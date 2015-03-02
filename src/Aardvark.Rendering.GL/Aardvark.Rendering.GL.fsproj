@@ -32,9 +32,6 @@
       <HintPath>..\..\..\..\.config\packages\Aardvark.Base.1.0.7\lib\net45\Aardvark.Base.dll</HintPath>
     </Reference>
     <Reference Include="System.Drawing" />
-    <Reference Include="nunit.framework">
-      <HintPath>..\..\..\..\.config\packages\NUnit.2.6.3\lib\nunit.framework.dll</HintPath>
-    </Reference>
     <Reference Include="Aardvark.Base.TypeProviders">
       <HintPath>..\..\..\..\.config\packages\Aardvark.Base.FSharp.1.0.7\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
     </Reference>
@@ -86,9 +83,6 @@
     <Reference Include="Aardvark.Base.Essentials">
       <HintPath>..\..\..\..\.config\packages\Aardvark.Base.Essentials.1.0.7\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
     </Reference>
-    <Reference Include="FSharp.Compiler.Service">
-      <HintPath>..\..\..\..\.config\packages\FSharp.Compiler.Service.0.0.82\lib\net45\FSharp.Compiler.Service.dll</HintPath>
-    </Reference>
     <Reference Include="RegexProvider">
       <HintPath>..\..\..\..\.config\packages\RegexProvider.0.0.3\lib\net40\RegexProvider.dll</HintPath>
     </Reference>
@@ -100,6 +94,12 @@
     </Reference>
     <Reference Include="FShade.Debug">
       <HintPath>..\..\..\..\.config\packages\FShade.0.1.0.1\lib\net45\FShade.Debug.dll</HintPath>
+    </Reference>
+    <Reference Include="nunit">
+      <HintPath>..\..\..\..\.config\packages\NUnit.2.6.3\lib\nunit.framework.dll</HintPath>
+    </Reference>
+    <Reference Include="FSharp.Compiler">
+      <HintPath>..\..\..\..\.config\packages\FSharp.Compiler.Service.0.0.82\lib\net45\FSharp.Compiler.Service.dll</HintPath>
     </Reference>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.1\Framework\v4.0\Microsoft.FSharp.Targets" />
