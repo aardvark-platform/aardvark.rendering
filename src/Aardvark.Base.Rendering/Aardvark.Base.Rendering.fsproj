@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{F8233648-55CE-4795-9151-E512390D86E7}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Aardvark.Base.Rendering</RootNamespace>
+    <AssemblyName>Aardvark.Base.Rendering</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
+    <Name>Aardvark.Base.Rendering</Name>
+    <AardvarkProject>True</AardvarkProject>
+    <ProductVersion>8.0.30703</ProductVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <OutputPath>..\..\bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>3</WarningLevel>
+    <DocumentationFile>bin\Debug\Aardvark.Base.Rendering.XML</DocumentationFile>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <Tailcalls>true</Tailcalls>
+    <OutputPath>..\..\bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>3</WarningLevel>
+    <DocumentationFile>bin\Release\Aardvark.Base.Rendering.XML</DocumentationFile>
+  </PropertyGroup>
+  <PropertyGroup>
+    <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
+  </PropertyGroup>
+  <Choose>
+    <When Condition="'$(VisualStudioVersion)' == '11.0'">
+      <PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')">
+        <FSharpTargetsPath>$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets</FSharpTargetsPath>
+      </PropertyGroup>
+    </When>
+    <Otherwise>
+      <PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets')">
+        <FSharpTargetsPath>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets</FSharpTargetsPath>
+      </PropertyGroup>
+    </Otherwise>
+  </Choose>
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <Import Project="..\..\..\..\build\Aardvark.targets" Condition="exists('..\..\..\..\build\Aardvark.targets')" />
+  <Import Project="$(SolutionPath).targets" Condition="exists('$(SolutionPath).targets')" />
+  <Import Project="$(FSharpTargetsPath)" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+  <ItemGroup>
+    <Compile Include="DefaultSemantic.fs" />
+    <Compile Include="IndexedGeometry.fs" />
+    <Compile Include="FrameStatistics.fs" />
+    <Compile Include="DrawCallInfo.fs" />
+    <Compile Include="Buffers.fs" />
+    <Compile Include="Textures.fs" />
+    <Compile Include="RenderJob.fs" />
+    <Compile Include="GPUVendor.fs" />
+    <Compile Include="Framebuffers.fs" />
+    <Compile Include="Runtime.fs" />
+    <Content Include="app.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="FSharp.Core">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Aardvark.Base">
+      <HintPath>..\..\..\..\.config\packages\Aardvark.Base.1.0.7\lib\net45\Aardvark.Base.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Collections.Immutable">
+      <HintPath>..\..\..\..\.config\packages\Microsoft.Bcl.Immutable.1.0.34\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Reactive.Interfaces">
+      <HintPath>..\..\..\..\.config\packages\Rx-Interfaces.2.2.5\lib\net45\System.Reactive.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Reactive.Core">
+      <HintPath>..\..\..\..\.config\packages\Rx-Core.2.2.5\lib\net45\System.Reactive.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Reactive.Linq">
+      <HintPath>..\..\..\..\.config\packages\Rx-Linq.2.2.5\lib\net45\System.Reactive.Linq.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Reactive.PlatformServices">
+      <HintPath>..\..\..\..\.config\packages\Rx-PlatformServices.2.2.5\lib\net45\System.Reactive.PlatformServices.dll</HintPath>
+    </Reference>
+    <Reference Include="Aardvark.Base.Essentials">
+      <HintPath>..\..\..\..\.config\packages\Aardvark.Base.Essentials.1.0.7\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
+    </Reference>
+    <Reference Include="FSharp.Compiler.Service">
+      <HintPath>..\..\..\..\.config\packages\FSharp.Compiler.Service.0.0.58\lib\net45\FSharp.Compiler.Service.dll</HintPath>
+    </Reference>
+    <Reference Include="nunit.framework">
+      <HintPath>..\..\..\..\.config\packages\NUnit.2.6.3\lib\nunit.framework.dll</HintPath>
+    </Reference>
+    <Reference Include="RegexProvider">
+      <HintPath>..\..\..\..\.config\packages\RegexProvider.0.0.2\lib\net40\RegexProvider.dll</HintPath>
+    </Reference>
+    <Reference Include="Aardvark.Base.TypeProviders">
+      <HintPath>..\..\..\..\.config\packages\Aardvark.Base.FSharp.1.0.7\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
+    </Reference>
+    <Reference Include="Aardvark.Base.FSharp">
+      <HintPath>..\..\..\..\.config\packages\Aardvark.Base.FSharp.1.0.7\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="FsUnit.NUnit">
+      <HintPath>..\..\..\..\.config\packages\FsUnit.1.3.0.1\Lib\Net40\FsUnit.NUnit.dll</HintPath>
+    </Reference>
+    <Reference Include="Aardvark.Base.Incremental">
+      <HintPath>..\..\..\..\.config\packages\Aardvark.Base.Incremental.1.0.7\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+</Project>
