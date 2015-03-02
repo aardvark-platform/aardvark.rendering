@@ -2,3 +2,6 @@ bin
 *.swp
 *.userprefs
 **/obj
+/packages
+!/packages/*.config
+/src/*.suo

@@ -1,6 +1,6 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
 Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
 EndProject
 Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "Aardvark.Rendering.GL", "Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj", "{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}"

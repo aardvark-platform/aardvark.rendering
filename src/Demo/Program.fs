@@ -12,7 +12,7 @@ open Aardvark.Base.Incremental
 open System.Threading.Tasks
 open System.Threading
 
-(*
+
 do printfn "abc"
 
 type OpenGlApplication() =
@@ -959,10 +959,4 @@ let main argv =
     w.Run()
 
 
-    0
- *)
-
-[<EntryPoint>]
-let main argv = 
-    PixImage.Create "ABC"
     0
