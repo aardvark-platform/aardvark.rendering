@@ -1,0 +1,33 @@
+﻿
+==========================================================
+=       General Notes on our Resource implementations    =
+==========================================================
+
+Organizazion
+============
+
+	All resource implementations define very simple wrapper-types around
+	OpenGL resources (Buffers, Textures, etc.) which are accompanied by
+	the Context they were created with.
+
+	In order to keep out implementation clean every file extends the
+	Context with functions for creating/updating and deleting the corresponding
+	resource. That way everything concerning buffers is located in one file
+	which improves the clarity of the implementation by avoiding a huge
+	monolithic implementation of the context.
+
+	Furthermore every file extends the ExecutionContext module with
+	functions needed for binding resources at runtime. Note that these 
+	functions simply return a sequence of Instructions (as defined in Instruction.fs)
+	which can then be interpreted/compiled by the runtime.
+
+
+Issues
+======
+
+	Since the backend implementation was reworked several times the instruction-compiler
+	might currenlty not use the respective functions for binding resources but instead generate
+	instructions itself.
+
+	In general all "translation-tables" cannot be considered complete yet. They will be extended
+	on demand.

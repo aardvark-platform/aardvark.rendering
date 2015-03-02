@@ -1,0 +1,703 @@
+﻿namespace Aardvark.Rendering.GL
+open System
+open System.IO
+open System.Runtime.InteropServices
+open Aardvark.Base  
+
+/// <summary>
+/// This module contains enumerations provided by OpenGL and 
+/// searches for OpenGL entry-points exposing them as wrapped
+/// functions and as pointers
+/// </summary>
+module OpenGl =
+
+    type Handle = int
+
+    [<AutoOpen>]
+    module Enums =
+        type TextureUnit = Texture0 = 0x84C0
+                         | Texture1 = 0x84C1
+                         | Texture2 = 0x84C2
+                         | Texture3 = 0x84C3
+                         | Texture4 = 0x84C4
+                         | Texture5 = 0x84C5
+                         | Texture6 = 0x84C6
+                         | Texture7 = 0x84C7
+                         | Texture8 = 0x84C8
+                         | Texture9 = 0x84C9
+                         | Texture10 = 0x84CA
+                         | Texture11 = 0x84CB
+                         | Texture12 = 0x84CC
+                         | Texture13 = 0x84CD
+                         | Texture14 = 0x84CE
+                         | Texture15 = 0x84CF
+                         | Texture16 = 0x84D0
+                         | Texture17 = 0x84D1
+                         | Texture18 = 0x84D2
+                         | Texture19 = 0x84D3
+                         | Texture20 = 0x84D4
+                         | Texture21 = 0x84D5
+                         | Texture22 = 0x84D6
+                         | Texture23 = 0x84D7
+                         | Texture24 = 0x84D8
+                         | Texture25 = 0x84D9
+                         | Texture26 = 0x84DA
+                         | Texture27 = 0x84DB
+                         | Texture28 = 0x84DC
+                         | Texture29 = 0x84DD
+                         | Texture30 = 0x84DE
+                         | Texture31 = 0x84DF
+
+        type TextureTarget = Texture1D = 0x0DE0
+                           | Texture2D = 0x0DE1
+                           | Texture3D = 0x806F
+                           | TextureCubeMap = 0x8513
+                           | TextureBuffer = 0x8C2A
+                           | Texture2DMultisample = 0x9100
+                           | TextureRectangle = 0x84F5
+                           | Texture1DArray = 0x8C18
+                           | Texture2DArray = 0x8C1A
+                           | TextureCubeMapArray = 0x9009
+                           | Texture2DMultisampleArray = 0x9102
+
+        type BufferTarget = AtomicCounterBuffer = 0x92C0
+                          | TransformFeedbackBuffer = 0x8C8E
+                          | UniformBuffer = 0x8A11
+                          | ShaderStorageBuffer = 0x90D2
+
+        type FramebufferTarget = Framebuffer = 0x8D40
+                               | DrawFramebuffer = 0x8CA9
+                               | ReadFramebuffer = 0x8CA8
+
+        type State = Blend = 0x0BE2
+                   | ClipDistance0 = 0x3000
+                   | ClipDistance1 = 0x3001
+                   | ClipDistance2 = 0x3002
+                   | ClipDistance3 = 0x3003
+                   | ClipDistance4 = 0x3004
+                   | ClipDistance5 = 0x3005
+                   | ClipDistance6 = 0x3006
+                   | ClipDistance7 = 0x3007
+                   | ColorLogicOperation = 0x0BF2
+                   | CullFace = 0x0B44
+                   | DebugOutput = 0x92E0
+                   | DebugOutputSynchronous = 0x8242
+                   | DepthClamp = 0x864F
+                   | DepthTest = 0x0B71
+                   | Dither = 0x0BD0
+                   | LineSmooth = 0x0B20
+                   | Multisample = 0x809D
+                   | PolygonOffsetFill = 0x8037
+                   | PolygonOffsetLine = 0x2A02
+                   | PolygonOffsetPoint = 0x2A01
+                   | PolygonSmooth = 0x0B41
+                   | PrimitiveRestart = 0x8F9D
+                   | PrimitiveRestartFixedIndex = 0x8D69
+                   | RasterizerDiscard = 0x8C89
+                   | SampleAlphaToCoverage = 0x809E
+                   | SampleAlphaToOne = 0x809F
+                   | SampleCoverage = 0x80A0
+                   | SampleShading = 0x8C36
+                   | SampleMask = 0x8E51
+                   | ScissorTest = 0x0C11
+                   | StencilTest = 0x0B90
+                   | TextureCubeMapSeamless = 0x884F
+                   | ProgramPointSize = 0x8642
+
+        type PolygonMode = Point = 0x1B00
+                         | Line = 0x1B01
+                         | Fill = 0x1B02
+
+        type CompareFunction = Never = 0x0200
+                             | Less = 0x0201
+                             | Equal = 0x0202
+                             | LessEqual = 0x0203
+                             | Greater = 0x0204
+                             | NotEqual = 0x0205
+                             | GreaterEqual = 0x0206
+                             | Always = 0x0207
+
+        type Face = Front = 0x0404
+                  | Back = 0x0405
+                  | FrontAndBack = 0x0408
+
+        type BlendFactor = Zero = 0
+                         | One = 1
+                         | SrcColor = 0x0300
+                         | InvSrcColor = 0x0301
+                         | SrcAlpha = 0x0302
+                         | InvSrcAlpha = 0x0303
+                         | DstAlpha = 0x0304
+                         | InvDstAlpha = 0x0305
+                         | DstColor = 0x0306
+                         | InvDstColor = 0x0307
+                         | SrcAlphaSat = 0x0308
+                         | ConstantColor = 0x8001
+                         | InvConstantColor = 0x8002
+                         | ConstantAlpha = 0x8003
+                         | InvConstantAlpha = 0x8004
+
+        type BlendOperation = Add = 0x8006
+                            | Subtract = 0x800A
+                            | ReverseSubtract = 0x800B
+
+        type StencilOperation = Keep = 0x1E00
+                              | Zero = 0
+                              | Replace = 0x1E01
+                              | Increment = 0x1E02
+                              | IncrementWrap = 0x8507
+                              | Decrement = 0x1E03
+                              | DecrementWrap = 0x8508
+                              | Invert = 0x150A
+
+        type DrawMode = Points = 0x0000
+                      | LineStrip = 0x0003
+                      | LineLoop = 0x0002
+                      | Lines = 0x0001
+                      | LineStripAdjacency = 0x000B
+                      | LinesAdjacency = 0x000A
+                      | TriangleStrip = 0x0005
+                      | TriangleFan = 0x0006
+                      | Triangles = 0x0004
+                      | TriangleStripAdjacency = 0x000D
+                      | TrianglesAdjacency = 0x000C
+                      | Patches = 0x000E
+
+        type IndexType = UnsignedByte = 0x1401
+                       | UnsignedShort = 0x1403
+                       | UnsignedInt = 0x1405
+
+        type ClearMask = ColorBuffer = 0x00004000
+                       | DepthBuffer = 0x00000100
+                       | AccumBuffer = 0x00000200
+                       | StencilBuffer = 0x00000400
+
+        type Access = ReadOnly = 35000 
+                    | WriteOnly = 35001
+                    | ReadWrite = 35002 
+
+        type All =
+              Texture0 = 0x84C0
+            | Texture1 = 0x84C1
+            | Texture2 = 0x84C2
+            | Texture3 = 0x84C3
+            | Texture4 = 0x84C4
+            | Texture5 = 0x84C5
+            | Texture6 = 0x84C6
+            | Texture7 = 0x84C7
+            | Texture8 = 0x84C8
+            | Texture9 = 0x84C9
+            | Texture10 = 0x84CA
+            | Texture11 = 0x84CB
+            | Texture12 = 0x84CC
+            | Texture13 = 0x84CD
+            | Texture14 = 0x84CE
+            | Texture15 = 0x84CF
+            | Texture16 = 0x84D0
+            | Texture17 = 0x84D1
+            | Texture18 = 0x84D2
+            | Texture19 = 0x84D3
+            | Texture20 = 0x84D4
+            | Texture21 = 0x84D5
+            | Texture22 = 0x84D6
+            | Texture23 = 0x84D7
+            | Texture24 = 0x84D8
+            | Texture25 = 0x84D9
+            | Texture26 = 0x84DA
+            | Texture27 = 0x84DB
+            | Texture28 = 0x84DC
+            | Texture29 = 0x84DD
+            | Texture30 = 0x84DE
+            | Texture31 = 0x84DF
+            | Texture1D = 0x0DE0
+            | Texture2D = 0x0DE1
+            | Texture3D = 0x806F
+            | TextureCubeMap = 0x8513
+            | TextureBuffer = 0x8C2A
+            | Texture2DMultisample = 0x9100
+            | TextureRectangle = 0x84F5
+            | Texture1DArray = 0x8C18
+            | Texture2DArray = 0x8C1A
+            | TextureCubeMapArray = 0x9009
+            | Texture2DMultisampleArray = 0x9102
+            | Framebuffer = 0x8D40
+            | DrawFramebuffer = 0x8CA9
+            | ReadFramebuffer = 0x8CA8
+            | Blend = 0x0BE2
+            | ClipDistance0 = 0x3000
+            | ClipDistance1 = 0x3001
+            | ClipDistance2 = 0x3002
+            | ClipDistance3 = 0x3003
+            | ClipDistance4 = 0x3004
+            | ClipDistance5 = 0x3005
+            | ClipDistance6 = 0x3006
+            | ClipDistance7 = 0x3007
+            | ColorLogicOperation = 0x0BF2
+            | CullFace = 0x0B44
+            | DebugOutput = 0x92E0
+            | DebugOutputSynchronous = 0x8242
+            | DepthClamp = 0x864F
+            | DepthTest = 0x0B71
+            | Dither = 0x0BD0
+            | LineSmooth = 0x0B20
+            | Multisample = 0x809D
+            | PolygonOffsetFill = 0x8037
+            | PolygonOffsetLine = 0x2A02
+            | PolygonOffsetPoint = 0x2A01
+            | PolygonSmooth = 0x0B41
+            | PrimitiveRestart = 0x8F9D
+            | PrimitiveRestartFixedIndex = 0x8D69
+            | RasterizerDiscard = 0x8C89
+            | SampleAlphaToCoverage = 0x809E
+            | SampleAlphaToOne = 0x809F
+            | SampleCoverage = 0x80A0
+            | SampleShading = 0x8C36
+            | SampleMask = 0x8E51
+            | ScissorTest = 0x0C11
+            | StencilTest = 0x0B90
+            | TextureCubeMapSeamless = 0x884F
+            | ProgramPointSize = 0x8642
+            | Point = 0x1B00
+            | Line = 0x1B01
+            | Fill = 0x1B02
+            | Never = 0x0200
+            | Less = 0x0201
+            | Equal = 0x0202
+            | LessEqual = 0x0203
+            | Greater = 0x0204
+            | NotEqual = 0x0205
+            | GreaterEqual = 0x0206
+            | Always = 0x0207
+            | Front = 0x0404
+            | Back = 0x0405
+            | FrontAndBack = 0x0408
+            | Zero = 0
+            | One = 1
+            | SrcColor = 0x0300
+            | InvSrcColor = 0x0301
+            | SrcAlpha = 0x0302
+            | InvSrcAlpha = 0x0303
+            | DstAlpha = 0x0304
+            | InvDstAlpha = 0x0305
+            | DstColor = 0x0306
+            | InvDstColor = 0x0307
+            | SrcAlphaSat = 0x0308
+            | ConstantColor = 0x8001
+            | InvConstantColor = 0x8002
+            | ConstantAlpha = 0x8003
+            | InvConstantAlpha = 0x8004
+            | Add = 0x8006
+            | Subtract = 0x800A
+            | ReverseSubtract = 0x800B
+            | Keep = 0x1E00
+            | Replace = 0x1E01
+            | Increment = 0x1E02
+            | IncrementWrap = 0x8507
+            | Decrement = 0x1E03
+            | DecrementWrap = 0x8508
+            | Invert = 0x150A
+            | Points = 0x0000
+            | LineStrip = 0x0003
+            | LineLoop = 0x0002
+            | Lines = 0x0001
+            | LineStripAdjacency = 0x000B
+            | LinesAdjacency = 0x000A
+            | TriangleStrip = 0x0005
+            | TriangleFan = 0x0006
+            | Triangles = 0x0004
+            | TriangleStripAdjacency = 0x000D
+            | TrianglesAdjacency = 0x000C
+            | Patches = 0x000E
+            | UnsignedByte = 0x1401
+            | UnsignedShort = 0x1403
+            | UnsignedInt = 0x1405
+            | ColorBuffer = 0x00004000
+            | DepthBuffer = 0x00000100
+            | AccumBuffer = 0x00000200
+            | StencilBuffer = 0x00000400
+            | ReadOnly = 35000 
+            | WriteOnly = 35001
+            | ReadWrite = 35002 
+
+    let mutable private opengl32 = 0n
+    
+    /// <summary>
+    /// imports some WGL functions. By using a separate module
+    /// we ensure that those imports are not loaded until their first use
+    /// which allows the system to work on other platforms dynamically.
+    /// </summary>
+    module private Wgl =
+        
+        [<Literal>]
+        let gl = "opengl32.dll"
+
+        [<System.Security.SuppressUnmanagedCodeSecurity()>]
+        [<System.Runtime.InteropServices.DllImport(gl, EntryPoint = "wglGetDefaultProcAddress", ExactSpelling = true, SetLastError = true)>]
+        extern IntPtr GetDefaultProcAddress(String lpszProc);
+
+        [<System.Security.SuppressUnmanagedCodeSecurity()>]
+        [<System.Runtime.InteropServices.DllImport(gl, EntryPoint = "wglGetProcAddress", ExactSpelling = true, SetLastError = true)>]
+        extern IntPtr GLGetProcAddress(String lpszProc);
+
+        [<System.Runtime.InteropServices.DllImport("kernel32.dll")>]
+        extern nativeint LoadLibrary (string path)
+
+        [<System.Runtime.InteropServices.DllImport("kernel32.dll")>]
+        extern nativeint GetProcAddress(nativeint library, string name)
+
+    /// <summary>
+    /// imports some GLX functions. By using a separate module
+    /// we ensure that those imports are not loaded until their first use
+    /// which allows the system to work on other platforms dynamically.
+    /// </summary>
+    module private GLX =
+
+        [<Literal>]
+        let gl = "libGL.so.1"
+
+        [<System.Security.SuppressUnmanagedCodeSecurity()>]
+        [<System.Runtime.InteropServices.DllImport(gl, EntryPoint = "glXGetProcAddress", ExactSpelling = true, SetLastError = true)>]
+        extern IntPtr GetProcAddress(String lpszProc);
+
+
+
+    /// <summary>
+    /// searches for a given name in the OpenGL-implementation
+    /// by successively checking "GetDefaultProcAddress", "glGetProcAddress"
+    /// </summary>
+    let getProcAddressInternal (name : string) =
+        if opengl32 = 0n then
+            opengl32 <- (DynamicLinker.loadLibrary "Opengl32.dll").Handle
+
+        #if Linux
+
+        match GLX.GetProcAddress name with
+            | 0n -> 0n
+            | ptr -> ptr
+
+        #else
+
+        match Wgl.GetDefaultProcAddress name with
+                | 0n -> match Wgl.GLGetProcAddress name with
+                        | 0n -> match Wgl.GetProcAddress(opengl32, name) with
+                                    | 0n -> 0n
+                                    | ptr -> ptr
+                        | ptr -> ptr
+                | ptr -> ptr  
+        #endif
+
+    let rec getProcAddressProbing (suffixes : list<string>) (name : string) =
+        match suffixes with
+            | s::rest -> 
+                let ptr = getProcAddressInternal (name + s)
+                if ptr <> 0n then ptr
+                else getProcAddressProbing rest name
+            | [] -> 0n
+
+    let getProcAddress (name : string) =
+         let address = getProcAddressProbing [""; "ARB"; "EXT"] name
+         if address = 0n then
+              Log.line "got no address for %A" name
+              0n
+         else
+              address
+
+
+    /// <summary>
+    /// wraps the given ptr as function efficiently
+    /// 
+    /// </summary>  
+    let private wrap (ptr : nativeint) =
+        UnmanagedFunctions.wrap ptr
+
+    /// <summary>
+    /// contains function-pointers for all needed OpenGL entry-points.
+    /// </summary>
+    module Pointers = 
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindVertexArray.xml
+        /// </summary>
+        let BindVertexArray  = getProcAddress "glBindVertexArray"
+ 
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glUseProgram.xml
+        /// </summary>
+        let BindProgram  = getProcAddress "glUseProgram"
+ 
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glActiveTexture.xml
+        /// </summary>
+        let ActiveTexture  = getProcAddress "glActiveTexture"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindSampler.xml
+        /// </summary>
+        let BindSampler  = getProcAddress "glBindSampler"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindTexture.xml
+        /// </summary>
+        let BindTexture  = getProcAddress "glBindTexture"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBuffer.xml
+        /// </summary>
+        let BindBuffer  = getProcAddress "glBindBuffer"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBufferBase.xml
+        /// </summary>
+        let BindBufferBase  = getProcAddress "glBindBufferBase"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindBufferRange.xml
+        /// </summary>
+        let BindBufferRange = getProcAddress "glBindBufferRange"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindFramebuffer.xml
+        /// </summary>
+        let BindFramebuffer  = getProcAddress "glBindFramebuffer"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glViewport.xml
+        /// </summary>
+        let Viewport  = getProcAddress "glViewport"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glEnable.xml
+        /// </summary>
+        let Enable  = getProcAddress "glEnable"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDisable.xml
+        /// </summary>
+        let Disable  = getProcAddress "glDisable"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDepthFunc.xml
+        /// </summary>
+        let DepthFunc  = getProcAddress "glDepthFunc"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glCullFace.xml
+        /// </summary>
+        let CullFace  = getProcAddress "glCullFace"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendFunc.xml
+        /// </summary>
+        let BlendFuncSeparate  = getProcAddress "glBlendFunc"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendEquationSeparate.xml
+        /// </summary>
+        let BlendEquationSeparate  = getProcAddress "glBlendEquationSeparate"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendColor.xml
+        /// </summary>
+        let BlendColor  = getProcAddress "glBlendColor"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glPolygonMode.xml
+        /// </summary>
+        let PolygonMode  = getProcAddress "glPolygonMode"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glStencilFuncSeparate.xml
+        /// </summary>
+        let StencilFuncSeparate  = getProcAddress "glStencilFuncSeparate"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glStencilOpSeparate.xml
+        /// </summary>
+        let StencilOpSeparate  = getProcAddress "glStencilOpSeparate"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glPatchParameteri.xml
+        /// </summary>
+        let PatchParameter  = getProcAddress "glPatchParameteri"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDrawElements.xml
+        /// </summary>
+        let DrawElements  = getProcAddress "glDrawElements"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDrawArrays.xml
+        /// </summary>
+        let DrawArrays  = getProcAddress "glDrawArrays"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDrawElementsInstanced.xml
+        /// </summary>
+        let DrawElementsInstanced  = getProcAddress "glDrawElementsInstanced"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDrawArraysInstanced.xml
+        /// </summary>
+        let DrawArraysInstanced  = getProcAddress "glDrawArraysInstanced"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClear.xml
+        /// </summary>
+        let Clear  = getProcAddress "glClear"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindImageTexture.xml
+        /// </summary>
+        let BindImageTexture = getProcAddress "glBindImageTexture"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClearColor.xml
+        /// </summary>
+        let ClearColor  = getProcAddress "glClearColor"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClearDepth.xml
+        /// </summary>
+        let ClearDepth  = getProcAddress "glClearDepth"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glGetError.xml
+        /// </summary>
+        let GetError  = getProcAddress "glGetError"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glVertexAttribPointer.xml
+        /// </summary>
+        let VertexAttribPointer = getProcAddress "glVertexAttribPointer"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glVertexAttribDivisor.xml
+        /// </summary>
+        let VertexAttribDivisor = getProcAddress "glVertexAttribDivisor"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glEnableVertexAttribArray.xml
+        /// </summary>
+        let EnableVertexAttribArray = getProcAddress "glEnableVertexAttribArray"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDisableVertexAttribArray.xml
+        /// </summary>
+        let DisableVertexAttribArray = getProcAddress "glDisableVertexAttribArray"
+
+        let Uniform1iv = getProcAddress "glUniform1iv"
+        let Uniform1fv = getProcAddress "glUniform1fv"
+        let Uniform2iv = getProcAddress "glUniform2iv"
+        let Uniform2fv = getProcAddress "glUniform2fv"
+        let Uniform3iv = getProcAddress "glUniform3iv"
+        let Uniform3fv = getProcAddress "glUniform3fv"
+        let Uniform4iv = getProcAddress "glUniform4iv"
+        let Uniform4fv = getProcAddress "glUniform4fv"
+        let UniformMatrix2fv = getProcAddress "glUniformMatrix2fv"
+        let UniformMatrix3fv = getProcAddress "glUniformMatrix3fv"
+        let UniformMatrix4fv = getProcAddress "glUniformMatrix4fv"
+
+
+
+        let private pointerNames = 
+            [ BindVertexArray, "glBindVertexArray" 
+              BindProgram, "glUseProgram" 
+              ActiveTexture, "glActiveTexture"
+              BindSampler, "glBindSampler"
+              BindTexture, "glBindTexture"
+              BindBuffer, "glBindBuffer"
+              BindBufferBase, "glBindBufferBase"
+              BindBufferRange, "glBindBufferRange"
+              BindFramebuffer, "glBindFramebuffer"
+              Viewport, "glViewport"
+              Enable, "glEnable"
+              Disable, "glDisable"
+              DepthFunc, "glDepthFunc"
+              CullFace, "glCullFace"
+              BlendFuncSeparate, "glBlendFunc"
+              BlendEquationSeparate, "glBlendEquationSeparate"
+              BlendColor, "glBlendColor"
+              PolygonMode, "glPolygonMode"
+              StencilFuncSeparate, "glStencilFuncSeparate"
+              StencilOpSeparate, "glStencilOpSeparate"
+              PatchParameter, "glPatchParameteri"
+              DrawElements, "glDrawElements"
+              DrawArrays, "glDrawArrays"
+              DrawElementsInstanced, "glDrawElementsInstanced"
+              DrawArraysInstanced, "glDrawArraysInstanced"
+              Clear, "glClear"
+              BindImageTexture, "glBindImageTexture"
+              ClearColor, "glClearColor"
+              ClearDepth, "glClearDepth"
+              GetError, "glGetError"
+              VertexAttribPointer, "glVertexAttribPointer"
+              VertexAttribDivisor, "glVertexAttribDivisor"
+              EnableVertexAttribArray, "glEnableVertexAttribArray"
+              DisableVertexAttribArray, "glDisableVertexAttribArray"
+
+              Uniform1iv, "glUniform1iv"
+              Uniform1fv, "glUniform1fv"
+              UniformMatrix2fv, "glUniformMatrix2fv"
+              UniformMatrix3fv, "glUniformMatrix3fv"
+              UniformMatrix4fv, "glUniformMatrix4fv"
+
+            ] |> Map.ofList
+
+        let getPointerName (ptr : nativeint) =
+            match Map.tryFind ptr pointerNames with
+                | Some name -> name
+                | _ -> ptr.ToString()
+
+    /// <summary>
+    /// contains wrapped OpenGL functions using only primitive types.
+    /// this means that enums will just be represented as ints, etc.
+    /// hence its name
+    /// </summary>
+    module Unsafe =
+        let BindVertexArray : Handle -> unit = wrap Pointers.BindVertexArray
+        let BindProgram : Handle -> unit = wrap Pointers.BindProgram
+        let ActiveTexture : int -> unit = wrap Pointers.ActiveTexture
+        let BindSampler : int -> Handle -> unit = wrap Pointers.BindSampler
+        let BindTexture : int -> int -> unit = wrap Pointers.BindTexture
+        let BindBuffer : int -> int -> unit = wrap Pointers.BindBuffer
+        let BindBufferBase : int -> int -> int -> unit = wrap Pointers.BindBufferBase
+        let BindBufferRange : int -> int -> int -> nativeint -> nativeint -> unit = wrap Pointers.BindBufferRange
+        let BindFramebuffer : int -> int -> unit = wrap Pointers.BindFramebuffer
+        let Enable : int -> unit = wrap Pointers.Enable
+        let Disable : int -> unit = wrap Pointers.Disable
+
+        let DepthFunc : int -> unit = wrap Pointers.DepthFunc
+        let CullFace : int -> unit = wrap Pointers.CullFace
+        let BlendFuncSeparate : int -> int -> int -> int -> unit = wrap Pointers.BlendFuncSeparate
+        let BlendEquationSeparate : int -> int -> unit = wrap Pointers.BlendEquationSeparate
+        let BlendColor : int -> int -> int -> int -> unit = wrap Pointers.BlendColor
+        let PolygonMode : int -> int -> unit = wrap Pointers.PolygonMode
+        let StencilFuncSeparate : int -> int -> int -> int -> unit = wrap Pointers.StencilFuncSeparate
+        let StencilOpSeparate : int -> int -> int -> int -> unit = wrap Pointers.StencilOpSeparate
+        let PatchParameter : int -> int -> unit = wrap Pointers.PatchParameter
+        let DrawElements : int -> int -> int -> nativeint -> unit = wrap Pointers.DrawElements
+        let DrawArrays : int -> int -> int -> unit = wrap Pointers.DrawArrays
+        let DrawElementsInstanced : int -> int -> int -> nativeint -> int -> unit = wrap Pointers.DrawElementsInstanced
+        let DrawArraysInstanced : int -> int -> int -> int -> unit = wrap Pointers.DrawArraysInstanced
+        let Clear : int -> unit = wrap Pointers.Clear
+        let BindImageTexture : int -> int -> int -> int -> unit = wrap Pointers.BindImageTexture
+        let VertexAttribPointer : int -> int -> int -> int -> int -> nativeint -> unit = wrap Pointers.VertexAttribPointer
+        let VertexAttribDivisor : int -> int -> unit = wrap Pointers.VertexAttribDivisor
+        let EnableVertexAttribArray : int -> unit = wrap Pointers.EnableVertexAttribArray
+        let DisableVertexAttribArray : int -> unit = wrap Pointers.DisableVertexAttribArray
+
+        let Uniform1iv : int -> int -> nativeint -> unit = wrap Pointers.Uniform1iv
+        let Uniform1fv : int -> int -> nativeint -> unit = wrap Pointers.Uniform1fv
+        let Uniform2iv : int -> int -> nativeint -> unit = wrap Pointers.Uniform2iv
+        let Uniform2fv : int -> int -> nativeint -> unit = wrap Pointers.Uniform2fv
+        let Uniform3iv : int -> int -> nativeint -> unit = wrap Pointers.Uniform3iv
+        let Uniform3fv : int -> int -> nativeint -> unit = wrap Pointers.Uniform3fv
+        let Uniform4iv : int -> int -> nativeint -> unit = wrap Pointers.Uniform4iv
+        let Uniform4fv : int -> int -> nativeint -> unit = wrap Pointers.Uniform4fv
+        let UniformMatrix2fv : int -> int -> int -> nativeint -> unit = wrap Pointers.UniformMatrix2fv
+        let UniformMatrix3fv : int -> int -> int -> nativeint -> unit = wrap Pointers.UniformMatrix3fv
+        let UniformMatrix4fv : int -> int -> int -> nativeint -> unit = wrap Pointers.UniformMatrix4fv
+
+        let ClearColor : int -> int -> int -> int -> unit = wrap Pointers.ClearColor
+        let ClearDepth : int64 -> unit = wrap Pointers.ClearDepth
+        let GetError : unit -> int = wrap Pointers.GetError
+
