@@ -13,7 +13,6 @@ open System.Threading.Tasks
 open System.Threading
 
 
-do printfn "abc"
 
 type OpenGlApplication() =
     
@@ -899,9 +898,11 @@ type Trafo3d with
 
 [<EntryPoint>]
 let main argv = 
-    printfn "ABC1"
+    DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
+
     Aardvark.Init()
-    printfn "ABC"
+
+    
 
 
     use app = new OpenGlApplication()

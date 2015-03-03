@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2013
+Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
+EndProject
+Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "Aardvark.Rendering.GL", "Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj", "{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}"
+EndProject
+Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "ScratchHs", "ScratchHs\ScratchHs.fsproj", "{92F8B60A-9070-45E7-9EFD-3DF1B3F053DD}"
+EndProject
+Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "Demo", "Demo\Demo.fsproj", "{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}"
+EndProject
+Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "Aardvark.SceneGraph", "Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj", "{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A6C4D14-AF36-4740-9D9C-CC3D8AD523D6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{92F8B60A-9070-45E7-9EFD-3DF1B3F053DD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{92F8B60A-9070-45E7-9EFD-3DF1B3F053DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{92F8B60A-9070-45E7-9EFD-3DF1B3F053DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{92F8B60A-9070-45E7-9EFD-3DF1B3F053DD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F8233648-55CE-4795-9151-E512390D86E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F8233648-55CE-4795-9151-E512390D86E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F8233648-55CE-4795-9151-E512390D86E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F8233648-55CE-4795-9151-E512390D86E7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
