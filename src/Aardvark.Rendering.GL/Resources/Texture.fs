@@ -892,7 +892,7 @@ module TextureExtensions =
                         if file = null then 
                             ()
                         else
-                            let pi = PixImage.Create(file, PixLoadOptions.UseBitmap)
+                            let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
                             let mm = PixImageMipMap [|pi|]
                             uploadTexture2D t info mm |> ignore
 
@@ -937,7 +937,7 @@ module TextureExtensions =
 //                        uploadTexture3D t info image
 
                     | FileTexture(info, file) ->
-                        let pi = PixImage.Create(file, PixLoadOptions.UseBitmap)
+                        let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
                         let mm = PixImageMipMap [|pi|]
                         uploadTexture2D t info mm |> ignore
 

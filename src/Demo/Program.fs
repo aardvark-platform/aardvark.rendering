@@ -507,9 +507,6 @@ module WinForms =
                         | _ -> FillMode.Fill
 
                 transact (fun () -> fillMode.Value <- newMode)
-                
-                
-            ()
         )
 
 
@@ -898,6 +895,7 @@ type Trafo3d with
 
 [<EntryPoint>]
 let main argv = 
+    
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
 
     Aardvark.Init()
