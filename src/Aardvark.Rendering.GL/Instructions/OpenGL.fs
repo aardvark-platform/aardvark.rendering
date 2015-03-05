@@ -366,25 +366,24 @@ module OpenGl =
     /// by successively checking "GetDefaultProcAddress", "glGetProcAddress"
     /// </summary>
     let getProcAddressInternal (name : string) =
-        if opengl32 = 0n then
-            opengl32 <- (DynamicLinker.loadLibrary "Opengl32.dll").Handle
+       
+        if System.Environment.OSVersion.Platform = System.PlatformID.Unix
+        then
+            if opengl32 = 0n then opengl32 <- (DynamicLinker.loadLibrary "libGL.so.1").Handle
+            match GLX.GetProcAddress name with
+                | 0n -> 0n
+                | ptr -> ptr
 
-        #if Linux
+        else
+            if opengl32 = 0n then opengl32 <- (DynamicLinker.loadLibrary "Opengl32.dll").Handle
+            match Wgl.GetDefaultProcAddress name with
+                    | 0n -> match Wgl.GLGetProcAddress name with
+                            | 0n -> match Wgl.GetProcAddress(opengl32, name) with
+                                        | 0n -> 0n
+                                        | ptr -> ptr
+                            | ptr -> ptr
+                    | ptr -> ptr  
 
-        match GLX.GetProcAddress name with
-            | 0n -> 0n
-            | ptr -> ptr
-
-        #else
-
-        match Wgl.GetDefaultProcAddress name with
-                | 0n -> match Wgl.GLGetProcAddress name with
-                        | 0n -> match Wgl.GetProcAddress(opengl32, name) with
-                                    | 0n -> 0n
-                                    | ptr -> ptr
-                        | ptr -> ptr
-                | ptr -> ptr  
-        #endif
 
     let rec getProcAddressProbing (suffixes : list<string>) (name : string) =
         match suffixes with
