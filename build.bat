@@ -6,6 +6,7 @@ cls
 
 IF exist packages\FAKE ( echo skipping FAKE download ) ELSE ( 
 echo downloading FAKE
+dir
 "bin\nuget.exe" "install" "FAKE" "-OutputDirectory" "Packages" "-ExcludeVersion" "-Prerelease"
 "bin\nuget.exe" "install" "FSharp.Formatting.CommandTool" "-OutputDirectory" "Packages" "-ExcludeVersion" "-Prerelease"
 "bin\nuget.exe" "install" "SourceLink.Fake" "-OutputDirectory" "Packages" "-ExcludeVersion"
