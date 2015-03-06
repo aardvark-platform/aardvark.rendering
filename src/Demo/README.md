@@ -7,4 +7,4 @@ finally to be renderered by the rendering engine.
 
 How to build
 ====
-This project is automatically built, when building the ([aardvark.rendering](https://github.com/vrvis/aardvark.rendering) solution. 
+This project is automatically built, when building the [aardvark.rendering](https://github.com/vrvis/aardvark.rendering) solution. 
