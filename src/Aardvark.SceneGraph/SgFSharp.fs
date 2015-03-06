@@ -1,19 +1,8 @@
-﻿#if INTERACTIVE
-#r "..\..\Bin\Debug\Aardvark.VRVis.Base.dll"
-#r "..\..\Bin\Debug\Aardvark.VRVis.Lins.dll"
-#r "..\..\Bin\Debug\Aardvark.VRVis.Geometry.dll"
-#r "..\..\Bin\Debug\Aardvark.VRVis.Essentials.dll"
-#r "..\..\Bin\Debug\Aardvark.SceneGraph.Ag.dll"
-#r "..\..\Bin\Debug\Aardvark.Base.FSharp.dll"
-#r "..\..\Bin\Debug\Aardvark.Base.dll"
-#r "..\..\Bin\Debug\Aardvark.Rendering.Base.dll"
-#else
-namespace Aardvark.SceneGraph
-#endif
+﻿namespace Aardvark.SceneGraph
+
 
 open System
 open Aardvark.Base
-//open Aardvark.Essentials
 open Aardvark.Base.Ag
 open System.Collections.Generic
 open System.Runtime.InteropServices

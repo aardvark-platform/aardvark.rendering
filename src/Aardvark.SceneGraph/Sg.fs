@@ -1,20 +1,8 @@
-﻿#if INTERACTIVE
-#r "..\..\Bin\Debug\Aardvark.VRVis.Base.dll"
-#r "..\..\Bin\Debug\Aardvark.VRVis.Lins.dll"
-#r "..\..\Bin\Debug\Aardvark.VRVis.Geometry.dll"
-#r "..\..\Bin\Debug\Aardvark.VRVis.Essentials.dll"
-#r "..\..\Bin\Debug\Aardvark.SceneGraph.Ag.dll"
-#r "..\..\Bin\Debug\Aardvark.Base.FSharp.dll"
-#r "..\..\Bin\Debug\Aardvark.Base.dll"
-#r "..\..\Bin\Debug\Aardvark.Rendering.Base.dll"
-#else
-namespace Aardvark.SceneGraph
-#endif
+﻿namespace Aardvark.SceneGraph
 
 open System
 open Aardvark.Base
 open Aardvark.Base.Incremental
-//open Aardvark.Essentials
 open Aardvark.Base.Ag
 open System.Collections.Generic
 open System.Runtime.InteropServices
@@ -880,16 +868,9 @@ module Semantics =
             rj.FillMode <- r?FillMode
             rj.StencilMode <- r?StencilMode
             rj.BlendMode <- r?BlendMode
-
-//            let polyMesh : Option<PolyMesh> = r?PolyMesh
-//            rj.ConcretePolyMesh <- match polyMesh with
-//                                    | None      -> None
-//                                    | Some pm   -> ConcretePolyMesh(pm, r?ModelTrafo |> cSharpMod) |> Some
-//            
+              
             rj.Surface <- r?Surface
             rj.DrawCallInfo <- r.DrawCallInfo
-            
-            //rj.MetaData <- MetaData(rj.ID.ToString())
 
             ASet.single rj
 
