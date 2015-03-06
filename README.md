@@ -1,3 +1,6 @@
+[![Build status Linux](https://ci.appveyor.com/api/projects/status/oqg1tw2ax1jl8qjx?svg=true)](https://ci.appveyor.com/project/haraldsteinlechner/aardvark-rendering)
+[![Build Status Windows](https://travis-ci.org/vrvis/aardvark.rendering.svg?branch=master)](https://travis-ci.org/vrvis/aardvark.rendering)
+
 # Aardvark.Rendering
 
 How to build:
