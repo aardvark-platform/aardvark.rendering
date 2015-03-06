@@ -1,5 +1,5 @@
 language: csharp
-solution: src/Aardvark.sln
+solution: src/Aardvark.Rendering.sln
 before_install:
 before_install:
   # Make sure mono is installed,
