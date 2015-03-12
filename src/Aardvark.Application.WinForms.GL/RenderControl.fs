@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Application.GL.WinForms
+﻿namespace Aardvark.Application.WinForms
 
 
 open OpenTK
@@ -12,7 +12,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-type RenderControl(ctx : Context, samples : int) =
+type OpenGlRenderControl(ctx : Context, samples : int) =
     inherit GLControl(
         Graphics.GraphicsMode(
             OpenTK.Graphics.ColorFormat(Config.BitsPerPixel), 
@@ -144,5 +144,5 @@ type RenderControl(ctx : Context, samples : int) =
         member x.Mouse = Unchecked.defaultof<IMouse>
 
 
-    new(ctx : Context) = new RenderControl(ctx, 1)
+    new(ctx : Context) = new OpenGlRenderControl(ctx, 1)
 

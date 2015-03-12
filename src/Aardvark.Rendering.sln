@@ -15,7 +15,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Application", "Application"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application", "Aardvark.Application\Aardvark.Application.fsproj", "{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.GL.WinForms", "Aardvark.Application.GL.WinForms\Aardvark.Application.GL.WinForms.fsproj", "{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.GL", "Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj", "{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

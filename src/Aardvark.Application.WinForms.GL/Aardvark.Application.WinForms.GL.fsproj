@@ -11,7 +11,7 @@
     <AssemblyName>Aardvark.Application.GL.WinForms</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
-    <Name>Aardvark.Application.GL.WinForms</Name>
+    <Name>Aardvark.Application.WinForms.GL</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -53,6 +53,7 @@
   <ItemGroup>
     <Compile Include="MessageLoop.fs" />
     <Compile Include="RenderControl.fs" />
+    <Compile Include="Application.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />
   </ItemGroup>

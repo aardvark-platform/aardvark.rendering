@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Application.GL.WinForms
+﻿namespace Aardvark.Application.WinForms
 
 
 open System
