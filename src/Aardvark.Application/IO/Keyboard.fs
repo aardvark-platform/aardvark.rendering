@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Application
 
+open Aardvark.Base
+
 type Keys =
     /// The bitmask to extract modifiers from a key value.
     | Modifiers = -65536
@@ -394,7 +396,10 @@ type Keys =
     /// The ALT modifier key.
     | Alt = 262144
 
+type KeyboardEvent =
+    | KeyDown of Keys
+    | KeyUp of Keys
+    | KeyPress of char
 
 type IKeyboard =
-    abstract member KeyDown : IEvent<Keys>
-    abstract member KeyUp : IEvent<Keys>
+    abstract member Events : IEvent<KeyboardEvent>

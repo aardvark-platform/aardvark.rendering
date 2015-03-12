@@ -22,7 +22,13 @@ type OpenGlApplication() =
         runtime.Dispose()
 
     interface IApplication with
-        member x.Initialize(ctrl : IRenderControl) = 
+        member x.Initialize(ctrl : IRenderControl) (samples : int) = 
+            match ctrl with
+                | :? RenderControl as ctrl ->
+                    ctrl.Implementation <- new OpenGlRenderControl(ctx, samples)
+                | _ ->
+                    failwith "unknown control type: %A" ctrl
+                    
             ()
 
         member x.Runtime = x.Runtime :> IRuntime

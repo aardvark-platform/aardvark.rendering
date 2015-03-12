@@ -6,5 +6,5 @@ open Aardvark.Base
 type IApplication =
     inherit IDisposable
     abstract member Runtime : IRuntime
-    abstract member Initialize : IRenderControl -> unit
+    abstract member Initialize : IRenderControl -> int -> unit
     

@@ -5,13 +5,13 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>e3508b1c-592c-4e8e-98f3-71dbec6083da</ProjectGuid>
+    <ProjectGuid>b1d5938d-ab5d-4d0e-8dde-482ef5308f16</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>Aardvark.Application</RootNamespace>
-    <AssemblyName>Aardvark.Application</AssemblyName>
+    <RootNamespace>Aardvark.Application.WinForms</RootNamespace>
+    <AssemblyName>Aardvark.Application.WinForms</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
-    <Name>Aardvark.Application</Name>
+    <Name>Aardvark.Application.WinForms</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -51,12 +51,9 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
-    <Compile Include="IO\EventCombinators.fs" />
-    <Compile Include="IO\Keyboard.fs" />
-    <Compile Include="IO\Mouse.fs" />
-    <Compile Include="IO\Combinators.fs" />
-    <Compile Include="IRenderControl.fs" />
-    <Compile Include="IApplication.fs" />
+    <Compile Include="Keyboard.fs" />
+    <Compile Include="Mouse.fs" />
+    <Compile Include="RenderControl.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />
   </ItemGroup>
@@ -129,6 +126,12 @@
       <HintPath>..\..\packages\Rx-PlatformServices.2.2.5\lib\net45\System.Reactive.PlatformServices.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="System.Windows.Forms" />
+    <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj">
+      <Name>Aardvark.Application</Name>
+      <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
       <Name>Aardvark.Base.Rendering</Name>
       <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
