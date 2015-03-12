@@ -11,6 +11,12 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Demo", "Demo\Demo.fsproj", 
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.SceneGraph", "Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj", "{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Application", "Application", "{2993E291-DFD2-4AB6-9E3B-B7F66015C914}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application", "Aardvark.Application\Aardvark.Application.fsproj", "{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.GL.WinForms", "Aardvark.Application.GL.WinForms\Aardvark.Application.GL.WinForms.fsproj", "{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,8 +39,20 @@ Global
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 	EndGlobalSection
 EndGlobal
