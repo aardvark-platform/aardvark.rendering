@@ -4,7 +4,9 @@ open Aardvark.Base.Ag
 open Aardvark.Rendering.GL
 open Aardvark.SceneGraph
 open Aardvark.Base.Incremental
-open Demo
+//open Demo
+
+open Aardvark.Application.WinForms
 
 // this module demonstrates how to extend a given scene graph system (here the one provided by assimp) with
 // semantic functions to be used in our rendering framework
@@ -400,15 +402,22 @@ let main args =
 
     use app = new OpenGlApplication()
     
-    use w = new WinForms.Window(app, 8)
-    
+    //use w = new WinForms.Window(app, 8)
+    use f = new System.Windows.Forms.Form()
+    let ctrl = new RenderControl()
+    ctrl.Dock <- System.Windows.Forms.DockStyle.Fill
+    f.Controls.Add ctrl
+
+    app.Initialize ctrl 1
+
 
     let view = CameraViewWithSky(Location = V3d(2.0,2.0,2.0), Forward = -V3d.III.Normalized)
-    let proj = CameraProjectionPerspective(60.0, 0.1, 100.0, float w.ClientSize.Width / float w.ClientSize.Height)
+    let proj = CameraProjectionPerspective(60.0, 0.1, 100.0, float ctrl.ClientSize.Width / float ctrl.ClientSize.Height)
     let mode = Mod.initMod FillMode.Fill
 
-    use cc = WinForms.addCameraController w view
-    WinForms.addFillModeController w mode
+
+//    use cc = WinForms.addCameraController w view
+//    WinForms.addFillModeController w mode
 
     let sg = Assimp.load modelPath
 
@@ -438,19 +447,20 @@ let main args =
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
     
     
-    w.Sizes.Values.Subscribe(fun s ->
+    ctrl.Sizes.Values.Subscribe(fun s ->
         let aspect = float s.X / float s.Y
         proj.AspectRatio <- aspect
     ) |> ignore
 
 
-
-
     let renderJobs = sg.RenderJobs()
     let task = app.Runtime.CompileRender(renderJobs)
 
-    w.RenderTask <- task
-    w.Run()
+    ctrl.CameraView <- view
+    ctrl.CameraProjection <- proj
+    ctrl.RenderTask <- task
+//    w.Run()
 
+    System.Windows.Forms.Application.Run(f)
 
     0

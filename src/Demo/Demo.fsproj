@@ -121,6 +121,21 @@
     <Reference Include="FShade.Debug">
       <HintPath>..\..\packages\FShade.1.0.3\lib\net45\FShade.Debug.dll</HintPath>
     </Reference>
+    <ProjectReference Include="..\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
+      <Name>Aardvark.Application.WinForms.GL</Name>
+      <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
+      <Name>Aardvark.Application.WinForms</Name>
+      <Project>{b1d5938d-ab5d-4d0e-8dde-482ef5308f16}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj">
+      <Name>Aardvark.Application</Name>
+      <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
       <Project>{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}</Project>
       <Name>Aardvark.Rendering.GL</Name>

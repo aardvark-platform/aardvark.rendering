@@ -9,7 +9,7 @@ open Aardvark.Application
 type RenderControl() =
     inherit Control()
 
-    let mutable renderTask : IRenderTask = Unchecked.defaultof<IRenderTask>
+    let mutable renderTask : Option<IRenderTask> = None
     let mutable impl : Option<IRenderControlImplementation> = None
     let mutable ctrl : Option<Control> = None
 
@@ -30,7 +30,9 @@ type RenderControl() =
         keyboard.Inner <- new Keyboard(c)
         mouse.Inner <- new Mouse(c)
         keyboard.Inner <- new Keyboard(c)
-        cr.RenderTask <- renderTask
+        match renderTask with
+            | Some task -> cr.RenderTask <- task
+            | None -> ()
 
 
         ctrl <- Some c
@@ -59,28 +61,28 @@ type RenderControl() =
     member x.Mouse = mouse :> IMouse
 
     member x.RenderTask 
-        with get() = renderTask
+        with get() = match renderTask with | Some t -> t | _ -> Unchecked.defaultof<_>
         and set t = 
-            renderTask <- t
+            renderTask <- Some t
             match impl with
                 | Some i -> i.RenderTask <- t
                 | None -> ()
 
 
     interface IRenderControl with
-        member x.Sizes = sizes :> IEvent<V2i>
+        member x.Sizes = x.Sizes
         member x.CameraView
-            with get() = cameraView
-            and set v = cameraView <- v
+            with get() = x.CameraView
+            and set v = x.CameraView <- v
 
         member x.CameraProjection
-            with get() = cameraProjection
-            and set p = cameraProjection <- p
+            with get() = x.CameraProjection
+            and set p = x.CameraProjection <- p
 
-        member x.Keyboard = keyboard :> IKeyboard
-        member x.Mouse = mouse :> IMouse
+        member x.Keyboard = x.Keyboard
+        member x.Mouse = x.Mouse
 
         member x.RenderTask 
-            with get() = renderTask
-            and set t = renderTask <- t
+            with get() = x.RenderTask
+            and set t = x.RenderTask <- t
     
