@@ -41,6 +41,9 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
     let mutable contextHandle : ContextHandle = null 
     let defaultFramebuffer = new Framebuffer(ctx, (fun _ -> 0), ignore, [], None)
 
+    let sizes = EventSource<V2i>(V2i(base.ClientSize.Width, base.ClientSize.Height))
+
+
     interface IControl with
         member x.Paint() =
             use g = x.CreateGraphics()
@@ -99,11 +102,15 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
                 | None ->
                     ()
 
+    override x.OnResize(e) =
+        base.OnResize(e)
+        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
 
-    interface IRenderControlImplementation with
+    interface IRenderTarget with
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
+        member x.Sizes = sizes :> IEvent<_>
 
     new(ctx : Context) = new OpenGlRenderControl(ctx, 1)
 

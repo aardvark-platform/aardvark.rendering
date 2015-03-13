@@ -2,15 +2,13 @@
 
 open Aardvark.Base
 
-type IRenderControlImplementation =
+type IRenderTarget =
+    abstract member Sizes : IEvent<V2i>
     abstract member RenderTask : IRenderTask with get, set
 
 type IRenderControl =
-    inherit IRenderControlImplementation
+    inherit IRenderTarget
 
-    abstract member Sizes : IEvent<V2i>
-    abstract member CameraView : ICameraView with get, set
-    abstract member CameraProjection : ICameraProjection with get, set
     abstract member Keyboard : IKeyboard
     abstract member Mouse : IMouse
     

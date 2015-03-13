@@ -21,7 +21,7 @@ type OpenGlApplication() =
         ctx.Dispose()
         runtime.Dispose()
 
-    member x.Initialize(ctrl : IRenderControl) (samples : int) = 
+    member x.Initialize(ctrl : IRenderControl, samples : int) = 
         match ctrl with
             | :? RenderControl as ctrl ->
                 ctrl.Implementation <- new OpenGlRenderControl(ctx, samples)
@@ -32,7 +32,7 @@ type OpenGlApplication() =
 
 
     interface IApplication with
-        member x.Initialize(ctrl : IRenderControl) (samples : int) = x.Initialize ctrl samples
+        member x.Initialize(ctrl : IRenderControl, samples : int) = x.Initialize(ctrl, samples)
         member x.Runtime = x.Runtime :> IRuntime
         member x.Dispose() = x.Dispose()
 

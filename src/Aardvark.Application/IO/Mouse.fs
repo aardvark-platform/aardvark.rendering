@@ -19,15 +19,11 @@ type MouseEvent =
     | MouseUp of MouseEventProperties
     | MouseClick of MouseEventProperties
     | MouseDoubleClick of MouseEventProperties
-    | MouseMove of PixelPosition with
+    | MouseMove of PixelPosition
+    | MouseScroll of float * PixelPosition
+    | MouseEnter of PixelPosition
+    | MouseLeave of PixelPosition
 
-        member x.Properties =
-            match x with
-                | MouseDown p -> p
-                | MouseUp p -> p
-                | MouseClick p -> p
-                | MouseDoubleClick p -> p
-                | MouseMove pp -> { buttons = MouseButtons.None;  location = pp }
 
     
 

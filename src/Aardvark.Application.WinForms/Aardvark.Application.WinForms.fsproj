@@ -54,6 +54,7 @@
     <Compile Include="Keyboard.fs" />
     <Compile Include="Mouse.fs" />
     <Compile Include="RenderControl.fs" />
+    <Compile Include="SimpleRenderWindow.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />
   </ItemGroup>

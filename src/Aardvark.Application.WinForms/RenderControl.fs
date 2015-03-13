@@ -10,16 +10,14 @@ type RenderControl() =
     inherit Control()
 
     let mutable renderTask : Option<IRenderTask> = None
-    let mutable impl : Option<IRenderControlImplementation> = None
+    let mutable impl : Option<IRenderTarget> = None
     let mutable ctrl : Option<Control> = None
 
     let keyboard = new ChangeableKeyboard()
     let mouse = new ChangeableMouse()
     let sizes = new EventSource<V2i>()
-    let mutable cameraView = CameraViewWithSky(Location = V3d.III * 6.0, Forward = -V3d.III.Normalized) :> ICameraView
-    let mutable cameraProjection = CameraProjectionPerspective(60.0, 0.1, 1000.0, 1.0) :> ICameraProjection
 
-    let setControl (self : RenderControl) (c : Control) (cr : IRenderControlImplementation) =
+    let setControl (self : RenderControl) (c : Control) (cr : IRenderTarget) =
         match impl with
             | Some i -> failwith "implementation can only be set once per control"
             | None -> ()
@@ -40,7 +38,7 @@ type RenderControl() =
 
     member x.Implementation
         with get() = match ctrl with | Some c -> c | _ -> null
-        and set v = setControl x v (v |> unbox<IRenderControlImplementation>)
+        and set v = setControl x v (v |> unbox<IRenderTarget>)
 
     override x.OnResize(e) =
         base.OnResize(e)
@@ -49,13 +47,6 @@ type RenderControl() =
 
 
     member x.Sizes = sizes :> IEvent<V2i>
-    member x.CameraView
-        with get() = cameraView
-        and set v = cameraView <- v
-
-    member x.CameraProjection
-        with get() = cameraProjection
-        and set p = cameraProjection <- p
 
     member x.Keyboard = keyboard :> IKeyboard
     member x.Mouse = mouse :> IMouse
@@ -71,13 +62,6 @@ type RenderControl() =
 
     interface IRenderControl with
         member x.Sizes = x.Sizes
-        member x.CameraView
-            with get() = x.CameraView
-            and set v = x.CameraView <- v
-
-        member x.CameraProjection
-            with get() = x.CameraProjection
-            and set p = x.CameraProjection <- p
 
         member x.Keyboard = x.Keyboard
         member x.Mouse = x.Mouse

@@ -6,6 +6,7 @@ open Aardvark.SceneGraph
 open Aardvark.Base.Incremental
 //open Demo
 
+open Aardvark.Application
 open Aardvark.Application.WinForms
 
 // this module demonstrates how to extend a given scene graph system (here the one provided by assimp) with
@@ -403,13 +404,20 @@ let main args =
     use app = new OpenGlApplication()
     
     //use w = new WinForms.Window(app, 8)
-    use f = new System.Windows.Forms.Form()
-    let ctrl = new RenderControl()
-    ctrl.Dock <- System.Windows.Forms.DockStyle.Fill
-    f.Controls.Add ctrl
+    use f = app.CreateSimpleRenderWindow()
+    let ctrl = f.Control
 
-    app.Initialize ctrl 1
-
+    ctrl.Mouse.Events.Values.Subscribe(fun e ->
+        match e with
+            | MouseDown p -> printfn  "down: %A" p.location.Position
+            | MouseUp p -> printfn  "up: %A" p.location.Position
+            | MouseClick p -> printfn  "click: %A" p.location.Position
+            | MouseDoubleClick p -> printfn  "doubleClick: %A" p.location.Position
+            | MouseMove p -> printfn  "move: %A" p.Position
+            | MouseScroll(delta,p) -> printfn  "scroll: %A" delta
+            | MouseEnter p -> printfn  "enter: %A" p.Position
+            | MouseLeave p -> printfn  "leave: %A" p.Position
+    ) |> ignore
 
     let view = CameraViewWithSky(Location = V3d(2.0,2.0,2.0), Forward = -V3d.III.Normalized)
     let proj = CameraProjectionPerspective(60.0, 0.1, 100.0, float ctrl.ClientSize.Width / float ctrl.ClientSize.Height)
@@ -456,8 +464,6 @@ let main args =
     let renderJobs = sg.RenderJobs()
     let task = app.Runtime.CompileRender(renderJobs)
 
-    ctrl.CameraView <- view
-    ctrl.CameraProjection <- proj
     ctrl.RenderTask <- task
 //    w.Run()
 

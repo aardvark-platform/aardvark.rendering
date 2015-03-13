@@ -41,12 +41,12 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <None Include="packages.config" />
-    <Content Include="app.config" />
-    <EmbeddedResource Include="Assimp.zip" />
     <Compile Include="ApplicationSetup.fs" />
     <Compile Include="Program.fs">
     </Compile>
+    <None Include="packages.config" />
+    <Content Include="app.config" />
+    <EmbeddedResource Include="Assimp.zip" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">
