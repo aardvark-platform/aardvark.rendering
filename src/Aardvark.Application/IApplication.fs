@@ -7,7 +7,7 @@ open System.Runtime.CompilerServices
 type IApplication =
     inherit IDisposable
     abstract member Runtime : IRuntime
-    abstract member Initialize : IRenderControl * int -> unit
+    abstract member Initialize : IRenderControl * samples : int -> unit
     
 [<AbstractClass; Sealed; Extension>]
 type ApplicationExtensions private() =

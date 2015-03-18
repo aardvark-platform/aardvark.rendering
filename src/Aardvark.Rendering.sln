@@ -19,6 +19,10 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinFor
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms", "Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj", "{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WPF", "Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj", "{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WPF.GL", "Aardvark.Application.WPF.GL\Aardvark.Application.WPF.GL.fsproj", "{993CF671-5810-44D9-85D8-A35F5EE16F8F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -53,6 +57,14 @@ Global
 		{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{993CF671-5810-44D9-85D8-A35F5EE16F8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{993CF671-5810-44D9-85D8-A35F5EE16F8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{993CF671-5810-44D9-85D8-A35F5EE16F8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{993CF671-5810-44D9-85D8-A35F5EE16F8F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -61,5 +73,7 @@ Global
 		{E3508B1C-592C-4E8E-98F3-71DBEC6083DA} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{4F645DE6-6D22-4BAD-8489-C1F8456E3D55} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 		{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{993CF671-5810-44D9-85D8-A35F5EE16F8F} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
 	EndGlobalSection
 EndGlobal

@@ -50,27 +50,46 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">
-      <HintPath>..\..\packages\Aardvark.Base.1.1.6\lib\net45\Aardvark.Base.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.1.1.7\lib\net45\Aardvark.Base.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Aardvark.Base.Essentials">
-      <HintPath>..\..\packages\Aardvark.Base.Essentials.1.1.6\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.Essentials.1.1.7\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Aardvark.Base.FSharp">
-      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.6\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.7\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Aardvark.Base.Incremental">
-      <HintPath>..\..\packages\Aardvark.Base.Incremental.1.1.6\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.Incremental.1.1.7\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Aardvark.Base.TypeProviders">
-      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.6\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.7\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="DevILSharp">
       <HintPath>..\..\packages\DevILSharp.0.0.5\lib\net45\DevILSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="FShade">
+      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="FShade.Compiler">
+      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.Compiler.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="FShade.Debug">
+      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.Debug.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Compiler.Service">
       <HintPath>..\..\packages\FSharp.Compiler.Service.0.0.85\lib\net45\FSharp.Compiler.Service.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
@@ -112,15 +131,6 @@
     <Reference Include="AssimpNet">
       <HintPath>..\..\packages\AssimpNet.3.3.1\lib\net45\AssimpNet.dll</HintPath>
     </Reference>
-    <Reference Include="FShade.Compiler">
-      <HintPath>..\..\packages\FShade.1.0.3\lib\net45\FShade.Compiler.dll</HintPath>
-    </Reference>
-    <Reference Include="FShade">
-      <HintPath>..\..\packages\FShade.1.0.3\lib\net45\FShade.dll</HintPath>
-    </Reference>
-    <Reference Include="FShade.Debug">
-      <HintPath>..\..\packages\FShade.1.0.3\lib\net45\FShade.Debug.dll</HintPath>
-    </Reference>
     <ProjectReference Include="..\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
       <Name>Aardvark.Application.WinForms.GL</Name>
       <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
@@ -129,6 +139,16 @@
     <ProjectReference Include="..\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
       <Name>Aardvark.Application.WinForms</Name>
       <Project>{b1d5938d-ab5d-4d0e-8dde-482ef5308f16}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application.WPF.GL\Aardvark.Application.WPF.GL.fsproj">
+      <Name>Aardvark.Application.WPF.GL</Name>
+      <Project>{993cf671-5810-44d9-85d8-a35f5ee16f8f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj">
+      <Name>Aardvark.Application.WPF</Name>
+      <Project>{d8ada249-0cb6-4bde-9ae7-dbbdb6c3812a}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj">
@@ -148,8 +168,10 @@
       <Project>{B9EF48E4-7E73-4DDF-805A-D7324D907CB8}</Project>
       <Name>Aardvark.SceneGraph</Name>
     </ProjectReference>
-    <Reference Include="FSharp.Core">
+    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
       <Private>True</Private>
     </Reference>
+    <Reference Include="System.Xaml" />
+    <Reference Include="WindowsBase" />
   </ItemGroup>
 </Project>

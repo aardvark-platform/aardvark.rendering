@@ -1,13 +1,16 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Ag
+open Aardvark.Base.AgHelpers
 open Aardvark.Rendering.GL
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.CSharp
 open Aardvark.Base.Incremental
+open Aardvark.Base.Incremental.CSharp
 //open Demo
 
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.WPF
 
 // this module demonstrates how to extend a given scene graph system (here the one provided by assimp) with
 // semantic functions to be used in our rendering framework
@@ -392,6 +395,7 @@ module Main =
             Trafo3d(fw, fw)
 
 [<EntryPoint>]
+[<STAThread>]
 let main args = 
     let modelPath = match args |> Array.toList with
                       | []     -> printfn "using default eigi model."; System.IO.Path.Combine( __SOURCE_DIRECTORY__, "eigi", "eigi.dae") 
@@ -402,9 +406,7 @@ let main args =
     Aardvark.Init()
 
     use app = new OpenGlApplication()
-    
-    //use w = new WinForms.Window(app, 8)
-    use f = app.CreateSimpleRenderWindow()
+    let f = app.CreateSimpleRenderWindow()
     let ctrl = f.Control
 
     ctrl.Mouse.Events.Values.Subscribe(fun e ->
@@ -420,7 +422,7 @@ let main args =
     ) |> ignore
 
     let view = CameraViewWithSky(Location = V3d(2.0,2.0,2.0), Forward = -V3d.III.Normalized)
-    let proj = CameraProjectionPerspective(60.0, 0.1, 100.0, float ctrl.ClientSize.Width / float ctrl.ClientSize.Height)
+    let proj = CameraProjectionPerspective(60.0, 0.1, 100.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
     let mode = Mod.initMod FillMode.Fill
 
 
@@ -454,19 +456,33 @@ let main args =
            |> Sg.blendMode (Mod.initConstant BlendMode.Blend)
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
     
+
+//    let arr = new ModRef<Array> ([|V3f.III|] :> Array)
+//
+//    let info = arr.Select(fun arr -> DrawCallInfo(FaceVertexCount = arr.Length))
+//    let line = 
+//        new Sg.VertexAttributeApplicator(
+//            SymDict.ofList [
+//                DefaultSemantic.Positions, BufferView(ArrayBuffer(arr), typeof<V3f>)
+//            ], 
+//            new Sg.RenderNode(info)
+//        )
+// 
+//    transact <| fun () ->
+//        arr.Value <- [||]
     
     ctrl.Sizes.Values.Subscribe(fun s ->
         let aspect = float s.X / float s.Y
         proj.AspectRatio <- aspect
     ) |> ignore
 
-
-    let renderJobs = sg.RenderJobs()
-    let task = app.Runtime.CompileRender(renderJobs)
+    let task = app.Runtime.CompileRender(sg.RenderJobs())
 
     ctrl.RenderTask <- task
 //    w.Run()
 
-    System.Windows.Forms.Application.Run(f)
+    let app = System.Windows.Application()
+    app.Run(f) |> ignore
+    //System.Windows.Forms.Application.Run(f)
 
     0

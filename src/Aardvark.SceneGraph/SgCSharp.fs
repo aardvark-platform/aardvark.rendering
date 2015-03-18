@@ -28,6 +28,11 @@ type GeometryExtensions =
 [<Sealed>]
 type SceneGraphExtensions =
 
+
+    [<Extension>]
+    static member CameraView(sg : ISg, view : ICameraView) = Sg.ViewTrafoApplicator(view.ViewTrafos, sg) :> ISg
+
+
     [<Extension>]
     static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(Mod.initConstant surface, sg) :> ISg
 

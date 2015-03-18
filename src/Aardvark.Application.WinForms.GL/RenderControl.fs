@@ -69,6 +69,8 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
             task <- Some t
             taskSubscription <- t.AddMarkingCallback x.ForceRedraw
 
+    member x.Sizes = sizes :> IEvent<_>
+
     override x.OnHandleCreated(e) =
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
         if c <> null then
