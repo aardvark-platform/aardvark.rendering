@@ -288,7 +288,7 @@ module private ValueConverter =
                 let resultValue = Convert.getConversion target pathValue f
                 let writeMeth = typeof<Marshal>.GetMethod("StructureToPtr", [| typeof<obj>; typeof<nativeint>;typeof<bool> |])
                 // TODO: use generic
-                1
+                
                 let pos = 
                     if offset = 0 then ptr
                     else <@@ addintptr (%%ptr : nativeint) offset @@>
