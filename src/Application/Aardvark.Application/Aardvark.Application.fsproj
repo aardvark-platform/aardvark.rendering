@@ -55,6 +55,7 @@
     <Compile Include="IO\Keyboard.fs" />
     <Compile Include="IO\Mouse.fs" />
     <Compile Include="IO\Combinators.fs" />
+    <Compile Include="IMessageLoop.fs" />
     <Compile Include="IRenderControl.fs" />
     <Compile Include="IApplication.fs" />
     <Content Include="packages.config" />
