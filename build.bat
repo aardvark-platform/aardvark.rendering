@@ -2,7 +2,6 @@
 echo %~dp0
 
 PUSHD %~dp0
-cls
 
 IF exist packages\FAKE ( echo skipping FAKE download ) ELSE ( 
 echo downloading FAKE
