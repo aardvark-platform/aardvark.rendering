@@ -131,27 +131,27 @@
     <Reference Include="AssimpNet">
       <HintPath>..\..\packages\AssimpNet.3.3.1\lib\net45\AssimpNet.dll</HintPath>
     </Reference>
-    <ProjectReference Include="..\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
+    <ProjectReference Include="..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
       <Name>Aardvark.Application.WinForms.GL</Name>
       <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
+    <ProjectReference Include="..\Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
       <Name>Aardvark.Application.WinForms</Name>
       <Project>{b1d5938d-ab5d-4d0e-8dde-482ef5308f16}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\Aardvark.Application.WPF.GL\Aardvark.Application.WPF.GL.fsproj">
+    <ProjectReference Include="..\Application\Aardvark.Application.WPF.GL\Aardvark.Application.WPF.GL.fsproj">
       <Name>Aardvark.Application.WPF.GL</Name>
       <Project>{993cf671-5810-44d9-85d8-a35f5ee16f8f}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj">
+    <ProjectReference Include="..\Application\Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj">
       <Name>Aardvark.Application.WPF</Name>
       <Project>{d8ada249-0cb6-4bde-9ae7-dbbdb6c3812a}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj">
+    <ProjectReference Include="..\Application\Aardvark.Application\Aardvark.Application.fsproj">
       <Name>Aardvark.Application</Name>
       <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
       <Private>True</Private>

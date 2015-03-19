@@ -13,15 +13,15 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.SceneGraph", "Aard
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Application", "Application", "{2993E291-DFD2-4AB6-9E3B-B7F66015C914}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application", "Aardvark.Application\Aardvark.Application.fsproj", "{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application", "Application\Aardvark.Application\Aardvark.Application.fsproj", "{E3508B1C-592C-4E8E-98F3-71DBEC6083DA}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.GL", "Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj", "{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.GL", "Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj", "{4F645DE6-6D22-4BAD-8489-C1F8456E3D55}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms", "Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj", "{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms", "Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj", "{B1D5938D-AB5D-4D0E-8DDE-482EF5308F16}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WPF", "Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj", "{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WPF", "Application\Aardvark.Application.WPF\Aardvark.Application.WPF.fsproj", "{D8ADA249-0CB6-4BDE-9AE7-DBBDB6C3812A}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WPF.GL", "Aardvark.Application.WPF.GL\Aardvark.Application.WPF.GL.fsproj", "{993CF671-5810-44D9-85D8-A35F5EE16F8F}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WPF.GL", "Application\Aardvark.Application.WPF.GL\Aardvark.Application.WPF.GL.fsproj", "{993CF671-5810-44D9-85D8-A35F5EE16F8F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
