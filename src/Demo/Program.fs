@@ -397,19 +397,54 @@ module Main =
 
 open System.Threading
 
+let timePulled = new ManualResetEventSlim()
+let timeLock = obj()
+let time = Mod.custom(fun () -> DateTime.Now)
+//
+//
+//let t = 
+//    new Thread(ThreadStart(fun _ ->
+//        while true do
+//            timePulled.Wait()
+//            if not time.OutOfDate then
+//                lock timeLock (fun () ->
+//                    transact (fun () ->
+//                        time.MarkOutdated()
+//                    )
+//                )
+//    ))
+////    new Timer(TimerCallback(fun _ ->
+////            if not time.OutOfDate then
+////                transact (fun () ->
+////                    time.MarkOutdated()
+////                )
+////
+////    ), null, 0, 5)
 
-let time = Mod.custom(fun () ->  DateTime.Now)
 
+let withLastValue (m : IMod<'a>) =
+    let lastValue = ref None
+    adaptive {
+        let! newValue = m
+        let t = !lastValue, newValue
+        lastValue := Some newValue
+        return t
+    }
 
-let t = 
-    new Timer(TimerCallback(fun _ ->
-            if not time.OutOfDate then
-                transact (fun () ->
-                    time.MarkOutdated()
-                )
+let inline differentiate (m : IMod< ^a >) =
+    let lastValue = ref None
 
-    ), null, 0, 5)
-
+    adaptive {
+        let! newValue = m
+        match !lastValue with
+            | Some last ->
+                let d = newValue - last
+                lastValue := Some newValue
+                return Some d
+            | None ->
+                lastValue := Some newValue
+                return None
+    }
 
 
 let timeTest() =
@@ -417,35 +452,40 @@ let timeTest() =
     let down = Mod.initMod false
 
     let pos = ref 0.0
-    let lastTime : ref<Option<DateTime>> = ref None
+
+    let dt = differentiate time
+
     let move =
         adaptive {
             let! d = down
             if d then
-                let! t = time
-                return t
-//                let! t = time
-//                let res = 
-//                    match !lastTime with
-//                        | Some lastTime -> 
-//                            let dt = t - lastTime
-//                            let newPos = !pos + dt.TotalSeconds
-//                            pos := newPos
-//                            newPos
-//                        | None ->
-//                            !pos
-//                lastTime := Some t 
-//                return res
+                let! dt = differentiate time
+                match dt with
+                    | Some dt ->
+                        pos := !pos + dt.TotalSeconds
+                        return !pos
+                    | None ->
+                        return !pos
             else
-                lastTime := None
-                return DateTime(0L) //!pos
+                return !pos
         }
 
+    let renderSem = new SemaphoreSlim(1)
+    let rendering =
+        new Thread(ThreadStart(fun _ ->
+            while true do
+                renderSem.Wait()
+                printfn "pull: %A" (Mod.force move)
+                transact (fun () -> time.MarkOutdated())
+        ), IsBackground = true)
 
+    rendering.Start()
     
-    let d = move |> Mod.registerCallback (fun t ->
-        printfn "pull: %A" t
-    )
+    let d = move.AddMarkingCallback(fun () -> renderSem.Release() |> ignore)
+//
+//    let d = move |> Mod.registerCallback (fun t ->
+//        printfn "pull: %A" t
+//    )
     
     while true do
         Console.ReadLine() |> ignore

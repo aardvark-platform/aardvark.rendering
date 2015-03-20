@@ -1,0 +1,4 @@
+[submodule "src/Aardvark.Base"]
+	path = src/Aardvark.Base
+	url = https://github.com/vrvis/aardvark.git
+	branch = master
