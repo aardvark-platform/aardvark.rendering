@@ -394,9 +394,74 @@ module Main =
 
             Trafo3d(fw, fw)
 
+
+open System.Threading
+
+
+let time = Mod.custom(fun () ->  DateTime.Now)
+
+
+let t = 
+    new Timer(TimerCallback(fun _ ->
+            if not time.OutOfDate then
+                transact (fun () ->
+                    time.MarkOutdated()
+                )
+
+    ), null, 0, 5)
+
+
+
+let timeTest() =
+    
+    let down = Mod.initMod false
+
+    let pos = ref 0.0
+    let lastTime : ref<Option<DateTime>> = ref None
+    let move =
+        adaptive {
+            let! d = down
+            if d then
+                let! t = time
+                return t
+//                let! t = time
+//                let res = 
+//                    match !lastTime with
+//                        | Some lastTime -> 
+//                            let dt = t - lastTime
+//                            let newPos = !pos + dt.TotalSeconds
+//                            pos := newPos
+//                            newPos
+//                        | None ->
+//                            !pos
+//                lastTime := Some t 
+//                return res
+            else
+                lastTime := None
+                return DateTime(0L) //!pos
+        }
+
+
+    
+    let d = move |> Mod.registerCallback (fun t ->
+        printfn "pull: %A" t
+    )
+    
+    while true do
+        Console.ReadLine() |> ignore
+        transact (fun () ->
+            Mod.change down <| not down.Value
+        )
+    d.Dispose()
+
+
+
+
 [<EntryPoint>]
 [<STAThread>]
 let main args = 
+    timeTest()
+
     let modelPath = match args |> Array.toList with
                       | []     -> printfn "using default eigi model."; System.IO.Path.Combine( __SOURCE_DIRECTORY__, "eigi", "eigi.dae") 
                       | [path] -> printfn "using path: %s" path; path

@@ -6,41 +6,48 @@ open System.Threading.Tasks
 open Aardvark.Base
 
 type IMessageLoop =
-    abstract member Invoke : wait : TimeSpan * Func<TimeSpan, 'a> -> Task<'a>
     abstract member Enqueue : wait : TimeSpan * action : Action<TimeSpan> -> IDisposable
 
 [<AbstractClass; Sealed; Extension>]
 type MessageLoopExtensions private() =
 
     [<Extension>]
+    static member Invoke(x : IMessageLoop, wait : TimeSpan, action : Func<TimeSpan, 'a>) =
+        let s = TaskCompletionSource<'a>()
+        x.Enqueue(wait, Action<TimeSpan>(fun r -> s.SetResult(action.Invoke(r)))) |> ignore
+        s.Task
+
+    [<Extension>]
     static member Invoke(x : IMessageLoop, wait : TimeSpan, action : Action<TimeSpan>) =
-        x.Invoke(wait, Func<TimeSpan, unit>(action.Invoke)) :> Task
+        let s = TaskCompletionSource<unit>()
+        x.Enqueue(wait, Action<TimeSpan>(fun r -> s.SetResult(action.Invoke(r)))) |> ignore
+        s.Task :> Task
        
     [<Extension>]
     static member Invoke(x : IMessageLoop, wait : TimeSpan, action : Action) =
-        x.Invoke(wait, Func<TimeSpan, unit>(fun _ -> action.Invoke())) :> Task
+        MessageLoopExtensions.Invoke(x, wait, Func<TimeSpan, unit>(fun _ -> action.Invoke())) :> Task
 
     [<Extension>]
     static member Invoke(x : IMessageLoop, wait : TimeSpan, action : Func<'a>) =
-        x.Invoke(wait, Func<TimeSpan, 'a>(fun _ -> action.Invoke()))
+        MessageLoopExtensions.Invoke(x, wait, Func<TimeSpan, 'a>(fun _ -> action.Invoke()))
        
 
 
     [<Extension>]
     static member Invoke(x : IMessageLoop, action : Action<TimeSpan>) =
-        x.Invoke(TimeSpan.Zero, Func<TimeSpan, unit>(action.Invoke)) :> Task
+        MessageLoopExtensions.Invoke(x, TimeSpan.Zero, Func<TimeSpan, unit>(action.Invoke)) :> Task
        
     [<Extension>]
     static member Invoke(x : IMessageLoop, action : Action) =
-        x.Invoke(TimeSpan.Zero, Func<TimeSpan, unit>(fun _ -> action.Invoke())) :> Task
+        MessageLoopExtensions.Invoke(x, TimeSpan.Zero, Func<TimeSpan, unit>(fun _ -> action.Invoke())) :> Task
 
     [<Extension>]
     static member Invoke(x : IMessageLoop, action : Func<TimeSpan,'a>) =
-        x.Invoke(TimeSpan.Zero, action)
+        MessageLoopExtensions.Invoke(x, TimeSpan.Zero, action)
        
     [<Extension>]
     static member Invoke(x : IMessageLoop, action : Func<'a>) =
-        x.Invoke(TimeSpan.Zero, Func<TimeSpan, 'a>(fun _ -> action.Invoke()))
+        MessageLoopExtensions.Invoke(x, TimeSpan.Zero, Func<TimeSpan, 'a>(fun _ -> action.Invoke()))
        
 
 
@@ -73,31 +80,41 @@ module ``F# MessageLoop Extensions`` =
     type IMessageLoop with
 
         member x.Invoke (wait : TimeSpan, action : TimeSpan -> 'a) =
-            x.Invoke(wait, Func<TimeSpan, 'a>(action)) |> Async.AwaitTask
+            Async.FromContinuations(fun (succes, error, cancel) -> 
+                
+                x.Enqueue(wait, fun tr ->
+                    try 
+                        succes (action tr)
+                    with 
+                        | :? OperationCanceledException as e -> cancel e
+                        | e -> error e
+                        
+                ) |> ignore
+      
+            )
 
         member x.Invoke (wait : TimeSpan, action : unit -> 'a) =
-            x.Invoke(wait, Func<TimeSpan, 'a>(fun _ -> action())) |> Async.AwaitTask
+            x.Invoke(wait, fun _ -> action()) 
 
         member x.Invoke (action : TimeSpan -> 'a) =
-            x.Invoke(TimeSpan.Zero, Func<TimeSpan, 'a>(action)) |> Async.AwaitTask
+            x.Invoke(TimeSpan.Zero, action)
 
         member x.Invoke (action : unit -> 'a) =
-            x.Invoke(TimeSpan.Zero, Func<TimeSpan, 'a>(fun _ -> action())) |> Async.AwaitTask
+            x.Invoke(TimeSpan.Zero, action)
 
         // all overloads need to be specialized for unit since F#
         // will otherwise take the Action-overloads from above
         member x.Invoke (wait : TimeSpan, action : TimeSpan -> unit) =
-            x.Invoke(wait, Func<TimeSpan, unit>(action)) |> Async.AwaitTask
+            x.Invoke(wait, action)
 
         member x.Invoke (wait : TimeSpan, action : unit -> unit) =
-            x.Invoke(wait, Func<TimeSpan, unit>(fun _ -> action())) |> Async.AwaitTask
+            x.Invoke(wait, action) 
 
         member x.Invoke (action : TimeSpan -> unit) =
-            x.Invoke(TimeSpan.Zero, Func<TimeSpan, unit>(action)) |> Async.AwaitTask
+            x.Invoke(action)
 
         member x.Invoke (action : unit -> unit) =
-            x.Invoke(TimeSpan.Zero, Func<TimeSpan, unit>(fun _ -> action())) |> Async.AwaitTask
-
+            x.Invoke(action) 
 
 
 
@@ -113,7 +130,9 @@ module ``F# MessageLoop Extensions`` =
         member x.EnqueuePeriodic(interval : TimeSpan, action : TimeSpan -> unit) =
             x.EnqueuePeriodic(TimeSpan.Zero, interval, Action<TimeSpan>(action))    
 
-
+module Test =
+    let a (m : IMessageLoop) =
+        m.Invoke (fun () -> ())
 
 //[<AutoOpen>]
 //module private TimeRangeConstants =
