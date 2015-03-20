@@ -192,6 +192,10 @@ Target "InstallLocal" (fun () ->
             match packageOutputPath with
                 | Some packageOutputPath ->
                     if File.Exists buildCmd then
+
+                        Git.Branches.checkout modulePath false "master"
+
+
                         let ret = 
                             ExecProcess (fun info -> 
                                 info.UseShellExecute <- true
