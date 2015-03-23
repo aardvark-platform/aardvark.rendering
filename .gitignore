@@ -1,8 +1,10 @@
-bin
-!/bin/nuget.exe
+bin/Release
+bin/Debug
 *.swp
 *.userprefs
 **/obj
 /packages
 !/packages/*.config
 /src/*.suo
+/bin/*.nupkg
+/src/.vs
