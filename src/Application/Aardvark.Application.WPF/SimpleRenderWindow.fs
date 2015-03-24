@@ -29,6 +29,7 @@ type SimpleRenderWindow() =
     member x.Mouse = ctrl.Mouse
 
     interface IRenderControl with
+        member x.Time = ctrl.Time
         member x.RenderTask
             with get() = ctrl.RenderTask
             and set t = ctrl.RenderTask <- t

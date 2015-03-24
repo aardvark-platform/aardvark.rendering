@@ -14,27 +14,32 @@ type Keyboard(ctrl : Control) =
     
     let events = EventSource<KeyboardEvent>()
 
+    let down = System.Collections.Generic.HashSet<Keys>()
 
-    let onKeyDown (s : obj) (e : PreviewKeyDownEventArgs) =
-        events.Emit (KeyDown %e.KeyCode)
+    let onKeyDown (s : obj) (e : KeyEventArgs) =
+        let k = %e.KeyCode
+        if down.Add k then
+            events.Emit (KeyDown %e.KeyCode)
 
     let onKeyUp (s : obj) (e : KeyEventArgs) =
-        events.Emit (KeyUp %e.KeyCode)
+        let k = %e.KeyCode
+        if down.Remove k then
+            events.Emit (KeyUp k)
 
     let onKeyPress (s : obj) (e : KeyPressEventArgs) =
         events.Emit (KeyPress e.KeyChar)
 
 
-    let onKeyDownHandler = PreviewKeyDownEventHandler(onKeyDown)
+    let onKeyDownHandler = KeyEventHandler(onKeyDown)
     let onKeyUpHandler = KeyEventHandler(onKeyUp)
     let onKeyPressHandler = KeyPressEventHandler(onKeyPress)
 
-    do ctrl.PreviewKeyDown.AddHandler onKeyDownHandler
+    do ctrl.KeyDown.AddHandler onKeyDownHandler
        ctrl.KeyUp.AddHandler onKeyUpHandler
        ctrl.KeyPress.AddHandler onKeyPressHandler
 
     member x.Dispose() =
-        ctrl.PreviewKeyDown.RemoveHandler onKeyDownHandler
+        ctrl.KeyDown.RemoveHandler onKeyDownHandler
         ctrl.KeyUp.RemoveHandler onKeyUpHandler
         ctrl.KeyPress.RemoveHandler onKeyPressHandler
 

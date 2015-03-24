@@ -42,7 +42,7 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
     let defaultFramebuffer = new Framebuffer(ctx, (fun _ -> 0), ignore, [], None)
 
     let sizes = EventSource<V2i>(V2i(base.ClientSize.Width, base.ClientSize.Height))
-
+    let time = Mod.custom (fun () -> DateTime.Now)
 
     interface IControl with
         member x.Paint() =
@@ -86,6 +86,7 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
             if contextHandle = null then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
 
+            
             match task with
                 | Some t ->
                     using (ctx.RenderingLock contextHandle) (fun _ ->
@@ -99,16 +100,25 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
 
                         statistics.Emit res.Statistics
 
+                        System.Threading.Thread.Sleep(30)
+
+
+                        transact (fun () -> time.MarkOutdated())
                         x.SwapBuffers()
                     )
                 | None ->
                     ()
 
+            
+
     override x.OnResize(e) =
         base.OnResize(e)
         sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
 
+    member x.Time = time
+
     interface IRenderTarget with
+        member x.Time = time
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t

@@ -63,7 +63,7 @@ module ``F# Mouse Extensions`` =
 type CSharpMouseExtensions private() =
     
     [<Extension>]
-    static member Down(x : IMouse) = x.Move
+    static member Down(x : IMouse) = x.Down
 
     [<Extension>]
     static member Up(x : IMouse) = x.Up
@@ -75,7 +75,7 @@ type CSharpMouseExtensions private() =
     static member Scroll(x : IMouse) = x.Scroll
 
     [<Extension>]
-    static member Click(x : IMouse) = x.Scroll
+    static member Click(x : IMouse) = x.Click
     static member DoubleClick(x : IMouse) = x.DoubleClick
     static member Enter(x : IMouse) = x.Enter
     static member Leave(x : IMouse) = x.Leave

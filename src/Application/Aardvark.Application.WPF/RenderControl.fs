@@ -1,10 +1,11 @@
 ﻿namespace Aardvark.Application.WPF
 
-
+open System
 open System.Windows
 open System.Windows.Controls
 open System.Windows.Media
 open Aardvark.Base
+open Aardvark.Base.Incremental
 open Aardvark.Application
 open System.Windows.Forms.Integration
 
@@ -19,6 +20,13 @@ type RenderControl() =
     let keyboard = new ChangeableKeyboard()
     let mouse = new ChangeableMouse()
     let sizes = new EventSource<V2i>()
+    let mutable inner : Option<IMod<DateTime>> = None
+    let time = 
+        Mod.custom (fun () -> 
+            match inner with
+                | Some m -> m.GetValue()
+                | None -> DateTime.Now
+           )
 
     let setControl (self : RenderControl) (c : FrameworkElement) (cr : IRenderTarget) =
         match impl with
@@ -39,6 +47,11 @@ type RenderControl() =
         match renderTask with
             | Some task -> cr.RenderTask <- task
             | None -> ()
+
+        transact(fun () ->
+            cr.Time.AddOutput(time)
+            inner <- Some cr.Time
+        )
 
         ctrl <- Some c
         impl <- Some cr
@@ -65,10 +78,10 @@ type RenderControl() =
                 | Some i -> i.RenderTask <- t
                 | None -> ()
 
-
+    member x.Time = time
     interface IRenderControl with
         member x.Sizes = x.Sizes
-
+        member x.Time = time
         member x.Keyboard = x.Keyboard
         member x.Mouse = x.Mouse
 

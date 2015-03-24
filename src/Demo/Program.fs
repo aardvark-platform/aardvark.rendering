@@ -10,7 +10,7 @@ open Aardvark.Base.Incremental.CSharp
 //open Demo
 
 open Aardvark.Application
-open Aardvark.Application.WPF
+open Aardvark.Application.WinForms
 
 // this module demonstrates how to extend a given scene graph system (here the one provided by assimp) with
 // semantic functions to be used in our rendering framework
@@ -440,10 +440,10 @@ let inline differentiate (m : IMod< ^a >) =
             | Some last ->
                 let d = newValue - last
                 lastValue := Some newValue
-                return Some d
+                return last, Some d
             | None ->
                 lastValue := Some newValue
-                return None
+                return newValue, None
     }
 
 
@@ -459,7 +459,7 @@ let timeTest() =
         adaptive {
             let! d = down
             if d then
-                let! dt = differentiate time
+                let! (t,dt) = differentiate time
                 match dt with
                     | Some dt ->
                         pos := !pos + dt.TotalSeconds
@@ -496,11 +496,162 @@ let timeTest() =
 
 
 
+type IEvent<'a> with
+    member x.BeforeEmit(f : unit -> unit) =
+        x.Values.Subscribe(fun _ -> f())
+
+let controlWSAD (view : ICameraView) (keyboard : IKeyboard) (time : IMod<DateTime>) =
+    let viewTrafoChanger =
+        adaptive {
+
+            let forward = keyboard.IsDown(Keys.W).Mod
+            let backward = keyboard.IsDown(Keys.S).Mod
+            let right = keyboard.IsDown(Keys.D).Mod
+            let left = keyboard.IsDown(Keys.A).Mod
+
+            let moveX =
+                let l = left |> Mod.map (fun a -> if a then -V2d.IO else V2d.Zero) 
+                let r = right |> Mod.map (fun a -> if a then V2d.IO else V2d.Zero) 
+                Mod.map2 (+) l r
+
+            let moveView =
+                let f = forward |> Mod.map (fun a -> if a then V2d.OI else V2d.Zero) 
+                let b = backward |> Mod.map (fun a -> if a then -V2d.OI else V2d.Zero) 
+                Mod.map2 (+) f b
+
+            let! move = Mod.map2 (+) moveX moveView
+            if move <> V2d.Zero then
+                let! (t, dt) = differentiate time
+                match dt with
+                    | Some dt -> 
+                        let moveVec = view.Right * move.X + view.Forward * move.Y
+                        view.Location <- view.Location + moveVec * dt.TotalSeconds * 1.2
+
+                    | None -> ()
+        }
+
+    viewTrafoChanger.AddOutput(view.ViewTrafos.Mod)
+    let d = viewTrafoChanger |> Mod.registerCallback id
+
+    { new IDisposable with
+        member x.Dispose() = 
+            viewTrafoChanger.RemoveOutput(view.ViewTrafos.Mod)
+            d.Dispose()
+    }
+
+type LazyCont<'a, 'r> = { runCont : ('a -> 'r) -> 'r }
+
+type IEvent<'a> with
+    member x.SubscribeVolatile(f : 'a -> unit) =
+        let self : ref<IDisposable> = ref null
+        let live = ref true
+        let cb = fun (v : 'a) ->
+            self.Value.Dispose()
+            f v
+
+        let subscribe() =
+            if !live then
+                self := x.Values.Subscribe(cb)
+
+        subscribe()
+
+        subscribe, { new IDisposable with member x.Dispose() = live := false; self.Value.Dispose() }
+
+module Event =
+    let any (e : list<IEvent>) : IEvent<IEvent> =
+        let res = EventSource<IEvent>()
+        let disp : ref<list<IDisposable>> = ref []
+        disp := e |> List.map (fun e -> e.Values.Subscribe (fun _ -> res.Emit(e); !disp |> List.iter (fun d -> d.Dispose())))
+        res :> IEvent<_>
+
+type AsyncBuilder() =
+    member x.Bind(e : IEvent<'a>, f : 'a -> Async<'b>) : Async<'b> =
+        x.Bind(e.Values, f)
+
+    member x.Bind(t : System.Threading.Tasks.Task<'a>, f : 'a -> Async<'b>) =
+        async.Bind(Async.AwaitTask t, f)
+
+    member x.Bind(o : IObservable<'a>, f : 'a -> Async<'b>) =
+        async.Bind(x.ReturnFrom o, f)
+
+    member x.Bind(a : Async<'a>, f : 'a -> Async<'b>) =
+        async.Bind(a, f)
+
+
+    member x.Return(v : 'a) = 
+        async.Return(v)
+
+    member x.ReturnFrom(o : IObservable<'a>) =
+        let a = Async.FromContinuations(fun (success, error, cancel) ->
+            let d : ref<IDisposable> = ref null
+            d := o.Subscribe(fun v -> d.Value.Dispose(); success v)
+        )
+        async.ReturnFrom(a)
+
+    member x.ReturnFrom(e : IEvent<'a>) =
+        x.ReturnFrom(e.Values)
+
+    member x.ReturnFrom(e : System.Threading.Tasks.Task<'a>) =
+        x.ReturnFrom(Async.AwaitTask e)
+
+    member x.ReturnFrom(a : Async<'a>) =
+        async.ReturnFrom(a)
+
+    member x.Combine(l : Async<unit>, r : Async<'a>) =
+        async.Combine(l,r)
+
+    member x.Zero () =
+        async.Zero()
+
+    member x.Delay(f : unit -> Async<'a>) =
+        async.Delay(f)
+
+    member x.While(guard : unit -> bool, body : Async<unit>) =
+        async.While(guard, body)
+
+    member x.For(s : seq<'a>, f : 'a -> Async<unit>) =
+        async.For(s, f)
+
+    member x.TryWith(e : Async<'a>, ex : exn -> Async<'a>) =
+        async.TryWith(e, ex)
+
+    member x.TryFinally(e : Async<'a>, f : unit -> unit) =
+        async.TryFinally(e, f)
+
+let async = AsyncBuilder()
+
+let cc (view : ICameraView) (keyboard : IKeyboard) (time : IMod<DateTime>) =
+    let time = time.Event
+    let l = keyboard.IsDown(Keys.A)
+    let r = keyboard.IsDown(Keys.D)
+
+    async {
+        while true do
+            let! _ = Event.any [l; r]
+            
+            if l.Latest || r.Latest then
+                printfn "start"
+                let start = ref DateTime.Now
+                while l.Latest || r.Latest do
+                    let! time = time
+                    let dt = time - !start
+                    printfn "%Ams" dt.TotalMilliseconds
+                    start := time
+
+                    let delta = 
+                        match l.Latest, r.Latest with
+                            | true, false -> -1.0
+                            | false, true -> 1.0
+                            | _ -> 0.0
+                    view.Location <- view.Location + view.Right * delta * dt.TotalSeconds * 1.2
+                printfn "stop"
+    }
+
 
 [<EntryPoint>]
 [<STAThread>]
 let main args = 
-    timeTest()
+    //timeTest()
 
     let modelPath = match args |> Array.toList with
                       | []     -> printfn "using default eigi model."; System.IO.Path.Combine( __SOURCE_DIRECTORY__, "eigi", "eigi.dae") 
@@ -514,22 +665,36 @@ let main args =
     let f = app.CreateSimpleRenderWindow()
     let ctrl = f.Control
 
-    ctrl.Mouse.Events.Values.Subscribe(fun e ->
-        match e with
-            | MouseDown p -> printfn  "down: %A" p.location.Position
-            | MouseUp p -> printfn  "up: %A" p.location.Position
-            | MouseClick p -> printfn  "click: %A" p.location.Position
-            | MouseDoubleClick p -> printfn  "doubleClick: %A" p.location.Position
-            | MouseMove p -> printfn  "move: %A" p.Position
-            | MouseScroll(delta,p) -> printfn  "scroll: %A" delta
-            | MouseEnter p -> printfn  "enter: %A" p.Position
-            | MouseLeave p -> printfn  "leave: %A" p.Position
-    ) |> ignore
+//    ctrl.Mouse.Events.Values.Subscribe(fun e ->
+//        match e with
+//            | MouseDown p -> printfn  "down: %A" p.location.Position
+//            | MouseUp p -> printfn  "up: %A" p.location.Position
+//            | MouseClick p -> printfn  "click: %A" p.location.Position
+//            | MouseDoubleClick p -> printfn  "doubleClick: %A" p.location.Position
+//            | MouseMove p -> printfn  "move: %A" p.Position
+//            | MouseScroll(delta,p) -> printfn  "scroll: %A" delta
+//            | MouseEnter p -> printfn  "enter: %A" p.Position
+//            | MouseLeave p -> printfn  "leave: %A" p.Position
+//    ) |> ignore
 
     let view = CameraViewWithSky(Location = V3d(2.0,2.0,2.0), Forward = -V3d.III.Normalized)
     let proj = CameraProjectionPerspective(60.0, 0.1, 100.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
     let mode = Mod.initMod FillMode.Fill
 
+
+
+//    let moveX =
+//        let l = left |> Mod.map (fun a -> if a then -1.0 else 0.0) 
+//        let r = right |> Mod.map (fun a -> if a then 1.0 else 0.0) 
+//        Mod.map2 (+) l r
+//
+//    let moveView =
+//        let f = forward |> Mod.map (fun a -> if a then 1.0 else 0.0) 
+//        let b = backward |> Mod.map (fun a -> if a then -1.0 else 0.0) 
+//        Mod.map2 (+) f b
+
+
+    //ctrl.Time |> Mod.registerCallback (fun t -> printfn "%A" t) |> ignore
 
 //    use cc = WinForms.addCameraController w view
 //    WinForms.addFillModeController w mode
@@ -551,6 +716,9 @@ let main args =
 
         sg |> Sg.trafo (Mod.initConstant trafo)
 
+    //let d = controlWSAD view ctrl.Keyboard ctrl.Time
+
+    controlWSAD view ctrl.Keyboard ctrl.Time |> ignore
 
     let sg =
         sg |> Sg.effect [Shader.effect]
@@ -586,8 +754,8 @@ let main args =
     ctrl.RenderTask <- task
 //    w.Run()
 
-    let app = System.Windows.Application()
-    app.Run(f) |> ignore
-    //System.Windows.Forms.Application.Run(f)
+//    let app = System.Windows.Application()
+//    app.Run(f) |> ignore
+    System.Windows.Forms.Application.Run(f)
 
     0

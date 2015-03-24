@@ -27,8 +27,9 @@ type OpenGlRenderControl(context : Context, samples : int) as this =
 
     member x.Sizes = ctrl.Sizes
 
-
+    member x.Time = ctrl.Time
     interface IRenderTarget with
+        member x.Time = ctrl.Time
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t

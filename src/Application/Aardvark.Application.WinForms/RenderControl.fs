@@ -4,6 +4,7 @@ open System
 open System.Windows.Forms
 open System.Drawing
 open Aardvark.Base
+open Aardvark.Base.Incremental
 open Aardvark.Application
 
 type RenderControl() =
@@ -16,6 +17,13 @@ type RenderControl() =
     let keyboard = new ChangeableKeyboard()
     let mouse = new ChangeableMouse()
     let sizes = new EventSource<V2i>()
+    let mutable inner : Option<IMod<DateTime>> = None
+    let time = 
+        Mod.custom (fun () -> 
+            match inner with
+                | Some m -> m.GetValue()
+                | None -> DateTime.Now
+           )
 
     let setControl (self : RenderControl) (c : Control) (cr : IRenderTarget) =
         match impl with
@@ -31,7 +39,10 @@ type RenderControl() =
             | Some task -> cr.RenderTask <- task
             | None -> ()
 
-
+        transact(fun () ->
+            cr.Time.AddOutput(time)
+            inner <- Some cr.Time
+        )
         ctrl <- Some c
         impl <- Some cr
 
@@ -58,8 +69,10 @@ type RenderControl() =
                 | Some i -> i.RenderTask <- t
                 | None -> ()
 
+    member x.Time = time
 
     interface IRenderControl with
+        member x.Time = time
         member x.Sizes = x.Sizes
 
         member x.Keyboard = x.Keyboard

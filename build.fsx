@@ -193,7 +193,7 @@ Target "InstallLocal" (fun () ->
                 | Some packageOutputPath ->
                     if File.Exists buildCmd then
 
-                        Git.Branches.checkout modulePath false "master"
+                        //Git.Branches.checkout modulePath false "master"
 
 
                         let ret = 
