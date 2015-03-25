@@ -39,7 +39,7 @@ Target "Default" (fun () -> ())
 
 let knownPackages = 
     Set.ofList [
-        "Aardvark.Rendering"
+        "Aardvark.Base.Rendering"
     ]
 
 
