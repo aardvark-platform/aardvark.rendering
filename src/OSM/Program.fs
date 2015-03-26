@@ -133,6 +133,7 @@ let main argv =
     let tileIndices =
         aset {
             let! gridSize = gridSize
+            printfn "new grid size: %A" gridSize
             for x in 0..gridSize.X-1 do
                 for y in 0..gridSize.Y-1 do
                     yield V2i(x,y)
@@ -170,9 +171,8 @@ let main argv =
                     Trafo3d.Scale(V3d(scaleFactor.X, scaleFactor.Y, 1.0)) * Trafo3d.Translation(tileOrigin.X,tileOrigin.Y, 0.0)
 
                 let tileTrafo = Mod.map2 calcTileTrafo firstTileAndOffset gridSize
-                let sg = fsq |> Sg.trafo tileTrafo
-                printfn "new sg for: %A" coord
-                yield Sg.UniformApplicator("TileIndex", Mod.initConstant (V2d coord / V2d (gridSize.GetValue())), sg) :> ISg
+                yield fsq |> Sg.trafo tileTrafo
+                
         }
 
     let vertex (v : Vertex) =
@@ -182,8 +182,7 @@ let main argv =
 
     let fragment (v : Vertex) =
         fragment {
-            let index : V2d = uniform?TileIndex
-            return V4d(index.X, index.Y, 1.0, 1.0)
+            return V4d(v.tc.X, v.tc.Y, 1.0, 1.0)
         }
 
     let sg =
