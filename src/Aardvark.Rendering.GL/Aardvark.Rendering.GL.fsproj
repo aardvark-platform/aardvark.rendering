@@ -80,23 +80,23 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">
-      <HintPath>..\..\packages\Aardvark.Base.1.1.12\lib\net45\Aardvark.Base.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.1.1.8\lib\net45\Aardvark.Base.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Aardvark.Base.Essentials">
-      <HintPath>..\..\packages\Aardvark.Base.Essentials.1.1.12\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.Essentials.1.1.8\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Aardvark.Base.FSharp">
-      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.12\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.8\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Aardvark.Base.Incremental">
-      <HintPath>..\..\packages\Aardvark.Base.Incremental.1.1.12\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.Incremental.1.1.8\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Aardvark.Base.TypeProviders">
-      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.12\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.8\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="DevILSharp">
@@ -116,15 +116,11 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Compiler.Service">
-      <HintPath>..\..\packages\FSharp.Compiler.Service.0.0.86\lib\net45\FSharp.Compiler.Service.dll</HintPath>
+      <HintPath>..\..\packages\FSharp.Compiler.Service.0.0.85\lib\net45\FSharp.Compiler.Service.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="nunit.framework">
-      <HintPath>..\..\packages\NUnit.3.0.0-alpha-5\lib\net45\nunit.framework.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -183,6 +179,10 @@
     </Reference>
     <Reference Include="RegexProvider">
       <HintPath>..\..\packages\RegexProvider.0.0.4\lib\net40\RegexProvider.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="nunit.framework">
+      <HintPath>..\..\packages\NUnit.2.6.4\lib\nunit.framework.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Compiler">

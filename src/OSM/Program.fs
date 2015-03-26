@@ -110,7 +110,8 @@ let main argv =
     let gridSize = 
         adaptive {
             let! size = viewResolution
-            return size / tileResolution + V2i.II
+            let res =  (size / tileResolution) + 2*V2i.II
+            return res
         }
 
     let tileSize = 
@@ -161,12 +162,17 @@ let main argv =
         aset {
             for coord in tileIndices do
                 let calcTileTrafo (f : V2i, o : V2d) (s : V2i) =
-                    let tileOrigin = V2d coord / V2d s + o / tileSize.GetValue()
+                    let tileOrigin = (V2d coord + o / tileSize.GetValue()) / V2d (s - V2i.II)
 
-                    Trafo3d.Translation(tileOrigin.X, tileOrigin.Y, 0.0)
+                    let scaleFactor = V2d tileResolution / V2d (viewResolution.GetValue())
+                    let tileOrigin = tileOrigin
+
+                    Trafo3d.Scale(V3d(scaleFactor.X, scaleFactor.Y, 1.0)) * Trafo3d.Translation(tileOrigin.X,tileOrigin.Y, 0.0)
 
                 let tileTrafo = Mod.map2 calcTileTrafo firstTileAndOffset gridSize
-                yield fsq |> Sg.trafo tileTrafo
+                let sg = fsq |> Sg.trafo tileTrafo
+                printfn "new sg for: %A" coord
+                yield Sg.UniformApplicator("TileIndex", Mod.initConstant (V2d coord / V2d (gridSize.GetValue())), sg) :> ISg
         }
 
     let vertex (v : Vertex) =
@@ -176,13 +182,14 @@ let main argv =
 
     let fragment (v : Vertex) =
         fragment {
-            return V4d(v.tc.X, v.tc.Y, 1.0, 1.0)
+            let index : V2d = uniform?TileIndex
+            return V4d(index.X, index.Y, 1.0, 1.0)
         }
 
     let sg =
         sgs |> Sg.set
             |> Sg.effect [toEffect vertex; toEffect fragment]
-
+            |> Sg.trafo (Mod.initConstant (Trafo3d.ViewTrafo(V3d(-1.0, 1.0, 0.0), V3d.IOO * 2.0, -V3d.OIO * 2.0, V3d.OOI)).Inverse)
 //    tileCoords |> ASet.toMod |> Mod.registerCallback (fun indices ->
 //        printfn "%A" (Seq.toList indices)
 //    ) |> ignore
@@ -207,7 +214,7 @@ let main argv =
                     let vp = viewport.Value
 
                     transact (fun () ->
-                        viewport.Value <- vp.Translated((!lastPos - pos) * vp.Size)
+                        viewport.Value <- vp.Translated((pos - !lastPos) * vp.Size)
                     )
 
                     lastPos := pos

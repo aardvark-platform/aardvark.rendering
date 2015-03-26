@@ -82,10 +82,6 @@
       <HintPath>..\..\packages\Aardvark.Base.FSharp.1.1.12\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Antlr3.Runtime">
-      <HintPath>..\..\packages\Antlr3.Runtime.PCL.3.5.0.3\lib\portable-win+net40+sl40+wp\Antlr3.Runtime.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="BruTile">
       <HintPath>..\..\packages\BruTile.0.12.0\lib\net40\BruTile.dll</HintPath>
       <Private>True</Private>
@@ -120,30 +116,6 @@
     </Reference>
     <Reference Include="nunit.framework">
       <HintPath>..\..\packages\NUnit.3.0.0-alpha-5\lib\net45\nunit.framework.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="OsmSharp">
-      <HintPath>..\..\packages\OsmSharp.4.3.0.998-beta\lib\net45\OsmSharp.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="OsmSharp.Osm">
-      <HintPath>..\..\packages\OsmSharp.4.3.0.998-beta\lib\net45\OsmSharp.Osm.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="OsmSharp.Routing">
-      <HintPath>..\..\packages\OsmSharp.4.3.0.998-beta\lib\net45\OsmSharp.Routing.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="OsmSharp.Service.Tiles">
-      <HintPath>..\..\packages\OsmSharp.Service.Tiles.0.0.1.61-beta\lib\net45\OsmSharp.Service.Tiles.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="OsmSharp.UI">
-      <HintPath>..\..\packages\OsmSharp.4.3.0.998-beta\lib\net45\OsmSharp.UI.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="OsmSharp.WinForms.UI">
-      <HintPath>..\..\packages\OsmSharp.4.3.0.998-beta\lib\net45\OsmSharp.WinForms.UI.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="protobuf-net">
