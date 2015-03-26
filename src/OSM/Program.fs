@@ -9,6 +9,11 @@ open BruTile.Cache
 open BruTile.Predefined
 open Aardvark.Base
 open DevILSharp
+open Aardvark.Base.Incremental
+open Aardvark.Application
+open Aardvark.Application.WinForms
+open Aardvark.SceneGraph
+open FShade
 
 let e = 8.1819190842622E-02
 let a = 6378137.0
@@ -54,8 +59,16 @@ type Extent with
     member x.Box =
         Box2d(x.MinX, x.MinY, x.MaxX, x.MaxY)
 
+type Vertex =
+    {
+        [<Position>] pos : V4d
+        [<TexCoord>] tc : V2d
+    }
+
 [<EntryPoint>]
 let main argv = 
+    Aardvark.Init()
+
     let source = KnownTileSources.Create(KnownTileSource.OpenStreetMap)
 
     let imageSize = V2i(1024, 768)
@@ -74,6 +87,138 @@ let main argv =
     let pi = PixImage<byte>(Col.Format.RGBA, imageSize.X, imageSize.Y, 4)
     DevILSharp.IL.Enable(DevILSharp.EnableCap.AbsoluteOrigin) |> ignore
     DevILSharp.IL.OriginFunc(DevILSharp.OriginMode.LowerLeft) |> ignore
+
+
+    let app = new OpenGlApplication()
+    let w = app.CreateSimpleRenderWindow()
+
+    let tileResolution = V2i(256, 256)
+
+    let worldBounds = source.Schema.Extent.Box
+    let viewport = Mod.initMod (Box2d.FromMinAndSize(worldBounds.Min, worldBounds.Size * 0.1))
+
+    let viewResolution = w.Sizes.Mod
+
+    let zoomLevel = 
+        adaptive {
+            let! vp = viewport
+            let! s = viewResolution
+            let res = vp.Size / V2d s
+            return Utilities.GetNearestLevel(source.Schema.Resolutions, max res.X res.Y)
+        }
+
+    let gridSize = 
+        adaptive {
+            let! size = viewResolution
+            return size / tileResolution + V2i.II
+        }
+
+    let tileSize = 
+        zoomLevel |> Mod.map (fun l -> let gridSize = V2d(source.Schema.GetMatrixWidth(l), source.Schema.GetMatrixHeight(l)) in worldBounds.Size / gridSize)
+
+    let firstTileAndOffset =
+        adaptive {
+            let! tileSize = tileSize
+            let! vp = viewport
+
+            let vpOffset = vp.Min - worldBounds.Min
+            let floatTile = vpOffset / tileSize
+            let offset = V2d(vpOffset.X % tileSize.X, vpOffset.Y % tileSize.Y)
+            let tile = V2i(floor floatTile.X, floor floatTile.Y)
+
+            return tile, offset
+        }
+
+    let tileIndices =
+        aset {
+            let! gridSize = gridSize
+            for x in 0..gridSize.X-1 do
+                for y in 0..gridSize.Y-1 do
+                    yield V2i(x,y)
+        }
+
+    let tileCoords =
+        aset {
+            let! (first, offset) = firstTileAndOffset
+            for i in tileIndices do
+                yield i + first
+        }
+
+
+    let fsq = 
+        let q = IndexedGeometry()
+
+        q.Mode <- IndexedGeometryMode.TriangleList
+        q.IndexArray <- [|0;1;2; 0;2;3|]
+        q.IndexedAttributes <- SymDict.ofList [
+            DefaultSemantic.Positions, [|V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO|] :> Array
+            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array
+        ]
+
+        Sg.ofIndexedGeometry q
+
+    let sgs =
+        aset {
+            for coord in tileIndices do
+                let calcTileTrafo (f : V2i, o : V2d) (s : V2i) =
+                    let tileOrigin = V2d coord / V2d s + o / tileSize.GetValue()
+
+                    Trafo3d.Translation(tileOrigin.X, tileOrigin.Y, 0.0)
+
+                let tileTrafo = Mod.map2 calcTileTrafo firstTileAndOffset gridSize
+                yield fsq |> Sg.trafo tileTrafo
+        }
+
+    let vertex (v : Vertex) =
+        vertex {
+            return { v with pos = uniform.ModelTrafo * v.pos }
+        }
+
+    let fragment (v : Vertex) =
+        fragment {
+            return V4d(v.tc.X, v.tc.Y, 1.0, 1.0)
+        }
+
+    let sg =
+        sgs |> Sg.set
+            |> Sg.effect [toEffect vertex; toEffect fragment]
+
+//    tileCoords |> ASet.toMod |> Mod.registerCallback (fun indices ->
+//        printfn "%A" (Seq.toList indices)
+//    ) |> ignore
+
+    w.RenderTask <- app.Runtime.CompileRender(sg.RenderJobs())
+
+
+    let lastPos = ref V2d.Zero
+    let down = ref false
+    w.Mouse.Events.Values.Subscribe(fun e ->
+        match e with
+            | MouseDown p ->
+                down := true
+                lastPos := p.location.NormalizedPosition
+            | MouseUp p ->
+                down := false
+                lastPos := p.location.NormalizedPosition
+            | MouseMove pos ->
+                if !down then
+                    let pos = pos.NormalizedPosition
+                    let delta = pos - !lastPos
+                    let vp = viewport.Value
+
+                    transact (fun () ->
+                        viewport.Value <- vp.Translated((!lastPos - pos) * vp.Size)
+                    )
+
+                    lastPos := pos
+            | _ -> ()
+    ) |> ignore
+
+
+
+
+    System.Windows.Forms.Application.Run w
+    Environment.Exit 0
 
     for t in tileInfos do
 

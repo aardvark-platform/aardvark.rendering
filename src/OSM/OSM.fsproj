@@ -94,6 +94,18 @@
       <HintPath>..\..\packages\DevILSharp.0.0.5\lib\net45\DevILSharp.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="FShade">
+      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="FShade.Compiler">
+      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.Compiler.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="FShade.Debug">
+      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.Debug.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="FSharp.Compiler.Service">
       <HintPath>..\..\packages\FSharp.Compiler.Service.0.0.86\lib\net45\FSharp.Compiler.Service.dll</HintPath>
       <Private>True</Private>
@@ -196,6 +208,7 @@
       <HintPath>..\..\packages\Rx-PlatformServices.2.2.5\lib\net45\System.Reactive.PlatformServices.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="Zlib.Portable">
       <HintPath>..\..\packages\Zlib.Portable.1.10.0\lib\portable-net4+sl5+wp8+win8+wpa81+MonoTouch+MonoAndroid\Zlib.Portable.dll</HintPath>
       <Private>True</Private>
