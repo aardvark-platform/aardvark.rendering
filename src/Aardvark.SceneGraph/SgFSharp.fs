@@ -21,6 +21,9 @@ module SgFSharp =
 
     module Sg =
 
+        let uniform (name : string) (value : IMod<'a>) (sg : ISg) =
+            Sg.UniformApplicator(name, value :> IMod, sg) :> ISg
+
         let trafo (m : IMod<Trafo3d>) (sg : ISg) =
             Sg.TrafoApplicator(m, sg) :> ISg
 
