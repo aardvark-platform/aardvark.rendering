@@ -219,9 +219,9 @@ module ProgramReflector =
                             GL.Check "could not get program resource"
                             let outputType = p |> unbox<ActiveAttribType>
 
-                            let mutable prop = ProgramProperty.ArraySize
-                            let _,size = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
-                            GL.Check "could not get program resource"
+//                            let mutable prop = ProgramProperty.ArraySize
+//                            let _,size = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
+//                            GL.Check "could not get program resource"
 
                             let location = GL.GetFragDataLocation(p, name)
                             GL.Check "could not get frag data location"

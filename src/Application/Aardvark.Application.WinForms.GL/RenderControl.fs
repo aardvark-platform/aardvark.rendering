@@ -86,10 +86,14 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
             if contextHandle = null then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
 
+            let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
             
+
             match task with
                 | Some t ->
                     using (ctx.RenderingLock contextHandle) (fun _ ->
+                        if size <> sizes.Latest then
+                            transact (fun () -> sizes.Emit size)
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                         GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
                         GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
@@ -107,13 +111,14 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
                         x.SwapBuffers()
                     )
                 | None ->
-                    ()
+                    if size <> sizes.Latest then
+                        transact (fun () -> sizes.Emit size)
 
             
 
-    override x.OnResize(e) =
-        base.OnResize(e)
-        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
+//    override x.OnResize(e) =
+//        base.OnResize(e)
+//        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
 
     member x.Time = time
 

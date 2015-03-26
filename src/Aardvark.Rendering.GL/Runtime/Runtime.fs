@@ -105,47 +105,47 @@ type Runtime(ctx : Context) =
         member x.CreateFramebuffer bindings = x.CreateFramebuffer bindings
 
     member private x.CompileRenderInternal (set : aset<RenderJob>) =
-        let task = new RenderTasks.RenderTask(x, ctx, manager)
-        let subscriptions = Dictionary()
-
-        set |> ASet.registerCallback (fun d ->
-            for d in d do   
-                match d with
-                    | Add a ->
-                        if a.RenderPass <> null then
-                            let oldPass = ref System.UInt64.MaxValue
-                            let s = a.RenderPass |> Mod.registerCallback (fun k ->
-                                if !oldPass <> k  // phantom change here might lead to duplicate additions.
-                                    then
-                                        oldPass := k
-                                        task.Add(k,a)
-
-                                        match subscriptions.TryGetValue a with
-                                            | (true,(s,old)) ->
-                                                task.Remove(old, a)
-                                                subscriptions.[a] <- (s,k)
-                                            | _ -> ()
-                                    else 
-                                        printfn "changed pass to old value (phantom)"
-                            
-                            )
-                            let sortKey = a.RenderPass.GetValue()
-                            subscriptions.[a] <- (s, sortKey)
-                        else
-                            task.Add(0UL, a)
-
-                    | Rem a ->
-                        if a.RenderPass <> null then
-                            match subscriptions.TryGetValue a with
-                                | (true,(d,k)) ->
-                                    task.Remove(k, a)
-                                    d.Dispose()
-                                    subscriptions.Remove a |> ignore
-                                | _ -> ()
-                        else
-                            task.Remove(0UL, a)
-
-        ) |> ignore
+        let task = new RenderTasks.RenderTask(x, ctx, manager, set)
+//        let subscriptions = Dictionary()
+//
+//        set |> ASet.registerCallback (fun d ->
+//            for d in d do   
+//                match d with
+//                    | Add a ->
+//                        if a.RenderPass <> null then
+//                            let oldPass = ref System.UInt64.MaxValue
+//                            let s = a.RenderPass |> Mod.registerCallback (fun k ->
+//                                if !oldPass <> k  // phantom change here might lead to duplicate additions.
+//                                    then
+//                                        oldPass := k
+//                                        task.Add(k,a)
+//
+//                                        match subscriptions.TryGetValue a with
+//                                            | (true,(s,old)) ->
+//                                                task.Remove(old, a)
+//                                                subscriptions.[a] <- (s,k)
+//                                            | _ -> ()
+//                                    else 
+//                                        printfn "changed pass to old value (phantom)"
+//                            
+//                            )
+//                            let sortKey = a.RenderPass.GetValue()
+//                            subscriptions.[a] <- (s, sortKey)
+//                        else
+//                            task.Add(0UL, a)
+//
+//                    | Rem a ->
+//                        if a.RenderPass <> null then
+//                            match subscriptions.TryGetValue a with
+//                                | (true,(d,k)) ->
+//                                    task.Remove(k, a)
+//                                    d.Dispose()
+//                                    subscriptions.Remove a |> ignore
+//                                | _ -> ()
+//                        else
+//                            task.Remove(0UL, a)
+//
+//        ) |> ignore
         task
 
     member x.CompileRender(set : aset<RenderJob>) : IRenderTask =

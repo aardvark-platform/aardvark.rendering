@@ -31,7 +31,8 @@ type UnsharedObject(context : Context, createHandle : ContextHandle -> int, dest
     /// </summary>
     let handle() =
         if isLive = 0 then
-            raise <| OpenGLException(ErrorCode.InvalidOperation, "cannot use disposed VertexArrayObject")
+            //raise <| OpenGLException(ErrorCode.InvalidOperation, "cannot use disposed VertexArrayObject")
+            0
         else
             match ContextHandle.Current with
                 | Some ctx -> 

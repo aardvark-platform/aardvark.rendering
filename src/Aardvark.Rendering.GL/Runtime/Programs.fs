@@ -489,6 +489,8 @@ module Programs =
         let defragment() =
             Log.startTimed "defragmentation"
 
+            //Log.warn "defragmentation currently disabled"
+
             let mutable current = prolog
             current.Freeze()
                 

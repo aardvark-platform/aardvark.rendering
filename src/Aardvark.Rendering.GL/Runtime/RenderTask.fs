@@ -114,8 +114,13 @@ module RenderTasks =
                 let s = seq { for i in 0..keys.Count-1 do yield KeyValuePair(keys.[i], values.[i]) }
                 (s :> System.Collections.IEnumerable).GetEnumerator()
 
-    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager) as this =
+    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, set : aset<RenderJob>) as this =
         inherit AdaptiveObject()
+
+        let subscriptions = Dictionary()
+        let reader = set.GetReader()
+        do reader.AddOutput this
+
         let inputs = ReferenceCountingSet<IAdaptiveObject>()
         let mutable programs = Map.empty
         let changer = Mod.initMod ()
@@ -126,11 +131,11 @@ module RenderTasks =
 
         let addInput m =
             if inputs.Add m then
-                m.AddOutput this
+                transact (fun () -> m.AddOutput this)
 
         let removeInput m =
             if inputs.Remove m then
-                m.RemoveOutput this
+                transact (fun () -> m.RemoveOutput this)
 
         let tryGetProgramForPass (pass : uint64) =
             Map.tryFind pass programs
@@ -154,7 +159,7 @@ module RenderTasks =
                     p
 
 
-        member x.Add(pass : uint64, rj : RenderJob) =
+        member private x.Add(pass : uint64, rj : RenderJob) =
             additions <- additions + 1
             let program = getProgramForPass pass (rj.AttributeScope |> unbox)
             program.Add rj
@@ -169,9 +174,7 @@ module RenderTasks =
                 )
             surfaceSubscriptions.Add(rj, subscription)
 
-            base.MarkOutdated()
-
-        member x.Remove(pass : uint64, rj : RenderJob) =
+        member private x.Remove(pass : uint64, rj : RenderJob) =
             removals <- removals + 1
             match tryGetProgramForPass pass with
                 | Some p -> p.Remove rj
@@ -183,7 +186,42 @@ module RenderTasks =
                     Dictionary.remove rj surfaceSubscriptions |> ignore
                 | _ -> ()
 
-            base.MarkOutdated()
+        member x.ProcessDeltas (deltas : list<Delta<RenderJob>>) =
+            for d in deltas do
+                match d with
+                    | Add a ->
+                        if a.RenderPass <> null then
+                            let oldPass = ref System.UInt64.MaxValue
+                            let s = a.RenderPass |> Mod.registerCallback (fun k ->
+                                if !oldPass <> k  // phantom change here might lead to duplicate additions.
+                                    then
+                                        oldPass := k
+                                        x.Add(k,a)
+
+                                        match subscriptions.TryGetValue a with
+                                            | (true,(s,old)) ->
+                                                x.Remove(old, a)
+                                                subscriptions.[a] <- (s,k)
+                                            | _ -> ()
+                                    else 
+                                        printfn "changed pass to old value (phantom)"
+                            
+                            )
+                            let sortKey = a.RenderPass.GetValue()
+                            subscriptions.[a] <- (s, sortKey)
+                        else
+                            x.Add(0UL, a)
+
+                    | Rem a ->
+                        if a.RenderPass <> null then
+                            match subscriptions.TryGetValue a with
+                                | (true,(d,k)) ->
+                                    x.Remove(k, a)
+                                    d.Dispose()
+                                    subscriptions.Remove a |> ignore
+                                | _ -> ()
+                        else
+                            x.Remove(0UL, a)
 
         member x.Run (fbo : IFramebuffer) =
             using ctx.ResourceLock (fun _ ->
@@ -199,6 +237,8 @@ module RenderTasks =
                     GL.Check (sprintf "could not bind framebuffer (new): %d" handle)
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check (sprintf "could not set viewport: %A" fbo.Size)
+
+                    x.ProcessDeltas (reader.GetDelta())
 
                     let mutable stats = FrameStatistics.Zero
                     let fboHandle = fbo |> unbox<Framebuffer>
@@ -222,6 +262,9 @@ module RenderTasks =
             for _,p in Map.toSeq programs do
                 p.Dispose()
             programs <- Map.empty
+            reader.RemoveOutput x
+            reader.Dispose()
+
 
         interface IRenderTask with
             member x.Run(fbo) =
