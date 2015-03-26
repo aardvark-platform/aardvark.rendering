@@ -14,7 +14,7 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
 open FShade
-
+open Aardvark.Rendering.GL
 let e = 8.1819190842622E-02
 let a = 6378137.0
 
@@ -59,17 +59,45 @@ type Extent with
     member x.Box =
         Box2d(x.MinX, x.MinY, x.MaxX, x.MaxY)
 
-type Vertex =
-    {
-        [<Position>] pos : V4d
-        [<TexCoord>] tc : V2d
-    }
+[<AutoOpen>]
+module Shader = 
+    type Vertex =
+        {
+            [<Position>] pos : V4d
+            [<TexCoord>] tc : V2d
+        }
 
-[<EntryPoint>]
+    // define a very simple shader for rendering the tiles and apply it to the scenegraph
+    // furthermore normalize the view-space to [0.0, 1.0] x [0.0, 1.0] (starting top-left)
+    let vertex (v : Vertex) =
+        vertex {
+            return { v with pos = uniform.ModelTrafo * v.pos }
+        }
+
+    let diffuseTex = 
+        sampler2d {
+            texture uniform?DiffuseColorTexture
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+            filter Filter.MinMagMipLinear
+        }
+
+    let fragment (v : Vertex) =
+        fragment {
+            let color = diffuseTex.Sample(v.tc)
+
+            return V4d(1.0 * color.XYZ, color.W)
+        }
+
+
+[<EntryPoint; STAThread>]
 let main argv = 
     Aardvark.Init()
+    System.Windows.Forms.Application.SetUnhandledExceptionMode(System.Windows.Forms.UnhandledExceptionMode.ThrowException)
+    
+    let source = KnownTileSources.Create(KnownTileSource.BingAerial)
 
-    let source = KnownTileSources.Create(KnownTileSource.OpenStreetMap)
+
 
 //    let imageSize = V2i(1024, 768)
 //    let region = Box2d(16.3, 48.15, 16.4, 48.25)
@@ -92,13 +120,26 @@ let main argv =
     let app = new OpenGlApplication()
     let w = app.CreateSimpleRenderWindow()
 
-    let tileResolution = V2i(256, 256)
 
+    // let's assume the tile resolution is constant
+    let realTileResolution = V2i(256, 256)
     let worldBounds = source.Schema.Extent.Box
-    let viewport = Mod.initMod (Box2d.FromMinAndSize(worldBounds.Min, worldBounds.Size * 0.1))
 
+    // initialize a viewport (small part of the world currently)
+    // NOTE that the viewport matches the aspect-ratio of the initial
+    //      window-size. therefore tiles will appear quadradic.
+    let viewport = 
+        let horizontal = worldBounds.Size.X * 0.1
+        let vertical = (3.0 / 4.0) * horizontal
+        Mod.initMod (Box2d.FromMinAndSize(worldBounds.Center, V2d(horizontal, vertical)))
+
+    // in order to determine the appropriate grid-size we will need the view's size
     let viewResolution = w.Sizes.Mod
 
+
+
+
+    // determine the zoom-level using the current viewport and view-size
     let zoomLevel = 
         adaptive {
             let! vp = viewport
@@ -107,16 +148,39 @@ let main argv =
             return Utilities.GetNearestLevel(source.Schema.Resolutions, max res.X res.Y)
         }
 
+    let tileCounts =
+        zoomLevel |> Mod.map (fun l -> V2i(source.Schema.GetMatrixWidth(l), source.Schema.GetMatrixHeight(l)))
+
+
+    // determine the tile-size in world-space
+    let tileSize = 
+        zoomLevel |> Mod.map (fun l -> let gridSize = V2d(source.Schema.GetMatrixWidth(l), source.Schema.GetMatrixHeight(l)) in worldBounds.Size / gridSize)
+
+    // calculate the real resolution of tiles for the current view
+    let tileViewResolution =
+        adaptive {
+            let! tileSize = tileSize
+            let! viewport = viewport
+            let r = tileSize / viewport.Size
+
+            let! viewResolution = viewResolution
+
+            return V2i (V2d viewResolution * r)
+
+        }
+
+    // calculate the total grid size (todo: +2 may be to conservative)
     let gridSize = 
         adaptive {
             let! size = viewResolution
+            let! tileResolution = tileViewResolution
             let res =  (size / tileResolution) + 2*V2i.II
             return res
         }
 
-    let tileSize = 
-        zoomLevel |> Mod.map (fun l -> let gridSize = V2d(source.Schema.GetMatrixWidth(l), source.Schema.GetMatrixHeight(l)) in worldBounds.Size / gridSize)
 
+    // calculate the integer index for the first (upper-left) tile 
+    // and a fractional offset for that tile
     let firstTileAndOffset =
         adaptive {
             let! tileSize = tileSize
@@ -124,30 +188,25 @@ let main argv =
 
             let vpOffset = vp.Min - worldBounds.Min
             let floatTile = vpOffset / tileSize
-            let offset = V2d(vpOffset.X % tileSize.X, vpOffset.Y % tileSize.Y)
+
+            let offset = V2d(vpOffset.X % tileSize.X, vpOffset.Y % tileSize.Y) / tileSize
             let tile = V2i(floor floatTile.X, floor floatTile.Y)
 
             return tile, offset
         }
 
+    // create the desired tile-indices ([0..gridSize.X-1] x [0..gridSize.Y-1])
     let tileIndices =
         aset {
             let! gridSize = gridSize
             
             for x in 0..gridSize.X-1 do
                 for y in 0..gridSize.Y-1 do
-                    printfn "new tile: %A %A" x y
                     yield V2i(x,y)
         }
 
-    let tileCoords =
-        aset {
-            let! (first, offset) = firstTileAndOffset
-            for i in tileIndices do
-                yield i + first
-        }
 
-
+    // since tiles are rectangles we may need to define a rectangle-geometry
     let fsq = 
         let q = IndexedGeometry()
 
@@ -160,43 +219,78 @@ let main argv =
 
         Sg.ofIndexedGeometry q
 
+
+    // function for calculating the appropriate transformations for 
+    // a specific tile-coord using firstTileAndOffset and the grid-size
+    let calcTileTrafo (coord : V2i) =
+        adaptive {
+            let! res = viewResolution
+            let! tileResolution = tileViewResolution
+            let! (f,o) = firstTileAndOffset
+            
+            let relativeTileSize = V2d tileResolution / V2d res
+            let relativePosition = relativeTileSize * (V2d coord - o) 
+
+            return Trafo3d.Scale(V3d(relativeTileSize.X, relativeTileSize.Y, 1.0)) * 
+                   Trafo3d.Translation(relativePosition.X,relativePosition.Y, 0.0)
+        }
+
+    let ctx = (app.Runtime |> unbox<Aardvark.Rendering.GL.Runtime>).Context
+
+    let cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, ITexture>()
+
+    let getTileTexure (coord : V2i) (zoom : string) =
+        cache.GetOrAdd((zoom, coord), fun (zoom, coord) ->
+            let info = TileInfo()
+            info.Index <- TileIndex(coord.X, coord.Y, zoom)
+
+            let data = source.GetTile(info)
+            use ms = new System.IO.MemoryStream(data)
+            let bmp = System.Drawing.Bitmap.FromStream(ms) |> unbox<System.Drawing.Bitmap>
+
+            //let tex = ctx.CreateTexture <| BitmapTexture(bmp, true)
+
+            BitmapTexture(bmp, true) :> ITexture
+        )
+
+    let getTileColor (coord : V2i) =
+        adaptive {
+            let! counts = tileCounts
+            let! (first,o) = firstTileAndOffset
+            let coord = first + coord
+
+
+            if coord.AnySmaller 0 || coord.AnyGreaterOrEqual counts then
+                return C4f.Black
+            else
+                let r = V2d coord / V2d counts
+                return C4f(r.X, r.Y, 1.0, 1.0)
+        }
+
+    // calculate a set of SceneGraph nodes having the appropriate transformations for 
+    // all tiles (using the FullScreenQuad from above)
     let sgs =
         aset {
             for coord in tileIndices do
-                let calcTileTrafo (f : V2i, o : V2d) (s : V2i) =
-                    let tileOrigin = (V2d coord + o / tileSize.GetValue()) / V2d (s - V2i.II)
-
-                    let scaleFactor = V2d tileResolution / V2d (viewResolution.GetValue())
-                    let tileOrigin = tileOrigin
-
-                    Trafo3d.Scale(V3d(scaleFactor.X, scaleFactor.Y, 1.0)) * Trafo3d.Translation(tileOrigin.X,tileOrigin.Y, 0.0)
-
-                let tileTrafo = Mod.map2 calcTileTrafo firstTileAndOffset gridSize
-                yield fsq |> Sg.trafo tileTrafo
+                let tex = zoomLevel |> Mod.map (getTileTexure coord)
+                yield fsq |> Sg.trafo (calcTileTrafo coord)
+                          |> Sg.diffuseTexture tex
+                          |> Sg.uniform "TileColor" (getTileColor coord)
                 
         }
 
-    let vertex (v : Vertex) =
-        vertex {
-            return { v with pos = uniform.ModelTrafo * v.pos }
-        }
 
-    let fragment (v : Vertex) =
-        fragment {
-            return V4d(v.tc.X, v.tc.Y, 1.0, 1.0)
-        }
 
     let sg =
         sgs |> Sg.set
             |> Sg.effect [toEffect vertex; toEffect fragment]
             |> Sg.trafo (Mod.initConstant (Trafo3d.ViewTrafo(V3d(-1.0, 1.0, 0.0), V3d.IOO * 2.0, -V3d.OIO * 2.0, V3d.OOI)).Inverse)
-//    tileCoords |> ASet.toMod |> Mod.registerCallback (fun indices ->
-//        printfn "%A" (Seq.toList indices)
-//    ) |> ignore
 
+
+    // compile the rendertask and pass it to the window
     w.RenderTask <- app.Runtime.CompileRender(sg.RenderJobs())
 
-
+    // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero
     let down = ref false
     w.Mouse.Events.Values.Subscribe(fun e ->
@@ -210,11 +304,10 @@ let main argv =
             | MouseMove pos ->
                 if !down then
                     let pos = pos.NormalizedPosition
-                    let delta = pos - !lastPos
                     let vp = viewport.Value
 
                     transact (fun () ->
-                        viewport.Value <- vp.Translated((pos - !lastPos) * vp.Size)
+                        viewport.Value <- vp.Translated((!lastPos - pos) * vp.Size)
                     )
 
                     lastPos := pos
@@ -222,9 +315,9 @@ let main argv =
     ) |> ignore
 
 
-
+    // finally run the application
     System.Windows.Forms.Application.Run w
-    Environment.Exit 0
+    //Environment.Exit 0
 
 //    for t in tileInfos do
 //
