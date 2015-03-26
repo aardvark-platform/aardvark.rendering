@@ -77,6 +77,7 @@ module private ValueConverter =
              float32 m.M02, float32 m.M12, float32 m.M22
         )
 
+
     let conversions =
         [
             <@@ fun (b : bool)      -> if b then 1 else 0 @@>
@@ -93,6 +94,20 @@ module private ValueConverter =
             <@@ fun (v : V3d)       -> V3f.op_Explicit v @@>
             <@@ fun (v : V2d)       -> V2f.op_Explicit v @@>
             <@@ fun (v : float)     -> float32 v @@>
+
+
+            <@@ fun (c : C4b)     -> V4f (C4f c) @@>
+            <@@ fun (c : C4us)     -> V4f (C4f c) @@>
+            <@@ fun (c : C4ui)     -> V4f (C4f c) @@>
+            <@@ fun (c : C4f)     -> V4f c @@>
+            <@@ fun (c : C4d)     -> V4f c @@>
+
+
+            <@@ fun (c : C3b)     -> V4f (C4f c) @@>
+            <@@ fun (c : C3us)     -> V4f (C4f c) @@>
+            <@@ fun (c : C3ui)     -> V4f (C4f c) @@>
+            <@@ fun (c : C3f)     -> V4f c @@>
+            <@@ fun (c : C3d)     -> V4f c @@>
         ]
 
 
