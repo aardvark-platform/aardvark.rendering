@@ -18,8 +18,8 @@ module Shader =
     let diffuseTex = 
         sampler2d {
             texture uniform?DiffuseColorTexture
-            addressU WrapMode.Mirror
-            addressV WrapMode.Mirror
+            addressU WrapMode.Clamp
+            addressV WrapMode.Clamp
             filter Filter.MinMagLinear
         }
 

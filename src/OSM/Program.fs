@@ -17,6 +17,18 @@ open System.Drawing.Imaging
 open System.Threading.Tasks
 open OSM
 open System.Windows.Forms
+open BruTile.Web
+open System.Net
+open System.Web
+
+let createGoogleSource() =
+    let fetchGoogle (uri : Uri) =
+        let httpWebRequest = WebRequest.Create(uri) |> unbox<HttpWebRequest>
+        httpWebRequest.UserAgent <- @"Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7";
+        httpWebRequest.Referer <- "http://maps.google.com/";
+        RequestHelper.FetchImage(httpWebRequest)
+
+    BruTile.Web.HttpTileSource(GlobalSphericalMercator(), "http://mt{s}.google.com/vt/lyrs=m@130&hl=en&x={x}&y={y}&z={z}", ["0"; "1"; "2"; "3"], tileFetcher = fetchGoogle) :> ITileSource
 
 
 [<EntryPoint; STAThread>]
@@ -29,7 +41,6 @@ let main argv =
     w.Height <- 1024
     let source = KnownTileSources.Create(KnownTileSource.BingAerial)
 
-
     // let's assume the tile resolution is constant
     let realTileResolution = V2i(256, 256)
     let worldBounds = source.Schema.Extent.Box
@@ -38,7 +49,7 @@ let main argv =
     // NOTE that the viewport matches the aspect-ratio of the initial
     //      window-size. therefore tiles will appear quadradic.
     let viewport = 
-        let horizontal = worldBounds.Size.X * 0.1
+        let horizontal = worldBounds.Size.X * 0.05
         let vertical = (float w.Sizes.Latest.Y / float w.Sizes.Latest.X) * horizontal
         Mod.initMod (Box2d.FromCenterAndSize(worldBounds.Center, V2d(horizontal, vertical)))
 
@@ -94,8 +105,9 @@ let main argv =
             let vpOffset = vp.Min - worldBounds.Min
             let floatTile = vpOffset / tileSize
 
-            let offset = V2d(vpOffset.X % tileSize.X, vpOffset.Y % tileSize.Y) / tileSize
+            let offset = (V2d(vpOffset.X % tileSize.X, vpOffset.Y % tileSize.Y) / tileSize)
             let tile = V2i(floor floatTile.X, floor floatTile.Y)
+            //printfn "offset: %A" offset
 
             return tile, offset
         }
@@ -166,21 +178,28 @@ let main argv =
             let info = TileInfo()
             info.Index <- TileIndex(coord.X, coord.Y, zoom)
 
-            printfn "creating texture for %s/%d/%d" zoom coord.X coord.Y
+            // printfn "creating texture for %s/%d/%d" zoom coord.X coord.Y
 
-            // Debugging Code (without actual maps)
-            // use bmp = new Bitmap(256, 256)
-            // use g = Graphics.FromImage bmp
-            // 
-            // g.Clear(Color.Black)
-            // g.DrawRectangle(Pens.Red, Rectangle(0,0,256,256))
-            // 
-            // let str = sprintf "%s/%d/%d" zoom coord.X coord.Y
-            // use font = new Font("Consolas", 30.0f)
-            // 
-            // let size = g.MeasureString(str, font)
-            // let pos = PointF(0.5f * (float32 bmp.Width - size.Width), 0.5f * (float32 bmp.Height - size.Height))
-            // g.DrawString(str, font, Brushes.White, pos)
+//            // Debugging Code (without actual maps)
+//            Task.Factory.StartNew(fun () ->
+//                 use bmp = new Bitmap(256, 256)
+//                 use g = Graphics.FromImage bmp
+//                 
+//                 g.Clear(Color.Black)
+//                 g.DrawRectangle(Pens.White, Rectangle(0,0,256,256))
+//                 
+//                 let str = sprintf "%A\r\n%d\r\n%d" zoom coord.X coord.Y
+//                 use font = new Font("Consolas", 30.0f)
+//                 
+//                 use format = new StringFormat()
+//                 format.LineAlignment <- StringAlignment.Center
+//                 format.Alignment <- StringAlignment.Center
+//
+//                 let pos = PointF(0.5f * float32 bmp.Width, 0.5f * float32 bmp.Height)
+//                 g.DrawString(str, font, Brushes.White, pos, format)
+//            
+//                 app.Runtime.CreateTexture <| BitmapTexture(bmp, false)
+//             )
 
             Task.Factory.StartNew(fun () ->
                 let data = source.GetTile(info)
