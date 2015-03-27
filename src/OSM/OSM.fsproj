@@ -58,6 +58,8 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Utilities.fs" />
+    <Compile Include="TileShader.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <Content Include="packages.config" />
@@ -118,6 +120,15 @@
     <Reference Include="nunit.framework">
       <HintPath>..\..\packages\NUnit.3.0.0-alpha-5\lib\net45\nunit.framework.dll</HintPath>
       <Private>True</Private>
+    </Reference>
+    <Reference Include="OpenTK">
+      <HintPath>..\..\lib\Release\OpenTK.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK.Compatibility">
+      <HintPath>..\..\lib\Release\OpenTK.Compatibility.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK.GLControl">
+      <HintPath>..\..\lib\Release\OpenTK.GLControl.dll</HintPath>
     </Reference>
     <Reference Include="RegexProvider">
       <HintPath>..\..\packages\RegexProvider.0.0.4\lib\net40\RegexProvider.dll</HintPath>

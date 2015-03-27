@@ -1,7 +1,4 @@
-﻿// Learn more about F# at http://fsharp.org
-// See the 'F# Tutorial' project for more help.
-
-open System
+﻿open System
 open System.IO
 open System.Net
 open BruTile
@@ -15,110 +12,19 @@ open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
 open FShade
 open Aardvark.Rendering.GL
-let e = 8.1819190842622E-02
-let a = 6378137.0
-
-type ITileSchema with
-    member x.GetBounds(level : string) =
-        let minx = x.GetMatrixFirstCol level
-        let miny = x.GetMatrixFirstRow level
-        let sizeX = x.GetMatrixWidth level
-        let sizeY = x.GetMatrixHeight level
-        Box2i.FromMinAndSize(V2i(minx, miny), V2i(sizeX-1, sizeY-1))
-
-    member x.GetExtent (region : Box2d) =
-        let world = Box2d(x.Extent.MinX, x.Extent.MinY, x.Extent.MaxX, x.Extent.MaxY)
-        //http://earth-info.nga.mil/GandG/wgs84/web_mercator/%28U%29%20NGA_SIG_0011_1.0.0_WEBMERC.pdf
-        let thetaMin = region.Min.Y * Constant.RadiansPerDegree
-        let thetaMax = region.Max.Y * Constant.RadiansPerDegree
-        let minY = a * (Fun.Atanh (sin thetaMin) (*- e *  Fun.Atanh (e * sin thetaMin)*))
-        let maxY = a * (Fun.Atanh (sin thetaMax) (*- e *  Fun.Atanh (e * sin thetaMax)*))
-
-        Extent(
-            x.Extent.Width  * (region.Min.X / 360.0),
-            minY,
-            x.Extent.Width  * (region.Max.X / 360.0),
-            maxY
-        )
-
-
-
-type TileInfo with
-    member x.Bounds =
-        Box2d(Constant.DegreesPerRadian * x.Extent.MinX / a, Constant.DegreesPerRadian * Fun.Asin(Fun.Tanh(x.Extent.MinY / a)), Constant.DegreesPerRadian * x.Extent.MaxX / a, Constant.DegreesPerRadian * Fun.Asin(Fun.Tanh(x.Extent.MaxY / a)))
-
-
-type Extent with
-    member x.RelativeTo(other : Extent) =
-        let rMinX = (x.MinX - other.MinX) / other.Width
-        let rMinY = (x.MinY - other.MinY) / other.Height
-        let rMaxX = (x.MaxX - other.MinX) / other.Width
-        let rMaxY = (x.MaxY - other.MinY) / other.Height
-        Extent(rMinX, rMinY, rMaxX, rMaxY)
-
-    member x.Box =
-        Box2d(x.MinX, x.MinY, x.MaxX, x.MaxY)
-
-[<AutoOpen>]
-module Shader = 
-    type Vertex =
-        {
-            [<Position>] pos : V4d
-            [<TexCoord>] tc : V2d
-        }
-
-    // define a very simple shader for rendering the tiles and apply it to the scenegraph
-    // furthermore normalize the view-space to [0.0, 1.0] x [0.0, 1.0] (starting top-left)
-    let vertex (v : Vertex) =
-        vertex {
-            return { v with pos = uniform.ModelTrafo * v.pos }
-        }
-
-    let diffuseTex = 
-        sampler2d {
-            texture uniform?DiffuseColorTexture
-            addressU WrapMode.Wrap
-            addressV WrapMode.Wrap
-            filter Filter.MinMagMipLinear
-        }
-
-    let fragment (v : Vertex) =
-        fragment {
-            let color = diffuseTex.Sample(v.tc)
-
-            return V4d(1.0 * color.XYZ, color.W)
-        }
+open System.Drawing
+open System.Drawing.Imaging
+open System.Threading.Tasks
+open OSM
 
 
 [<EntryPoint; STAThread>]
 let main argv = 
     Aardvark.Init()
-    System.Windows.Forms.Application.SetUnhandledExceptionMode(System.Windows.Forms.UnhandledExceptionMode.ThrowException)
     
-    let source = KnownTileSources.Create(KnownTileSource.BingAerial)
-
-
-
-//    let imageSize = V2i(1024, 768)
-//    let region = Box2d(16.3, 48.15, 16.4, 48.25)
-//
-//    
-//    let extent = source.Schema.GetExtent(region)
-//
-//    let sizeX = extent.Height * (float imageSize.X / float imageSize.Y)
-//    let delta = sizeX - extent.Width
-//    let extent = Extent(extent.MinX - delta / 2.0, extent.MinY, extent.MaxX + delta / 2.0, extent.MaxY)
-//
-//    let resolution = V2d((extent.Width / float imageSize.X),(extent.Height / float imageSize.Y))
-//    let tileInfos = source.Schema.GetTileInfos(extent, max resolution.X resolution.Y)
-//
-//    let pi = PixImage<byte>(Col.Format.RGBA, imageSize.X, imageSize.Y, 4)
-//    DevILSharp.IL.Enable(DevILSharp.EnableCap.AbsoluteOrigin) |> ignore
-//    DevILSharp.IL.OriginFunc(DevILSharp.OriginMode.LowerLeft) |> ignore
-
-
     let app = new OpenGlApplication()
     let w = app.CreateSimpleRenderWindow()
+    let source = KnownTileSources.Create(KnownTileSource.BingAerial)
 
 
     // let's assume the tile resolution is constant
@@ -166,7 +72,6 @@ let main argv =
             let! viewResolution = viewResolution
 
             return V2i (V2d viewResolution * r)
-
         }
 
     // calculate the total grid size (todo: +2 may be to conservative)
@@ -214,7 +119,7 @@ let main argv =
         q.IndexArray <- [|0;1;2; 0;2;3|]
         q.IndexedAttributes <- SymDict.ofList [
             DefaultSemantic.Positions, [|V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO|] :> Array
-            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array
+            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OI; V2f.II; V2f.IO; V2f.OO|] :> Array
         ]
 
         Sg.ofIndexedGeometry q
@@ -235,52 +140,72 @@ let main argv =
                    Trafo3d.Translation(relativePosition.X,relativePosition.Y, 0.0)
         }
 
-    let ctx = (app.Runtime |> unbox<Aardvark.Rendering.GL.Runtime>).Context
+    
 
-    let cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, ITexture>()
+    
+    // create a checkerboard-texture as placeholder for unloaded texture
+    let noTexture =
+        let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
+        pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
+            let c = c / 16L
+            if (c.X + c.Y) % 2L = 0L then
+                C4b.White
+            else
+                C4b.Gray
+        ) |> ignore
 
-    let getTileTexure (coord : V2i) (zoom : string) =
+        app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], false))
+
+    // get a chached texture for the given tile and zoom-level
+    // TODO: add proper memory management (textures are never deleted)
+    let cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, Task<ITexture>>()
+
+    let getTileTexure (coord : V2i) (zoom : string)=
         cache.GetOrAdd((zoom, coord), fun (zoom, coord) ->
             let info = TileInfo()
             info.Index <- TileIndex(coord.X, coord.Y, zoom)
 
-            let data = source.GetTile(info)
-            use ms = new System.IO.MemoryStream(data)
-            let bmp = System.Drawing.Bitmap.FromStream(ms) |> unbox<System.Drawing.Bitmap>
+            printfn "creating texture for %s/%d/%d" zoom coord.X coord.Y
 
-            //let tex = ctx.CreateTexture <| BitmapTexture(bmp, true)
+            // Debugging Code (without actual maps)
+            // use bmp = new Bitmap(256, 256)
+            // use g = Graphics.FromImage bmp
+            // 
+            // g.Clear(Color.Black)
+            // g.DrawRectangle(Pens.Red, Rectangle(0,0,256,256))
+            // 
+            // let str = sprintf "%s/%d/%d" zoom coord.X coord.Y
+            // use font = new Font("Consolas", 30.0f)
+            // 
+            // let size = g.MeasureString(str, font)
+            // let pos = PointF(0.5f * (float32 bmp.Width - size.Width), 0.5f * (float32 bmp.Height - size.Height))
+            // g.DrawString(str, font, Brushes.White, pos)
 
-            BitmapTexture(bmp, true) :> ITexture
+            Task.Factory.StartNew(fun () ->
+                let data = source.GetTile(info)
+                use ms = new System.IO.MemoryStream(data)
+                use bmp = System.Drawing.Bitmap.FromStream(ms) |> unbox<System.Drawing.Bitmap>
+                
+                let tex = app.Runtime.CreateTexture <| BitmapTexture(bmp, false)
+
+                tex
+            )
         )
-
-    let getTileColor (coord : V2i) =
-        adaptive {
-            let! counts = tileCounts
-            let! (first,o) = firstTileAndOffset
-            let coord = first + coord
-
-
-            if coord.AnySmaller 0 || coord.AnyGreaterOrEqual counts then
-                return C4f.Black
-            else
-                let r = V2d coord / V2d counts
-                return C4f(r.X, r.Y, 1.0, 1.0)
-        }
 
     // calculate a set of SceneGraph nodes having the appropriate transformations for 
     // all tiles (using the FullScreenQuad from above)
     let sgs =
         aset {
             for coord in tileIndices do
-                let tex = zoomLevel |> Mod.map (getTileTexure coord)
+                let tex = Mod.bind2 (fun z (f,_) -> getTileTexure (f + coord) z |> Mod.async noTexture) zoomLevel firstTileAndOffset
                 yield fsq |> Sg.trafo (calcTileTrafo coord)
                           |> Sg.diffuseTexture tex
-                          |> Sg.uniform "TileColor" (getTileColor coord)
                 
         }
 
 
-
+    // apply an effect and a trafo making the screen [0,1]x[0,1] starting
+    // at the upper left corner.
     let sg =
         sgs |> Sg.set
             |> Sg.effect [toEffect vertex; toEffect fragment]
@@ -317,47 +242,5 @@ let main argv =
 
     // finally run the application
     System.Windows.Forms.Application.Run w
-    //Environment.Exit 0
 
-//    for t in tileInfos do
-//
-//        let tileData = source.GetTile t
-//        let path = sprintf @"C:\Users\schorsch\Desktop\geo\tile_%d_%d_%s.png" t.Index.Row t.Index.Col t.Index.Level
-//        File.WriteAllBytes(path, tileData)
-//        let tileSize = V2i(256, 256)
-//        let bounds = t.Extent.Intersect(extent)
-//
-//        let rTile = bounds.RelativeTo(t.Extent)
-//        let rTarget = bounds.RelativeTo(extent)
-//
-//        let imageRegion = Box2i(V2i(V2d tileSize * V2d(rTile.MinX, rTile.MinY)), V2i(V2d tileSize * V2d(rTile.MaxX, rTile.MaxY)))
-//        let targetRegion = Box2i(V2i(V2d imageSize * V2d(rTarget.MinX, rTarget.MinY)), V2i(V2d imageSize * V2d(rTarget.MaxX, rTarget.MaxY)))
-//        
-////        let imageRegion = Box2i(imageRegion.Min.X, tileSize.Y - imageRegion.Max.Y, imageRegion.Max.X, tileSize.Y - imageRegion.Min.Y)
-////        let targetRegion = Box2i(targetRegion.Min.X, imageSize - targetRegion.Max.Y, targetRegion.Max.X, imageSize - targetRegion.Min.Y)
-//
-//        let cropped = Path.ChangeExtension(path, ".jpg")
-//
-//        let i = IL.GenImage()
-//        IL.BindImage(i)
-//        IL.LoadImage path |> ignore
-//        ILU.Crop(imageRegion.Min.X, imageRegion.Min.Y, 0, imageRegion.SizeX, imageRegion.SizeY, 0) |> ignore
-//        ILU.SetFilter(Filter.Lanczos3)
-//        ILU.Scale(targetRegion.SizeX, targetRegion.SizeY, 0) |> ignore
-//        IL.SaveImage cropped |> ignore
-//        IL.BindImage(0)
-//        IL.DeleteImage(i)
-//
-//        let tile = PixImage.Create(cropped).ToPixImage<byte>(Col.Format.RGBA)
-//
-//        pi.SubImage(targetRegion).Set(tile)
-//        //pi.SaveAsImage(@"C:\Users\schorsch\Desktop\geo\res.png")
-//
-//        //let tileIndex = V2i (ceil ((t.Bounds.Min.X - region.Min.X) / t.Bounds.Size.X), ceil ((t.Bounds.Min.Y - region.Min.Y) / t.Bounds.Size.Y))
-//        printfn "%A" imageRegion
-//
-//
-//        ()
-//    pi.SaveAsImage(@"C:\Users\schorsch\Desktop\geo\res.png")
-
-    0 // return an integer exit code
+    0

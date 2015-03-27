@@ -300,11 +300,21 @@ module ResourceManager =
                     let current = data.GetValue()
                     let handle = ctx.CreateTexture(current)
 
+                    let handleMod = Mod.initMod handle
+
                     { dependencies = [data]
                       updateCPU = fun () -> data.GetValue() |> ignore
-                      updateGPU = fun () -> ctx.Upload(handle, data.GetValue())
+                      updateGPU = fun () -> 
+                        match data.GetValue() with
+                            | :? Texture as t -> 
+                                transact (fun () -> handleMod.Value <- t)
+                            | _ -> 
+                                ctx.Upload(handle, data.GetValue())
+                                if handleMod.Value <> handle then 
+                                    transact (fun () -> handleMod.Value <- handle)
+
                       destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.initConstant handle }            
+                      resource = handleMod }            
             )
 
         member x.CreateSurface (s : IMod<ISurface>) =
