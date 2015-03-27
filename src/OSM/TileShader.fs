@@ -20,7 +20,7 @@ module Shader =
             texture uniform?DiffuseColorTexture
             addressU WrapMode.Mirror
             addressV WrapMode.Mirror
-            filter Filter.MinMagPoint
+            filter Filter.MinMagLinear
         }
 
     let fragment (v : Vertex) =

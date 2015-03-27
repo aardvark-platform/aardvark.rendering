@@ -16,6 +16,7 @@ open System.Drawing
 open System.Drawing.Imaging
 open System.Threading.Tasks
 open OSM
+open System.Windows.Forms
 
 
 [<EntryPoint; STAThread>]
@@ -23,7 +24,9 @@ let main argv =
     Aardvark.Init()
     
     let app = new OpenGlApplication()
-    let w = app.CreateSimpleRenderWindow()
+    let w = app.CreateSimpleRenderWindow(1)
+    w.Width <- 1280
+    w.Height <- 1024
     let source = KnownTileSources.Create(KnownTileSource.BingAerial)
 
 
@@ -36,8 +39,8 @@ let main argv =
     //      window-size. therefore tiles will appear quadradic.
     let viewport = 
         let horizontal = worldBounds.Size.X * 0.1
-        let vertical = (3.0 / 4.0) * horizontal
-        Mod.initMod (Box2d.FromMinAndSize(worldBounds.Center, V2d(horizontal, vertical)))
+        let vertical = (float w.Sizes.Latest.Y / float w.Sizes.Latest.X) * horizontal
+        Mod.initMod (Box2d.FromCenterAndSize(worldBounds.Center, V2d(horizontal, vertical)))
 
     // in order to determine the appropriate grid-size we will need the view's size
     let viewResolution = w.Sizes.Mod
@@ -53,9 +56,6 @@ let main argv =
             let res = vp.Size / V2d s
             return Utilities.GetNearestLevel(source.Schema.Resolutions, max res.X res.Y)
         }
-
-    let tileCounts =
-        zoomLevel |> Mod.map (fun l -> V2i(source.Schema.GetMatrixWidth(l), source.Schema.GetMatrixHeight(l)))
 
 
     // determine the tile-size in world-space
@@ -160,6 +160,7 @@ let main argv =
     // TODO: add proper memory management (textures are never deleted)
     let cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, Task<ITexture>>()
 
+    let dataLock = obj()
     let getTileTexure (coord : V2i) (zoom : string)=
         cache.GetOrAdd((zoom, coord), fun (zoom, coord) ->
             let info = TileInfo()
@@ -197,7 +198,13 @@ let main argv =
     let sgs =
         aset {
             for coord in tileIndices do
-                let tex = Mod.bind2 (fun z (f,_) -> getTileTexure (f + coord) z |> Mod.async noTexture) zoomLevel firstTileAndOffset
+                let tex = 
+                    adaptive {
+                        let! z = zoomLevel
+                        let! (f,_) = firstTileAndOffset
+                        let t = getTileTexure (f + coord) z
+                        return! t |> Mod.async noTexture
+                    } //Mod.bind2 (fun z (f,_) -> getTileTexure (f + coord) z) zoomLevel firstTileAndOffset
                 yield fsq |> Sg.trafo (calcTileTrafo coord)
                           |> Sg.diffuseTexture tex
                 
@@ -227,20 +234,35 @@ let main argv =
                 down := false
                 lastPos := p.location.NormalizedPosition
             | MouseMove pos ->
+                let pos = pos.NormalizedPosition
                 if !down then
-                    let pos = pos.NormalizedPosition
                     let vp = viewport.Value
 
                     transact (fun () ->
                         viewport.Value <- vp.Translated((!lastPos - pos) * vp.Size)
                     )
 
-                    lastPos := pos
+                lastPos := pos
+
+            | MouseScroll(delta,pos) ->
+                let delta = delta / 120.0
+
+                let vp = viewport.Value
+                let zoomCenter = vp.Size * pos.NormalizedPosition + vp.Min
+
+                let newViewport = vp.Translated(-zoomCenter).Scaled(V2d.II * Fun.Pow(0.9, delta)).Translated(zoomCenter)
+
+                transact (fun () ->
+                    viewport.Value <- newViewport
+                )
+
+                ()
+
             | _ -> ()
     ) |> ignore
 
 
     // finally run the application
-    System.Windows.Forms.Application.Run w
+    Application.Run w
 
     0

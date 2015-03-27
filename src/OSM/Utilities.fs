@@ -48,13 +48,9 @@ module Extensions =
         
 
         let async (defaultValue : 'a) (t : Task<'a>) =
-            let m =
-                Mod.custom (fun () ->
-                    if t.IsCompleted then t.Result
-                    else defaultValue
-                )
-
-            if not t.IsCompleted then
-                t.ContinueWith(fun (t : Task<'a>) -> transact (fun () -> m.MarkOutdated()), TaskContinuationOptions.AttachedToParent) |> ignore
-
-            m
+            if t.IsCompleted then
+                Mod.initConstant t.Result
+            else
+                let r = Mod.initMod defaultValue
+                t.ContinueWith(fun (t : Task<'a>) -> transact (fun () -> r.Value <- t.Result), TaskContinuationOptions.AttachedToParent) |> ignore
+                r :> IMod<'a>
