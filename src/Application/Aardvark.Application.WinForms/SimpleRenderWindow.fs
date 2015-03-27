@@ -10,10 +10,10 @@ type SimpleRenderWindow() =
 
     let ctrl = new RenderControl()
 
-    do base.Width <- 1024
-       base.Height <- 768
-       ctrl.Dock <- DockStyle.Fill
-       base.Controls.Add ctrl
+    do
+        base.ClientSize <- System.Drawing.Size(1024, 768)
+        ctrl.Dock <- DockStyle.Fill
+        base.Controls.Add ctrl
 
     member x.Control = ctrl
 

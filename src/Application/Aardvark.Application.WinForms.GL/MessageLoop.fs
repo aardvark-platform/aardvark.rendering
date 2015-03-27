@@ -6,6 +6,7 @@ open System.Diagnostics
 open System.Windows.Forms
 open System.Threading
 open System.Collections.Concurrent
+open Aardvark.Base
 
 type IControl =
     abstract member Paint : unit -> unit
@@ -48,19 +49,30 @@ type Periodic(interval : int, f : float -> unit) =
                 sw.Restart()
                 f(times.Average / 1000.0)
 
+
+
 type MessageLoop() as this =
 
-    let q = ConcurrentBag<IControl>()
+    static let rec interlockedChange (location : byref<'a>) (update : 'a -> 'a) =
+        let mutable oldValue = location
+        let newValue = update oldValue
+        let mutable ex = Interlocked.CompareExchange(&location, newValue, oldValue)
+        while not <| System.Object.ReferenceEquals(ex, oldValue) do
+            oldValue <- ex
+            let newValue = update oldValue
+            ex <- Interlocked.CompareExchange(&location, newValue, oldValue)
+
+    let mutable q : PersistentHashSet<IControl> = PersistentHashSet.empty
     let mutable timer : Timer = null
     let periodic = ConcurrentHashSet<Periodic>()
 
     let rec processAll() =
-        match q.TryTake() with
-            | (true, ctrl) ->
+        let mine = Interlocked.Exchange(&q, PersistentHashSet.empty)
+        for ctrl in mine |> PersistentHashSet.toSeq do
+            try 
                 ctrl.Invoke (fun () -> ctrl.Paint())
-                processAll()
-
-            | _ -> ()
+            with e ->
+                printfn "%A" e
 
     member private x.Process() =
         Application.DoEvents()
@@ -74,7 +86,7 @@ type MessageLoop() as this =
         timer <- new Timer(TimerCallback(fun _ -> this.Process()), null, 0L, 2L)
 
     member x.Draw(c : IControl) =
-        q.Add c 
+        interlockedChange &q (fun q -> PersistentHashSet.add c q)
 
     member x.EnqueuePeriodic (f : float -> unit, intervalInMilliseconds : int) =
         let p = Periodic(intervalInMilliseconds, f)

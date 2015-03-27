@@ -16,6 +16,12 @@ type IRenderTask =
     abstract member Run : IFramebuffer -> RenderingResult
 
 type IRuntime =
+
+    abstract member CreateTexture : ITexture -> ITexture
+    abstract member CreateBuffer : IBuffer -> IBuffer
+    abstract member DeleteTexture : ITexture -> unit
+    abstract member DeleteBuffer : IBuffer -> unit
+
     abstract member CompileClear : IMod<C4f> * IMod<double> -> IRenderTask
     abstract member CompileRender : aset<RenderJob> -> IRenderTask
 
