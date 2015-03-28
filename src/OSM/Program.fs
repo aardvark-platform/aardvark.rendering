@@ -20,6 +20,11 @@ open System.Windows.Forms
 open BruTile.Web
 open System.Net
 open System.Web
+open System.Collections.Generic
+open System.Collections.Concurrent
+open System.Threading
+open System.Net
+open System.Web
 
 let createGoogleSource() =
     let fetchGoogle (uri : Uri) =
@@ -30,6 +35,106 @@ let createGoogleSource() =
 
     BruTile.Web.HttpTileSource(GlobalSphericalMercator(), "http://mt{s}.google.com/vt/lyrs=m@130&hl=en&x={x}&y={y}&z={z}", ["0"; "1"; "2"; "3"], tileFetcher = fetchGoogle) :> ITileSource
 
+//let fetchTasks = ConcurrentDictionary()
+//type KnownTileSources with
+//    static member CreateAsync(s : KnownTileSource) =
+//        let fetchGoogle (uri : Uri) =
+//            
+////            let httpWebRequest = WebRequest.Create(uri) |> unbox<HttpWebRequest>
+////            httpWebRequest.UserAgent <- @"Mozilla/5.0 (Windows; U; Windows NT 6.0; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7";
+////            httpWebRequest.Referer <- "http://maps.google.com/";
+////            RequestHelper.FetchImage(httpWebRequest)
+//            
+//            [||]
+//
+//        KnownTileSources.Create(s, tileFetcher = Func<Uri, byte[]>(fetchGoogle))
+
+
+let noTileImage = 
+    let bmp = new Bitmap(256,256)
+
+    use g = Graphics.FromImage(bmp)
+    g.Clear(Color.Black)
+
+    use p = new Pen(Brushes.Red, 10.0f)
+    g.DrawLine(p, 0, 0, 256, 256)
+    g.DrawLine(p, 256, 0, 256, 0)
+
+    bmp
+
+type HttpTileSource with
+    member x.GetTileAsync(tileInfo : TileInfo) =
+        let url = x.GetUri(tileInfo)
+
+        let request = WebRequest.Create(url)
+        request.UseDefaultCredentials <- true
+        async {
+            try
+                let! response = request.GetResponseAsync() |> Async.AwaitTask
+
+                if response.ContentType.StartsWith "image" then
+                    use s = response.GetResponseStream()
+                    return System.Drawing.Bitmap.FromStream(s) |> unbox<System.Drawing.Bitmap>
+                    //return! s.AsyncRead(int response.ContentLength)
+
+                else
+                    return noTileImage
+            with e ->
+                return noTileImage
+        }
+
+type ITileSource with
+    member x.GetTileAsync(info : TileInfo) =
+        let w = x |> unbox<HttpTileSource>
+        w.GetTileAsync(info)
+
+
+type MyScheduler(threads : int) as this =
+    inherit TaskScheduler()
+
+    let bag = ConcurrentBag<Task>()
+    let sem = new SemaphoreSlim(0)
+
+    let threads = 
+        lazy (
+            Array.init threads (fun i -> 
+                let t = new Thread(ParameterizedThreadStart(this.Work), IsBackground = true)
+                t.Name <- sprintf "MyScheduler[%d]" i
+                t.Start(i)
+                t
+            )
+        )
+
+    let start() = threads.Value |> ignore
+
+    member private x.Work (state : obj) =
+        let index = state |> unbox<int>
+
+        while true do
+            sem.Wait()
+
+            match bag.TryTake() with
+                | (true, t) ->
+                    base.TryExecuteTask(t) |> ignore
+                | _ -> ()
+
+        ()
+
+
+    override x.GetScheduledTasks() = start(); bag |> Seq.toArray :> seq<_>
+    override x.QueueTask(t : Task) =
+        start()
+        bag.Add(t)
+        sem.Release() |> ignore
+
+    override x.TryExecuteTaskInline(t : Task, wasEnqueued : bool) =
+        start()
+        if wasEnqueued then
+            false
+        else
+            base.TryExecuteTask(t)
+            
+
 
 [<EntryPoint; STAThread>]
 let main argv = 
@@ -39,7 +144,7 @@ let main argv =
     let w = app.CreateSimpleRenderWindow(1)
     w.Width <- 1280
     w.Height <- 1024
-    let source = KnownTileSources.Create(KnownTileSource.BingAerial)
+    let source = KnownTileSources.Create(KnownTileSource.BingHybrid)
 
     // let's assume the tile resolution is constant
     let realTileResolution = V2i(256, 256)
@@ -48,25 +153,44 @@ let main argv =
     // initialize a viewport (small part of the world currently)
     // NOTE that the viewport matches the aspect-ratio of the initial
     //      window-size. therefore tiles will appear quadradic.
-    let viewport = 
+    let viewportOrigin, viewportSize = 
         let horizontal = worldBounds.Size.X * 0.05
         let vertical = (float w.Sizes.Latest.Y / float w.Sizes.Latest.X) * horizontal
-        Mod.initMod (Box2d.FromCenterAndSize(worldBounds.Center, V2d(horizontal, vertical)))
+        let box = Box2d.FromCenterAndSize(worldBounds.Center, V2d(horizontal, vertical))
+
+        Mod.initMod box.Min, Mod.initMod box.Size
+
+    let viewport = Mod.map2 (schönfinkel Box2d.FromMinAndSize) viewportOrigin viewportSize
+
+    w.Sizes.Values.Subscribe(fun s ->
+        let aspect = float s.X / float s.Y
+        transact (fun () ->
+            let vp = viewport.GetValue()
+            let targetAspect = vp.SizeX / vp.SizeY
+
+            let newVp = vp.ScaledFromCenterBy(V2d(aspect / targetAspect, 1.0))
+
+            viewportOrigin.Value <- newVp.Min
+            viewportSize.Value <- newVp.Size
+
+
+            ()
+        )
+    ) |> ignore
+
 
     // in order to determine the appropriate grid-size we will need the view's size
     let viewResolution = w.Sizes.Mod
 
-
-
-
     // determine the zoom-level using the current viewport and view-size
     let zoomLevel = 
         adaptive {
-            let! vp = viewport
+            let! vpSize = viewportSize
             let! s = viewResolution
-            let res = vp.Size / V2d s
+            let res = vpSize / V2d s
             return Utilities.GetNearestLevel(source.Schema.Resolutions, max res.X res.Y)
-        }
+        } |> Mod.always
+        
 
 
     // determine the tile-size in world-space
@@ -76,12 +200,12 @@ let main argv =
     // calculate the real resolution of tiles for the current view
     let tileViewResolution =
         adaptive {
-            let! tileSize = tileSize
-            let! viewport = viewport
-            let r = tileSize / viewport.Size
-
             let! viewResolution = viewResolution
 
+            let! tileSize = tileSize
+            let! viewportSize = viewportSize
+
+            let r = tileSize / viewportSize
             return V2i (V2d viewResolution * r)
         }
 
@@ -90,9 +214,10 @@ let main argv =
         adaptive {
             let! size = viewResolution
             let! tileResolution = tileViewResolution
-            let res =  (size / tileResolution) + 2*V2i.II
+
+            let res =  V2i(ceil (float size.X / float tileResolution.X), ceil (float size.Y / float tileResolution.Y)) + V2i.II
             return res
-        }
+        } |> Mod.always
 
 
     // calculate the integer index for the first (upper-left) tile 
@@ -100,9 +225,9 @@ let main argv =
     let firstTileAndOffset =
         adaptive {
             let! tileSize = tileSize
-            let! vp = viewport
+            let! vp = viewportOrigin
 
-            let vpOffset = vp.Min - worldBounds.Min
+            let vpOffset = vp - worldBounds.Min
             let floatTile = vpOffset / tileSize
 
             let offset = (V2d(vpOffset.X % tileSize.X, vpOffset.Y % tileSize.Y) / tileSize)
@@ -166,12 +291,15 @@ let main argv =
                 C4b.Gray
         ) |> ignore
 
-        app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], false))
+        app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true))
 
     // get a chached texture for the given tile and zoom-level
     // TODO: add proper memory management (textures are never deleted)
-    let cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, Task<ITexture>>()
+    let cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, IMod<ITexture>>()
 
+
+    let scheduler = MyScheduler(25)
+    let factory = TaskFactory(scheduler)
     let dataLock = obj()
     let getTileTexure (coord : V2i) (zoom : string)=
         cache.GetOrAdd((zoom, coord), fun (zoom, coord) ->
@@ -201,15 +329,24 @@ let main argv =
 //                 app.Runtime.CreateTexture <| BitmapTexture(bmp, false)
 //             )
 
-            Task.Factory.StartNew(fun () ->
-                let data = source.GetTile(info)
-                use ms = new System.IO.MemoryStream(data)
-                use bmp = System.Drawing.Bitmap.FromStream(ms) |> unbox<System.Drawing.Bitmap>
-                
-                let tex = app.Runtime.CreateTexture <| BitmapTexture(bmp, false)
+            let run =
+                async {
+                    let! bmp = source.GetTileAsync info
+                    return BitmapTexture(bmp, false) |> app.Runtime.CreateTexture
+                }
+            let tcs = TaskCompletionSource<ITexture>()
+            factory.StartNew(fun () -> Async.StartWithContinuations(run, tcs.SetResult, tcs.SetException, fun _ -> tcs.SetCanceled())) |> ignore
+            tcs.Task |> Mod.async noTexture
 
-                tex
-            )
+//            Task.Factory.StartNew(fun () ->
+//                let data = source.GetTile(info)
+//                use ms = new System.IO.MemoryStream(data)
+//                use bmp = System.Drawing.Bitmap.FromStream(ms) |> unbox<System.Drawing.Bitmap>
+//                
+//                let tex = app.Runtime.CreateTexture <| BitmapTexture(bmp, false)
+//
+//                tex
+//            )
         )
 
     // calculate a set of SceneGraph nodes having the appropriate transformations for 
@@ -221,8 +358,9 @@ let main argv =
                     adaptive {
                         let! z = zoomLevel
                         let! (f,_) = firstTileAndOffset
+                        //printfn "%A: %A %A" coord (f + coord) z
                         let t = getTileTexure (f + coord) z
-                        return! t |> Mod.async noTexture
+                        return! t
                     } //Mod.bind2 (fun z (f,_) -> getTileTexure (f + coord) z) zoomLevel firstTileAndOffset
                 yield fsq |> Sg.trafo (calcTileTrafo coord)
                           |> Sg.diffuseTexture tex
@@ -255,10 +393,8 @@ let main argv =
             | MouseMove pos ->
                 let pos = pos.NormalizedPosition
                 if !down then
-                    let vp = viewport.Value
-
                     transact (fun () ->
-                        viewport.Value <- vp.Translated((!lastPos - pos) * vp.Size)
+                        viewportOrigin.Value <- viewportOrigin.Value + (!lastPos - pos) * viewportSize.Value
                     )
 
                 lastPos := pos
@@ -266,13 +402,14 @@ let main argv =
             | MouseScroll(delta,pos) ->
                 let delta = delta / 120.0
 
-                let vp = viewport.Value
+                let vp = Box2d.FromMinAndSize(viewportOrigin.Value, viewportSize.Value)
                 let zoomCenter = vp.Size * pos.NormalizedPosition + vp.Min
 
                 let newViewport = vp.Translated(-zoomCenter).Scaled(V2d.II * Fun.Pow(0.9, delta)).Translated(zoomCenter)
 
                 transact (fun () ->
-                    viewport.Value <- newViewport
+                    viewportOrigin.Value <- newViewport.Min
+                    viewportSize.Value <- newViewport.Size
                 )
 
                 ()
