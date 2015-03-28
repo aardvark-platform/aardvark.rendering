@@ -104,7 +104,7 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
 
                         statistics.Emit res.Statistics
 
-                        System.Threading.Thread.Sleep(30)
+                        //System.Threading.Thread.Sleep(30)
 
 
                         transact (fun () -> time.MarkOutdated())
