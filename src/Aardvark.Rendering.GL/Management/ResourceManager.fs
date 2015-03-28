@@ -298,22 +298,39 @@ module ResourceManager =
                 [data],
                 fun () ->
                     let current = data.GetValue()
-                    let handle = ctx.CreateTexture(current)
 
-                    let handleMod = Mod.initMod handle
+                    let created = ref false
+                    let handle = 
+                        match current with
+                            | :? Texture as t -> ref t
+                            | _ -> 
+                                created := true
+                                ref <| ctx.CreateTexture(current)
+
+                    let handleMod = Mod.initMod !handle
 
                     { dependencies = [data]
                       updateCPU = fun () -> data.GetValue() |> ignore
                       updateGPU = fun () -> 
                         match data.GetValue() with
                             | :? Texture as t -> 
+                                if !created then
+                                    ctx.Delete(!handle)
+                                    created := false
+
+                                handle := t
                                 transact (fun () -> handleMod.Value <- t)
                             | _ -> 
-                                ctx.Upload(handle, data.GetValue())
-                                if handleMod.Value <> handle then 
-                                    transact (fun () -> handleMod.Value <- handle)
+                                if !created then
+                                    ctx.Upload(!handle, data.GetValue())
+                                else
+                                    created := true
+                                    handle := ctx.CreateTexture(current)
 
-                      destroy = fun () -> ctx.Delete(handle)
+                                if handleMod.Value <> !handle then 
+                                    transact (fun () -> handleMod.Value <- !handle)
+
+                      destroy = fun () -> if !created then ctx.Delete(!handle)
                       resource = handleMod }            
             )
 
