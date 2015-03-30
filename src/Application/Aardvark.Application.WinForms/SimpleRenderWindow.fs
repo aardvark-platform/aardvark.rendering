@@ -4,6 +4,7 @@ open System
 open System.Runtime.CompilerServices
 open Aardvark.Application
 open System.Windows.Forms
+open Aardvark.Base
 
 type SimpleRenderWindow() =
     inherit Form()
@@ -20,6 +21,10 @@ type SimpleRenderWindow() =
     member x.RenderTask
         with get() = ctrl.RenderTask
         and set t = ctrl.RenderTask <- t
+
+    member x.Size
+        with get() = V2i(base.ClientSize.Width, base.ClientSize.Height)
+        and set (size : V2i) = base.ClientSize <- System.Drawing.Size(size.X, size.Y)
 
     member x.Sizes = ctrl.Sizes
     member x.Keyboard = ctrl.Keyboard
