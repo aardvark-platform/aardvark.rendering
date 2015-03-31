@@ -699,6 +699,8 @@ module Semantics =
     [<Semantic>]
     type AttributeSem() =
         static let emptyIndex : IMod<Array> = Mod.initConstant null
+        static let zero = Mod.initConstant 0
+
         let (~%) (m : Map<Symbol, BufferView>) = m
 
         let union (l : Map<Symbol, BufferView>) (r : Map<Symbol, BufferView>) =
@@ -709,6 +711,26 @@ module Semantics =
             result
 
         static member EmptyIndex = emptyIndex
+
+        member x.FaceVertexCount (root : Root) =
+            root.Child?FaceVertexCount <- zero
+
+        member x.FaceVertexCount (app : VertexIndexApplicator) =
+            app.Child?FaceVertexCount <- app.Value |> Mod.map (fun a -> a.Length)
+
+        member x.FaceVertexCount (app : VertexAttributeApplicator) =
+            let res : Error<IMod<int>> = Ag.tryGetAttributeValue app "FaceVertexCount"
+            match res with
+                | Success (v) -> app.Child?FaceVertexCount <- v
+                | _ -> 
+                    match Map.tryFind DefaultSemantic.Positions app.Values with
+                        | Some pos ->
+                            match pos.Buffer with
+                                | :? ArrayBuffer as ab ->
+                                    app.Child?FaceVertexCount <- ab.Data |> Mod.map (fun a -> a.Length - pos.Offset)
+            
+                                | _ -> app.Child?FaceVertexCount <- zero
+                        | _ -> app.Child?FaceVertexCount <- zero
 
         member x.InstanceAttributes(root : Root) = 
             root.Child?InstanceAttributes <- %Map.empty
@@ -859,7 +881,7 @@ module Semantics =
             rj.IsActive <- r?IsActive
             rj.RenderPass <- r?RenderPass
             
-
+            
             rj.Uniforms <- new Providers.UniformProvider(scope, r?Uniforms)
             rj.VertexAttributes <- new Providers.AttributeProvider(scope, "VertexAttributes")
             rj.InstanceAttributes <- new Providers.AttributeProvider(scope, "InstanceAttributes")
@@ -871,6 +893,24 @@ module Semantics =
             rj.BlendMode <- r?BlendMode
               
             rj.Surface <- r?Surface
+            
+            let callInfo =
+                adaptive {
+                    let! info = r.DrawCallInfo
+                    if info.FaceVertexCount < 0 then
+                        let! (count : int) = scope?FaceVertexCount
+                        return 
+                            DrawCallInfo(
+                                FirstIndex = info.FirstIndex,
+                                FirstInstance = info.FirstInstance,
+                                InstanceCount = info.InstanceCount,
+                                FaceVertexCount = count,
+                                Mode = info.Mode
+                            )
+                    else
+                        return info
+                }
+
             rj.DrawCallInfo <- r.DrawCallInfo
 
             ASet.single rj

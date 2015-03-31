@@ -87,6 +87,35 @@ module SgFSharp =
         let depthTest (m : IMod<DepthTestMode>) (sg : ISg) =
             Sg.DepthTestModeApplicator(m, sg) :> ISg
 
+        let private arrayModCache = ConditionalWeakTable<IMod, IMod<Array>>()
+
+        let private modOfArray (m : IMod<'a[]>) =
+            match arrayModCache.TryGetValue (m :> IMod) with
+                | (true, r) -> r
+                | _ -> 
+                    let r = m |> Mod.map (fun a -> a :> Array)
+                    arrayModCache.Add(m, r)
+                    r
+
+        let vertexAttribute (s : Symbol) (value : IMod<'a[]>) (sg : ISg) =
+            let view = BufferView(ArrayBuffer(modOfArray value), typeof<'a>)
+            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.initConstant sg) :> ISg
+
+        let index (value : IMod<'a[]>) (sg : ISg) =
+            Sg.VertexIndexApplicator(modOfArray value, sg) :> ISg
+
+        let draw (mode : IndexedGeometryMode) =
+            Sg.RenderNode(
+                DrawCallInfo(
+                    FirstInstance = 0,
+                    InstanceCount = 1,
+                    FirstIndex = 0,
+                    FaceVertexCount = -1,
+                    Mode = mode
+                )
+            ) :> ISg
+
+
         let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(Mod.initConstant pass, sg)
 
 
