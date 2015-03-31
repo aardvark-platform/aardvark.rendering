@@ -80,6 +80,29 @@ module Extensions =
             
             r :> IMod<_>
 
+        let lazyAsync (defaultValue : 'a) (run : Async<'a>) =
+            let task : ref<Option<Task<'a>>> = ref None
+
+            let res = ref Unchecked.defaultof<_>
+            res :=
+                Mod.custom (fun () ->
+                    match !task with
+                        | Some t ->
+                            if t.IsCompleted then 
+                                let res = t.Result
+                                res
+                            else 
+                                defaultValue
+                        | None ->
+                            let t = Async.StartAsTask run
+                            task := Some t
+                            t.GetAwaiter().OnCompleted(fun () -> transact (fun () -> res.Value.MarkOutdated()))
+
+                            defaultValue
+                )
+
+            !res
+
 
     let noTileImage = 
         let bmp = new Bitmap(256,256)
