@@ -648,40 +648,60 @@ module InstructionCompiler =
                 
         let draw (indexArray : IMod<System.Array>) (hasTess : bool) (call : IMod<DrawCallInfo>) (isActive : IMod<bool>) =
           
-            let indexed,indexType = 
-                match indexArray with
-                    | null -> false, int OpenGl.Enums.IndexType.UnsignedShort
-                    | _ ->
-                        let t = indexArray.GetValue().GetType().GetElementType()
-                        if t =  typeof<uint16> then true, int OpenGl.Enums.IndexType.UnsignedShort
-                        elif t =  typeof<int> then true, int OpenGl.Enums.IndexType.UnsignedInt
-                        else failwith "wrong index buffer type" 
+            let indexType = 
+                if indexArray <> null then
+                    indexArray |> Mod.map (fun ia -> (ia <> null, if ia <> null then ia.GetType().GetElementType() else typeof<obj>))
+                else
+                    Mod.initConstant (false, typeof<obj>)
 
+            let patchSize (mode : IndexedGeometryMode) =
+                match mode with
+                    | IndexedGeometryMode.LineList -> 2
+                    | IndexedGeometryMode.PointList -> 1
+                    | IndexedGeometryMode.TriangleList -> 3
+                    | m -> failwithf "unsupported patch-mode: %A" m
 
-            Mod.map2 (fun (call : DrawCallInfo) (isActive : bool) ->
-                if isActive then
-                    let patchCount = Translations.toPatchCount call.Mode
+            let instruction =
+                adaptive {
+                    let! (indexed, indexType) = indexType
+                    let! (call, isActive) = call, isActive
 
                     let mode =
                         if hasTess then int OpenGl.Enums.DrawMode.Patches
                         else Translations.toGLMode call.Mode
 
-                    let call = 
-                        match call.InstanceCount, indexed with
-                            | 1, false  -> Instruction.DrawArrays mode call.FirstIndex call.FaceVertexCount
-                            | 1, true   -> Instruction.DrawElements mode call.FaceVertexCount indexType 0n
-                            | n, false  -> Instruction.DrawArraysInstanced mode call.FirstIndex call.FaceVertexCount call.InstanceCount
-                            | n, true   -> Instruction.DrawElementsInstanced mode call.FaceVertexCount indexType 0n call.InstanceCount
+                    if indexed then
+                        let offset = nativeint (call.FirstIndex * indexType.GLSize)
 
-                    if hasTess then
-                        [ Instruction.PatchParameter (int OpenTK.Graphics.OpenGL4.PatchParameterInt.PatchVertices) mode
-                          call ]
+                        let indexType =
+                            if indexType = typeof<byte> then int OpenGl.Enums.IndexType.UnsignedByte
+                            elif indexType = typeof<uint16> then int OpenGl.Enums.IndexType.UnsignedShort
+                            elif indexType = typeof<uint32> then int OpenGl.Enums.IndexType.UnsignedInt
+                            elif indexType = typeof<sbyte> then int OpenGl.Enums.IndexType.UnsignedByte
+                            elif indexType = typeof<int16> then int OpenGl.Enums.IndexType.UnsignedShort
+                            elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
+                            else failwithf "unsupported index type: %A"  indexType
+
+                        match call.InstanceCount with
+                            | 1 -> return call.Mode, Instruction.DrawElements mode call.FaceVertexCount indexType offset
+                            | n -> return call.Mode, Instruction.DrawElementsInstanced mode call.FaceVertexCount indexType offset n
                     else
-                        [ call ]
-                else
-                    []
+                        match call.InstanceCount with
+                            | 1 -> return call.Mode, Instruction.DrawArrays mode call.FirstIndex call.FaceVertexCount
+                            | n -> return call.Mode, Instruction.DrawArraysInstanced mode call.FirstIndex call.FaceVertexCount n
+                }
 
-            ) call isActive |> wrapWithDeps [call;isActive]
+            let final =
+                instruction |> Mod.map (fun (mode,i) ->
+                    if hasTess then
+                        let size = patchSize mode
+                        [ Instruction.PatchParameter (int OpenTK.Graphics.OpenGL4.PatchParameterInt.PatchVertices) size
+                          i]
+                    else
+                        [i]
+                )
+
+            final |> wrapWithDeps [call;isActive;indexArray]
 
         let rec allUniformsEqual (rj : RenderJob) (values : list<string * IMod>) =
             match values with
