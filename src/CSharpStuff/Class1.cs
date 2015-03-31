@@ -5,9 +5,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Aardvark.Application;
 using System.Collections.Generic;
-using Aardvark.Base;
 using System.Linq;
 using System.Reactive;
+using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace CSharpStuff
 {
@@ -320,6 +321,31 @@ namespace CSharpStuff
         public System.Windows.Forms.Control Control { get { return m_control; } }
     }
 
+    public class HciKeyboardWpfAsync : HciKeyboard
+    {
+        private Control m_control;
+
+        public HciKeyboardWpfAsync(Control control)
+        {
+            Requires.NotNull(control);
+            m_control = control;
+
+            m_control.KeyDown += (s, e) =>
+            {
+                var k = (Keys)KeyInterop.VirtualKeyFromKey(e.Key);
+                if (!e.IsRepeat) m_keyDown.Emit(k);
+                m_keyPressed.Emit(k);
+            };
+
+            m_control.KeyUp += (s, e) =>
+            {
+                m_keyUp.Emit((Keys)KeyInterop.VirtualKeyFromKey(e.Key));
+            };
+        }
+
+        public Control Control { get { return m_control; } }
+    }
+
     public class DefaultCameraControllers
     {
         private EventSource<bool> m_isEnabled = new EventSource<bool>(false);
@@ -623,4 +649,80 @@ namespace CSharpStuff
             await Task.Yield();
         }
     }
+
+    public class HciMouseWpfAsync : HciMouse
+    {
+        private Control m_control;
+
+        public HciMouseWpfAsync(Control control)
+        {
+            Requires.NotNull(control);
+            m_control = control;
+
+            m_control.MouseEnter += (s, e) => m_enter.Emit(Unit.Default);
+
+            m_control.MouseLeave += (s, e) => m_leave.Emit(Unit.Default);
+
+            m_control.MouseDown += (s, e) =>
+            {
+                var pRaw = e.GetPosition(m_control);
+                var p = new PixelPosition((int)pRaw.X, (int)pRaw.Y, (int)m_control.ActualWidth, (int)m_control.ActualHeight);
+                switch (e.ChangedButton)
+                {
+                    case MouseButton.Left:
+                        m_downLeft.Emit(p);
+                        m_pressedLeft.Emit(true);
+                        break;
+                    case MouseButton.Middle:
+                        m_downMiddle.Emit(p);
+                        m_pressedMiddle.Emit(true);
+                        break;
+                    case MouseButton.Right:
+                        m_downRight.Emit(p);
+                        m_pressedRight.Emit(true);
+                        break;
+                }
+            };
+
+            m_control.MouseUp += (s, e) =>
+            {
+                var pRaw = e.GetPosition(m_control);
+                var p = new PixelPosition((int)pRaw.X, (int)pRaw.Y, (int)m_control.ActualWidth, (int)m_control.ActualHeight);
+                switch (e.ChangedButton)
+                {
+                    case MouseButton.Left:
+                        m_upLeft.Emit(p);
+                        m_pressedLeft.Emit(false);
+                        break;
+                    case MouseButton.Middle:
+                        m_upMiddle.Emit(p);
+                        m_pressedMiddle.Emit(false);
+                        break;
+                    case MouseButton.Right:
+                        m_upRight.Emit(p);
+                        m_pressedRight.Emit(false);
+                        break;
+                }
+            };
+
+            m_control.MouseMove += (s, e) =>
+            {
+                var pRaw = e.GetPosition(m_control);
+                var p = new PixelPosition((int)pRaw.X, (int)pRaw.Y, (int)m_control.ActualWidth, (int)m_control.ActualHeight);
+                m_move.Emit(p);
+            };
+
+            m_control.MouseDoubleClick += (s, e) =>
+            {
+                var pRaw = e.GetPosition(m_control);
+                var p = new PixelPosition((int)pRaw.X, (int)pRaw.Y, (int)m_control.ActualWidth, (int)m_control.ActualHeight);
+                m_doubleClickLeft.Emit(p);
+            };
+
+            m_control.MouseWheel += (s, e) => m_wheel.Emit(e.Delta / 120);
+        }
+
+        public Control Control { get { return m_control; } }
+    }
+
 }
