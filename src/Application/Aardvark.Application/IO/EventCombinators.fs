@@ -11,6 +11,7 @@ module Event =
         let mutable latest = Unchecked.defaultof<'a>
         let o = lazy ( o.Value.Do(fun e -> latest <- e) )
         let untyped = lazy ( o.Value.Select (fun _ -> Unit.Default) )
+        let mutable next = None
 
         interface IEvent with
             member x.Values = untyped.Value

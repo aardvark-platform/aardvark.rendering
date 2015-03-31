@@ -25,6 +25,7 @@ open System.Collections.Concurrent
 open System.Threading
 open System.Net
 open System.Web
+open System.Globalization
 
 let app = new OpenGlApplication()
 let source = KnownTileSources.Create(KnownTileSource.BingHybrid)
@@ -140,12 +141,14 @@ module Shader =
             return color
         }
 
-
-
 [<EntryPoint; STAThread>]
 let main argv = 
     Aardvark.Init()
     
+    Meixner.Application.run()
+    Environment.Exit 0
+
+
     let w = app.CreateSimpleRenderWindow()
     w.Size <- V2i(1280, 1024)
 
@@ -207,21 +210,11 @@ let main argv =
 
             return tileSize / viewportSize
         }
-//
-//    // calculate the real resolution of tiles for the current view
-//    let tileViewResolution =
-//        adaptive {
-//            let! viewResolution = viewResolution
-//            let! relative = relativeTileResolution
-//            return V2i (V2d viewResolution * relative)
-//        }
 
     // calculate the total grid size (todo: +2 may be to conservative)
     let gridSize = 
         adaptive {
             let! rel = relativeTileResolution
-//            let! size = viewResolution
-//            let! tileResolution = tileViewResolution
 
             let res =  V2i(ceil (1.0 / rel.X), ceil (1.0 / rel.Y)) + V2i.II
             return res
@@ -280,6 +273,8 @@ let main argv =
             return! t
         } 
 
+   
+
 
     // calculate a set of SceneGraph nodes having the appropriate transformations for 
     // all tiles (using the FullScreenQuad from above)
@@ -287,7 +282,7 @@ let main argv =
         aset {
             for coord in tileIndices do
                 yield zeroOneQuad |> Sg.trafo (getTileTrafo coord)
-                          |> Sg.diffuseTexture (getTileTexture coord)
+                                  |> Sg.diffuseTexture (getTileTexture coord)
                 
         }
 
@@ -301,16 +296,16 @@ let main argv =
 
 
 
-    let test =
-        IndexedGeometryMode.TriangleList
-            |> Sg.draw
-            |> Sg.index'                [|0;1;2; 0;2;3|]
-            |> Sg.vertexAttribute'      DefaultSemantic.Positions                           [|V3f.OOI; V3f.IOI; V3f.III; V3f.OII|]
-            |> Sg.vertexAttribute'      DefaultSemantic.DiffuseColorCoordinates             [|V2f.OO; V2f.IO; V2f.II; V2f.OI|]
-            |> Sg.diffuseFileTexture'   @"E:\Development\WorkDirectory\bricksDiffuse.png"   true
-            |> Sg.effect                [toEffect Shader.fragment]
+//    let test =
+//        IndexedGeometryMode.TriangleList
+//            |> Sg.draw
+//            |> Sg.index'                [|0;1;2; 0;2;3|]
+//            |> Sg.vertexAttribute'      DefaultSemantic.Positions                           [|V3f.OOI; V3f.IOI; V3f.III; V3f.OII|]
+//            |> Sg.vertexAttribute'      DefaultSemantic.DiffuseColorCoordinates             [|V2f.OO; V2f.IO; V2f.II; V2f.OI|]
+//            |> Sg.diffuseFileTexture'   @"E:\Development\WorkDirectory\bricksDiffuse.png"   true
+//            |> Sg.effect                [toEffect Shader.fragment]
 
-    let sg = Sg.group' [sg]
+    //let sg = Sg.group' [sg]
 
     // compile the rendertask and pass it to the window
     w.RenderTask <- app.Runtime.CompileRender(sg.RenderJobs())

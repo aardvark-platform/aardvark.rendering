@@ -37,7 +37,13 @@ module ``F# Mouse Extensions`` =
     let private table = ConditionalWeakTable<IMouse, SymbolDict<IEvent>>()
 
     let private get (id : Symbol) (f : IEvent<MouseEvent> -> IEvent<'a>) (m : IMouse)=
-        let tab = table.GetOrCreateValue(m)
+        let tab =
+            match table.TryGetValue m with
+                | (true, v) -> v
+                | _ -> 
+                    let res = SymbolDict<IEvent>()
+                    table.Add(m,res)
+                    res
         tab.GetOrCreate(id, fun s -> f m.Events :> IEvent) |> unbox<IEvent<'a>>
 
     let private down = Sym.ofString "down"
@@ -66,7 +72,17 @@ type CSharpMouseExtensions private() =
     static member Down(x : IMouse) = x.Down
 
     [<Extension>]
+    static member Down(x : IMouse, button : MouseButtons) = 
+        x.Down |> Event.filter(fun p -> p.buttons = button)
+
+
+    [<Extension>]
     static member Up(x : IMouse) = x.Up
+
+    [<Extension>]
+    static member Up(x : IMouse, button : MouseButtons) = 
+        x.Up |> Event.filter(fun p -> p.buttons = button)
+
 
     [<Extension>]
     static member Move(x : IMouse) = x.Move

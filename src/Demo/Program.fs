@@ -8,6 +8,7 @@ open Aardvark.SceneGraph.CSharp
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
 //open Demo
+open CSharpStuff
 
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -752,6 +753,14 @@ let main args =
     let task = app.Runtime.CompileRender(sg.RenderJobs())
 
     ctrl.RenderTask <- task
+
+    let controller = 
+        DefaultCameraControllers(
+            HciMouseWinFormsAsync (ctrl.Implementation), 
+            HciKeyboardWinFormsAsync (ctrl.Implementation), 
+            view,
+            isEnabled = EventSource(true)    
+        )
 //    w.Run()
 
 //    let app = System.Windows.Application()

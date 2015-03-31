@@ -49,6 +49,11 @@
     <EmbeddedResource Include="Assimp.zip" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\CSharpStuff\CSharpStuff.csproj">
+      <Name>CSharpStuff</Name>
+      <Project>{c9479b16-61f0-4467-9405-d62225eecebd}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <Reference Include="Aardvark.Base">
       <HintPath>..\..\packages\Aardvark.Base.1.1.12\lib\net45\Aardvark.Base.dll</HintPath>
       <Private>True</Private>
