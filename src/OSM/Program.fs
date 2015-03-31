@@ -301,6 +301,16 @@ let main argv =
 
 
 
+    let test =
+        IndexedGeometryMode.TriangleList
+            |> Sg.draw
+            |> Sg.index'                [|0;1;2; 0;2;3|]
+            |> Sg.vertexAttribute'      DefaultSemantic.Positions                           [|V3f.OOI; V3f.IOI; V3f.III; V3f.OII|]
+            |> Sg.vertexAttribute'      DefaultSemantic.DiffuseColorCoordinates             [|V2f.OO; V2f.IO; V2f.II; V2f.OI|]
+            |> Sg.diffuseFileTexture'   @"E:\Development\WorkDirectory\bricksDiffuse.png"   true
+            |> Sg.effect                [toEffect Shader.fragment]
+
+    let sg = Sg.group' [sg]
 
     // compile the rendertask and pass it to the window
     w.RenderTask <- app.Runtime.CompileRender(sg.RenderJobs())

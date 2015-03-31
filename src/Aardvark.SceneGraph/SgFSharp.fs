@@ -54,6 +54,13 @@ module SgFSharp =
         let diffuseTexture (tex : IMod<ITexture>) (sg : ISg) = 
             texture DefaultSemantic.DiffuseColorTexture tex sg
 
+        let diffuseTexture' (tex : ITexture) (sg : ISg) = 
+            texture DefaultSemantic.DiffuseColorTexture (Mod.initConstant tex) sg
+
+        let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) = 
+            texture DefaultSemantic.DiffuseColorTexture (Mod.initConstant (FileTexture(path, wantMipMaps) :> ITexture)) sg
+
+
         let scopeDependentTexture (sem : Symbol) (tex : Scope -> IMod<ITexture>) (sg : ISg) =
             Sg.UniformApplicator(Uniforms.ScopeDependentUniformHolder([sem, fun s -> tex s :> IMod]), sg) :> ISg
 
@@ -97,12 +104,20 @@ module SgFSharp =
                     arrayModCache.Add(m, r)
                     r
 
-        let vertexAttribute (s : Symbol) (value : IMod<'a[]>) (sg : ISg) =
+        let vertexAttribute<'a when 'a : struct> (s : Symbol) (value : IMod<'a[]>) (sg : ISg) =
             let view = BufferView(ArrayBuffer(modOfArray value), typeof<'a>)
             Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.initConstant sg) :> ISg
 
-        let index (value : IMod<'a[]>) (sg : ISg) =
+        let index<'a when 'a : struct> (value : IMod<'a[]>) (sg : ISg) =
             Sg.VertexIndexApplicator(modOfArray value, sg) :> ISg
+
+        let vertexAttribute'<'a when 'a : struct> (s : Symbol) (value : 'a[]) (sg : ISg) =
+            let view = BufferView(ArrayBuffer(Mod.initConstant (value :> Array)), typeof<'a>)
+            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.initConstant sg) :> ISg
+
+        let index'<'a when 'a : struct> (value : 'a[]) (sg : ISg) =
+            Sg.VertexIndexApplicator(Mod.initConstant (value :> Array), sg) :> ISg
+
 
         let draw (mode : IndexedGeometryMode) =
             Sg.RenderNode(

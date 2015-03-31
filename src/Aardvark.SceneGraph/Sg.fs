@@ -719,18 +719,19 @@ module Semantics =
             app.Child?FaceVertexCount <- app.Value |> Mod.map (fun a -> a.Length)
 
         member x.FaceVertexCount (app : VertexAttributeApplicator) =
-            let res : Error<IMod<int>> = Ag.tryGetAttributeValue app "FaceVertexCount"
-            match res with
-                | Success (v) -> app.Child?FaceVertexCount <- v
-                | _ -> 
-                    match Map.tryFind DefaultSemantic.Positions app.Values with
-                        | Some pos ->
-                            match pos.Buffer with
-                                | :? ArrayBuffer as ab ->
-                                    app.Child?FaceVertexCount <- ab.Data |> Mod.map (fun a -> a.Length - pos.Offset)
+            let res : IMod<int> = app?FaceVertexCount
+
+            if res <> zero then
+                app.Child?FaceVertexCount <- res
+            else
+                match Map.tryFind DefaultSemantic.Positions app.Values with
+                    | Some pos ->
+                        match pos.Buffer with
+                            | :? ArrayBuffer as ab ->
+                                app.Child?FaceVertexCount <- ab.Data |> Mod.map (fun a -> a.Length - pos.Offset)
             
-                                | _ -> app.Child?FaceVertexCount <- zero
-                        | _ -> app.Child?FaceVertexCount <- zero
+                            | _ -> app.Child?FaceVertexCount <- zero
+                    | _ -> app.Child?FaceVertexCount <- zero
 
         member x.InstanceAttributes(root : Root) = 
             root.Child?InstanceAttributes <- %Map.empty
@@ -911,7 +912,7 @@ module Semantics =
                         return info
                 }
 
-            rj.DrawCallInfo <- r.DrawCallInfo
+            rj.DrawCallInfo <- callInfo
 
             ASet.single rj
 
