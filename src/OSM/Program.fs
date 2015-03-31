@@ -34,7 +34,15 @@ let realTileResolution = V2i(256, 256)
 
 [<AutoOpen>]
 module Textures =
-    
+    let mutable shouldInit = true
+
+    let init() =
+        if shouldInit then
+            shouldInit <- false
+            IL.Init()
+            IL.OriginFunc(OriginMode.LowerLeft) |> ignore
+            IL.Enable(EnableCap.AbsoluteOrigin) |> ignore
+
     // get a chached texture for the given tile and zoom-level
     // TODO: add proper memory management (textures are never deleted)
     let private cache = System.Collections.Concurrent.ConcurrentDictionary<string * V2i, IMod<ITexture>>()
@@ -55,6 +63,7 @@ module Textures =
         app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true))
 
     let getTileTexure (coord : V2i) (zoom : string)=
+        init()
         cache.GetOrAdd((zoom, coord), fun (zoom, coord) ->
             let info = TileInfo()
             info.Index <- TileIndex(coord.X, coord.Y, zoom)
@@ -82,24 +91,11 @@ module Textures =
 
             let run =
                 async {
-                    let! bmp = source.GetTileAsync info
-                    return BitmapTexture(bmp, false) |> app.Runtime.CreateTexture
+                    let! img = source.GetTileAsync info
+                    return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.CreateTexture
                 }
 
             run |> Async.StartAsTask |> Mod.async noTexture
-//            let tcs = TaskCompletionSource<ITexture>()
-//            factory.StartNew(fun () -> Async.StartWithContinuations(run, tcs.SetResult, tcs.SetException, fun _ -> tcs.SetCanceled())) |> ignore
-//            tcs.Task |> Mod.async noTexture
-
-    //            Task.Factory.StartNew(fun () ->
-    //                let data = source.GetTile(info)
-    //                use ms = new System.IO.MemoryStream(data)
-    //                use bmp = System.Drawing.Bitmap.FromStream(ms) |> unbox<System.Drawing.Bitmap>
-    //                
-    //                let tex = app.Runtime.CreateTexture <| BitmapTexture(bmp, false)
-    //
-    //                tex
-    //            )
         )
 
 [<AutoOpen>]
@@ -211,14 +207,14 @@ let main argv =
 
             return tileSize / viewportSize
         }
-
-    // calculate the real resolution of tiles for the current view
-    let tileViewResolution =
-        adaptive {
-            let! viewResolution = viewResolution
-            let! relative = relativeTileResolution
-            return V2i (V2d viewResolution * relative)
-        }
+//
+//    // calculate the real resolution of tiles for the current view
+//    let tileViewResolution =
+//        adaptive {
+//            let! viewResolution = viewResolution
+//            let! relative = relativeTileResolution
+//            return V2i (V2d viewResolution * relative)
+//        }
 
     // calculate the total grid size (todo: +2 may be to conservative)
     let gridSize = 
@@ -302,6 +298,8 @@ let main argv =
         sgs |> Sg.set
             |> Sg.effect [toEffect vertex; toEffect fragment]
             |> Sg.trafo (Mod.initConstant normal01FrameTrafo)
+
+
 
 
     // compile the rendertask and pass it to the window

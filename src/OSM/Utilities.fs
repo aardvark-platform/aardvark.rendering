@@ -68,8 +68,6 @@ module Extensions =
 
 
     module Mod =
-        
-
         let async (defaultValue : 'a) (t : Task<'a>) =
 
             let aw = ref None
@@ -93,28 +91,35 @@ module Extensions =
         g.DrawLine(p, 0, 0, 256, 256)
         g.DrawLine(p, 256, 0, 256, 0)
 
-        bmp
+        PixImage.Create(bmp)
 
     type HttpTileSource with
         member x.GetTileAsync(tileInfo : TileInfo) =
             let url = x.GetUri(tileInfo)
 
-            let request = WebRequest.Create(url)
-            request.UseDefaultCredentials <- true
-            async {
-                try
-                    let! response = request.GetResponseAsync() |> Async.AwaitTask
+            let rec load (retry : int) =
+                let request = WebRequest.Create(url)
+                request.UseDefaultCredentials <- true
+                async {
+                    try
+                        use! response = request.GetResponseAsync() |> Async.AwaitTask
 
-                    if response.ContentType.StartsWith "image" then
-                        use s = response.GetResponseStream()
-                        return System.Drawing.Bitmap.FromStream(s) |> unbox<System.Drawing.Bitmap>
-                        //return! s.AsyncRead(int response.ContentLength)
+                        if response.ContentType.StartsWith "image" then
+                            let s = response.GetResponseStream()
+                            let! data = s.AsyncRead(int response.ContentLength)
+                            use ms = new MemoryStream(data)
+                        
+                            return PixImage.Create(ms)
+                        else
+                            return noTileImage
+                    with e ->
+                        if retry > 0 then
+                            return! load (retry - 1)
+                        else 
+                            return noTileImage
+                }
 
-                    else
-                        return noTileImage
-                with e ->
-                    return noTileImage
-            }
+            load 5
 
     type ITileSource with
         member x.GetTileAsync(info : TileInfo) =

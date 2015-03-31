@@ -87,14 +87,14 @@ module SamplerExtensions =
         GL.SamplerParameter(handle, SamplerParameterName.TextureBorderColor, [|d.BorderColor.R; d.BorderColor.G; d.BorderColor.B; d.BorderColor.A|])
         GL.Check "could not set BorderColor for sampler"
 
-        GL.SamplerParameter(handle, SamplerParameterName.TextureWrapR, wrapMode d.AddressU)
-        GL.Check "could not set TextureWrapR for sampler"
-
-        GL.SamplerParameter(handle, SamplerParameterName.TextureWrapS, wrapMode d.AddressV)
+        GL.SamplerParameter(handle, SamplerParameterName.TextureWrapS, wrapMode d.AddressU)
         GL.Check "could not set TextureWrapS for sampler"
 
-        GL.SamplerParameter(handle, SamplerParameterName.TextureWrapT, wrapMode d.AddressW)
+        GL.SamplerParameter(handle, SamplerParameterName.TextureWrapT, wrapMode d.AddressV)
         GL.Check "could not set TextureWrapT for sampler"
+
+        GL.SamplerParameter(handle, SamplerParameterName.TextureWrapR, wrapMode d.AddressW)
+        GL.Check "could not set TextureWrapR for sampler"
 
 
         GL.SamplerParameter(handle, SamplerParameterName.TextureLodBias, d.MipLodBias)
