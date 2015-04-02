@@ -68,7 +68,8 @@ type MessageLoop() as this =
 
     let rec processAll() =
         let mine = Interlocked.Exchange(&q, PersistentHashSet.empty)
-        for ctrl in mine |> PersistentHashSet.toSeq do
+        let mine = mine |> PersistentHashSet.toList
+        for ctrl in mine do
             try 
                 ctrl.Invoke (fun () -> ctrl.Paint())
             with e ->
