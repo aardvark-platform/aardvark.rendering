@@ -145,12 +145,12 @@ module Shader =
 let main argv = 
     Aardvark.Init()
     
-    Meixner.Application.run()
+    //Meixner.Application.run()
     Environment.Exit 0
 
 
     let w = app.CreateSimpleRenderWindow()
-    w.Size <- V2i(1280, 1024)
+    //w.Size <- V2i(1280, 1024)
 
     // initialize a viewport (small part of the world currently)
     let viewportOrigin, viewportSize = 
