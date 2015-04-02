@@ -53,6 +53,7 @@ type Label(content : IMod<string>) =
     interface IUi
     member x.Content = content
 
+
 type Button(label : IMod<string>) as this =
     let click : Lazy<EventSource<unit>> = this |> Utilities.getAttribute "click" null
     
@@ -83,13 +84,15 @@ type VerticalStack(content : list<IUi>) as this =
     member x.Sizes = sizes.Value
     member x.Content = content
 
-
-
 type TreeView<'a> (content : alist<'a>, ui : 'a -> IUi, children : 'a -> alist<'a>) =
     interface IUi
     member x.Content = content
     member x.GetChildren = children
     member x.GetUi = ui
+
+type TextBox (content : ModRef<string>) =
+    interface IUi
+    member x.Content = content
 
 module UIHelpers =
     let raise (e : IEvent<'a>) (value : 'a) =
@@ -108,6 +111,9 @@ module UI =
 
     let tree (content : alist<'a>) (children : 'a -> alist<'a>) (ui : 'a -> IUi) =
         TreeView(content, ui, children) :> IUi
+
+    let modLabel str = Label(str) :> IUi
+    let textBox str = TextBox(str) :> IUi
 
 [<AutoOpen>]
 module Extensions =

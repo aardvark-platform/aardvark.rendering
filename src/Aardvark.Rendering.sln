@@ -40,6 +40,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meixner.Base.CSharp", "Meix
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Meixner.App", "Meixner\Meixner.App\Meixner.App.fsproj", "{2B7246A6-B6DA-46AC-809B-90CE5371B34D}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "WPFTest", "WPFTest\WPFTest.fsproj", "{891C7F36-29A7-4D35-B043-8EDE1889E34E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -102,6 +104,10 @@ Global
 		{2B7246A6-B6DA-46AC-809B-90CE5371B34D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2B7246A6-B6DA-46AC-809B-90CE5371B34D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2B7246A6-B6DA-46AC-809B-90CE5371B34D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{891C7F36-29A7-4D35-B043-8EDE1889E34E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{891C7F36-29A7-4D35-B043-8EDE1889E34E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{891C7F36-29A7-4D35-B043-8EDE1889E34E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{891C7F36-29A7-4D35-B043-8EDE1889E34E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
