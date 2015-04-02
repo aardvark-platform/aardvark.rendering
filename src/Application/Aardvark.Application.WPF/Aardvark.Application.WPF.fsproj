@@ -57,6 +57,7 @@
     <Compile Include="SimpleRenderWindow.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />
+    <Compile Include="GUI\UI.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">
@@ -131,6 +132,7 @@
     </Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xaml" />
+    <Reference Include="System.Xml" />
     <Reference Include="UIAutomationTypes" />
     <Reference Include="WindowsBase" />
     <ProjectReference Include="..\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
