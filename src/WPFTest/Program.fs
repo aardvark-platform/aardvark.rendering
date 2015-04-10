@@ -37,8 +37,22 @@ module UITest =
         let c = EventSource<unit>()
         let some = Mod.initMod "Hi There you crazy basterd!"
         let text = Mod.initMod ""
+
+        let treeItems = corderedset [1;2;3]
+        let r = Random()
+
         check |> Mod.registerCallback (fun c ->
-            
+            if c then
+                let before = r.NextDouble() > 0.5
+                let anchor = 1 + r.Next treeItems.Count
+
+                transact (fun () ->
+                    if before then treeItems.InsertBefore(anchor, treeItems.Count + 1) |> ignore
+                    else treeItems.InsertAfter(anchor, treeItems.Count + 1) |> ignore
+                )
+            else 
+                transact (fun () -> treeItems.Remove (treeItems.Count)) |> ignore
+
             printfn "checked: %A" c
         ) |> ignore
 
@@ -55,6 +69,8 @@ module UITest =
             )
         ) |> ignore
 
+
+
         let content =
             UI.horizontal |< [ sizes &= [80R; 20R]] >| [
                 UI.vertical -< [ sizes &= [25R; 50R; 25R]] >- [
@@ -66,7 +82,7 @@ module UITest =
 
                     UI.textBox text
                 ]
-                UI.modLabel some 
+                UI.tree treeItems (fun a -> AList.empty) (fun i -> UI.label (string i))
             ]
 
         content.WPF()

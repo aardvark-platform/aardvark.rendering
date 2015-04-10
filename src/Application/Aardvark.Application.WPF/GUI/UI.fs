@@ -26,17 +26,23 @@ module Extensions =
 module Semantics =
     
     type Dispatcher with
-        member x.OnUIThread (f : unit -> 'a) =
+        member x.Run (f : unit -> 'a) =
             if x.CheckAccess() then
                 f()
             else
                 x.Invoke(Func<'a>(f))
 
+        member x.Start (f : unit -> 'a) =
+            if x.CheckAccess() then
+                System.Threading.Tasks.Task.FromResult(f())
+            else
+                x.InvokeAsync(Func<'a>(f)).Task
+
     type WrappedMod(e : UIElement, m : IMod) as this =
         let changed = Event<_,_>()
 
         let callback =
-            fun () -> e.Dispatcher.OnUIThread (fun () -> changed.Trigger(this, PropertyChangedEventArgs("Value")))
+            fun () -> e.Dispatcher.Run (fun () -> changed.Trigger(this, PropertyChangedEventArgs("Value")))
 
 
         [<CLIEvent>]
@@ -56,7 +62,7 @@ module Semantics =
         let changed = Event<_,_>()
 
         let callback =
-            fun () -> e.Dispatcher.OnUIThread (fun () -> changed.Trigger(this, PropertyChangedEventArgs("Value")))
+            fun () -> e.Dispatcher.Run (fun () -> changed.Trigger(this, PropertyChangedEventArgs("Value")))
 
         [<CLIEvent>]
         member x.PropertyChanged = changed.Publish
@@ -110,8 +116,24 @@ module Semantics =
             | Relative r -> GridLength(100.0 * r, GridUnitType.Star)
             | Absolute p -> GridLength(float p, GridUnitType.Pixel)
 
+    type DisposableTreeViewItem() =
+        inherit TreeViewItem()
+        let disp = System.Collections.Generic.HashSet<IDisposable>()
+
+        member x.AddSubscription (d : IDisposable) =
+            disp.Add d |> ignore
+
+        member x.Dispose() =
+            let s = disp |> Seq.toList
+            disp.Clear()
+            s |> List.iter (fun d -> d.Dispose())
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
     [<Semantic>]
     type LabelSemantics() =
+        let treeViewSubscriptions = System.Runtime.CompilerServices.ConditionalWeakTable<TreeView, IDisposable>()
         member x.WPF(l : Label) =
             let res = TextBlock()
             res |> set TextBlock.TextProperty l.Content
@@ -144,6 +166,75 @@ module Semantics =
 
             res :> obj 
 
+
+        member x.WPF(t : TreeView<'a>) =
+
+            let view = TreeView()
+            let rec build (items : ItemCollection) (s : alist<'a>) =
+
+                let tuple (i : int) =
+                    (unbox<TreeViewItem> items.[i]).Tag |> unbox<Time * 'a>
+
+                let rec binarySearch (l : int) (r : int) (t : Time) =
+                    if l > r then
+                        l
+                    else
+                        let m = (l + r) / 2
+                        let (tm, vm) = tuple m
+
+                        let c = compare t tm
+
+                        if c > 0 then
+                            binarySearch (m+1) r t
+                        elif c < 0 then
+                            binarySearch l (m-1) t
+                        else
+                            m
+
+                let binarySearch t =
+                    binarySearch 0 (items.Count - 1) t
+
+                let rootTime = Time.newRoot()
+                let mapping = TimeMappings.SparseTimeMapping.Create rootTime
+                let cache = Cache(Ag.getContext(), fun (t' : Time,v : 'a) -> new DisposableTreeViewItem(Header = (t.GetUi v).WPF(), Tag = (t',v)))
+
+                let subscription = 
+                    s |> AList.registerCallback (fun deltas ->
+                        view.Dispatcher.Start (fun () ->
+                            for d in deltas do
+                                match d with
+                                    | Add (t',v) ->
+                                        let t' = mapping.GetTime t'
+                                        let index = binarySearch t'
+
+                                        let item = cache.Invoke(t',v)
+
+                                        items.Insert(index, item)
+                                        item.AddSubscription(build item.Items (t.GetChildren v))
+
+                                    | Rem (t,v) ->
+                                        match mapping.TryGetTime t with
+                                            | Some t' ->
+                                                let index = binarySearch t'
+                                                let item = cache.Revoke(t',v)
+                                                items.RemoveAt index
+                                                item.Dispose()
+
+                                                mapping.RemoveTime t
+                                            | _ -> ()
+                        ) |> ignore
+                
+                    )
+                { new IDisposable with
+                    member x.Dispose() =
+                            subscription.Dispose()
+                            cache.Clear(fun d -> d.Dispose())
+                }
+
+            let s = t.Content |> build view.Items
+
+            treeViewSubscriptions.Add(view, s)
+            view :> obj
 
         member x.WPF(s : HorizontalStack) =
             let res = Grid()

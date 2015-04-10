@@ -48,11 +48,17 @@ module private Utilities =
                 | _ -> defaultValue
         )
 
+    let tryGetAttribute (name : string) (e : IUi) =
+        lazy (
+            match Ag.tryGetAttributeValue e name with
+                | Success v -> Some v
+                | _ -> None
+        )
+
 
 type Label(content : IMod<string>) =
     interface IUi
     member x.Content = content
-
 
 type Button(label : IMod<string>) as this =
     let click : Lazy<EventSource<unit>> = this |> Utilities.getAttribute "click" null
@@ -84,8 +90,12 @@ type VerticalStack(content : list<IUi>) as this =
     member x.Sizes = sizes.Value
     member x.Content = content
 
-type TreeView<'a> (content : alist<'a>, ui : 'a -> IUi, children : 'a -> alist<'a>) =
+type TreeView<'a> (content : alist<'a>, ui : 'a -> IUi, children : 'a -> alist<'a>) as this =
+    let selection = this |> Utilities.tryGetAttribute "selected"
+    
     interface IUi
+
+    member x.Selection : Option<ModRef<'a>> = selection.Value
     member x.Content = content
     member x.GetChildren = children
     member x.GetUi = ui
@@ -134,10 +144,11 @@ module Extensions =
     let sizes = Attribute<list<LayoutSize>>("sizes")
     let onclick = Attribute<EventSource<unit>>("click")
     let isChecked = Attribute<ModRef<bool>>("checked")
-
+    
     let (&=) (name : Attribute<'a>) (value : 'a) =
         fun (a : IUi) ->
             rootScope.GetChildScope(a).AddCache name.Name (Some (value :> obj)) |> ignore
+
 
 
 module UITest =
