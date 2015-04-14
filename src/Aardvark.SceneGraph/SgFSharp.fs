@@ -46,6 +46,9 @@ module SgFSharp =
         let set (set : aset<ISg>) =
             Sg.Set(set) :> ISg
 
+        let onOff (active : IMod<bool>) (sg : ISg) =
+            Sg.OnOffNode(active, sg) :> ISg
+
         let visibleBB (c : C4b) (sg : ISg) renderBoth = Sg.VisibleBB(c,sg, renderBoth) :> ISg
 
         let texture (sem : Symbol) (tex : IMod<ITexture>) (sg : ISg) =
