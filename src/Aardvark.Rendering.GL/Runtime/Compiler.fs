@@ -666,6 +666,10 @@ module InstructionCompiler =
                     let! (indexed, indexType) = indexType
                     let! (call, isActive) = call, isActive
 
+                    let faceVertexCount =
+                        if isActive then call.FaceVertexCount
+                        else 0
+
                     let mode =
                         if hasTess then int OpenGl.Enums.DrawMode.Patches
                         else Translations.toGLMode call.Mode
@@ -683,12 +687,12 @@ module InstructionCompiler =
                             else failwithf "unsupported index type: %A"  indexType
 
                         match call.InstanceCount with
-                            | 1 -> return call.Mode, Instruction.DrawElements mode call.FaceVertexCount indexType offset
-                            | n -> return call.Mode, Instruction.DrawElementsInstanced mode call.FaceVertexCount indexType offset n
+                            | 1 -> return call.Mode, Instruction.DrawElements mode faceVertexCount indexType offset
+                            | n -> return call.Mode, Instruction.DrawElementsInstanced mode faceVertexCount indexType offset n
                     else
                         match call.InstanceCount with
-                            | 1 -> return call.Mode, Instruction.DrawArrays mode call.FirstIndex call.FaceVertexCount
-                            | n -> return call.Mode, Instruction.DrawArraysInstanced mode call.FirstIndex call.FaceVertexCount n
+                            | 1 -> return call.Mode, Instruction.DrawArrays mode call.FirstIndex faceVertexCount
+                            | n -> return call.Mode, Instruction.DrawArraysInstanced mode call.FirstIndex faceVertexCount n
                 }
 
             let final =
