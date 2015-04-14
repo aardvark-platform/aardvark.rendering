@@ -272,14 +272,6 @@ module Programs =
                     x.Recompile(v.RenderJob, x.RenderJob)
 
 
-    [<AllowNullLiteral>]
-    type IProgram =
-        inherit IDisposable
-        abstract member Add : RenderJob -> unit
-        abstract member Remove : RenderJob -> unit
-        abstract member Update : RenderJob -> unit
-        abstract member Run : Framebuffer * ContextHandle -> FrameStatistics
-
     type DelayedTask(f : unit -> unit) =
         let f = ref f
         let timerLock = obj()

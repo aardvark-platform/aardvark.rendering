@@ -51,6 +51,7 @@
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\Instruction.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
+    <Compile Include="Instructions\Translations.fs" />
     <Content Include="Resources\Resources.txt" />
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\Attribute.fs" />
@@ -69,6 +70,7 @@
     <Compile Include="Runtime\Native\Fragments.fs" />
     <Compile Include="Runtime\Native\DynamicFragments.fs" />
     <Compile Include="Runtime\Managed\ManagedFragments.fs" />
+    <Compile Include="Runtime\Interpreter\InterpretedProgram.fs" />
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\Compiler.fs" />
     <Compile Include="Runtime\Sorting.fs" />

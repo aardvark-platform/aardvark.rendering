@@ -145,9 +145,6 @@ module Shader =
 let main argv = 
     Aardvark.Init()
     
-    //Meixner.Application.run()
-    Environment.Exit 0
-
 
     let w = app.CreateSimpleRenderWindow()
     //w.Size <- V2i(1280, 1024)
