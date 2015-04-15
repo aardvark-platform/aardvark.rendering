@@ -12,6 +12,7 @@ type ISurface = interface end
 type IAttributeProvider =
     inherit IDisposable
     abstract member TryGetAttribute : name : Symbol * [<Out>] buffer : byref<BufferView> -> bool
+    abstract member All : seq<Symbol * BufferView>
 
 [<AllowNullLiteral>]
 type IUniformProvider =
@@ -99,6 +100,7 @@ module RenderJobExtensions =
         { new IAttributeProvider with
             member x.TryGetAttribute(name : Symbol, uniform : byref<BufferView>) = 
                 false
+            member x.All = Seq.empty
             member x.Dispose() =
                 ()
         }

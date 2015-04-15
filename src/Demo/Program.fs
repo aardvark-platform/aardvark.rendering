@@ -662,6 +662,8 @@ let main args =
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
 
+    Demo.AssimpExporter.test()
+
     use app = new OpenGlApplication()
     let f = app.CreateSimpleRenderWindow()
     let ctrl = f.Control

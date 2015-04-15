@@ -551,6 +551,9 @@ module Semantics =
                     cache <- None
                     scope <- emptyScope
 
+                member x.All =
+                    getMap() |> Map.toSeq
+
                 member x.TryGetAttribute(s : Symbol, result : byref<BufferView>) =
                     let m = getMap()
 
@@ -563,30 +566,40 @@ module Semantics =
         type SimpleAttributeProvider(ig : IndexedGeometry) =
             let mutable cache = SymbolDict<BufferView>()
 
-            interface IAttributeProvider with
+            
+            member x.Dispose() = cache.Clear()
 
-                member x.Dispose() = cache.Clear()
+            member x.TryGetAttribute(s : Symbol, [<Out>] result : byref<BufferView>) =
+                match cache.TryGetValue s with
+                    | (true, v) ->
+                        result <- v
+                        true
+                    | _ ->
+                        match ig.IndexedAttributes.TryGetValue s with
+                            | (true, att) -> 
+                                let m = Mod.initConstant att
 
-                member x.TryGetAttribute(s : Symbol, result : byref<BufferView>) =
-                    match cache.TryGetValue s with
-                        | (true, v) ->
-                            result <- v
-                            true
-                        | _ ->
-                            match ig.IndexedAttributes.TryGetValue s with
-                                | (true, att) -> 
-                                    let m = Mod.initConstant att
+                                let t = att.GetType().GetElementType()
+                                let v = BufferView(ArrayBuffer m, t)
 
-                                    let t = att.GetType().GetElementType()
-                                    let v = BufferView(ArrayBuffer m, t)
-
-                                    cache.[s] <- v
-                                    result <- v
-                                    true
-                                | _ -> 
-                                    false
+                                cache.[s] <- v
+                                result <- v
+                                true
+                            | _ -> 
+                                false
                                 
+            member x.All =
+                seq {
+                    for k in ig.IndexedAttributes.Keys do
+                        match x.TryGetAttribute(k) with
+                            | (true, att) -> yield k, att
+                            | _ -> ()
+                }
 
+            interface IAttributeProvider with
+                member x.TryGetAttribute(key, v) = x.TryGetAttribute(key, &v)
+                member x.All = x.All
+                member x.Dispose() = x.Dispose()
 
         type UniformProvider(scope : Scope, uniforms : list<IUniformHolder>) =
             let mutable scope = scope
