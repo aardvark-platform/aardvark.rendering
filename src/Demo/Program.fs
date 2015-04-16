@@ -662,8 +662,6 @@ let main args =
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
 
-    Demo.AssimpExporter.test()
-
     use app = new OpenGlApplication()
     let f = app.CreateSimpleRenderWindow()
     let ctrl = f.Control
@@ -732,6 +730,9 @@ let main args =
            |> Sg.blendMode (Mod.initConstant BlendMode.Blend)
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
     
+
+    Demo.AssimpExporter.save @"C:\Users\Schorsch\Desktop\quadScene\eigi.dae" sg
+
 
 //    let arr = new ModRef<Array> ([|V3f.III|] :> Array)
 //
