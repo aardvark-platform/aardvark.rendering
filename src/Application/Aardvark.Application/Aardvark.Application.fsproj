@@ -58,6 +58,8 @@
     <Compile Include="IMessageLoop.fs" />
     <Compile Include="IRenderControl.fs" />
     <Compile Include="IApplication.fs" />
+    <Compile Include="Camera.fs" />
+    <Compile Include="DefaultCameraController.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />
     <Compile Include="GUI\Sg.fs" />

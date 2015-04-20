@@ -27,21 +27,37 @@ module VertexArrayObjectExtensions =
         GL.Check "could not bind VertexArrayObjects"
 
         for (id, att) in attributes do
-            GL.EnableVertexAttribArray(id)
-            GL.Check "could not enable vertex attribute array"
+
 
             GL.BindBuffer(BufferTarget.ArrayBuffer, att.Buffer.Handle)
             GL.Check "could not bind buffer"
 
-            match att.Frequency with
-                | PerVertex -> GL.VertexAttribDivisor(id, 0)
-                | PerInstances s -> GL.VertexAttribDivisor(id, s)
-            GL.Check "could not set vertex attribute frequency"
 
+            if att.Type = typeof<M44f> then
+                for i in 0..3 do
+                    let id = id + i
 
-            let attType = glTypes.[att.BaseType]
-            GL.VertexAttribPointer(id, att.Dimension, attType, att.Normalized, att.Stride, att.Offset)
-            GL.Check "could not set vertex attribute pointer"
+                    match att.Frequency with
+                        | PerVertex -> GL.VertexAttribDivisor(id, 0)
+                        | PerInstances s -> GL.VertexAttribDivisor(id, s)
+                    GL.Check "could not set vertex attribute frequency"
+
+                    GL.EnableVertexAttribArray(id)
+                    GL.Check "could not enable vertex attribute array"
+
+                    GL.VertexAttribPointer(id, 4, VertexAttribPointerType.Float, false, 16 * sizeof<float32>, 4 * i * sizeof<float32>)
+            else
+                GL.EnableVertexAttribArray(id)
+                GL.Check "could not enable vertex attribute array"
+
+                match att.Frequency with
+                    | PerVertex -> GL.VertexAttribDivisor(id, 0)
+                    | PerInstances s -> GL.VertexAttribDivisor(id, s)
+                GL.Check "could not set vertex attribute frequency"
+
+                let attType = glTypes.[att.BaseType]
+                GL.VertexAttribPointer(id, att.Dimension, attType, att.Normalized, att.Stride, att.Offset)
+                GL.Check "could not set vertex attribute pointer"
 
 
         GL.BindBuffer(BufferTarget.ArrayBuffer, 0)

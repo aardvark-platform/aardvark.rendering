@@ -481,7 +481,7 @@ module Sg =
             else
                 sg
 
-        let m44Trafos = trafos |> Mod.map (fun a -> a |> Array.map (fun (t : Trafo3d) -> M44f.op_Explicit t.Forward) :> Array)
+        let m44Trafos = trafos |> Mod.map (fun a -> a |> Array.map (fun (t : Trafo3d) -> (M44f.op_Explicit t.Forward).Transposed) :> Array)
         let m44View = BufferView(ArrayBuffer m44Trafos, typeof<M44f>)
 
         InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg

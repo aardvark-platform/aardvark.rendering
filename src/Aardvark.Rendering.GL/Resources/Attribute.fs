@@ -96,6 +96,7 @@ module AttributeDescriptionExtensions =
             typeof<V4i>,        4
             typeof<V4f>,        4
             typeof<V4d>,        4
+            typeof<M44f>,       16
 
             typeof<C4b>,        GL_BGRA
         ] 
@@ -126,6 +127,8 @@ module AttributeDescriptionExtensions =
             typeof<V4d>,        typeof<float>
 
             typeof<C4b>,        typeof<byte>
+
+            typeof<M44f>,       typeof<float>
         ] 
 
     let internal glTypes =
@@ -139,6 +142,8 @@ module AttributeDescriptionExtensions =
 
             typeof<float32>, VertexAttribPointerType.Float
             typeof<float>, VertexAttribPointerType.Double
+
+            typeof<M44f>, VertexAttribPointerType.Float
         ]
 
     // some useful extensions for AttributeDescription

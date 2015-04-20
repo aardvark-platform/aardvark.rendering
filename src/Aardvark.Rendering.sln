@@ -42,6 +42,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Meixner.App", "Meixner\Meix
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "WPFTest", "WPFTest\WPFTest.fsproj", "{891C7F36-29A7-4D35-B043-8EDE1889E34E}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FontRendering", "FontRendering\FontRendering.fsproj", "{63DCF027-1892-44B9-AF14-1FFF8005617C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -108,6 +110,10 @@ Global
 		{891C7F36-29A7-4D35-B043-8EDE1889E34E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{891C7F36-29A7-4D35-B043-8EDE1889E34E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{891C7F36-29A7-4D35-B043-8EDE1889E34E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

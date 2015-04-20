@@ -44,7 +44,7 @@ module ``F# Mouse Extensions`` =
                     let res = SymbolDict<IEvent>()
                     table.Add(m,res)
                     res
-        tab.GetOrCreate(id, fun s -> f m.Events :> IEvent) |> unbox<IEvent<'a>>
+        tab.GetOrCreate(id, fun s -> (f m.Events) :> IEvent) |> unbox<IEvent<'a>>
 
     let private down = Sym.ofString "down"
     let private up = Sym.ofString "up"
@@ -57,13 +57,13 @@ module ``F# Mouse Extensions`` =
 
     type IMouse with
         member x.Down = x |> get down (fun e -> e |> Event.choose (function | MouseDown e -> Some e | _ -> None))
-        member x.Up = x |> get down (fun e -> e |> Event.choose (function | MouseUp e -> Some e | _ -> None))
-        member x.Move = x |> get down (fun e -> e |> Event.choose (function | MouseMove e -> Some e | _ -> None))
-        member x.Scroll = x |> get down (fun e -> e |> Event.choose (function | MouseScroll(delta, p) -> Some(delta, p) | _ -> None))
-        member x.Click = x |> get down (fun e -> e |> Event.choose (function | MouseClick e -> Some e | _ -> None))
-        member x.DoubleClick = x |> get down (fun e -> e |> Event.choose (function | MouseDoubleClick e -> Some e | _ -> None))
-        member x.Enter = x |> get down (fun e -> e |> Event.choose (function | MouseEnter e -> Some e | _ -> None))
-        member x.Leave = x |> get down (fun e -> e |> Event.choose (function | MouseLeave e -> Some e | _ -> None))
+        member x.Up = x |> get up (fun e -> e |> Event.choose (function | MouseUp e -> Some e | _ -> None))
+        member x.Move = x |> get move (fun e -> e |> Event.choose (function | MouseMove e -> Some e | _ -> None))
+        member x.Scroll = x |> get scroll (fun e -> e |> Event.choose (function | MouseScroll(delta, p) -> Some(delta, p) | _ -> None))
+        member x.Click = x |> get click (fun e -> e |> Event.choose (function | MouseClick e -> Some e | _ -> None))
+        member x.DoubleClick = x |> get doubleClick (fun e -> e |> Event.choose (function | MouseDoubleClick e -> Some e | _ -> None))
+        member x.Enter = x |> get enter (fun e -> e |> Event.choose (function | MouseEnter e -> Some e | _ -> None))
+        member x.Leave = x |> get leave (fun e -> e |> Event.choose (function | MouseLeave e -> Some e | _ -> None))
 
 [<AbstractClass; Sealed; Extension>]
 type CSharpMouseExtensions private() =

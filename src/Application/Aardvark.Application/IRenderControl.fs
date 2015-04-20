@@ -12,7 +12,6 @@ type IRenderTarget =
 type IRenderControl =
     inherit IRenderTarget
 
-    
     abstract member Keyboard : IKeyboard
     abstract member Mouse : IMouse
     
