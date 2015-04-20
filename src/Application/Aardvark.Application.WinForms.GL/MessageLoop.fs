@@ -10,7 +10,9 @@ open Aardvark.Base
 
 type IControl =
     abstract member Paint : unit -> unit
+    abstract member Invalidate : unit -> unit
     abstract member Invoke : (unit -> unit) -> unit
+    abstract member IsInvalid : bool
 
 type RunningMean(maxCount : int) =
     let values = Array.zeroCreate maxCount
@@ -53,6 +55,8 @@ type Periodic(interval : int, f : float -> unit) =
 
 type MessageLoop() as this =
 
+
+
     static let rec interlockedChange (location : byref<'a>) (update : 'a -> 'a) =
         let mutable oldValue = location
         let newValue = update oldValue
@@ -71,19 +75,22 @@ type MessageLoop() as this =
         let mine = mine |> PersistentHashSet.toList
         for ctrl in mine do
             try 
-                ctrl.Invoke (fun () -> ctrl.Paint())
+                if not ctrl.IsInvalid then
+                    ctrl.Invoke (fun () -> ctrl.Invalidate())
             with e ->
                 printfn "%A" e
 
     member private x.Process() =
-        Application.DoEvents()
-        for p in periodic do p.RunIfNeeded()
+        //Application.DoEvents()
+        //for p in periodic do p.RunIfNeeded()
         processAll()
+        //Application.DoEvents()
 
     member x.Start() =
         if timer <> null then
             timer.Dispose()
 
+   
         timer <- new Timer(TimerCallback(fun _ -> this.Process()), null, 0L, 2L)
 
     member x.Draw(c : IControl) =

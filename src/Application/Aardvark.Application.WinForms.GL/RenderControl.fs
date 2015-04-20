@@ -43,8 +43,15 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
 
     let sizes = EventSource<V2i>(V2i(base.ClientSize.Width, base.ClientSize.Height))
     let time = Mod.custom (fun () -> DateTime.Now)
+    let mutable needsRedraw = false
 
     interface IControl with
+        member x.IsInvalid = needsRedraw
+        member x.Invalidate() =
+            if not needsRedraw then
+                needsRedraw <- true
+                x.Invalidate()
+
         member x.Paint() =
             use g = x.CreateGraphics()
             use e = new PaintEventArgs(g, x.ClientRectangle)
@@ -92,6 +99,8 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
             match task with
                 | Some t ->
                     using (ctx.RenderingLock contextHandle) (fun _ ->
+                        needsRedraw <- false
+
                         if size <> sizes.Latest then
                             transact (fun () -> sizes.Emit size)
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
@@ -100,22 +109,33 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
                         GL.ClearDepth(1.0)
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
 
+                        
                         let res = t.Run(defaultFramebuffer)
-
+                        
                         statistics.Emit res.Statistics
+                        //System.Threading.Thread.Sleep(200)
+//                        let sw = System.Diagnostics.Stopwatch()
+//                        sw.Start()
+//                        while sw.Elapsed.TotalMilliseconds < 10.0 do 1;
 
-                        //System.Threading.Thread.Sleep(30)
 
 
                         transact (fun () -> time.MarkOutdated())
                         x.SwapBuffers()
+
+                        if t.OutOfDate then
+                            needsRedraw <- true
+                            x.Invalidate()
+                        else
+                            needsRedraw <- false
                     )
+
                 | None ->
                     if size <> sizes.Latest then
                         transact (fun () -> sizes.Emit size)
 
-            
-
+                    needsRedraw <- false
+                    
 //    override x.OnResize(e) =
 //        base.OnResize(e)
 //        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)

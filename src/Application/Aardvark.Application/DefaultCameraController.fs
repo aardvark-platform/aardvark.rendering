@@ -17,33 +17,54 @@ module DefaultCameraController =
                     last := Some v
                     (v, None)
         )
+//
+//    let inline private integrate (time : IMod<DateTime>) (input : IMod<Option<'b>>) (m : IMod<'a>) (f : TimeSpan -> 'b -> 'a -> 'a) =
+//        let dt = Cache(Ag.getContext(), fun i -> differentiate time)
+//        let integral = ref Unchecked.defaultof<_>
+//
+//        adaptive {
+//            let! v = m
+//            integral := v
+//            let! i = input
+//
+//            match i with
+//                | Some i ->
+//                    let! (t, dt) = dt.Invoke 0
+//                    match dt with
+//                        | Some dt ->
+//                            let newValue = f dt i !integral
+//                            integral := newValue
+//                            return newValue
+//                        | None ->
+//                            return !integral
+//
+//                | None ->
+//                    dt.Clear(ignore)
+//                    return !integral 
+//        }
+   
 
-    let inline private integrate (time : IMod<DateTime>) (input : IMod<Option<'b>>) (m : IMod<'a>) (f : TimeSpan -> 'b -> 'a -> 'a) =
-        let dt = Cache(Ag.getContext(), fun i -> differentiate time)
-        let integral = ref Unchecked.defaultof<_>
 
-        adaptive {
-            let! v = m
-            integral := v
-            let! i = input
 
-            match i with
-                | Some i ->
-                    let! (t, dt) = dt.Invoke 0
-                    match dt with
-                        | Some dt ->
-                            let newValue = f dt i !integral
-                            integral := newValue
-                            return newValue
-                        | None ->
-                            return !integral
+    module Mod =
+        let step (f : 's -> 's -> 'a -> 'a) (state : IMod<'s>)  : IMod<'a -> 'a> =
+            
+            
+            let result = 
+                Mod.custom (fun () ->
+                    let oldState = ref <| state.GetValue()
 
-                | None ->
-                    dt.Clear(ignore)
-                    return !integral 
-        }
+                    fun (value : 'a) ->
+                        let state = state.GetValue()
+                        let newA = f !oldState state value
+                        oldState := state 
+                        newA
+                )
+            //state.AddOutput result
+            result
 
-    let controlWSAD (k : IKeyboard) (t : IMod<DateTime>) (view : IMod<CameraView>) =   
+
+    let controlWSAD (k : IKeyboard) (time : IMod<DateTime>) =   
         let w = k.IsDown Keys.W |> Mod.fromEvent
         let s = k.IsDown Keys.S |> Mod.fromEvent
         let a = k.IsDown Keys.A |> Mod.fromEvent
@@ -63,76 +84,137 @@ module DefaultCameraController =
                 else V2i.Zero
             ) w s
 
-        let move = 
-            Mod.map2 (fun x y -> 
-                let r = x + y
-                if r <> V2i.Zero then Some r
-                else None
-            ) moveX moveY
+        let move = Mod.map2 (+) moveX moveY
 
-        let last = ref <| Unchecked.defaultof<_>
+        adaptive {
+            let! m = move
+            if m <> V2i.Zero then
+                let f =
+                    Mod.step (fun (ot : DateTime) (nt : DateTime) (cam : CameraView)  ->
+                        let dt = nt - ot
+                        let direction = float m.X * cam.Right + float m.Y * cam.Forward
+                        let delta = 1.2 * dt.TotalSeconds * direction
 
-        integrate t move view (fun dt m v ->
-            let direction = float m.X * v.Right + float m.Y * v.Forward
-            let delta = 1.2 * dt.TotalSeconds * direction
+                        cam.WithLocation(cam.Location + delta)
+                    ) time
 
-            v.WithLocation(v.Location + delta)
-        )
+                return! f
+            else
+                return id
+        } 
 
-    let controlLookAround (m : IMouse) (view : IMod<CameraView>) =
+    let mouse (m : IMouse) =
         
         let down = Mod.initMod false
-        let lastMousePos = ref Unchecked.defaultof<_>
-        m.Down.Values.Subscribe(fun e -> if e.buttons = MouseButtons.Left then transact (fun () -> Mod.change down true); lastMousePos := e.location) |> ignore
-        m.Up.Values.Subscribe(fun e -> if e.buttons = MouseButtons.Left then transact (fun () -> Mod.change down false)) |> ignore
+        let location = Mod.initMod V2i.Zero
 
-        let drag = Mod.map2 (fun d m -> if d then Some m else None) down m.Move.Mod
+        m.Down.Values.Subscribe(fun e -> if e.buttons = MouseButtons.Left then transact (fun () -> printfn "down"; Mod.change down true)) |> ignore
+        m.Up.Values.Subscribe(fun e -> if e.buttons = MouseButtons.Left then transact (fun () -> printfn "up"; Mod.change down false)) |> ignore
+        m.Move.Values.Subscribe(fun p -> transact (fun () -> Mod.change location p.Position)  ) |> ignore
 
-        
-        let integral = ref <| Unchecked.defaultof<_>
         adaptive {
-            let! v = view
-            integral := v
+            let! down = down
 
-            let! d = drag
-            match d with
-                | Some d ->
-                    let delta = d.Position - lastMousePos.Value.Position
-                    lastMousePos := d
+            if down then
+                let f = 
+                    Mod.step (fun (op : V2i) (np : V2i) (cam : CameraView) ->
+                        let delta = np - op
 
-                    let trafo =
-                        M44d.Rotation(integral.Value.Right, float delta.Y * -0.01) *
-                        M44d.Rotation(integral.Value.Sky, float delta.X * -0.01)
+                        let trafo =
+                            M44d.Rotation(cam.Right, float delta.Y * -0.01) *
+                            M44d.Rotation(cam.Sky, float delta.X * -0.01)
 
-                    let newForward = trafo.TransformDir integral.Value.Forward |> Vec.normalize
-                    integral := integral.Value.WithForward(newForward)
+                        let newForward = trafo.TransformDir cam.Forward |> Vec.normalize
+                        cam.WithForward(newForward)
 
-                    return !integral
-                | None ->
-                    return !integral
+                    ) location
 
-
+                return! f
+            else
+                return id
         }
 
-
+//
+//    let controlLookAround (m : IMouse) =
+//        
+//        let down = Mod.initMod false
+//        let location = Mod.initMod V2i.Zero
+//        let lastMousePos = ref Unchecked.defaultof<_>
+//        let delta = ref V2i.Zero
+//
+//        m.Down.Values.Subscribe(fun e -> if e.buttons = MouseButtons.Left then transact (fun () -> Mod.change down true); lastMousePos := e.location.Position) |> ignore
+//        m.Up.Values.Subscribe(fun e -> if e.buttons = MouseButtons.Left then transact (fun () -> Mod.change down false)) |> ignore
+//        m.Move.Values.Subscribe(fun p -> 
+//            if down.GetValue() then
+//                let a = p.Position - !lastMousePos
+//                delta := !delta + a
+//
+//            lastMousePos := p.Position
+//        ) |> ignore
+//
+//        
+//
+//
 //        adaptive {
-//            let! v = view
-//            last := v
 //
-//            let! m = move
-//            if m <> V2i.Zero then
-//                let! (t,dt) = differentiate t
-//                
-//                match dt with
-//                    | Some dt ->
-//                        let delta = 0.1 * dt.TotalSeconds * (v.Right * (float m.X) + v.Forward * (float m.Y)) 
-//                        let newV = last.Value.WithLocation(v.Location + delta)
-//                        last := newV
+//            let! isDown = down
+//            if isDown then
+//                return Some (fun _ (dt : TimeSpan) (cam : CameraView) ->
+//                    let dM = !delta
+//                    delta := V2i.Zero
+//                    if dM = V2i.Zero then
+//                        cam
+//                    else
+//                        let trafo =
+//                            M44d.Rotation(cam.Right, float dM.Y * -0.01) *
+//                            M44d.Rotation(cam.Sky, float dM.X * -0.01)
 //
-//                        return newV
-//                    | None ->
-//                        return v
+//                        let newForward = trafo.TransformDir cam.Forward |> Vec.normalize
+//                        cam.WithForward(newForward)
+//                )
+//               
 //            else
-//                return v
-//        }
+//                return None
+//
+//
+//        } |> TimedController
 
+
+    let rec step (initial : IMod<'a>) (controllers : list<IMod<'a -> 'a>>): IMod<'a> =
+        match controllers with
+            | c::cs ->
+                
+                
+                let result = 
+                    Mod.custom (fun () ->
+                        let f = c.GetValue()
+                        let v = initial.GetValue()
+                        f v
+                    )
+
+                c.AddOutput result
+                initial.AddOutput result
+
+                step result cs
+
+
+            | [] -> initial
+
+
+    let integrate (initial : 'a) (time : IMod<DateTime>) (controllers : list<IMod<'a -> 'a>>) =
+        let currentValue = ref initial
+        let current = Mod.custom (fun () -> !currentValue)
+        time.AddOutput current
+        //time |> Mod.registerCallback (fun _ -> current.MarkOutdated()) |> ignore
+        
+        let result = step current controllers
+        let changer = result |> Mod.map ignore
+        time.AddOutput current
+
+        result |> Mod.map (fun v ->
+            if !currentValue <> v then
+                currentValue := v
+                time.GetValue() |> ignore
+
+            v
+        )

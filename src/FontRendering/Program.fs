@@ -67,11 +67,23 @@ let main argv =
 
     let trafos = trafos |> Mod.initConstant
 
-    let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI |> Mod.initConstant
+    let time = (win :> IRenderTarget).Time
+    let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
     let cam = 
-        cam |> DefaultCameraController.controlWSAD win.Keyboard (win :> IRenderTarget).Time
-            |> DefaultCameraController.controlLookAround win.Mouse
+        DefaultCameraController.integrate cam time [ 
+            DefaultCameraController.controlWSAD win.Keyboard time
+            DefaultCameraController.mouse win.Mouse
+        ]
 
+
+//    let cc = 
+//        let impl = win.Control.Implementation
+//        CSharpStuff.DefaultCameraControllers(
+//            CSharpStuff.HciMouseWinFormsAsync(impl),
+//            CSharpStuff.HciKeyboardWinFormsAsync(impl),
+//            cam,
+//            isEnabled = EventSource true
+//        )
 
     let sg =
         geometry 
@@ -84,24 +96,17 @@ let main argv =
 
     
     
-//    let cc = 
-//        let impl = win.Control.Implementation
-//        CSharpStuff.DefaultCameraControllers(
-//            CSharpStuff.HciMouseWinFormsAsync(impl),
-//            CSharpStuff.HciKeyboardWinFormsAsync(impl),
-//            cam,
-//            isEnabled = EventSource true
-//        )
 
-    let f = System.Windows.Media.GlyphTypeface(Uri(@"C:\Windows\Fonts\Arial.ttf"))
-   
-    let glyph = f.CharacterToGlyphMap.[int 'g']
-    let geom = f.GetGlyphOutline(glyph, 16.0, 16.0)
 
-    let outline = geom.GetOutlinedPathGeometry()
-
-    let b = outline.GetRenderBounds(Pen(Brushes.Black, 1.0))
-    let b = Box2i(int b.Left, int b.Bottom, int b.Right, int b.Top)
+//    let f = System.Windows.Media.GlyphTypeface(Uri(@"C:\Windows\Fonts\Arial.ttf"))
+//   
+//    let glyph = f.CharacterToGlyphMap.[int 'g']
+//    let geom = f.GetGlyphOutline(glyph, 16.0, 16.0)
+//
+//    let outline = geom.GetOutlinedPathGeometry()
+//
+//    let b = outline.GetRenderBounds(Pen(Brushes.Black, 1.0))
+//    let b = Box2i(int b.Left, int b.Bottom, int b.Right, int b.Top)
 
     System.Windows.Forms.Application.Run win
     0 // return an integer exit code

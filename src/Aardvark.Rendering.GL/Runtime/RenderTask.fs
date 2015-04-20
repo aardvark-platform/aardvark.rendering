@@ -234,9 +234,9 @@ module RenderTasks =
                     let handle = (fbo.Handle |> unbox<int>)
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                    GL.Check (sprintf "could not bind framebuffer (new): %d" handle)
+                    GL.Check "could not bind framebuffer"
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
-                    GL.Check (sprintf "could not set viewport: %A" fbo.Size)
+                    GL.Check "could not set viewport"
 
                     x.ProcessDeltas (reader.GetDelta())
 
@@ -250,9 +250,9 @@ module RenderTasks =
 
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
-                    GL.Check (sprintf "could not bind framebuffer (new): %d" handle)
+                    GL.Check "could not bind framebuffer"
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-                    GL.Check (sprintf "could not set viewport: %A" old)
+                    GL.Check "could not set viewport"
 
                     RenderingResult(fbo, stats)
                 )
