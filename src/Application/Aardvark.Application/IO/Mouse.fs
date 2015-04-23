@@ -65,6 +65,16 @@ module ``F# Mouse Extensions`` =
         member x.Enter = x |> get enter (fun e -> e |> Event.choose (function | MouseEnter e -> Some e | _ -> None))
         member x.Leave = x |> get leave (fun e -> e |> Event.choose (function | MouseLeave e -> Some e | _ -> None))
 
+        member x.IsDown(button : MouseButtons) =
+            x |> get (down.ToString() + button.ToString() |> Sym.ofString) (fun e ->
+                e |> Event.choose (fun e ->
+                    match e with
+                        | MouseDown k when k.buttons = button -> Some true
+                        | MouseUp k when k.buttons = button -> Some false
+                        | _ -> None
+                )
+            )
+
 [<AbstractClass; Sealed; Extension>]
 type CSharpMouseExtensions private() =
     

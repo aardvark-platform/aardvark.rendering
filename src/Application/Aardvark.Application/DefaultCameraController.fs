@@ -103,14 +103,9 @@ module DefaultCameraController =
                 return id
         } 
 
-    let mouse (m : IMouse) =
-        
-        let down = Mod.initMod false
-        let location = Mod.initMod V2i.Zero
-
-        m.Down.Values.Subscribe(fun e -> if e.buttons = MouseButtons.Left then transact (fun () -> printfn "down"; Mod.change down true)) |> ignore
-        m.Up.Values.Subscribe(fun e -> if e.buttons = MouseButtons.Left then transact (fun () -> printfn "up"; Mod.change down false)) |> ignore
-        m.Move.Values.Subscribe(fun p -> transact (fun () -> Mod.change location p.Position)  ) |> ignore
+    let controlLookAround (m : IMouse) =
+        let down = m.IsDown(MouseButtons.Left).Mod
+        let location = m.Move.Mod |> Mod.map (fun pp -> pp.Position)
 
         adaptive {
             let! down = down
@@ -133,6 +128,29 @@ module DefaultCameraController =
             else
                 return id
         }
+
+    let controlPan (m : IMouse) =
+        let down = m.IsDown(MouseButtons.Middle).Mod
+        let location = m.Move.Mod |> Mod.map (fun pp -> pp.Position)
+
+        adaptive {
+            let! down = down
+
+            if down then
+                let f = 
+                    Mod.step (fun (op : V2i) (np : V2i) (cam : CameraView) ->
+                        let delta = np - op
+
+                        let direction = 0.1 * (cam.Up * float delta.Y + cam.Right * float delta.X)
+
+                        cam.WithLocation(cam.Location + direction)
+
+                    ) location
+
+                return! f
+            else
+                return id
+        }  
 
 //
 //    let controlLookAround (m : IMouse) =
