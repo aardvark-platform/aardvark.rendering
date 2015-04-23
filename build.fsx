@@ -11,59 +11,7 @@ module Std =
     open System.Runtime.InteropServices
 
 
-    module private Kernel32 =
-        let StdOutputHandle = 0xFFFFFFF5u
-
-        [<DllImport("kernel32.dll")>]
-        extern IntPtr GetStdHandle(UInt32 nStdHandle)
-
-        [<DllImport("kernel32.dll")>]
-        extern void SetStdHandle(UInt32 nStdHandle, IntPtr handle)
-
-        let getstdout() = GetStdHandle(StdOutputHandle)
-        let setstdout(h) = SetStdHandle(StdOutputHandle, h)
-
-    module private Libc =
-//        let STDOUT_FILENO = 1
-//
-//        [<DllImport("libc")>]
-//        extern int dup(int oldfd)
-//
-//        [<DllImport("libc")>]
-//        extern int dup2(int oldfd, int newfd)
-
-        let getstdout() = 0n; //dup(STDOUT_FILENO) |> nativeint
-        let setstdout(h : nativeint) = () //dup2(int h, STDOUT_FILENO) |> ignore
-
-    let getstdout =
-        match Environment.OSVersion.Platform with
-            | PlatformID.Unix -> Libc.getstdout
-            | _ -> Kernel32.getstdout
-
-    let setstdout =
-        match Environment.OSVersion.Platform with
-            | PlatformID.Unix -> Libc.setstdout
-            | _ -> Kernel32.setstdout
-
-    let noOut (f : unit -> 'a) =
-        let outHandle = getstdout()
-        let out = Console.Out
-
-        let success = 
-            try
-                setstdout(0n)
-                Console.SetOut TextWriter.Null
-                true
-            with e ->
-                false
-
-        let res = f()
-
-        if success then
-            Console.SetOut out
-            setstdout(outHandle)
-
-        res
+    let noOut (f : unit -> 'a) = f () 
 
 Target "Restore" (fun () ->
 

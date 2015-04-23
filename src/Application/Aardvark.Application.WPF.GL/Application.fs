@@ -10,6 +10,7 @@ open Aardvark.Application
 
 
 type OpenGlApplication() =
+    do OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
     let runtime = new Runtime()
     let ctx = new Context(runtime)
     do runtime.Context <- ctx
