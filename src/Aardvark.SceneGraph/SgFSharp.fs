@@ -3,6 +3,7 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Base.Ag
 open System.Collections.Generic
 open System.Runtime.InteropServices

@@ -7,6 +7,7 @@ open System.Collections.Concurrent
 open Aardvark.Rendering.GL
 open Aardvark.Rendering
 open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 
 [<AutoOpen>]
 module ResourceManager =

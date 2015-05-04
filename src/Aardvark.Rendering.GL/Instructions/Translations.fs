@@ -2,14 +2,15 @@
 
 
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL.OpenGl
         
 
 module Translations =
 
-    type private ABlendFactor = Aardvark.Base.BlendFactor
+    type private ABlendFactor = Aardvark.Base.Rendering.BlendFactor
     type private GLBlendFactor = Aardvark.Rendering.GL.OpenGl.Enums.BlendFactor
-    type private ABlendOperation = Aardvark.Base.BlendOperation
+    type private ABlendOperation = Aardvark.Base.Rendering.BlendOperation
     type private GLBlendOperation = Aardvark.Rendering.GL.OpenGl.Enums.BlendOperation
 
     let toGLMode (m : IndexedGeometryMode) =

@@ -8,6 +8,7 @@ open Aardvark.Base.AgHelpers
 open System.Collections.Generic
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
+open Aardvark.Base.Rendering
 
 type ISg = 
     interface end

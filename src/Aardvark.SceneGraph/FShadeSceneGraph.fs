@@ -4,6 +4,7 @@
 module DefaultSems =
     open FShade
     open Aardvark.Base
+    open Aardvark.Base.Rendering
 
     type PositionAttribute() = inherit SemanticAttribute(DefaultSemantic.Positions.ToString())
     type TexCoordAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColorCoordinates.ToString())
@@ -38,7 +39,7 @@ module FShadeSceneGraph =
     open Aardvark.Base
     open FShade.Compiler
     open FShade
-    
+
     open System.Collections.Concurrent
     open System.Collections.Generic
     open Microsoft.FSharp.Quotations
@@ -84,33 +85,33 @@ module FShadeSceneGraph =
 
     let private toWrapMode (mode : WrapMode) =
         match mode with
-            | WrapMode.Border -> Aardvark.Base.WrapMode.Border
-            | WrapMode.Clamp -> Aardvark.Base.WrapMode.Clamp
-            | WrapMode.Mirror -> Aardvark.Base.WrapMode.Mirror
-            | WrapMode.MirrorOnce -> Aardvark.Base.WrapMode.MirrorOnce
-            | WrapMode.Wrap -> Aardvark.Base.WrapMode.Wrap
+            | WrapMode.Border -> Aardvark.Base.Rendering.WrapMode.Border
+            | WrapMode.Clamp -> Aardvark.Base.Rendering.WrapMode.Clamp
+            | WrapMode.Mirror -> Aardvark.Base.Rendering.WrapMode.Mirror
+            | WrapMode.MirrorOnce -> Aardvark.Base.Rendering.WrapMode.MirrorOnce
+            | WrapMode.Wrap -> Aardvark.Base.Rendering.WrapMode.Wrap
             | _ -> failwithf "unknown address mode %A" mode
 
     let private toTextureFilter (mode : Filter) =
         match mode with
-            | Filter.Anisotropic -> TextureFilter.Anisotropic
-            | Filter.MinLinearMagMipPoint -> TextureFilter.MinLinearMagMipPoint
-            | Filter.MinLinearMagPointMipLinear -> TextureFilter.MinLinearMagPointMipLinear
-            | Filter.MinMagLinearMipPoint -> TextureFilter.MinMagLinearMipPoint
-            | Filter.MinMagMipLinear -> TextureFilter.MinMagMipLinear
-            | Filter.MinMagMipPoint -> TextureFilter.MinMagMipPoint
-            | Filter.MinMagPointMipLinear -> TextureFilter.MinMagPointMipLinear
-            | Filter.MinPointMagLinearMipPoint -> TextureFilter.MinPointMagLinearMipPoint
-            | Filter.MinPointMagMipLinear -> TextureFilter.MinPointMagMipLinear
-            | Filter.MinMagPoint -> TextureFilter.MinMagPoint
-            | Filter.MinMagLinear -> TextureFilter.MinMagLinear
-            | Filter.MinPointMagLinear -> TextureFilter.MinPointMagLinear
-            | Filter.MinLinearMagPoint -> TextureFilter.MinLinearMagPoint
+            | Filter.Anisotropic -> Aardvark.Base.Rendering.TextureFilter.Anisotropic
+            | Filter.MinLinearMagMipPoint -> Aardvark.Base.Rendering.TextureFilter.MinLinearMagMipPoint
+            | Filter.MinLinearMagPointMipLinear -> Aardvark.Base.Rendering.TextureFilter.MinLinearMagPointMipLinear
+            | Filter.MinMagLinearMipPoint -> Aardvark.Base.Rendering.TextureFilter.MinMagLinearMipPoint
+            | Filter.MinMagMipLinear -> Aardvark.Base.Rendering.TextureFilter.MinMagMipLinear
+            | Filter.MinMagMipPoint -> Aardvark.Base.Rendering.TextureFilter.MinMagMipPoint
+            | Filter.MinMagPointMipLinear -> Aardvark.Base.Rendering.TextureFilter.MinMagPointMipLinear
+            | Filter.MinPointMagLinearMipPoint -> Aardvark.Base.Rendering.TextureFilter.MinPointMagLinearMipPoint
+            | Filter.MinPointMagMipLinear -> Aardvark.Base.Rendering.TextureFilter.MinPointMagMipLinear
+            | Filter.MinMagPoint -> Aardvark.Base.Rendering.TextureFilter.MinMagPoint
+            | Filter.MinMagLinear -> Aardvark.Base.Rendering.TextureFilter.MinMagLinear
+            | Filter.MinPointMagLinear -> Aardvark.Base.Rendering.TextureFilter.MinPointMagLinear
+            | Filter.MinLinearMagPoint -> Aardvark.Base.Rendering.TextureFilter.MinLinearMagPoint
             | _ -> failwithf "unknown filter mode: %A" mode
 
     let toSamplerStateDescription (state : SamplerState) =
 
-        let r = SamplerStateDescription()
+        let r = Aardvark.Base.Rendering.SamplerStateDescription()
         let a = r.AddressU
         state.AddressU |> Option.iter (fun a -> r.AddressU <- toWrapMode a)
         state.AddressV |> Option.iter (fun a -> r.AddressV <- toWrapMode a)

@@ -43,25 +43,37 @@ module DefaultCameraController =
 //                    return !integral 
 //        }
    
+    type ModTransformer<'a>(func : 'a -> 'a) =
+        inherit AdaptiveObject()
+        
+        static let identity = ModTransformer<'a>(id)
+        static member Identity = identity
+
+        member x.Run(v : 'a) =
+            x.EvaluateIfNeeded v (fun () ->
+                func v
+            )
 
 
+        
+    // = { func : 'a -> 'b; dependencies : IAdaptiveObject }
 
     module Mod =
-        let step (f : 's -> 's -> 'a -> 'a) (state : IMod<'s>)  : IMod<'a -> 'a> =
-            
-            
-            let result = 
-                Mod.custom (fun () ->
-                    let oldState = ref <| state.GetValue()
+        let step (f : 's -> 's -> 'a -> 'a) (state : IMod<'s>)  : ModTransformer<'a> =
 
-                    fun (value : 'a) ->
-                        let state = state.GetValue()
-                        let newA = f !oldState state value
-                        oldState := state 
-                        newA
+            let oldState = ref <| state.GetValue()
+            printfn "new step with: %A" oldState
+
+            let res = 
+                ModTransformer(fun value ->
+                    let s = state.GetValue()
+                    let newA = f !oldState s value
+                    oldState := s 
+                    newA
                 )
-            //state.AddOutput result
-            result
+            state.AddOutput res
+            res
+
 
 
     let controlWSAD (k : IKeyboard) (time : IMod<DateTime>) =   
@@ -98,14 +110,18 @@ module DefaultCameraController =
                         cam.WithLocation(cam.Location + delta)
                     ) time
 
-                return! f
+                return f
             else
-                return id
+                return ModTransformer.Identity
         } 
 
     let controlLookAround (m : IMouse) =
         let down = m.IsDown(MouseButtons.Left).Mod
-        let location = m.Move.Mod |> Mod.map (fun pp -> pp.Position)
+        //let location = m.Move.ImmediateMod |> Mod.map (fun pp -> pp.Position)
+        //let location = Mod.initMod V2i.Zero
+        //let s = m.Move.Values.Subscribe(fun pp -> transact (fun () -> Mod.change location pp.Position))
+
+        let location = m.Move.ImmediateMod |> Mod.map (fun pp -> pp.Position)
 
         adaptive {
             let! down = down
@@ -114,7 +130,7 @@ module DefaultCameraController =
                 let f = 
                     Mod.step (fun (op : V2i) (np : V2i) (cam : CameraView) ->
                         let delta = np - op
-
+                        printfn "delta: %A" delta
                         let trafo =
                             M44d.Rotation(cam.Right, float delta.Y * -0.01) *
                             M44d.Rotation(cam.Sky, float delta.X * -0.01)
@@ -124,9 +140,9 @@ module DefaultCameraController =
 
                     ) location
 
-                return! f
+                return f
             else
-                return id
+                return ModTransformer.Identity
         }
 
     let controlPan (m : IMouse) =
@@ -147,9 +163,9 @@ module DefaultCameraController =
 
                     ) location
 
-                return! f
+                return f
             else
-                return id
+                return ModTransformer.Identity
         }  
 
 //
@@ -198,20 +214,15 @@ module DefaultCameraController =
 //        } |> TimedController
 
 
-    let rec step (initial : IMod<'a>) (controllers : list<IMod<'a -> 'a>>): IMod<'a> =
+    let rec step (initial : IMod<'a>) (controllers : list<IMod<ModTransformer<'a>>>): IMod<'a> =
         match controllers with
             | c::cs ->
                 
                 
                 let result = 
-                    Mod.custom (fun () ->
-                        let f = c.GetValue()
-                        let v = initial.GetValue()
-                        f v
+                    c |> Mod.bind (fun f ->
+                        [initial :> IAdaptiveObject; f :> IAdaptiveObject] |> Mod.mapCustom (fun () -> f.Run (initial.GetValue()))
                     )
-
-                c.AddOutput result
-                initial.AddOutput result
 
                 step result cs
 
@@ -219,19 +230,22 @@ module DefaultCameraController =
             | [] -> initial
 
 
-    let integrate (initial : 'a) (time : IMod<DateTime>) (controllers : list<IMod<'a -> 'a>>) =
+    let integrate (initial : 'a) (time : IMod<DateTime>) (controllers : list<IMod<ModTransformer<'a>>>) =
         let currentValue = ref initial
         let current = Mod.custom (fun () -> !currentValue)
-        time.AddOutput current
+        //time.AddOutput current
         //time |> Mod.registerCallback (fun _ -> current.MarkOutdated()) |> ignore
         
         let result = step current controllers
         let changer = result |> Mod.map ignore
-        time.AddOutput current
+        //time.AddOutput current
 
         result |> Mod.map (fun v ->
             if !currentValue <> v then
                 currentValue := v
+                time.MarkingCallbacks.Add (fun () ->
+                    transact (fun () -> current.MarkOutdated())
+                ) |> ignore
                 time.GetValue() |> ignore
 
             v

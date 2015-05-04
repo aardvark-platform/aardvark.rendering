@@ -73,7 +73,7 @@ let main argv =
         DefaultCameraController.integrate cam time [ 
             DefaultCameraController.controlWSAD win.Keyboard time
             DefaultCameraController.controlLookAround win.Mouse
-            DefaultCameraController.controlPan win.Mouse
+            //DefaultCameraController.controlPan win.Mouse
         ]
 
 

@@ -8,6 +8,7 @@ open Aardvark.Application
 type private WinFormsButtons = System.Windows.Forms.MouseButtons
 
 type Mouse(ctrl : Control) =
+    let mutable lastPos = PixelPosition(0,0,ctrl.ClientSize.Width, ctrl.ClientSize.Height)
 
     let events = EventSource<MouseEvent>()
 
@@ -26,7 +27,11 @@ type Mouse(ctrl : Control) =
         buttons
 
     let pos (e : MouseEventArgs) =
-        PixelPosition(e.X, e.Y, ctrl.ClientSize.Width, ctrl.ClientSize.Height)
+        let pp = PixelPosition(e.X, e.Y, ctrl.ClientSize.Width, ctrl.ClientSize.Height)
+        if pp <> lastPos then
+            lastPos <- pp
+            events.Emit (MouseMove pp)
+        pp
 
     let (~%%) (m : MouseEventArgs) =
         let buttons = %m.Button
@@ -40,7 +45,12 @@ type Mouse(ctrl : Control) =
         let x = clamp 0 (s.Width-1) p.X
         let y = clamp 0 (s.Height-1) p.Y
 
-        PixelPosition(x, y, ctrl.ClientSize.Width, ctrl.ClientSize.Height)
+        let pp = PixelPosition(x, y, ctrl.ClientSize.Width, ctrl.ClientSize.Height)
+        if pp <> lastPos then
+            lastPos <- pp
+            events.Emit (MouseMove pp)
+        pp
+
 
     let onMouseDownHandler = MouseEventHandler(fun s e -> events.Emit (MouseDown %%e))
     let onMouseUpHandler = MouseEventHandler(fun s e -> events.Emit (MouseUp %%e))

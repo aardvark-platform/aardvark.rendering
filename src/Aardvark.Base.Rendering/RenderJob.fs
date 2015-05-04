@@ -3,6 +3,7 @@
 open System
 open Aardvark.Base.Incremental
 open System.Runtime.InteropServices
+open Aardvark.Base.Rendering
 
 [<AllowNullLiteral>]
 type ISurface = interface end

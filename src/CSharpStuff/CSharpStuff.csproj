@@ -32,11 +32,11 @@
   <ItemGroup>
     <Reference Include="Aardvark.Base, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\Aardvark.Base.1.1.12\lib\net45\Aardvark.Base.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.1.1.14\lib\net45\Aardvark.Base.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.Essentials, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\Aardvark.Base.Essentials.1.1.12\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.Essentials.1.1.14\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
     </Reference>
     <Reference Include="DevILSharp, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -81,6 +81,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="app.config" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>

@@ -7,6 +7,7 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.CSharp
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
+open Aardvark.Base.Rendering
 //open Demo
 open CSharpStuff
 

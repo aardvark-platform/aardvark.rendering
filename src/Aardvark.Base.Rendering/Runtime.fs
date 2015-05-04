@@ -4,7 +4,7 @@ open System
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open System.Collections.Generic
-
+open Aardvark.Base.Rendering
 
 type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
     member x.Framebuffer = f
