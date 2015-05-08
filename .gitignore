@@ -1,5 +1,6 @@
 bin
 !/bin/nuget.exe
+!/bin/*.nuspec
 *.swp
 *.userprefs
 **/obj
