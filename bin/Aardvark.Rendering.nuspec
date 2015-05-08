@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+    <metadata>
+        <id>Aardvark.Rendering</id>
+        <version>1.1.8</version>
+        <authors>VRVis Research Center</authors>
+        <owners>VRVis Research Center</owners>
+        <licenseUrl>http://opensource.org/licenses/Apache-2.0</licenseUrl>
+        <projectUrl>https://github.com/vrvis/aardvark/wiki</projectUrl>
+        <requireLicenseAcceptance>false</requireLicenseAcceptance>
+        <description>Aardvark is a collection of data structures and algorithms for computer graphics and visualization. It is under active development since 2006 as part of a much larger set of libraries at VRVis Research Center.</description>
+        <summary>Incremental rendering.</summary>
+        <releaseNotes>Various improvements.</releaseNotes>
+		<copyright>Copyright © 2014, 2015 VRVis Zentrum für Virtual Reality und Visualisierung Forschungs-GmbH, Donau-City-Strasse 1, A-1220 Wien, Austria.</copyright>
+        <language>en-US</language>
+        <tags>graphics visualization geometry math algorithms</tags>
+        <frameworkAssemblies>
+            <frameworkAssembly assemblyName="System.Drawing" />
+        </frameworkAssemblies>
+		<dependencies>
+            <dependency id="Aardvark.Base" version="1.1.8" />
+            <dependency id="Aardvark.Base.Essentials" version="1.1.8" />
+            <dependency id="Aardvark.Base.FSharp" version="1.1.8" />
+            <dependency id="Aardvark.Base.Incremental" version="1.1.8" />
+			<dependency id="DevILSharp" version="0.0.5" />
+			<dependency id="FShade" version="1.0.5" />
+			<dependency id="FSharp.Compiler.Service" version="0.0.86" />
+			<dependency id="FsUnit" version="1.3.0.1" />
+			<dependency id="Microsoft.Bcl.Immutable" version="1.0.34" />
+			<dependency id="NUnit" version="2.6.4" />
+			<dependency id="RegexProvider" version="0.0.4" />
+		    <dependency id="Rx-Core" version="2.2.5" />
+		    <dependency id="Rx-Interfaces" version="2.2.5" />
+		    <dependency id="Rx-Linq" version="2.2.5" />
+		    <dependency id="Rx-Main" version="2.2.5" />
+		    <dependency id="Rx-PlatformServices" version="2.2.5" />
+			<dependency id="FSPowerPack.Community" version="3.0.0" />
+			<dependency id="FSPowerPack.Core.Community" version="3.0.0" />
+        </dependencies>
+    </metadata>
+    <files>
+        <file src="Release\Aardvark.Base.Rendering.dll" target="lib\net45\Aardvark.Base.Rendering.dll" />
+        <file src="Release\Aardvark.Base.Rendering.pdb" target="lib\net45\Aardvark.Base.Rendering.pdb" />
+        <file src="Release\Aardvark.Base.Rendering.xml" target="lib\net45\Aardvark.Base.Rendering.xml" />
+		<file src="Release\Aardvark.Rendering.GL.dll" target="lib\net45\Aardvark.Rendering.GL.dll" />
+		<file src="Release\Aardvark.Rendering.GL.pdb" target="lib\net45\Aardvark.Rendering.GL.pdb" />
+		<file src="Release\Aardvark.Rendering.GL.xml" target="lib\net45\Aardvark.Rendering.GL.xml" />
+		<file src="Release\Aardvark.SceneGraph.dll" target="lib\net45\Aardvark.SceneGraph.dll" />
+		<file src="Release\Aardvark.SceneGraph.pdb" target="lib\net45\Aardvark.SceneGraph.pdb" />
+		<file src="Release\Aardvark.SceneGraph.xml" target="lib\net45\Aardvark.SceneGraph.xml" />
+    </files>
+</package>

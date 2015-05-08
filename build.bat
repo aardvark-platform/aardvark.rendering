@@ -1,5 +1,4 @@
 @echo off
-echo %~dp0
 
 PUSHD %~dp0
 REM cls

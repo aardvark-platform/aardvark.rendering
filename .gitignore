@@ -1,5 +1,5 @@
-bin
-!/bin/nuget.exe
+bin/Release
+bin/Debug
 !/bin/*.nuspec
 *.swp
 *.userprefs
@@ -7,3 +7,5 @@ bin
 /packages
 !/packages/*.config
 /src/*.suo
+/bin/*.nupkg
+/src/.vs
