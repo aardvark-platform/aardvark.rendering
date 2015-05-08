@@ -8,7 +8,7 @@
     <ProjectGuid>4f645de6-6d22-4bad-8489-c1f8456e3d55</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>Aardvark.Application.GL.WinForms</RootNamespace>
-    <AssemblyName>Aardvark.Application.GL.WinForms</AssemblyName>
+    <AssemblyName>Aardvark.Application.WinForms.GL</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
     <Name>Aardvark.Application.WinForms.GL</Name>

@@ -43,7 +43,13 @@ Target "Default" (fun () -> ())
 
 let ownPackages = 
     Set.ofList [
-        "Aardvark.Rendering"
+        "Aardvark.Base.Rendering"
+        "Aardvark.SceneGraph"
+        "Aardvark.Rendering.GL"
+        "Aardvark.Application"
+        "Aardvark.Application.WinForms.GL"
+        "Aardvark.Application.WPF.GL"
+        
     ]
 
 let subModulePackages =
@@ -57,18 +63,21 @@ let subModulePackages =
     ]
 
 
-Target "CreatePackage" (fun () ->
+Target "CreatePackages" (fun () ->
     let branch = Fake.Git.Information.getBranchName "."
     let releaseNotes = Fake.Git.Information.getCurrentHash()
 
     if branch = "master" then
         let tag = Fake.Git.Information.getLastTag()
 
+        if not <| Directory.Exists "bin/packages" then
+            Directory.CreateDirectory "bin/packages" |> ignore
+
         for id in ownPackages do
             NuGetPack (fun p -> 
-                { p with OutputPath = "bin"; 
-                         Version = tag; 
-                         ReleaseNotes = releaseNotes; 
+                { p with OutputPath = "bin/packages"
+                         Version = tag
+                         ReleaseNotes = releaseNotes
                          WorkingDir = "bin"
                          Dependencies = p.Dependencies |> List.map (fun (id,version) -> if Set.contains id ownPackages then (id, tag) else (id,version)) 
                 }) (sprintf "bin/%s.nuspec" id)
@@ -185,8 +194,8 @@ Target "InstallLocal" (fun () ->
 )
 
 
-"Compile" ==> "CreatePackage"
-"CreatePackage" ==> "Deploy"
+"Compile" ==> "CreatePackages"
+"CreatePackages" ==> "Deploy"
 
 // start build
 RunTargetOrDefault "Default"
