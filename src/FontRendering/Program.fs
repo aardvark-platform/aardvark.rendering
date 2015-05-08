@@ -70,7 +70,7 @@ let main argv =
     let time = (win :> IRenderTarget).Time
     let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
     let cam = 
-        DefaultCameraController.Mod.integrate cam time [ 
+        Mod.integrate cam time [ 
             DefaultCameraController.controlWSAD win.Keyboard time
             DefaultCameraController.controlLookAround win.Mouse
             DefaultCameraController.controlPan win.Mouse

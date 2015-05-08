@@ -17,7 +17,7 @@ type RenderControl() =
     let mutable impl : Option<IRenderTarget> = None
     let mutable ctrl : Option<FrameworkElement> = None
 
-    let keyboard = new ChangeableKeyboard()
+    let keyboard = new Aardvark.Application.WinForms.Keyboard()
     let mouse = new Aardvark.Application.WinForms.Mouse()
     let sizes = new EventSource<V2i>()
     let mutable inner : Option<IMod<DateTime>> = None
@@ -38,7 +38,7 @@ type RenderControl() =
 
         match c with
             | :? WindowsFormsHost as host ->
-                keyboard.Inner <- new Aardvark.Application.WinForms.Keyboard(host.Child)
+                keyboard.SetControl(host.Child)
                 mouse.SetControl(host.Child)
                 
             | _ ->

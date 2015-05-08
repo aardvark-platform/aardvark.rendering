@@ -506,10 +506,10 @@ let controlWSAD (view : ICameraView) (keyboard : IKeyboard) (time : IMod<DateTim
     let viewTrafoChanger =
         adaptive {
 
-            let forward = keyboard.IsDown(Keys.W).Mod
-            let backward = keyboard.IsDown(Keys.S).Mod
-            let right = keyboard.IsDown(Keys.D).Mod
-            let left = keyboard.IsDown(Keys.A).Mod
+            let forward = keyboard.IsDown(Keys.W)
+            let backward = keyboard.IsDown(Keys.S)
+            let right = keyboard.IsDown(Keys.D)
+            let left = keyboard.IsDown(Keys.A)
 
             let moveX =
                 let l = left |> Mod.map (fun a -> if a then -V2d.IO else V2d.Zero) 
@@ -558,96 +558,6 @@ type IEvent<'a> with
         subscribe()
 
         subscribe, { new IDisposable with member x.Dispose() = live := false; self.Value.Dispose() }
-
-module Event =
-    let any (e : list<IEvent>) : IEvent<IEvent> =
-        let res = EventSource<IEvent>()
-        let disp : ref<list<IDisposable>> = ref []
-        disp := e |> List.map (fun e -> e.Values.Subscribe (fun _ -> res.Emit(e); !disp |> List.iter (fun d -> d.Dispose())))
-        res :> IEvent<_>
-
-type AsyncBuilder() =
-    member x.Bind(e : IEvent<'a>, f : 'a -> Async<'b>) : Async<'b> =
-        x.Bind(e.Values, f)
-
-    member x.Bind(t : System.Threading.Tasks.Task<'a>, f : 'a -> Async<'b>) =
-        async.Bind(Async.AwaitTask t, f)
-
-    member x.Bind(o : IObservable<'a>, f : 'a -> Async<'b>) =
-        async.Bind(x.ReturnFrom o, f)
-
-    member x.Bind(a : Async<'a>, f : 'a -> Async<'b>) =
-        async.Bind(a, f)
-
-
-    member x.Return(v : 'a) = 
-        async.Return(v)
-
-    member x.ReturnFrom(o : IObservable<'a>) =
-        let a = Async.FromContinuations(fun (success, error, cancel) ->
-            let d : ref<IDisposable> = ref null
-            d := o.Subscribe(fun v -> d.Value.Dispose(); success v)
-        )
-        async.ReturnFrom(a)
-
-    member x.ReturnFrom(e : IEvent<'a>) =
-        x.ReturnFrom(e.Values)
-
-    member x.ReturnFrom(e : System.Threading.Tasks.Task<'a>) =
-        x.ReturnFrom(Async.AwaitTask e)
-
-    member x.ReturnFrom(a : Async<'a>) =
-        async.ReturnFrom(a)
-
-    member x.Combine(l : Async<unit>, r : Async<'a>) =
-        async.Combine(l,r)
-
-    member x.Zero () =
-        async.Zero()
-
-    member x.Delay(f : unit -> Async<'a>) =
-        async.Delay(f)
-
-    member x.While(guard : unit -> bool, body : Async<unit>) =
-        async.While(guard, body)
-
-    member x.For(s : seq<'a>, f : 'a -> Async<unit>) =
-        async.For(s, f)
-
-    member x.TryWith(e : Async<'a>, ex : exn -> Async<'a>) =
-        async.TryWith(e, ex)
-
-    member x.TryFinally(e : Async<'a>, f : unit -> unit) =
-        async.TryFinally(e, f)
-
-let async = AsyncBuilder()
-
-let cc (view : ICameraView) (keyboard : IKeyboard) (time : IMod<DateTime>) =
-    let time = time.Event
-    let l = keyboard.IsDown(Keys.A)
-    let r = keyboard.IsDown(Keys.D)
-
-    async {
-        while true do
-            let! _ = Event.any [l; r]
-            
-            if l.Latest || r.Latest then
-                printfn "start"
-                let start = ref DateTime.Now
-                while l.Latest || r.Latest do
-                    let! time = time
-                    let dt = time - !start
-                    printfn "%Ams" dt.TotalMilliseconds
-                    start := time
-
-                    let delta = 
-                        match l.Latest, r.Latest with
-                            | true, false -> -1.0
-                            | false, true -> 1.0
-                            | _ -> 0.0
-                    view.Location <- view.Location + view.Right * delta * dt.TotalSeconds * 1.2
-                printfn "stop"
-    }
 
 
 [<EntryPoint>]

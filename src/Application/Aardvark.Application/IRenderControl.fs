@@ -12,7 +12,6 @@ type TimeMod() =
         member x.GetValue() = x.EvaluateAlways (fun () -> DateTime.Now :> obj)
 
     interface IMod<DateTime> with
-        member x.Compute() = DateTime.Now
         member x.GetValue() = x.EvaluateAlways (fun () -> DateTime.Now)
 
 type IRenderTarget =

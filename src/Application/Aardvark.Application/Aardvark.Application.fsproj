@@ -52,14 +52,13 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="IO\Keys.fs" />
-    <Compile Include="IO\EventCombinators.fs" />
     <Compile Include="IO\Keyboard.fs" />
     <Compile Include="IO\Mouse.fs" />
-    <Compile Include="IO\Combinators.fs" />
     <Compile Include="IMessageLoop.fs" />
     <Compile Include="IRenderControl.fs" />
     <Compile Include="IApplication.fs" />
     <Compile Include="Camera.fs" />
+    <Compile Include="ModExtensions.fs" />
     <Compile Include="DefaultCameraController.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />
