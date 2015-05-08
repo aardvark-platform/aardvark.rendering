@@ -1066,7 +1066,7 @@ module Semantics =
                         failwithf "unknown IBuffer for positions: %A" positions.Buffer
 
             member x.GlobalBoundingBox(app : Group) : IMod<Box3d> =
-                app.ASet |> ASet.map (fun sg -> sg?GlobalBoundingBox() ) |> ASet.toMod |> Mod.map (fun (values : ICollection<Box3d>) -> Box3d ( values ) )
+                app.ASet |> ASet.map (fun sg -> sg?GlobalBoundingBox() ) |> ASet.toMod |> Mod.map (fun (values : ISet<Box3d>) -> Box3d ( values ) )
 
             member x.GlobalBoundingBox(n : IApplicator) : IMod<Box3d> = 
                 adaptive {
@@ -1111,7 +1111,7 @@ module Semantics =
                         failwithf "unknown IBuffer for positions: %A" positions.Buffer
 
             member x.LocalBoundingBox(app : Group) : IMod<Box3d> =
-                app.ASet |> ASet.map (fun sg -> sg?LocalBoundingBox() ) |> ASet.toMod |> Mod.map (fun (values : ICollection<Box3d>) -> Box3d ( values ) )
+                app.ASet |> ASet.map (fun sg -> sg?LocalBoundingBox() ) |> ASet.toMod |> Mod.map (fun (values : ISet<Box3d>) -> Box3d ( values ) )
 
             member x.LocalBoundingBox(app : TrafoApplicator) : IMod<Box3d> =  
                 adaptive {
