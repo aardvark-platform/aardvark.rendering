@@ -57,7 +57,6 @@
     <Compile Include="SimpleRenderWindow.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />
-    <Compile Include="GUI\UI.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">

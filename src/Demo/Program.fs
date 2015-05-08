@@ -8,8 +8,6 @@ open Aardvark.SceneGraph.CSharp
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
 open Aardvark.Base.Rendering
-//open Demo
-open CSharpStuff
 
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -589,7 +587,7 @@ let main args =
 //            | MouseLeave p -> printfn  "leave: %A" p.Position
 //    ) |> ignore
 
-    let view = CameraViewWithSky(Location = V3d(2.0,2.0,2.0), Forward = -V3d.III.Normalized)
+    let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
     let proj = CameraProjectionPerspective(60.0, 0.1, 100.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
     let mode = Mod.initMod FillMode.Fill
 
@@ -628,13 +626,12 @@ let main args =
 
         sg |> Sg.trafo (Mod.initConstant trafo)
 
-    //let d = controlWSAD view ctrl.Keyboard ctrl.Time
 
-    controlWSAD view ctrl.Keyboard ctrl.Time |> ignore
+    let view = DefaultCameraController.control ctrl.Mouse ctrl.Keyboard ctrl.Time view
 
     let sg =
         sg |> Sg.effect [Shader.effect]
-           |> Sg.viewTrafo view.ViewTrafos.Mod
+           |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
            |> Sg.trafo (Mod.initConstant <| Trafo3d.ChangeYZ)
            |> Sg.fillMode mode
@@ -668,13 +665,7 @@ let main args =
 
     ctrl.RenderTask <- task
 
-    let controller = 
-        DefaultCameraControllers(
-            HciMouseWinFormsAsync (ctrl.Implementation), 
-            HciKeyboardWinFormsAsync (ctrl.Implementation), 
-            view,
-            isEnabled = EventSource(true)    
-        )
+
 //    w.Run()
 
 //    let app = System.Windows.Application()

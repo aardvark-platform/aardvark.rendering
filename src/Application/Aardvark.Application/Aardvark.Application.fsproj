@@ -62,7 +62,6 @@
     <Compile Include="DefaultCameraController.fs" />
     <Content Include="packages.config" />
     <Content Include="app.config" />
-    <Compile Include="GUI\Sg.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">
