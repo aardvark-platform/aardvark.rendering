@@ -41,9 +41,12 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
     let mutable contextHandle : ContextHandle = null 
     let defaultFramebuffer = new Framebuffer(ctx, (fun _ -> 0), ignore, [], None)
 
+    let avgFrameTime = RunningMean(10)
     let sizes = EventSource<V2i>(V2i(base.ClientSize.Width, base.ClientSize.Height))
-    let time = Mod.custom (fun () -> DateTime.Now)
+    let time = Mod.custom (fun () -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
     let mutable needsRedraw = false
+    let mutable first = true
+    
 
     interface IControl with
         member x.IsInvalid = needsRedraw
@@ -100,7 +103,8 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
                 | Some t ->
                     using (ctx.RenderingLock contextHandle) (fun _ ->
                         needsRedraw <- false
-
+                        let sw = System.Diagnostics.Stopwatch()
+                        sw.Start()
                         if size <> sizes.Latest then
                             transact (fun () -> sizes.Emit size)
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
@@ -113,21 +117,28 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
                         let res = t.Run(defaultFramebuffer)
                         
                         statistics.Emit res.Statistics
-                        //System.Threading.Thread.Sleep(200)
+                        
 //                        let sw = System.Diagnostics.Stopwatch()
 //                        sw.Start()
 //                        while sw.Elapsed.TotalMilliseconds < 10.0 do 1;
 
 
 
-                        transact (fun () -> time.MarkOutdated())
                         x.SwapBuffers()
+                        //System.Threading.Thread.Sleep(200)
+                        sw.Stop()
+                        if not first then
+                            avgFrameTime.Add(sw.Elapsed.TotalSeconds)
+
+                        transact (fun () -> time.MarkOutdated())
 
                         if t.OutOfDate then
                             needsRedraw <- true
                             x.Invalidate()
                         else
                             needsRedraw <- false
+
+                        first <- false
                     )
 
                 | None ->

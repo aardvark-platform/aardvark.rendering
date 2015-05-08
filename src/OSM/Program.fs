@@ -310,40 +310,65 @@ let main argv =
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero
     let down = ref false
-    w.Mouse.Events.Values.Subscribe(fun e ->
-        match e with
-            | MouseDown p ->
-                down := true
-                lastPos := p.location.NormalizedPosition
-            | MouseUp p ->
-                down := false
-                lastPos := p.location.NormalizedPosition
-            | MouseMove pos ->
-                let pos = pos.NormalizedPosition
-                if !down then
-                    transact (fun () ->
-                        viewportOrigin.Value <- viewportOrigin.Value + (!lastPos - pos) * viewportSize.Value
-                    )
+    let down = w.Mouse.IsDown Aardvark.Application.MouseButtons.Left
 
-                lastPos := pos
+    w.Mouse.Move.Values.Subscribe(fun (op, np) ->
+        if down.GetValue() then
+            transact (fun () ->
+                viewportOrigin.Value <- viewportOrigin.Value + (op.NormalizedPosition - np.NormalizedPosition) * viewportSize.Value
+            )
 
-            | MouseScroll(delta,pos) ->
-                let delta = delta / 120.0
-
-                let vp = Box2d.FromMinAndSize(viewportOrigin.Value, viewportSize.Value)
-                let zoomCenter = vp.Size * pos.NormalizedPosition + vp.Min
-
-                let newViewport = vp.Translated(-zoomCenter).Scaled(V2d.II * Fun.Pow(0.9, delta)).Translated(zoomCenter)
-
-                transact (fun () ->
-                    viewportOrigin.Value <- newViewport.Min
-                    viewportSize.Value <- newViewport.Size
-                )
-
-                ()
-
-            | _ -> ()
     ) |> ignore
+
+    w.Mouse.Scroll.Values.Subscribe(fun delta ->
+        let delta = delta / 120.0
+
+        let vp = Box2d.FromMinAndSize(viewportOrigin.Value, viewportSize.Value)
+        let zoomCenter = vp.Size * w.Mouse.Position.GetValue().NormalizedPosition + vp.Min
+
+        let newViewport = vp.Translated(-zoomCenter).Scaled(V2d.II * Fun.Pow(0.9, delta)).Translated(zoomCenter)
+
+        transact (fun () ->
+            viewportOrigin.Value <- newViewport.Min
+            viewportSize.Value <- newViewport.Size
+        )
+    ) |> ignore
+    1
+//
+//    w.Mouse.Events.Values.Subscribe(fun e ->
+//        match e with
+//            | MouseDown p ->
+//                down := true
+//                lastPos := p.location.NormalizedPosition
+//            | MouseUp p ->
+//                down := false
+//                lastPos := p.location.NormalizedPosition
+//            | MouseMove pos ->
+//                let pos = pos.NormalizedPosition
+//                if !down then
+//                    transact (fun () ->
+//                        viewportOrigin.Value <- viewportOrigin.Value + (!lastPos - pos) * viewportSize.Value
+//                    )
+//
+//                lastPos := pos
+//
+//            | MouseScroll(delta,pos) ->
+//                let delta = delta / 120.0
+//
+//                let vp = Box2d.FromMinAndSize(viewportOrigin.Value, viewportSize.Value)
+//                let zoomCenter = vp.Size * pos.NormalizedPosition + vp.Min
+//
+//                let newViewport = vp.Translated(-zoomCenter).Scaled(V2d.II * Fun.Pow(0.9, delta)).Translated(zoomCenter)
+//
+//                transact (fun () ->
+//                    viewportOrigin.Value <- newViewport.Min
+//                    viewportSize.Value <- newViewport.Size
+//                )
+//
+//                ()
+//
+//            | _ -> ()
+//    ) |> ignore
 
 
     // finally run the application

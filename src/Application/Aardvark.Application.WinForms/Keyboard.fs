@@ -8,7 +8,7 @@ open Aardvark.Base
 [<AutoOpen>]
 module private WinFormsUtilities =
     let (~%) (k : System.Windows.Forms.Keys) : Keys =
-        k |> int |> unbox
+        KeyConverter.keyFromVirtualKey(int k)
 
 type Keyboard(ctrl : Control) =
     

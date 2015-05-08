@@ -51,6 +51,7 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
+    <Compile Include="IO\Keys.fs" />
     <Compile Include="IO\EventCombinators.fs" />
     <Compile Include="IO\Keyboard.fs" />
     <Compile Include="IO\Mouse.fs" />

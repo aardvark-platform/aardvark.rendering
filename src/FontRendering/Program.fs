@@ -70,10 +70,12 @@ let main argv =
     let time = (win :> IRenderTarget).Time
     let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
     let cam = 
-        DefaultCameraController.integrate cam time [ 
+        DefaultCameraController.Mod.integrate cam time [ 
             DefaultCameraController.controlWSAD win.Keyboard time
             DefaultCameraController.controlLookAround win.Mouse
-            //DefaultCameraController.controlPan win.Mouse
+            DefaultCameraController.controlPan win.Mouse
+            DefaultCameraController.controlZoom win.Mouse
+            DefaultCameraController.controllScroll win.Mouse time
         ]
 
 
@@ -90,6 +92,7 @@ let main argv =
         geometry 
             |> Sg.instancedGeometry trafos
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
+            //|> Sg.viewTrafo cam.ViewTrafos.Mod
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
 

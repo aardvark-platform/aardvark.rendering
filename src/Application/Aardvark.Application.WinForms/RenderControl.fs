@@ -15,7 +15,7 @@ type RenderControl() =
     let mutable ctrl : Option<Control> = None
 
     let keyboard = new ChangeableKeyboard()
-    let mouse = new ChangeableMouse()
+    let mouse = new Mouse()
     let sizes = new EventSource<V2i>()
     let mutable inner : Option<IMod<DateTime>> = None
     let time = 
@@ -34,7 +34,7 @@ type RenderControl() =
         self.Controls.Add c
 
         keyboard.Inner <- new Keyboard(c)
-        mouse.Inner <- new Mouse(c)
+        mouse.SetControl c
         match renderTask with
             | Some task -> cr.RenderTask <- task
             | None -> ()

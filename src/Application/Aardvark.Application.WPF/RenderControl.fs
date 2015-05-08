@@ -18,7 +18,7 @@ type RenderControl() =
     let mutable ctrl : Option<FrameworkElement> = None
 
     let keyboard = new ChangeableKeyboard()
-    let mouse = new ChangeableMouse()
+    let mouse = new Aardvark.Application.WinForms.Mouse()
     let sizes = new EventSource<V2i>()
     let mutable inner : Option<IMod<DateTime>> = None
     let time = 
@@ -39,10 +39,10 @@ type RenderControl() =
         match c with
             | :? WindowsFormsHost as host ->
                 keyboard.Inner <- new Aardvark.Application.WinForms.Keyboard(host.Child)
-                mouse.Inner <- new Aardvark.Application.WinForms.Mouse(host.Child)
+                mouse.SetControl(host.Child)
+                
             | _ ->
-                keyboard.Inner <- new Keyboard(c)
-                mouse.Inner <- new Mouse(c)
+                failwith "impossible to create WPF mouse"
 
         match renderTask with
             | Some task -> cr.RenderTask <- task

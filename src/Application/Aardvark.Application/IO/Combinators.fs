@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-
+open Aardvark.Base.Incremental
 
 
 module Keyboard =
@@ -41,40 +41,40 @@ module Keyboard =
     let union (keyboards : seq<IKeyboard>) =
         keyboards |> Seq.map (fun k -> k.Events) |> Event.concat |> ofEvent
 
-module Mouse =
-    
-    type private NoMouse private() =
-        static let events = EventSource<MouseEvent>()
-        static let instance = NoMouse() :> IMouse
-
-        static member Instance = instance
-
-        interface IMouse with
-            member x.Events = events :> IEvent<_>
-
-    type private StreamMouse(e : IEvent<MouseEvent>) =
-    
-        interface IMouse with
-            member x.Events = e
-
-    let empty = NoMouse.Instance
-
-    let ofEvent (e : IEvent<MouseEvent>) = StreamMouse e :> IMouse
-
-    let choose (f : MouseEvent -> Option<MouseEvent>) (k : IMouse) =
-        k.Events |> Event.choose f |> ofEvent
-
-    let filter (f : MouseEvent -> bool) (k : IMouse) =
-        k.Events |> Event.filter f |> ofEvent
-
-    let map (f : MouseEvent -> MouseEvent) (k : IMouse) =
-        k.Events |> Event.map f |> ofEvent
-
-    let collect (f : MouseEvent -> #seq<MouseEvent>) (k : IMouse) =
-        k.Events |> Event.collect f |> ofEvent
-
-    let union (keyboards : seq<IMouse>) =
-        keyboards |> Seq.map (fun k -> k.Events) |> Event.concat |> ofEvent
+//module Mouse =
+//    
+//    type private NoMouse private() =
+//        static let events = EventSource<MouseEvent>()
+//        static let instance = NoMouse() :> IMouse
+//
+//        static member Instance = instance
+//
+//        interface IMouse with
+//            member x.Events = events :> IEvent<_>
+//
+//    type private StreamMouse(e : IEvent<MouseEvent>) =
+//    
+//        interface IMouse with
+//            member x.Events = e
+//
+//    let empty = NoMouse.Instance
+//
+//    let ofEvent (e : IEvent<MouseEvent>) = StreamMouse e :> IMouse
+//
+//    let choose (f : MouseEvent -> Option<MouseEvent>) (k : IMouse) =
+//        k.Events |> Event.choose f |> ofEvent
+//
+//    let filter (f : MouseEvent -> bool) (k : IMouse) =
+//        k.Events |> Event.filter f |> ofEvent
+//
+//    let map (f : MouseEvent -> MouseEvent) (k : IMouse) =
+//        k.Events |> Event.map f |> ofEvent
+//
+//    let collect (f : MouseEvent -> #seq<MouseEvent>) (k : IMouse) =
+//        k.Events |> Event.collect f |> ofEvent
+//
+//    let union (keyboards : seq<IMouse>) =
+//        keyboards |> Seq.map (fun k -> k.Events) |> Event.concat |> ofEvent
 
 
 type ChangeableKeyboard(initial : IKeyboard) =
@@ -106,32 +106,32 @@ type ChangeableKeyboard(initial : IKeyboard) =
 
     new() = new ChangeableKeyboard(Keyboard.empty)
 
-type ChangeableMouse(initial : IMouse) =
-    let events = EventSource<MouseEvent>()
-
-    let subscribe (k : IMouse) =
-        k.Events.Values.Subscribe events.Emit
-    
-    let mutable inner = initial
-    let mutable subscription = subscribe initial
-
-
-    let set k =
-        subscription.Dispose()
-        inner <- k
-        subscription <- subscribe inner
-
-    member x.Inner 
-        with get() = inner
-        and set m = set m
-
-    member x.Dispose() =
-        set Mouse.empty
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
-    interface IMouse with
-        member x.Events = events :> IEvent<_>
-
-    new() = new ChangeableMouse(Mouse.empty)
+//type ChangeableMouse(initial : IMouse) =
+//    let events = EventSource<MouseEvent>()
+//
+//    let subscribe (k : IMouse) =
+//        k.Events.Values.Subscribe events.Emit
+//    
+//    let mutable inner = initial
+//    let mutable subscription = subscribe initial
+//
+//
+//    let set k =
+//        subscription.Dispose()
+//        inner <- k
+//        subscription <- subscribe inner
+//
+//    member x.Inner 
+//        with get() = inner
+//        and set m = set m
+//
+//    member x.Dispose() =
+//        set Mouse.empty
+//
+//    interface IDisposable with
+//        member x.Dispose() = x.Dispose()
+//
+//    interface IMouse with
+//        member x.Events = events :> IEvent<_>
+//
+//    new() = new ChangeableMouse(Mouse.empty)

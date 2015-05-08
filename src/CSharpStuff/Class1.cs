@@ -223,14 +223,14 @@ namespace CSharpStuff
 
             m_control.PreviewKeyDown += (s, e) =>
             {
-                var k = (Keys)(e.KeyCode);
+                var k = Aardvark.Application.KeyConverter.keyFromVirtualKey((int)e.KeyCode);
                 //Report.Line("HciKeyboardWinFormsAsync.KeyDown: KeyCode {0}, KeyValue {1}", e.KeyCode, e.KeyValue);
 
-                if (k == Keys.Menu)
+                if (k == Keys.LeftAlt)
                 {
                     //m_keyDown.Emit(Keys.Alt);
-                    if (!IsPressed(k)) m_keyDown.Emit(Keys.Alt);
-                    m_keyPressed.Emit(Keys.Alt);
+                    if (!IsPressed(k)) m_keyDown.Emit(Keys.LeftAlt);
+                    m_keyPressed.Emit(Keys.LeftAlt);
                 }
 
                 //m_keyDown.Emit(k);
@@ -239,12 +239,12 @@ namespace CSharpStuff
             };
             m_control.KeyUp += (s, e) =>
             {
-                var k = (Keys)(e.KeyCode);
+                var k = Aardvark.Application.KeyConverter.keyFromVirtualKey((int)e.KeyCode);
                 //Report.Line("HciKeyboardWinFormsAsync.KeyUp: KeyCode {0}, KeyValue {1}", e.KeyCode, e.KeyValue);
 
-                if (k == Keys.Menu)
+                if (k == Keys.LeftAlt)
                 {
-                    m_keyUp.Emit(Keys.Alt);
+                    m_keyUp.Emit(Keys.LeftAlt);
                 }
                 m_keyUp.Emit(k);
             };
