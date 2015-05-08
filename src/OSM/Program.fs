@@ -333,7 +333,6 @@ let main argv =
             viewportSize.Value <- newViewport.Size
         )
     ) |> ignore
-    1
 //
 //    w.Mouse.Events.Values.Subscribe(fun e ->
 //        match e with

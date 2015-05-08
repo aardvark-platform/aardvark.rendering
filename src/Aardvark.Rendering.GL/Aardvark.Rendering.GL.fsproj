@@ -106,23 +106,27 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="FShade">
-      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.dll</HintPath>
+      <HintPath>..\..\packages\FShade.1.0.7\lib\net45\FShade.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FShade.Compiler">
-      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.Compiler.dll</HintPath>
+      <HintPath>..\..\packages\FShade.1.0.7\lib\net45\FShade.Compiler.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FShade.Debug">
-      <HintPath>..\..\packages\FShade.1.0.5\lib\net45\FShade.Debug.dll</HintPath>
+      <HintPath>..\..\packages\FShade.1.0.7\lib\net45\FShade.Debug.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Compiler.Service">
-      <HintPath>..\..\packages\FSharp.Compiler.Service.0.0.86\lib\net45\FSharp.Compiler.Service.dll</HintPath>
+      <HintPath>..\..\packages\FSharp.Compiler.Service.0.0.89\lib\net45\FSharp.Compiler.Service.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="RegexProvider">
+      <HintPath>..\..\packages\RegexProvider.0.0.5\lib\net40\RegexProvider.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -177,10 +181,6 @@
     </Reference>
     <Reference Include="System.Collections.Immutable">
       <HintPath>..\..\packages\Microsoft.Bcl.Immutable.1.0.34\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="RegexProvider">
-      <HintPath>..\..\packages\RegexProvider.0.0.4\lib\net40\RegexProvider.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="nunit.framework">
