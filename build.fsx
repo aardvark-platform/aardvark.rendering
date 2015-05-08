@@ -87,19 +87,16 @@ let subModulePackages =
     ]
 
 
-Target "CreatePackages" (fun () ->
+Target "CreatePackage" (fun () ->
     let branch = Fake.Git.Information.getBranchName "."
     let releaseNotes = Fake.Git.Information.getCurrentHash()
 
     if branch = "master" then
         let tag = Fake.Git.Information.getLastTag()
 
-        if not <| Directory.Exists "bin/packages" then
-            Directory.CreateDirectory "bin/packages" |> ignore
-
         for id in ownPackages do
             NuGetPack (fun p -> 
-                { p with OutputPath = "bin/packages"
+                { p with OutputPath = "bin"
                          Version = tag
                          ReleaseNotes = releaseNotes
                          WorkingDir = "bin"
@@ -216,8 +213,8 @@ Target "InstallLocal" (fun () ->
 )
 
 
-"Compile" ==> "CreatePackages"
-"CreatePackages" ==> "Deploy"
+"Compile" ==> "CreatePackage"
+"CreatePackage" ==> "Deploy"
 
 // start build
 RunTargetOrDefault "Default"

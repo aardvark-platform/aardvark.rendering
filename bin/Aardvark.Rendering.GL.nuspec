@@ -21,6 +21,7 @@
 			<dependency id="Aardvark.Base.Incremental" version="@build.number@" />
 			<dependency id="FShade" version="@build.number@" />
 			<dependency id="Aardvark.Base.Rendering" version="@build.number@" />
+            <dependency id="FSPowerPack.Community" version="3.0.0.0" />
         </dependencies>
     </metadata>
     <files>
