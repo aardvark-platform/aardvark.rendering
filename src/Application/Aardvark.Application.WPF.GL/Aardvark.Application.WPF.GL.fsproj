@@ -50,7 +50,7 @@
       </PropertyGroup>
     </Otherwise>
   </Choose>
-  <Import Project="$(FSharpTargetsPath)" />
+    <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
   <ItemGroup>
     <Content Include="packages.config" />
     <Content Include="app.config" />

@@ -54,7 +54,7 @@
     </Otherwise>
   </Choose>
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-  <Import Project="$(FSharpTargetsPath)" />
+    <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
   <ItemGroup>
     <Compile Include="DefaultSemantic.fs" />
     <Compile Include="IndexedGeometry.fs" />
