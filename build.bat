@@ -10,6 +10,7 @@ dir
 "bin\nuget.exe" "install" "FSharp.Formatting.CommandTool" "-OutputDirectory" "Packages" "-ExcludeVersion" "-Prerelease"
 "bin\nuget.exe" "install" "SourceLink.Fake" "-OutputDirectory" "Packages" "-ExcludeVersion"
 "bin\nuget.exe" "install" "NUnit.Runners" "-OutputDirectory" "Packages" "-ExcludeVersion"
+"bin\nuget.exe" "install" "Aardvark.Build" "-OutputDirectory" "Packages" "-ExcludeVersion"
 )
 
 SET TARGET="Default"
