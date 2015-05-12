@@ -30,6 +30,7 @@
 			<dependency id="FShade" version="@build.number@" />
 			<dependency id="Aardvark.Base.Rendering" version="@build.number@" />
 			<dependency id="Aardvark.Application" version="@build.number@" />
+			<dependency id="Aardvark.Application.WinForms.GL" version="@build.number@" />
 			<dependency id="Aardvark.Rendering.GL" version="@build.number@" />
         </dependencies>
     </metadata>
