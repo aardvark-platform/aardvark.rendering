@@ -24,7 +24,6 @@ Target "Restore" (fun () ->
                                           Sources = sources
                                  }) pc
 
-    NuGetUtils.updatePackages NuGetUtils.additionalSources  (!!"src/**/*.csproj" ++ "src/**/*.fsproj")
 )
 
 Target "Clean" (fun () ->
