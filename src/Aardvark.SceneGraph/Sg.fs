@@ -1066,7 +1066,9 @@ module Semantics =
                         failwithf "unknown IBuffer for positions: %A" positions.Buffer
 
             member x.GlobalBoundingBox(app : Group) : IMod<Box3d> =
-                app.ASet |> ASet.map (fun sg -> sg?GlobalBoundingBox() ) |> ASet.toMod |> Mod.map (fun (values : ISet<Box3d>) -> Box3d ( values ) )
+                app.ASet |> ASet.map (fun sg -> sg.GlobalBoundingBox() ) 
+                    |> ASet.toMod 
+                    |> Mod.bind (fun (values : ISet<IMod<Box3d>>) -> (values |> Seq.map (fun a -> a :> IAdaptiveObject) |> Seq.toList) |> Mod.mapCustom (fun () -> Box3d ( values |> Seq.map Mod.force) ) )
 
             member x.GlobalBoundingBox(n : IApplicator) : IMod<Box3d> = 
                 adaptive {

@@ -46,6 +46,7 @@ module VertexArrayObjectExtensions =
                     GL.Check "could not enable vertex attribute array"
 
                     GL.VertexAttribPointer(id, 4, VertexAttribPointerType.Float, false, 16 * sizeof<float32>, 4 * i * sizeof<float32>)
+           
             else
                 GL.EnableVertexAttribArray(id)
                 GL.Check "could not enable vertex attribute array"
@@ -56,7 +57,11 @@ module VertexArrayObjectExtensions =
                 GL.Check "could not set vertex attribute frequency"
 
                 let attType = glTypes.[att.BaseType]
-                GL.VertexAttribPointer(id, att.Dimension, attType, att.Normalized, att.Stride, att.Offset)
+                if att.Type = typeof<C4b> then
+                    GL.VertexAttribPointer(id, 0x80E1, attType, true, att.Stride, att.Offset)
+                else
+                    GL.VertexAttribPointer(id, att.Dimension, attType, att.Normalized, att.Stride, att.Offset)
+
                 GL.Check "could not set vertex attribute pointer"
 
 
