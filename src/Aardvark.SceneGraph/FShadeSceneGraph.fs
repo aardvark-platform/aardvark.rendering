@@ -72,7 +72,7 @@ module FShadeSceneGraph =
 
     let (|SplicedMod|_|) (e : Expr) =
         match e with
-            | Call(None, mi, [target]) when mi.Name = "op_BangBang" ->
+            | Call(None, mi, [Value(target,ModOf(_))]) when mi.Name = "op_BangBang" ->
                 let t = mi.ReturnType
                 SplicedMod(t, target |> unbox<IMod>) |> Some 
             | _ -> None
@@ -173,6 +173,11 @@ module FShadeSceneGraph =
 
     let toFShadeSurface (e : FShadeEffect) =
         FShadeSurface(e) :> ISurface
+
+    let (~~) (f : 'a -> Expr<'b>) : FShadeEffect =
+        toEffect f
+
+    let inline toEffect a = toEffect a
 
     module Sg =
         let private constantSurfaceCache = MemoCache(false)

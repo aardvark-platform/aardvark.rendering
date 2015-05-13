@@ -164,7 +164,13 @@ module ResourceManager =
                     let ub = s.UniformBlocks |> List.map (fun b -> { b with fields = b.fields |> List.map (fun f -> { f with semantic = remapSemantic f.semantic }) })
                     let u = s.Uniforms |> List.map (fun f -> let sem = remapSemantic f.semantic in { f with semantic = sem; samplerState = getSamplerState sem})
 
-                    Success { s with UniformBlocks = ub; Uniforms = u; SamplerStates = b.SamplerStates }
+                    let uniformGetters =
+                        b.Uniforms 
+                            |> SymDict.toSeq 
+                            |> Seq.map (fun (k,v) -> (k, v :> obj)) 
+                            |> SymDict.ofSeq
+
+                    Success { s with UniformBlocks = ub; Uniforms = u; SamplerStates = b.SamplerStates; UniformGetters = uniformGetters }
 
                 | Error e -> Error e
 
@@ -359,14 +365,18 @@ module ResourceManager =
                             failwith e
            )
                 
-        member x.CreateUniformBuffer (layout : UniformBlock, surface : IMod<ISurface>, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
+        member x.CreateUniformBuffer (layout : UniformBlock, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
             let getValue (f : ActiveUniform) =
-                        
-                match u.TryGetUniform(Sym.ofString f.semantic) with
+                let sem = f.semantic |> Sym.ofString
+
+                match u.TryGetUniform sem with
                     | (true, m) ->
                         m
                     | _ ->
-                        failwithf "could not find uniform: %A" f
+                        match program.UniformGetters.TryGetValue sem with
+                            | (true, (:? IMod as m)) -> m
+                            | _ ->
+                                failwithf "could not find uniform: %A" f
 
             let fieldValues = layout.fields |> List.map (fun f -> f, getValue f)
             semanticValues <- fieldValues |> List.map (fun (f,v) -> f.semantic, v)

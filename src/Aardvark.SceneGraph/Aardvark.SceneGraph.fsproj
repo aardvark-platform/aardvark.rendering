@@ -50,9 +50,10 @@
     <Compile Include="Sg.fs" />
     <Compile Include="SgFSharp.fs" />
     <Compile Include="SgCSharp.fs" />
+    <Compile Include="FShadeSceneGraph.fs" />
+    <Compile Include="DefaultSurfaces.fs" />
     <None Include="packages.config" />
     <Content Include="app.config" />
-    <Compile Include="FShadeSceneGraph.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">

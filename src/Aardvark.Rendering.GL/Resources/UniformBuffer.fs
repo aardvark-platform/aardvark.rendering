@@ -89,6 +89,7 @@ module private ValueConverter =
             <@@ fun (t : M44d)      -> transposedFloat33 t @@>
 
             <@@ fun (v : M33f)      -> M34f(v.M00, v.M10, v.M20, 0.0f, v.M01, v.M11, v.M21, 0.0f, v.M02, v.M12, v.M22, 0.0f) @@>
+            <@@ fun (v : M33d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, 0.0f, float32 v.M10, float32 v.M11, float32 v.M12, 0.0f, float32 v.M20, float32 v.M21, float32 v.M22, 0.0f) @@>
 
             <@@ fun (v : V4d)       -> V4f.op_Explicit v @@>
             <@@ fun (v : V3d)       -> V3f.op_Explicit v @@>

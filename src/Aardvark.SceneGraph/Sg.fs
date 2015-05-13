@@ -1154,8 +1154,8 @@ module Semantics =
                 e.Child?CameraLocation <- Mod.map getViewPosition e.ViewTrafo
 
 
-            member x.NormalMatrix(s : ISg) : IMod<M44d> = 
-                Mod.map (fun (t : Trafo3d) -> t.Backward.Transposed) s?ModelTrafo
+            member x.NormalMatrix(s : ISg) : IMod<M33d> = 
+                Mod.map (fun (t : Trafo3d) -> t.Backward.Transposed.UpperLeftM33()) s?ModelTrafo
 
             member x.Runtime(e : Environment) =
                 e.Child?Runtime <- e.Runtime

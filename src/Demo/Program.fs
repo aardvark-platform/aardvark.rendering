@@ -558,6 +558,7 @@ type IEvent<'a> with
         subscribe, { new IDisposable with member x.Dispose() = live := false; self.Value.Dispose() }
 
 
+
 [<EntryPoint>]
 [<STAThread>]
 let main args = 
@@ -629,8 +630,23 @@ let main args =
 
     let view = DefaultCameraController.control ctrl.Mouse ctrl.Keyboard ctrl.Time view
 
+    let color = Mod.initMod C4f.Red
+
+    f.Keyboard.KeyDown(Keys.C).Values.Subscribe(fun () ->
+        let v = C4f(C3f.White - (Mod.force color).ToC3f())
+        transact (fun () ->
+            Mod.change color v
+        )
+    ) |> ignore
+
+
+
     let sg =
-        sg |> Sg.effect [Shader.effect]
+        sg |> Sg.effect [
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.diffuseTexture |> toEffect
+                DefaultSurfaces.simpleLighting |> toEffect
+              ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
            |> Sg.trafo (Mod.initConstant <| Trafo3d.ChangeYZ)

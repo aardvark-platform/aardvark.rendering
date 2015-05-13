@@ -122,7 +122,7 @@ type InterpretedProgram(manager : ResourceManager, add : IAdaptiveObject -> unit
             programHandle.UniformBlocks |> List.map (fun block ->
                 
                 let mutable used = []
-                let buffer = newResource <| manager.CreateUniformBuffer(block, rj.Surface, rj.Uniforms, &used)
+                let buffer = newResource <| manager.CreateUniformBuffer(block, programHandle, rj.Uniforms, &used)
 
                 for (_,u) in used do add u
 

@@ -662,7 +662,7 @@ module InstructionCompiler =
             let program = program.Resource.GetValue()
 
             for b in program.UniformBlocks do
-                let! (uniformBuffer, values) = Manager.createUniformBuffer b next.Surface next.Uniforms
+                let! (uniformBuffer, values) = Manager.createUniformBuffer b program next.Uniforms
 
                 //ISSUE: what if the programs are not equal but use the same uniform buffers?
                 if not programEqual || not (allUniformsEqual prev values) then
