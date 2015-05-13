@@ -547,8 +547,9 @@ module InstructionCompiler =
         let bindVertexArray (vao : ChangeableResource<VertexArrayObject>) =
             fun () -> Instruction.BindVertexArray(vao.Resource.GetValue().Handle)
                 
-        let draw (indexArray : IMod<System.Array>) (hasTess : bool) (call : IMod<DrawCallInfo>) (isActive : IMod<bool>) =
-          
+        let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<DrawCallInfo>) (isActive : IMod<bool>) =
+            let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
+
             let indexType = 
                 if indexArray <> null then
                     indexArray |> Mod.map (fun ia -> (ia <> null, if ia <> null then ia.GetType().GetElementType() else typeof<obj>))
@@ -573,7 +574,19 @@ module InstructionCompiler =
 
                     let mode =
                         if hasTess then int OpenGl.Enums.DrawMode.Patches
-                        else Translations.toGLMode call.Mode
+                        else 
+                            let realMode = 
+                                match program.SupportedModes with
+                                    | Some set ->
+                                        if Set.contains call.Mode set then 
+                                            call.Mode
+                                        elif Set.contains IndexedGeometryMode.PointList set then
+                                            IndexedGeometryMode.PointList
+                                        else failwith "invalid mode for program: %A (should be in: %A)" call.Mode set
+                                    | None -> 
+                                        call.Mode
+
+                            Translations.toGLMode realMode
 
                     if indexed then
                         let offset = nativeint (call.FirstIndex * indexType.GLSize)
@@ -732,9 +745,8 @@ module InstructionCompiler =
 
             let! vao = Manager.createVertexArrayObject program next
             yield! bindVertexArray vao
-            let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
-            yield! draw next.Indices hasTess next.DrawCallInfo next.IsActive 
+            yield! draw program next.Indices next.DrawCallInfo next.IsActive 
         }
 
     /// <summary>

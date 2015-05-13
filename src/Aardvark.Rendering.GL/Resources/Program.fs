@@ -15,7 +15,7 @@ open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 
 
-type ActiveUniform = { index : int; location : int; name : string; semantic : string; samplerState : Option<string>; size : int; uniformType : ActiveUniformType; offset : int } with
+type ActiveUniform = { index : int; location : int; name : string; semantic : string; samplerState : Option<string>; size : int; uniformType : ActiveUniformType; offset : int; isRowMajor : bool } with
     member x.Interface =
 
         let name =
@@ -36,8 +36,8 @@ type Shader =
         val mutable public Context : Context
         val mutable public Handle : int
         val mutable public Stage : ShaderStage
-
-        new(ctx : Context, handle : int, stage : ShaderStage) = { Context = ctx; Handle = handle; Stage = stage}
+        val mutable public SupportedModes : Option<Set<IndexedGeometryMode>>
+        new(ctx : Context, handle : int, stage : ShaderStage, tops) = { Context = ctx; Handle = handle; Stage = stage; SupportedModes = tops}
     end
 
 [<StructuredFormatDisplay("{InterfaceBlock}")>]
@@ -53,6 +53,7 @@ type Program =
        SamplerStates : SymbolDict<SamplerStateDescription>
        Inputs : list<ActiveAttribute>
        Outputs : list<ActiveAttribute>
+       SupportedModes : Option<Set<IndexedGeometryMode>>
     } with
 
 
@@ -120,7 +121,7 @@ module ProgramReflector =
 
         let location = GL.GetUniformLocation(p, name)
 
-        { index = index; location = location; name = name; semantic = name; samplerState = None; size = -1; uniformType = uniformType; offset = -1 }
+        { index = index; location = location; name = name; semantic = name; samplerState = None; size = -1; uniformType = uniformType; offset = -1; isRowMajor = false }
 
     let getActiveUniformBlocks (p : int) =
         [
@@ -156,8 +157,12 @@ module ProgramReflector =
                 GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformSize, sizes);
                 GL.Check "could not get field offsets for uniform block"
 
+                let rowMajor = Array.create fieldCount 0
+                GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformIsRowMajor, rowMajor);
+                GL.Check "could not get field majorities for uniform block"
+
                 for i in 0..fields.Length-1 do
-                    fields.[i] <- { fields.[i] with offset = offsets.[i]; size = sizes.[i] }
+                    fields.[i] <- { fields.[i] with offset = offsets.[i]; size = sizes.[i]; isRowMajor = (rowMajor.[i] = 1) }
 
                 GL.UniformBlockBinding(p, b, b)
                 GL.Check "could not set uniform buffer binding"
@@ -258,15 +263,17 @@ module ProgramExtensions =
     let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
     let private addPreprocessorDefine (define : string) (code : string) =
         let replaced = ref false
+        let def = sprintf "#define %s\r\nlayout(row_major) uniform;\r\n" define
+
         let newCode = 
             versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
                 let v = m.Groups.["version"].Value
                 replaced := true
-                sprintf "#version %s\r\n#define %s" v define
+                sprintf "#version %s\r\n%s" v def
             ))
 
         if !replaced then newCode
-        else (sprintf "#define %s\r\n" define) + newCode
+        else def + newCode
 
 
     type Aardvark.Rendering.GL.Context with
@@ -293,8 +300,30 @@ module ProgramExtensions =
 
                 let log = GL.GetShaderInfoLog handle
 
+                let topologies =
+                    match stage with
+                        | ShaderStage.Geometry ->
+                            
+                            let inRx = System.Text.RegularExpressions.Regex @"layout\((?<top>[a-zA-Z_]+)\)[ \t]*in[ \t]*;"
+                            let m = inRx.Match code
+                            if m.Success then
+                                match m.Groups.["top"].Value with
+                                    | "points" -> 
+                                        [IndexedGeometryMode.PointList] |> Set.ofList |> Some
+                                    | "lines" | "lines_adjacency" ->
+                                        [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+                                    | "triangles" | "triangles_adjacency" ->
+                                        [IndexedGeometryMode.TriangleStrip; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
+                                    | v ->
+                                       failwithf "unknown geometry shader input topology: %A" v 
+                            else
+                                failwith "could not determine geometry shader input topology"
+
+                        | _ ->
+                            None
+
                 if status = 1 then
-                    Success(Shader(x, handle, stage))
+                    Success(Shader(x, handle, stage, topologies))
                 else
                     let log =
                         if String.IsNullOrEmpty log then "ERROR: shader did not compile but log was empty"
@@ -349,6 +378,9 @@ module ProgramExtensions =
                         GL.UseProgram(handle)
                         GL.Check "could not bind program"
 
+                        let supported = 
+                            shaders |> List.tryPick (fun s -> s.SupportedModes)
+
                         let result = {
                             Context = x
                             Code = code
@@ -360,6 +392,7 @@ module ProgramExtensions =
                             SamplerStates = SymDict.empty
                             Inputs = ProgramReflector.getActiveInputs handle
                             Outputs = ProgramReflector.getActiveOutputs handle
+                            SupportedModes = supported
                         }
 
                         GL.UseProgram(0)

@@ -639,13 +639,15 @@ let main args =
         )
     ) |> ignore
 
-
+    let pointSize = Mod.initConstant <| V2d(0.06, 0.08)
 
     let sg =
         sg |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect
-                DefaultSurfaces.diffuseTexture |> toEffect
-                DefaultSurfaces.simpleLighting |> toEffect
+                DefaultSurfaces.pointSurface pointSize |> toEffect
+                DefaultSurfaces.uniformColor color |> toEffect
+//                DefaultSurfaces.diffuseTexture |> toEffect
+//                DefaultSurfaces.simpleLighting |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod

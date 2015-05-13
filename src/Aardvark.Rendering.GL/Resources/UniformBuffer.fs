@@ -50,32 +50,6 @@ module private ValueConverter =
         | ConvertForBuffer
         | ConvertForLocation
 
-    type private M24f =
-        struct
-            val mutable public R0 : V4f;
-            val mutable public R1 : V4f;
-
-            new(r0 : V4f, r1 : V4f) = { R0 = r0; R1 = r1 }
-        end
-
-    let transposedFloat (m : M44d) =
-        M44f(float32 m.M00, float32 m.M10, float32 m.M20, float32 m.M30,
-             float32 m.M01, float32 m.M11, float32 m.M21, float32 m.M31,
-             float32 m.M02, float32 m.M12, float32 m.M22, float32 m.M32,
-             float32 m.M03, float32 m.M13, float32 m.M23, float32 m.M33
-        )
-
-    let transposedFloat34 (m : M44d) =
-        M34f(float32 m.M00, float32 m.M10, float32 m.M20, float32 m.M30,
-             float32 m.M01, float32 m.M11, float32 m.M21, float32 m.M31,
-             float32 m.M02, float32 m.M12, float32 m.M22, float32 m.M32
-        )
-
-    let transposedFloat33 (m : M44d) =
-        M33f(float32 m.M00, float32 m.M10, float32 m.M20,
-             float32 m.M01, float32 m.M11, float32 m.M21,
-             float32 m.M02, float32 m.M12, float32 m.M22
-        )
 
 
     let conversions =
@@ -83,13 +57,12 @@ module private ValueConverter =
             <@@ fun (b : bool)      -> if b then 1 else 0 @@>
 
             // * -> M44f
-            <@@ fun (t : Trafo3d)   -> transposedFloat (Trafo.forward t) @@>
-            <@@ fun (t : M44d)      -> M44f.Transpose (M44f.op_Explicit t) @@>
-            <@@ fun (t : M44d)      -> transposedFloat34 t @@>
-            <@@ fun (t : M44d)      -> transposedFloat33 t @@>
+            <@@ fun (t : Trafo3d)   -> M44f.op_Explicit (Trafo.forward t) @@>
+            <@@ fun (t : M44d)      -> M44f.op_Explicit t @@>
+            <@@ fun (v : M44d)      -> M34f(float32 v.M00, float32 v.M10, float32 v.M20, float32 v.M30, float32 v.M01, float32 v.M11, float32 v.M21, float32 v.M31, float32 v.M02, float32 v.M12, float32 v.M22, float32 v.M32) @@>
 
             <@@ fun (v : M33f)      -> M34f(v.M00, v.M10, v.M20, 0.0f, v.M01, v.M11, v.M21, 0.0f, v.M02, v.M12, v.M22, 0.0f) @@>
-            <@@ fun (v : M33d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, 0.0f, float32 v.M10, float32 v.M11, float32 v.M12, 0.0f, float32 v.M20, float32 v.M21, float32 v.M22, 0.0f) @@>
+            <@@ fun (v : M33d)      -> M34f(float32 v.M00, float32 v.M10, float32 v.M20, 0.0f, float32 v.M01, float32 v.M11, float32 v.M21, 0.0f, float32 v.M02, float32 v.M12, float32 v.M22, 0.0f) @@>
 
             <@@ fun (v : V4d)       -> V4f.op_Explicit v @@>
             <@@ fun (v : V3d)       -> V3f.op_Explicit v @@>
@@ -98,15 +71,15 @@ module private ValueConverter =
 
 
             <@@ fun (c : C4b)     -> V4f (C4f c) @@>
-            <@@ fun (c : C4us)     -> V4f (C4f c) @@>
-            <@@ fun (c : C4ui)     -> V4f (C4f c) @@>
+            <@@ fun (c : C4us)    -> V4f (C4f c) @@>
+            <@@ fun (c : C4ui)    -> V4f (C4f c) @@>
             <@@ fun (c : C4f)     -> V4f c @@>
             <@@ fun (c : C4d)     -> V4f c @@>
 
 
             <@@ fun (c : C3b)     -> V4f (C4f c) @@>
-            <@@ fun (c : C3us)     -> V4f (C4f c) @@>
-            <@@ fun (c : C3ui)     -> V4f (C4f c) @@>
+            <@@ fun (c : C3us)    -> V4f (C4f c) @@>
+            <@@ fun (c : C3ui)    -> V4f (C4f c) @@>
             <@@ fun (c : C3f)     -> V4f c @@>
             <@@ fun (c : C3d)     -> V4f c @@>
         ]
@@ -124,8 +97,6 @@ module private ValueConverter =
             ActiveUniformType.DoubleVec4 ,          typeof<V4d>
             ActiveUniformType.Float ,               typeof<float32>
             ActiveUniformType.FloatMat2 ,           typeof<M22f>
-            ActiveUniformType.FloatMat2x3 ,         typeof<M24f>
-            ActiveUniformType.FloatMat2x4 ,         typeof<M24f>
             ActiveUniformType.FloatMat3 ,           typeof<M34f>
             ActiveUniformType.FloatMat3x4 ,         typeof<M34f>
             ActiveUniformType.FloatMat4 ,           typeof<M44f>
@@ -290,7 +261,7 @@ module private ValueConverter =
     let addintptr (a : nativeint) (b : int) =
         a + nativeint b
 
-
+    open Microsoft.FSharp.NativeInterop
 
     let private createSetter (target : ConversionTarget) (paths : list<UniformField>, inputType : Type) : Expr =
         let input = Var("input", inputType)
@@ -302,6 +273,7 @@ module private ValueConverter =
                 let offset = f.offset
                 let pathValue = Paths.createUniformPath (Expr.Var input) f.path
                 let resultValue = Convert.getConversion target pathValue f
+
                 let writeMeth = typeof<Marshal>.GetMethod("StructureToPtr", [| typeof<obj>; typeof<nativeint>;typeof<bool> |])
                 // TODO: use generic
                 
