@@ -59,19 +59,19 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">
-      <HintPath>..\..\..\packages\Aardvark.Base.1.2.7\lib\net45\Aardvark.Base.dll</HintPath>
+      <HintPath>..\..\..\packages\Aardvark.Base.1.2.8\lib\net45\Aardvark.Base.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.Essentials">
-      <HintPath>..\..\..\packages\Aardvark.Base.Essentials.1.2.7\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
+      <HintPath>..\..\..\packages\Aardvark.Base.Essentials.1.2.8\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.FSharp">
-      <HintPath>..\..\..\packages\Aardvark.Base.FSharp.1.2.7\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
+      <HintPath>..\..\..\packages\Aardvark.Base.FSharp.1.2.8\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.Incremental">
-      <HintPath>..\..\..\packages\Aardvark.Base.Incremental.1.2.7\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
+      <HintPath>..\..\..\packages\Aardvark.Base.Incremental.1.2.8\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.TypeProviders">
-      <HintPath>..\..\..\packages\Aardvark.Base.FSharp.1.2.7\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
+      <HintPath>..\..\..\packages\Aardvark.Base.FSharp.1.2.8\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
     </Reference>
     <Reference Include="DevILSharp">
       <HintPath>..\..\..\packages\DevILSharp.0.0.9\lib\net45\DevILSharp.dll</HintPath>
