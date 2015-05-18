@@ -13,6 +13,7 @@ module DefaultSems =
     type BiNormalAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColorUTangents.ToString())
     type TangentAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColorVTangents.ToString())
     type ColorAttribute() = inherit SemanticAttribute(DefaultSemantic.Colors.ToString())
+    type InstanceTrafoAttribute() = inherit SemanticAttribute(DefaultSemantic.InstanceTrafo.ToString())
 
 
     type FShade.Parameters.Uniforms.UniformScope with

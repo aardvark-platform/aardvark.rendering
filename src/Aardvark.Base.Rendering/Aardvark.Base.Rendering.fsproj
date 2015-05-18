@@ -68,6 +68,8 @@
     <Compile Include="Runtime.fs" />
     <Content Include="app.config" />
     <None Include="packages.config" />
+    <None Include="Scripts\load-references.fsx" />
+    <None Include="Scripts\load-project.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">

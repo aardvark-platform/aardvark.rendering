@@ -98,9 +98,60 @@ module CameraView =
         c.ViewTrafo
 
     let location (c : CameraView) = c.Location
-    let forward (c : CameraView) = c.Forward
-    let right (c : CameraView) = c.Right
-    let up (c : CameraView) = c.Up
+    let forward  (c : CameraView) = c.Forward
+    let right    (c : CameraView) = c.Right
+    let up       (c : CameraView) = c.Up
     let backward (c : CameraView) = c.Backward
-    let left (c : CameraView) = c.Left
-    let down (c : CameraView) = c.Down
+    let left     (c : CameraView) = c.Left
+    let down     (c : CameraView) = c.Down
+
+
+type Frustum = { left   : float
+                 right  : float
+                 bottom : float
+                 top    : float
+                 near   : float
+                 far    : float  }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Frustum =
+    let perspective (horizontalFieldOfViewInDegrees : float) (near : float) (far : float) (aspect : float) =
+        let d = tan (0.5 * Conversion.RadiansFromDegrees horizontalFieldOfViewInDegrees) * near
+        { left = -d; right = +d; bottom = -d / aspect; top = +d / aspect; near = near; far = far}
+
+    let toTrafo { left = l; right = r; top = t; bottom = b; near = n; far = f} : Trafo3d = 
+        Trafo3d(
+            M44d(
+                (2.0 * n) / (r - l),                     0.0,     (r + l) / (r - l),                     0.0,
+                                0.0,     (2.0 * n) / (t - b),     (t + b) / (t - b),                     0.0,
+                                0.0,                     0.0,           f / (n - f),       (f * n) / (n - f),
+                                0.0,                     0.0,                  -1.0,                     0.0
+                ),                                                     
+                                                                       
+            M44d(                                      
+                (r - l) / (2.0 * n),                     0.0,                     0.0,     (r + l) / (2.0 * n),
+                                0.0,     (t - b) / (2.0 * n),                     0.0,     (t + b) / (2.0 * n),
+                                0.0,                     0.0,                     0.0,                    -1.0,
+                                0.0,                     0.0,       (n - f) / (f * n),                 1.0 / n
+                )
+        )
+
+    let horizontalFieldOfViewInDegrees { left = l; right = r; near = near } = 
+        let l,r = atan2 l near, atan2 r near
+        Conversion.DegreesFromRadians(-l + r)
+
+    let near   (f : Frustum) = f.near
+    let far    (f : Frustum) = f.far
+    let left   (f : Frustum) = f.left
+    let right  (f : Frustum) = f.right
+    let bottom (f : Frustum) = f.bottom
+    let top    (f : Frustum) = f.top
+
+    let aspect { left = l; right = r; top = t; bottom = b } = (r - l) / (t - b)
+    let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  = 
+        let factor = 1.0 - (newAspect / aspect f)
+        { f with right = factor * l + r; left  = factor * r + l }
+
+    let unproject { near = n } (xyOnPlane : V2d) = Ray3d(V3d.Zero, V3d(xyOnPlane, -n))
+        
+    
