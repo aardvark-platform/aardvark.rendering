@@ -365,13 +365,12 @@ module ResourceManager =
                             failwith e
            )
                 
-        member x.CreateUniformBuffer (layout : UniformBlock, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
+        member x.CreateUniformBuffer (scope : Ag.Scope, layout : UniformBlock, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
             let getValue (f : ActiveUniform) =
                 let sem = f.semantic |> Sym.ofString
 
-                match u.TryGetUniform sem with
-                    | (true, m) ->
-                        m
+                match u.TryGetUniform (scope, sem) with
+                    | Some m -> m
                     | _ ->
                         match program.UniformGetters.TryGetValue sem with
                             | (true, (:? IMod as m)) -> m
@@ -423,9 +422,9 @@ module ResourceManager =
                       resource = Mod.initConstant b }    
             )
 
-        member x.CreateUniformLocation(u : IUniformProvider, uniform : ActiveUniform) =
-            match u.TryGetUniform (Sym.ofString uniform.semantic) with
-                | (true, v) ->
+        member x.CreateUniformLocation(scope : Ag.Scope, u : IUniformProvider, uniform : ActiveUniform) =
+            match u.TryGetUniform (scope, Sym.ofString uniform.semantic) with
+                | Some v ->
                     cache.[uniformBuffer].GetOrAdd(
                         [uniform :> obj; v :> obj],
                         fun () ->

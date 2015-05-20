@@ -12,13 +12,13 @@ type ISurface = interface end
 [<AllowNullLiteral>]
 type IAttributeProvider =
     inherit IDisposable
-    abstract member TryGetAttribute : name : Symbol * [<Out>] buffer : byref<BufferView> -> bool
+    abstract member TryGetAttribute : name : Symbol -> Option<BufferView>
     abstract member All : seq<Symbol * BufferView>
 
 [<AllowNullLiteral>]
 type IUniformProvider =
     inherit IDisposable
-    abstract member TryGetUniform : name : Symbol * [<Out>] uniform : byref<IMod> -> bool
+    abstract member TryGetUniform : scope : Ag.Scope * name : Symbol -> Option<IMod>
 
 
 module private RenderJobIds =
@@ -32,7 +32,7 @@ type RenderJob =
     {
         Id : int
         CreationPath : string
-        mutable AttributeScope : obj
+        mutable AttributeScope : Ag.Scope
                 
         mutable IsActive : IMod<bool>
         mutable RenderPass : IMod<uint64>
@@ -56,7 +56,7 @@ type RenderJob =
     static member Create(path : string) =
         { Id = RenderJobIds.newId()
           CreationPath = path;
-          AttributeScope = null
+          AttributeScope = Ag.emptyScope
           IsActive = null
           RenderPass = null
           DrawCallInfo = null
@@ -91,19 +91,15 @@ module RenderJobExtensions =
 
     let private emptyUniforms =
         { new IUniformProvider with
-            member x.TryGetUniform(name : Symbol, uniform : byref<IMod>) = 
-                false
-            member x.Dispose() =
-                ()
+            member x.TryGetUniform (_,_) = None
+            member x.Dispose() = ()
         }
 
     let private emptyAttributes =
         { new IAttributeProvider with
-            member x.TryGetAttribute(name : Symbol, uniform : byref<BufferView>) = 
-                false
+            member x.TryGetAttribute(name : Symbol) = None 
             member x.All = Seq.empty
-            member x.Dispose() =
-                ()
+            member x.Dispose() = ()
         }
 
     let private empty =

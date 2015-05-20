@@ -18,8 +18,8 @@ module Programs =
         [| fun (r : RenderJob) -> r.Surface :> IMod
 
            fun (r : RenderJob) -> 
-               match r.Uniforms.TryGetUniform DefaultSemantic.DiffuseColorTexture with
-                   | (true,t) -> t
+               match r.Uniforms.TryGetUniform (r.AttributeScope, DefaultSemantic.DiffuseColorTexture) with
+                   | Some t -> t
                    | _ -> emptyMod
 
 //               fun (r : RenderJob) -> r.StencilMode.Mod :> IMod

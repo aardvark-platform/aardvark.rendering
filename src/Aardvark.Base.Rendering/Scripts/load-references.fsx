@@ -1,10 +1,5 @@
 // Warning: generated file; your changes could be lost when a new file is generated.
 #I __SOURCE_DIRECTORY__
-#r @"..\..\..\packages\Aardvark.Base.1.2.7\lib\net45\Aardvark.Base.dll"
-#r @"..\..\..\packages\Aardvark.Base.Essentials.1.2.7\lib\net45\Aardvark.Base.Essentials.dll"
-#r @"..\..\..\packages\Aardvark.Base.FSharp.1.2.7\lib\net45\Aardvark.Base.FSharp.dll"
-#r @"..\..\..\packages\Aardvark.Base.Incremental.1.2.7\lib\net45\Aardvark.Base.Incremental.dll"
-#r @"..\..\..\packages\Aardvark.Base.FSharp.1.2.7\lib\net45\Aardvark.Base.TypeProviders.dll"
 #r @"..\..\..\packages\DevILSharp.0.0.9\lib\net45\DevILSharp.dll"
 #r @"..\..\..\packages\FSharp.Compiler.Service.0.0.89\lib\net45\FSharp.Compiler.Service.dll"
 #r @"..\..\..\packages\FsUnit.1.3.0.1\Lib\Net40\FsUnit.NUnit.dll"
@@ -19,3 +14,8 @@
 #r @"..\..\..\packages\Rx-Interfaces.2.2.5\lib\net45\System.Reactive.Interfaces.dll"
 #r @"..\..\..\packages\Rx-Linq.2.2.5\lib\net45\System.Reactive.Linq.dll"
 #r @"..\..\..\packages\Rx-PlatformServices.2.2.5\lib\net45\System.Reactive.PlatformServices.dll"
+#r @"..\..\..\packages\Aardvark.Base.1.2.8\lib\net45\Aardvark.Base.dll"
+#r @"..\..\..\packages\Aardvark.Base.Essentials.1.2.8\lib\net45\Aardvark.Base.Essentials.dll"
+#r @"..\..\..\packages\Aardvark.Base.FSharp.1.2.8\lib\net45\Aardvark.Base.FSharp.dll"
+#r @"..\..\..\packages\Aardvark.Base.Incremental.1.2.8\lib\net45\Aardvark.Base.Incremental.dll"
+#r @"..\..\..\packages\Aardvark.Base.FSharp.1.2.8\lib\net45\Aardvark.Base.TypeProviders.dll"
