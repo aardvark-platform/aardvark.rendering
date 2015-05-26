@@ -26,4 +26,4 @@ module SurfaceSemantics =
             e.Child?Surface <- emptySurface
 
         member x.Surface(s : Sg.SurfaceApplicator) =
-            s.Child?Surface <- s.Surface
+            s.Child?Surface <- s.Surface 

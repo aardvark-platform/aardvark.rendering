@@ -103,3 +103,4 @@ type SceneGraphTools =
 
     [<Extension>]
     static member NormalizeAdaptive (this : ISg)  = Sg.normalizeAdaptive this 
+     

@@ -33,7 +33,7 @@ module TrafoSemantics =
 
     [<Semantic>]
     type Trafos() =
-        let mulCache = Caching.BinaryOpCache(Mod.map2 (*))
+        let mulCache = Caching.BinaryOpCache (Mod.map2 (*))
         let invCache = Caching.UnaryOpCache(Mod.map (fun (t : Trafo3d) -> t.Inverse))
 
         let (<*>) a b = 

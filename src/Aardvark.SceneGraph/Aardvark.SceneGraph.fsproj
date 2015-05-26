@@ -54,7 +54,9 @@
     <Compile Include="Semantics\Attributes.fs" />
     <Compile Include="Semantics\Surface.fs" />
     <Compile Include="Semantics\Flags.fs" />
+    <Compile Include="Semantics\BoundingBoxes.fs" />
     <Compile Include="SgOld.fs" />
+    <Compile Include="HighLevelSceneGraph\Lod.fs" />
     <Compile Include="SgFSharp.fs" />
     <Compile Include="SgCSharp.fs" />
     <Compile Include="FShadeSceneGraph.fs" />

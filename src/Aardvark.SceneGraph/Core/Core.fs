@@ -77,7 +77,7 @@ module private Providers =
             
         member x.Dispose() = cache.Clear()
 
-        member x.TryGetAttribute(s : Symbol) =
+        member x.TryGetAttribute(s :  Symbol) =
             match cache.TryGetValue s with
                 | (true, v) -> Some v
                 | _ ->
@@ -100,13 +100,15 @@ module private Providers =
                         | Some att -> yield k, att
                         | _ -> ()
             }
-
+             
         interface IAttributeProvider with
             member x.TryGetAttribute key = x.TryGetAttribute key
-            member x.All = x.All
+            member x.All = x.All 
             member x.Dispose() = x.Dispose()
 
-    type UniformProvider(scope : Scope, uniforms : list<IUniformProvider>) =
+
+
+    type UniformProvider(scope : Scope,  uniforms : list<IUniformProvider>) =
         let mutable scope = scope
         let mutable cache = SymbolDict<IMod>()
 
