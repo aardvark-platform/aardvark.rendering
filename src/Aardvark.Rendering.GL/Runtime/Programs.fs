@@ -29,24 +29,6 @@ module Programs =
 //               fun (r : RenderJob) -> r.CullMode.Mod :> IMod
         |]
 
-    let private compareMods (l : IMod) (r : IMod) =
-        if l = r then 0
-        else compare l r
-
-    let rec private compareRenderJobs' (level : int) (l : RenderJob) (r : RenderJob) =
-        if level < projections.Length then
-            let p = projections.[level] 
-            let l' = p l
-            let r' = p r
-            let c = compareMods l' r' 
-            if c <> 0 then c
-            else compareRenderJobs' (level + 1) l r
-        else
-            0//compare l.ID r.ID
-
-    let private compareRenderJobs (l : RenderJob) (r : RenderJob) =
-        compareRenderJobs' 0 l r
-
     type private DependencySet(add : IAdaptiveObject -> unit, remove : IAdaptiveObject -> unit) =
         let resources = ReferenceCountingSet<IChangeableResource>()
         let perContext = HashSet<unit -> unit>()
@@ -658,7 +640,7 @@ module Programs =
         let stats = EventSourceAggregate<FrameStatistics>(FrameStatistics.Zero, (+), (-))
 
         let fragments = Dictionary<RenderJob, ManagedRenderJobFragment>()
-        let sortedFragments = BucketAVL.custom (fun (l : ManagedRenderJobFragment) (r : ManagedRenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
+        let sortedFragments = BucketAVL.custom (fun (l : ManagedRenderJobFragment) (r : ManagedRenderJobFragment) -> compare l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
            
         let deps = DependencySet(add, remove)
 
