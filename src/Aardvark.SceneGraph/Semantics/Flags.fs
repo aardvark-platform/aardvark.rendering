@@ -15,6 +15,10 @@ module ActiveSemantics =
         member x.IsActive : IMod<bool> = x?IsActive
         member x.RenderPass : IMod<uint64> = x?RenderPass
 
+    module Semantic =
+        let isActive (s : ISg) : IMod<bool> = s?IsActive
+        let renderPass (s : ISg) : IMod<uint64> = s?RenderPass
+
     [<Semantic>]
     type ActiveSemantics() =
 

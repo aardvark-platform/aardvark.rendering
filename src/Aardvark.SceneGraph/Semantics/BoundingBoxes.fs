@@ -47,8 +47,9 @@ module BoundingBoxes =
         member x.GlobalBoundingBox() : IMod<Box3d> = x?GlobalBoundingBox()
         member x.LocalBoundingBox()  : IMod<Box3d> = x?LocalBoundingBox()
 
-    let globalBoundingBox (sg : ISg) = sg.GlobalBoundingBox()
-    let localBoundingBox  (sg : ISg) = sg.LocalBoundingBox()
+    module Semantic =
+        let globalBoundingBox (sg : ISg) : IMod<Box3d> = sg?GlobalBoundingBox()
+        let localBoundingBox  (sg : ISg) : IMod<Box3d> = sg?LocalBoundingBox()
 
     [<Semantic>]
     type GlobalBoundingBoxSem() =

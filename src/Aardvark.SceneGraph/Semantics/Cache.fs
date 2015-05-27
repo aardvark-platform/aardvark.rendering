@@ -1,8 +1,8 @@
 ﻿namespace Aardvark.SceneGraph.Internal
+open System.Runtime.CompilerServices
 
 module internal Caching =
 
-    open System.Runtime.CompilerServices
     type BinaryOpCache<'a,'b,'c when 'a : not struct and 'b : not struct and 'c : not struct>
             ( f : 'a -> 'b -> 'c ) =
         let table = ConditionalWeakTable<'a,ConditionalWeakTable<'b,'c>>()

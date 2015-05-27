@@ -10,12 +10,17 @@ open Aardvark.SceneGraph
 
 [<AutoOpen>]
 module AttributeExtensions =
-
     type ISg with
         member x.FaceVertexCount : IMod<int> = x?FaceVertexCount
         member x.VertexAttributes : Map<Symbol, BufferView> = x?VertexAttributes
         member x.InstanceAttributes : Map<Symbol, BufferView> = x?InstanceAttributes
         member x.VertexIndexArray : IMod<Array> = x?VertexIndexArray
+
+    module Semantic =
+        let faceVertexCount (s : ISg) : IMod<int> = s?FaceVertexCount
+        let vertexAttributes (s : ISg) : Map<Symbol, BufferView> = s?VertexAttributes
+        let instanceAttributes (s : ISg) : Map<Symbol, BufferView> = s?InstanceAttributes
+        let vertexIndexArray (s : ISg) : IMod<Array> = s?VertexIndexArray
 
 module AttributeSemantics =
 

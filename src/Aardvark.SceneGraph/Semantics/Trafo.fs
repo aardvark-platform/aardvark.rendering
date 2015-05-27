@@ -25,8 +25,22 @@ module TrafoExtensions =
         member x.ModelViewTrafoInv      = x?ModelViewTrafoInv()     |> trafo
         member x.ViewProjTrafoInv       = x?ViewProjTrafoInv()      |> trafo
         member x.ModelViewProjTrafoInv  = x?ModelViewProjTrafoInv() |> trafo
-                        
-[<AutoOpen>]
+             
+    module Semantic =
+        let modelTrafo            (s : ISg) : IMod<Trafo3d> = s?ModelTrafo
+        let viewTrafo             (s : ISg) : IMod<Trafo3d> = s?ViewTrafo
+        let projTrafo             (s : ISg) : IMod<Trafo3d> = s?ProjTrafo
+        let modelTrafoInv         (s : ISg) : IMod<Trafo3d> = s?ModelTrafoInv()
+        let viewTrafoInv          (s : ISg) : IMod<Trafo3d> = s?ViewTrafoInv()
+        let projTrafoInv          (s : ISg) : IMod<Trafo3d> = s?ProjTrafoInv()
+        let modelViewTrafo        (s : ISg) : IMod<Trafo3d> = s?ModelViewTrafo()
+        let viewProjTrafo         (s : ISg) : IMod<Trafo3d> = s?ViewProjTrafo()
+        let modelViewProjTrafo    (s : ISg) : IMod<Trafo3d> = s?ModelViewProjTrafo()
+        let modelViewTrafoInv     (s : ISg) : IMod<Trafo3d> = s?ModelViewTrafoInv()
+        let viewProjTrafoInv      (s : ISg) : IMod<Trafo3d> = s?ViewProjTrafoInv()
+        let modelViewProjTrafoInv (s : ISg) : IMod<Trafo3d> = s?ModelViewProjTrafoInv()
+
+
 module TrafoSemantics =
 
     /// the root trafo for the entire Sg (used when no trafos are applied)
