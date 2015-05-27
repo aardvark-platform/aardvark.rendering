@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Rendering
+open System.Threading
 
 [<AutoOpen>]
 module Programs =
@@ -111,13 +112,15 @@ module Programs =
                
                 
     [<AllowNullLiteral>]
-    type private RenderJobFragment(parent : DependencySet, memory : MemoryManager, manager : ResourceManager, rj : RenderJob) =
+    type private RenderJobFragment(idCache : Cache<IMod, int>, parent : DependencySet, memory : MemoryManager, manager : ResourceManager, rj : RenderJob) =
         inherit Fragment<RenderJob>(memory, 0, rj)
 
         let stats = EventSource<FrameStatistics>(FrameStatistics.Zero)
         let mutable statSubscription : Option<IDisposable> = None
 
         let mutable state : Option<InstructionCompiler.CompilerState> = None
+
+        let sortKey = projections |> Array.map (fun p -> rj |> p |> idCache.Invoke) |> Array.toList
 
         member x.Statistics = stats :> IEvent<FrameStatistics>
 
@@ -145,9 +148,13 @@ module Programs =
 
         member x.RenderJob = x.Tag
 
+        member x.SortKey = sortKey
+
         member x.Dispose() =
             match state with
                 | Some state -> 
+                    projections |> Array.iter (fun p -> rj |> p |> idCache.Revoke |> ignore)
+
                     state.Dispose()
                     parent.Remove(state)
                     base.Dispose()
@@ -168,9 +175,8 @@ module Programs =
                   elif x.Tag.IsValid then 
                       x.Recompile(v.Tag, x.Tag)
 
-
     [<AllowNullLiteral>]
-    type private CompleteRenderJobFragment(parent : DependencySet, memory : MemoryManager, manager : ResourceManager, rj : RenderJob) =
+    type private CompleteRenderJobFragment(idCache : Cache<IMod, int>, parent : DependencySet, memory : MemoryManager, manager : ResourceManager, rj : RenderJob) =
         inherit Fragment<RenderJob>(memory, 0, rj)
 
         let stats = EventSource<FrameStatistics>(FrameStatistics.Zero)
@@ -178,7 +184,11 @@ module Programs =
 
         let mutable state : Option<InstructionCompiler.CompilerState> = None
 
+        let sortKey = projections |> Array.map (fun p -> rj |> p |> idCache.Invoke) |> Array.toList
+
         member x.Statistics = stats :> IEvent<FrameStatistics>
+
+        member x.SortKey = sortKey
 
         member private x.Compile(me : RenderJob) =
             if me.IsValid then
@@ -195,6 +205,7 @@ module Programs =
         member x.Dispose() =
             match state with
                 | Some state -> 
+                    projections |> Array.iter (fun p -> rj |> p |> idCache.Revoke |> ignore)
                     state.Dispose()
                     parent.Remove(state)
                     base.Dispose()
@@ -215,7 +226,7 @@ module Programs =
 
 
     [<AllowNullLiteral>]
-    type private ManagedRenderJobFragment(prolog : ManagedDynamicFragment, parent : DependencySet, manager : ResourceManager, rj : RenderJob) =
+    type private ManagedRenderJobFragment(idCache : Cache<IMod, int>, prolog : ManagedDynamicFragment, parent : DependencySet, manager : ResourceManager, rj : RenderJob) =
         inherit ManagedDynamicFragment(prolog)
 
         let stats = EventSource<FrameStatistics>(FrameStatistics.Zero)
@@ -223,8 +234,10 @@ module Programs =
 
         let mutable state : Option<InstructionCompiler.CompilerState> = None
 
-        member x.Statistics = stats :> IEvent<FrameStatistics>
+        let sortKey = projections |> Array.map (fun p -> rj |> p |> idCache.Invoke) |> Array.toList
 
+        member x.Statistics = stats :> IEvent<FrameStatistics>
+        member x.SortKey = sortKey
         member private x.Recompile(prev : RenderJob, me : RenderJob) =
 
             let mutable removeOldState = id
@@ -252,6 +265,7 @@ module Programs =
         member x.Dispose() =
             match state with
                 | Some state -> 
+                    projections |> Array.iter (fun p -> rj |> p |> idCache.Revoke |> ignore)
                     state.Dispose()
                     parent.Remove(state)
                 | _ -> ()
@@ -337,15 +351,18 @@ module Programs =
         let stats = EventSourceAggregate<FrameStatistics>(FrameStatistics.Zero, (+), (-))
         let jumpDistance = EventSourceAggregate<int64>(0L, (+),(-))
 
+        let mutable currentId = 0
+        let idCache = Cache(Ag.emptyScope, fun _ -> Interlocked.Increment &currentId)
+
         let deps = DependencySet(add, remove)
         let sorter = newSorter()
         let sorted = sorter.SortedList
         do add sorted
 
-        let prolog = CompleteRenderJobFragment(deps, memory, manager, RenderJob.Empty)
+        let prolog = CompleteRenderJobFragment(idCache, deps, memory, manager, RenderJob.Empty)
         do prolog.Append(Assembler.functionProlog 6) |> ignore
            jumpDistance.Add prolog.JumpDistance
-        let epilog = CompleteRenderJobFragment(deps, memory, manager, RenderJob.Empty)
+        let epilog = CompleteRenderJobFragment(idCache, deps, memory, manager, RenderJob.Empty)
         do epilog.Append(Assembler.functionEpilog 6) |> ignore
                
         let mutable run : unit -> unit = id 
@@ -356,7 +373,7 @@ module Programs =
             
         member x.Add (r : RenderJob) =
             let sorted = sorter.ToSortedRenderJob order r
-            let f = CompleteRenderJobFragment(deps, memory, manager, sorted)
+            let f = CompleteRenderJobFragment(idCache, deps, memory, manager, sorted)
             fragments.Add(r, f)
             sorter.Add r
             stats.Add f.Statistics
@@ -461,14 +478,17 @@ module Programs =
         let jumpDistance = EventSourceAggregate<int64>(0L, (+),(-))
 
         let fragments = Dictionary<RenderJob, RenderJobFragment>()
-        let sortedFragments = BucketAVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
+        let sortedFragments = BucketAVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compare l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
            
         let deps = DependencySet(add, remove)
 
-        let prolog = RenderJobFragment(deps, memory, manager, RenderJob.Empty)
+        let mutable currentId = 0
+        let idCache = Cache(Ag.emptyScope, fun _ -> Interlocked.Increment &currentId)
+
+        let prolog = RenderJobFragment(idCache, deps, memory, manager, RenderJob.Empty)
         do prolog.Append(Assembler.functionProlog 6) |> ignore
            jumpDistance.Add prolog.JumpDistance
-        let epilog = RenderJobFragment(deps, memory, manager, RenderJob.Empty)
+        let epilog = RenderJobFragment(idCache, deps, memory, manager, RenderJob.Empty)
         do epilog.Append(Assembler.functionEpilog 6) |> ignore
                
         let mutable run : unit -> unit = id 
@@ -516,7 +536,7 @@ module Programs =
 
 
         member x.Add(rj : RenderJob) =
-            let n = RenderJobFragment(deps, memory, manager, rj)
+            let n = RenderJobFragment(idCache, deps, memory, manager, rj)
             fragments.Add(rj, n)
             BucketAVL.insertNeighbourhood sortedFragments n (fun prev next ->
                 let prev = defaultArg prev prolog
@@ -642,14 +662,18 @@ module Programs =
            
         let deps = DependencySet(add, remove)
 
-        let first = ManagedRenderJobFragment(null, deps, manager, RenderJob.Empty)
+        let mutable currentId = 0
+        let idCache = Cache(Ag.emptyScope, fun _ -> Interlocked.Increment &currentId)
+
+
+        let first = ManagedRenderJobFragment(idCache, null, deps, manager, RenderJob.Empty)
         let mutable additions = 0
         let mutable removals = 0
 
         let sw = new System.Diagnostics.Stopwatch()
 
         member x.Add(rj : RenderJob) =
-            let n = ManagedRenderJobFragment(first, deps, manager, rj)
+            let n = ManagedRenderJobFragment(idCache, first, deps, manager, rj)
             fragments.Add(rj, n)
             BucketAVL.insertNeighbourhood sortedFragments n (fun prev next ->
                 let prev =
