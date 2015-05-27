@@ -8,7 +8,12 @@ open Aardvark.SceneGraph
 
 open Aardvark.SceneGraph.Internal
 
+[<AutoOpen>]
 module ActiveSemantics =
+
+    type ISg with
+        member x.IsActive : IMod<bool> = x?IsActive
+        member x.RenderPass : IMod<uint64> = x?RenderPass
 
     [<Semantic>]
     type ActiveSemantics() =

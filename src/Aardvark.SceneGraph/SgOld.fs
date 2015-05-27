@@ -229,9 +229,6 @@ module Semantics =
 //            }
 
 
-    type Foo = Foo of unit
-    let fo x = x * 2
-
     [<Semantic>]
     type Derived() =
 

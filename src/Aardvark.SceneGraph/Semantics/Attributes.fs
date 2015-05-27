@@ -8,6 +8,7 @@ open Aardvark.Base.Ag
 open Aardvark.Base.AgHelpers
 open Aardvark.SceneGraph
 
+[<AutoOpen>]
 module AttributeSemantics =
 
     type ISg with
