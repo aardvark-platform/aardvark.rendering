@@ -30,7 +30,7 @@ module Programs =
 
     let private compareMods (l : IMod) (r : IMod) =
         if l = r then 0
-        else compare l r
+        else compare l.Id r.Id
 
     let rec private compareRenderJobs' (level : int) (l : RenderJob) (r : RenderJob) =
         if level < projections.Length then
