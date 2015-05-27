@@ -9,7 +9,7 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Internal
 
 [<AutoOpen>]
-module Extensions =
+module TrafoExtensions =
 
     let inline private trafo v : IMod<Trafo3d> = v 
     type ISg with
@@ -26,12 +26,12 @@ module Extensions =
         member x.ViewProjTrafoInv       = x?ViewProjTrafoInv()      |> trafo
         member x.ModelViewProjTrafoInv  = x?ModelViewProjTrafoInv() |> trafo
                         
-
+[<AutoOpen>]
 module TrafoSemantics =
 
     /// the root trafo for the entire Sg (used when no trafos are applied)
     let rootTrafo = Mod.initConstant Trafo3d.Identity
-
+  
     [<Semantic>]
     type Trafos() =
         let mulCache = Caching.BinaryOpCache (Mod.map2 (*))

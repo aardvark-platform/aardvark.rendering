@@ -7,6 +7,7 @@ open Aardvark.Base.AgHelpers
 open Aardvark.Rendering.GL
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.CSharp
+open Aardvark.SceneGraph.Semantics
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
 open Assimp
@@ -101,8 +102,8 @@ module AssimpExporter =
                 mesh
 
     let createMaterial (e : SceneEnv) (u : IUniformProvider) : Material = 
-        match u.TryGetUniform DefaultSemantic.DiffuseColorTexture with
-            | (true, (:? IMod<ITexture> as t)) ->
+        match u.TryGetUniform(Ag.emptyScope, DefaultSemantic.DiffuseColorTexture) with
+            | Some (:? IMod<ITexture> as t) ->
                 match materialCache.TryGetValue t with
                     | (true, r) -> r
                     | _ ->
@@ -325,8 +326,8 @@ module AssimpExporter =
                     let node = Node(rj.CreationPath)
 
                     let trafo = 
-                        match rj.Uniforms.TryGetUniform (Symbol.Create "ModelTrafo") with
-                            | (true, (:? IMod<Trafo3d> as t)) -> t.GetValue()
+                        match rj.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelTrafo") with
+                            | Some (:? IMod<Trafo3d> as t) -> t.GetValue()
                             | _ -> currentTrafo
 
                     let additionalTrafo = currentTrafo * trafo.Inverse

@@ -1,6 +1,4 @@
-﻿namespace Aardvark.SceneGraph.Sg
-
-namespace Aardvark.SceneGraph.Semantics
+﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
 open Aardvark.Base.Incremental
@@ -17,6 +15,14 @@ module Ext =
 
     type LodScope = { trafo : Trafo3d; cameraPosition : V3d; scope : Scope}
 
+    type ViewFrustumCullNode(sg : IMod<ISg>) =
+        interface IApplicator with
+            member x.Child = sg
+        member x.Child = sg
+
+        new(s : ISg) = ViewFrustumCullNode(Mod.initConstant s)
+        new(s : IEvent<ISg>) = ViewFrustumCullNode(Mod.fromEvent  s)
+
     type LodNode(viewDecider : (LodScope -> bool), 
                  low : IMod<ISg>, high : IMod<ISg>) =
         interface ISg
@@ -30,11 +36,6 @@ module Ext =
             LodNode((fun t -> viewDecider.Invoke t), Mod.initConstant low, Mod.initConstant high)
 
     module LodSemantics =
-        
-        let foo x = x * 2
-        let gah x = x * 2
-
-        type Urdar = Urdar of unit
 
         [<Semantic>]
         type LodSem() =
@@ -60,3 +61,9 @@ module Ext =
                     else    
                         yield! lowJobs
                 }
+
+                            //            member x.GlobalBoundingBox(n : LodNode) : IMod<Box3d> = 
+                //                adaptive {
+                //                    let! low = n.Low
+                //                    return! low?GlobalBoundingBox()
+                //                }

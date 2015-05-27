@@ -25,7 +25,7 @@ module Sg =
 
         member x.Node = node
 
-
+    type DynamicNode(child : IMod<ISg>) = inherit AbstractApplicator(child)
 
     type RenderNode(call : IMod<DrawCallInfo>) =
         interface ISg

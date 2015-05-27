@@ -14,7 +14,7 @@ module SurfaceSemantics =
     type ISg with
         member x.Surface : IMod<ISurface> = x?Surface
 
-    let emptySurface : IMod<ISurface> = 
+    let private emptySurface : IMod<ISurface> = 
         Mod.custom (fun () -> 
             failwith "empty surface encountered. Solution: add a surface to your scene graph."
         )

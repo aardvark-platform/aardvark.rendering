@@ -9,13 +9,15 @@ open Aardvark.Base.AgHelpers
 open Aardvark.SceneGraph
 
 [<AutoOpen>]
-module AttributeSemantics =
+module AttributeExtensions =
 
     type ISg with
         member x.FaceVertexCount : IMod<int> = x?FaceVertexCount
         member x.VertexAttributes : Map<Symbol, BufferView> = x?VertexAttributes
         member x.InstanceAttributes : Map<Symbol, BufferView> = x?InstanceAttributes
         member x.VertexIndexArray : IMod<Array> = x?VertexIndexArray
+
+module AttributeSemantics =
 
     let emptyIndex : IMod<Array> = Mod.initConstant ([||] :> Array)
 
