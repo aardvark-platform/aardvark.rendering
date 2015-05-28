@@ -24,15 +24,9 @@ module RenderJobSemantics =
                 yield! c.RenderJobs()
             }
 
-        member x.RenderJobs(g : Sg.Group) : aset<RenderJob> =
+        member x.RenderJobs(g : IGroup) : aset<RenderJob> =
             aset {
-                for c in g.ASet do
-                    yield! c.RenderJobs()
-            }
-
-        member x.RenderJobs(set : Sg.Set) : aset<RenderJob> =
-            aset {
-                for c in set.ASet do
+                for c in g.Children do
                     yield! c.RenderJobs()
             }
 

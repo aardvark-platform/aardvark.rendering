@@ -222,7 +222,8 @@ module Sg =
     type Group(elements : seq<ISg>) =
         let aset = cset(elements)
 
-        interface ISg
+        interface IGroup with
+            member x.Children = x.ASet
 
         member x.ASet : aset<ISg> = aset :> aset<_>
 
@@ -263,7 +264,9 @@ module Sg =
         
     type Set(content : aset<ISg>) =
 
-        interface ISg
+        interface IGroup with
+            member x.Children = content
+
         member x.ASet = content
 
 

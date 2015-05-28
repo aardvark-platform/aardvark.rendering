@@ -85,12 +85,11 @@ module BoundingBoxes =
                 | _ ->
                     failwithf "unknown IBuffer for positions: %A" positions.Buffer
 
-        member x.GlobalBoundingBox(app : Sg.Group) : IMod<Box3d> =
-            app.ASet 
+        member x.GlobalBoundingBox(app : IGroup) : IMod<Box3d> =
+            app.Children 
                 |> ASet.map (fun sg -> sg.GlobalBoundingBox() ) 
-                |> ASet.toMod 
-                |> Mod.bind (fun (values : ISet<IMod<Box3d>>) -> (values |> Seq.map (fun a -> a :> IAdaptiveObject) |> Seq.toList) |> Mod.mapCustom (fun () -> Box3d ( values |> Seq.map Mod.force) ) )
-
+                |> ASet.foldSemiGroupM (curry Box3d.Union) Box3d.Invalid
+            
         member x.GlobalBoundingBox(n : IApplicator) : IMod<Box3d> = 
             adaptive {
                 let! low = n.Child
@@ -131,12 +130,10 @@ module BoundingBoxes =
                     failwithf "unknown IBuffer for positions: %A" positions.Buffer
 
             
-        member x.LocalBoundingBox(app : Sg.Group) : IMod<Box3d> =
-            app.ASet 
+        member x.LocalBoundingBox(app : IGroup) : IMod<Box3d> =
+            app.Children 
                 |> ASet.map (fun sg -> sg.LocalBoundingBox()) 
-                |> ASet.toMod 
-                |> Mod.bind (fun (values : ISet<IMod<Box3d>>) -> (values |> Seq.map (fun a -> a :> IAdaptiveObject) |> Seq.toList) |> Mod.mapCustom (fun () -> Box3d ( values |> Seq.map Mod.force) ) )
-
+                |> ASet.foldSemiGroupM (curry Box3d.Union) Box3d.Invalid
 
         member x.LocalBoundingBox(app : Sg.TrafoApplicator) : IMod<Box3d> =  
             adaptive {
@@ -145,6 +142,7 @@ module BoundingBoxes =
                 let! trafo = app.Trafo
                 return transform bb trafo
             }
+
         member x.LocalBoundingBox(n : IApplicator) : IMod<Box3d> = 
             adaptive {
                 let! low = n.Child

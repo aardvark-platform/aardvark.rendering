@@ -14,6 +14,9 @@ type IApplicator =
     inherit ISg
     abstract member Child : IMod<ISg>
 
+type IGroup =
+    inherit ISg
+    abstract member Children : aset<ISg>
 
 module private Providers =
 
