@@ -286,3 +286,66 @@ module Sg =
             Environment(runtime, Mod.fromEvent viewTrafo, Mod.fromEvent projTrafo, Mod.fromEvent viewSize, child)
         new(runtime : IRuntime, viewTrafo : IMod<Trafo3d>, projTrafo : IMod<Trafo3d>, viewSize : IMod<V2i>, child : ISg) =
             Environment(runtime, viewTrafo, projTrafo, viewSize, Mod.initConstant child)
+
+
+module SceneGraphCompletenessCheck =
+    open System.Text.RegularExpressions
+
+    let semantics =
+        [
+            "RenderJobs"
+            "GlobalBoundingBox"
+            "LocalBoundingBox"
+        ]
+
+    let genericNameRx = Regex @"(?<name>.*?)´[0-9]+"
+    let cleanName (name : string) =
+        let m = genericNameRx.Match name
+        if m.Success then m.Groups.["name"].Value
+        else name
+
+    let intrisicNames =
+        Dict.ofList [
+            typeof<byte>, "byte"
+            typeof<int8>, "int8"
+            typeof<uint16>, "uint16"
+            typeof<int16>, "int16"
+            typeof<int>, "int"
+            typeof<uint32>, "uint32"
+            typeof<int64>, "int64"
+            typeof<uint64>, "uint64"
+            typeof<obj>, "obj"
+        ]
+
+    let rec prettyName (t : Type) =
+        match intrisicNames.TryGetValue t with
+            | (true, n) -> n
+            | _ -> 
+                if t.IsArray then 
+                    sprintf "%s[]" (t.GetElementType() |> prettyName)
+                elif t.IsGenericType then
+                    let args = t.GetGenericArguments() |> Seq.map prettyName |> String.concat ","
+                    sprintf "%s<%s>" (cleanName t.Name) args
+                else
+                    cleanName t.Name
+
+    [<OnAardvarkInit>]
+    let checkSemanticCompleteness() =
+        let sgTypes = Introspection.GetAllClassesImplementingInterface(typeof<ISg>)
+
+        for att in semantics do
+            let semTypes = HashSet<Type>()
+            for t in sgTypes do
+                match t |> Ag.tryGetAttributeType att with
+                    | Some attType ->
+                        semTypes.Add attType |> ignore
+                    | None ->
+                        Log.warn "no semantic %A for type %s" att (prettyName t)
+
+            if semTypes.Count > 1 then
+                let allTypes = semTypes |> Seq.map prettyName |> String.concat "; "
+                Log.warn "conflicting types for semantic functions %A [%s]" att allTypes
+
+
+        ()
+

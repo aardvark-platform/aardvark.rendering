@@ -29,6 +29,15 @@ module Programs =
 //               fun (r : RenderJob) -> r.CullMode.Mod :> IMod
         |]
 
+    let rec compareSortKey (l : list<int>) (r : list<int>) =
+        match l,r with
+            | [],[] -> 0
+            | l::ls, r::rs ->
+                let c = compare l r
+                if c <> 0 then c
+                else compareSortKey ls rs
+            | _ -> failwith "non-matching key length"
+
     type private DependencySet(add : IAdaptiveObject -> unit, remove : IAdaptiveObject -> unit) =
         let resources = ReferenceCountingSet<IChangeableResource>()
         let perContext = HashSet<unit -> unit>()
@@ -460,7 +469,7 @@ module Programs =
         let jumpDistance = EventSourceAggregate<int64>(0L, (+),(-))
 
         let fragments = Dictionary<RenderJob, RenderJobFragment>()
-        let sortedFragments = BucketAVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compare l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
+        let sortedFragments = BucketAVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareSortKey l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
            
         let deps = DependencySet(add, remove)
 
@@ -640,7 +649,7 @@ module Programs =
         let stats = EventSourceAggregate<FrameStatistics>(FrameStatistics.Zero, (+), (-))
 
         let fragments = Dictionary<RenderJob, ManagedRenderJobFragment>()
-        let sortedFragments = BucketAVL.custom (fun (l : ManagedRenderJobFragment) (r : ManagedRenderJobFragment) -> compare l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
+        let sortedFragments = BucketAVL.custom (fun (l : ManagedRenderJobFragment) (r : ManagedRenderJobFragment) -> compareSortKey l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
            
         let deps = DependencySet(add, remove)
 
