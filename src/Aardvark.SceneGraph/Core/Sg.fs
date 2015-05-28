@@ -333,14 +333,17 @@ module SceneGraphCompletenessCheck =
     let checkSemanticCompleteness() =
         let sgTypes = Introspection.GetAllClassesImplementingInterface(typeof<ISg>)
 
+        let sgModule = typeof<Sg.Group>.DeclaringType
+
         for att in semantics do
             let semTypes = HashSet<Type>()
             for t in sgTypes do
-                match t |> Ag.tryGetAttributeType att with
-                    | Some attType ->
-                        semTypes.Add attType |> ignore
-                    | None ->
-                        Log.warn "no semantic %A for type %s" att (prettyName t)
+                if t.DeclaringType = sgModule then
+                    match t |> Ag.tryGetAttributeType att with
+                        | Some attType ->
+                            semTypes.Add attType |> ignore
+                        | None ->
+                            Log.warn "no semantic %A for type %s" att (prettyName t)
 
             if semTypes.Count > 1 then
                 let allTypes = semTypes |> Seq.map prettyName |> String.concat "; "

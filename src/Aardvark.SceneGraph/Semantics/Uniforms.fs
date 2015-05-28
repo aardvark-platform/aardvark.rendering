@@ -15,6 +15,9 @@ module UniformSemantics =
     type ISg with   
         member x.Uniforms : list<IUniformProvider> = x?Uniforms
  
+    module Semantic =
+        let uniforms (s : ISg) : list<IUniformProvider> = x?Uniforms
+
     [<Semantic>]
     type UniformSem() =
         member x.Uniforms(e : Root) =

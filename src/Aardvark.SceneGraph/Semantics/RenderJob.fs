@@ -15,6 +15,9 @@ module RenderJobSemantics =
     type ISg with
         member x.RenderJobs() : aset<RenderJob> = x?RenderJobs()
 
+    module Semantic =
+        let renderJobs (s : ISg) : aset<RenderJob> = s?RenderJobs()
+
     [<Semantic>]
     type RenderJobSem() =
 

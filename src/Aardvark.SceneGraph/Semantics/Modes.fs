@@ -19,7 +19,13 @@ module ModeSemantics =
         member x.StencilMode   : IMod<StencilMode> = x?StencilMode
         member x.BlendMode     : IMod<BlendMode> = x?BlendMode
 
- 
+    module Semantic =
+        let depthTestMode (s : ISg) : IMod<DepthTestMode> = s?DepthTestMode
+        let cullMode (s : ISg) : IMod<CullMode> = s?CullMode
+        let fillMode (s : ISg) : IMod<FillMode> = s?FillMode
+        let stencilMode (s : ISg) : IMod<DepthTestMode> = s?StencilMode
+        let blendMode (s : ISg) : IMod<BlendMode> = s?BlendMode
+        
     [<Semantic>]
     type ModeSem() =
         let defaultDepth = Mod.initConstant DepthTestMode.LessOrEqual
