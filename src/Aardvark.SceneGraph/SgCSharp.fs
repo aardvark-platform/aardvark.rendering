@@ -99,7 +99,8 @@ type SceneGraphExtensions =
 type SceneGraphTools =
 
     [<Extension>]
-    static member NormalizeTo (this : ISg, box : Box3d) = Sg.normalizeTo box this
+    static member NormalizeToAdaptive (this : ISg, box : Box3d) = Sg.normalizeToAdaptive box this
 
     [<Extension>]
-    static member Normalize (this : ISg)  = Sg.normalize this 
+    static member NormalizeAdaptive (this : ISg)  = Sg.normalizeAdaptive this 
+     

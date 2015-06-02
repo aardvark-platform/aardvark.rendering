@@ -9,6 +9,7 @@ open Aardvark.Rendering
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Semantics
 open System.Windows.Media
 open System.Windows
 open System.Windows.Media.Imaging

@@ -26,6 +26,7 @@ open System.Threading
 open System.Net
 open System.Web
 open System.Globalization
+open Aardvark.SceneGraph.Semantics
 
 let app = new OpenGlApplication()
 let source = KnownTileSources.Create(KnownTileSource.BingHybrid)

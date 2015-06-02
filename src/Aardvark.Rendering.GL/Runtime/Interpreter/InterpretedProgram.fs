@@ -90,7 +90,7 @@ type InterpretedProgram(manager : ResourceManager, add : IAdaptiveObject -> unit
         let bufferViews = 
             programHandle.Inputs |> List.map (fun i ->
                 match rj.VertexAttributes.TryGetAttribute (Symbol.Create i.semantic) with
-                    | (true, v) ->
+                    | Some v ->
                         let buffer = newResource <| manager.CreateBuffer(v.Buffer)
 
                         let view = 
@@ -122,7 +122,7 @@ type InterpretedProgram(manager : ResourceManager, add : IAdaptiveObject -> unit
             programHandle.UniformBlocks |> List.map (fun block ->
                 
                 let mutable used = []
-                let buffer = newResource <| manager.CreateUniformBuffer(block, programHandle, rj.Uniforms, &used)
+                let buffer = newResource <| manager.CreateUniformBuffer(rj.AttributeScope, block, programHandle, rj.Uniforms, &used)
 
                 for (_,u) in used do add u
 
@@ -134,8 +134,8 @@ type InterpretedProgram(manager : ResourceManager, add : IAdaptiveObject -> unit
                 match u.uniformType with
                     | SamplerType -> 
                         
-                        match rj.Uniforms.TryGetUniform (Symbol.Create u.semantic) with
-                            | (true, (:? IMod<ITexture> as tex)) ->
+                        match rj.Uniforms.TryGetUniform (rj.AttributeScope, Symbol.Create u.semantic) with
+                            | Some (:? IMod<ITexture> as tex) ->
 
 
                                 let sampler =

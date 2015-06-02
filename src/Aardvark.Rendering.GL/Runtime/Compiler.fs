@@ -372,17 +372,17 @@ module InstructionCompiler =
         let createProgram surface =
             createAndAddResource (fun m -> m.CreateSurface(surface))
 
-        let createUniformBuffer block surface provider =
+        let createUniformBuffer scope block surface provider =
             { run = fun s ->
                 let mutable values = []
-                let r = s.resourceManager.CreateUniformBuffer(block, surface, provider, &values)
+                let r = s.resourceManager.CreateUniformBuffer(scope, block, surface, provider, &values)
                 {s with resources = (r:> IChangeableResource)::s.resources}, (r,values)
             }
 
-        let createUniformLocation u provider =
+        let createUniformLocation scope u provider =
             { run = fun s ->
                 let mutable values = []
-                let r = s.resourceManager.CreateUniformLocation(provider, u)
+                let r = s.resourceManager.CreateUniformLocation(scope, provider, u)
                 {s with resources = (r:> IChangeableResource)::s.resources}, (r,values)
             }
 
@@ -409,7 +409,7 @@ module InstructionCompiler =
                 let bindings = System.Collections.Generic.Dictionary()
                 for v in program.Inputs do
                     match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
-                        | (true,value) ->
+                        | Some value ->
                             let dep = manager.CreateBuffer(value.Buffer)
                             buffers.Add dep
                             bindings.[v.attributeIndex] <- createView AttributeFrequency.PerVertex value dep
@@ -419,7 +419,7 @@ module InstructionCompiler =
                                 | _ -> 
                                     printfn "looking up %s in instance attribs" v.semantic
                                     match rj.InstanceAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
-                                        | (true,value) ->
+                                        | Some value ->
                                             let dep = manager.CreateBuffer(value.Buffer)
                                             buffers.Add dep
                                             bindings.[v.attributeIndex] <- createView (AttributeFrequency.PerInstances 1) value dep
@@ -624,8 +624,8 @@ module InstructionCompiler =
         let rec allUniformsEqual (rj : RenderJob) (values : list<string * IMod>) =
             match values with
                 | (k,v)::xs -> 
-                    match rj.Uniforms.TryGetUniform(Symbol.Create k) with
-                        | (true, c) ->
+                    match rj.Uniforms.TryGetUniform(rj.AttributeScope, Symbol.Create k) with
+                        | Some c ->
                             if c = v then
                                 allUniformsEqual rj xs
                             else
@@ -675,7 +675,7 @@ module InstructionCompiler =
             let program = program.Resource.GetValue()
 
             for b in program.UniformBlocks do
-                let! (uniformBuffer, values) = Manager.createUniformBuffer b program next.Uniforms
+                let! (uniformBuffer, values) = Manager.createUniformBuffer next.AttributeScope b program next.Uniforms
 
                 //ISSUE: what if the programs are not equal but use the same uniform buffers?
                 if not programEqual || not (allUniformsEqual prev values) then
@@ -683,8 +683,8 @@ module InstructionCompiler =
 
             //create and bind all textures/samplers
             for uniform in program.Uniforms do
-                let nextTexture = next.Uniforms.TryGetUniform(uniform.semantic |> Symbol.Create)
-                let prevTexture = prev.Uniforms.TryGetUniform(uniform.semantic |> Symbol.Create)
+                let nextTexture = next.Uniforms.TryGetUniform(next.AttributeScope, uniform.semantic |> Symbol.Create)
+                let prevTexture = prev.Uniforms.TryGetUniform(prev.AttributeScope, uniform.semantic |> Symbol.Create)
 
 
                 match uniform.uniformType with
@@ -702,7 +702,7 @@ module InstructionCompiler =
                                             SamplerStateDescription()
 
                         match nextTexture with
-                            | (true, value) ->
+                            | Some value ->
                                 match value with
                                     | :? IMod<ITexture> as value ->
                                         let! texture = Manager.createTexture value
@@ -712,12 +712,12 @@ module InstructionCompiler =
                                         //there is a special case when the prev renderjob has the same texture but binds it to
                                         //a different slot!!!
                                         match prevTexture with
-                                            | (false,old) ->
+                                            | Some old ->
                                                 yield setActiveTexture uniform.index
                                                 yield! bindSampler uniform.index sampler
                                                 yield! bindTexture texture
 
-                                            | (true,old) when old <> (value :> IMod) ->
+                                            | Some old when old <> (value :> IMod) ->
                                                 yield setActiveTexture uniform.index
                                                 yield! bindSampler uniform.index sampler
                                                 yield! bindTexture texture
@@ -733,9 +733,9 @@ module InstructionCompiler =
 
                     | _ ->
                         match prevTexture, nextTexture with
-                            | (true, p), (true, n) when p = n -> ()
+                            | Some p, Some n when p = n -> ()
                             | _ ->
-                                let! (loc,_) = Manager.createUniformLocation uniform next.Uniforms
+                                let! (loc,_) = Manager.createUniformLocation next.AttributeScope uniform next.Uniforms
                                 let l = ExecutionContext.bindUniformLocation uniform.location (loc.Resource.GetValue())
                                 yield! l
 

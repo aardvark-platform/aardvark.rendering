@@ -15,11 +15,6 @@ open Aardvark.Base.Incremental
 [<AutoOpen>]
 module SgFSharp =
 
-    let private constantSurfaceCache = MemoCache(false)
-    let private constantlistSurfaceCache = MemoCache(false)
-    let private surfaceCache = MemoCache(false)
-    let private effectCache = MemoCache(false)
-
     module Sg =
 
         let uniform (name : string) (value : IMod<'a>) (sg : ISg) =
@@ -50,8 +45,6 @@ module SgFSharp =
         let onOff (active : IMod<bool>) (sg : ISg) =
             Sg.OnOffNode(active, sg) :> ISg
 
-        let visibleBB (c : C4b) (sg : ISg) renderBoth = Sg.VisibleBB(c,sg, renderBoth) :> ISg
-
         let texture (sem : Symbol) (tex : IMod<ITexture>) (sg : ISg) =
             Sg.TextureApplicator(sem, tex, sg) :> ISg
 
@@ -66,7 +59,7 @@ module SgFSharp =
 
 
         let scopeDependentTexture (sem : Symbol) (tex : Scope -> IMod<ITexture>) (sg : ISg) =
-            Sg.UniformApplicator(Uniforms.ScopeDependentUniformHolder([sem, fun s -> tex s :> IMod]), sg) :> ISg
+            Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sem, fun s -> tex s :> IMod]), sg) :> ISg
 
         let scopeDependentDiffuseTexture (tex : Scope -> IMod<ITexture>) (sg : ISg) =
             scopeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
@@ -134,34 +127,104 @@ module SgFSharp =
                 )
             ) :> ISg
 
+        let ofIndexedGeometry (g : IndexedGeometry) =
+            let attributes = 
+                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
+                    let t = v.GetType().GetElementType()
+                    let view = BufferView(ArrayBuffer(Mod.initConstant v), t)
+
+                    k, view
+                ) |> Map.ofSeq
+        
+
+            let index, faceVertexCount =
+                if g.IsIndexed then
+                    g.IndexArray, g.IndexArray.Length
+                else
+                    null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
+
+            let call = 
+                DrawCallInfo(
+                    FaceVertexCount = faceVertexCount,
+                    FirstIndex = 0,
+                    InstanceCount = 1,
+                    FirstInstance = 0,
+                    Mode = g.Mode
+                )
+
+            let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call)) :> ISg
+            if index <> null then
+                let converteIndex = if index |> unbox<array<int>> |> Array.max < int System.UInt16.MaxValue then (index |> unbox<array<int>> |> Array.map uint16) :> System.Array else index
+                Sg.VertexIndexApplicator(Mod.initConstant converteIndex, sg) :> ISg
+            else
+                sg
+
+
+        let instancedGeometry (trafos : IMod<Trafo3d[]>) (g : IndexedGeometry) =
+            let vertexAttributes = 
+                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
+                    let t = v.GetType().GetElementType()
+                    let view = BufferView(ArrayBuffer(Mod.initConstant v), t)
+
+                    k, view
+                ) |> Map.ofSeq
+
+            let index, faceVertexCount =
+                if g.IsIndexed then
+                    g.IndexArray, g.IndexArray.Length
+                else
+                    null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
+
+            let call = trafos |> Mod.map (fun t ->
+                    DrawCallInfo(
+                        FaceVertexCount = faceVertexCount,
+                        FirstIndex = 0,
+                        InstanceCount = t.Length,
+                        FirstInstance = 0,
+                        Mode = g.Mode
+                    )
+                )
+
+            let sg = Sg.VertexAttributeApplicator(vertexAttributes, Sg.RenderNode(call)) :> ISg
+        
+            let sg =
+                if index <> null then
+                    Sg.VertexIndexApplicator(Mod.initConstant index, sg) :> ISg
+                else
+                    sg
+
+            let m44Trafos = trafos |> Mod.map (fun a -> a |> Array.map (fun (t : Trafo3d) -> (M44f.op_Explicit t.Forward).Transposed) :> Array)
+            let m44View = BufferView(ArrayBuffer m44Trafos, typeof<M44f>)
+
+            Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
 
         let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(Mod.initConstant pass, sg)
 
+        let normalizeToAdaptive (box : Box3d) (this : ISg) =
 
+            let getBoxScale (fromBox : Box3d) (toBox : Box3d) : float =
+                let fromSize = fromBox.Size
+                let toSize = toBox.Size
+                let factor = toSize / fromSize
 
+                let mutable smallest = factor.X
 
-    type ISg with
+                if factor.Y < smallest then
+                    smallest <- factor.Y
+                if factor.Z < smallest then
+                    smallest <- factor.Z
 
-        member x.Trafo(t : Trafo3d) =
-            Sg.TrafoApplicator(Mod.initConstant t, x) :> ISg
+                smallest
 
-        member x.Trafo(t : IMod<Trafo3d>) =
-            Sg.TrafoApplicator(t, x) :> ISg
+            let bb = this?GlobalBoundingBox() : IMod<Box3d>
 
-        member x.OnOff(on : IMod<bool>) =
-            Sg.OnOffNode(on, x) :> ISg
+            printfn "normalizing from: %A" ( bb.GetValue() )
 
-        member x.DiffuseTexture(t : IMod<ITexture>) =
-            Sg.TextureApplicator(DefaultSemantic.DiffuseColorTexture, t, x) :> ISg
+            let transformBox (sbox : Box3d) = Trafo3d.Translation(-sbox.Center) * Trafo3d.Scale(getBoxScale sbox box) * Trafo3d.Translation(box.Center)
 
-        member x.WithUniforms(m : Map<Symbol, IMod>) =
-            Sg.UniformApplicator(Uniforms.SimpleUniformHolder(m), x) :> ISg
+            Sg.TrafoApplicator(Mod.map transformBox bb, this) :> ISg
 
-        member x.WithUniform(name : Symbol, value : IMod<'a>) =
-            Sg.UniformApplicator(name, value :> IMod, x) :> ISg
-
-        member x.WithUniforms(values : list<Symbol * IMod>) =
-            Sg.UniformApplicator(Uniforms.SimpleUniformHolder(Map.ofList values), x) :> ISg
+        let normalizeAdaptive sg = sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
 
 
 

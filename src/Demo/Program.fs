@@ -5,6 +5,7 @@ open Aardvark.Base.AgHelpers
 open Aardvark.Rendering.GL
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.CSharp
+open Aardvark.SceneGraph.Semantics
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
 open Aardvark.Base.Rendering
@@ -241,7 +242,7 @@ module Assimp =
             if mine.Forward.IsIdentity(Constant.PositiveTinyValue) then
                 n.AllChildren?ModelTrafo <- p
             else
-                if p = Aardvark.SceneGraph.Semantics.TrafoSem.RootTrafo then
+                if p = Aardvark.SceneGraph.Semantics.TrafoSemantics.rootTrafo then
                     n.AllChildren?ModelTrafo <- Mod.initConstant mine
                 else
                     n.AllChildren?ModelTrafo <- Mod.map (fun t -> t * mine) p
