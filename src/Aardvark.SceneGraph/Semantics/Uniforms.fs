@@ -16,7 +16,7 @@ module UniformSemantics =
         member x.Uniforms : list<IUniformProvider> = x?Uniforms
  
     module Semantic =
-        let uniforms (s : ISg) : list<IUniformProvider> = x?Uniforms
+        let uniforms (s : ISg) : list<IUniformProvider> = s?Uniforms
 
     [<Semantic>]
     type UniformSem() =

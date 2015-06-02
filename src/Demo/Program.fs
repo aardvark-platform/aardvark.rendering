@@ -295,7 +295,7 @@ module Assimp =
 
     // define a default checkerboard texture
     let private defaultTexture =
-        let image = PixImage<byte>(Col.Format.RGBA, 128, 128, 4)
+        let image = PixImage<byte>(Col.Format.RGBA, 128L, 128L, 4L)
 
         image.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
             let c = c / 32L
