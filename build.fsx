@@ -17,7 +17,7 @@ Target "Restore" (fun () ->
 
     let packageConfigs = !!"src/**/packages.config" |> Seq.toList
 
-    let sources = NuGetUtils.sources @ ["https://www.nuget.org/api/v2/" ]
+    let sources = NuGetUtils.sources 
     tracefn "sources: %A" sources
     for pc in packageConfigs do
         RestorePackage (fun p -> { p with OutputPath = "packages"
