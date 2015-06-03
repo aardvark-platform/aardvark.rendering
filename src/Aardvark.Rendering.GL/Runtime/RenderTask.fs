@@ -151,6 +151,7 @@ module RenderTasks =
                             | Order.Unordered -> 
                                 new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
                                 //new OptimizedManagedProgram(manager,addInput,removeInput) :> IProgram
+                                //new OptimizedSwitchProgram(manager,addInput,removeInput) :> IProgram
                             | order ->
                                 //let sorter = fun () -> BspSorting.BBTreeSorter(scope, bspOrder) :> ISorter
                                 new SortedProgram(order, manager, addInput, removeInput, Sorting.createSorter scope order) :> IProgram

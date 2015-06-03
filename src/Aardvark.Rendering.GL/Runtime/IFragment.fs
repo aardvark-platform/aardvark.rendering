@@ -8,6 +8,7 @@ type IDynamicFragment =
     abstract member Append : seq<Instruction> -> int
     abstract member Update : int -> seq<Instruction> -> unit
     abstract member Clear : unit -> unit
+    abstract member RunAll : unit -> unit
 
 [<AllowNullLiteral>]
 type IDynamicFragment<'a when 'a :> IDynamicFragment<'a>> =

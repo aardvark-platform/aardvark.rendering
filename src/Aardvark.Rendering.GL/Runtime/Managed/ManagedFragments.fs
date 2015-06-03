@@ -29,7 +29,7 @@ type private InstructionListFragment(l : Instruction[]) =
             ExecutionContext.run i
 
 [<AllowNullLiteral>]
-type ManagedDynamicFragment(prolog : ManagedDynamicFragment) =
+type ManagedDynamicFragment() =
     let mutable next : ManagedDynamicFragment = null
     let mutable prev : ManagedDynamicFragment = null
     let mutable first = null
@@ -41,20 +41,14 @@ type ManagedDynamicFragment(prolog : ManagedDynamicFragment) =
     let newId() =
         System.Threading.Interlocked.Increment &currentId
 
-    let reset() =
-        if prolog <> null then
-            prolog.RebuildCache()
-
     member x.Next
         with get() = next
         and set v = 
-            reset()
             next <- v
 
     member x.Prev
         with get() = prev
         and set v = 
-            reset()
             prev <- v
 
     member private x.First = first
@@ -73,24 +67,21 @@ type ManagedDynamicFragment(prolog : ManagedDynamicFragment) =
             f.Prev <- last
             last <- f
 
-
-        reset()
         id
 
     member x.Update (id : int) (value : seq<Instruction>) =
         let f = cache.[id]
         f.Instructions <- value |> Seq.toArray
-        reset()
+
 
     member x.Clear() =
         first <- null
         last <- null
         cache.Clear()
-        reset()
         currentId <- 0
 
 
-    member private x.Instructions =
+    member x.AllInstructions =
         seq {
             let current = ref x
             while !current <> null do
@@ -101,21 +92,13 @@ type ManagedDynamicFragment(prolog : ManagedDynamicFragment) =
                 current := current.contents.Next
         }
 
-    member x.AllInstructions =
-        if instructions = null then
-            instructions <- x.Instructions |> Seq.toArray
-
-        instructions
-
     member x.RebuildCache() =
         instructions <- null
 
-    member x.RunSelf() =
-        let mutable current = first
-        while current <> null do
-            current.RunSelf()
-            current <- current.Next
-
+    member x.RunAll() =
+        let all = x.AllInstructions |> Seq.toArray
+        for i in all do
+            ExecutionContext.run i
 
     interface IDynamicFragment<ManagedDynamicFragment> with
         member x.Next
@@ -135,13 +118,7 @@ type ManagedDynamicFragment(prolog : ManagedDynamicFragment) =
         member x.Clear() =
             x.Clear()
 
-[<AutoOpen>]
-module ManagedDynamicFragmentExtensions =
-    type ManagedDynamicFragment with
-
-
         member x.RunAll() =
-            let all = x.AllInstructions
-            for i in all do
-                ExecutionContext.run i
+            x.RunAll()
+
 

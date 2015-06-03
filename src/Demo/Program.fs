@@ -207,11 +207,17 @@ module Assimp =
         let toTrafo (m : Matrix4x4) =
             let m = 
                 M44d(
-                    float m.A1, float m.B1, float m.C1, float m.D1,
-                    float m.A2, float m.B2, float m.C2, float m.D2,
-                    float m.A3, float m.B3, float m.C3, float m.D3,
-                    float m.A4, float m.B4, float m.C4, float m.D4
+                    float m.A1, float m.A2, float m.A3, float m.A4,
+                    float m.B1, float m.B2, float m.B3, float m.B4,
+                    float m.C1, float m.C2, float m.C3, float m.C4,
+                    float m.D1, float m.D2, float m.D3, float m.D4
                 )
+//                M44d(
+//                    float m.A1, float m.B1, float m.C1, float m.D1,
+//                    float m.A2, float m.B2, float m.C2, float m.D2,
+//                    float m.A3, float m.B3, float m.C3, float m.D3,
+//                    float m.A4, float m.B4, float m.C4, float m.D4
+//                )
 
             Trafo3d(m, m.Inverse)
 
@@ -315,7 +321,9 @@ module Assimp =
     // Due to our semantic-definitions above we may simply use
     // it in our SceneGraph (which allows extensibility through its AdapterNode)
     let load (file : string) =
-        let scene = ctx.ImportFile(file, PostProcessSteps.Triangulate ||| PostProcessSteps.FixInFacingNormals ||| PostProcessSteps.GenerateSmoothNormals)
+        let scene = ctx.ImportFile(file, PostProcessSteps.Triangulate ||| PostProcessSteps.FixInFacingNormals ||| 
+                                         PostProcessSteps.GenerateSmoothNormals ||| PostProcessSteps.ImproveCacheLocality ||| 
+                                         PostProcessSteps.JoinIdenticalVertices ||| PostProcessSteps.SplitLargeMeshes)
 
         // the attribute system can also be used to extend objects
         // with "properties" wich are scope independent.
@@ -570,12 +578,14 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
+    let modelPath = @"C:\Aardwork\scenes\bench\16000_128_8000_4.dae"
+
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
 
     use app = new OpenGlApplication()
-    let f = app.CreateSimpleRenderWindow()
-    let ctrl = f.Control
+    let f = app.CreateGameWindow(1)
+    let ctrl = f //f.Control
 
 //    ctrl.Mouse.Events.Values.Subscribe(fun e ->
 //        match e with
@@ -590,7 +600,7 @@ let main args =
 //    ) |> ignore
 
     let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-    let proj = CameraProjectionPerspective(60.0, 0.1, 100.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
+    let proj = CameraProjectionPerspective(60.0, 0.1, 10000.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
     let mode = Mod.initMod FillMode.Fill
 
 
@@ -645,20 +655,20 @@ let main args =
     let sg =
         sg |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect
-                DefaultSurfaces.pointSurface pointSize |> toEffect
-                DefaultSurfaces.uniformColor color |> toEffect
-//                DefaultSurfaces.diffuseTexture |> toEffect
-//                DefaultSurfaces.simpleLighting |> toEffect
+//                DefaultSurfaces.pointSurface pointSize |> toEffect
+                //DefaultSurfaces.uniformColor color |> toEffect
+                DefaultSurfaces.diffuseTexture |> toEffect
+                //DefaultSurfaces.simpleLighting |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
-           |> Sg.trafo (Mod.initConstant <| Trafo3d.ChangeYZ)
-           |> Sg.fillMode mode
-           |> Sg.blendMode (Mod.initConstant BlendMode.Blend)
-           |> normalizeTo (Box3d(-V3d.III, V3d.III))
+           //|> Sg.trafo (Mod.initConstant <| Trafo3d.ChangeYZ)
+           //|> Sg.fillMode mode
+           //|> Sg.blendMode (Mod.initConstant BlendMode.Blend)
+           //|> normalizeTo (Box3d(-V3d.III, V3d.III))
     
 
-    Demo.AssimpExporter.save @"C:\Users\Schorsch\Desktop\quadScene\eigi.dae" sg
+    //Demo.AssimpExporter.save @"C:\Users\Schorsch\Desktop\quadScene\eigi.dae" sg
 
 
 //    let arr = new ModRef<Array> ([|V3f.III|] :> Array)
@@ -689,6 +699,6 @@ let main args =
 
 //    let app = System.Windows.Application()
 //    app.Run(f) |> ignore
-    System.Windows.Forms.Application.Run(f)
-
+    //System.Windows.Forms.Application.Run(f)
+    f.Run()
     0

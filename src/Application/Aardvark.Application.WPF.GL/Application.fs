@@ -14,7 +14,7 @@ type OpenGlApplication() =
     let runtime = new Runtime()
     let ctx = new Context(runtime)
     do runtime.Context <- ctx
-
+       using ctx.ResourceLock (fun _ -> GLVM.vmInit())
     member x.Context = ctx
     member x.Runtime = runtime
 
@@ -31,6 +31,9 @@ type OpenGlApplication() =
                     
         ()
 
+    member x.CreateGameWindow(samples : int) =
+        let w = new GameWindow(ctx, samples)
+        w
 
     interface IApplication with
         member x.Initialize(ctrl : IRenderControl, samples : int) = x.Initialize(ctrl, samples)

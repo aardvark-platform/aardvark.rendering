@@ -6,9 +6,13 @@ open Aardvark.Base
 open Aardvark.Rendering
 
 type NativeDynamicFragment<'a>(f : Fragment<'a>) =
+    let mutable entry : Option<nativeint * (unit -> unit)> = None
     member x.Fragment = f
 
     interface IDynamicFragment<NativeDynamicFragment<'a>> with
+        member x.RunAll() =
+            failwith "native fragments cannot be invoked directly"
+
         member x.Next
             with get() = NativeDynamicFragment(f.Next)
             and set n = f.Next <- n.Fragment

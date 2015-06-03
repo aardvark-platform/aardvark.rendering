@@ -112,11 +112,15 @@ module InstructionCompiler =
                 // Whenever it changes replace it in the DynamicFragment 
                 // and adapt the statistics accordingly.
                 let old = ref i'
+                let initial = ref true
                 let registration =
                     i |> Mod.registerCallback (fun v ->
-                        p.Update id [v]
-                        InstructionStatistics.replace s.statistics !old v
-                        old := v
+                        if not !initial then
+                            p.Update id [v]
+                            InstructionStatistics.replace s.statistics !old v
+                            old := v
+                        else
+                            initial := false
                     )
 
                 // return a new CompilerState including the
@@ -148,11 +152,15 @@ module InstructionCompiler =
                 // Whenever it changes replace it in the DynamicFragment 
                 // and adapt the statistics accordingly.
                 let old = ref i'
+                let initial = ref true
                 let registration =
                     i |> Mod.registerCallback (fun v ->
-                        p.Update id v
-                        InstructionStatistics.replaceList s.statistics !old v
-                        old := v
+                        if not !initial then
+                            p.Update id v
+                            InstructionStatistics.replaceList s.statistics !old v
+                            old := v
+                        else
+                            initial := false
                     )
 
                 // return a new CompilerState including the
@@ -239,14 +247,16 @@ module InstructionCompiler =
 
                 let writer() =
                     let i' = i()
-                    p.Update id [i']
-
                     match !old with
-                        | Some o -> InstructionStatistics.remove stats o
-                        | None -> ()
-
-                    InstructionStatistics.add stats i'
-                    old := Some i'
+                        | Some o when o = i' -> ()
+                        | _ ->
+                            p.Update id [i']
+                            match !old with
+                                | Some o -> InstructionStatistics.remove stats o
+                                | None -> ()
+                            InstructionStatistics.add stats i'
+                            old := Some i'
+ 
 
                 // return a new CompilerState including the
                 // registration (created above) and the dependencies
@@ -712,17 +722,13 @@ module InstructionCompiler =
                                         //there is a special case when the prev renderjob has the same texture but binds it to
                                         //a different slot!!!
                                         match prevTexture with
-                                            | Some old ->
+                                            | Some old when old = (value :> IMod) ->
+                                                ()
+                                            | _ ->
                                                 yield setActiveTexture uniform.index
                                                 yield! bindSampler uniform.index sampler
                                                 yield! bindTexture texture
 
-                                            | Some old when old <> (value :> IMod) ->
-                                                yield setActiveTexture uniform.index
-                                                yield! bindSampler uniform.index sampler
-                                                yield! bindTexture texture
-
-                                            | _ -> ()
                                     | _ ->
                                         Log.warn "Urdar: using default texture since none was found"
                             | _ ->
@@ -742,9 +748,13 @@ module InstructionCompiler =
                     | _ ->
                         Log.warn "trying to set unknown top-level uniform: %A" uniform
 
-
             let! vao = Manager.createVertexArrayObject program next
-            yield! bindVertexArray vao
+            if prev <> RenderJob.Empty then
+                let! vaoPrev = Manager.createVertexArrayObject program prev
+                if vao <> vaoPrev then
+                    yield! bindVertexArray vao
+            else
+                yield! bindVertexArray vao
 
             yield! draw program next.Indices next.DrawCallInfo next.IsActive 
         }

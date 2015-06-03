@@ -31,7 +31,6 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
     static let messageLoop = MessageLoop()
     static do messageLoop.Start()
 
-
     let mutable loaded = false
     let statistics = EventSource<FrameStatistics>(FrameStatistics.Zero)
 
