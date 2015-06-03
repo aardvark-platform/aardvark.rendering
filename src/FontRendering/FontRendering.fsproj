@@ -65,31 +65,31 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Aardvark.Base">
-      <HintPath>..\..\packages\Aardvark.Base.1.2.8\lib\net45\Aardvark.Base.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.1.3.2\lib\net45\Aardvark.Base.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.Essentials">
-      <HintPath>..\..\packages\Aardvark.Base.Essentials.1.2.8\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.Essentials.1.3.2\lib\net45\Aardvark.Base.Essentials.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.FSharp">
-      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.2.8\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.3.2\lib\net45\Aardvark.Base.FSharp.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.Incremental">
-      <HintPath>..\..\packages\Aardvark.Base.Incremental.1.2.8\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.Incremental.1.3.2\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
     </Reference>
     <Reference Include="Aardvark.Base.TypeProviders">
-      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.2.8\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
+      <HintPath>..\..\packages\Aardvark.Base.FSharp.1.3.2\lib\net45\Aardvark.Base.TypeProviders.dll</HintPath>
     </Reference>
     <Reference Include="DevILSharp">
       <HintPath>..\..\packages\DevILSharp.0.0.9\lib\net45\DevILSharp.dll</HintPath>
     </Reference>
     <Reference Include="FShade">
-      <HintPath>..\..\packages\FShade.1.2.8\lib\net45\FShade.dll</HintPath>
+      <HintPath>..\..\packages\FShade.1.3.2\lib\net45\FShade.dll</HintPath>
     </Reference>
     <Reference Include="FShade.Compiler">
-      <HintPath>..\..\packages\FShade.1.2.8\lib\net45\FShade.Compiler.dll</HintPath>
+      <HintPath>..\..\packages\FShade.1.3.2\lib\net45\FShade.Compiler.dll</HintPath>
     </Reference>
     <Reference Include="FShade.Debug">
-      <HintPath>..\..\packages\FShade.1.2.8\lib\net45\FShade.Debug.dll</HintPath>
+      <HintPath>..\..\packages\FShade.1.3.2\lib\net45\FShade.Debug.dll</HintPath>
     </Reference>
     <Reference Include="FSharp.Compiler.Service">
       <HintPath>..\..\packages\FSharp.Compiler.Service.0.0.89\lib\net45\FSharp.Compiler.Service.dll</HintPath>

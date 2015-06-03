@@ -710,7 +710,7 @@ module TextureExtensions =
                 failwith "downloads of mipmap-levels currently not implemented"
 
             let levelSize = t.Size2D
-            let image = PixImage.Create(format, levelSize.X, levelSize.Y)
+            let image = PixImage.Create(format, int64 levelSize.X, int64 levelSize.Y)
 
             GL.BindTexture(target, t.Handle)
             GL.Check "could not bind texture"
