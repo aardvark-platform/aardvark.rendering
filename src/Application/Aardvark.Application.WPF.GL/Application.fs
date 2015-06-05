@@ -14,18 +14,54 @@ type OpenGlApplication() =
     let runtime = new Runtime()
     let ctx = new Context(runtime)
     do runtime.Context <- ctx
-       using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+
+    let init =
+        let initialized = ref false
+        fun (ctx : Context) (glctx : OpenTK.Graphics.IGraphicsContext) (w : OpenTK.Platform.IWindowInfo) ->
+            if not !initialized then
+                initialized := true
+                glctx.MakeCurrent(w)
+
+                let handle = ContextHandle(glctx,w)
+                ctx.CurrentContextHandle <- Some handle
+                ContextHandle.Current <- Some handle
+
+                using ctx.ResourceLock (fun _ ->
+                    GLVM.vmInit()
+
+                    Log.startTimed "initializing OpenGL runtime"
+
+                    OpenTK.Graphics.OpenGL4.GL.GetError() |> ignore
+                    OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
+                    OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
+                
+               
+                    Log.line "vendor:   %A" ctx.Driver.vendor
+                    Log.line "renderer: %A" ctx.Driver.renderer 
+                    Log.line "version:  OpenGL %A / GLSL %A" ctx.Driver.version ctx.Driver.glsl
+
+                    Log.stop()
+                )
+
+                glctx.MakeCurrent(null)
+                ctx.CurrentContextHandle <- None
+                ContextHandle.Current <- None
+
     member x.Context = ctx
     member x.Runtime = runtime
+
 
     member x.Dispose() =
         ctx.Dispose()
         runtime.Dispose()
 
     member x.Initialize(ctrl : IRenderControl, samples : int) = 
+        
         match ctrl with
             | :? RenderControl as ctrl ->
-                ctrl.Implementation <- new OpenGlRenderControl(ctx, samples)
+                let impl = new OpenGlRenderControl(ctx, samples)
+                ctrl.Implementation <- impl
+                init ctx impl.Context impl.WindowInfo
             | _ ->
                 failwith "unknown control type: %A" ctrl
                     
@@ -33,6 +69,7 @@ type OpenGlApplication() =
 
     member x.CreateGameWindow(samples : int) =
         let w = new GameWindow(ctx, samples)
+        init ctx w.Context w.WindowInfo
         w
 
     interface IApplication with

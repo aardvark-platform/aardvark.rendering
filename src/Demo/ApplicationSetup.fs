@@ -263,7 +263,8 @@ module WinForms =
             if c <> null then
                 c.MakeCurrent(null)
 
-            ContextHandle.primaryContext.MakeCurrent()
+            if ContextHandle.primaryContext <> null then
+                ContextHandle.primaryContext.MakeCurrent()
             base.OnHandleCreated(e)
             loaded <- true
             base.MakeCurrent()
