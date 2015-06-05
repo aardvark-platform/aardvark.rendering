@@ -23,7 +23,7 @@ type private ContextToken(obtain : ContextToken -> ContextHandle, release : Cont
     member x.Release() = 
         isObtained <- false
         release x
-        handle <- None
+        //handle <- None
 
     member x.Obtain() = 
         handle <- Some <| obtain x
@@ -48,6 +48,7 @@ type private ContextToken(obtain : ContextToken -> ContextHandle, release : Cont
 /// </summary>
 [<AllowNullLiteral>]
 type Context(runtime : IRuntime, resourceContextCount : int) =
+    static let nopDisposable = { new IDisposable with member x.Dispose() = () }
     let resourceContexts = ContextHandle.createContexts resourceContextCount
     let resourceContextCount = resourceContexts.Length
 
@@ -99,7 +100,7 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
                     // if the current token uses the same context as requested
                     // we don't need to perform any operations here since
                     // the outer token will take care of everything
-                    { new IDisposable with member x.Dispose() = () }
+                    nopDisposable
 
                 else
                     // if the current token is using a different context
@@ -108,13 +109,11 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
                     new ContextToken (
                         ( fun x ->
                             token.Release()
-                            sem.Wait()
                             handle.MakeCurrent()
                             currentToken.Value <- Some x
                             handle),
                         ( fun x ->
                             handle.ReleaseCurrent()
-                            sem.Release() |> ignore
                             currentToken.Value <- None
                             token.Obtain())
                     ) :> _
@@ -126,14 +125,13 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
                 // one obtaining/releasing the desired context.
                 new ContextToken (
                     ( fun x ->
-                        sem.Wait()
                         handle.MakeCurrent()
                         currentToken.Value <- Some x
                         handle),
                     ( fun x ->
-                        handle.ReleaseCurrent()
-                        sem.Release() |> ignore
-                        currentToken.Value <- None)
+                        //handle.ReleaseCurrent()
+                        //currentToken.Value <- None
+                        ())
                 ) :> _
                     
     /// <summary>
@@ -147,7 +145,7 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
             | Some token ->
                 // if the calling thread already posesses the token
                 // simply return a dummy disposable and do no perform any operation
-                { new IDisposable with member x.Dispose() = () }
+                nopDisposable
 
             | None -> 
                 // create a token for the obtained context
