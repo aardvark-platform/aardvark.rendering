@@ -18,6 +18,22 @@ type BufferView(b : IBuffer, elementType : Type, offset : int, stride : int) =
     new(b : IBuffer, elementType : Type) =
         BufferView(b, elementType, 0, 0)
 
+    override x.GetHashCode() =
+        HashCode.Combine(b.GetHashCode(), elementType.GetHashCode(), offset.GetHashCode(), stride.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? BufferView as o ->
+                o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
+            | _ -> false
+
 type ArrayBuffer(data : IMod<Array>) =
     interface IBuffer
     member x.Data = data
+
+
+    override x.GetHashCode() = data.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? ArrayBuffer as o -> o.Data = data
+            | _ -> false

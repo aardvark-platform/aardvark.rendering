@@ -347,12 +347,21 @@ let quadSg =
 module Shader =
     open FShade
 
+    let diffuseTex = 
+        sampler2d {
+            texture uniform?DiffuseColorTexture
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+            filter Filter.MinMagMipLinear
+        }
+
     type Vertex = 
         { 
             [<Position>]        pos     : V4d 
             [<Normal>]          n       : V3d
             [<TexCoord>]        tc      : V2d
             [<WorldPosition>]   wp      : V4d
+            [<Color>]           color   : V3d
         }
 
     let vs (v : Vertex)  = 
@@ -367,13 +376,27 @@ module Shader =
                 }
         }   
 
-    let diffuseTex = 
-        sampler2d {
-            texture uniform?DiffuseColorTexture
-            addressU WrapMode.Wrap
-            addressV WrapMode.Wrap
-            filter Filter.MinMagMipLinear
+    let pvLight (v : Vertex)  = 
+        vertex {
+            let wp = uniform.ModelTrafo * v.pos
+
+            let id = V3d.III
+            return 
+                { v with 
+                    pos = uniform.ViewProjTrafo * wp; 
+                    n = uniform.NormalMatrix * v.n; 
+                    wp = wp 
+                    color = id * Vec.dot v.n.Normalized id.Normalized
+                }
+        }   
+
+    let pvFrag (v : Vertex) =
+        fragment {
+            let color = diffuseTex.Sample(v.tc).XYZ + v.color * 0.001
+            return V4d(color, 1.0)
         }
+        
+
 
     let ps (v : Vertex) =
         fragment {
@@ -578,7 +601,7 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
-    let modelPath = @"C:\Aardwork\scenes\bench\16000_128_8000_4.dae"
+    let modelPath =  @"C:\Aardwork\scenes\bench\2000_128_1000_12.dae"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
@@ -654,10 +677,12 @@ let main args =
 
     let sg =
         sg |> Sg.effect [
-                DefaultSurfaces.trafo |> toEffect
+                Shader.pvLight |> toEffect
+                Shader.pvFrag |> toEffect
+                //DefaultSurfaces.trafo |> toEffect
 //                DefaultSurfaces.pointSurface pointSize |> toEffect
                 //DefaultSurfaces.uniformColor color |> toEffect
-                DefaultSurfaces.diffuseTexture |> toEffect
+                //DefaultSurfaces.diffuseTexture |> toEffect
                 //DefaultSurfaces.simpleLighting |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)

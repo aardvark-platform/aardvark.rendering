@@ -26,6 +26,7 @@ type AttributeFrequency =
 /// DirectX/OpenGl allowing to bind buffers with
 /// a specific format/offset/stride/etc.
 /// </summary>
+[<StructuralEquality; NoComparisonAttribute>]
 type AttributeDescription = 
     { 
         /// <summary>
