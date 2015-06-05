@@ -25,11 +25,21 @@ module Fragments =
     [<AllowNullLiteral>]
     type Fragment<'a> (manager : MemoryManager, padding : int, tag : 'a) as this =
         static let jumpSize = 8
+
+        // taken from: http://stackoverflow.com/a/12564044
+        static let oneByteNop       = [|0x90uy|]
+        static let twoByteNop       = [|0x66uy; 0x90uy|]
+        static let threeByteNop     = [|0x0Fuy; 0x1Fuy; 0x00uy|]
+        static let fourByteNop      = [|0x0Fuy; 0x1Fuy; 0x40uy; 0x00uy|]
+        static let fiveByteNop      = [|0x0Fuy; 0x1Fuy; 0x44uy; 0x00uy; 0x00uy|]
+        static let eightByteNop     = [|0x0Fuy; 0x1Fuy; 0x84uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy|]
+
         let modifyLock = obj()
         let mutable isDisposed = false
         let mutable prev : Fragment<'a> = null
         let mutable next : Fragment<'a> = null
         let mutable block = manager.Alloc(jumpSize)
+        let mutable currentOffset = -1
         let startOffsets = List<int>()
         let jumpDistance = EventSource(0L)
 
@@ -84,11 +94,19 @@ module Fragments =
         member private x.WriteJump(offset : int) =
             match Assembler.cpu with
                 | Assembler.AMD64 ->
-                    //the jump needs to be 4-byte aligned in order to perform 
-                    //atomic writes on its offset.
                     let jumpPosition = block.Size - jumpSize
                     let realJumpPosition = (jumpPosition ||| 3)
-                    block.WriteInt32(realJumpPosition + 1, offset - (5 + realJumpPosition - jumpPosition))
+                    if offset = jumpSize then
+                        block.Write(jumpPosition, eightByteNop)
+                    else
+                        if currentOffset = jumpSize then
+                            writeJumpStub()
+                        //the jump needs to be 4-byte aligned in order to perform 
+                        //atomic writes on its offset.
+                        block.WriteInt32(realJumpPosition + 1, offset - (5 + realJumpPosition - jumpPosition))
+
+                    // store the current offset
+                    currentOffset <- offset
 
                 | Assembler.ARM ->
                         

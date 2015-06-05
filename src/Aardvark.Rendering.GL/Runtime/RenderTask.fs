@@ -149,7 +149,13 @@ module RenderTasks =
                     let p = 
                         match config with
                             | Order.Unordered -> 
+                                //new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
+                                //new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
+                                //new OptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
                                 new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
+                                
+
+                                //new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
                                 //new OptimizedManagedProgram(manager,addInput,removeInput) :> IProgram
                                 //new OptimizedSwitchProgram(manager,addInput,removeInput) :> IProgram
                             | order ->
@@ -232,21 +238,22 @@ module RenderTasks =
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                    let handle = (fbo.Handle |> unbox<int>)
+                    let fboHandle = fbo |> unbox<Framebuffer>
+                    let handle = fboHandle.Handle
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                     GL.Check "could not bind framebuffer"
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not set viewport"
 
-                    x.ProcessDeltas (reader.GetDelta())
+                    if reader.OutOfDate then
+                        x.ProcessDeltas (reader.GetDelta())
 
                     let mutable stats = FrameStatistics.Zero
-                    let fboHandle = fbo |> unbox<Framebuffer>
                     let contextHandle = ContextHandle.Current.Value
 
                     //render
-                    for _,p in Map.toSeq programs do
+                    for (KeyValue(_,p)) in programs do
                         stats <- stats + p.Run(fboHandle, contextHandle)
 
 

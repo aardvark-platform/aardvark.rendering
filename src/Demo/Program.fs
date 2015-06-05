@@ -578,7 +578,7 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
-    let modelPath = @"C:\Aardwork\scenes\bench\16000_128_8000_4.dae"
+    let modelPath = @"C:\Aardwork\scenes\bench\2000_128_1000_12.dae"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
