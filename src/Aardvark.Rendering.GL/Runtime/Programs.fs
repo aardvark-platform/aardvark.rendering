@@ -46,11 +46,15 @@ module Programs =
         let changeSet = HashSet<IChangeableResource>()
         let subscriptions = Dictionary<IChangeableResource, IDisposable>()
         let mutable currentContext : ContextHandle = null
+        let dirty = ref 1
+        static let emptyChange = [||]
 
         let addChanged (r : IChangeableResource) =  
+            dirty := 1
             lock changeSet (fun () -> changeSet.Add r |> ignore)
 
         let removeChanged (r : IChangeableResource) =  
+            dirty := 1
             lock changeSet (fun () -> changeSet.Remove r |> ignore)
 
 
@@ -58,7 +62,7 @@ module Programs =
             if resources.Add r then
                 add r
                 if outOfDate r then addChanged r
-                subscriptions.Add(r, subscribeDirty r changeSet)
+                subscriptions.Add(r, subscribeDirty r changeSet dirty)
 
         let removeResource (r : IChangeableResource) =
             if resources.Remove r then
@@ -83,11 +87,15 @@ module Programs =
             state.dependencies |> List.iter remove
 
         member x.GetAndClearChanges() =
-            lock changeSet (fun () -> 
-                let data = changeSet |> Seq.toArray
-                changeSet.Clear()
-                data
-            )
+            let c = Interlocked.Exchange(&dirty.contents, 0)
+            if c <> 0 then
+                lock changeSet (fun () -> 
+                    let data = changeSet |> Seq.toArray
+                    changeSet.Clear()
+                    data
+                )
+            else
+                emptyChange
 
         member x.SetCurrentContext(context : ContextHandle) =
             if currentContext <> context then
@@ -609,12 +617,12 @@ module Programs =
 
             deps.SetCurrentContext(context)
 
-            lock memory.PointerLock (fun () ->
-                if prolog.RealPointer <> entryPtr then
+            if prolog.RealPointer <> entryPtr then
+                lock memory.PointerLock (fun () ->
                     entryPtr <- prolog.RealPointer
                     run <- UnmanagedFunctions.wrap entryPtr
-                run()
-            )
+                )
+            run()
 
             ranOnce <- true
             hintDefragmentation 0
@@ -767,8 +775,20 @@ module Programs =
 //            member x.Run(fbo,ctx) = x.Run(fbo,ctx)
 //            member x.Dispose() = x.Dispose()
 //       
+    
+    [<AllowNullLiteral>]   
+    type IRenderJobFragment<'s, 'f when 'f :> IDynamicFragment<'f> and 'f : (new : unit -> 'f) and 'f : null and 's :> IRenderJobFragment<'s, 'f> and 's : null> =
+        inherit IDisposable
+
+        abstract member Statistics : IEvent<FrameStatistics>
+        abstract member SortKey : list<int>
+        abstract member RenderJob : RenderJob
+        abstract member Next : 's with get, set
+        abstract member Prev : 's with get, set
+        abstract member RunAll : unit -> unit
+
     [<AllowNullLiteral>]     
-    type private RenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : (new : unit -> 'f) and 'f : null> (idCache : Cache<IMod, int>, parent : DependencySet, manager : ResourceManager, rj : RenderJob) =
+    type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : (new : unit -> 'f) and 'f : null> (idCache : Cache<IMod, int>, parent : DependencySet, manager : ResourceManager, rj : RenderJob) =
         let frag = new 'f()
         let mutable prev = null
         let mutable next = null
@@ -819,7 +839,7 @@ module Programs =
 
         member x.Next
             with get() = next
-            and set (v : RenderJobFragment<'f>) = 
+            and set (v : OptimizedRenderJobFragment<'f>) = 
                 if v <> null then
                     frag.Next <- v.Frag
                 else
@@ -828,7 +848,7 @@ module Programs =
 
         member x.Prev 
             with get() = prev
-            and set (v : RenderJobFragment<'f>) =
+            and set (v : OptimizedRenderJobFragment<'f>) =
                 prev <- v
                 if v <> null then
                     prev.Frag.Next <- frag
@@ -841,11 +861,122 @@ module Programs =
         member x.RunAll() =
             frag.RunAll()
 
-    type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : (new : unit -> 'f) and 'f : null>(manager : ResourceManager, add : IAdaptiveObject -> unit, remove : IAdaptiveObject -> unit) =
+        interface IRenderJobFragment<OptimizedRenderJobFragment<'f>, 'f> with
+            member x.Statistics = x.Statistics
+            member x.SortKey = sortKey
+            member x.RenderJob = rj
+            member x.Dispose() = x.Dispose()
+            member x.Next 
+                with get() = x.Next
+                and set v = x.Next <- v
+            member x.Prev 
+                with get() = x.Prev
+                and set v = x.Prev <- v
+            member x.RunAll() =
+                x.RunAll()
+
+    [<AllowNullLiteral>]     
+    type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : (new : unit -> 'f) and 'f : null> 
+        (idCache : Cache<IMod, int>, parent : DependencySet, manager : ResourceManager, rj : RenderJob) =
+        let frag = new 'f()
+        let mutable prev = null
+        let mutable next = null
+
+        let stats = EventSource<FrameStatistics>(FrameStatistics.Zero)
+        let mutable statSubscription : Option<IDisposable> = None
+
+        let mutable state : Option<InstructionCompiler.CompilerState> = None
+
+        let sortKey = projections |> Array.map (fun p -> rj |> p |> idCache.Invoke) |> Array.toList
+
+        let recompile(me : RenderJob) =
+            if rj <> RenderJob.Empty then
+                let mutable removeOldState = id
+                match state with
+                    | Some state -> 
+                        match statSubscription with | Some s -> s.Dispose(); statSubscription <- None | _ -> ()
+                        stats.Emit(FrameStatistics.Zero)
+                        removeOldState <- fun () -> parent.Remove(state)
+                        state.Dispose()
+                        frag.Clear()
+                    | _ -> ()
+                
+                let newState = InstructionCompiler.compileDelta manager frag RenderJob.Empty me
+                state <- Some newState
+                let s = newState.statistics.Values.Subscribe(fun s ->
+                    stats.Emit(s)
+                )
+                statSubscription <- Some s
+                parent.Add newState
+                removeOldState()
+
+        do recompile rj
+
+        member private x.Frag = frag
+
+        member x.Statistics = stats :> IEvent<FrameStatistics>
+        member x.SortKey = sortKey
+
+        member x.RenderJob = rj
+
+        member x.Dispose() =
+            match state with
+                | Some state -> 
+                    projections |> Array.iter (fun p -> rj |> p |> idCache.Revoke |> ignore)
+                    state.Dispose()
+                    parent.Remove(state)
+                    frag.TryDispose() |> ignore
+                | _ -> ()
+            state <- None
+
+        member x.Next
+            with get() = next
+            and set (v : UnoptimizedRenderJobFragment<'f>) = 
+                if v <> null then
+                    frag.Next <- v.Frag
+                else
+                    frag.Next <- null
+                next <- v
+
+        member x.Prev 
+            with get() = prev
+            and set (v : UnoptimizedRenderJobFragment<'f>) =
+                prev <- v
+                if v <> null then
+                    v.Frag.Next <- frag
+
+        member x.RunAll() =
+            frag.RunAll()
+
+        interface IRenderJobFragment<UnoptimizedRenderJobFragment<'f>, 'f> with
+            member x.Statistics = x.Statistics
+            member x.SortKey = sortKey
+            member x.RenderJob = rj
+            member x.Dispose() = x.Dispose()
+            member x.Next 
+                with get() = x.Next
+                and set v = x.Next <- v
+            member x.Prev 
+                with get() = x.Prev
+                and set v = x.Prev <- v
+            member x.RunAll() =
+                x.RunAll()
+
+    type SortedProgram<'s, 'f when 'f :> IDynamicFragment<'f> and 'f : (new : unit -> 'f) and 'f : null and 's :> IRenderJobFragment<'s, 'f> and 's : null and 's : equality>(manager : ResourceManager, add : IAdaptiveObject -> unit, remove : IAdaptiveObject -> unit) =
         let stats = EventSourceAggregate<FrameStatistics>(FrameStatistics.Zero, (+), (-))
 
-        let fragments = Dictionary<RenderJob, RenderJobFragment<'f>>()
-        let sortedFragments = BucketAVL.custom (fun (l : RenderJobFragment<'f>) (r : RenderJobFragment<'f>) -> compareSortKey l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
+        //(idCache : Cache<IMod, int>, parent : DependencySet, manager : ResourceManager, rj : RenderJob)
+        let ctor = 
+            let t = typeof<'s>.GetConstructor([|typeof<Cache<IMod, int>>; typeof<DependencySet>; typeof<ResourceManager>; typeof<RenderJob>|])
+            if t = null then failwithf "fragment type does not provide needed constructor: %A" typeof<'s>
+            else t
+
+        let newFragment(idCache : Cache<IMod, int>, parent : DependencySet, manager : ResourceManager, rj : RenderJob) =
+            ctor.Invoke [|idCache :> obj; parent :> obj; manager :> obj; rj :> obj|] |> unbox<'s>
+
+
+        let fragments = Dictionary<RenderJob, 's>()
+        let sortedFragments = BucketAVL.custom (fun (l : 's) (r : 's) -> compareSortKey l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
            
         let deps = DependencySet(add, remove)
 
@@ -853,14 +984,15 @@ module Programs =
         let idCache = Cache(Ag.emptyScope, fun _ -> Interlocked.Increment &currentId)
 
 
-        let first = RenderJobFragment<'f>(idCache, deps, manager, RenderJob.Empty)
+        
+        let first = newFragment(idCache, deps, manager, RenderJob.Empty)
         let mutable additions = 0
         let mutable removals = 0
 
         let sw = new System.Diagnostics.Stopwatch()
 
         member x.Add(rj : RenderJob) =
-            let n = new RenderJobFragment<'f>(idCache, deps, manager, rj)
+            let n = newFragment(idCache, deps, manager, rj)
             fragments.Add(rj, n)
             BucketAVL.insertNeighbourhood sortedFragments n (fun prev next ->
                 let prev =
@@ -959,5 +1091,7 @@ module Programs =
             member x.Run(fbo,ctx) = x.Run(fbo,ctx)
             member x.Dispose() = x.Dispose()
 
-    type OptimizedSwitchProgram = OptimizedProgram<SwitchFragment>
-    type OptimizedManagedProgram = OptimizedProgram<ManagedDynamicFragment>
+    type OptimizedSwitchProgram = SortedProgram<OptimizedRenderJobFragment<SwitchFragment>, SwitchFragment>
+    type UnoptimizedSwitchProgram = SortedProgram<UnoptimizedRenderJobFragment<SwitchFragment>, SwitchFragment>
+    type RuntimeOptimizedSwitchProgram = SortedProgram<UnoptimizedRenderJobFragment<SwitchFragmentRedundancyRemoval>, SwitchFragmentRedundancyRemoval>
+    type OptimizedManagedProgram = SortedProgram<OptimizedRenderJobFragment<ManagedDynamicFragment>, ManagedDynamicFragment>

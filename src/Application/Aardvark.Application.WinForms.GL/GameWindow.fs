@@ -408,7 +408,8 @@ type GameWindow(ctx : Context, samples : int) as this =
                         if not first then
                             avgFrameTime.Add(sw.Elapsed.TotalSeconds)
 
-                        transact (fun () -> time.MarkOutdated())
+                        if not time.OutOfDate then
+                            transact (fun () -> time.MarkOutdated())
                         first <- false
                     )
 
