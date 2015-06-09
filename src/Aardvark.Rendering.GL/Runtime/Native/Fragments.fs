@@ -215,10 +215,10 @@ module Fragments =
                         let jumpPosition = block.Size - jumpSize
                         let jumpAddress = block.Pointer + (nativeint jumpPosition)
                         let jumpOffset = int (next.EntryPointer - jumpAddress)
-                        jumpDistance.Emit((jumpOffset - jumpSize) |> abs |> int64)
+                        //jumpDistance.Emit((jumpOffset - jumpSize) |> abs |> int64)
                         x.WriteJump(jumpOffset)
                     else 
-                        jumpDistance.Emit(0L)
+                        //jumpDistance.Emit(0L)
                         x.WriteJump(0)
                 )
 

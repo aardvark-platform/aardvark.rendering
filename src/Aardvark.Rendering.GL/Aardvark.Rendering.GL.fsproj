@@ -72,6 +72,7 @@
     <Compile Include="Resources\Renderbuffer.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Management\ResourceManager.fs" />
+    <Compile Include="Trie.fs" />
     <Compile Include="Runtime\ReferenceCountingSet.fs" />
     <Compile Include="Runtime\IFragment.fs" />
     <Compile Include="Runtime\Native\Memory.fs" />

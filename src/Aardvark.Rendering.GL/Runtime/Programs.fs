@@ -113,7 +113,7 @@ module Programs =
                
                 
     [<AllowNullLiteral>]
-    type private RenderJobFragment(idCache : Cache<IMod, int>, parent : DependencySet, memory : MemoryManager, manager : ResourceManager, rj : RenderJob) =
+    type private RenderJobFragment(pendingRecompiles : HashSet<RenderJobFragment>, parent : DependencySet, memory : MemoryManager, manager : ResourceManager, rj : RenderJob) =
         inherit Fragment<RenderJob>(memory, 0, rj)
 
         let stats = EventSource<FrameStatistics>(FrameStatistics.Zero)
@@ -121,11 +121,11 @@ module Programs =
 
         let mutable state : Option<InstructionCompiler.CompilerState> = None
 
-        let sortKey = projections |> Array.map (fun p -> rj |> p |> idCache.Invoke) |> Array.toList
+        //let sortKey = projections |> Array.map (fun p -> rj |> p |> idCache.Invoke) |> Array.toList
 
         member x.Statistics = stats :> IEvent<FrameStatistics>
 
-        member private x.Recompile(prev : RenderJob, me : RenderJob) =
+        member x.Recompile () =
 
             let mutable removeOldState = id
             match state with
@@ -137,7 +137,7 @@ module Programs =
                     x.Clear()
                 | _ -> ()
                 
-            let newState = InstructionCompiler.compileDelta manager (NativeDynamicFragment(x)) prev me
+            let newState = InstructionCompiler.compileDelta manager (NativeDynamicFragment(x)) base.Prev.Tag x.Tag
             state <- Some newState
             let s = newState.statistics.Values.Subscribe(fun s ->
                 stats.Emit(s)
@@ -149,13 +149,9 @@ module Programs =
 
         member x.RenderJob = x.Tag
 
-        member x.SortKey = sortKey
-
         member x.Dispose() =
             match state with
                 | Some state -> 
-                    projections |> Array.iter (fun p -> rj |> p |> idCache.Revoke |> ignore)
-
                     state.Dispose()
                     parent.Remove(state)
                     base.Dispose()
@@ -174,7 +170,7 @@ module Programs =
                   if v = null then
                       x.Dispose()
                   elif x.Tag.IsValid then 
-                      x.Recompile(v.Tag, x.Tag)
+                      pendingRecompiles.Add x |> ignore
 
     [<AllowNullLiteral>]
     type private CompleteRenderJobFragment(idCache : Cache<IMod, int>, parent : DependencySet, memory : MemoryManager, manager : ResourceManager, rj : RenderJob) =
@@ -475,21 +471,25 @@ module Programs =
     type OptimizedNativeProgram(manager : ResourceManager, add : IAdaptiveObject -> unit, remove : IAdaptiveObject -> unit) =
         let memory = new MemoryManager()
 
+        let pendingRecompiles = HashSet<RenderJobFragment>()
+
         let stats = EventSourceAggregate<FrameStatistics>(FrameStatistics.Zero, (+), (-))
         let jumpDistance = EventSourceAggregate<int64>(0L, (+),(-))
 
         let fragments = Dictionary<RenderJob, RenderJobFragment>()
-        let sortedFragments = BucketAVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareSortKey l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
+        //let sortedFragments = BucketAVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareSortKey l.SortKey r.SortKey)  //AVL.custom (fun (l : RenderJobFragment) (r : RenderJobFragment) -> compareRenderJobs l.RenderJob r.RenderJob)
+          
+        let trie = Trie<IMod,RenderJobFragment>()
            
         let deps = DependencySet(add, remove)
 
-        let mutable currentId = 0
-        let idCache = Cache(Ag.emptyScope, fun _ -> Interlocked.Increment &currentId)
+        //let mutable currentId = 0
+//        let idCache = Cache(Ag.emptyScope, fun _ -> Interlocked.Increment &currentId)
 
-        let prolog = RenderJobFragment(idCache, deps, memory, manager, RenderJob.Empty)
+        let prolog = RenderJobFragment(pendingRecompiles, deps, memory, manager, RenderJob.Empty)
         do prolog.Append(Assembler.functionProlog 6) |> ignore
            jumpDistance.Add prolog.JumpDistance
-        let epilog = RenderJobFragment(idCache, deps, memory, manager, RenderJob.Empty)
+        let epilog = RenderJobFragment(pendingRecompiles, deps, memory, manager, RenderJob.Empty)
         do epilog.Append(Assembler.functionEpilog 6) |> ignore
                
         let mutable run : unit -> unit = id 
@@ -499,30 +499,30 @@ module Programs =
         let mutable additions = 0
         let mutable removals = 0
 
-        let defragment() =
-            Log.startTimed "defragmentation"
-
-            //Log.warn "defragmentation currently disabled"
-
-            let mutable current = prolog
-            current.Freeze()
-                
-            let mutable index = 0
-            while current.Next <> null do
-                //printfn "%d" index
-                current.DefragmentNext()
-
-                let next = current.Next
-                current.Unfreeze()
-                //System.Threading.Thread.Sleep(100)
-                next.Freeze()
-
-                current <- next
-                index <- index + 1
-
-            current.Unfreeze()
-
-            Log.stop()
+        let defragment() = ()
+//            Log.startTimed "defragmentation"
+//
+//            //Log.warn "defragmentation currently disabled"
+//
+//            let mutable current = prolog
+//            current.Freeze()
+//                
+//            let mutable index = 0
+//            while current.Next <> null do
+//                //printfn "%d" index
+//                current.DefragmentNext()
+//
+//                let next = current.Next
+//                current.Unfreeze()
+//                //System.Threading.Thread.Sleep(100)
+//                next.Freeze()
+//
+//                current <- next
+//                index <- index + 1
+//
+//            current.Unfreeze()
+//
+//            Log.stop()
 
         let mutable defrag = DelayedTask(defragment)
         let mutable totalChanges = 0
@@ -534,12 +534,13 @@ module Programs =
                     totalChanges <- 0
 
 
-
+        let sw = System.Diagnostics.Stopwatch()
 
         member x.Add(rj : RenderJob) =
-            let n = RenderJobFragment(idCache, deps, memory, manager, rj)
+            let n = RenderJobFragment(pendingRecompiles, deps, memory, manager, rj)
             fragments.Add(rj, n)
-            BucketAVL.insertNeighbourhood sortedFragments n (fun prev next ->
+            let key = projections |> Array.map (fun f -> f rj) |> Array.toList
+            trie.Add(key, n, fun prev next ->
                 let prev = defaultArg prev prolog
                 let next = defaultArg next epilog
 
@@ -548,7 +549,17 @@ module Programs =
                 n.Next <- next
                 next.Prev <- n
                 hintDefragmentation 1
-            ) |> ignore
+            ) |> ignore 
+//            BucketAVL.insertNeighbourhood sortedFragments n (fun prev next ->
+//                let prev = defaultArg prev prolog
+//                let next = defaultArg next epilog
+//
+//                n.Prev <- prev
+//                prev.Next <- n
+//                n.Next <- next
+//                next.Prev <- n
+//                hintDefragmentation 1
+//            ) |> ignore
 
             stats.Add n.Statistics
             jumpDistance.Add n.JumpDistance
@@ -560,7 +571,9 @@ module Programs =
                     if not <| fragments.Remove rj then
                         failwith "inconsistent state in NativeOptimizedProgram"
 
-                    let removed = BucketAVL.remove sortedFragments f
+                    let key = projections |> Array.map (fun f -> f rj) |> Array.toList
+                    let removed = trie.Remove(key,f)
+                    //let removed = BucketAVL.remove sortedFragments f
                     if removed then
                             
                         stats.Remove f.Statistics
@@ -604,6 +617,9 @@ module Programs =
 
                     
         member x.Run(fbo : Framebuffer, context : ContextHandle) =
+            pendingRecompiles |> Seq.toArray |> Seq.iter (fun s -> s.Recompile ())
+            pendingRecompiles.Clear()
+
             let resources = deps.GetAndClearChanges()
 
             let mutable resourceUpdates = 0

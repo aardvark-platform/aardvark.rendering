@@ -231,40 +231,38 @@ module RenderTasks =
                             x.Remove(0UL, a)
 
         member x.Run (fbo : IFramebuffer) =
-            using ctx.ResourceLock (fun _ ->
-                x.EvaluateAlways (fun () ->
-                    let old = Array.create 4 0
-                    let mutable oldFbo = 0
-                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+            use a = ctx.ResourceLock
+            x.EvaluateAlways (fun () -> ())
+            let old = Array.create 4 0
+            let mutable oldFbo = 0
+            OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
+            OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                    let fboHandle = fbo |> unbox<Framebuffer>
-                    let handle = fboHandle.Handle
+            let fboHandle = fbo |> unbox<Framebuffer>
+            let handle = fboHandle.Handle
 
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                    GL.Check "could not bind framebuffer"
-                    GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
-                    GL.Check "could not set viewport"
+            GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+            GL.Check "could not bind framebuffer"
+            GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+            GL.Check "could not set viewport"
 
-                    if reader.OutOfDate then
-                        x.ProcessDeltas (reader.GetDelta())
+            if reader.OutOfDate then
+                x.ProcessDeltas (reader.GetDelta())
 
-                    let mutable stats = FrameStatistics.Zero
-                    let contextHandle = ContextHandle.Current.Value
+            let mutable stats = FrameStatistics.Zero
+            let contextHandle = ContextHandle.Current.Value
 
-                    //render
-                    for (KeyValue(_,p)) in programs do
-                        stats <- stats + p.Run(fboHandle, contextHandle)
+            //render
+            for (KeyValue(_,p)) in programs do
+                stats <- stats + p.Run(fboHandle, contextHandle)
 
 
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
-                    GL.Check "could not bind framebuffer"
-                    GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-                    GL.Check "could not set viewport"
+            GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+            GL.Check "could not bind framebuffer"
+            GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+            GL.Check "could not set viewport"
 
-                    RenderingResult(fbo, stats)
-                )
-            )
+            RenderingResult(fbo, stats)
 
         member x.Dispose() = 
             for _,p in Map.toSeq programs do
