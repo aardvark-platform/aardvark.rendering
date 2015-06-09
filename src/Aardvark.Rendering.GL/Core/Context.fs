@@ -62,6 +62,15 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
 
     let mutable packAlignment = None
 
+    member x.CurrentContextHandle
+        with get() =  currentToken.Value.Value.Handle
+        and set ctx =
+            match ctx with
+                | Some ctx ->
+                    currentToken.Value <- Some <| new ContextToken((fun _ -> ctx), ignore)
+                | None ->
+                    currentToken.Value <- None
+
     member x.Runtime = runtime
 
     member x.Driver =
@@ -129,8 +138,8 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
                         currentToken.Value <- Some x
                         handle),
                     ( fun x ->
-                        //handle.ReleaseCurrent()
-                        //currentToken.Value <- None
+                        handle.ReleaseCurrent()
+                        currentToken.Value <- None
                         ())
                 ) :> _
                     

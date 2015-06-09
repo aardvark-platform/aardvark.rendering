@@ -365,7 +365,9 @@ type GameWindow(ctx : Context, samples : int) as this =
         if c <> null then
             c.MakeCurrent(null)
 
-        ContextHandle.primaryContext.MakeCurrent()
+        if ContextHandle.primaryContext <> null then
+            ContextHandle.primaryContext.MakeCurrent()
+
         base.OnLoad(e)
         loaded <- true
         base.MakeCurrent()

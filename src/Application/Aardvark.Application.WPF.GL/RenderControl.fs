@@ -27,6 +27,9 @@ type OpenGlRenderControl(context : Context, samples : int) as this =
 
     member x.Sizes = ctrl.Sizes
 
+    member x.Context = ctrl.Context
+    member x.WindowInfo = ctrl.WindowInfo
+
     member x.Time = ctrl.Time
     interface IRenderTarget with
         member x.Time = ctrl.Time

@@ -55,26 +55,6 @@ type Runtime(ctx : Context) =
     let mutable ctx = ctx
     let mutable manager = if ctx <> null then ResourceManager(ctx) else null
 
-    let firstGLCall () = 
-        Log.startTimed "initializing OpenGL runtime"
-
-        using ctx.ResourceLock (fun _ ->
-                OpenTK.Graphics.OpenGL4.GL.GetError() |> ignore
-                OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
-                OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
-                
-               
-                Log.line "vendor:   %A" ctx.Driver.vendor
-                Log.line "renderer: %A" ctx.Driver.renderer 
-                Log.line "version:  OpenGL %A / GLSL %A" ctx.Driver.version ctx.Driver.glsl
-            )
-
-        Log.stop()
-
-    do if ctx <> null then
-        firstGLCall ()
-        //currentRuntime <- Some (this :> IRuntime)
-
     member x.SupportsUniformBuffers =
         ExecutionContext.uniformBuffersSupported
 
@@ -84,7 +64,6 @@ type Runtime(ctx : Context) =
             ctx <- c
             manager <- ResourceManager(ctx)
             //compiler <- Compiler.Compiler(x, c)
-            firstGLCall ()
             //currentRuntime <- Some (x :> IRuntime)
 
 
