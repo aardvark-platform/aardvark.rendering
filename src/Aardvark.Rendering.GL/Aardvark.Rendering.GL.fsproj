@@ -49,6 +49,7 @@
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
   <ItemGroup>
+    <Compile Include="Core\Trie.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Validation.fs" />
     <Compile Include="Core\Config.fs" />
@@ -72,7 +73,6 @@
     <Compile Include="Resources\Renderbuffer.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Management\ResourceManager.fs" />
-    <Compile Include="Trie.fs" />
     <Compile Include="Runtime\ReferenceCountingSet.fs" />
     <Compile Include="Runtime\IFragment.fs" />
     <Compile Include="Runtime\Native\Memory.fs" />
