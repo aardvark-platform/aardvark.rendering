@@ -601,7 +601,7 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
-    let modelPath =  @"C:\Aardwork\scenes\bench2\1000_128_500_18.dae"
+    let modelPath =  @"C:\Aardwork\scenes\bench\1000_128_500_18.dae"
 
     //let modelPath =  @"C:\Aardwork\scenes\bench2\8000_128_4000_6.dae"
 
@@ -717,32 +717,33 @@ let main args =
         proj.AspectRatio <- aspect
     ) |> ignore
 
-//    let ctx = app.Runtime.Context
-//    let fbo = new Aardvark.Rendering.GL.Framebuffer(ctx,(fun _ -> 0),ignore,[],None)
-//
-//
-//
-//    let sw = System.Diagnostics.Stopwatch()
-//    using ctx.ResourceLock (fun _ ->
-//        for i in 0 .. 10000 do
-//            printfn "run %d" i
-//            sw.Restart()
-//            let task = app.Runtime.CompileRender(sg.RenderJobs())
-//            task.Run fbo |> ignore
-//            sw.Stop ()
-//            task.Dispose()
-//            app.Runtime.Reset()
-//            printfn "%A ms" sw.Elapsed.TotalMilliseconds
-//            System.Environment.Exit 0
-//    )
-// 
+    let ctx = app.Runtime.Context
+    let fbo = new Aardvark.Rendering.GL.Framebuffer(ctx,(fun _ -> 0),ignore,[],None)
+
+
+
+    let sw = System.Diagnostics.Stopwatch()
+    using ctx.ResourceLock (fun _ ->
+        for i in 0 .. 10000 do
+            printfn "run %d" i
+            sw.Restart()
+            let task = app.Runtime.CompileRender(sg.RenderJobs())
+            task.Run fbo |> ignore
+            sw.Stop ()
+            task.Dispose()
+            printfn "%A ms" sw.Elapsed.TotalMilliseconds
+            System.Environment.Exit 0
+    )
  
-//    let task = app.Runtime.CompileRender(sg.RenderJobs())
-//    using ctx.ResourceLock (fun _ ->
-//       task.Run fbo |> ignore
-//    )   
  
     let task = app.Runtime.CompileRender(sg.RenderJobs())
+    using ctx.ResourceLock (fun _ ->
+       task.Run fbo |> ignore
+    )   
+ 
+    let task = app.Runtime.CompileRender(sg.RenderJobs())
+
+
 
     ctrl.RenderTask <- task
 

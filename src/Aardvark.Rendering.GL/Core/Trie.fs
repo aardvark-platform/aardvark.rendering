@@ -1,12 +1,9 @@
 ﻿namespace Aardvark.Rendering.GL
 
+open Aardvark.Base
 open System.Collections
 open System.Collections.Generic
 open System.Runtime.InteropServices
-
-module Option =
-    let ofObj (o : 'a) =
-        if o = null then None else Some o
 
 [<AllowNullLiteral>]
 type Linked<'a> =
@@ -111,6 +108,9 @@ module Linked =
                 right.Prev.Next <- n
 
         n.Next <- right
+
+    let value (l : Linked<'a>) = l.Value
+
 
 type OrderedDictionary<'k, 'v when 'k : equality>() =
     let store = Dictionary<'k, Linked<'k * 'v>>()
@@ -228,6 +228,11 @@ type OrderedDictionary<'k, 'v when 'k : equality>() =
                     | None ->
                         ()
 
+    member x.Clear() =
+        store.Clear()
+        first <- null
+        last <- null
+
     member x.Count = store.Count
 
     member x.First = first
@@ -237,10 +242,54 @@ type OrderedDictionary<'k, 'v when 'k : equality>() =
         first |> Linked.toSeq
 
     member x.Keys =
-        first |> Linked.toSeq |> Seq.map fst
+        first |> Seq.map fst
 
     member x.Values =
-        first |> Linked.toSeq |> Seq.map snd
+        first |> Seq.map snd
+
+    interface IEnumerable with
+        member x.GetEnumerator() = failwith ""
+
+    interface IEnumerable<KeyValuePair<'k, 'v>> with
+        member x.GetEnumerator() = failwith ""
+
+    interface ICollection<KeyValuePair<'k, 'v>> with
+        member x.Contains(KeyValue(k,v)) =
+            match x.TryGetValue k with
+                | (true, v') when System.Object.Equals(v, v') -> true
+                | _ -> false
+
+        member x.CopyTo(arr, index) =
+            let mutable i = index
+            for (k,v) in Linked.toSeq first do
+                arr.[i] <- KeyValuePair(k,v)
+                i <- i + 1
+
+        member x.Add((KeyValue(k,v))) = x.Add(k, v)
+        member x.Remove(KeyValue(k,v)) =
+            let success = ref false
+            x.Alter(k, fun _ o _ ->
+                match o with
+                    | Some o when System.Object.Equals(o,v) -> 
+                        success := true
+                        None
+                    | _ -> o
+            )
+            !success
+        member x.Clear() = x.Clear()
+        member x.Count = x.Count
+        member x.IsReadOnly = false
+
+    interface IDictionary<'k, 'v> with
+        member x.Add(k, v) = x.Add(k,v)
+        member x.Remove(k) = x.Remove k
+        member x.TryGetValue(k, v) = x.TryGetValue(k,&v)
+        member x.Keys = List(x.Keys) :> ICollection<_>
+        member x.Values = List(x.Values) :> ICollection<_>
+        member x.ContainsKey k = store.ContainsKey k
+        member x.Item
+            with get (k : 'k) = x.[k]
+            and set (k : 'k) (v : 'v) = x.[k] <- v
 
 module OrderedDictionary =
     let empty<'k, 'v when 'k : equality> = OrderedDictionary<'k, 'v>()
@@ -250,6 +299,12 @@ module OrderedDictionary =
         
     let remove (key : 'k) (d : OrderedDictionary<'k, 'v>) =
         d.Remove key
+
+    let alter (key : 'k) (valueFun : Option<'k * 'v> -> Option<'v> -> Option<'k * 'v> -> Option<'v>) (d : OrderedDictionary<'k, 'v>) =
+        d.Alter(key, valueFun)
+
+    let clear (d : OrderedDictionary<'k, 'v>) =
+        d.Clear()
 
     let tryFind (key : 'k) (d : OrderedDictionary<'k, 'v>) =
         match d.TryGetValue key with
@@ -267,14 +322,28 @@ type Trie<'k, 'v when 'k : equality>() =
     let children = OrderedDictionary<'k,Trie<'k, 'v>>()
     let values = OrderedDictionary<obj, Linked<'v>>()
 
-    let mutable first = None
-    let mutable last = None
+    let mutable first : Linked<'v> = null
+    let mutable last : Linked<'v>  = null
 
-    member x.First = first
-    member x.Last = last
+    member private x.FirstNode = first
+    member private x.LastNode = last
+
+    member x.First =
+        if first = null then None
+        else Some first
+
+    member x.Last =
+        if last = null then None
+        else Some last
+
+    member x.Clear() = 
+        children.Clear()
+        values.Clear()
+        first <- null
+        last <- null
 
     member x.Add(key : list<'k>, value : 'v, adjust : Option<'v> -> Option<'v> -> unit) =
-        x.Add(key, None, None, fun l r -> adjust l r; value)
+        x.Add(key, null, null, fun l r -> adjust l r; value)
 
     member x.IsEmpty =
         children.Count = 0 && values.Count = 0
@@ -289,15 +358,15 @@ type Trie<'k, 'v when 'k : equality>() =
         let success = ref false
         match key with
             | k::key ->
-                children.Alter(k, fun l selfOpt r ->
+                children |> OrderedDictionary.alter k (fun l selfOpt r ->
                     match selfOpt with
                         | Some self ->
                             if self.Remove(key, value, destroy) then
                                 success := true
                                 if self = (snd children.First.Value) then
-                                    first <- self.First
+                                    first <- self.FirstNode
                                 if self = (snd children.Last.Value) then
-                                    last <- self.Last
+                                    last <- self.LastNode
                                 
                                 if self.IsEmpty then
                                     None
@@ -330,28 +399,27 @@ type Trie<'k, 'v when 'k : equality>() =
                 )
 
                 if values.Count = 0 then
-                    first <- None
-                    last <- None
+                    first <- null
+                    last <- null
                 else
-                    first <- values.First.Value |> snd |> Option.ofObj
-                    last <- values.Last.Value |> snd |> Option.ofObj
+                    first <- values.First.Value |> snd 
+                    last <- values.Last.Value |> snd
 
                 !success
 
-
-    member private x.Add(key : list<'k>, left : Option<Linked<'v>>, right : Option<Linked<'v>>, valueFun : Option<'v> -> Option<'v> -> 'v) =
+    member private x.Add(key : list<'k>, left : Linked<'v>, right : Linked<'v>, valueFun : Option<'v> -> Option<'v> -> 'v) =
         match key with
             | k::key ->
                 children.Alter(k, fun l self r ->
 
                     let l' =
                         match l with
-                            | Some (_,t) -> t.Last
+                            | Some (_,t) -> t.LastNode
                             | None -> left
 
                     let r' =
                         match r with
-                            | Some (_,t) -> t.First
+                            | Some (_,t) -> t.FirstNode
                             | None -> right
 
                     match self with
@@ -360,15 +428,15 @@ type Trie<'k, 'v when 'k : equality>() =
 
                             let lastTrie = snd children.Last.Value
                             if self = lastTrie then
-                                last <- lastTrie.Last
+                                last <- lastTrie.LastNode
 
                             Some self
                         | None ->
                             let n = Trie<'k, 'v>()
                             n.Add(key, l', r', valueFun)
-                            last <- n.Last
+                            last <- n.LastNode
                             match first with
-                                | None -> first <- n.First
+                                | null -> first <- n.FirstNode
                                 | _ -> ()
 
                             Some n
@@ -377,42 +445,63 @@ type Trie<'k, 'v when 'k : equality>() =
                 let leftNode =
                     match values.Last with
                         | null -> left
-                        | l -> l.Value |> snd |> Some
+                        | l -> l.Value |> snd
 
                 let rightNode = right
 
                 let realLeft =
                     match leftNode with
-                        | Some r -> Some r.Value
-                        | None -> None
+                        | null -> None
+                        | r -> Some r.Value
                 
                 let realRight =
                     match rightNode with
-                        | Some r -> Some r.Value
-                        | None -> None
+                        | null -> None
+                        | r -> Some r.Value
 
                 let v = valueFun realLeft realRight
                 let node = Linked(v)
 
-                match leftNode with 
-                    | Some l ->
-                        l.Next <- node
-                        node.Prev <- l
-                    | None -> ()
 
-                match rightNode with 
-                    | Some r ->
-                        r.Prev <- node
-                        node.Next <- r
-                    | None -> ()
+                if leftNode <> null then
+                    leftNode.Next <- node
+                    node.Prev <- leftNode
+   
+                if rightNode <> null then
+                    rightNode.Prev <- node
+                    node.Next <- rightNode
+      
 
                 values.[v :> obj] <- node
-                match first with
-                    | None -> first <- Some node
-                    | _ -> ()
-                last <- Some node
+                if first = null then
+                    first <- node
+
+                last <- node
 
                 ()
+
+
+    member x.Item
+        with get(key : list<'k>) =
+            match key with
+                | k::key ->
+                    children.[k].[key]
+                | [] ->
+                    values.Values |> Seq.map (Linked.value)
+
+module Trie =
+    
+    let empty<'k, 'v when 'k : equality>  = Trie<'k, 'v>()
+
+    let add (key : list<'k>) (value : 'v) (t : Trie<'k, 'v>) =
+        t.Add(key, value)
+
+    let remove (key : list<'k>) (value : 'v) (t : Trie<'k, 'v>) =
+        t.Remove(key, value)
+
+    let clear (t : Trie<'k, 'v>) =
+        t.Clear()
+
 
 module TrieTest =
 
