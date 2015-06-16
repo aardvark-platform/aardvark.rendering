@@ -589,7 +589,13 @@ type IEvent<'a> with
 
         subscribe, { new IDisposable with member x.Dispose() = live := false; self.Value.Dispose() }
 
-let modelViewer args =
+
+
+[<EntryPoint>]
+[<STAThread>]
+let main args = 
+    //timeTest()
+
     let modelPath = match args |> Array.toList with
                       | []     -> printfn "using default eigi model."; System.IO.Path.Combine( __SOURCE_DIRECTORY__, "eigi", "eigi.dae") 
                       | [path] -> printfn "using path: %s" path; path
@@ -604,12 +610,41 @@ let modelViewer args =
 
     use app = new OpenGlApplication()
     let f = app.CreateGameWindow(1)
-    let ctrl = f 
+    let ctrl = f //f.Control
+
+//    ctrl.Mouse.Events.Values.Subscribe(fun e ->
+//        match e with
+//            | MouseDown p -> printfn  "down: %A" p.location.Position
+//            | MouseUp p -> printfn  "up: %A" p.location.Position
+//            | MouseClick p -> printfn  "click: %A" p.location.Position
+//            | MouseDoubleClick p -> printfn  "doubleClick: %A" p.location.Position
+//            | MouseMove p -> printfn  "move: %A" p.Position
+//            | MouseScroll(delta,p) -> printfn  "scroll: %A" delta
+//            | MouseEnter p -> printfn  "enter: %A" p.Position
+//            | MouseLeave p -> printfn  "leave: %A" p.Position
+//    ) |> ignore
 
     let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
     let proj = CameraProjectionPerspective(60.0, 0.1, 10000.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
     let mode = Mod.initMod FillMode.Fill
 
+
+
+//    let moveX =
+//        let l = left |> Mod.map (fun a -> if a then -1.0 else 0.0) 
+//        let r = right |> Mod.map (fun a -> if a then 1.0 else 0.0) 
+//        Mod.map2 (+) l r
+//
+//    let moveView =
+//        let f = forward |> Mod.map (fun a -> if a then 1.0 else 0.0) 
+//        let b = backward |> Mod.map (fun a -> if a then -1.0 else 0.0) 
+//        Mod.map2 (+) f b
+
+
+    //ctrl.Time |> Mod.registerCallback (fun t -> printfn "%A" t) |> ignore
+
+//    use cc = WinForms.addCameraController w view
+//    WinForms.addFillModeController w mode
 
     let sg = Assimp.load modelPath
 
@@ -621,6 +656,8 @@ let modelViewer args =
             if sourceSize.MajorDim = 0 then target.SizeX / sourceSize.X
             elif sourceSize.MajorDim = 1 then target.SizeY / sourceSize.Y
             else target.SizeZ / sourceSize.Z
+
+
 
         let trafo = Trafo3d.Translation(-source.Center) * Trafo3d.Scale(scale) * Trafo3d.Translation(target.Center)
 
@@ -658,22 +695,62 @@ let modelViewer args =
            //|> normalizeTo (Box3d(-V3d.III, V3d.III))
     
 
+    //Demo.AssimpExporter.save @"C:\Users\Schorsch\Desktop\quadScene\eigi.dae" sg
+
+
+//    let arr = new ModRef<Array> ([|V3f.III|] :> Array)
+//
+//    let info = arr.Select(fun arr -> DrawCallInfo(FaceVertexCount = arr.Length))
+//    let line = 
+//        new Sg.VertexAttributeApplicator(
+//            SymDict.ofList [
+//                DefaultSemantic.Positions, BufferView(ArrayBuffer(arr), typeof<V3f>)
+//            ], 
+//            new Sg.RenderNode(info)
+//        )
+// 
+//    transact <| fun () ->
+//        arr.Value <- [||]
+    
     ctrl.Sizes.Values.Subscribe(fun s ->
         let aspect = float s.X / float s.Y
         proj.AspectRatio <- aspect
     ) |> ignore
 
+//    let ctx = app.Runtime.Context
+//    let fbo = new Aardvark.Rendering.GL.Framebuffer(ctx,(fun _ -> 0),ignore,[],None)
+//
+//
+//
+//    let sw = System.Diagnostics.Stopwatch()
+//    using ctx.ResourceLock (fun _ ->
+//        for i in 0 .. 10000 do
+//            printfn "run %d" i
+//            sw.Restart()
+//            let task = app.Runtime.CompileRender(sg.RenderJobs())
+//            task.Run fbo |> ignore
+//            sw.Stop ()
+//            task.Dispose()
+//            app.Runtime.Reset()
+//            printfn "%A ms" sw.Elapsed.TotalMilliseconds
+//            System.Environment.Exit 0
+//    )
+// 
+ 
+//    let task = app.Runtime.CompileRender(sg.RenderJobs())
+//    using ctx.ResourceLock (fun _ ->
+//       task.Run fbo |> ignore
+//    )   
+ 
     let task = app.Runtime.CompileRender(sg.RenderJobs())
+
     ctrl.RenderTask <- task
 
+
+//    w.Run()
+
+//    let app = System.Windows.Application()
+//    app.Run(f) |> ignore
+    //System.Windows.Forms.Application.Run(f)
     f.Run()
     0
-
-
-[<EntryPoint>]
-[<STAThread>]
-let main args = 
-    Demo.Demo.demo()
-    //modelViewer args
-
-    
