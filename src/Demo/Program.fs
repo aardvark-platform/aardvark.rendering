@@ -680,7 +680,7 @@ let main args =
     let sg =
         sg |> Sg.effect [
                 Shader.pvLight |> toEffect
-                Shader.pvFrag |> toEffect
+                Shader.pvFrag  |> toEffect
                 //DefaultSurfaces.trafo |> toEffect
 //                DefaultSurfaces.pointSurface pointSize |> toEffect
                 //DefaultSurfaces.uniformColor color |> toEffect

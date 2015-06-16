@@ -27,7 +27,8 @@ type OpenGlApplication() =
                 ContextHandle.Current <- Some handle
 
                 using ctx.ResourceLock (fun _ ->
-                    GLVM.vmInit()
+                    try GLVM.vmInit()
+                    with _ -> Log.line "No glvm found, running without glvm"
 
                     Log.startTimed "initializing OpenGL runtime"
 
