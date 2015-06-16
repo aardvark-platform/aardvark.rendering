@@ -83,10 +83,10 @@ module Linked =
     let toList (l : Linked<'a>) =
         if l = null then []
         else
-            let mutable current = l
-            [ while current <> null do
-                yield current.Value
-                current <- current.Next
+            let current = ref l
+            [ while !current <> null do
+                yield current.Value.Value
+                current := current.Value.Next
             ]
 
     let insertAfter (left : Linked<'a>) (v : 'a) =
