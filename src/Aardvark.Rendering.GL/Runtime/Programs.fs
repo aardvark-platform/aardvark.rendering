@@ -137,13 +137,15 @@ module Programs =
                     x.Clear()
                 | _ -> ()
                 
-            let newState = InstructionCompiler.compileDelta manager (NativeDynamicFragment(x)) base.Prev.Tag x.Tag
-            state <- Some newState
-            let s = newState.statistics.Values.Subscribe(fun s ->
-                stats.Emit(s)
-            )
-            statSubscription <- Some s
-            parent.Add newState
+            if base.Prev <> null
+            then    
+                let newState = InstructionCompiler.compileDelta manager (NativeDynamicFragment(x)) base.Prev.Tag x.Tag
+                state <- Some newState
+                let s = newState.statistics.Values.Subscribe(fun s ->
+                    stats.Emit(s)
+                )
+                statSubscription <- Some s
+                parent.Add newState
             removeOldState()
             ()
 
