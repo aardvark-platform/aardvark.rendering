@@ -73,7 +73,7 @@ Target "CreatePackage" (fun () ->
     let branch = Fake.Git.Information.getBranchName "."
     let releaseNotes = Fake.Git.Information.getCurrentHash()
 
-    if branch = "master" then
+    if true (* branch = "master" *) then // why this check?
         let tag = Fake.Git.Information.getLastTag()
 
         for id in ownPackages do
@@ -86,7 +86,7 @@ Target "CreatePackage" (fun () ->
                 }) (sprintf "bin/%s.nuspec" id)
     
     else 
-        traceError (sprintf "cannot create package for branch: %A" branch)
+        failwith (sprintf "cannot create package for branch: %A" branch)
 )
 
 Target "Deploy" (fun () ->

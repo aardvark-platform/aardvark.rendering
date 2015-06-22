@@ -4,8 +4,9 @@ source ../Aardvark.Base/bin
 source \\hobel\nuget
 
 nuget Aardvark.Base.Incremental (1.3.5)
+nuget FShade (1.3.5)
+
 nuget RegexProvider  (0.0.5)
 nuget BruTile (0.12.0)
 nuget FSPowerPack.Community (3.0.0)
-nuget FShade (1.3.5)
 nuget AssimpNet (3.3.1)
