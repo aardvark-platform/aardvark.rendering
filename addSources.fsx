@@ -3,10 +3,12 @@
 #I @"packages/Paket.Core/lib/net45"
 #r @"Paket.Core.dll"
 #r @"FakeLib.dll"
+//do System.Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 namespace AdditionalSources
-module AdditionalSources =
 #else
 #endif
+
+module AdditionalSources =
 
     open System.IO
     open System
@@ -14,6 +16,9 @@ module AdditionalSources =
     open Paket
     open Fake
     open System.Text.RegularExpressions
+    open System.IO.Compression
+    open System.Security.Cryptography
+    open System.Text
 
     Logging.event.Publish.Subscribe (fun a -> 
         match a.Level with
@@ -25,8 +30,34 @@ module AdditionalSources =
     ) |> ignore
 
     let packageNameRx = Regex @"(?<name>[a-zA-Z_0-9\.]+?)\.(?<version>([0-9]+\.)*[0-9]+)\.nupkg"
+    let idRegex = Regex @"^id[ \t]+(?<id>.*)$"
+    let versionRx = Regex @"(?<version>([0-9]+\.)*[0-9]+).*"
+    
+    // a hash based on the current path
+    let cacheFile = Path.Combine(Path.GetTempPath(), Convert.ToBase64String(MD5.Create().ComputeHash(UnicodeEncoding.Unicode.GetBytes(Environment.CurrentDirectory))))
+    let paketDependencies = Paket.Dependencies.Locate()
 
-    let paketDependencies = Paket.Dependencies.Locate(__SOURCE_DIRECTORY__)
+    let tryReadPackageId (file : string) =
+        let lines = file |> File.ReadAllLines
+        
+        lines |> Array.tryPick (fun l ->
+            let m = idRegex.Match l
+            if m.Success then Some m.Groups.["id"].Value
+            else None
+        )
+
+    let findCreatedPackages (folder : string) =
+        let files = !!Path.Combine(folder, "**", "paket.template") |> Seq.toList
+        let ids = files |> List.choose tryReadPackageId
+        let tag = 
+            try Git.Information.describe folder
+            with _ -> ""
+
+        let m = versionRx.Match tag
+        if m.Success then
+            Some (m.Groups.["version"].Value, ids)
+        else
+            None
 
     let addSource folder = 
 
@@ -55,13 +86,31 @@ module AdditionalSources =
         else
             File.WriteAllLines("sources.references", newSourceFolders)
 
-        printfn "removing paket.lock. InstallSources automatically creates a new one."
+        tracefn "removing paket.lock. InstallSources automatically creates a new one."
         File.Delete "paket.lock"
 
+    let installPackage (pkgFile : string) =
+        let m = pkgFile |> Path.GetFileName |> packageNameRx.Match
+        if m.Success then
+            let id = m.Groups.["name"].Value
+            let outputFolder = Path.Combine("packages", id) |> Path.GetFullPath
+            
+            if not <| Directory.Exists outputFolder then
+                Directory.CreateDirectory outputFolder |> ignore
+
+            Unzip outputFolder pkgFile
+            File.Copy(pkgFile, Path.Combine(outputFolder, Path.GetFileName pkgFile), true)
+            true
+        else
+            false
+
+    let latestModificationDate (folder : string) =
+        let file = DirectoryInfo(folder).GetFileSystemInfos("*", SearchOption.AllDirectories) |> Seq.maxBy (fun fi -> fi.LastWriteTime)
+        file.LastWriteTime
+
     let installSources () =
-        if File.Exists "paket.lock" |> not 
-        then
-            printfn "paket.lock is missing. Reinstalling paket sources."
+        if not <| File.Exists "paket.lock" then
+            tracefn "paket.lock is missing. Reinstalling paket sources."
             Paket.Dependencies.Locate().Install(true, false, false, false)
 
         let sourceLines =
@@ -70,54 +119,61 @@ module AdditionalSources =
             else 
                 []
 
-        let buildSourceFolder (folder : string) : Set<string> =
-            let code = shellExec { CommandLine = "/C build.cmd CreatePackage"; Program = "cmd.exe"; WorkingDirectory = folder; Args = [] }
+        let cacheTimes = 
+            if File.Exists cacheFile then 
+                cacheFile |> File.ReadAllLines |> Array.choose (fun str -> match str.Split [|';'|] with [|a;b|] -> Some (a,DateTime(b |> int64)) | _ -> None) |> Map.ofArray |> ref
+            else
+                Map.empty |> ref
+
+        let buildSourceFolder (folder : string) : Map<string, Version> =
+            let cacheTime =
+                match Map.tryFind folder !cacheTimes with
+                    | Some t -> t
+                    | None -> DateTime.MinValue
+
+            let modTime = latestModificationDate folder
+
+            let code = 
+                if modTime > cacheTime then
+                    shellExec { CommandLine = "/C build.cmd CreatePackage"; Program = "cmd.exe"; WorkingDirectory = folder; Args = [] }
+                else
+                    0
+
             if code <> 0 then
                 failwith "failed to build: %A" folder
             else
+                cacheTimes := Map.add folder DateTime.Now !cacheTimes
                 let binPath = Path.Combine(folder, "bin", "*.nupkg")
                 !!binPath 
                     |> Seq.choose (fun str ->
                         let m = packageNameRx.Match str
                         if m.Success then
-                            Some m.Groups.["name"].Value
+                            Some (m.Groups.["name"].Value, Version.Parse m.Groups.["version"].Value)
                         else
                             None
                         )
-                    |> Set.ofSeq
-
+                    |> Seq.groupBy fst
+                    |> Seq.map (fun (id,versions) -> (id, versions |> Seq.map snd |> Seq.max))
+                    |> Map.ofSeq
 
         let sourcePackages = sourceLines |> List.map (fun f -> f, buildSourceFolder f) |> Map.ofList
         let installedPackages = paketDependencies.GetInstalledPackages() |> List.map fst |> Set.ofList
 
-        let reinstallPackages = Set.intersect installedPackages (sourcePackages |> Map.toSeq |> Seq.map snd |> Set.unionMany)
-        let tempFile = Path.GetTempFileName() + ".references"
 
+        for (source, packages) in Map.toSeq sourcePackages do
+            for (id, version) in Map.toSeq packages do
+                let fileName = sprintf "%s.%s.nupkg" id (string version)
+                let path = Path.Combine(source, "bin", fileName)
+                let installPath = Path.Combine("packages", id)
 
-        let packageSources = sourcePackages |> Map.toSeq |> Seq.collect (fun (a,b) -> b |> Seq.map (fun b -> (Paket.Domain.NormalizedPackageName (Paket.Domain.PackageName b),a))) |> Map.ofSeq
+                if Directory.Exists installPath then
+                    Directory.Delete(installPath, true)
 
-        for p in reinstallPackages do
-            Directory.Delete(Path.Combine("packages", p), true)
+                if installPackage path then
+                    tracefn "reinstalled %A" id
+                else
+                    traceError <| sprintf "failed to reinstall: %A" id
 
-        let fixLockFile (folders : list<string>) =
-            let lockFile = Paket.LockFile.LoadFrom("paket.lock")
-
-            let newPackages =
-                lockFile.ResolvedPackages
-                    |> Map.map (fun k v ->
-                        match Map.tryFind k packageSources with
-                            | Some folder ->
-                                tracefn "patching package: %A" k
-                                { v with Source = Paket.PackageSources.PackageSource.LocalNuget folder }
-                            | None ->
-                                v
-                    )
-
-
-            let test = Paket.LockFile.Create("paket.lock", lockFile.Options, Paket.PackageResolver.Resolution.Ok newPackages, lockFile.SourceFiles)
-            test.Save()
-            ()
-
-        fixLockFile sourceLines
-
-        paketDependencies.Restore()
+        tracefn "%A" cacheFile
+        File.WriteAllLines(cacheFile, !cacheTimes |> Map.toSeq |> Seq.map (fun (a, time) -> sprintf "%s;%d" a time.Ticks))
+        

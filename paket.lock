@@ -70,7 +70,3 @@ NUGET
     Rx-PlatformServices (2.2.5)
       Rx-Core (>= 2.2.5)
       Rx-Interfaces (>= 2.2.5)
-GITHUB
-  remote: vrvis/additionalSources
-  specs:
-    additionalSources.fsx (59a36ef80fb31b9e337ac064383fef38eb6253b2)

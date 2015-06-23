@@ -25,8 +25,14 @@ do Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let packageNameRx = Regex @"(?<name>[a-zA-Z_0-9\.]+?)\.(?<version>([0-9]+\.)*[0-9]+)\.nupkg"
 let core = ["src/Aardvark.Rendering.sln"];
 
+Target "Install" (fun () ->
+    AdditionalSources.paketDependencies.Install(false, false, false, true)
+    AdditionalSources.installSources ()
+)
+
 Target "Restore" (fun () ->
     AdditionalSources.paketDependencies.Restore()
+    AdditionalSources.installSources ()
 )
 
 
@@ -49,13 +55,7 @@ Target "RemoveSource" (fun () ->
             | _ -> failwith "no source folder given"
 
     tracefn "%A" folder
-
     AdditionalSources.removeSource folder
-)
-
-
-Target "InstallSources" (fun () ->
-    AdditionalSources.installSources ()
 )
 
 
