@@ -2,38 +2,38 @@ NUGET
   remote: \\hobel\nuget
   specs:
     Aardvark.Base (1.3.5)
-      DevILSharp (>= 0.0.9)
+      DevILSharp
     Aardvark.Base.Essentials (1.3.5)
-      Aardvark.Base (>= 1.3.5)
-      Microsoft.Bcl.Immutable (>= 1.0.34)
-      Rx-Core (>= 2.2.5)
-      Rx-Interfaces (>= 2.2.5)
-      Rx-Linq (>= 2.2.5)
-      Rx-Main (>= 2.2.5)
-      Rx-PlatformServices (>= 2.2.5)
+      Aardvark.Base
+      Microsoft.Bcl.Immutable
+      Rx-Core
+      Rx-Interfaces
+      Rx-Linq
+      Rx-Main
+      Rx-PlatformServices
     Aardvark.Base.FSharp (1.3.5)
-      Aardvark.Base (>= 1.3.5)
-      FSharp.Compiler.Service (>= 0.0.85)
-      Microsoft.Bcl.Immutable (>= 1.0.34)
-      NUnit (>= 2.6.4)
-      RegexProvider (>= 0.0.4)
+      Aardvark.Base
+      FSharp.Compiler.Service
+      Microsoft.Bcl.Immutable
+      NUnit
+      RegexProvider
     Aardvark.Base.Incremental (1.3.5)
-      Aardvark.Base (>= 1.3.5)
-      Aardvark.Base.Essentials (>= 1.3.5)
-      Aardvark.Base.FSharp (>= 1.3.5)
-      FsUnit (>= 1.3.0.1)
-      NUnit (>= 2.6.4)
-      Rx-Core (>= 2.2.5)
-      Rx-Interfaces (>= 2.2.5)
-      Rx-Linq (>= 2.2.5)
-      Rx-Main (>= 2.2.5)
-      Rx-PlatformServices (>= 2.2.5)
+      Aardvark.Base
+      Aardvark.Base.Essentials
+      Aardvark.Base.FSharp
+      FsUnit
+      NUnit
+      Rx-Core
+      Rx-Interfaces
+      Rx-Linq
+      Rx-Main
+      Rx-PlatformServices
     FShade (1.3.5)
-      Aardvark.Base (>= 1.3.5)
-      Aardvark.Base.FSharp (>= 1.3.5)
-      FSharp.Compiler.Service (>= 0.0.85)
-      NUnit (>= 2.6.4)
-      RegexProvider (>= 0.0.4)
+      Aardvark.Base
+      Aardvark.Base.FSharp
+      FSharp.Compiler.Service
+      NUnit
+      RegexProvider
   remote: https://nuget.org/api/v2
   specs:
     AssimpNet (3.3.1)
@@ -52,21 +52,21 @@ NUGET
     FSPowerPack.Parallel.Seq.Community (3.0.0.0)
       FSPowerPack.Core.Community
     FsUnit (1.3.0.1)
-      NUnit (>= 2.6.3)
+      NUnit
     Microsoft.Bcl.Immutable (1.0.34)
     NUnit (2.6.4)
     RegexProvider (0.0.5)
     Rx-Core (2.2.5)
-      Rx-Interfaces (>= 2.2.5)
+      Rx-Interfaces
     Rx-Interfaces (2.2.5)
     Rx-Linq (2.2.5)
-      Rx-Core (>= 2.2.5)
-      Rx-Interfaces (>= 2.2.5)
+      Rx-Core
+      Rx-Interfaces
     Rx-Main (2.2.5)
-      Rx-Core (>= 2.2.5)
-      Rx-Interfaces (>= 2.2.5)
-      Rx-Linq (>= 2.2.5)
-      Rx-PlatformServices (>= 2.2.5)
+      Rx-Core
+      Rx-Interfaces
+      Rx-Linq
+      Rx-PlatformServices
     Rx-PlatformServices (2.2.5)
-      Rx-Core (>= 2.2.5)
-      Rx-Interfaces (>= 2.2.5)
+      Rx-Core
+      Rx-Interfaces
