@@ -86,8 +86,6 @@ module AdditionalSources =
         else
             File.WriteAllLines("sources.references", newSourceFolders)
 
-        tracefn "removing paket.lock. InstallSources automatically creates a new one."
-        File.Delete "paket.lock"
 
     let installPackage (pkgFile : string) =
         let m = pkgFile |> Path.GetFileName |> packageNameRx.Match
