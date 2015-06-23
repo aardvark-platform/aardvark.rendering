@@ -1,6 +1,5 @@
 source https://nuget.org/api/v2
 
-source ../Aardvark.Base/bin
 source \\hobel\nuget
 
 nuget Aardvark.Base.Incremental (1.3.5)
