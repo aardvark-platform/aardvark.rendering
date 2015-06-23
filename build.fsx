@@ -8,7 +8,7 @@
 #r @"Mono.Cecil.dll"
 #r @"Paket.Core.dll"
 
-#load "addSources.fsx"
+#load @"bin\addSources.fsx"
 
 
 open Fake

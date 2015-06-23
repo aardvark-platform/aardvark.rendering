@@ -1,6 +1,6 @@
 #if INTERACTIVE
-#I @"packages/FAKE/tools/"
-#I @"packages/Paket.Core/lib/net45"
+#I @"../packages/FAKE/tools/"
+#I @"../packages/Paket.Core/lib/net45"
 #r @"Paket.Core.dll"
 #r @"FakeLib.dll"
 //do System.Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
