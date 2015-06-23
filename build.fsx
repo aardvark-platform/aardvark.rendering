@@ -15,7 +15,7 @@ open System.IO
 open Aardvark.Build
 open System.Diagnostics
 open System.Text.RegularExpressions
-
+ 
 do Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 
 let packageNameRx = Regex @"(?<name>[a-zA-Z_0-9\.]+?)\.(?<version>([0-9]+\.)*[0-9]+)\.nupkg"
@@ -79,10 +79,19 @@ Target "RemoveSource" (fun () ->
             File.Delete "sources.references"
     else
         File.WriteAllLines("sources.references", newSourceFolders)
+
+    printfn "removing paket.lock. InstallSources automatically creates a new one."
+    File.Delete "paket.lock"
 )
 
 
 Target "InstallSources" (fun () ->
+
+    if File.Exists "paket.lock" |> not 
+    then
+        printfn "paket.lock is missing. Reinstalling paket sources."
+        Paket.Dependencies.Locate().Install(true, false, false, false)
+
     let sourceLines =
         if File.Exists "sources.references" then 
             File.ReadAllLines "sources.references" |> Array.toList
@@ -221,5 +230,5 @@ Target "Deploy" (fun () ->
 "CreatePackage" ==> "Deploy"
 
 // start build
-RunTargetOrDefault "Default"
-
+//RunTargetOrDefault "Default"
+RunTargetOrDefault "InstallSources"
