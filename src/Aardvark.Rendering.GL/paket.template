@@ -7,3 +7,6 @@ files
     ..\..\bin\BUILDCONFIG\Aardvark.Rendering.GL.dll ==> lib\net45
     ..\..\bin\BUILDCONFIG\Aardvark.Rendering.GL.pdb ==> lib\net45
     ..\..\bin\BUILDCONFIG\Aardvark.Rendering.GL.xml ==> lib\net45
+    ..\..\bin\BUILDCONFIG\OpenTK.Compatibility.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\OpenTK.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\OpenTK.GLControl.dll ==> lib\net45

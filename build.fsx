@@ -165,5 +165,4 @@ Target "Deploy" (fun () ->
 "CreatePackage" ==> "Push"
 
 // start build
-//RunTargetOrDefault "Default"
-RunTargetOrDefault "InstallSources"
+RunTargetOrDefault "Default"
