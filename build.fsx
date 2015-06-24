@@ -94,6 +94,33 @@ Target "CreatePackage" (fun () ->
     AdditionalSources.paketDependencies.Pack("bin", version = tag, releaseNotes = releaseNotes)
 )
 
+
+Target "Push" (fun () ->
+    let packages = !!"bin/*.nupkg"
+    let packageNameRx = Regex @"(?<name>[a-zA-Z_0-9\.]+?)\.(?<version>([0-9]+\.)*[0-9]+)\.nupkg"
+    let tag = Fake.Git.Information.getLastTag()
+
+    let myPackages = 
+        packages 
+            |> Seq.choose (fun p ->
+                let m = packageNameRx.Match (Path.GetFileName p)
+                if m.Success then 
+                    Some(m.Groups.["name"].Value)
+                else
+                    None
+            )
+            |> Set.ofSeq
+
+    try
+        for id in myPackages do
+            let source = sprintf "bin/%s.%s.nupkg" id tag
+            let target = sprintf @"\\hobel.ra1.vrvis.lan\NuGet\%s.%s.nupkg" id tag
+            File.Copy(source, target, true)
+    with e ->
+        traceError (string e)
+)
+
+
 Target "Deploy" (fun () ->
 
     let packages = !!"bin/*.nupkg"
@@ -135,6 +162,7 @@ Target "Deploy" (fun () ->
 
 "Compile" ==> "CreatePackage"
 "CreatePackage" ==> "Deploy"
+"CreatePackage" ==> "Push"
 
 // start build
 //RunTargetOrDefault "Default"
