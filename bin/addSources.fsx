@@ -8,18 +8,41 @@ namespace AdditionalSources
 #else
 #endif
 
+open System.IO
+open System
+open System.Diagnostics
+open Paket
+open Fake
+open System.Text.RegularExpressions
+open System.IO.Compression
+open System.Security.Cryptography
+open System.Text
+
+module Array =
+    let skip (n : int) (a : 'a[]) =
+        let res = Array.zeroCreate (a.Length - n)
+        for i in n..a.Length-1 do
+            res.[i - n] <- a.[i]
+        res
+ 
+[<AutoOpen>]
+module PathHelpers =
+
+    let deleteDir d =
+        if Directory.Exists d then
+            try Directory.Delete(d, true)
+            with e -> traceError (sprintf "could not delete directory %A" d)
+
+    let createDir d =
+        if not <| Directory.Exists d then
+            Directory.CreateDirectory d |> ignore
+
+    let deleteFile f =
+        if File.Exists f then
+            try File.Delete f
+            with e -> traceError (sprintf "could not delete %A" f)
+
 module AdditionalSources =
-
-    open System.IO
-    open System
-    open System.Diagnostics
-    open Paket
-    open Fake
-    open System.Text.RegularExpressions
-    open System.IO.Compression
-    open System.Security.Cryptography
-    open System.Text
-
     Logging.event.Publish.Subscribe (fun a -> 
         match a.Level with
             | TraceLevel.Error -> traceError a.Text
@@ -32,7 +55,8 @@ module AdditionalSources =
     let packageNameRx = Regex @"(?<name>[a-zA-Z_0-9\.]+?)\.(?<version>([0-9]+\.)*[0-9]+)\.nupkg"
     let idRegex = Regex @"^id[ \t]+(?<id>.*)$"
     let versionRx = Regex @"(?<version>([0-9]+\.)*[0-9]+).*"
-    
+    let sourcesFileName = "sources.lock"
+
     // a hash based on the current path
     let cacheFile = Path.Combine(Path.GetTempPath(), Convert.ToBase64String(MD5.Create().ComputeHash(UnicodeEncoding.Unicode.GetBytes(Environment.CurrentDirectory))))
     let paketDependencies = Paket.Dependencies.Locate()
@@ -59,42 +83,13 @@ module AdditionalSources =
         else
             None
 
-    let addSource folder = 
-
-        let sourceFolders =
-            if File.Exists "sources.references" then 
-                File.ReadAllLines "sources.references" |> Set.ofArray
-            else 
-                Set.empty
-
-        let newSourceFolders = Set.add folder sourceFolders
-
-        File.WriteAllLines("sources.references", newSourceFolders)
-
-    let removeSource folder =
-        let sourceFolders =
-            if File.Exists "sources.references" then 
-                File.ReadAllLines "sources.references" |> Set.ofArray
-            else 
-                Set.empty
-
-        let newSourceFolders = Set.remove folder sourceFolders
-
-        if Set.isEmpty newSourceFolders then
-            if File.Exists "sources.references" then
-                File.Delete "sources.references"
-        else
-            File.WriteAllLines("sources.references", newSourceFolders)
-
-
     let installPackage (pkgFile : string) =
         let m = pkgFile |> Path.GetFileName |> packageNameRx.Match
         if m.Success then
             let id = m.Groups.["name"].Value
             let outputFolder = Path.Combine("packages", id) |> Path.GetFullPath
             
-            if not <| Directory.Exists outputFolder then
-                Directory.CreateDirectory outputFolder |> ignore
+            createDir outputFolder
 
             Unzip outputFolder pkgFile
             File.Copy(pkgFile, Path.Combine(outputFolder, Path.GetFileName pkgFile), true)
@@ -107,13 +102,9 @@ module AdditionalSources =
         file.LastWriteTime
 
     let installSources () =
-        if not <| File.Exists "paket.lock" then
-            tracefn "paket.lock is missing. Reinstalling paket sources."
-            Paket.Dependencies.Locate().Install(true, false, false, false)
-
         let sourceLines =
-            if File.Exists "sources.references" then 
-                File.ReadAllLines "sources.references" |> Array.toList
+            if File.Exists sourcesFileName then 
+                File.ReadAllLines sourcesFileName |> Array.toList
             else 
                 []
 
@@ -164,14 +155,57 @@ module AdditionalSources =
                 let path = Path.Combine(source, "bin", fileName)
                 let installPath = Path.Combine("packages", id)
 
-                if Directory.Exists installPath then
-                    Directory.Delete(installPath, true)
+                deleteDir installPath
 
                 if installPackage path then
                     tracefn "reinstalled %A" id
                 else
                     traceError <| sprintf "failed to reinstall: %A" id
 
-        tracefn "%A" cacheFile
         File.WriteAllLines(cacheFile, !cacheTimes |> Map.toSeq |> Seq.map (fun (a, time) -> sprintf "%s;%d" a time.Ticks))
+
+
+    let addSources folders = 
+
+        let sourceFolders =
+            if File.Exists sourcesFileName then 
+                File.ReadAllLines sourcesFileName |> Set.ofArray
+            else 
+                Set.empty
+
+        let newSourceFolders = Set.union (Set.ofList folders) sourceFolders
+
+        File.WriteAllLines(sourcesFileName, newSourceFolders)
+        paketDependencies.Restore()
+        installSources()
+
+    let removeSources folders =
+        let sourceFolders =
+            if File.Exists sourcesFileName then 
+                File.ReadAllLines sourcesFileName |> Set.ofArray
+            else 
+                Set.empty
+
+        let newSourceFolders = Set.difference sourceFolders (Set.ofList folders)
+
+        if Set.isEmpty newSourceFolders then
+            deleteFile sourcesFileName
+        else
+            File.WriteAllLines(sourcesFileName, newSourceFolders)
+
+        for f in folders do
+            match findCreatedPackages f with
+                | Some(version, ids) ->
+
+                    for id in ids do
+                        let path = Path.Combine("packages", id)
+                        deleteDir path
+
+                | None ->
+                    ()
+
+        paketDependencies.Restore()
+        installSources()
+
+
         

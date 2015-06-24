@@ -35,27 +35,31 @@ Target "Restore" (fun () ->
     AdditionalSources.installSources ()
 )
 
+Target "Update" (fun () ->
+    AdditionalSources.paketDependencies.Update(false, false)
+    AdditionalSources.installSources ()
+)
 
 Target "AddSource" (fun () ->
     let args = Environment.GetCommandLineArgs()
-    let folder =
-        match args with
-            | [|_;_;_;a|] -> a
-            | _ -> failwith "no source folder given"
+    let folders =
+        if args.Length > 3 then
+            Array.skip 3 args
+        else
+            failwith "no source folder given"
 
-    tracefn "%A" folder
-    AdditionalSources.addSource folder
+    AdditionalSources.addSources (Array.toList folders)
 )
 
 Target "RemoveSource" (fun () ->
     let args = Environment.GetCommandLineArgs()
-    let folder =
-        match args with
-            | [|_;_;_;a|] -> a
-            | _ -> failwith "no source folder given"
+    let folders =
+        if args.Length > 3 then
+            Array.skip 3 args
+        else
+            failwith "no source folder given"
 
-    tracefn "%A" folder
-    AdditionalSources.removeSource folder
+    AdditionalSources.removeSources (Array.toList folders)
 )
 
 
@@ -66,10 +70,6 @@ Target "Clean" (fun () ->
 
 Target "Compile" (fun () ->
     MSBuildRelease "bin/Release" "Build" core |> ignore
-)
-
-Target "Inject" (fun () ->
-    ()
 )
 
 Target "Default" (fun () -> ())
