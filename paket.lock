@@ -1,22 +1,22 @@
 NUGET
   remote: \\hobel\nuget
   specs:
-    Aardvark.Base (1.3.6)
+    Aardvark.Base (1.3.7)
       DevILSharp (>= 0.0.9 < 0.1.0)
-    Aardvark.Base.Essentials (1.3.6)
-      Aardvark.Base (>= 1.3.6)
+    Aardvark.Base.Essentials (1.3.7)
+      Aardvark.Base (>= 1.3.7)
       Microsoft.Bcl.Immutable (>= 1.0.34 < 1.1.0)
       Rx-Linq (>= 2.2.5 < 2.3.0)
-    Aardvark.Base.FSharp (1.3.6)
-      Aardvark.Base (>= 1.3.6)
+    Aardvark.Base.FSharp (1.3.7)
+      Aardvark.Base (>= 1.3.7)
       DevILSharp (>= 0.0.9 < 0.1.0)
       FSharp.Compiler.Service (>= 0.0.90 < 0.1.0)
       NUnit (>= 2.6.4 < 2.7.0)
       RegexProvider (>= 0.0.5 < 0.1.0)
-    Aardvark.Base.Incremental (1.3.6)
-      Aardvark.Base (1.3.6)
-      Aardvark.Base.Essentials (1.3.6)
-      Aardvark.Base.FSharp (1.3.6)
+    Aardvark.Base.Incremental (1.3.7)
+      Aardvark.Base (1.3.7)
+      Aardvark.Base.Essentials (1.3.7)
+      Aardvark.Base.FSharp (1.3.7)
       FsUnit
       Rx-Core
     FShade (1.3.5)
