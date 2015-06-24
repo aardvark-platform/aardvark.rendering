@@ -1,11 +1,16 @@
 type project
-id Aardvark.Base
+id Aardvark.Application.WPF
 authors VRVis Research Center
 description
-    Aardvark.Base is a collection of data structures and algorithms for computer graphics and visualization. It is under active development since 2006 as part of a much larger set of libraries at VRVis Research Center.
+    Aardvark.Application.WPF
 frameworkAssemblies
-    System.Drawing
+    System.Xaml
+    PresentationCore
+    PresentationFramework
+    UIAutomationTypes
+    WindowsBase
+    WindowsFormsIntegration
 files
-    ..\..\bin\BUILDCONFIG\Aardvark.Base.dll ==> lib\net45
-    ..\..\bin\BUILDCONFIG\Aardvark.Base.pdb ==> lib\net45
-    ..\..\bin\BUILDCONFIG\Aardvark.Base.xml ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.pdb ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.xml ==> lib\net45

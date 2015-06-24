@@ -2,7 +2,7 @@ type project
 id Aardvark.Base.Rendering
 authors VRVis Research Center
 description
-    Aardvark.Base is a collection of data structures and algorithms for computer graphics and visualization. It is under active development since 2006 as part of a much larger set of libraries at VRVis Research Center.
+    Aardvark.Base.Rendering
 files
     ..\..\bin\BUILDCONFIG\Aardvark.Base.Rendering.dll ==> lib\net45
     ..\..\bin\BUILDCONFIG\Aardvark.Base.Rendering.pdb ==> lib\net45
