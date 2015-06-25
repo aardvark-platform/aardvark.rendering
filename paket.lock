@@ -1,22 +1,22 @@
 NUGET
   remote: \\hobel\nuget
   specs:
-    Aardvark.Base (1.3.7)
+    Aardvark.Base (1.3.9)
       DevILSharp (>= 0.0.9 < 0.1.0)
-    Aardvark.Base.Essentials (1.3.7)
-      Aardvark.Base (>= 1.3.7)
-      Microsoft.Bcl.Immutable (>= 1.0.34 < 1.1.0)
+    Aardvark.Base.Essentials (1.3.9)
+      Aardvark.Base (>= 1.3.9)
       Rx-Linq (>= 2.2.5 < 2.3.0)
-    Aardvark.Base.FSharp (1.3.7)
-      Aardvark.Base (>= 1.3.7)
+      System.Collections.Immutable (>= 1.1.36 < 1.2.0)
+    Aardvark.Base.FSharp (1.3.9)
+      Aardvark.Base (>= 1.3.9)
       DevILSharp (>= 0.0.9 < 0.1.0)
       FSharp.Compiler.Service (>= 0.0.90 < 0.1.0)
       NUnit (>= 2.6.4 < 2.7.0)
       RegexProvider (>= 0.0.5 < 0.1.0)
-    Aardvark.Base.Incremental (1.3.7)
-      Aardvark.Base (1.3.7)
-      Aardvark.Base.Essentials (1.3.7)
-      Aardvark.Base.FSharp (1.3.7)
+    Aardvark.Base.Incremental (1.3.9)
+      Aardvark.Base (1.3.9)
+      Aardvark.Base.Essentials (1.3.9)
+      Aardvark.Base.FSharp (1.3.9)
       FsUnit
       Rx-Core
     FShade (1.3.5)
@@ -44,7 +44,6 @@ NUGET
       FSPowerPack.Core.Community
     FsUnit (1.3.0.1)
       NUnit (>= 2.6.3)
-    Microsoft.Bcl.Immutable (1.0.34)
     NUnit (2.6.4)
     RegexProvider (0.0.5)
     Rx-Core (2.2.5)
@@ -53,3 +52,4 @@ NUGET
     Rx-Linq (2.2.5)
       Rx-Core (>= 2.2.5)
       Rx-Interfaces (>= 2.2.5)
+    System.Collections.Immutable (1.1.36)
