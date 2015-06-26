@@ -15,12 +15,20 @@ type IRenderTask =
     inherit IAdaptiveObject
     abstract member Run : IFramebuffer -> RenderingResult
 
+type IStreamingTexture =
+    inherit IMod<ITexture>
+    abstract member Update : format : PixFormat * size : V2i * data : nativeint -> unit
+    abstract member ReadPixel : pos : V2i -> C4b
+
 type IRuntime =
 
     abstract member CreateTexture : ITexture -> ITexture
     abstract member CreateBuffer : IBuffer -> IBuffer
     abstract member DeleteTexture : ITexture -> unit
     abstract member DeleteBuffer : IBuffer -> unit
+
+    abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
+    abstract member DeleteStreamingTexture : IStreamingTexture -> unit
 
     abstract member CompileClear : IMod<C4f> * IMod<double> -> IRenderTask
     abstract member CompileRender : aset<RenderJob> -> IRenderTask

@@ -86,6 +86,8 @@ type Runtime(ctx : Context) =
         member x.CreateBuffer b = x.CreateBuffer b
         member x.DeleteTexture t = x.DeleteTexture t
         member x.DeleteBuffer b = x.DeleteBuffer b
+        member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
+        member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
 
     member x.CreateTexture (t : ITexture) = ctx.CreateTexture t :> ITexture
     member x.CreateBuffer (b : IBuffer) : IBuffer = failwith "not implemented"
@@ -97,6 +99,15 @@ type Runtime(ctx : Context) =
     member x.DeleteBuffer (b : IBuffer) : unit =
         failwith "not implemented"
 
+    member x.CreateStreamingTexture(mipMaps : bool) =
+        ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture
+
+    member x.DeleteStreamingTexture(t : IStreamingTexture) =
+        match t with
+            | :? StreamingTexture as t ->
+                ctx.Delete(t)
+            | _ ->
+                failwithf "unsupported streaming texture: %A" t
 
     member private x.CompileRenderInternal (set : aset<RenderJob>) =
         let task = new RenderTasks.RenderTask(x, ctx, manager, set)
