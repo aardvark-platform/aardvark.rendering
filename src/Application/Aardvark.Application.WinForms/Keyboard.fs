@@ -5,6 +5,8 @@ open System.Windows.Forms
 open Aardvark.Application
 open Aardvark.Base
 
+type private WKeys = System.Windows.Forms.Keys
+
 type Keyboard() as this =
     inherit EventKeyboard()
 
@@ -17,6 +19,13 @@ type Keyboard() as this =
     let onKeyDown (s : obj) (e : KeyEventArgs) =
         this.KeyDown (%e.KeyCode)
 
+    let onPreviewKeyDown (s : obj) (e : PreviewKeyDownEventArgs) =
+        match e.KeyCode with
+            | WKeys.Left | WKeys.Right | WKeys.Up | WKeys.Down ->
+                this.KeyDown (%e.KeyCode)
+            | _ -> ()
+
+
     let onKeyUp (s : obj) (e : KeyEventArgs) =
         this.KeyUp (%e.KeyCode)
 
@@ -25,12 +34,14 @@ type Keyboard() as this =
 
 
     let onKeyDownHandler = KeyEventHandler(onKeyDown)
+    let onPreviewKeyDownHandler = PreviewKeyDownEventHandler(onPreviewKeyDown)
     let onKeyUpHandler = KeyEventHandler(onKeyUp)
     let onKeyPressHandler = KeyPressEventHandler(onKeyPress)
 
     let addHandlers() =
         match ctrl with
             | Some ctrl ->
+               ctrl.PreviewKeyDown.AddHandler onPreviewKeyDownHandler
                ctrl.KeyDown.AddHandler onKeyDownHandler
                ctrl.KeyUp.AddHandler onKeyUpHandler
                ctrl.KeyPress.AddHandler onKeyPressHandler
@@ -39,6 +50,7 @@ type Keyboard() as this =
     let removeHandlers() =
         match ctrl with
             | Some ctrl ->
+                ctrl.PreviewKeyDown.RemoveHandler onPreviewKeyDownHandler
                 ctrl.KeyDown.RemoveHandler onKeyDownHandler
                 ctrl.KeyUp.RemoveHandler onKeyUpHandler
                 ctrl.KeyPress.RemoveHandler onKeyPressHandler

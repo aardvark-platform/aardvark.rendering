@@ -17,6 +17,12 @@ module RuntimeSemantics =
             let jobs : aset<RenderJob> = e?RenderJobs()
             x.CompileRender(jobs)
 
+        member x.CompileRender (s : ISg) =
+            let app = Sg.DynamicNode(Mod.constant s)
+            app?Runtime <- x
+            let jobs : aset<RenderJob> = app?RenderJobs()
+            x.CompileRender(jobs)
+
     [<Semantic>]
     type RuntimeSem() =
             member x.Runtime(e : Sg.Environment) =

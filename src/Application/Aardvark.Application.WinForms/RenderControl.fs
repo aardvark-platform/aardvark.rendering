@@ -7,7 +7,7 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Application
 
-type RenderControl() =
+type RenderControl() as this =
     inherit Control()
 
     let mutable renderTask : Option<IRenderTask> = None
@@ -45,6 +45,49 @@ type RenderControl() =
         )
         ctrl <- Some c
         impl <- Some cr
+
+
+    static let rec subscribeToLocationChange (ctrl : Control) (action : EventHandler) : IDisposable =
+        if ctrl <> null then
+            let inner = ref <| subscribeToLocationChange ctrl.Parent action
+            
+            let parentChange = EventHandler (fun s e ->
+                inner.Value.Dispose()
+                inner := subscribeToLocationChange ctrl.Parent action
+                action.Invoke(s, e)
+            )
+            ctrl.LocationChanged.AddHandler parentChange
+            ctrl.ParentChanged.AddHandler action
+            
+            { new IDisposable with 
+                member x.Dispose() =
+                    inner.Value.Dispose()
+                    ctrl.LocationChanged.RemoveHandler action
+                    ctrl.ParentChanged.RemoveHandler parentChange
+            }
+        else
+            { new IDisposable with member x.Dispose() = () }
+
+    static let getScreenLocation (ctrl : Control) =
+        let currentPos() =
+            let point = ctrl.PointToScreen(Point(0,0))
+            V2i(point.X, point.Y)
+
+        let res = Mod.initMod (currentPos())
+
+        let update (s : obj) (e : EventArgs) =
+            transact (fun () ->
+                Mod.change res (currentPos())
+            )
+
+        let d = subscribeToLocationChange ctrl (EventHandler update)
+        d, res :> IMod<_>
+
+    let locationAndSub = lazy ( getScreenLocation this )
+
+    member x.Location =
+        locationAndSub.Value |> snd
+
 
     member x.Implementation
         with get() = match ctrl with | Some c -> c | _ -> null

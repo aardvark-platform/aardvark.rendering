@@ -17,6 +17,9 @@ type CSharpRuntimeExtensions =
     [<Extension>]
     static member CompileRender (x : IRuntime, e : Sg.Environment) = x.CompileRender e
 
+    [<Extension>]
+    static member CompileRender (x : IRuntime, sg : ISg) = x.CompileRender sg
+
 [<Extension>]
 [<AbstractClass>]
 [<Sealed>]

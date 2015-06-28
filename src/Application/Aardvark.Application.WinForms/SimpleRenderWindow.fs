@@ -18,6 +18,8 @@ type SimpleRenderWindow() =
 
     member x.Control = ctrl
 
+    member x.Location = ctrl.Location
+
     member x.RenderTask
         with get() = ctrl.RenderTask
         and set t = ctrl.RenderTask <- t

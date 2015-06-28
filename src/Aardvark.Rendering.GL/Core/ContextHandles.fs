@@ -73,15 +73,6 @@ module ContextHandle =
 
     let mutable primaryContext : ContextHandle = null
 
-    let usePrimaryContext (f : unit -> 'a) =
-        if primaryContext = null then f()
-        else
-            try
-                primaryContext.MakeCurrent()
-                f()
-            finally
-                primaryContext.ReleaseCurrent()
-
     /// <summary>
     /// creates a new context using the default configuration
     /// </summary>
@@ -105,13 +96,10 @@ module ContextHandle =
         // garbage collected.
         if not <| windows.TryAdd(handle, window) then failwith "failed to add new context to live-set"
     
-        // store the primary context (if not already existing)
-        if primaryContext = null then
-            primaryContext <- handle
     
         handle
-      
-    
+
+    primaryContext <- create()
 
     let createContexts resourceContextCount =
         // if there is a current context release it before creating

@@ -31,9 +31,11 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
 
     let createPBOs() =
         if pixelBuffers = null then
-            pixelBuffers <- Array.init 2 (fun _ ->
-                let handle = GL.GenBuffer()
-                { handle = handle; sizeInBytes = 0L }
+            using ctx.ResourceLock (fun _ ->
+                pixelBuffers <- Array.init 3 (fun _ ->
+                    let handle = GL.GenBuffer()
+                    { handle = handle; sizeInBytes = 0L }
+                )
             )
 
     let swapPBOs() =
@@ -54,14 +56,16 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
 
                 let bufferResized = bufferSize <> pbo.sizeInBytes
                 let textureResized = size <> s || fmt <> format
-                
+                size <- s
+                format <- fmt  
+                pbo.sizeInBytes <- bufferSize
+                         
                 GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo.handle)
                 GL.Check "could not bind buffer"
 
                 if bufferResized then
                     GL.BufferData(BufferTarget.PixelUnpackBuffer, nativeint bufferSize, data, BufferUsageHint.StreamDraw)
                     GL.Check "could not upload buffer"
-                    pbo.sizeInBytes <- bufferSize
                 else
                     let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint bufferSize, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateBufferBit)
                     GL.Check "could not map buffer"
@@ -78,16 +82,14 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
                 if textureResized then
                     let channelType = fmt |> ChannelType.ofPixFormat
                     let ifmt = channelType |> ChannelType.toGlInternalFormat
-                    GL.TexImage2D(TextureTarget.Texture2D, 0, ifmt, size.X, size.Y, 0, pixelFormat, pixelType, 0n)
+                    GL.TexImage2D(TextureTarget.Texture2D, 0, ifmt, s.X, s.Y, 0, pixelFormat, pixelType, 0n)
                     GL.Check "could not copy PBO to texture"
 
-                    size <- s
-                    format <- fmt
                     texture.ChannelType <- channelType
                     texture.Size <- V3i(size.X, size.Y, 1)
                     texture.MipMapLevels <- expectedLevels size
                 else
-                    GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, size.X, size.Y, pixelFormat, pixelType, 0n)
+                    GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, s.X, s.Y, pixelFormat, pixelType, 0n)
                     GL.Check "could not copy PBO to texture"
 
                 if mipMap then
@@ -101,6 +103,22 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
 
             | _ ->
                 failwithf "unsupported format: %A" fmt
+
+    static let mark (self : StreamingTexture) =
+        let action = 
+            lock self (fun () ->
+                if not self.OutOfDate then
+                    match Transaction.Running with
+                        | Some t -> 
+                            t.Enqueue(self)
+                            id
+                        | _ ->
+                            let t = Transaction()
+                            t.Enqueue(self)
+                            fun () -> t.Commit()
+                else id
+            )
+        action()
 
 
     member x.Context = ctx
@@ -123,17 +141,18 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
         member x.ReadPixel(pos) = x.ReadPixel pos
 
     member x.Update(f : PixFormat, s : V2i, data : nativeint) =
-        using ctx.ResourceLock (fun _ ->
-            let pbo = swapPBOs()
-            lock pbo (fun () ->
+        let pbo = swapPBOs()
+        lock pbo (fun () ->
+            using ctx.ResourceLock (fun _ ->
                 uploadUsingPBO pbo f s data
             )
         )
+        mark x
 
     member x.ReadPixel(pos : V2i) =
-        using ctx.ResourceLock (fun _ ->
-            let pbo = lastPBO()
-            lock pbo (fun () ->
+        let pbo = lastPBO()
+        lock pbo (fun () ->
+            using ctx.ResourceLock (fun _ ->
                 let offset = formatSize * (pos.X + pos.Y * size.X)
             
                 if offset >= 0 && offset < int pbo.sizeInBytes then
