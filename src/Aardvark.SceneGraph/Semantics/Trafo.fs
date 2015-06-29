@@ -72,6 +72,12 @@ module TrafoSemantics =
         member x.ProjTrafo(p : Sg.ProjectionTrafoApplicator) =
             p.Child?ProjTrafo <- p.ProjectionTrafo
 
+        member x.ViewTrafo(r : Root) =
+            r.Child?ViewTrafo <- rootTrafo
+
+        member x.ProjTrafo(r : Root) =
+            r.Child?ProjTrafo <- rootTrafo
+
         member x.ViewTrafo(e : Sg.Environment) =
             e.Child?ViewTrafo <- e.ViewTrafo
 
