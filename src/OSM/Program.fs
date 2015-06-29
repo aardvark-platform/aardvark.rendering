@@ -111,7 +111,7 @@ module Geometry =
         q.IndexArray <- [|0;1;2; 0;2;3|]
         q.IndexedAttributes <- SymDict.ofList [
             DefaultSemantic.Positions, [|V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO|] :> Array
-            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OI; V2f.II; V2f.IO; V2f.OO|] :> Array
+            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array
         ]
 
         Sg.ofIndexedGeometry q
@@ -372,6 +372,6 @@ let main argv =
 
 
     // finally run the application
-    Application.Run w
+    w.Run()
 
     0
