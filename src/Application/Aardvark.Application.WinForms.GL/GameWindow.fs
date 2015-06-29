@@ -422,6 +422,7 @@ type GameWindow(ctx : Context, samples : int) as this =
    
     member x.Mouse = mouse :> IMouse
     member x.Keyboard = keyboard :> IKeyboard     
+    member x.Run() = x.Run()
 
     interface IRenderTarget with
         member x.Time = time
@@ -434,3 +435,5 @@ type GameWindow(ctx : Context, samples : int) as this =
         member x.Mouse = mouse :> IMouse
         member x.Keyboard = keyboard :> IKeyboard
 
+    interface IRenderWindow with
+        member x.Run() = x.Run()

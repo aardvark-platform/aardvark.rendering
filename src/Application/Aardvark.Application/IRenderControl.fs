@@ -25,3 +25,7 @@ type IRenderControl =
     abstract member Keyboard : IKeyboard
     abstract member Mouse : IMouse
     
+type IRenderWindow =
+    inherit IRenderControl
+
+    abstract member Run : unit -> unit

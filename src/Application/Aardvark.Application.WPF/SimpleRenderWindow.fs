@@ -28,8 +28,11 @@ type SimpleRenderWindow() =
     member x.Keyboard = ctrl.Keyboard
     member x.Mouse = ctrl.Mouse
     member x.Time = ctrl.Time
+    member x.Run() = 
+        let app = Application()
+        app.Run(x) |> ignore
 
-    interface IRenderControl with
+    interface IRenderWindow with
         member x.Time = ctrl.Time
         member x.RenderTask
             with get() = ctrl.RenderTask
@@ -38,6 +41,8 @@ type SimpleRenderWindow() =
         member x.Sizes = ctrl.Sizes
         member x.Keyboard = ctrl.Keyboard
         member x.Mouse = ctrl.Mouse
+        member x.Run() = x.Run()
+
 
 [<AbstractClass; Sealed; Extension>]
 type WPFApplicationExtensions private() =
