@@ -750,8 +750,12 @@ module InstructionCompiler =
 
             let! vao = Manager.createVertexArrayObject program next
             if prev <> RenderJob.Empty then
-                let! vaoPrev = Manager.createVertexArrayObject program prev
-                if vao <> vaoPrev then
+                if prev.Surface = next.Surface then
+                    let! vaoPrev = Manager.createVertexArrayObject program prev
+                    vaoPrev.Dispose()
+                    if vao <> vaoPrev then
+                        yield! bindVertexArray vao
+                else
                     yield! bindVertexArray vao
             else
                 yield! bindVertexArray vao
