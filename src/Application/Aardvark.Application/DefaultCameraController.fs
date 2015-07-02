@@ -138,3 +138,49 @@ module DefaultCameraController =
             controlZoom mouse
             controllScroll mouse time
         ]
+
+
+    let controlWSADwithSpeed (speed : ModRef<float>) (k : IKeyboard) (time : IMod<DateTime>) =   
+        let w = k.IsDown Keys.W 
+        let s = k.IsDown Keys.S
+        let a = k.IsDown Keys.A 
+        let d = k.IsDown Keys.D 
+
+        let moveX = 
+            Mod.map2 (fun l r ->
+                if l && not r then -V2i.IO
+                elif r && not l then V2i.IO
+                else V2i.Zero
+            ) a d
+
+        let moveY = 
+            Mod.map2 (fun f b ->
+                if f && not b then V2i.OI
+                elif b && not f then -V2i.OI
+                else V2i.Zero
+            ) w s
+
+        let move = Mod.map2 (+) moveX moveY
+
+        adaptive {
+            let! m = move
+            if m <> V2i.Zero then
+                return time |> Mod.stepTime (fun t dt (cam : CameraView)  ->
+                    //printfn "%Ams" dt.TotalMilliseconds
+                    let direction = float m.X * cam.Right + float m.Y * cam.Forward
+                    let delta = speed.Value * dt.TotalSeconds * direction
+
+                    cam.WithLocation(cam.Location + delta)
+                )
+            else
+                return AdaptiveFunc.Identity
+        } |> Mod.always
+
+    let controlWithSpeed (speed : ModRef<float>) (mouse : IMouse) (keyboard : IKeyboard) (time : IMod<DateTime>) (cam : CameraView) : IMod<CameraView> =
+         Mod.integrate cam time [
+            controlWSADwithSpeed speed keyboard time
+            controlLookAround mouse
+            controlPan mouse
+            controlZoom mouse
+            controllScroll mouse time
+        ]
