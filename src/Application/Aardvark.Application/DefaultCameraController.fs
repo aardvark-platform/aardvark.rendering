@@ -176,11 +176,78 @@ module DefaultCameraController =
                 return AdaptiveFunc.Identity
         } |> Mod.always
 
+    let controlPanWithSpeed (speed : ModRef<float>) (m : IMouse) =
+        let down = m.IsDown(MouseButtons.Middle)
+        let location = m.Position |> Mod.map (fun pp -> pp.Position)
+
+        adaptive {
+            let! d = down
+
+            if d then
+                return location |> Mod.step (fun p delta (cam : CameraView) ->
+
+                    let step = 0.06 * speed.Value * (cam.Down * float delta.Y + cam.Right * float delta.X)
+
+                    cam.WithLocation(cam.Location + step)
+
+                )
+            else
+                return AdaptiveFunc.Identity
+        }
+        
+    let controllScrollWithSpeed (speed : ModRef<float>) (m : IMouse) (time : IMod<DateTime>) =
+        let active = Mod.initMod false
+
+        let speed = ref 0.0
+        let s = m.Scroll.Values.Subscribe(fun d ->
+            speed := !speed + d
+            if not <| active.GetValue() then
+                transact (fun () -> Mod.change active true)
+        )
+
+        adaptive {
+            let! a = active 
+            if a then
+                return time |> Mod.step (fun t dt (cam : CameraView) ->
+                    let v = !speed * pow 0.004 dt.TotalSeconds
+                    speed := v
+
+                    let df = v * dt.TotalSeconds
+                    let direction = 0.12 * speed.Value * (cam.Forward * df)
+
+                    if abs v < 0.5 then
+                        transact (fun () -> Mod.change active false)
+
+                    cam.WithLocation(cam.Location + direction)
+
+                )
+            else
+                return AdaptiveFunc.Identity
+        }
+        
+    let controlZoomWithSpeed (speed : ModRef<float>) (m : IMouse) =
+        let down = m.IsDown(MouseButtons.Right)
+        let location = m.Position |> Mod.map (fun pp -> pp.Position)
+
+        adaptive {
+            let! d = down
+
+            if d then
+                return location |> Mod.step (fun p delta (cam : CameraView) ->
+
+                    let step = -0.06 * speed.Value * (cam.Forward * float delta.Y)
+                    cam.WithLocation(cam.Location + step)
+
+                )
+            else
+                return AdaptiveFunc.Identity
+        }      
+
     let controlWithSpeed (speed : ModRef<float>) (mouse : IMouse) (keyboard : IKeyboard) (time : IMod<DateTime>) (cam : CameraView) : IMod<CameraView> =
          Mod.integrate cam time [
             controlWSADwithSpeed speed keyboard time
             controlLookAround mouse
-            controlPan mouse
-            controlZoom mouse
-            controllScroll mouse time
+            controlPanWithSpeed speed mouse
+            controlZoomWithSpeed speed mouse
+            controllScrollWithSpeed speed mouse time
         ]
