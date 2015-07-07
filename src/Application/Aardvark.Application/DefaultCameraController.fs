@@ -186,7 +186,7 @@ module DefaultCameraController =
             if d then
                 return location |> Mod.step (fun p delta (cam : CameraView) ->
 
-                    let step = 0.06 * speed.Value * (cam.Down * float delta.Y + cam.Right * float delta.X)
+                    let step = 0.006 * speed.Value * (cam.Down * float delta.Y + cam.Right * float delta.X)
 
                     cam.WithLocation(cam.Location + step)
 
@@ -195,7 +195,7 @@ module DefaultCameraController =
                 return AdaptiveFunc.Identity
         }
         
-    let controllScrollWithSpeed (speed : ModRef<float>) (m : IMouse) (time : IMod<DateTime>) =
+    let controllScrollWithSpeed (moveSpeed : ModRef<float>) (m : IMouse) (time : IMod<DateTime>) =
         let active = Mod.initMod false
 
         let speed = ref 0.0
@@ -213,7 +213,7 @@ module DefaultCameraController =
                     speed := v
 
                     let df = v * dt.TotalSeconds
-                    let direction = 0.12 * speed.Value * (cam.Forward * df)
+                    let direction = (0.012 * moveSpeed.Value) * (cam.Forward * df)
 
                     if abs v < 0.5 then
                         transact (fun () -> Mod.change active false)
@@ -235,7 +235,7 @@ module DefaultCameraController =
             if d then
                 return location |> Mod.step (fun p delta (cam : CameraView) ->
 
-                    let step = -0.06 * speed.Value * (cam.Forward * float delta.Y)
+                    let step = -0.006 * speed.Value * (cam.Forward * float delta.Y)
                     cam.WithLocation(cam.Location + step)
 
                 )
