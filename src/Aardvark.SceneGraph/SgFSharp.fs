@@ -154,8 +154,7 @@ module SgFSharp =
 
             let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call)) :> ISg
             if index <> null then
-                let converteIndex = if index |> unbox<array<int>> |> Array.max < int System.UInt16.MaxValue then (index |> unbox<array<int>> |> Array.map uint16) :> System.Array else index
-                Sg.VertexIndexApplicator(Mod.constant converteIndex, sg) :> ISg
+                Sg.VertexIndexApplicator(Mod.constant index, sg) :> ISg
             else
                 sg
 

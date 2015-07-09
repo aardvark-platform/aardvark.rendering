@@ -75,6 +75,11 @@ module DefaultSurfaces =
             return c
         }
 
+    let vertexColor (v : Vertex) =
+        fragment {
+            return v.c
+        }
+
     let simpleLighting (v : Vertex) =
         fragment {
             let n = v.n |> Vec.normalize
