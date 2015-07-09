@@ -12,9 +12,9 @@ open Aardvark.Application
 
 type private WinFormsControl = Aardvark.Application.WinForms.OpenGlRenderControl
 
-type OpenGlRenderControl(context : Context, samples : int) as this =
+type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
     inherit WindowsFormsHost()
-    let ctrl = new WinFormsControl(context, samples)
+    let ctrl = new WinFormsControl(runtime, samples)
 
     do this.Child <- ctrl
        this.Loaded.Add(fun e -> this.Focusable <- false)
@@ -32,6 +32,7 @@ type OpenGlRenderControl(context : Context, samples : int) as this =
 
     member x.Time = ctrl.Time
     interface IRenderTarget with
+        member x.Runtime = runtime :> IRuntime
         member x.Time = ctrl.Time
         member x.RenderTask
             with get() = x.RenderTask

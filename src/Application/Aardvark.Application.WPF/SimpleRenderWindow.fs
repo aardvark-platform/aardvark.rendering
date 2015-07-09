@@ -24,6 +24,7 @@ type SimpleRenderWindow() =
         with get() = ctrl.RenderTask
         and set t = ctrl.RenderTask <- t
 
+    member x.Runtime = ctrl.Runtime
     member x.Sizes = ctrl.Sizes
     member x.Keyboard = ctrl.Keyboard
     member x.Mouse = ctrl.Mouse
@@ -33,6 +34,7 @@ type SimpleRenderWindow() =
         app.Run(x) |> ignore
 
     interface IRenderWindow with
+        member x.Runtime = ctrl.Runtime
         member x.Time = ctrl.Time
         member x.RenderTask
             with get() = ctrl.RenderTask

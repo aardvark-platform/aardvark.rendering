@@ -60,7 +60,7 @@ type OpenGlApplication() =
         
         match ctrl with
             | :? RenderControl as ctrl ->
-                let impl = new OpenGlRenderControl(ctx, samples)
+                let impl = new OpenGlRenderControl(runtime, samples)
                 ctrl.Implementation <- impl
                 init ctx impl.Context impl.WindowInfo
             | _ ->
@@ -69,7 +69,7 @@ type OpenGlApplication() =
         ()
 
     member x.CreateGameWindow(samples : int) =
-        let w = new GameWindow(ctx, samples)
+        let w = new GameWindow(runtime, samples)
         init ctx w.Context w.WindowInfo
         w
 

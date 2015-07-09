@@ -625,7 +625,7 @@ let main args =
 //    ) |> ignore
 
     let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-    let proj = CameraProjectionPerspective(60.0, 0.1, 10000.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
+    let proj = CameraProjectionPerspective(60.0, 0.1, 10000.0, float (ctrl.Sizes.GetValue().X) / float (ctrl.Sizes.GetValue().Y))
     let mode = Mod.init FillMode.Fill
 
 
@@ -712,7 +712,7 @@ let main args =
 //    transact <| fun () ->
 //        arr.Value <- [||]
     
-    ctrl.Sizes.Values.Subscribe(fun s ->
+    ctrl.Sizes |> Mod.registerCallback (fun s ->
         let aspect = float s.X / float s.Y
         proj.AspectRatio <- aspect
     ) |> ignore

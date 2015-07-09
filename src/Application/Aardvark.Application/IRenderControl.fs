@@ -15,7 +15,8 @@ type TimeMod() =
         member x.GetValue() = x.EvaluateAlways (fun () -> DateTime.Now)
 
 type IRenderTarget =
-    abstract member Sizes : IEvent<V2i>
+    abstract member Runtime : IRuntime
+    abstract member Sizes : IMod<V2i>
     abstract member RenderTask : IRenderTask with get, set
     abstract member Time : IMod<DateTime>
 
@@ -27,5 +28,5 @@ type IRenderControl =
     
 type IRenderWindow =
     inherit IRenderControl
-
+    
     abstract member Run : unit -> unit

@@ -25,5 +25,5 @@ module RuntimeSemantics =
 
     [<Semantic>]
     type RuntimeSem() =
-            member x.Runtime(e : Sg.Environment) =
-                e.Child?Runtime <- e.Runtime
+        member x.Runtime(e : Sg.Environment) =
+            e.Child?Runtime <- e.Runtime

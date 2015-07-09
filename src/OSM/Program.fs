@@ -153,7 +153,7 @@ let main argv =
     // initialize a viewport (small part of the world currently)
     let viewportOrigin, viewportSize = 
         let horizontal = worldBounds.Size.X * 0.05
-        let vertical = (float w.Sizes.Latest.Y / float w.Sizes.Latest.X) * horizontal
+        let vertical = (float (w.Sizes.GetValue().Y) / float (w.Sizes.GetValue().X)) * horizontal
         let box = Box2d.FromCenterAndSize(worldBounds.Center, V2d(horizontal, vertical))
 
         Mod.init box.Min, Mod.init box.Size
@@ -164,7 +164,7 @@ let main argv =
     // whenever the window size changes we'd like to adjust the viewport's aspect
     // Note that we don't do this in the mod-system since we want to be able to override
     // this behavoiur.
-    w.Sizes.Values.Subscribe(fun s ->
+    w.Sizes |> Mod.registerCallback (fun s ->
         let aspect = float s.X / float s.Y
         transact (fun () ->
             let vp = viewport.GetValue()
@@ -179,7 +179,7 @@ let main argv =
 
 
     // in order to determine the appropriate grid-size we will need the view's size
-    let viewResolution = w.Sizes.Mod
+    let viewResolution = w.Sizes
 
     // determine the zoom-level using the current viewport and view-size
     let zoomLevel = 
