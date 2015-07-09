@@ -66,7 +66,7 @@ let main argv =
                     yield Trafo3d.Translation(2.0 * float x, 2.0 * float y, 0.0)
         |]
 
-    let trafos = trafos |> Mod.initConstant
+    let trafos = trafos |> Mod.constant
 
     let time = (win :> IRenderTarget).Time
     let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI

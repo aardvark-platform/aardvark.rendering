@@ -20,7 +20,7 @@ module Ext =
             member x.Child = sg
         member x.Child = sg
 
-        new(s : ISg) = ViewFrustumCullNode(Mod.initConstant s)
+        new(s : ISg) = ViewFrustumCullNode(Mod.constant s)
         new(s : IEvent<ISg>) = ViewFrustumCullNode(Mod.fromEvent  s)
 
     type LodNode(viewDecider : (LodScope -> bool), 
@@ -33,7 +33,7 @@ module Ext =
         member val Name = "" with get, set
 
         new(viewDecider : System.Func<LodScope, bool>, low : ISg, high : ISg) = 
-            LodNode((fun t -> viewDecider.Invoke t), Mod.initConstant low, Mod.initConstant high)
+            LodNode((fun t -> viewDecider.Invoke t), Mod.constant low, Mod.constant high)
 
     module LodSemantics =
 

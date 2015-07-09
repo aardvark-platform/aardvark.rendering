@@ -156,7 +156,7 @@ let main argv =
         let vertical = (float w.Sizes.Latest.Y / float w.Sizes.Latest.X) * horizontal
         let box = Box2d.FromCenterAndSize(worldBounds.Center, V2d(horizontal, vertical))
 
-        Mod.initMod box.Min, Mod.initMod box.Size
+        Mod.init box.Min, Mod.init box.Size
 
     // compose viewportOrigin/Size to a Box2d
     let viewport = Mod.map2 (schönfinkel Box2d.FromMinAndSize) viewportOrigin viewportSize
@@ -290,7 +290,7 @@ let main argv =
         let normal01FrameTrafo = Trafo3d.ViewTrafo(V3d(-1.0, 1.0, 0.0), V3d.IOO * 2.0, -V3d.OIO * 2.0, V3d.OOI).Inverse
         sgs |> Sg.set
             |> Sg.effect [toEffect vertex; toEffect fragment]
-            |> Sg.trafo (Mod.initConstant normal01FrameTrafo)
+            |> Sg.trafo (Mod.constant normal01FrameTrafo)
 
 
 

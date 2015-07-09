@@ -73,7 +73,7 @@ type RenderControl() as this =
             let point = ctrl.PointToScreen(Point(0,0))
             V2i(point.X, point.Y)
 
-        let res = Mod.initMod (currentPos())
+        let res = Mod.init (currentPos())
 
         let update (s : obj) (e : EventArgs) =
             transact (fun () ->

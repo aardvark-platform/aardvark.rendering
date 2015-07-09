@@ -44,7 +44,7 @@ module TrafoExtensions =
 module TrafoSemantics =
 
     /// the root trafo for the entire Sg (used when no trafos are applied)
-    let rootTrafo = Mod.initConstant Trafo3d.Identity
+    let rootTrafo = Mod.constant Trafo3d.Identity
   
     [<Semantic>]
     type Trafos() =

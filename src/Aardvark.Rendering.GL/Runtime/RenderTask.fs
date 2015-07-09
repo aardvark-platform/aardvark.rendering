@@ -123,7 +123,7 @@ module RenderTasks =
 
         let inputs = ReferenceCountingSet<IAdaptiveObject>()
         let mutable programs = Map.empty
-        let changer = Mod.initMod ()
+        let changer = Mod.init ()
         let surfaceSubscriptions = Dictionary<RenderJob, IDisposable>()
 
         let mutable additions = 0

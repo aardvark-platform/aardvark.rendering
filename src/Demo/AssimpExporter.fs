@@ -403,7 +403,7 @@ module AssimpExporter =
         let sg = Sg.ofIndexedGeometry ig
         let sg = 
             [1..10] 
-                |> List.map (fun i -> sg |> Sg.trafo (Mod.initConstant <| Trafo3d.Translation(float i, 0.0, 0.0))) 
+                |> List.map (fun i -> sg |> Sg.trafo (Mod.constant <| Trafo3d.Translation(float i, 0.0, 0.0))) 
                 |> Sg.group
                 |> Sg.effect []
 

@@ -24,11 +24,11 @@ module AttributeExtensions =
 
 module AttributeSemantics =
 
-    let emptyIndex : IMod<Array> = Mod.initConstant ([||] :> Array)
+    let emptyIndex : IMod<Array> = Mod.constant ([||] :> Array)
 
     [<Semantic>]
     type AttributeSem() =
-        static let zero = Mod.initConstant 0
+        static let zero = Mod.constant 0
         let (~%) (m : Map<Symbol, BufferView>) = m
 
         member x.FaceVertexCount (root : Root) =

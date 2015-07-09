@@ -59,7 +59,7 @@ type EventKeyboard() =
 
     interface IKeyboard with
         member x.IsDown (k : Keys) =
-            let r = isDown.GetOrAdd(k, fun k -> Mod.initMod (downKeys.Contains k))
+            let r = isDown.GetOrAdd(k, fun k -> Mod.init (downKeys.Contains k))
             r :> IMod<_>
 
         member x.KeyDown (k : Keys) =

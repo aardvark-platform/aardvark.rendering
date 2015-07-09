@@ -71,7 +71,7 @@ module Extensions =
         let async (defaultValue : 'a) (t : Task<'a>) =
 
             let aw = ref None
-            let r = Mod.initMod defaultValue
+            let r = Mod.init defaultValue
 
             let a = t.GetAwaiter()
             a.OnCompleted(fun () ->

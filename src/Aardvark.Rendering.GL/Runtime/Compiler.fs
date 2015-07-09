@@ -564,7 +564,7 @@ module InstructionCompiler =
                 if indexArray <> null then
                     indexArray |> Mod.map (fun ia -> (ia <> null, if ia <> null then ia.GetType().GetElementType() else typeof<obj>))
                 else
-                    Mod.initConstant (false, typeof<obj>)
+                    Mod.constant (false, typeof<obj>)
 
             let patchSize (mode : IndexedGeometryMode) =
                 match mode with
@@ -716,7 +716,7 @@ module InstructionCompiler =
                                 match value with
                                     | :? IMod<ITexture> as value ->
                                         let! texture = Manager.createTexture value
-                                        let! sampler = Manager.createSampler (Mod.initConstant sampler)
+                                        let! sampler = Manager.createSampler (Mod.constant sampler)
                               
                                         //ISSUE:      
                                         //there is a special case when the prev renderjob has the same texture but binds it to

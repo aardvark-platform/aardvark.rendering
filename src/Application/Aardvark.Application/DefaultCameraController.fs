@@ -101,7 +101,7 @@ module DefaultCameraController =
         }  
 
     let controllScroll (m : IMouse) (time : IMod<DateTime>) =
-        let active = Mod.initMod false
+        let active = Mod.init false
 
         let speed = ref 0.0
         let s = m.Scroll.Values.Subscribe(fun d ->
@@ -196,7 +196,7 @@ module DefaultCameraController =
         }
         
     let controllScrollWithSpeed (moveSpeed : ModRef<float>) (m : IMouse) (time : IMod<DateTime>) =
-        let active = Mod.initMod false
+        let active = Mod.init false
 
         let speed = ref 0.0
         let s = m.Scroll.Values.Subscribe(fun d ->

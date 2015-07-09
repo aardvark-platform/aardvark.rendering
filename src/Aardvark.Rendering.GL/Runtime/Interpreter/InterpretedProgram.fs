@@ -153,7 +153,7 @@ type InterpretedProgram(manager : ResourceManager, add : IAdaptiveObject -> unit
 
 
                                 let tex = newResource <| manager.CreateTexture(tex)
-                                let sampler = newResource <| manager.CreateSampler(Mod.initConstant sampler)
+                                let sampler = newResource <| manager.CreateSampler(Mod.constant sampler)
                                 let r = tex.Resource.GetValue()
                                 let target = Translations.toGLTarget r.Dimension r.IsArray r.Multisamples
 

@@ -52,10 +52,10 @@ module SgFSharp =
             texture DefaultSemantic.DiffuseColorTexture tex sg
 
         let diffuseTexture' (tex : ITexture) (sg : ISg) = 
-            texture DefaultSemantic.DiffuseColorTexture (Mod.initConstant tex) sg
+            texture DefaultSemantic.DiffuseColorTexture (Mod.constant tex) sg
 
         let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) = 
-            texture DefaultSemantic.DiffuseColorTexture (Mod.initConstant (FileTexture(path, wantMipMaps) :> ITexture)) sg
+            texture DefaultSemantic.DiffuseColorTexture (Mod.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
 
         let scopeDependentTexture (sem : Symbol) (tex : Scope -> IMod<ITexture>) (sg : ISg) =
@@ -103,17 +103,17 @@ module SgFSharp =
 
         let vertexAttribute<'a when 'a : struct> (s : Symbol) (value : IMod<'a[]>) (sg : ISg) =
             let view = BufferView(ArrayBuffer(modOfArray value), typeof<'a>)
-            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.initConstant sg) :> ISg
+            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
 
         let index<'a when 'a : struct> (value : IMod<'a[]>) (sg : ISg) =
             Sg.VertexIndexApplicator(modOfArray value, sg) :> ISg
 
         let vertexAttribute'<'a when 'a : struct> (s : Symbol) (value : 'a[]) (sg : ISg) =
-            let view = BufferView(ArrayBuffer(Mod.initConstant (value :> Array)), typeof<'a>)
-            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.initConstant sg) :> ISg
+            let view = BufferView(ArrayBuffer(Mod.constant (value :> Array)), typeof<'a>)
+            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
 
         let index'<'a when 'a : struct> (value : 'a[]) (sg : ISg) =
-            Sg.VertexIndexApplicator(Mod.initConstant (value :> Array), sg) :> ISg
+            Sg.VertexIndexApplicator(Mod.constant (value :> Array), sg) :> ISg
 
 
         let draw (mode : IndexedGeometryMode) =
@@ -131,7 +131,7 @@ module SgFSharp =
             let attributes = 
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
                     let t = v.GetType().GetElementType()
-                    let view = BufferView(ArrayBuffer(Mod.initConstant v), t)
+                    let view = BufferView(ArrayBuffer(Mod.constant v), t)
 
                     k, view
                 ) |> Map.ofSeq
@@ -155,7 +155,7 @@ module SgFSharp =
             let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call)) :> ISg
             if index <> null then
                 let converteIndex = if index |> unbox<array<int>> |> Array.max < int System.UInt16.MaxValue then (index |> unbox<array<int>> |> Array.map uint16) :> System.Array else index
-                Sg.VertexIndexApplicator(Mod.initConstant converteIndex, sg) :> ISg
+                Sg.VertexIndexApplicator(Mod.constant converteIndex, sg) :> ISg
             else
                 sg
 
@@ -164,7 +164,7 @@ module SgFSharp =
             let vertexAttributes = 
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
                     let t = v.GetType().GetElementType()
-                    let view = BufferView(ArrayBuffer(Mod.initConstant v), t)
+                    let view = BufferView(ArrayBuffer(Mod.constant v), t)
 
                     k, view
                 ) |> Map.ofSeq
@@ -189,7 +189,7 @@ module SgFSharp =
         
             let sg =
                 if index <> null then
-                    Sg.VertexIndexApplicator(Mod.initConstant index, sg) :> ISg
+                    Sg.VertexIndexApplicator(Mod.constant index, sg) :> ISg
                 else
                     sg
 
@@ -198,7 +198,7 @@ module SgFSharp =
 
             Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
 
-        let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(Mod.initConstant pass, sg)
+        let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(Mod.constant pass, sg)
 
         let normalizeToAdaptive (box : Box3d) (this : ISg) =
 

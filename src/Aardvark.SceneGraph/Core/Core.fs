@@ -86,7 +86,7 @@ module private Providers =
                 | _ ->
                     match ig.IndexedAttributes.TryGetValue s with
                         | (true, att) -> 
-                            let m = Mod.initConstant att
+                            let m = Mod.constant att
 
                             let t = att.GetType().GetElementType()
                             let v = BufferView(ArrayBuffer m, t)

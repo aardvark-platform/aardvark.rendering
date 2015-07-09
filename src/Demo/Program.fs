@@ -99,7 +99,7 @@ module Assimp =
                             Some tex
                         | _ ->
                             let tex = FileTexture(path, true)
-                            let m = Mod.initConstant (tex :> ITexture)
+                            let m = Mod.constant (tex :> ITexture)
                             textureCache.[path] <- m
                             Some m
                 else
@@ -175,7 +175,7 @@ module Assimp =
 
                         let sg =
                             if indexArray <> null then
-                                Sg.VertexIndexApplicator(Mod.initConstant (indexArray :> Array), sg) :> ISg
+                                Sg.VertexIndexApplicator(Mod.constant (indexArray :> Array), sg) :> ISg
                             else
                                 sg
 
@@ -249,7 +249,7 @@ module Assimp =
                 n.AllChildren?ModelTrafo <- p
             else
                 if p = Aardvark.SceneGraph.Semantics.TrafoSemantics.rootTrafo then
-                    n.AllChildren?ModelTrafo <- Mod.initConstant mine
+                    n.AllChildren?ModelTrafo <- Mod.constant mine
                 else
                     n.AllChildren?ModelTrafo <- Mod.map (fun t -> t * mine) p
         
@@ -314,7 +314,7 @@ module Assimp =
         let tex =
             PixTexture2d(PixImageMipMap [|image :> PixImage|], true) :> ITexture
 
-        Mod.initConstant tex
+        Mod.constant tex
 
 
     // a scene can simply be loaded using assimp.
@@ -481,7 +481,7 @@ let inline differentiate (m : IMod< ^a >) =
 
 let timeTest() =
     
-    let down = Mod.initMod false
+    let down = Mod.init false
 
     let pos = ref 0.0
 
@@ -626,7 +626,7 @@ let main args =
 
     let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
     let proj = CameraProjectionPerspective(60.0, 0.1, 10000.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
-    let mode = Mod.initMod FillMode.Fill
+    let mode = Mod.init FillMode.Fill
 
 
 
@@ -661,12 +661,12 @@ let main args =
 
         let trafo = Trafo3d.Translation(-source.Center) * Trafo3d.Scale(scale) * Trafo3d.Translation(target.Center)
 
-        sg |> Sg.trafo (Mod.initConstant trafo)
+        sg |> Sg.trafo (Mod.constant trafo)
 
 
     let view = DefaultCameraController.control ctrl.Mouse ctrl.Keyboard ctrl.Time view
 
-    let color = Mod.initMod C4f.Red
+    let color = Mod.init C4f.Red
 
     f.Keyboard.KeyDown(Keys.C).Values.Subscribe(fun () ->
         let v = C4f(C3f.White - (Mod.force color).ToC3f())
@@ -675,7 +675,7 @@ let main args =
         )
     ) |> ignore
 
-    let pointSize = Mod.initConstant <| V2d(0.06, 0.08)
+    let pointSize = Mod.constant <| V2d(0.06, 0.08)
 
     let sg =
         sg |> Sg.effect [
@@ -689,9 +689,9 @@ let main args =
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
-           //|> Sg.trafo (Mod.initConstant <| Trafo3d.ChangeYZ)
+           //|> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
            //|> Sg.fillMode mode
-           //|> Sg.blendMode (Mod.initConstant BlendMode.Blend)
+           //|> Sg.blendMode (Mod.constant BlendMode.Blend)
            //|> normalizeTo (Box3d(-V3d.III, V3d.III))
     
 

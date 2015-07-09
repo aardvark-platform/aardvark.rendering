@@ -14,7 +14,7 @@ module Programs =
     open System.Collections.Concurrent
     open Aardvark.Base.Incremental
 
-    let private emptyMod = Mod.initConstant () :> IMod
+    let private emptyMod = Mod.constant () :> IMod
     let private projections = 
         [| fun (r : RenderJob) -> r.Surface :> IMod
 

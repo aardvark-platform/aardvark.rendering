@@ -28,11 +28,11 @@ module ModeSemantics =
         
     [<Semantic>]
     type ModeSem() =
-        let defaultDepth = Mod.initConstant DepthTestMode.LessOrEqual
-        let defaultCull = Mod.initConstant CullMode.None
-        let defaultFill = Mod.initConstant FillMode.Fill
-        let defaultStencil = Mod.initConstant StencilMode.Disabled
-        let defaultBlend = Mod.initConstant BlendMode.None
+        let defaultDepth = Mod.constant DepthTestMode.LessOrEqual
+        let defaultCull = Mod.constant CullMode.None
+        let defaultFill = Mod.constant FillMode.Fill
+        let defaultStencil = Mod.constant StencilMode.Disabled
+        let defaultBlend = Mod.constant BlendMode.None
 
         member x.DepthTestMode(e : Root) =
             e.Child?DepthTestMode <- defaultDepth

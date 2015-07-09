@@ -33,10 +33,10 @@ type IMouse =
     abstract member Leave : IEvent<PixelPosition> 
 
 type EventMouse() =
-    let position = Mod.initMod <| PixelPosition()
+    let position = Mod.init <| PixelPosition()
     let buttons = ConcurrentDictionary<MouseButtons, ModRef<bool>>()
-    let scroll = Mod.initMod 0.0
-    let inside = Mod.initMod false
+    let scroll = Mod.init 0.0
+    let inside = Mod.init false
 
     let downEvent = EventSource<MouseButtons>()
     let upEvent = EventSource<MouseButtons>()
@@ -52,7 +52,7 @@ type EventMouse() =
             Mod.change position p
 
     let getDown button =
-        buttons.GetOrAdd(button, fun b -> Mod.initMod false)
+        buttons.GetOrAdd(button, fun b -> Mod.init false)
 
     member x.Down(pos : PixelPosition, b : MouseButtons) =
         let m = getDown b

@@ -88,7 +88,7 @@ module BoundingBoxes =
         member x.GlobalBoundingBox(app : IGroup) : IMod<Box3d> =
             app.Children 
                 |> ASet.map (fun sg -> sg.GlobalBoundingBox() ) 
-                |> ASet.foldSemiGroupM (curry Box3d.Union) Box3d.Invalid
+                |> ASet.foldMonoidM (curry Box3d.Union) Box3d.Invalid
             
         member x.GlobalBoundingBox(n : IApplicator) : IMod<Box3d> = 
             adaptive {
@@ -133,7 +133,7 @@ module BoundingBoxes =
         member x.LocalBoundingBox(app : IGroup) : IMod<Box3d> =
             app.Children 
                 |> ASet.map (fun sg -> sg.LocalBoundingBox()) 
-                |> ASet.foldSemiGroupM (curry Box3d.Union) Box3d.Invalid
+                |> ASet.foldMonoidM (curry Box3d.Union) Box3d.Invalid
 
         member x.LocalBoundingBox(app : Sg.TrafoApplicator) : IMod<Box3d> =  
             adaptive {
