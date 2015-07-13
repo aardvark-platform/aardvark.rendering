@@ -214,13 +214,14 @@ module GameWindowIO =
 
 
         let onMouseDownHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Down(%%e, %e.Button))
-        let onMouseUpHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Up (%%e, %e.Button))
+        let onMouseUpHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Up(%%e, %e.Button))
         let onMouseMoveHandler = EventHandler<MouseMoveEventArgs>(fun s e -> this.Move %%e)
-        let onMouseClickHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Click (%%e, %e.Button))
-        let onMouseDoubleClickHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.DoubleClick (%%e, %e.Button))
         let onMouseWheelHandler = EventHandler<MouseWheelEventArgs>(fun s e -> this.Scroll (%%e, (float e.Delta * 120.0)))
         let onMouseEnter = EventHandler<EventArgs>(fun s e -> this.Enter (mousePos()))
         let onMouseLeave = EventHandler<EventArgs>(fun s e -> this.Leave (mousePos()))
+
+        
+
 
         let addHandlers() =
             match ctrl with
@@ -228,8 +229,6 @@ module GameWindowIO =
                     ctrl.MouseDown.AddHandler onMouseDownHandler
                     ctrl.MouseUp.AddHandler onMouseUpHandler
                     ctrl.MouseMove.AddHandler onMouseMoveHandler
-//                    ctrl.MouseClick.AddHandler onMouseClickHandler
-//                    ctrl.MouseDoubleClick.AddHandler onMouseDoubleClickHandler
                     ctrl.MouseWheel.AddHandler onMouseWheelHandler
                     ctrl.MouseEnter.AddHandler onMouseEnter
                     ctrl.MouseLeave.AddHandler onMouseLeave
@@ -241,8 +240,6 @@ module GameWindowIO =
                     ctrl.MouseDown.RemoveHandler onMouseDownHandler
                     ctrl.MouseUp.RemoveHandler onMouseUpHandler
                     ctrl.MouseMove.RemoveHandler onMouseMoveHandler
-//                    ctrl.MouseClick.RemoveHandler onMouseClickHandler
-//                    ctrl.MouseDoubleClick.RemoveHandler onMouseDoubleClickHandler
                     ctrl.MouseWheel.RemoveHandler onMouseWheelHandler
                     ctrl.MouseEnter.RemoveHandler onMouseEnter
                     ctrl.MouseLeave.RemoveHandler onMouseLeave

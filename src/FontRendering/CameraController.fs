@@ -9,9 +9,6 @@ open Aardvark.Application
 
 module CameraController =
 
-    type IMouse with
-        member x.PixelPosition = x.Position |> Mod.map (fun p -> p.Position)
-
     /// rotates the CameraView around its origin using the left mouse-button.
     let controlLook (m : IMouse) =
         controller {

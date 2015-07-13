@@ -56,7 +56,6 @@ type OpenGlApplication() =
         runtime.Dispose()
 
     member x.Initialize(ctrl : IRenderControl, samples : int) = 
-        
         match ctrl with
             | :? RenderControl as ctrl ->
                 let impl = new OpenGlRenderControl(runtime, samples)
@@ -66,7 +65,8 @@ type OpenGlApplication() =
                 failwith "unknown control type: %A" ctrl
         
 
-    member x.CreateGameWindow(samples : int) =
+    member x.CreateGameWindow(?samples : int) =
+        let samples = defaultArg samples 1
         let w = new GameWindow(runtime, samples)
         init ctx w.Context w.WindowInfo  
         w

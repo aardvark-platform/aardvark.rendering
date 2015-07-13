@@ -190,7 +190,7 @@ let main argv =
             let res = viewportSize / V2d viewResolution
 
             return Utilities.GetNearestLevel(source.Schema.Resolutions, max res.X res.Y)
-        } |> Mod.always
+        } |> Mod.onPush
 
     // determine the tile-size in world-space
     let tileSize = 
@@ -216,7 +216,7 @@ let main argv =
 
             let res =  V2i(ceil (1.0 / rel.X), ceil (1.0 / rel.Y)) + V2i.II
             return res
-        } |> Mod.always
+        } |> Mod.onPush
 
 
     // calculate the integer index for the first (upper-left) tile 

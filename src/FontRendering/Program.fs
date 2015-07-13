@@ -42,7 +42,7 @@ module Shader =
 [<EntryPoint>]
 let main argv = 
     use app = new OpenGlApplication()
-    use win = app.CreateSimpleRenderWindow()
+    use win = app.CreateGameWindow()
 
     Aardvark.Init()
 
@@ -60,6 +60,8 @@ let main argv =
                     DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
                 ]
         )
+
+
 
     let trafos =
         [|
@@ -105,6 +107,9 @@ let main argv =
 //            isEnabled = EventSource true
 //        )
 
+    win.Mouse.Click.Values.Subscribe(printfn "click %A") |> ignore
+    win.Mouse.DoubleClick.Values.Subscribe(printfn "double click %A") |> ignore
+
     let sg =
         geometry 
             |> Sg.instancedGeometry trafos
@@ -129,5 +134,5 @@ let main argv =
 //    let b = outline.GetRenderBounds(Pen(Brushes.Black, 1.0))
 //    let b = Box2i(int b.Left, int b.Bottom, int b.Right, int b.Top)
 
-    System.Windows.Forms.Application.Run win
+    win.Run()
     0 // return an integer exit code
