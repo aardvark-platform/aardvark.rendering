@@ -20,6 +20,19 @@ type IStreamingTexture =
     abstract member Update : format : PixFormat * size : V2i * data : nativeint -> unit
     abstract member ReadPixel : pos : V2i -> C4b
 
+[<Flags>]
+type ExecutionEngine =
+    | None              = 0x000
+    | Native            = 0x001
+    | Managed           = 0x002
+    | Unmanaged         = 0x004
+
+    | Optimized         = 0x010
+    | RuntimeOptimized  = 0x020
+    | Unoptimized       = 0x040
+
+    | Default           = 0x011 // Native | Optimized
+
 type IRuntime =
 
     abstract member CreateTexture : ITexture -> ITexture
@@ -31,7 +44,7 @@ type IRuntime =
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
 
     abstract member CompileClear : IMod<C4f> * IMod<double> -> IRenderTask
-    abstract member CompileRender : aset<RenderJob> -> IRenderTask
+    abstract member CompileRender : ExecutionEngine * aset<RenderJob> -> IRenderTask
 
     abstract member CreateTexture : IMod<V2i> * IMod<PixFormat> * IMod<int> * IMod<int> -> IFramebufferTexture
     abstract member CreateRenderbuffer : IMod<V2i> * IMod<PixFormat> * IMod<int> -> IFramebufferRenderbuffer

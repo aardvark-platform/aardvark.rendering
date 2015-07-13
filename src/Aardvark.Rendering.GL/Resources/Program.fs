@@ -230,7 +230,8 @@ module ProgramReflector =
 //                            GL.Check "could not get program resource"
 
                             let location = GL.GetFragDataLocation(p, name)
-                            GL.Check "could not get frag data location"
+                            GL.GetError() |> ignore
+                            //GL.Check "could not get frag data location"
 
                             yield { attributeIndex = i; size = size; name = name; semantic = name; attributeType = outputType }
 

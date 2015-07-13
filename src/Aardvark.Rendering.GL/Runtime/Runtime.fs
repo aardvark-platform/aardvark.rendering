@@ -77,7 +77,7 @@ type Runtime(ctx : Context) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
-        member x.CompileRender (set : aset<RenderJob>) = x.CompileRender set
+        member x.CompileRender (engine : ExecutionEngine, set : aset<RenderJob>) = x.CompileRender(engine,set)
         member x.CompileClear(color, depth) = x.CompileClear(color, depth)
         member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples)
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
@@ -109,12 +109,12 @@ type Runtime(ctx : Context) =
             | _ ->
                 failwithf "unsupported streaming texture: %A" t
 
-    member private x.CompileRenderInternal (set : aset<RenderJob>) =
-        let task = new RenderTasks.RenderTask(x, ctx, manager, set)
+    member private x.CompileRenderInternal (engine : ExecutionEngine, set : aset<RenderJob>) =
+        let task = new RenderTasks.RenderTask(x, ctx, manager, engine, set)
         task
 
-    member x.CompileRender(set : aset<RenderJob>) : IRenderTask =
-        x.CompileRenderInternal(set) :> IRenderTask // newbackend
+    member x.CompileRender(engine : ExecutionEngine, set : aset<RenderJob>) : IRenderTask =
+        x.CompileRenderInternal(engine, set) :> IRenderTask // newbackend
 
     member x.CompileClear(color : IMod<C4f>, depth : IMod<float>) : IRenderTask =
         new RenderTasks.ClearTask(x, color, depth, ctx) :> IRenderTask

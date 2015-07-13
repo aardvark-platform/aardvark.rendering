@@ -13,15 +13,26 @@ open Aardvark.SceneGraph.Internal
 module RuntimeSemantics =
 
     type IRuntime with
-        member x.CompileRender (e : Sg.Environment) =
-            let jobs : aset<RenderJob> = e?RenderJobs()
-            x.CompileRender(jobs)
 
-        member x.CompileRender (s : ISg) =
+        member x.CompileRender(rjs : aset<RenderJob>) =
+            x.CompileRender(ExecutionEngine.Default, rjs)
+
+        member x.CompileRender (engine : ExecutionEngine, e : Sg.Environment) =
+            let jobs : aset<RenderJob> = e?RenderJobs()
+            x.CompileRender(engine, jobs)
+
+        member x.CompileRender (engine : ExecutionEngine, s : ISg) =
             let app = Sg.DynamicNode(Mod.constant s)
             app?Runtime <- x
             let jobs : aset<RenderJob> = app?RenderJobs()
-            x.CompileRender(jobs)
+            x.CompileRender(engine, jobs)
+
+        member x.CompileRender (e : Sg.Environment) =
+            x.CompileRender(ExecutionEngine.Default, e)
+
+        member x.CompileRender (s : ISg) =
+            x.CompileRender(ExecutionEngine.Default, s)
+
 
     [<Semantic>]
     type RuntimeSem() =

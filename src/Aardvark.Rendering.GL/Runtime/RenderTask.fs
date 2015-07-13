@@ -114,7 +114,7 @@ module RenderTasks =
                 let s = seq { for i in 0..keys.Count-1 do yield KeyValuePair(keys.[i], values.[i]) }
                 (s :> System.Collections.IEnumerable).GetEnumerator()
 
-    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, set : aset<RenderJob>) as this =
+    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : ExecutionEngine, set : aset<RenderJob>) as this =
         inherit AdaptiveObject()
 
         let subscriptions = Dictionary()
@@ -149,10 +149,30 @@ module RenderTasks =
                     let p = 
                         match config with
                             | Order.Unordered -> 
+                                let mode = 
+                                    if engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
+                                    elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
+                                    else 2
+
+                                let opt =
+                                    if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
+                                    elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
+                                    else 1
+
+                                match mode with
+                                    | 2 -> new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
+                                    | 1 ->
+                                        match opt with
+                                            | 0 -> new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
+                                            | 1 -> new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
+                                            | _ -> new OptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
+                                    | _ ->
+                                        new OptimizedManagedProgram(manager,addInput,removeInput) :> IProgram
+
                                 //new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
                                 //new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
                                 //new OptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
+                                //new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
                                 
 
                                 //new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
