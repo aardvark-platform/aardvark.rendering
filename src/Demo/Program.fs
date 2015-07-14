@@ -141,7 +141,7 @@ module Assimp =
 
                                 if m.TextureCoordinateChannelCount > 0 then
                                     let tc = m.TextureCoordinateChannels.[0]
-                                    yield DefaultSemantic.DiffuseColorCoordinates, tc |> mapAttribute (fun v -> V2f(v.X, 1.0f - v.Y))
+                                    yield DefaultSemantic.DiffuseColorCoordinates, tc |> mapAttribute (fun v -> V2f(v.X, v.Y))
 
                             ]
 
@@ -601,7 +601,7 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
-    let modelPath =  @"C:\Aardwork\scenes\bench2\1000_128_500_18.dae"
+    //let modelPath =  @"C:\Aardwork\scenes\bench2\1000_128_500_18.dae"
 
     //let modelPath =  @"C:\Aardwork\scenes\bench2\8000_128_4000_6.dae"
 
@@ -679,20 +679,21 @@ let main args =
 
     let sg =
         sg |> Sg.effect [
-                Shader.pvLight |> toEffect
-                Shader.pvFrag  |> toEffect
+                //Shader.pvLight |> toEffect
+                //Shader.pvFrag  |> toEffect
                 //DefaultSurfaces.trafo |> toEffect
 //                DefaultSurfaces.pointSurface pointSize |> toEffect
                 //DefaultSurfaces.uniformColor color |> toEffect
-                //DefaultSurfaces.diffuseTexture |> toEffect
-                //DefaultSurfaces.simpleLighting |> toEffect
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.diffuseTexture |> toEffect
+                DefaultSurfaces.simpleLighting |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
-           //|> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
+           |> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
            //|> Sg.fillMode mode
            //|> Sg.blendMode (Mod.constant BlendMode.Blend)
-           //|> normalizeTo (Box3d(-V3d.III, V3d.III))
+           |> normalizeTo (Box3d(-V3d.III, V3d.III))
     
 
     //Demo.AssimpExporter.save @"C:\Users\Schorsch\Desktop\quadScene\eigi.dae" sg
