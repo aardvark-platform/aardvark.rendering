@@ -146,46 +146,78 @@ module RenderTasks =
                 | _ -> 
                     let config = getPassConfig pass
 
-                    let p = 
+                    let program = 
                         match config with
                             | Order.Unordered -> 
-                                new Compiler.UnoptimizedProgram<_>(Compiler.FragmentHandlers.managed, manager, addInput, removeInput) :> IProgram
 
-//                                let mode = 
-//                                    if engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
-//                                    elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
-//                                    else 2
-//
-//                                let opt =
-//                                    if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
-//                                    elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
-//                                    else 1
-//
-//                                match mode with
-//                                    | 2 -> new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
-//                                    | 1 ->
-//                                        match opt with
-//                                            | 0 -> new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-//                                            | 1 -> new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-//                                            | _ -> new OptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-//                                    | _ ->
-//                                        new OptimizedManagedProgram(manager,addInput,removeInput) :> IProgram
+                                let mode = 
+                                    if engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
+                                    elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
+                                    else 2
 
-                                //new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                //new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                //new OptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                //new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
-                                
+                                let opt =
+                                    if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
+                                    elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
+                                    else 0
 
-                                //new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
-                                //new OptimizedManagedProgram(manager,addInput,removeInput) :> IProgram
-                                //new OptimizedSwitchProgram(manager,addInput,removeInput) :> IProgram
+                                match mode with
+                                    | 2 -> // native
+                                        match opt with
+                                            | 0 -> // unoptimized
+                                                Log.line "using unoptimized native program"
+                                                new Compiler.UnoptimizedProgram<_>(
+                                                    Compiler.FragmentHandlers.native, manager,  addInput, removeInput
+                                                ) :> IProgram
+
+                                            | _ ->  // optimized
+                                                Log.line "using optimized native program"
+                                                new Compiler.OptimizedProgram<_>(
+                                                    Compiler.FragmentHandlers.native, manager, addInput, removeInput
+                                                ) :> IProgram
+                                    | 1 -> // GLVM
+                                        match opt with
+                                            | 0 -> // unoptimized
+                                                Log.line "using unoptimized GLVM program"
+                                                new Compiler.UnoptimizedProgram<_>(
+                                                    Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
+                                                ) :> IProgram
+
+                                            | 1 -> // runtime optimized
+                                                Log.line "using runtime optimized GLVM program"
+                                                new Compiler.UnoptimizedProgram<_>(
+                                                    Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager,  addInput, removeInput
+                                                ) :> IProgram
+                                            | _ -> // optimized
+                                                Log.line "using optimized GLVM program"
+                                                new Compiler.OptimizedProgram<_>(
+                                                    Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
+                                                ) :> IProgram
+                                    | _ -> // managed
+                                        match opt with
+                                            | 0 -> // unoptimized
+                                                Log.line "using unoptimized managed program"
+                                                new Compiler.UnoptimizedProgram<_>(
+                                                    Compiler.FragmentHandlers.managed, manager,  addInput, removeInput
+                                                ) :> IProgram
+
+                                            | _ ->  // optimized
+                                                Log.line "using optimized managed program"
+                                                new Compiler.OptimizedProgram<_>(
+                                                    Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+                                                ) :> IProgram
+ 
                             | order ->
-                                //let sorter = fun () -> BspSorting.BBTreeSorter(scope, bspOrder) :> ISorter
-                                new SortedProgram(order, manager, addInput, removeInput, Sorting.createSorter scope order) :> IProgram
+                                // TODO: respect mode here
+                                Log.line "using GLVM sorted program"
+                                new Compiler.SortedProgram<_>(
+                                    Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
+                                    order,
+                                    Sorting.createSorter scope order,
+                                    manager, addInput, removeInput
+                                ) :> IProgram
 
-                    programs <- Map.add pass p programs
-                    p
+                    programs <- Map.add pass program programs
+                    program
 
 
         member private x.Add(pass : uint64, rj : RenderJob) =

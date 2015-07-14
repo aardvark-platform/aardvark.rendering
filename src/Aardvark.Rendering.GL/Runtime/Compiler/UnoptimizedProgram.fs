@@ -161,7 +161,10 @@ type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and
 
 
 type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
-    (newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
+        (newHandler : unit -> IFragmentHandler<'f>, 
+         manager : ResourceManager, 
+         addInput : IAdaptiveObject -> unit, 
+         removeInput : IAdaptiveObject -> unit) =
     
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()

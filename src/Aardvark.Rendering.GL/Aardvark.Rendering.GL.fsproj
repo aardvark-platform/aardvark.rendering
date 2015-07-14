@@ -79,6 +79,7 @@
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Runtime\ReferenceCountingSet.fs" />
     <Compile Include="Runtime\IFragment.fs" />
+    <Compile Include="Runtime\Sorting.fs" />
     <Compile Include="Runtime\Native\Memory.fs" />
     <Compile Include="Runtime\Native\Fragments.fs" />
     <Compile Include="Runtime\Native\DynamicFragments.fs" />
@@ -95,9 +96,9 @@
     <Compile Include="Runtime\Compiler\RenderJobSorting.fs" />
     <Compile Include="Runtime\Compiler\OptimizedProgram.fs" />
     <Compile Include="Runtime\Compiler\UnoptimizedProgram.fs" />
+    <Compile Include="Runtime\Compiler\SortedProgram.fs" />
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\Compiler.fs" />
-    <Compile Include="Runtime\Sorting.fs" />
     <Compile Include="Runtime\Programs.fs" />
     <Compile Include="Runtime\RenderTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />
