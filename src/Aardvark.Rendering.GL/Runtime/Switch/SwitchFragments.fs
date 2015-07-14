@@ -84,6 +84,9 @@ type SwitchFragment(mode : VMMode) =
     let mutable next : SwitchFragment = null
     let mutable prev : SwitchFragment = null
 
+    let cachedStats = Dictionary<int, FrameStatistics>()
+    let mutable statistics = FrameStatistics.Zero
+
     let getArgs (o : Instruction) =
         o.Arguments |> Array.map (fun arg ->
             match arg with
@@ -120,14 +123,23 @@ type SwitchFragment(mode : VMMode) =
 
     member x.Append(instructions : seq<Instruction>) =
         let id = GLVM.vmNewBlock(frag)
+        let stats = instructions |> Seq.map InstructionStatistics.toStats |> Seq.sum
+        statistics <- statistics + stats
+        cachedStats.[id] <- stats
         appendToBlock id instructions
         id
 
     member x.Update(id : int, instructions : seq<Instruction>) =
+        let newStats = instructions |> Seq.map InstructionStatistics.toStats |> Seq.sum
+        let oldStats = cachedStats.[id]
+        statistics <- statistics - oldStats + newStats
+        cachedStats.[id] <- newStats
         GLVM.vmClearBlock(frag, id)
         appendToBlock id instructions
 
     member x.Clear() =
+        statistics <- FrameStatistics.Zero
+        cachedStats.Clear()
         GLVM.vmClear(frag)
 
     member x.RunSelf() =
@@ -136,6 +148,11 @@ type SwitchFragment(mode : VMMode) =
     member x.RunAll() =
         let mutable stats = VMStats()
         GLVM.vmRun(frag, mode, &stats)
+
+    member x.RunAll(mode) =
+        let mutable stats = VMStats()
+        GLVM.vmRun(frag, mode, &stats)
+        stats
 
     member x.Dispose() =
         GLVM.vmDelete frag
@@ -146,6 +163,7 @@ type SwitchFragment(mode : VMMode) =
         member x.Dispose() = x.Dispose()
 
     interface IDynamicFragment<SwitchFragment> with
+        member x.Statistics = statistics
         member x.Next
             with get() = x.Next
             and set v = x.Next <- v
@@ -168,91 +186,3 @@ type SwitchFragment(mode : VMMode) =
             GLVM.vmRun(frag, mode, &stats)
 
     new() = new SwitchFragment(VMMode.None)
-
-[<AllowNullLiteral>]
-type SwitchFragmentRedundancyRemoval() =
-    let frag = GLVM.vmCreate()
-    let mutable next : SwitchFragmentRedundancyRemoval = null
-    let mutable prev : SwitchFragmentRedundancyRemoval = null
-    let mutable stats = VMStats()
-
-    let getArgs (o : Instruction) =
-        o.Arguments |> Array.map (fun arg ->
-            match arg with
-                | :? int as i -> nativeint i
-                | :? nativeint as i -> i
-                | _ -> failwith "invalid argument"
-        )
-
-    let appendToBlock (id : int) (instructions : seq<Instruction>) =
-        for i in instructions do
-            match getArgs i with
-                | [| a |] -> GLVM.vmAppend1(frag, id, i.Operation, a)
-                | [| a; b |] -> GLVM.vmAppend2(frag, id, i.Operation, a, b)
-                | [| a; b; c |] -> GLVM.vmAppend3(frag, id, i.Operation, a, b, c)
-                | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, i.Operation, a, b, c, d)
-                | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
-                | _ -> failwithf "invalid instruction: %A" i
-
-    member x.NativeFragment = frag
-
-    member x.Next
-        with get() = next
-        and set (v : SwitchFragmentRedundancyRemoval) = 
-            if v <> null then GLVM.vmLink(frag, v.NativeFragment)
-            else GLVM.vmUnlink(frag)
-            next <- v
-
-    member x.Prev
-        with get() = prev
-        and set (v : SwitchFragmentRedundancyRemoval) = 
-            if v <> null then
-                GLVM.vmLink(v.NativeFragment, frag)
-            next <- v
-
-    member x.Append(instructions : seq<Instruction>) =
-        let id = GLVM.vmNewBlock(frag)
-        appendToBlock id instructions
-        id
-
-    member x.Update(id : int, instructions : seq<Instruction>) =
-        GLVM.vmClearBlock(frag, id)
-        appendToBlock id instructions
-
-    member x.Clear() =
-        GLVM.vmClear(frag)
-
-    member x.RunSelf() =
-        GLVM.vmRunSingle frag
-
-    member x.RunAll() =
-        GLVM.vmRun(frag, VMMode.RuntimeRedundancyChecks, &stats)
-
-    member x.Dispose() =
-        GLVM.vmDelete frag
-        next <- null
-        prev <- null
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
-    interface IDynamicFragment<SwitchFragmentRedundancyRemoval> with
-        member x.Next
-            with get() = x.Next
-            and set v = x.Next <- v
-
-        member x.Prev
-            with get() = x.Prev
-            and set v = x.Prev <- v
-
-        member x.Append(i : seq<Instruction>) =
-            x.Append i
-
-        member x.Update (id : int) (value : seq<Instruction>) =
-            x.Update(id, value)
-
-        member x.Clear() =
-            x.Clear()
-
-        member x.RunAll() =
-            GLVM.vmRun(frag, VMMode.RuntimeRedundancyChecks, &stats)
