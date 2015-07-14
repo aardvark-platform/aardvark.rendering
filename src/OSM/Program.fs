@@ -27,6 +27,7 @@ open System.Net
 open System.Web
 open System.Globalization
 open Aardvark.SceneGraph.Semantics
+open Aardvark.Base.Rendering
 
 let app = new OpenGlApplication()
 let source = KnownTileSources.Create(KnownTileSource.BingHybrid)
@@ -305,8 +306,21 @@ let main argv =
 
     //let sg = Sg.group' [sg]
 
+    let mode = Mod.init FillMode.Fill
+
+    w.Keyboard.KeyDown(Aardvark.Application.Keys.X).Values.Subscribe(fun () ->
+        transact (fun () ->
+            match mode.Value with
+                | FillMode.Fill -> Mod.change mode FillMode.Line
+                | FillMode.Line -> Mod.change mode FillMode.Point
+                | _ -> Mod.change mode FillMode.Fill
+        )
+    ) |> ignore
+
+    let sg = sg |> Sg.fillMode mode
+
     // compile the rendertask and pass it to the window
-    w.RenderTask <- app.Runtime.CompileRender(ExecutionEngine.Native ||| ExecutionEngine.Optimized, sg.RenderJobs())
+    w.RenderTask <- app.Runtime.CompileRender(ExecutionEngine.Unmanaged ||| ExecutionEngine.RuntimeOptimized, sg.RenderJobs())
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero
@@ -334,6 +348,10 @@ let main argv =
             viewportSize.Value <- newViewport.Size
         )
     ) |> ignore
+
+
+
+
 //
 //    w.Mouse.Events.Values.Subscribe(fun e ->
 //        match e with
