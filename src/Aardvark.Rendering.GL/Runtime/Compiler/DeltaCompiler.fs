@@ -1,8 +1,9 @@
-﻿namespace Aardvark.Rendering.GL
+﻿namespace Aardvark.Rendering.GL.Compiler
 
 open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.GL
 
 type AdaptiveCode(instructions : list<MetaInstruction>, resources : list<IChangeableResource>) =
     member x.Instructions = instructions

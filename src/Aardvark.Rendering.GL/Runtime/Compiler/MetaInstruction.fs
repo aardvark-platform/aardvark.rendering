@@ -1,8 +1,9 @@
-﻿namespace Aardvark.Rendering.GL
+﻿namespace Aardvark.Rendering.GL.Compiler
 
 open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.GL
 
 type MetaInstruction =
     | FixedInstruction of list<Instruction>

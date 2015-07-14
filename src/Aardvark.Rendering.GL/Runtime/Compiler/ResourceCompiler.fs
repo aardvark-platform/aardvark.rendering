@@ -1,8 +1,9 @@
-﻿namespace Aardvark.Rendering.GL
+﻿namespace Aardvark.Rendering.GL.Compiler
 
 open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.GL
 
 module Resources =
     let private createAndAddResource (f : ResourceManager -> ChangeableResource<'a>) =

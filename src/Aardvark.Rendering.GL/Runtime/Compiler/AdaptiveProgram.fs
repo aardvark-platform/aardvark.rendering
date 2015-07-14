@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.GL
+﻿namespace Aardvark.Rendering.GL.Compiler
 
 open System
 open System.Collections.Generic
@@ -6,6 +6,7 @@ open System.Collections.Generic
 open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.GL
 
 type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     let l = obj()
