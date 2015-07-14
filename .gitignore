@@ -11,3 +11,4 @@ bin/Debug
 /src/.vs
 /src/*.opensdf
 /src/*.sdf
+/src/ipch/GLVM-7f383b0f/*.ipch
