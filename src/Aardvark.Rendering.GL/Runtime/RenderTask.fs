@@ -151,7 +151,8 @@ module RenderTasks =
                             | Order.Unordered -> 
 
                                 let mode = 
-                                    if engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
+                                    if engine = ExecutionEngine.Debug then -1
+                                    elif engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
                                     elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
                                     else 2
 
@@ -161,6 +162,9 @@ module RenderTasks =
                                     else 0
 
                                 match mode with
+                                    | -1 -> 
+                                        Log.warn "using debug program"
+                                        new Compiler.DebugProgram(manager,  addInput, removeInput) :> IProgram
                                     | 2 -> // native
                                         match opt with
                                             | 0 -> // unoptimized

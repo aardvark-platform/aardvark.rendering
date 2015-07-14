@@ -148,7 +148,7 @@ let main argv =
     Aardvark.Init()
     
 
-    let w = app.CreateSimpleRenderWindow()
+    let w = app.CreateGameWindow()
     //w.Size <- V2i(1280, 1024)
 
     // initialize a viewport (small part of the world currently)
@@ -320,7 +320,7 @@ let main argv =
     let sg = sg |> Sg.fillMode mode
 
     // compile the rendertask and pass it to the window
-    w.RenderTask <- app.Runtime.CompileRender(ExecutionEngine.Unmanaged ||| ExecutionEngine.RuntimeOptimized, sg.RenderJobs())
+    w.RenderTask <- app.Runtime.CompileRender(ExecutionEngine.Native ||| ExecutionEngine.Optimized, sg.RenderJobs())
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero

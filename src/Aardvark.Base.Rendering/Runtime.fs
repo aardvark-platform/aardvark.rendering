@@ -31,6 +31,8 @@ type ExecutionEngine =
     | RuntimeOptimized  = 0x020
     | Unoptimized       = 0x040
 
+    | Debug             = 0x100
+
     | Default           = 0x011 // Native | Optimized
 
 type IRuntime =

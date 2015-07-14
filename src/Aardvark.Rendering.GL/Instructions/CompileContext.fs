@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Rendering.GL
 
+open Aardvark.Base
+
 /// <summary>
 /// a compiled instructions consists of a function-pointer, 
 /// its code and all its arguments (as object array).
@@ -176,3 +178,16 @@ module ExecutionContext =
 
             | InstructionCode.GetError                 -> ()
             | _ -> failwithf "unknown instruction: %A" i
+
+    /// <summary>
+    /// executes a specific instruction using a simple interpreter
+    /// Note that this might be relatively slow and should only be 
+    /// used for debugging.
+    /// </summary>
+    let debug(i : Instruction) =
+        run i
+        let err = OpenGl.Unsafe.GetError() |> unbox<OpenTK.Graphics.OpenGL4.ErrorCode>
+        if err <> OpenTK.Graphics.OpenGL4.ErrorCode.NoError then
+            let str = sprintf "%A failed with code: %A" i err
+            System.Diagnostics.Debugger.Break()
+            Log.warn "%s" str
