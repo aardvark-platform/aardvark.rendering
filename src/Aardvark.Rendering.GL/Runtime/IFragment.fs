@@ -5,6 +5,7 @@ open Aardvark.Base
 
 [<AllowNullLiteral>]
 type IDynamicFragment =
+    abstract member Statistics : FrameStatistics
     abstract member Append : seq<Instruction> -> int
     abstract member Update : int -> seq<Instruction> -> unit
     abstract member Clear : unit -> unit

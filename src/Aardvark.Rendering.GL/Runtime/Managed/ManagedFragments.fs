@@ -37,6 +37,8 @@ type ManagedDynamicFragment() =
     let cache = Dict<int, InstructionListFragment>()
     let mutable currentId = 0
     let mutable instructions = null
+    let mutable statistics = FrameStatistics.Zero
+    let cachedStats = Dictionary<int, FrameStatistics>()
 
     let newId() =
         System.Threading.Interlocked.Increment &currentId
@@ -55,7 +57,10 @@ type ManagedDynamicFragment() =
     member private x.Last = last
 
     member x.Append(i : seq<Instruction>) =
+        let stats = i |> Seq.map InstructionStatistics.toStats |> Seq.sum
+        statistics <- statistics + stats
         let id = newId()
+        cachedStats.[id] <- stats
         let f = InstructionListFragment(i |> Seq.toArray)
         cache.[id] <- f
 
@@ -70,11 +75,17 @@ type ManagedDynamicFragment() =
         id
 
     member x.Update (id : int) (value : seq<Instruction>) =
+        let newStats = value |> Seq.map InstructionStatistics.toStats |> Seq.sum
+        let oldStats = cachedStats.[id]
+        cachedStats.[id] <- newStats
+        statistics <- statistics - oldStats + newStats
         let f = cache.[id]
         f.Instructions <- value |> Seq.toArray
 
 
     member x.Clear() =
+        statistics <- FrameStatistics.Zero
+        cachedStats.Clear()
         first <- null
         last <- null
         cache.Clear()
@@ -101,6 +112,7 @@ type ManagedDynamicFragment() =
             ExecutionContext.run i
 
     interface IDynamicFragment<ManagedDynamicFragment> with
+        member x.Statistics = statistics
         member x.Next
             with get() = next
             and set v = next <- v

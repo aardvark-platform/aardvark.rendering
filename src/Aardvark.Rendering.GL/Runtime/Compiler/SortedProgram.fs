@@ -20,8 +20,9 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let handler = newHandler()
     let changeSet = ChangeSet(addInput, removeInput)
     let resourceSet = ResourceSet(addInput, removeInput)
-    
-    let ctx = { handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
+    let statistics = Mod.init FrameStatistics.Zero
+
+    let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
 
     let mutable currentId = 0
     let idCache = Cache(Ag.emptyScope, fun m -> System.Threading.Interlocked.Increment &currentId)
@@ -118,8 +119,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         // run everything
         run prolog.Fragment
 
-        // TODO: real statistics
-        FrameStatistics.Zero
+        statistics |> Mod.force
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

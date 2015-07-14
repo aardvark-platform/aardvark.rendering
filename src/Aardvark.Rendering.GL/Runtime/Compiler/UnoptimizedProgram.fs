@@ -66,10 +66,15 @@ type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and
         self :=
             Mod.custom (fun () ->
                 if prev <> null then
+                    let oldStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
                     currentChanger.RemoveOutput !self
                     recompile()
                     currentChanger |> Mod.force
                     currentChanger.AddOutput !self
+                    let newStats = frag.Statistics
+                    transact (fun () ->
+                        Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
+                    )
             )
         !self
 
@@ -84,6 +89,11 @@ type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and
                 match frag.Prev with
                     | null -> ()
                     | p ->  p.Next <- frag.Next
+
+                let stats = frag.Statistics
+                transact (fun () ->
+                    Mod.change ctx.statistics (ctx.statistics.Value - stats)
+                )
 
                 ctx.handler.Delete frag
                 frag <- null
@@ -170,9 +180,9 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let handler = newHandler()
     let changeSet = ChangeSet(addInput, removeInput)
     let resourceSet = ResourceSet(addInput, removeInput)
+    let statistics = Mod.init FrameStatistics.Zero
 
-
-    let ctx = { handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
+    let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
 
     let mutable currentId = 0
     let idCache = Cache(Ag.emptyScope, fun m -> System.Threading.Interlocked.Increment &currentId)
@@ -263,8 +273,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         // run everything
         run prolog.Fragment
 
-        // TODO: real statistics
-        FrameStatistics.Zero
+        statistics |> Mod.force
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
