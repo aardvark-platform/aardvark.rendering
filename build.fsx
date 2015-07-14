@@ -79,6 +79,43 @@ Target "Default" (fun () -> ())
     "Default"
 
 
+
+Target "InjectNativeDependencies" (fun () ->
+
+    if Directory.Exists "bin/Debug" then
+        File.Copy(@"packages/Aardvark.Build/lib/net45/Aardvark.Build.dll", @"bin/Debug/Aardvark.Build.dll", true)
+    if Directory.Exists "bin/Release" then
+        File.Copy(@"packages/Aardvark.Build/lib/net45/Aardvark.Build.dll", @"bin/Release/Aardvark.Build.dll", true)
+
+    let dirs = Directory.GetDirectories "lib/Native"
+    for d in dirs do
+        let n = Path.GetFileName d
+        let d = d |> Path.GetFullPath
+        let paths = [
+            Path.Combine("bin/Release", n + ".dll") |> Path.GetFullPath
+            Path.Combine("bin/Release", n + ".exe") |> Path.GetFullPath
+            Path.Combine("bin/Debug", n + ".dll") |> Path.GetFullPath
+            Path.Combine("bin/Debug", n + ".exe") |> Path.GetFullPath
+        ]
+
+        let wd = Environment.CurrentDirectory
+        try
+        
+            for p in paths do
+                if File.Exists p then
+                    Environment.CurrentDirectory <- Path.GetDirectoryName p
+                    let ass = Mono.Cecil.AssemblyDefinition.ReadAssembly(p)
+                    AssemblyInjector.addResources d ass
+                    ass.Write p
+                    tracefn "injected native stuff in %A" p
+        finally
+            Environment.CurrentDirectory <- wd
+
+        ()
+
+    ()
+)
+
 Target "CreatePackage" (fun () ->
     let releaseNotes = try Fake.Git.Information.getCurrentHash() |> Some with _ -> None
     if releaseNotes.IsNone then 
@@ -160,7 +197,7 @@ Target "Deploy" (fun () ->
 )
 
 
-"Compile" ==> "CreatePackage"
+"Compile" ==> "InjectNativeDependencies" ==> "CreatePackage"
 "CreatePackage" ==> "Deploy"
 "CreatePackage" ==> "Push"
 
