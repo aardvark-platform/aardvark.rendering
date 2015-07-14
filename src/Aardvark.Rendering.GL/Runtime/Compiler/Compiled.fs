@@ -4,56 +4,16 @@ open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
 
-type AdaptiveInstruction =
-    | FixedInstruction of list<Instruction>
-    | AdaptiveInstruction of IMod<list<Instruction>>
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module AdaptiveInstruction =
-    let private noMod = Mod.constant ()
-
-    let create (l : list<Instruction>) =
-        FixedInstruction l
-
-    let ofMod (l : IMod<list<Instruction>>) =
-        if l.IsConstant then
-            FixedInstruction (Mod.force l)
-        else
-            AdaptiveInstruction l
-
-    let writeTo (i : AdaptiveInstruction) (f : IDynamicFragment<'f>) =
-        match i with
-            | FixedInstruction l -> 
-                f.Append l |> ignore
-                noMod
-            | AdaptiveInstruction l ->
-                let id = ref -1
-                let res =
-                    l |> Mod.map (fun l ->
-                        if !id >= 0 then
-                            f.Update !id l
-                        else
-                            id := f.Append l
-                    )
-                
-                res |> Mod.force
-                res
-
-
-
 type CompilerState =
     {
         currentContext : IMod<ContextHandle>
-        instructions : list<AdaptiveInstruction>
-        resources : list<IChangeableResource>
         manager : ResourceManager
+
+        resources : list<IChangeableResource>
+        instructions : list<MetaInstruction>
     }
 
 type Compiled<'a> = { runCompile : CompilerState -> CompilerState * 'a }
-
-module Compiled =
-    
-    let manager = { runCompile = fun s -> s,s.manager }
 
 [<AutoOpen>]
 module ``Compiled Builder`` =
@@ -70,30 +30,30 @@ module ``Compiled Builder`` =
                 (f r).runCompile { s with resources = (r :> IChangeableResource)::s.resources }
             }
 
-        member x.Yield(i : AdaptiveInstruction) =
+        member x.Yield(i : MetaInstruction) =
             { runCompile = fun s -> {s with instructions = s.instructions @ [i]}, ()}
 
         member x.Yield(m : IMod<list<Instruction>>) =
-            m |> AdaptiveInstruction.ofMod |> x.Yield
+            m |> MetaInstruction.ofModList |> x.Yield
 
         member x.Yield(m : list<Instruction>) =
-            m |> AdaptiveInstruction.create |> x.Yield
+            m |> MetaInstruction.ofList |> x.Yield
 
         member x.Yield(m : ContextHandle -> list<Instruction>) =
             { runCompile = fun s ->
-                let i = s.currentContext |> Mod.map m |> AdaptiveInstruction.ofMod
+                let i = s.currentContext |> Mod.map m |> MetaInstruction.ofModList
                 { s with instructions = s.instructions @ [i] }, ()
             }
 
         member x.Yield(m : IMod<Instruction>) =
-            m |> Mod.map (fun i -> [i]) |> AdaptiveInstruction.ofMod |> x.Yield
+            m |> MetaInstruction.ofMod |> x.Yield
 
         member x.Yield(m : Instruction) =
-            [m] |> AdaptiveInstruction.create |> x.Yield
+            m |> MetaInstruction.single |> x.Yield
 
         member x.Yield(m : ContextHandle -> Instruction) =
             { runCompile = fun s ->
-                let i = s.currentContext |> Mod.map (fun v -> [m v]) |> AdaptiveInstruction.ofMod
+                let i = s.currentContext |> Mod.map m |> MetaInstruction.ofMod
                 { s with instructions = s.instructions @ [i] }, ()
             }
 

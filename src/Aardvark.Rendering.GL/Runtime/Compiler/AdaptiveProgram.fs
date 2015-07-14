@@ -215,8 +215,14 @@ type RenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         match frag with
             | null -> ()
             | _ -> 
-                frag.Next.Prev <- frag.Prev
-                frag.Prev.Next <- frag.Next
+                match frag.Next with
+                    | null -> ()
+                    | n ->  n.Prev <- frag.Prev
+
+                match frag.Prev with
+                    | null -> ()
+                    | p ->  p.Next <- frag.Next
+
                 ctx.handler.Delete frag
                 frag <- null
 
@@ -261,12 +267,28 @@ type RenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     member x.Next
         with get() = next
-        and set n = 
+        and set (n : RenderJobFragment<'f>) = 
+            match frag with
+                | null -> ()
+                | _ ->
+                    match n.FragmentOption with
+                        | Some n -> 
+                            frag.Next <- n
+                            n.Prev <- frag
+                        | None -> ()
             next <- n
 
     member x.Prev
         with get() = prev
-        and set p = 
+        and set (p : RenderJobFragment<'f>) = 
+            match frag with
+                | null -> ()
+                | _ ->
+                    match p.FragmentOption with
+                        | Some p -> 
+                            frag.Prev <- p
+                            p.Next <- frag
+                        | None -> ()
             prev <- p
             transact (fun () -> changer.MarkOutdated())
 
@@ -293,7 +315,9 @@ module RenderJobSorting =
     let project (rj : RenderJob) =
         projections |> Array.map (fun f -> f rj) |> Array.toList
 
-type RedundancyRemovalProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>(newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
+type RedundancyRemovalProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
+    (newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
+    
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()
     let changeSet = ChangeSet(addInput, removeInput)
@@ -303,65 +327,68 @@ type RedundancyRemovalProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>(
     let ctx = { handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
 
     let mutable currentId = 0
-    let modIds = Dict<IMod, int>()
+    let idCache = Cache(Ag.emptyScope, fun m -> System.Threading.Interlocked.Increment &currentId)
 
-    let getId m =
-        modIds.GetOrCreate(m, fun m -> System.Threading.Interlocked.Increment &currentId)
-
-    let cmp (l : RenderJobFragment<'f>) (r : RenderJobFragment<'f>) =
-        let l = l.RenderJob |> RenderJobSorting.project |> List.map getId
-        let r = r.RenderJob |> RenderJobSorting.project |> List.map getId
-        compare l r
-
-    let sortedFragments = BucketAVL.custom cmp
-    let mutable fragments = Dict<RenderJob, RenderJobFragment<'f>>()
+    let sortedFragments = SortedDictionaryExt<list<int>, RenderJobFragment<'f>>(compare)
+    let fragments = Dict<RenderJob, RenderJobFragment<'f>>()
 
     let mutable prolog = new RenderJobFragment<'f>(handler.CreateProlog(), ctx)
     let mutable epilog = new RenderJobFragment<'f>(handler.CreateEpilog(), ctx)
     let mutable run = handler.Compile ()
 
 
-    let add (f : RenderJobFragment<'f>) =
-        fragments.[f.RenderJob] <- f
-
-        BucketAVL.insertNeighbourhood sortedFragments f (fun l r ->
-            let l = match l with | Some l -> l | None -> prolog
-            let r = match r with | Some r -> r | None -> epilog
-
-            f.Prev <- l
-            l.Next <- f
-
-            f.Next <- r
-            r.Prev <- f
-        ) |> ignore
-
-    let remove (f : RenderJobFragment<'f>) =
-        BucketAVL.remove sortedFragments f |> ignore
-
     member x.Dispose() =
-        handler.Delete prolog.Fragment
-        handler.Delete epilog.Fragment
+        run <- fun _ -> failwith "cannot run disposed program"
 
         for (KeyValue(_,f)) in fragments do
             changeSet.Unlisten f.Changer
             f.Dispose()
 
         fragments.Clear()
-        run <- fun _ -> failwith "cannot run disposed program"
+        sortedFragments.Clear()
         handler.Dispose()
+        idCache.Clear(ignore)
+
+        handler.Delete prolog.Fragment
+        handler.Delete epilog.Fragment
+        prolog <- null
+        epilog <- null
 
     member x.Add (rj : RenderJob) =
-        // create and store a new RenderJobFragment
-        let f = new RenderJobFragment<'f>(rj, ctx)
-        add f
 
+        let key = (rj |> RenderJobSorting.project |> List.map idCache.Invoke) @ [rj.Id]
+
+        // create a new RenderJobFragment and link it
+        let fragment = 
+            sortedFragments |> SortedDictionary.setWithNeighbours key (fun l s r -> 
+                match s with
+                    | Some f ->
+                        failwithf "duplicated renderjob: %A" f.RenderJob
+                    | None ->
+                        let l = match l with | Some (_,l) -> l | None -> prolog
+                        let r = match r with | Some (_,r) -> r | None -> epilog
+
+                        let f = new RenderJobFragment<'f>(rj, ctx)
+                        f.Prev <- l
+                        l.Next <- f
+
+                        f.Next <- r
+                        r.Prev <- f
+
+                        f
+            ) 
+
+        fragments.[rj] <- fragment
+        
         // listen to changes
-        changeSet.Listen f.Changer
+        changeSet.Listen fragment.Changer
 
     member x.Remove (rj : RenderJob) =
         match fragments.TryRemove rj with
             | (true, f) ->
-                remove f
+                let key = (rj |> RenderJobSorting.project |> List.map idCache.Revoke) @ [rj.Id]
+
+                sortedFragments |> SortedDictionary.remove key |> ignore
 
                 // detach the fragment
                 f.Prev.Next <- f.Next
@@ -399,6 +426,8 @@ type RedundancyRemovalProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>(
         member x.Remove rj = x.Remove rj
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
         member x.Update rj = failwith "not implemented"
+
+
 
 module FragmentHandlers =
     let native() =
