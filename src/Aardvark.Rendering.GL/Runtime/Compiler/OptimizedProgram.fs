@@ -8,130 +8,6 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
-type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
-    let l = obj()
-    let all = HashSet<IMod<unit>>()
-    let set = HashSet<IMod<unit>>()
-    let callbacks = Dictionary<IMod<unit>, (unit -> unit)>()
-
-    let dirty (m : IMod<unit>) () =
-        lock l (fun () -> 
-            callbacks.Remove m |> ignore
-            set.Add m |> ignore
-        )
-
-    member x.Listen(m : IMod<unit>) =
-        if not m.IsConstant then
-            lock m (fun () -> 
-                lock l (fun () ->
-                    if all.Add m then addInput m
-
-                    if m.OutOfDate then
-                        set.Add m |> ignore
-                    else
-                        let cb = dirty m
-                        callbacks.[m] <- cb
-                        m.MarkingCallbacks.Add cb |> ignore
-                )
-            )
-        else
-            m |> Mod.force
-
-    member x.Unlisten (m : IMod<unit>) =
-        if not m.IsConstant then
-            lock m (fun () ->
-                lock l (fun () ->
-                    if all.Remove m then removeInput m
-
-                    set.Remove m |> ignore
-                    match callbacks.TryGetValue m with
-                        | (true, cb) ->
-                            callbacks.Remove m |> ignore
-                            m.MarkingCallbacks.Remove cb |> ignore
-                        | _ ->
-                            ()
-                )
-            )
-
-    member x.Update() =
-        let dirtySet = 
-            lock l (fun () ->
-                let dirty = set |> Seq.toArray
-                set.Clear()
-                dirty
-            )
-
-        for d in dirtySet do
-            d |> Mod.force
-            let cb = dirty d
-            callbacks.[d] <- cb
-            d.MarkingCallbacks.Add cb |> ignore
-
-type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
-    let l = obj()
-    let all = ReferenceCountingSet<IChangeableResource>()
-    let set = HashSet<IChangeableResource>()
-    let callbacks = Dictionary<IChangeableResource, (unit -> unit)>()
-
-    let dirty (m : IChangeableResource) () =
-        lock l (fun () -> 
-            callbacks.Remove m |> ignore
-            set.Add m |> ignore
-        )
-
-    member x.Listen(m : IChangeableResource) =
-        lock m (fun () -> 
-            lock l (fun () ->
-                if all.Add m then
-                    addInput m
-                    if m.OutOfDate then
-                        set.Add m |> ignore
-                    else
-                        let cb = dirty m
-                        callbacks.[m] <- cb
-                        m.MarkingCallbacks.Add cb |> ignore
-            )
-        )
-
-    member x.Unlisten (m : IChangeableResource) =
-        lock m (fun () ->
-            lock l (fun () ->
-                if all.Remove m then
-                    removeInput m
-                    set.Remove m |> ignore
-                    match callbacks.TryGetValue m with
-                        | (true, cb) ->
-                            callbacks.Remove m |> ignore
-                            m.MarkingCallbacks.Remove cb |> ignore
-                        | _ ->
-                            ()
-            )
-        )
-
-    member x.Update() =
-        let dirtyResoruces = 
-            lock l (fun () ->
-                let dirty = set |> Seq.toArray
-                set.Clear()
-                dirty
-            )
-
-        for d in dirtyResoruces do
-            d.UpdateCPU()
-            d.UpdateGPU()
-
-            let cb = dirty d
-            callbacks.[d] <- cb
-            d.MarkingCallbacks.Add cb |> ignore
-
-type IFragmentHandler<'f when 'f :> IDynamicFragment<'f>> =
-    inherit IDisposable
-    abstract member CreateProlog : unit -> 'f
-    abstract member CreateEpilog : unit -> 'f
-    abstract member Create : seq<Instruction> -> 'f
-    abstract member Delete : 'f -> unit
-    abstract member Compile : unit -> ('f -> unit)
-
 type CompileContext<'f when 'f :> IDynamicFragment<'f>> =
     {
         handler : IFragmentHandler<'f>
@@ -141,11 +17,11 @@ type CompileContext<'f when 'f :> IDynamicFragment<'f>> =
     }
 
 [<AllowNullLiteral>]
-type RenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
+type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     private (precompiled : Option<'f>, rj : RenderJob, ctx : CompileContext<'f>) =
 
-    let mutable next : RenderJobFragment<'f> = null
-    let mutable prev : RenderJobFragment<'f> = null
+    let mutable next : OptimizedRenderJobFragment<'f> = null
+    let mutable prev : OptimizedRenderJobFragment<'f> = null
     let mutable currentProgram : Option<AdaptiveCode> = None
     let mutable currentChanger = Mod.constant ()
     let mutable frag : 'f = match precompiled with | Some p -> p | None -> null
@@ -268,7 +144,7 @@ type RenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     member x.Next
         with get() = next
-        and set (n : RenderJobFragment<'f>) = 
+        and set (n : OptimizedRenderJobFragment<'f>) = 
             match frag with
                 | null -> ()
                 | _ ->
@@ -281,7 +157,7 @@ type RenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     member x.Prev
         with get() = prev
-        and set (p : RenderJobFragment<'f>) = 
+        and set (p : OptimizedRenderJobFragment<'f>) = 
             match frag with
                 | null -> ()
                 | _ ->
@@ -296,27 +172,11 @@ type RenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    new(rj : RenderJob, ctx : CompileContext<'f>) = new RenderJobFragment<'f>(None, rj, ctx)
-    new(precompiled : 'f, ctx : CompileContext<'f>) = new RenderJobFragment<'f>(Some precompiled, RenderJob.Empty, ctx)
+    new(rj : RenderJob, ctx : CompileContext<'f>) = new OptimizedRenderJobFragment<'f>(None, rj, ctx)
+    new(precompiled : 'f, ctx : CompileContext<'f>) = new OptimizedRenderJobFragment<'f>(Some precompiled, RenderJob.Empty, ctx)
 
-module RenderJobSorting =
 
-    let private emptyMod = Mod.constant () :> IMod
-    let private projections = 
-        [| fun (r : RenderJob) -> r.Surface :> IMod
-
-           fun (r : RenderJob) -> 
-               match r.Uniforms.TryGetUniform (r.AttributeScope, DefaultSemantic.DiffuseColorTexture) with
-                   | Some t -> t
-                   | _ -> emptyMod
-
-           fun (r : RenderJob) -> if r.Indices <> null then r.Indices :> IMod else emptyMod 
-        |]
-
-    let project (rj : RenderJob) =
-        projections |> Array.map (fun f -> f rj) |> Array.toList
-
-type RedundancyRemovalProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
+type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     (newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
@@ -330,11 +190,11 @@ type RedundancyRemovalProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let mutable currentId = 0
     let idCache = Cache(Ag.emptyScope, fun m -> System.Threading.Interlocked.Increment &currentId)
 
-    let sortedFragments = SortedDictionaryExt<list<int>, RenderJobFragment<'f>>(compare)
-    let fragments = Dict<RenderJob, RenderJobFragment<'f>>()
+    let sortedFragments = SortedDictionaryExt<list<int>, OptimizedRenderJobFragment<'f>>(compare)
+    let fragments = Dict<RenderJob, OptimizedRenderJobFragment<'f>>()
 
-    let mutable prolog = new RenderJobFragment<'f>(handler.CreateProlog(), ctx)
-    let mutable epilog = new RenderJobFragment<'f>(handler.CreateEpilog(), ctx)
+    let mutable prolog = new OptimizedRenderJobFragment<'f>(handler.CreateProlog(), ctx)
+    let mutable epilog = new OptimizedRenderJobFragment<'f>(handler.CreateEpilog(), ctx)
     let mutable run = handler.Compile ()
 
 
@@ -369,7 +229,7 @@ type RedundancyRemovalProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                         let l = match l with | Some (_,l) -> l | None -> prolog
                         let r = match r with | Some (_,r) -> r | None -> epilog
 
-                        let f = new RenderJobFragment<'f>(rj, ctx)
+                        let f = new OptimizedRenderJobFragment<'f>(rj, ctx)
                         f.Prev <- l
                         l.Next <- f
 
@@ -427,67 +287,4 @@ type RedundancyRemovalProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         member x.Remove rj = x.Remove rj
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
         member x.Update rj = failwith "not implemented"
-
-
-
-module FragmentHandlers =
-    let native() =
-        let manager = new MemoryManager()
-
-        let prolog() =
-            let f = new Fragment<unit>(manager, 0)
-            f.Append (Assembler.functionProlog 6) |> ignore
-            NativeDynamicFragment(f)
-
-        let epilog() =
-            let f = new Fragment<unit>(manager, 0)
-            f.Append (Assembler.functionEpilog 6) |> ignore
-            NativeDynamicFragment(f)
-
-        let create (s : seq<Instruction>) =
-            if not (Seq.isEmpty s) then
-                failwith "cannot create non-empty fragment"
-
-            let f = new Fragment<unit>(manager, 0)
-            NativeDynamicFragment(f)
-
-        { new IFragmentHandler<NativeDynamicFragment<unit>> with
-            member x.Dispose() = manager.Dispose()
-            member x.CreateProlog() = prolog()
-            member x.CreateEpilog() = epilog()
-            member x.Create s = create s
-            member x.Delete f = f.Fragment.Dispose()
-            member x.Compile() =
-                let entryPtr = ref 0n
-                let run = ref (fun () -> ())
-                fun (f : NativeDynamicFragment<unit>) ->
-                    let prolog = f.Fragment
-                    if prolog.RealPointer <> !entryPtr then
-                        entryPtr := prolog.RealPointer
-                        run := UnmanagedFunctions.wrap !entryPtr
-                    !run ()
-        }
-
-    let managed() =
-        { new IFragmentHandler<ManagedDynamicFragment> with
-            member x.Dispose() = ()
-            member x.CreateProlog() = ManagedDynamicFragment()
-            member x.CreateEpilog() = ManagedDynamicFragment()
-            member x.Create s = ManagedDynamicFragment()
-            member x.Delete f = f.Clear()
-            member x.Compile() =
-                fun (f : ManagedDynamicFragment) -> f.RunAll ()
-        }
-
-    let glvm() =
-        { new IFragmentHandler<SwitchFragment> with
-            member x.Dispose() = ()
-            member x.CreateProlog() = new SwitchFragment()
-            member x.CreateEpilog() = new SwitchFragment()
-            member x.Create s = new SwitchFragment()
-            member x.Delete f = f.Dispose()
-            member x.Compile() =
-                fun (f : SwitchFragment) -> f.RunAll ()
-        }
-
 

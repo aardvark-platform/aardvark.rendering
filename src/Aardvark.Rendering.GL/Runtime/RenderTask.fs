@@ -149,7 +149,7 @@ module RenderTasks =
                     let p = 
                         match config with
                             | Order.Unordered -> 
-                                new Compiler.RedundancyRemovalProgram<_>(Compiler.FragmentHandlers.glvm, manager, addInput, removeInput) :> IProgram
+                                new Compiler.UnoptimizedProgram<_>(Compiler.FragmentHandlers.managed, manager, addInput, removeInput) :> IProgram
 
 //                                let mode = 
 //                                    if engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0

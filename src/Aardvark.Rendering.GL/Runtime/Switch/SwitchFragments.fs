@@ -137,6 +137,11 @@ type SwitchFragment(mode : VMMode) =
         let mutable stats = VMStats()
         GLVM.vmRun(frag, mode, &stats)
 
+    member x.RunAll(mode) =
+        let mutable stats = VMStats()
+        GLVM.vmRun(frag, mode, &stats)
+
+
     member x.Dispose() =
         GLVM.vmDelete frag
         next <- null
