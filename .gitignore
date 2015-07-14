@@ -9,3 +9,5 @@ bin/Debug
 /src/*.suo
 /bin/*.nupkg
 /src/.vs
+/src/*.opensdf
+/src/*.sdf
