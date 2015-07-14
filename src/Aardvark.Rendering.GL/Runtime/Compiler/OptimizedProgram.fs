@@ -287,7 +287,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         // run everything
         run prolog.Fragment
 
-        statistics |> Mod.force
+        statistics |> Mod.force |> handler.AdjustStatistics
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
