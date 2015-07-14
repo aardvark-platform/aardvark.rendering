@@ -78,7 +78,21 @@ Target "Default" (fun () -> ())
     "Compile" ==>
     "Default"
 
+Target "CopyGLVM" (fun () ->
+    let arch =
+        if Environment.Is64BitOperatingSystem then @"lib\Native\Aardvark.Rendering.GL\windows\AMD64"
+        else @"lib\Native\Aardvark.Rendering.GL\windows\x86"
 
+    let dir = DirectoryInfo(arch)
+    let debug = DirectoryInfo(@"bin\Debug")
+    let release = DirectoryInfo(@"bin\Release")
+    
+    debug.Create()
+    release.Create()
+
+    copyRecursive dir debug true |> ignore
+    copyRecursive dir release true |> ignore
+)
 
 Target "InjectNativeDependencies" (fun () ->
 
@@ -196,7 +210,7 @@ Target "Deploy" (fun () ->
         traceError (sprintf "cannot deploy branch: %A" branch)
 )
 
-
+"CopyGLVM" ==> "Compile"
 "Compile" ==> "InjectNativeDependencies" ==> "CreatePackage"
 "CreatePackage" ==> "Deploy"
 "CreatePackage" ==> "Push"
