@@ -16,6 +16,7 @@ type IFragmentHandler<'f when 'f :> IDynamicFragment<'f>> =
     abstract member Create : seq<Instruction> -> 'f
     abstract member Delete : 'f -> unit
     abstract member Compile : unit -> ('f -> unit)
+    abstract member AdjustStatistics : FrameStatistics -> FrameStatistics
 
 module FragmentHandlers =
     let native() =
@@ -53,6 +54,7 @@ module FragmentHandlers =
                         entryPtr := prolog.RealPointer
                         run := UnmanagedFunctions.wrap !entryPtr
                     !run ()
+            member x.AdjustStatistics s = s
         }
 
     let managed() =
@@ -64,6 +66,7 @@ module FragmentHandlers =
             member x.Delete f = f.Clear()
             member x.Compile() =
                 fun (f : ManagedDynamicFragment) -> f.RunAll ()
+            member x.AdjustStatistics s = s
         }
 
     let glvm() =
@@ -75,9 +78,11 @@ module FragmentHandlers =
             member x.Delete f = f.Dispose()
             member x.Compile() =
                 fun (f : SwitchFragment) -> f.RunAll ()
+            member x.AdjustStatistics s = s
         }
 
     let glvmRuntimeRedundancyChecks() =
+        let lastStats = ref (VMStats())
         { new IFragmentHandler<SwitchFragment> with
             member x.Dispose() = ()
             member x.CreateProlog() = new SwitchFragment()
@@ -85,5 +90,8 @@ module FragmentHandlers =
             member x.Create s = new SwitchFragment()
             member x.Delete f = f.Dispose()
             member x.Compile() =
-                fun (f : SwitchFragment) -> f.RunAll (VMMode.RuntimeRedundancyChecks)
+                fun (f : SwitchFragment) -> 
+                    lastStats := f.RunAll (VMMode.RuntimeRedundancyChecks)
+            member x.AdjustStatistics s = 
+                { s with ActiveInstructionCount = s.ActiveInstructionCount - float lastStats.Value.RemovedInstructions }
         }
