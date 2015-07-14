@@ -85,7 +85,6 @@
     <Compile Include="Runtime\Native\DynamicFragments.fs" />
     <Compile Include="Runtime\Managed\ManagedFragments.fs" />
     <Compile Include="Runtime\Switch\SwitchFragments.fs" />
-    <Compile Include="Runtime\Interpreter\InterpretedProgram.fs" />
     <Compile Include="Runtime\Compiler\ChangeSets.fs" />
     <Compile Include="Runtime\Compiler\FragmentHandlers.fs" />
     <Compile Include="Runtime\Compiler\MetaInstruction.fs" />
@@ -98,8 +97,6 @@
     <Compile Include="Runtime\Compiler\UnoptimizedProgram.fs" />
     <Compile Include="Runtime\Compiler\SortedProgram.fs" />
     <Compile Include="Runtime\Statistics.fs" />
-    <Compile Include="Runtime\Compiler.fs" />
-    <Compile Include="Runtime\Programs.fs" />
     <Compile Include="Runtime\RenderTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />
   </ItemGroup>
