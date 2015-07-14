@@ -149,25 +149,27 @@ module RenderTasks =
                     let p = 
                         match config with
                             | Order.Unordered -> 
-                                let mode = 
-                                    if engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
-                                    elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
-                                    else 2
+                                new RedundancyRemovalProgram<_>(FragmentHandlers.glvm, manager, addInput, removeInput) :> IProgram
 
-                                let opt =
-                                    if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
-                                    elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
-                                    else 1
-
-                                match mode with
-                                    | 2 -> new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
-                                    | 1 ->
-                                        match opt with
-                                            | 0 -> new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                            | 1 -> new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                            | _ -> new OptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                    | _ ->
-                                        new OptimizedManagedProgram(manager,addInput,removeInput) :> IProgram
+//                                let mode = 
+//                                    if engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
+//                                    elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
+//                                    else 2
+//
+//                                let opt =
+//                                    if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
+//                                    elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
+//                                    else 1
+//
+//                                match mode with
+//                                    | 2 -> new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
+//                                    | 1 ->
+//                                        match opt with
+//                                            | 0 -> new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
+//                                            | 1 -> new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
+//                                            | _ -> new OptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
+//                                    | _ ->
+//                                        new OptimizedManagedProgram(manager,addInput,removeInput) :> IProgram
 
                                 //new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
                                 //new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram

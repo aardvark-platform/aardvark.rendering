@@ -85,6 +85,9 @@
     <Compile Include="Runtime\Managed\ManagedFragments.fs" />
     <Compile Include="Runtime\Switch\SwitchFragments.fs" />
     <Compile Include="Runtime\Interpreter\InterpretedProgram.fs" />
+    <Compile Include="Runtime\InstructionCompiler\Compiled.fs" />
+    <Compile Include="Runtime\InstructionCompiler\DeltaCompiler.fs" />
+    <Compile Include="Runtime\InstructionCompiler\AdaptiveProgram.fs" />
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\Compiler.fs" />
     <Compile Include="Runtime\Sorting.fs" />

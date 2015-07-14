@@ -5,6 +5,7 @@ open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Rendering
 
+[<AllowNullLiteral>]
 type NativeDynamicFragment<'a>(f : Fragment<'a>) =
     let mutable entry : Option<nativeint * (unit -> unit)> = None
     member x.Fragment = f
