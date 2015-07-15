@@ -8,3 +8,4 @@ nuget RegexProvider ~> 0.0.5
 nuget BruTile ~> 0.12.0
 nuget FSPowerPack.Community ~> 3.0.0
 nuget AssimpNet ~> 3.3.1
+nuget OpenHardwareMonitor ~> 0.7.1

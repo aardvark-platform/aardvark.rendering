@@ -16,6 +16,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
          addInput : IAdaptiveObject -> unit, 
          removeInput : IAdaptiveObject -> unit) =
     
+    let sw = System.Diagnostics.Stopwatch()
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()
     let changeSet = ChangeSet(addInput, removeInput)
@@ -33,8 +34,8 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let sortedRenderJobs = sorter.SortedList
     do addInput sortedRenderJobs
 
-    let mutable prolog = new UnoptimizedRenderJobFragment<'f>(handler.CreateProlog(), ctx)
-    let mutable epilog = new UnoptimizedRenderJobFragment<'f>(handler.CreateEpilog(), ctx)
+    let mutable prolog = new UnoptimizedRenderJobFragment<'f>(handler.Prolog, ctx)
+    let mutable epilog = new UnoptimizedRenderJobFragment<'f>(handler.Epilog, ctx)
     let mutable run = handler.Compile ()
 
 
@@ -92,6 +93,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         let applySorting =
             async {
+                sw.Restart()
                 let sorted = sortedRenderJobs |> Mod.force
 
                 let mutable prev = prolog
@@ -106,20 +108,38 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
                 prev.Next <- epilog
                 epilog.Prev <- prev
+                sw.Stop()
+                return sw.Elapsed
             } |> Async.StartAsTask
 
 
         // update resources and instructions
-        resourceSet.Update()
-        changeSet.Update()
+        let resourceUpdates, resourceUpdateTime = 
+            resourceSet.Update()
+
+        let instructionUpdates, instructionUpdateTime = 
+            changeSet.Update() 
 
         // wait for the sorting
-        applySorting.Wait()
+        let sortingTime = applySorting.Result
 
+        sw.Restart()
         // run everything
         run prolog.Fragment
+        sw.Stop()
 
-        statistics |> Mod.force |> handler.AdjustStatistics
+        let stats = 
+            { Mod.force statistics with 
+                Programs = 1.0 
+                InstructionUpdateCount = float instructionUpdates
+                InstructionUpdateTime = instructionUpdateTime
+                ResourceUpdateCount = float resourceUpdates
+                ResourceUpdateTime = resourceUpdateTime
+                ExecutionTime = sw.Elapsed
+                SortingTime = sortingTime
+            }
+
+        stats |> handler.AdjustStatistics
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

@@ -190,6 +190,7 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
 type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     (newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     
+    let sw = System.Diagnostics.Stopwatch()
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()
     let changeSet = ChangeSet(addInput, removeInput)
@@ -204,8 +205,8 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let sortedFragments = SortedDictionaryExt<list<int>, OptimizedRenderJobFragment<'f>>(compare)
     let fragments = Dict<RenderJob, OptimizedRenderJobFragment<'f>>()
 
-    let mutable prolog = new OptimizedRenderJobFragment<'f>(handler.CreateProlog(), ctx)
-    let mutable epilog = new OptimizedRenderJobFragment<'f>(handler.CreateEpilog(), ctx)
+    let mutable prolog = new OptimizedRenderJobFragment<'f>(handler.Prolog, ctx)
+    let mutable epilog = new OptimizedRenderJobFragment<'f>(handler.Epilog, ctx)
     let mutable run = handler.Compile ()
 
 
@@ -252,6 +253,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         fragments.[rj] <- fragment
         
+        handler.Hint(AddRenderJob 1)
         // listen to changes
         changeSet.Listen fragment.Changer
 
@@ -272,6 +274,8 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 // finally dispose the fragment
                 f.Dispose()
 
+                handler.Hint(RemoveRenderJob 1)
+
             | _ ->
                 failwithf "cannot remove unknown renderjob: %A" rj
 
@@ -281,13 +285,30 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             transact (fun () -> Mod.change currentContext ctx)
 
         // update resources and instructions
-        resourceSet.Update()
-        changeSet.Update()
+        let resourceUpdates, resourceUpdateTime = 
+            resourceSet.Update()
 
+        let instructionUpdates, instructionUpdateTime = 
+            changeSet.Update() 
+
+        handler.Hint(RunProgram)
+
+        sw.Restart()
         // run everything
         run prolog.Fragment
+        sw.Stop()
 
-        statistics |> Mod.force |> handler.AdjustStatistics
+        let stats = 
+            { Mod.force statistics with 
+                Programs = 1.0 
+                InstructionUpdateCount = float instructionUpdates
+                InstructionUpdateTime = instructionUpdateTime
+                ResourceUpdateCount = float resourceUpdates
+                ResourceUpdateTime = resourceUpdateTime
+                ExecutionTime = sw.Elapsed
+            }
+
+        stats |> handler.AdjustStatistics
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

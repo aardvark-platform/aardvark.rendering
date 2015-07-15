@@ -22,7 +22,8 @@ SET /P t=<tmp
 SETLOCAL EnableDelayedExpansion
 IF DEFINED t SET "t=!t:%1 =!"
 SET args=!t!
+del tmp
 
 "packages\FAKE\tools\Fake.exe" "build.fsx" "target=%TARGET%" %args%
-del tmp
+
 

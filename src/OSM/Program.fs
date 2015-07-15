@@ -145,8 +145,11 @@ module Shader =
 
 [<EntryPoint; STAThread>]
 let main argv = 
+//    Hardware.test()
+//    Environment.Exit 0
     Aardvark.Init()
     
+
 
     let w = app.CreateSimpleRenderWindow()
     //w.Size <- V2i(1280, 1024)
@@ -281,7 +284,7 @@ let main argv =
         aset {
             for coord in tileIndices do
                 yield zeroOneQuad |> Sg.trafo (getTileTrafo coord)
-                                  |> Sg.diffuseTexture (getTileTexture coord)
+                                  |> Sg.diffuseTexture (getTileTexture coord |> Mod.onPush)
                 
         }
 
@@ -320,7 +323,7 @@ let main argv =
     let sg = sg |> Sg.fillMode mode
 
     // compile the rendertask and pass it to the window
-    w.RenderTask <- app.Runtime.CompileRender(ExecutionEngine.Native ||| ExecutionEngine.Optimized, sg.RenderJobs())
+    w.RenderTask <- app.Runtime.CompileRender(ExecutionEngine.Optimized ||| ExecutionEngine.Native, sg.RenderJobs())
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero

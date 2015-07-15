@@ -41,6 +41,7 @@ NUGET
       FSPowerPack.Core.Community
     FSPowerPack.Parallel.Seq.Community (3.0.0.0)
       FSPowerPack.Core.Community
+    OpenHardwareMonitor (0.7.1)
     Rx-Core (2.2.5)
       Rx-Interfaces (>= 2.2.5)
     Rx-Interfaces (2.2.5)

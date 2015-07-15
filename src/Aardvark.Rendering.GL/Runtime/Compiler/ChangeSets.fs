@@ -13,6 +13,7 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
     let all = HashSet<IMod<unit>>()
     let set = HashSet<IMod<unit>>()
     let callbacks = Dictionary<IMod<unit>, (unit -> unit)>()
+    let sw = System.Diagnostics.Stopwatch()
 
     let dirty (m : IMod<unit>) () =
         lock l (fun () -> 
@@ -61,17 +62,23 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
                 dirty
             )
 
+        sw.Restart()
+        let mutable count = 0
         for d in dirtySet do
             d |> Mod.force
+            count <- count + 1
             let cb = dirty d
             callbacks.[d] <- cb
             d.MarkingCallbacks.Add cb |> ignore
+        sw.Stop()
+        count, sw.Elapsed
 
 type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     let l = obj()
     let all = ReferenceCountingSet<IChangeableResource>()
     let set = HashSet<IChangeableResource>()
     let callbacks = Dictionary<IChangeableResource, (unit -> unit)>()
+    let sw = System.Diagnostics.Stopwatch()
 
     let dirty (m : IChangeableResource) () =
         lock l (fun () -> 
@@ -115,11 +122,17 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
                 set.Clear()
                 dirty
             )
-
+        sw.Restart()
+        let mutable count = 0
         for d in dirtyResoruces do
-            d.UpdateCPU()
-            d.UpdateGPU()
+            if d.OutOfDate then
+                count <- count + 1
+                d.UpdateCPU()
+                d.UpdateGPU()
 
-            let cb = dirty d
-            callbacks.[d] <- cb
-            d.MarkingCallbacks.Add cb |> ignore
+                let cb = dirty d
+                callbacks.[d] <- cb
+                d.MarkingCallbacks.Add cb |> ignore
+        sw.Stop()
+        count,sw.Elapsed
+
