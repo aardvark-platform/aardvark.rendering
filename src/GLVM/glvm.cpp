@@ -6,109 +6,7 @@
 #include <vector>
 #include <gl/GL.h>
 #include "State.h"
-
-#define DllExport(t) extern "C"  __declspec( dllexport ) t __cdecl
-
-PFNGLBINDVERTEXARRAYPROC		glBindVertexArray;
-PFNGLUSEPROGRAMPROC				glUseProgram;
-PFNGLACTIVETEXTUREPROC			glActiveTexture;
-PFNGLBINDSAMPLERPROC			glBindSampler;
-PFNGLBINDBUFFERBASEPROC			glBindBufferBase;
-PFNGLBINDBUFFERRANGEPROC		glBindBufferRange;
-PFNGLBINDFRAMEBUFFERPROC		glBindFramebuffer;
-PFNGLBLENDFUNCSEPARATEPROC		glBlendFuncSeparate;
-PFNGLBLENDEQUATIONSEPARATEPROC	glBlendEquationSeparate;
-PFNGLBLENDCOLORPROC				glBlendColor;
-PFNGLSTENCILFUNCSEPARATEPROC	glStencilFuncSeparate;
-PFNGLSTENCILOPSEPARATEPROC		glStencilOpSeparate;
-PFNGLPATCHPARAMETERIPROC		glPatchParameteri;
-PFNGLDRAWARRAYSINSTANCEDPROC	glDrawArraysInstanced;
-PFNGLDRAWELEMENTSINSTANCEDPROC  glDrawElementsInstanced;
-PFNGLVERTEXATTRIBPOINTERPROC	glVertexAttribPointer;
-PFNGLUNIFORM1FVPROC				glUniform1fv;
-PFNGLUNIFORM1IVPROC				glUniform1iv;
-PFNGLUNIFORM2FVPROC				glUniform2fv;
-PFNGLUNIFORM2IVPROC				glUniform2iv;
-PFNGLUNIFORM3FVPROC				glUniform3fv;
-PFNGLUNIFORM3IVPROC				glUniform3iv;
-PFNGLUNIFORM4FVPROC				glUniform4fv;
-PFNGLUNIFORM4IVPROC				glUniform4iv;
-PFNGLUNIFORMMATRIX2FVPROC		glUniformMatrix2fv;
-PFNGLUNIFORMMATRIX3FVPROC		glUniformMatrix3fv;
-PFNGLUNIFORMMATRIX4FVPROC		glUniformMatrix4fv;
-
-typedef enum {
-	BindVertexArray = 1,
-	BindProgram = 2,
-	ActiveTexture = 3,
-	BindSampler = 4,
-	BindTexture = 5,
-	BindBufferBase = 6,
-	BindBufferRange = 7,
-	BindFramebuffer = 8,
-	Viewport = 9,
-	Enable = 10,
-	Disable = 11,
-	DepthFunc = 12,
-	CullFace = 13,
-	BlendFuncSeparate = 14,
-	BlendEquationSeparate = 15,
-	BlendColor = 16,
-	PolygonMode = 17,
-	StencilFuncSeparate = 18,
-	StencilOpSeparate = 19,
-	PatchParameter = 20,
-	DrawElements = 21,
-	DrawArrays = 22,
-	DrawElementsInstanced = 23,
-	DrawArraysInstanced = 24,
-	Clear = 25,
-	BindImageTexture = 26,
-	ClearColor = 27,
-	ClearDepth = 28,
-	GetError = 29,
-	BindBuffer = 30,
-	VertexAttribPointer = 31,
-	VertexAttribDivisor = 32,
-	EnableVertexAttribArray = 33,
-	DisableVertexAttribArray = 34,
-	Uniform1fv = 35,
-	Uniform1iv = 36,
-	Uniform2fv = 37,
-	Uniform2iv = 38,
-	Uniform3fv = 39,
-	Uniform3iv = 40,
-	Uniform4fv = 41,
-	Uniform4iv = 42,
-	UniformMatrix2fv = 43,
-	UniformMatrix3fv = 44,
-	UniformMatrix4fv = 45
-} InstructionCode;
-
-typedef enum {
-	None					= 0x00000,
-	RuntimeRedundancyChecks = 0x00001,
-	RuntimeStateSorting		= 0x00002
-} VMMode;
-
-typedef struct {
-	InstructionCode Code;
-	intptr_t Arg0;
-	intptr_t Arg1;
-	intptr_t Arg2;
-	intptr_t Arg3;
-	intptr_t Arg4;
-} Instruction;
-
-typedef struct FragStruct {
-	std::vector<std::vector<Instruction>> Instructions;
-	struct FragStruct* Next;
-} Fragment;
-
-typedef struct {
-	int TotalInstructions;
-	int RemovedInstructions;
-} Statistics;
+#include "glvm.h"
 
 PROC getProc(LPCSTR name)
 {
@@ -120,7 +18,7 @@ PROC getProc(LPCSTR name)
 	return ptr;
 }
 
-bool initialized = false;
+static bool initialized = false;
 
 DllExport(void) vmInit()
 {
@@ -582,13 +480,6 @@ Statistics runRedundancyChecks(Fragment* frag)
 }
 
 
-
-/*
-| InstructionCode.BindImageTexture->OpenGl.Unsafe.BindImageTexture(int 0) (int 1) (int 2) (int 3)
-| InstructionCode.ClearColor->OpenGl.Unsafe.ClearColor(int 0) (int 1) (int 2) (int 3)
-| InstructionCode.ClearDepth->OpenGl.Unsafe.ClearDepth(int64 0)
-| InstructionCode.GetError                 -> ()
-*/
 DllExport(void) vmRunSingle(Fragment* frag)
 {
 	if (!initialized)
