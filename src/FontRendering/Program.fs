@@ -45,17 +45,17 @@ module Overlays =
 
     let simple =
         {
-            transform = ~~(M33d.Translation(V2d(10.0, 768.0)))
+            transform = ~~(M33d.Translation(V2d(10.0, 10.0)))
             scissor = ~~Box2d.Infinite
             fillColor = ~~C4f.White
             command = 
                 Right {
-                    font = ~~(SystemFont("Calibri", FontStyle.Regular))
-                    size = ~~12.0
+                    font = ~~(SystemFont("Courier New", FontStyle.Bold))
+                    size = ~~22.0
                     letterSpacing = ~~0.0
                     lineHeight = ~~1.0
                     blur = ~~0.0
-                    align = ~~(TextAlign.Left ||| TextAlign.Bottom)
+                    align = ~~(TextAlign.Left ||| TextAlign.Top)
                     content = ~~"This is NanoVg working in Aardvark\r\nThis is pretty cool for rendering simple overlays and stuff..."
                 }
         }
