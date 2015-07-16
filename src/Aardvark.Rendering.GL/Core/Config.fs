@@ -15,12 +15,12 @@ module Config =
     /// <summary>
     /// The major GL Version for default contexts
     /// </summary>
-    let MajorVersion = 4
+    let MajorVersion = 3
 
     /// <summary>
     /// The minor GL Version for default contexts
     /// </summary>
-    let MinorVersion = 1
+    let MinorVersion = 0
 
     /// <summary>
     /// The number of subsamples for default windows
