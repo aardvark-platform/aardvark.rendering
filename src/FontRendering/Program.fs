@@ -50,7 +50,7 @@ module Overlays =
             fillColor = ~~C4f.White
             command = 
                 Right {
-                    font = ~~(SystemFont("Courier New", FontStyle.Bold))
+                    font = ~~(SystemFont("Arial", FontStyle.Regular))
                     size = ~~22.0
                     letterSpacing = ~~0.0
                     lineHeight = ~~1.0
