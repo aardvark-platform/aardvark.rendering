@@ -6,15 +6,6 @@ open Aardvark.Base.Incremental
 open System.Collections.Generic
 open Aardvark.Base.Rendering
 
-type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
-    member x.Framebuffer = f
-    member x.Statistics = stats
-
-type IRenderTask =
-    inherit IDisposable
-    inherit IAdaptiveObject
-    abstract member Run : IFramebuffer -> RenderingResult
-
 type IStreamingTexture =
     inherit IMod<ITexture>
     abstract member Update : format : PixFormat * size : V2i * data : nativeint -> unit

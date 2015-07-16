@@ -59,27 +59,6 @@
   <Target Name="AfterBuild">
   </Target>
   -->
-  <ItemGroup>
-    <Content Include="InstallationDummyFile.txt">
-      <Paket>True</Paket>
-    </Content>
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
-      <Name>Aardvark.Rendering.GL</Name>
-      <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-  </ItemGroup>
   <Choose>
     <When Condition="($(TargetFrameworkIdentifier) == '.NETFramework' And ($(TargetFrameworkVersion) == 'v4.5' Or $(TargetFrameworkVersion) == 'v4.5.1' Or $(TargetFrameworkVersion) == 'v4.5.2' Or $(TargetFrameworkVersion) == 'v4.5.3' Or $(TargetFrameworkVersion) == 'v4.6')) Or ($(TargetFrameworkIdentifier) == 'MonoAndroid') Or ($(TargetFrameworkIdentifier) == 'MonoTouch')">
       <ItemGroup>
@@ -625,4 +604,41 @@
       </ItemGroup>
     </When>
   </Choose>
+  <ItemGroup>
+    <Content Include="InstallationDummyFile.txt">
+      <Paket>True</Paket>
+    </Content>
+    <Compile Include="Core.fs" />
+    <Compile Include="RenderJobs.fs" />
+    <Compile Include="Context.fs" />
+    <Compile Include="Runtime.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="OpenTK">
+      <HintPath>..\..\lib\Release\OpenTK.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK.Compatibility">
+      <HintPath>..\..\lib\Release\OpenTK.Compatibility.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK.GLControl">
+      <HintPath>..\..\lib\Release\OpenTK.GLControl.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
+      <Name>Aardvark.Base.Rendering</Name>
+      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
+      <Name>Aardvark.Rendering.GL</Name>
+      <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

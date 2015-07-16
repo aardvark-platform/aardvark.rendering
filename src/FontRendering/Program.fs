@@ -6,6 +6,7 @@ open FShade
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering
+open Aardvark.Rendering.NanoVg
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
@@ -38,6 +39,28 @@ module Shader =
         fragment {
             return V4d.IIII
         }
+
+module Overlays =   
+    open Aardvark.Base.Incremental.Operators
+
+    let simple =
+        {
+            transform = ~~(M33d.Translation(V2d(10.0, 768.0)))
+            scissor = ~~Box2d.Infinite
+            fillColor = ~~C4f.White
+            command = 
+                Right {
+                    font = ~~(SystemFont("Calibri", FontStyle.Regular))
+                    size = ~~12.0
+                    letterSpacing = ~~0.0
+                    lineHeight = ~~1.0
+                    blur = ~~0.0
+                    align = ~~(TextAlign.Left ||| TextAlign.Bottom)
+                    content = ~~"This is NanoVg working in Aardvark\r\nThis is pretty cool for rendering simple overlays and stuff..."
+                }
+        }
+    
+
 
 [<EntryPoint>]
 let main argv = 
@@ -118,8 +141,10 @@ let main argv =
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
 
-    win.RenderTask <- app.Runtime.CompileRender(sg.RenderJobs())
-
+    let main = sg |> app.Runtime.CompileRender
+    let overlay = [Overlays.simple] |> AList.ofList |> app.Runtime.CompileRender
+    
+    win.RenderTask <- RenderTask.ofList [main; overlay]
     
     
 
