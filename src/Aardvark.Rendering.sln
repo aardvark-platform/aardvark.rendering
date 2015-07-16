@@ -27,6 +27,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "OSM", "OSM\OSM.fsproj", "{B
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FontRendering", "FontRendering\FontRendering.fsproj", "{63DCF027-1892-44B9-AF14-1FFF8005617C}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.NanoVg", "Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj", "{054DF582-D549-4DA0-B74B-762AB2585D3F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -77,6 +79,10 @@ Global
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{63DCF027-1892-44B9-AF14-1FFF8005617C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{054DF582-D549-4DA0-B74B-762AB2585D3F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
