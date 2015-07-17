@@ -141,10 +141,11 @@ let main argv =
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
 
-    let main = sg |> app.Runtime.CompileRender
+    let engine = ExecutionEngine.Unmanaged ||| ExecutionEngine.RuntimeOptimized
+    let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
     let overlay = [Overlays.simple] |> AList.ofList |> app.Runtime.CompileRender
     
-    win.RenderTask <- RenderTask.ofList [main; overlay]
+    win.RenderTask <- RenderTask.ofList [main]
     
     
 

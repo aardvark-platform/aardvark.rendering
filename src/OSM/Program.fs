@@ -28,6 +28,7 @@ open System.Web
 open System.Globalization
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.NanoVg
 
 let app = new OpenGlApplication()
 let source = KnownTileSources.Create(KnownTileSource.BingHybrid)
@@ -323,7 +324,9 @@ let main argv =
     let sg = sg |> Sg.fillMode mode
 
     // compile the rendertask and pass it to the window
-    w.RenderTask <- app.Runtime.CompileRender(ExecutionEngine.Optimized ||| ExecutionEngine.Native, sg.RenderJobs())
+    let engine = ExecutionEngine.Managed ||| ExecutionEngine.Unmanaged
+    let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
+    w.RenderTask <- RenderTask.ofList [main]
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero

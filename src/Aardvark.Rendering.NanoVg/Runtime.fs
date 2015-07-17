@@ -63,9 +63,9 @@ module private Interpreter =
             ctx = 0n
             transform = M33d.Identity
             scissor = Box2d.Infinite
-            fillColor = C4f.Black
+            fillColor = C4f(Single.MaxValue, Single.MaxValue, Single.MaxValue, Single.MaxValue)
             pathStrokeWidth = -1.0
-            pathStrokeColor = C4f.Black
+            pathStrokeColor = C4f(Single.MaxValue, Single.MaxValue, Single.MaxValue, Single.MaxValue)
             pathLineCap = ButtCap
             pathLineJoin = RoundJoin
             pathWinding = Winding.CW
@@ -285,9 +285,9 @@ module private Interpreter =
             state <- n
         ()
 
-type RenderTask(glContext : Context, l : alist<NvgRenderJob>) as this =
+type RenderTask(glRuntime : Runtime, l : alist<NvgRenderJob>) as this =
     inherit AdaptiveObject()
-
+    let glContext = glRuntime.Context
     let r = l.GetReader()
     let inputs = ReferenceCountingSet<IAdaptiveObject>()
     do r.AddOutput this
@@ -369,6 +369,7 @@ type RenderTask(glContext : Context, l : alist<NvgRenderJob>) as this =
         )
 
     interface IRenderTask with
+        member x.Runtime = glRuntime :> IRuntime |> Some
         member x.Run(fbo) = 
             x.Run(fbo)
             RenderingResult(fbo, FrameStatistics.Zero)
@@ -379,5 +380,15 @@ type RenderTask(glContext : Context, l : alist<NvgRenderJob>) as this =
 [<Extension; AbstractClass; Sealed>]
 type RuntimeExtensions private() =
     [<Extension>]
-    static member CompileRender(this : Runtime, list : alist<NvgRenderJob>) =
-        new RenderTask(this.Context, list) :> IRenderTask
+    static member CompileRender(this : IRuntime, list : alist<NvgRenderJob>) =
+        match this with
+            | :? Runtime as this ->
+                new RenderTask(this, list) :> IRenderTask
+            | _ -> failwithf "unsupported NanoVg runtime: %A" this
+
+    [<Extension>]
+    static member CompileRender(this : IRuntime, list : list<NvgRenderJob>) =
+        match this with
+            | :? Runtime as this ->
+                new RenderTask(this, AList.ofList list) :> IRenderTask
+            | _ -> failwithf "unsupported NanoVg runtime: %A" this

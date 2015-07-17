@@ -6,15 +6,6 @@ open Aardvark.Base.Incremental
 open System.Collections.Generic
 open Aardvark.Base.Rendering
 
-type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
-    member x.Framebuffer = f
-    member x.Statistics = stats
-
-type IRenderTask =
-    inherit IDisposable
-    inherit IAdaptiveObject
-    abstract member Run : IFramebuffer -> RenderingResult
-
 
 module RenderTask =
     
@@ -23,11 +14,14 @@ module RenderTask =
         interface IRenderTask with
             member x.Dispose() = ()
             member x.Run(fbo) = RenderingResult(fbo, FrameStatistics.Zero)
+            member x.Runtime = None
 
-    type private SequentialRenderTask(tasks : IRenderTask[]) as this =
+    type private SequentialRenderTask(f : RenderingResult -> RenderingResult, tasks : IRenderTask[]) as this =
         inherit AdaptiveObject()
 
         do for t in tasks do t.AddOutput this
+
+        let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
 
         interface IRenderTask with
             member x.Run(fbo) =
@@ -36,11 +30,15 @@ module RenderTask =
                     for t in tasks do
                         let res = t.Run(fbo)
                         stats <- stats + res.Statistics
-                    RenderingResult(fbo, stats)
+                    RenderingResult(fbo, stats) |> f
                 )
 
             member x.Dispose() =
                 for t in tasks do t.RemoveOutput this
+
+            member x.Runtime = runtime
+
+        new(tasks : IRenderTask[]) = new SequentialRenderTask(id, tasks)
 
     type private ModRenderTask(input : IMod<IRenderTask>) as this =
         inherit AdaptiveObject()
@@ -74,33 +72,45 @@ module RenderTask =
                         inner <- None
                     | _ -> ()
 
+            member x.Runtime = input.GetValue().Runtime
+
     type private AListRenderTask(tasks : alist<IRenderTask>) as this =
         inherit AdaptiveObject()
         let reader = tasks.GetReader()
         do reader.AddOutput this
 
+        let mutable runtime = None
         let tasks = ReferenceCountingSet()
 
         let add (t : IRenderTask) =
             if tasks.Add t then
+                match t.Runtime with
+                    | Some r -> runtime <- Some r
+                    | None -> ()
                 t.AddOutput this
 
         let remove (t : IRenderTask) =
             if tasks.Remove t then
                 t.RemoveOutput this
 
+        let processDeltas() =
+            // TODO: EvaluateAlways should ensure that self is OutOfDate since
+            //       when its not we need a transaction to add outputs
+            let wasOutOfDate = this.OutOfDate
+            this.OutOfDate <- true
+
+            // adjust the dependencies
+            for d in reader.GetDelta() do
+                match d with
+                    | Add(_,t) -> add t
+                    | Rem(_,t) -> remove t
+
+            this.OutOfDate <- wasOutOfDate
+
         interface IRenderTask with
             member x.Run(fbo) =
                 base.EvaluateAlways(fun () ->
-                    // TODO: EvaluateAlways should ensure that self is OutOfDate since
-                    //       when its not we need a transaction to add outputs
-                    this.OutOfDate <- true
-
-                    // adjust the dependencies
-                    for d in reader.GetDelta() do
-                        match d with
-                            | Add(_,t) -> add t
-                            | Rem(_,t) -> remove t
+                    processDeltas()
 
                     // run all tasks
                     let mutable stats = FrameStatistics.Zero
@@ -119,6 +129,10 @@ module RenderTask =
                 for i in tasks do
                     i.RemoveOutput x
                 tasks.Clear()
+                
+            member x.Runtime =
+                processDeltas()
+                runtime
 
 
     let empty = new EmptyRenderTask() :> IRenderTask
@@ -143,6 +157,14 @@ module RenderTask =
 
     let ofASet (s : aset<IRenderTask>) =
         new AListRenderTask(s |> ASet.sortWith (fun a b -> 0)) :> IRenderTask
+
+    let mapResult (f : RenderingResult -> RenderingResult) (t : IRenderTask) =
+        new SequentialRenderTask(f, [|t|]) :> IRenderTask
+
+    let mapStatistics (f : FrameStatistics -> FrameStatistics) (t : IRenderTask) =
+        t |> mapResult (fun r -> RenderingResult(r.Framebuffer, f r.Statistics))
+
+
 
 [<AutoOpen>]
 module ``RenderTask Builder`` =

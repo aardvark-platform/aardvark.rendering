@@ -19,24 +19,44 @@ module Context =
             | FontStyle.Italic -> System.Drawing.FontStyle.Italic
             | _ -> failwithf "unknown font style: %A" s
 
-    let fontPathTable =
-        let folder = Environment.GetFolderPath(Environment.SpecialFolder.Fonts)
+    let private fontNames = Dictionary<Font, string>()
 
-        let res = Dictionary()
-        for f in Directory.EnumerateFiles(folder, "*.ttf") do
-            use coll = new System.Drawing.Text.PrivateFontCollection()
-            coll.AddFontFile(f)
-            let fam = coll.Families.[0]
+    module private FontResolver =
 
-            let s = styles |> List.filter (toSysStyle >> fam.IsStyleAvailable)
-            match s with
-                | style::_ -> res.[(fam.Name, style)] <- f
-                | _ -> ()
-            ()
-        res
+        module private Windows =
+            open System.IO
+            open Microsoft.Win32
+            let fontFolder = Environment.GetFolderPath Environment.SpecialFolder.Fonts
+
+            let getSystemFontFileName (name : string) (style : FontStyle) =
+                use font = new System.Drawing.Font(name, 10.0f, toSysStyle style)
+                let fontname = font.Name + " (TrueType)"
+                let fonts = Registry.LocalMachine.OpenSubKey(@"Software\Microsoft\Windows NT\CurrentVersion\Fonts", false)
+                match fonts with
+                    | null -> failwith "can't find font registry database."
+                    | _ ->
+                        let o = fonts.GetValue(fontname)  
+                        match o with
+                            | :? string as path -> Some (Path.Combine(fontFolder, path))
+                            | _ -> None
+
+        module private Linux =
+            let getSystemFontFileName (name : string) (style : FontStyle) =
+                Log.warn "font retrieval not implemented on linux-systems"
+                None
+
+        module private MacOS =
+            let getSystemFontFileName (name : string) (style : FontStyle) =
+                Log.warn "font retrieval not implemented on MacOS X"
+                None
+
+        let getSystemFontFileName (name : string) (style : FontStyle) =
+            match Environment.OSVersion.Platform with
+                | PlatformID.Unix -> Linux.getSystemFontFileName name style
+                | PlatformID.MacOSX -> MacOS.getSystemFontFileName name style
+                | _ -> Windows.getSystemFontFileName name style
 
 
-    let private fontNames = Dictionary<string, string>()
 
     let init(ctx : Context) =
         if context = 0n then
@@ -57,18 +77,21 @@ module Context =
                 | None ->
                     failwith "cannot initialize NanoVg without a GL context"
 
-    let rec getFontName (font : Aardvark.Rendering.NanoVg.Font) =
-        match font with
-            | FileFont path ->
-                match fontNames.TryGetValue path with
-                    | (true, n) -> n
-                    | _ ->
-                        let n = Guid.NewGuid().ToString()
-                        let ctx = current()
-                        NanoVg.nvgCreateFont(ctx, n, path) |> ignore
-                        fontNames.[path] <- n
-                        n
-            | SystemFont(name, style) ->
-                match fontPathTable.TryGetValue((name, style)) with
-                    | (true, path) -> getFontName (FileFont path)
-                    | _ -> failwithf "cannot locate system font: %s with style %A" name style
+    let rec getFontName (font : Font) =
+        match fontNames.TryGetValue font with
+            | (true, name) -> name
+            | _ ->
+                let name = 
+                    match font with
+                        | FileFont path ->
+                            let n = Guid.NewGuid().ToString()
+                            let ctx = current()
+                            let fontId = NanoVg.nvgCreateFont(ctx, n, path)
+                            n
+                        | SystemFont(name, style) ->
+                            match FontResolver.getSystemFontFileName name style with
+                                | Some path -> getFontName (FileFont path)
+                                | _ -> failwithf "cannot locate system font: %s with style %A" name style
+
+                fontNames.[font] <- name
+                name

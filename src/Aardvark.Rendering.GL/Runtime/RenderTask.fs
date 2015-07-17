@@ -251,6 +251,9 @@ module RenderTasks =
                     Dictionary.remove rj surfaceSubscriptions |> ignore
                 | _ -> ()
 
+        member x.Runtime = runtime
+        member x.Manager = manager
+
         member x.ProcessDeltas (deltas : list<Delta<RenderJob>>) =
             for d in deltas do
                 match d with
@@ -339,6 +342,8 @@ module RenderTasks =
             member x.Dispose() =
                 x.Dispose()
 
+            member x.Runtime = runtime |> Some
+
 
     type ClearTask(runtime : IRuntime, color : IMod<C4f>, depth : IMod<float>, ctx : Context) as this =
         inherit AdaptiveObject()
@@ -378,6 +383,7 @@ module RenderTasks =
             depth.RemoveOutput x
 
         interface IRenderTask with
+            member x.Runtime = runtime |> Some
             member x.Run(fbo) =
                 x.Run(fbo)
 

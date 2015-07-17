@@ -65,8 +65,8 @@
     <Compile Include="RenderJob.fs" />
     <Compile Include="GPUVendor.fs" />
     <Compile Include="Framebuffers.fs" />
-    <Compile Include="RenderTask.fs" />
     <Compile Include="Runtime.fs" />
+    <Compile Include="RenderTask.fs" />
     <None Include="Scripts\load-references.fsx" />
     <None Include="Scripts\load-project.fsx" />
   </ItemGroup>

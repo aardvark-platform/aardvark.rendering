@@ -26,6 +26,10 @@ type ExecutionEngine =
 
     | Default           = 0x011 // Native | Optimized
 
+type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
+    member x.Framebuffer = f
+    member x.Statistics = stats
+
 type IRuntime =
 
     abstract member CreateTexture : ITexture -> ITexture
@@ -44,6 +48,11 @@ type IRuntime =
 
     abstract member CreateFramebuffer : Map<Symbol, IMod<IFramebufferOutput>> -> IFramebuffer
 
+and IRenderTask =
+    inherit IDisposable
+    inherit IAdaptiveObject
+    abstract member Runtime : Option<IRuntime>
+    abstract member Run : IFramebuffer -> RenderingResult
 
 type ShaderStage =
     | Vertex = 1

@@ -612,6 +612,7 @@
     <Compile Include="RenderJobs.fs" />
     <Compile Include="Context.fs" />
     <Compile Include="Runtime.fs" />
+    <Compile Include="DefaultOverlays.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
