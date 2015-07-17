@@ -10,4 +10,14 @@ if [ ! -d "packages/FAKE" ]; then
 fi
 
 
+if [ ! -d "\\\\hobel\\NuGet\\" ]; then
+	echo "attempting to mount hobel"
+	sudo mkdir "\\\\hobel\\NuGet\\"
+	sudo chmod 777 "\\\\hobel\\NuGet\\"
+	echo "please enter your VRVis username"
+	read user
+	echo "mounting hobel"
+	sudo mount -t cifs -o user=$user,dom=VRVIS,uid=$(id -u),gid=$(id -u) //hobel.ra1.vrvis.lan/NuGet "\\\\hobel\\NuGet\\"
+fi
+
 mono packages/FAKE/tools/FAKE.exe "build.fsx"  $@
