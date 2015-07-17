@@ -324,8 +324,8 @@ let main argv =
     let sg = sg |> Sg.fillMode mode
 
     // compile the rendertask and pass it to the window
-    let engine = ExecutionEngine.Managed ||| ExecutionEngine.Unmanaged
-    let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
+    let engine = ExecutionEngine.Native ||| ExecutionEngine.Optimized
+    let main = app.Runtime.CompileRender(engine, sg) //|> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
     w.RenderTask <- RenderTask.ofList [main]
 
     // a very sketch controller for changing the viewport

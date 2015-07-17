@@ -13,7 +13,6 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open System.Windows.Media
 open System.Windows
-open System.Windows.Media.Imaging
 open FontRendering
 
 
@@ -141,9 +140,9 @@ let main argv =
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
 
-    let engine = ExecutionEngine.Unmanaged ||| ExecutionEngine.RuntimeOptimized
-    let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
-    let overlay = [Overlays.simple] |> AList.ofList |> app.Runtime.CompileRender
+    let engine = ExecutionEngine.Native ||| ExecutionEngine.Optimized
+    let main = app.Runtime.CompileRender(engine, sg) //|> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
+    //let overlay = [Overlays.simple] |> AList.ofList |> app.Runtime.CompileRender
     
     win.RenderTask <- RenderTask.ofList [main]
     

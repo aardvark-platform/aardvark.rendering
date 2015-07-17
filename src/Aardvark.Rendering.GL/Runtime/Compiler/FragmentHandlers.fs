@@ -90,14 +90,14 @@ module FragmentHandlers =
 
             Log.stop()
 
-        let mutable defrag = DelayedTask(defragment)
-        let mutable totalChanges = 0
-        let mutable ranOnce = false
+        let defrag = DelayedTask(defragment)
+        let totalChanges = ref 0
+        let ranOnce = ref false
         let hintDefragmentation(additional : int) = 
-            totalChanges <- totalChanges + abs additional
-            if ranOnce && totalChanges > 2 then
+            totalChanges := !totalChanges + abs additional
+            if !ranOnce && !totalChanges > 2 then
                 if defrag.TrySetDelay(2000) then
-                    totalChanges <- 0
+                    totalChanges := 0
 
 
 
@@ -122,7 +122,7 @@ module FragmentHandlers =
                     | AddRenderJob v -> hintDefragmentation v
                     | RemoveRenderJob v -> hintDefragmentation -v
                     | RunProgram -> 
-                        ranOnce <- true
+                        ranOnce := true
                         hintDefragmentation 0
         }
 

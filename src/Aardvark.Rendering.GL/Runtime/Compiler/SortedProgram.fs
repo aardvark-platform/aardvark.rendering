@@ -96,18 +96,18 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 sw.Restart()
                 let sorted = sortedRenderJobs |> Mod.force
 
-                let mutable prev = prolog
+                let prev = ref prolog
                 for rj in sorted do
                     match fragments.TryGetValue rj with
                         | (true, f) ->
-                            prev.Next <- f
-                            f.Prev <- prev
-                            prev <- f
+                            prev.Value.Next <- f
+                            f.Prev <- !prev
+                            prev := f
                         | _ ->
                             Log.warn "sorter returned unknown renderjob"
 
-                prev.Next <- epilog
-                epilog.Prev <- prev
+                prev.Value.Next <- epilog
+                epilog.Prev <- !prev
                 sw.Stop()
                 return sw.Elapsed
             } |> Async.StartAsTask

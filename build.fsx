@@ -8,7 +8,7 @@
 #r @"Mono.Cecil.dll"
 #r @"Paket.Core.dll"
 
-#load @"bin\addSources.fsx"
+#load @"bin/addSources.fsx"
 
 
 open Fake
@@ -80,7 +80,7 @@ Target "Default" (fun () -> ())
 
 Target "CopyGLVM" (fun () ->
     let arch =
-        if Environment.Is64BitOperatingSystem then @"lib\Native\Aardvark.Rendering.GL\windows\AMD64"
+        if Environment.Is64BitOperatingSystem then Path.Combine("lib", "Native", "Aardvark.Rendering.GL", "windows", "AMD64")
         else @"lib\Native\Aardvark.Rendering.GL\windows\x86"
 
     let dir = DirectoryInfo(arch)
