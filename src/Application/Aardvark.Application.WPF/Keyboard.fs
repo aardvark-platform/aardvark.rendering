@@ -1,11 +1,11 @@
 ﻿namespace Aardvark.Application.WPF
 
-open System
-open System.Windows
-open System.Windows.Input
-open System.Windows.Controls
-open Aardvark.Application
-open Aardvark.Base
+//open System
+//open System.Windows
+//open System.Windows.Input
+//open System.Windows.Controls
+//open Aardvark.Application
+//open Aardvark.Base
 
 //[<AutoOpen>]
 //module private WPFUtilites =

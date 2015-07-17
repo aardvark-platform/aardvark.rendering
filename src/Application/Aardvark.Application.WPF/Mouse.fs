@@ -1,13 +1,13 @@
 ﻿namespace Aardvark.Application.WPF
 
-open System
-open System.Windows
-open System.Windows.Controls
-open System.Windows.Input
-open Aardvark.Base
-open Aardvark.Application
+//open System
+//open System.Windows
+//open System.Windows.Controls
+//open System.Windows.Input
+//open Aardvark.Base
+//open Aardvark.Application
 
-type private WPFButtons = System.Windows.Input.MouseButton
+//type private WPFButtons = System.Windows.Input.MouseButton
 //
 //type Mouse(ctrl : FrameworkElement) =
 //

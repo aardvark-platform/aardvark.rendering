@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Application.WPF
 
+#if Windows
+
 open System
 open System.Windows
 open System.Windows.Controls
@@ -89,4 +91,5 @@ type RenderControl() =
         member x.RenderTask 
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
-    
+
+#endif
