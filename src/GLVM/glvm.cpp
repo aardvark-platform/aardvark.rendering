@@ -1,12 +1,18 @@
 // Aardark.NativeStream.cpp : Defines the exported functions for the DLL application.
 //
 
-#include "stdafx.h"
-#include "glext.h"
-#include <vector>
-#include <gl/GL.h>
 #include "State.h"
 #include "glvm.h"
+
+#ifdef __GNUC__
+
+void* getProc(const char* name)
+{
+	return (void*)glXGetProcAddress((const GLubyte*)name);
+	//return NULL;
+}
+
+#else
 
 PROC getProc(LPCSTR name)
 {
@@ -18,6 +24,8 @@ PROC getProc(LPCSTR name)
 	return ptr;
 }
 
+#endif
+
 static bool initialized = false;
 
 DllExport(void) vmInit()
@@ -27,16 +35,19 @@ DllExport(void) vmInit()
 
 	initialized = true;
 
+	#ifndef __GNUC__
+	glActiveTexture = (PFNGLACTIVETEXTUREPROC)getProc("glActiveTexture");
+	glBlendColor = (PFNGLBLENDCOLORPROC)getProc("glBlendColor");
+	#endif
+
 	glBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)getProc("glBindVertexArray");
 	glUseProgram = (PFNGLUSEPROGRAMPROC)getProc("glUseProgram");
-	glActiveTexture = (PFNGLACTIVETEXTUREPROC)getProc("glActiveTexture");
 	glBindSampler = (PFNGLBINDSAMPLERPROC)getProc("glBindSampler");
 	glBindBufferBase = (PFNGLBINDBUFFERBASEPROC)getProc("glBindBufferBase");
 	glBindBufferRange = (PFNGLBINDBUFFERRANGEPROC)getProc("glBindBufferRange");
 	glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)getProc("glBindFramebuffer");
 	glBlendFuncSeparate = (PFNGLBLENDFUNCSEPARATEPROC)getProc("glBlendFuncSeparate");
 	glBlendEquationSeparate = (PFNGLBLENDEQUATIONSEPARATEPROC)getProc("glBlendEquationSeparate");
-	glBlendColor = (PFNGLBLENDCOLORPROC)getProc("glBlendColor");
 	glStencilFuncSeparate = (PFNGLSTENCILFUNCSEPARATEPROC)getProc("glStencilFuncSeparate");
 	glStencilOpSeparate = (PFNGLSTENCILOPSEPARATEPROC)getProc("glStencilOpSeparate");
 	glPatchParameteri = (PFNGLPATCHPARAMETERIPROC)getProc("glPatchParameteri");
@@ -266,7 +277,7 @@ Statistics runNoRedundancyChecks(Fragment* frag)
 		{
 			for (auto it = itb->begin(); it != itb->end(); ++it)
 			{
-				runInstruction(it._Ptr);
+				runInstruction(&(*it));
 				total++;
 			}
 		}
@@ -289,7 +300,7 @@ Statistics runRedundancyChecks(Fragment* frag)
 			for (auto it = itb->begin(); it != itb->end(); ++it)
 			{
 				totalInstructions++;
-				Instruction* i = it._Ptr;
+				Instruction* i = &(*it);
 
 				intptr_t arg0 = i->Arg0;
 
@@ -492,7 +503,7 @@ DllExport(void) vmRunSingle(Fragment* frag)
 	{
 		for (auto it = itb->begin(); it != itb->end(); ++it)
 		{
-			runInstruction(it._Ptr);
+			runInstruction(&(*it));
 		}
 	}
 }

@@ -1,22 +1,31 @@
 #pragma once
 
+#include <vector>
+
+#ifdef __GNUC__
+#include <GL/gl.h>
+#include <GL/glx.h>
+#define DllExport(t) t
+#else
 #include "stdafx.h"
 #include "glext.h"
-#include <vector>
 #include <gl/GL.h>
-
 #define DllExport(t) extern "C"  __declspec( dllexport ) t __cdecl
+#endif
+
+#ifndef __GNUC__
+PFNGLACTIVETEXTUREPROC			glActiveTexture;
+PFNGLBLENDCOLORPROC				glBlendColor;
+#endif
 
 PFNGLBINDVERTEXARRAYPROC		glBindVertexArray;
 PFNGLUSEPROGRAMPROC				glUseProgram;
-PFNGLACTIVETEXTUREPROC			glActiveTexture;
 PFNGLBINDSAMPLERPROC			glBindSampler;
 PFNGLBINDBUFFERBASEPROC			glBindBufferBase;
 PFNGLBINDBUFFERRANGEPROC		glBindBufferRange;
 PFNGLBINDFRAMEBUFFERPROC		glBindFramebuffer;
 PFNGLBLENDFUNCSEPARATEPROC		glBlendFuncSeparate;
 PFNGLBLENDEQUATIONSEPARATEPROC	glBlendEquationSeparate;
-PFNGLBLENDCOLORPROC				glBlendColor;
 PFNGLSTENCILFUNCSEPARATEPROC	glStencilFuncSeparate;
 PFNGLSTENCILOPSEPARATEPROC		glStencilOpSeparate;
 PFNGLPATCHPARAMETERIPROC		glPatchParameteri;
@@ -81,14 +90,14 @@ typedef enum {
 	Uniform4iv = 42,
 	UniformMatrix2fv = 43,
 	UniformMatrix3fv = 44,
-	UniformMatrix4fv = 45
+	UniformMatrix4fv = 45 
 } InstructionCode;
 
 // enum controlling the current execution mode
 typedef enum {
-	None = 0x00000,
+	NoOptimization = 0x00000,
 	RuntimeRedundancyChecks = 0x00001,
-	RuntimeStateSorting = 0x00002
+	RuntimeStateSorting = 0x00002 
 } VMMode;
 
 // an instruction consists of a code and up to 5 arguments. 
