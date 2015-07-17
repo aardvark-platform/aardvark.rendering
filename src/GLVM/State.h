@@ -1,9 +1,15 @@
 #pragma once
 
+#ifdef __GNUC__
+#include <GL/gl.h>
+#include <unordered_map>
+#include <unordered_set>
+#else
 #include <windows.h>
 #include <gl/GL.h>
 #include <unordered_map>
 #include <unordered_set>
+#endif
 
 class State
 {
