@@ -1,6 +1,5 @@
 source https://nuget.org/api/v2
-
-source \\hobel\nuget
+source \\hobel\NuGet\
 
 nuget Aardvark.Base.Incremental ~> 1.3.5
 nuget FShade ~> 1.3.5

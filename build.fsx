@@ -81,11 +81,11 @@ Target "Default" (fun () -> ())
 Target "CopyGLVM" (fun () ->
     let arch =
         if Environment.Is64BitOperatingSystem then Path.Combine("lib", "Native", "Aardvark.Rendering.GL", "windows", "AMD64")
-        else @"lib\Native\Aardvark.Rendering.GL\windows\x86"
+        else @"lib/Native/Aardvark.Rendering.GL/windows/x86"
 
     let dir = DirectoryInfo(arch)
-    let debug = DirectoryInfo(@"bin\Debug")
-    let release = DirectoryInfo(@"bin\Release")
+    let debug = DirectoryInfo(@"bin/Debug")
+    let release = DirectoryInfo(@"bin/Release")
     
     debug.Create()
     release.Create()
