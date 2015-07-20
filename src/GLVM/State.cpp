@@ -12,11 +12,11 @@ State::State()
 	currentActiveTexture = -1;
 	currentDepthFunc = -1;
 	currentCullFace = -1;
-	currentSampler = std::hash_map<int, intptr_t>();
-	currentTexture = std::hash_map<GLenum, std::hash_map<int, intptr_t>>();
-	currentBuffer = std::hash_map<int, intptr_t>();
-	modes = std::hash_map<intptr_t, bool>();
-	patchParameters = std::hash_map<intptr_t, intptr_t>();
+	currentSampler = std::unordered_map<int, intptr_t>();
+	currentTexture = std::unordered_map<GLenum, std::unordered_map<int, intptr_t>>();
+	currentBuffer = std::unordered_map<int, intptr_t>();
+	modes = std::unordered_map<intptr_t, bool>();
+	patchParameters = std::unordered_map<intptr_t, intptr_t>();
 
 	currentPolygonMode = std::pair<intptr_t, intptr_t>(-1, -1);
 	blendFunc = std::tuple<intptr_t, intptr_t, intptr_t, intptr_t>(-1, -1, -1, -1);
@@ -123,7 +123,7 @@ bool State::ShouldSetTexture(GLenum target, intptr_t texture)
 	}
 	else
 	{
-		std::hash_map<int, intptr_t> map;
+		std::unordered_map<int, intptr_t> map;
 		map[(int)currentActiveTexture] = texture;
 		currentTexture[target] = map;
 		return true;

@@ -2,17 +2,20 @@
 
 #ifdef __GNUC__
 #include <GL/gl.h>
-#include <hash_map>
-#include <hash_set>
+#include <unordered_set>
+#include <unordered_map>
 #include <tuple>
 #else
 #define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
 #include "stdafx.h"
 #include <windows.h>
 #include <gl/GL.h>
-#include <hash_map>
-#include <hash_set>
+#include <unordered_set>
+#include <unordered_map>
 #include <tuple>
+
+using namespace __gnu_cxx;
+
 #endif
 
 class State
@@ -33,11 +36,11 @@ private:
 	std::tuple<intptr_t, intptr_t, intptr_t, intptr_t> stencilFunc;
 	std::tuple<intptr_t, intptr_t, intptr_t, intptr_t> stencilOp;
 
-	std::hash_map<intptr_t, intptr_t> patchParameters;
-	std::hash_map<int, intptr_t> currentSampler;
-	std::hash_map<GLenum, std::hash_map<int, intptr_t>> currentTexture;
-	std::hash_map<int, intptr_t> currentBuffer;
-	std::hash_map<intptr_t, bool> modes;
+	std::unordered_map<intptr_t, intptr_t> patchParameters;
+	std::unordered_map<int, intptr_t> currentSampler;
+	std::unordered_map<GLenum, std::unordered_map<int, intptr_t>> currentTexture;
+	std::unordered_map<int, intptr_t> currentBuffer;
+	std::unordered_map<intptr_t, bool> modes;
 	
 
 public:
