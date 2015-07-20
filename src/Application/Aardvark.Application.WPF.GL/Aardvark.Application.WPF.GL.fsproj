@@ -13,6 +13,8 @@
     <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
     <Name>Aardvark.Application.WPF.GL</Name>
     <NuGetPackageImportStamp>716d4491</NuGetPackageImportStamp>
+	<OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
+	<OperatingSystem Condition="Exists('/usr')">UNIX</OperatingSystem>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -20,7 +22,7 @@
     <Optimize>false</Optimize>
     <Tailcalls>false</Tailcalls>
     <OutputPath>..\..\..\bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>DEBUG;TRACE;$(OperatingSystem)</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>
     </DocumentationFile>
@@ -30,7 +32,7 @@
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
     <OutputPath>..\..\..\bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;$(OperatingSystem)</DefineConstants>
     <WarningLevel>3</WarningLevel>
     <DocumentationFile>
     </DocumentationFile>
@@ -52,7 +54,6 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
   <ItemGroup>
-    <Compile Include="DxSharing.fs" />
     <Compile Include="RenderControl.fs" />
     <Compile Include="Application.fs" />
   </ItemGroup>
