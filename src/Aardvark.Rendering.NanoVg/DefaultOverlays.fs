@@ -231,6 +231,8 @@ module DefaultOverlays =
     type AnnotationRenderTask(real : IRenderTask, annotation : IRenderTask, emit : RenderingResult -> unit) as this =
         inherit AdaptiveObject()
 
+        let mutable upToDateExec = 0
+
         do real.AddOutput this
            annotation.AddOutput this
 
@@ -245,7 +247,11 @@ module DefaultOverlays =
                 base.EvaluateAlways (fun () ->
                     // TODO: 1) does not work when rendering continuously
                     //       2) does also not work when annotating the same task multiple times
-                    if real.OutOfDate || not x.OutOfDate then
+                    if not x.OutOfDate then upToDateExec <- upToDateExec + 1
+                    else upToDateExec <- 0
+
+
+                    if real.OutOfDate || upToDateExec > 1 then
                         let real = real.Run f
                         emit real
                         let annotation = annotation.Run f

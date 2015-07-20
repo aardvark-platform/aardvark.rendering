@@ -64,7 +64,7 @@ module Overlays =
 [<EntryPoint>]
 let main argv = 
     use app = new OpenGlApplication()
-    use win = app.CreateGameWindow()
+    use win = app.CreateSimpleRenderWindow()
 
     Aardvark.Init()
 
@@ -141,7 +141,7 @@ let main argv =
             |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
 
     let engine = ExecutionEngine.Native ||| ExecutionEngine.Optimized
-    let main = app.Runtime.CompileRender(engine, sg) //|> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
+    let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
     //let overlay = [Overlays.simple] |> AList.ofList |> app.Runtime.CompileRender
     
     win.RenderTask <- RenderTask.ofList [main]
