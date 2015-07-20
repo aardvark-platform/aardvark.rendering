@@ -14,8 +14,6 @@
 #include <unordered_map>
 #include <tuple>
 
-using namespace __gnu_cxx;
-
 #endif
 
 class State
