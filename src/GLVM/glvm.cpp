@@ -1,20 +1,20 @@
-// Aardark.NativeStream.cpp : Defines the exported functions for the DLL application.
-//
+#ifndef __GNUC__
+#include "stdafx.h"
+#endif
 
 #include "State.h"
 #include "glvm.h"
 
 #ifdef __GNUC__
 
-void* getProc(const char* name)
+static void* getProc(const char* name)
 {
 	return (void*)glXGetProcAddress((const GLubyte*)name);
-	//return NULL;
 }
 
 #else
 
-PROC getProc(LPCSTR name)
+static PROC getProc(LPCSTR name)
 {
 	auto ptr = wglGetProcAddress(name);
 
@@ -69,7 +69,7 @@ DllExport(void) vmInit()
 
 DllExport(Fragment*) vmCreate()
 {
-	auto ptr = new Fragment();
+	Fragment* ptr = new Fragment();
 	ptr->Instructions = std::vector<std::vector<Instruction>>();
 	ptr->Next = nullptr;
 	return ptr;
@@ -106,9 +106,9 @@ DllExport(void) vmUnlink(Fragment* left)
 
 DllExport(int) vmNewBlock(Fragment* frag)
 {
-	auto s = frag->Instructions.size();
+	int s = (int)frag->Instructions.size();
 	frag->Instructions.push_back(std::vector<Instruction>());
-	return (int)s;
+	return s;
 }
 
 DllExport(void) vmClearBlock(Fragment* frag, int block)

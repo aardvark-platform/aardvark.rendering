@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vector>
 
 #ifdef __GNUC__
 #include <GL/gl.h>
@@ -8,10 +7,13 @@
 #define DllExport(t) t
 #else
 #include "stdafx.h"
+#include <stdio.h>
 #include "glext.h"
 #include <gl/GL.h>
 #define DllExport(t) extern "C"  __declspec( dllexport ) t __cdecl
 #endif
+
+#include <vector>
 
 #ifndef __GNUC__
 PFNGLACTIVETEXTUREPROC			glActiveTexture;
