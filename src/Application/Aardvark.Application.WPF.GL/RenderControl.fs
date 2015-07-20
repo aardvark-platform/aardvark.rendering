@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Application.WPF
 
+#if BuildingOnWindows
+
 open System
 open System.Runtime.InteropServices
 open Aardvark.Base
@@ -41,3 +43,5 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
         member x.Sizes = x.Sizes
 
     new(context) = new OpenGlRenderControl(context, 1)
+
+#endif

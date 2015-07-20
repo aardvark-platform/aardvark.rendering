@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Application.WPF
 
+#if WINDOWS
 
 open System.Runtime.CompilerServices
 open System.Windows
@@ -59,4 +60,4 @@ type WPFApplicationExtensions private() =
     static member CreateSimpleRenderWindow(this : IApplication) =
         WPFApplicationExtensions.CreateSimpleRenderWindow(this, 1)
 
-
+#endif

@@ -1,4 +1,7 @@
+#ifndef __GNUC__
 #include "stdafx.h"
+#endif
+
 #include "State.h"
 
 State::State()
@@ -103,7 +106,7 @@ bool State::ShouldSetTexture(GLenum target, intptr_t texture)
 		{
 			if (res2->second != texture)
 			{
-				res->second.insert_or_assign((int)currentActiveTexture, texture);
+				res->second[(int)currentActiveTexture] = texture;
 				return true;
 			}
 			else
@@ -114,15 +117,15 @@ bool State::ShouldSetTexture(GLenum target, intptr_t texture)
 		}
 		else
 		{
-			res->second.insert_or_assign((int)currentActiveTexture, texture);
+			res->second[(int)currentActiveTexture] = texture;
 			return true;
 		}
 	}
 	else
 	{
 		std::unordered_map<int, intptr_t> map;
-		map.insert_or_assign((int)currentActiveTexture, texture);
-		currentTexture.insert_or_assign(target, map);
+		map[(int)currentActiveTexture] = texture;
+		currentTexture[target] = map;
 		return true;
 	}
 }
@@ -134,7 +137,7 @@ bool State::ShouldSetSampler(int index, intptr_t sampler)
 	{
 		if (res->second != sampler)
 		{
-			currentSampler.insert_or_assign(index, sampler);
+			currentSampler[index] = sampler;
 			return true;
 		}
 		else
@@ -145,7 +148,7 @@ bool State::ShouldSetSampler(int index, intptr_t sampler)
 	}
 	else
 	{
-		currentSampler.insert_or_assign(index, sampler);
+		currentSampler[index] = sampler;
 		return true;
 	}
 }
@@ -157,7 +160,7 @@ bool State::ShouldSetBuffer(GLenum target, int index, intptr_t buffer)
 	{
 		if (res->second != buffer)
 		{
-			currentBuffer.insert_or_assign(index, buffer);
+			currentBuffer[index] = buffer;
 			return true;
 		}
 		else
@@ -168,7 +171,7 @@ bool State::ShouldSetBuffer(GLenum target, int index, intptr_t buffer)
 	}
 	else
 	{
-		currentBuffer.insert_or_assign(index, buffer);
+		currentBuffer[index] = buffer;
 		return true;
 	}
 }
@@ -178,7 +181,7 @@ bool State::ShouldEnable(intptr_t flag)
 	auto res = modes.find(flag);
 	if (res == modes.end() || res->second != true)
 	{
-		modes.insert_or_assign(flag, true);
+		modes[flag] = true;
 		return true;
 	}
 	else
@@ -193,7 +196,7 @@ bool State::ShouldDisable(intptr_t flag)
 	auto res = modes.find(flag);
 	if (res == modes.end() || res->second != false)
 	{
-		modes.insert_or_assign(flag, false);
+		modes[flag] = false;
 		return true;
 	}
 	else
@@ -325,7 +328,7 @@ bool State::ShouldSetPatchParameter(intptr_t parameter, intptr_t value)
 	}
 	else
 	{
-		patchParameters.insert_or_assign(parameter, value);
+		patchParameters[parameter] = value;
 		return true;
 	}
 }

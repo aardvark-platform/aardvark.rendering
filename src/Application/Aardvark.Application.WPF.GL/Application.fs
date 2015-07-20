@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Application.WPF
 
+#if BuildingOnWindows
+
 open System
 open System.Windows.Forms
 
@@ -78,4 +80,4 @@ type OpenGlApplication() =
         member x.Runtime = x.Runtime :> IRuntime
         member x.Dispose() = x.Dispose()
 
-
+#endif

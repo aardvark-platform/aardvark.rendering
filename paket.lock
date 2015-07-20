@@ -1,5 +1,5 @@
 NUGET
-  remote: \\hobel\nuget
+  remote: \\hobel\NuGet\
   specs:
     Aardvark.Base (1.3.16)
       DevILSharp (>= 0.0.9 < 0.1.0)

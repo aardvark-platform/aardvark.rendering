@@ -1,39 +1,50 @@
 #pragma once
 
+
+#ifdef __GNUC__
+#include <GL/gl.h>
+#include <GL/glx.h>
+#define DllExport(t) extern "C" t
+#else
 #include "stdafx.h"
+#include <stdio.h>
 #include "glext.h"
-#include <vector>
 #include <gl/GL.h>
-
 #define DllExport(t) extern "C"  __declspec( dllexport ) t __cdecl
+#endif
 
-PFNGLBINDVERTEXARRAYPROC		glBindVertexArray;
-PFNGLUSEPROGRAMPROC				glUseProgram;
-PFNGLACTIVETEXTUREPROC			glActiveTexture;
-PFNGLBINDSAMPLERPROC			glBindSampler;
-PFNGLBINDBUFFERBASEPROC			glBindBufferBase;
-PFNGLBINDBUFFERRANGEPROC		glBindBufferRange;
-PFNGLBINDFRAMEBUFFERPROC		glBindFramebuffer;
-PFNGLBLENDFUNCSEPARATEPROC		glBlendFuncSeparate;
-PFNGLBLENDEQUATIONSEPARATEPROC	glBlendEquationSeparate;
-PFNGLBLENDCOLORPROC				glBlendColor;
-PFNGLSTENCILFUNCSEPARATEPROC	glStencilFuncSeparate;
-PFNGLSTENCILOPSEPARATEPROC		glStencilOpSeparate;
-PFNGLPATCHPARAMETERIPROC		glPatchParameteri;
-PFNGLDRAWARRAYSINSTANCEDPROC	glDrawArraysInstanced;
-PFNGLDRAWELEMENTSINSTANCEDPROC  glDrawElementsInstanced;
-PFNGLVERTEXATTRIBPOINTERPROC	glVertexAttribPointer;
-PFNGLUNIFORM1FVPROC				glUniform1fv;
-PFNGLUNIFORM1IVPROC				glUniform1iv;
-PFNGLUNIFORM2FVPROC				glUniform2fv;
-PFNGLUNIFORM2IVPROC				glUniform2iv;
-PFNGLUNIFORM3FVPROC				glUniform3fv;
-PFNGLUNIFORM3IVPROC				glUniform3iv;
-PFNGLUNIFORM4FVPROC				glUniform4fv;
-PFNGLUNIFORM4IVPROC				glUniform4iv;
-PFNGLUNIFORMMATRIX2FVPROC		glUniformMatrix2fv;
-PFNGLUNIFORMMATRIX3FVPROC		glUniformMatrix3fv;
-PFNGLUNIFORMMATRIX4FVPROC		glUniformMatrix4fv;
+#include <vector>
+
+#ifndef __GNUC__
+static PFNGLACTIVETEXTUREPROC			glActiveTexture;
+static PFNGLBLENDCOLORPROC				glBlendColor;
+#endif
+
+static PFNGLBINDVERTEXARRAYPROC		glBindVertexArray;
+static PFNGLUSEPROGRAMPROC				glUseProgram;
+static PFNGLBINDSAMPLERPROC			glBindSampler;
+static PFNGLBINDBUFFERBASEPROC			glBindBufferBase;
+static PFNGLBINDBUFFERRANGEPROC		glBindBufferRange;
+static PFNGLBINDFRAMEBUFFERPROC		glBindFramebuffer;
+static PFNGLBLENDFUNCSEPARATEPROC		glBlendFuncSeparate;
+static PFNGLBLENDEQUATIONSEPARATEPROC	glBlendEquationSeparate;
+static PFNGLSTENCILFUNCSEPARATEPROC	glStencilFuncSeparate;
+static PFNGLSTENCILOPSEPARATEPROC		glStencilOpSeparate;
+static PFNGLPATCHPARAMETERIPROC		glPatchParameteri;
+static PFNGLDRAWARRAYSINSTANCEDPROC	glDrawArraysInstanced;
+static PFNGLDRAWELEMENTSINSTANCEDPROC  glDrawElementsInstanced;
+static PFNGLVERTEXATTRIBPOINTERPROC	glVertexAttribPointer;
+static PFNGLUNIFORM1FVPROC				glUniform1fv;
+static PFNGLUNIFORM1IVPROC				glUniform1iv;
+static PFNGLUNIFORM2FVPROC				glUniform2fv;
+static PFNGLUNIFORM2IVPROC				glUniform2iv;
+static PFNGLUNIFORM3FVPROC				glUniform3fv;
+static PFNGLUNIFORM3IVPROC				glUniform3iv;
+static PFNGLUNIFORM4FVPROC				glUniform4fv;
+static PFNGLUNIFORM4IVPROC				glUniform4iv;
+static PFNGLUNIFORMMATRIX2FVPROC		glUniformMatrix2fv;
+static PFNGLUNIFORMMATRIX3FVPROC		glUniformMatrix3fv;
+static PFNGLUNIFORMMATRIX4FVPROC		glUniformMatrix4fv;
 
 // enum holding the available instruction codes
 typedef enum {
@@ -81,14 +92,14 @@ typedef enum {
 	Uniform4iv = 42,
 	UniformMatrix2fv = 43,
 	UniformMatrix3fv = 44,
-	UniformMatrix4fv = 45
+	UniformMatrix4fv = 45 
 } InstructionCode;
 
 // enum controlling the current execution mode
 typedef enum {
-	None = 0x00000,
+	NoOptimization = 0x00000,
 	RuntimeRedundancyChecks = 0x00001,
-	RuntimeStateSorting = 0x00002
+	RuntimeStateSorting = 0x00002 
 } VMMode;
 
 // an instruction consists of a code and up to 5 arguments. 

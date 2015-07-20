@@ -1,14 +1,27 @@
-// Aardark.NativeStream.cpp : Defines the exported functions for the DLL application.
-//
-
+#ifndef __GNUC__
 #include "stdafx.h"
-#include "glext.h"
-#include <vector>
-#include <gl/GL.h>
+#endif
+
 #include "State.h"
 #include "glvm.h"
 
-PROC getProc(LPCSTR name)
+#ifdef __GNUC__
+
+static void* getProc(const char* name)
+{
+	void* ptr = (void*)glXGetProcAddressARB((const GLubyte*)name);
+	if(ptr == nullptr)
+		printf("could not import function %s\n", name);
+
+	printf("function address for %s: %lX\n", name, (unsigned long int)ptr);
+
+	return ptr;
+}
+
+
+#else
+
+static PROC getProc(LPCSTR name)
 {
 	auto ptr = wglGetProcAddress(name);
 
@@ -18,25 +31,31 @@ PROC getProc(LPCSTR name)
 	return ptr;
 }
 
+#endif
+
 static bool initialized = false;
 
 DllExport(void) vmInit()
 {
+	//printf("asdasd\n");
 	if (initialized)
 		return;
 
 	initialized = true;
 
+	#ifndef __GNUC__
+	glActiveTexture = (PFNGLACTIVETEXTUREPROC)getProc("glActiveTexture");
+	glBlendColor = (PFNGLBLENDCOLORPROC)getProc("glBlendColor");
+	#endif
+
 	glBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)getProc("glBindVertexArray");
 	glUseProgram = (PFNGLUSEPROGRAMPROC)getProc("glUseProgram");
-	glActiveTexture = (PFNGLACTIVETEXTUREPROC)getProc("glActiveTexture");
 	glBindSampler = (PFNGLBINDSAMPLERPROC)getProc("glBindSampler");
 	glBindBufferBase = (PFNGLBINDBUFFERBASEPROC)getProc("glBindBufferBase");
 	glBindBufferRange = (PFNGLBINDBUFFERRANGEPROC)getProc("glBindBufferRange");
 	glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)getProc("glBindFramebuffer");
 	glBlendFuncSeparate = (PFNGLBLENDFUNCSEPARATEPROC)getProc("glBlendFuncSeparate");
 	glBlendEquationSeparate = (PFNGLBLENDEQUATIONSEPARATEPROC)getProc("glBlendEquationSeparate");
-	glBlendColor = (PFNGLBLENDCOLORPROC)getProc("glBlendColor");
 	glStencilFuncSeparate = (PFNGLSTENCILFUNCSEPARATEPROC)getProc("glStencilFuncSeparate");
 	glStencilOpSeparate = (PFNGLSTENCILOPSEPARATEPROC)getProc("glStencilOpSeparate");
 	glPatchParameteri = (PFNGLPATCHPARAMETERIPROC)getProc("glPatchParameteri");
@@ -58,7 +77,7 @@ DllExport(void) vmInit()
 
 DllExport(Fragment*) vmCreate()
 {
-	auto ptr = new Fragment();
+	Fragment* ptr = new Fragment();
 	ptr->Instructions = std::vector<std::vector<Instruction>>();
 	ptr->Next = nullptr;
 	return ptr;
@@ -95,9 +114,9 @@ DllExport(void) vmUnlink(Fragment* left)
 
 DllExport(int) vmNewBlock(Fragment* frag)
 {
-	auto s = frag->Instructions.size();
+	int s = (int)frag->Instructions.size();
 	frag->Instructions.push_back(std::vector<Instruction>());
-	return (int)s;
+	return s;
 }
 
 DllExport(void) vmClearBlock(Fragment* frag, int block)
@@ -266,7 +285,7 @@ Statistics runNoRedundancyChecks(Fragment* frag)
 		{
 			for (auto it = itb->begin(); it != itb->end(); ++it)
 			{
-				runInstruction(it._Ptr);
+				runInstruction(&(*it));
 				total++;
 			}
 		}
@@ -289,7 +308,7 @@ Statistics runRedundancyChecks(Fragment* frag)
 			for (auto it = itb->begin(); it != itb->end(); ++it)
 			{
 				totalInstructions++;
-				Instruction* i = it._Ptr;
+				Instruction* i = &(*it);
 
 				intptr_t arg0 = i->Arg0;
 
@@ -492,7 +511,7 @@ DllExport(void) vmRunSingle(Fragment* frag)
 	{
 		for (auto it = itb->begin(); it != itb->end(); ++it)
 		{
-			runInstruction(it._Ptr);
+			runInstruction(&(*it));
 		}
 	}
 }

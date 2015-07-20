@@ -1,9 +1,20 @@
 #pragma once
 
+#ifdef __GNUC__
+#include <GL/gl.h>
+#include <unordered_set>
+#include <unordered_map>
+#include <tuple>
+#else
+#define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
+#include "stdafx.h"
 #include <windows.h>
 #include <gl/GL.h>
-#include <unordered_map>
 #include <unordered_set>
+#include <unordered_map>
+#include <tuple>
+
+#endif
 
 class State
 {

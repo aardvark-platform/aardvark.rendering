@@ -26,56 +26,56 @@ module GLVM =
     [<Literal>]
     let lib = "glvm"
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmInit()
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern FragmentPtr vmCreate()
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmDelete(FragmentPtr frag)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern bool vmHasNext(FragmentPtr frag)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern FragmentPtr vmGetNext(FragmentPtr frag)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmLink(FragmentPtr left, FragmentPtr right)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmUnlink(FragmentPtr left)
 
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern int vmNewBlock(FragmentPtr left)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmClearBlock(FragmentPtr left, int block)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmAppend1(FragmentPtr left, int block, InstructionCode code, nativeint arg0)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmAppend2(FragmentPtr left, int block, InstructionCode code, nativeint arg0, nativeint arg1)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmAppend3(FragmentPtr left, int block, InstructionCode code, nativeint arg0, nativeint arg1, nativeint arg2)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmAppend4(FragmentPtr left, int block, InstructionCode code, nativeint arg0, nativeint arg1, nativeint arg2, nativeint arg3)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmAppend5(FragmentPtr left, int block, InstructionCode code, nativeint arg0, nativeint arg1, nativeint arg2, nativeint arg3, nativeint arg4)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmClear(FragmentPtr frag)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmRunSingle(FragmentPtr frag)
 
-    [<DllImport(lib)>]
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmRun(FragmentPtr frag, VMMode mode, VMStats& stats)
 
 [<AllowNullLiteral>]
