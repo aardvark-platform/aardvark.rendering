@@ -13,3 +13,6 @@ bin/Debug
 /src/*.sdf
 /src/ipch/GLVM-7f383b0f/*.ipch
 \\\\hobel\\NuGet\\
+*.o
+*~
+src/GLVM/*.so
