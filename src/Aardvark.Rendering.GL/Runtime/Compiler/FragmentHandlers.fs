@@ -50,6 +50,7 @@ module FragmentHandlers =
     let native() =
         let manager = new MemoryManager()
         let cancel = new System.Threading.CancellationTokenSource()
+        let isDisposed = ref false
 
         let prolog =
             let f = new Fragment<unit>(manager, 0)
@@ -80,7 +81,7 @@ module FragmentHandlers =
                     let mutable index = 0
                     while current.Next <> null do
                         ct.ThrowIfCancellationRequested()
-                        
+
                         current.DefragmentNext()
                         let next = current.Next
                         current.Unfreeze()
@@ -110,15 +111,23 @@ module FragmentHandlers =
 
 
         { new IFragmentHandler<NativeDynamicFragment<unit>> with
-            member x.Dispose() = 
+            member x.Dispose() =    
+                isDisposed := true
                 cancel.Cancel()
                 manager.Dispose()
                 cancel.Dispose()
 
             member x.Prolog = prolog
             member x.Epilog = epilog
-            member x.Create s = create s
-            member x.Delete f = f.Fragment.Dispose()
+            member x.Create s = 
+                if not !isDisposed then
+                    create s
+                else
+                    raise <| ObjectDisposedException("handler")
+
+            member x.Delete f = 
+                if not !isDisposed then
+                    f.Fragment.Dispose()
             member x.Compile() =
                 let entryPtr = ref 0n
                 let run = ref (fun () -> ())

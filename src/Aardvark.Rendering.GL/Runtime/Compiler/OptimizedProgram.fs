@@ -211,6 +211,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
 
     member x.Dispose() =
+        handler.Dispose()
         run <- fun _ -> failwith "cannot run disposed program"
 
         for (KeyValue(_,f)) in fragments do
@@ -219,7 +220,6 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         fragments.Clear()
         sortedFragments.Clear()
-        handler.Dispose()
         idCache.Clear(ignore)
 
         handler.Delete prolog.Fragment
