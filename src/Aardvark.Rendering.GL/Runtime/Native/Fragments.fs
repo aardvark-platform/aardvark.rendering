@@ -92,29 +92,30 @@ module Fragments =
         member x.Memory = block.Memory
 
         member private x.WriteJump(offset : int) =
-            match Assembler.cpu with
-                | Assembler.AMD64 ->
-                    let jumpPosition = block.Size - jumpSize
-                    let realJumpPosition = (jumpPosition ||| 3)
-                    if offset = jumpSize then
-                        block.Write(jumpPosition, eightByteNop)
-                    else
-                        if currentOffset = jumpSize then
-                            writeJumpStub()
-                        //the jump needs to be 4-byte aligned in order to perform 
-                        //atomic writes on its offset.
-                        block.WriteInt32(realJumpPosition + 1, offset - (5 + realJumpPosition - jumpPosition))
+            if manager.Capacity <> 0 then
+                match Assembler.cpu with
+                    | Assembler.AMD64 ->
+                        let jumpPosition = block.Size - jumpSize
+                        let realJumpPosition = (jumpPosition ||| 3)
+                        if offset = jumpSize then
+                            block.Write(jumpPosition, eightByteNop)
+                        else
+                            if currentOffset = jumpSize then
+                                writeJumpStub()
+                            //the jump needs to be 4-byte aligned in order to perform 
+                            //atomic writes on its offset.
+                            block.WriteInt32(realJumpPosition + 1, offset - (5 + realJumpPosition - jumpPosition))
 
-                    // store the current offset
-                    currentOffset <- offset
+                        // store the current offset
+                        currentOffset <- offset
 
-                | Assembler.ARM ->
+                    | Assembler.ARM ->
                         
-                    let jumpPosition = block.Size - 4
-                    let data = ((offset / 4 - 2) &&& 0x00FFFFFF) ||| (0xEA000000)
-                    block.WriteInt32(jumpPosition, data)
+                        let jumpPosition = block.Size - 4
+                        let data = ((offset / 4 - 2) &&& 0x00FFFFFF) ||| (0xEA000000)
+                        block.WriteInt32(jumpPosition, data)
 
-                | _ -> failwithf "unknown CPU: %A" Assembler.cpu
+                    | _ -> failwithf "unknown CPU: %A" Assembler.cpu
 
         member private x.ReadJump() =
             match Assembler.cpu with
@@ -135,72 +136,76 @@ module Fragments =
 
         member private x.NextPointer
             with get() =
-                let jumpPosition = block.Size - jumpSize
-                let jumpOffset = x.ReadJump()
-                let targetOffset = jumpPosition + jumpOffset
-                block.Pointer + (nativeint targetOffset)
+                if manager.Capacity <> 0 then
+                    let jumpPosition = block.Size - jumpSize
+                    let jumpOffset = x.ReadJump()
+                    let targetOffset = jumpPosition + jumpOffset
+                    block.Pointer + (nativeint targetOffset)
+                else
+                    0n
 
         member x.Freeze() = System.Threading.Monitor.Enter(modifyLock)
         member x.Unfreeze() = System.Threading.Monitor.Exit(modifyLock)
 
         member f.DefragmentNext() =
-            if isDisposed then
-                failwith "the impossible happened!!! (there is a disposed fragment in the stream)"
-            else
-                f.Freeze()
-                let mem = f.Memory
-                let nextFragment : Fragment<'a> = f.Next
-                
-                if nextFragment <> null then
-                    
-                    nextFragment.Freeze()
-                    let block = f.Block
-                    let nextFragBlock = nextFragment.Block
-                    if block.Next <> nextFragBlock then
-
-                        //collect fragments until they have a sufficient size
-                        let fragmentsToMove = System.Collections.Generic.List()
-                        let freeBlock = 
-                            mem.GetSequentialBlockOfMinimalSize(block, nextFragBlock.Size, (fun (b : Block) ->
-                                let f = b.Tag |> unbox<Fragment<'a>>
-                                if f <> null then
-                                    f.Freeze()
-
-                                    fragmentsToMove.Add f
-                            ))
-
-
-                        //move the collected fragments to the swap-area
-                        for m in fragmentsToMove do
-                            let newBlock = mem.Alloc(m.Block.Size)
-                            //relocate returns the old-block which will be part of
-                            //the freeBlock created below (it is therefore simply ignored here)
-                            m.Relocate(newBlock) |> ignore
-                            m.Unfreeze()
-                            
-
-                        //create a new free block aggregating the collected ones
-                        freeBlock.Tag <- nextFragment
-                        freeBlock.IsFree <- false
-
-
-                        //free the unused part of the new freeBlock
-                        match freeBlock.Split nextFragBlock.Size with
-                            | Some rest -> rest.Dispose()
-                            | None -> ()
-
-
-                            
-
-                        //move nextFragment to freeBlock
-                        let oldBlock = nextFragment.Relocate(freeBlock)
-                        oldBlock.Dispose()
-
-                    nextFragment.Unfreeze()
+            if manager.Capacity <> 0 then
+                if isDisposed then
+                    failwith "the impossible happened!!! (there is a disposed fragment in the stream)"
                 else
-                    () //when there is no next we're done here
+                    f.Freeze()
+                    let mem = f.Memory
+                    let nextFragment : Fragment<'a> = f.Next
+                
+                    if nextFragment <> null then
+                    
+                        nextFragment.Freeze()
+                        let block = f.Block
+                        let nextFragBlock = nextFragment.Block
+                        if block.Next <> nextFragBlock then
 
-                f.Unfreeze()
+                            //collect fragments until they have a sufficient size
+                            let fragmentsToMove = System.Collections.Generic.List()
+                            let freeBlock = 
+                                mem.GetSequentialBlockOfMinimalSize(block, nextFragBlock.Size, (fun (b : Block) ->
+                                    let f = b.Tag |> unbox<Fragment<'a>>
+                                    if f <> null then
+                                        f.Freeze()
+
+                                        fragmentsToMove.Add f
+                                ))
+
+
+                            //move the collected fragments to the swap-area
+                            for m in fragmentsToMove do
+                                let newBlock = mem.Alloc(m.Block.Size)
+                                //relocate returns the old-block which will be part of
+                                //the freeBlock created below (it is therefore simply ignored here)
+                                m.Relocate(newBlock) |> ignore
+                                m.Unfreeze()
+                            
+
+                            //create a new free block aggregating the collected ones
+                            freeBlock.Tag <- nextFragment
+                            freeBlock.IsFree <- false
+
+
+                            //free the unused part of the new freeBlock
+                            match freeBlock.Split nextFragBlock.Size with
+                                | Some rest -> rest.Dispose()
+                                | None -> ()
+
+
+                            
+
+                            //move nextFragment to freeBlock
+                            let oldBlock = nextFragment.Relocate(freeBlock)
+                            oldBlock.Dispose()
+
+                        nextFragment.Unfreeze()
+                    else
+                        () //when there is no next we're done here
+
+                    f.Unfreeze()
 
         member x.Prev
             with get() = prev
@@ -327,7 +332,8 @@ module Fragments =
             lock modifyLock (fun () ->
                 if not isDisposed then
                     isDisposed <- true
-                    x.Dispose()
+                    if manager.Capacity <> 0 then
+                        block.Dispose()
                     startOffsets.Clear()
                     prev <- null
                     next <- null

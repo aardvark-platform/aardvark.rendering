@@ -312,13 +312,15 @@ let main argv =
 
     let mode = Mod.init FillMode.Fill
 
-    w.Keyboard.KeyDown(Aardvark.Application.Keys.X).Values.Subscribe(fun () ->
-        transact (fun () ->
-            match mode.Value with
-                | FillMode.Fill -> Mod.change mode FillMode.Line
-                | FillMode.Line -> Mod.change mode FillMode.Point
-                | _ -> Mod.change mode FillMode.Fill
-        )
+    w.Keyboard.DownWithRepeats.Values.Subscribe(fun k ->
+        if k = Aardvark.Application.Keys.X then
+            transact (fun () ->
+                match mode.Value with
+                    | FillMode.Fill -> Mod.change mode FillMode.Line
+                    | FillMode.Line -> Mod.change mode FillMode.Point
+                    | _ -> Mod.change mode FillMode.Fill
+            )
+
     ) |> ignore
 
     let sg = sg |> Sg.fillMode mode
@@ -335,13 +337,18 @@ let main argv =
             ExecutionEngine.Native ||| ExecutionEngine.Optimized
         ]
 
-    w.Keyboard.KeyDown(Aardvark.Application.Keys.P).Values.Subscribe (fun _ ->
-        match !engines with
-            | h::r ->
-                transact(fun () -> Mod.change engine h)
-                engines := r @ [h]
-            | _ -> ()
-
+    w.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->
+        if k = Aardvark.Application.Keys.P then
+            match !engines with
+                | h::r ->
+                    transact(fun () -> Mod.change engine h)
+                    engines := r @ [h]
+                | _ -> ()
+        elif k = Aardvark.Application.Keys.G then
+            System.GC.AddMemoryPressure(1000000000L)
+            System.GC.Collect()
+            System.GC.WaitForFullGCApproach() |> ignore
+            System.GC.RemoveMemoryPressure(1000000000L)
 
         ()
     ) |> ignore

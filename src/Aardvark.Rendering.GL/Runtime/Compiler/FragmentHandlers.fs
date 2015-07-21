@@ -93,7 +93,6 @@ module FragmentHandlers =
 
                 with :? OperationCanceledException | :? System.Threading.Tasks.TaskCanceledException ->
                     Log.line "defragmentation canceled"
-                    ()
 
                 current.Unfreeze()
 
@@ -128,6 +127,7 @@ module FragmentHandlers =
             member x.Delete f = 
                 if not !isDisposed then
                     f.Fragment.Dispose()
+
             member x.Compile() =
                 let entryPtr = ref 0n
                 let run = ref (fun () -> ())
