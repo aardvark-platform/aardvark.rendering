@@ -41,9 +41,47 @@ module Context =
                             | _ -> None
 
         module private Linux =
+            open System.Diagnostics
+            open System.Text.RegularExpressions
+
+            let lineRx = Regex @"(?<path>.*?)[ \t]*:[ \t]*(?<name>.*)[ \t]*:[ \t]*style=(?<style>[a-zA-Z_]*)"
+            let parseLine (str : string) =
+                let m = lineRx.Match str 
+                if m.Success then
+                    let path = m.Groups.["path"].Value
+                    let name = m.Groups.["name"].Value
+                    let style = m.Groups.["style"].Value.ToLower()
+                    Some(name, style, path)
+                else
+                    None
+                ///usr/share/fonts/type1/gsfonts/n019003l.pfb: Nimbus Sans L:style=Regular
+
+            let allNames =
+                let si = ProcessStartInfo("/usr/bin/fc-list")
+                si.RedirectStandardOutput <- true
+                si.UseShellExecute <- false
+                let proc = Process.Start(si)
+                proc.WaitForExit()
+
+                let lines = proc.StandardOutput.ReadToEnd().Split('\n')
+                lines 
+                    |> Array.choose parseLine
+                    |> Array.choose (fun (n,s,p) ->
+                        if p.EndsWith ".ttf" then
+                            match s with
+                                | "regular"     -> Some ((n,FontStyle.Regular), p)
+                                | "bold"        -> Some ((n,FontStyle.Bold), p)
+                                | "italic"      -> Some ((n,FontStyle.Italic), p)
+                                | _ -> None
+                        else
+                            None
+                       )
+                    |> Dict.ofArray
+
             let getSystemFontFileName (name : string) (style : FontStyle) =
-                Log.warn "font retrieval not implemented on linux-systems"
-                None
+                match allNames.TryGetValue ((name, style)) with
+                    | (true, p) -> Some p
+                    | _ -> None
 
         module private MacOS =
             let getSystemFontFileName (name : string) (style : FontStyle) =
