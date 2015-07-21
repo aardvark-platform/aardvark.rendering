@@ -167,8 +167,8 @@ module DefaultOverlays =
 
     let statisticsTable (s : FrameStatistics) =
         [
-            "instructions", sprintf "%.0f" s.InstructionCount
-            "active instructions", sprintf "%.0f" s.ActiveInstructionCount
+            "draw calls", sprintf "%.0f" s.DrawCallCount
+            "instructions", (if s.InstructionCount = s.ActiveInstructionCount then sprintf "%.0f" s.InstructionCount else sprintf "%.0f (%.0f)" s.ActiveInstructionCount s.InstructionCount)
             "primitives", sprintf "%.0f" s.PrimitiveCount
             "execute", timeString s.ExecutionTime
             "resource update", timeString s.ResourceUpdateTime

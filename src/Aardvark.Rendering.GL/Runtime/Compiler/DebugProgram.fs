@@ -65,6 +65,7 @@ type DebugProgram(manager : ResourceManager,
         allResources.Clear()
 
     interface IProgram with
+        member x.RenderJobs = renderJobs :> seq<_>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Update rj = failwith "not implemented"

@@ -20,6 +20,7 @@ type IDynamicFragment<'a when 'a :> IDynamicFragment<'a>> =
 [<AllowNullLiteral>]
 type IProgram =
     inherit IDisposable
+    abstract member RenderJobs : seq<RenderJob>
     abstract member Add : RenderJob -> unit
     abstract member Remove : RenderJob -> unit
     abstract member Update : RenderJob -> unit

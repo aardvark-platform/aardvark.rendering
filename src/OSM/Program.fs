@@ -154,7 +154,7 @@ let main argv =
     
 
 
-    let w = app.CreateSimpleRenderWindow()
+    let w = app.CreateGameWindow()
     //w.Size <- V2i(1280, 1024)
 
     // initialize a viewport (small part of the world currently)
@@ -326,9 +326,33 @@ let main argv =
     let sg = sg |> Sg.fillMode mode
 
     // compile the rendertask and pass it to the window
-    let engine = ExecutionEngine.Unmanaged ||| ExecutionEngine.Optimized
+    let engine = ExecutionEngine.Native ||| ExecutionEngine.Optimized
     let main = app.Runtime.CompileRender(engine, sg) //|> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
-    w.RenderTask <- RenderTask.ofList [main]
+
+
+    let engines = 
+        ref [
+            ExecutionEngine.Unmanaged ||| ExecutionEngine.Optimized
+            ExecutionEngine.Unmanaged ||| ExecutionEngine.RuntimeOptimized
+            ExecutionEngine.Managed ||| ExecutionEngine.Optimized
+            ExecutionEngine.Managed ||| ExecutionEngine.Unoptimized
+            ExecutionEngine.Native ||| ExecutionEngine.Optimized
+        ]
+
+    w.Keyboard.KeyDown(Aardvark.Application.Keys.P).Values.Subscribe (fun _ ->
+        let task = main |> unbox<Aardvark.Rendering.GL.RenderTasks.RenderTask>
+
+        match !engines with
+            | h::r ->
+                task.SetExecutionEngine h
+                engines := r @ [h]
+            | _ -> ()
+
+
+        ()
+    ) |> ignore
+
+    w.RenderTask <- RenderTask.ofList [main |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)]
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero

@@ -145,6 +145,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         member x.Dispose() = x.Dispose()
 
     interface IProgram with
+        member x.RenderJobs = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
