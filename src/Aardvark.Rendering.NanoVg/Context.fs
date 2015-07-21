@@ -64,19 +64,23 @@ module Context =
                 proc.WaitForExit()
 
                 let lines = proc.StandardOutput.ReadToEnd().Split('\n')
-                lines 
-                    |> Array.choose parseLine
-                    |> Array.choose (fun (n,s,p) ->
-                        if p.EndsWith ".ttf" then
-                            match s with
-                                | "regular"     -> Some ((n,FontStyle.Regular), p)
-                                | "bold"        -> Some ((n,FontStyle.Bold), p)
-                                | "italic"      -> Some ((n,FontStyle.Italic), p)
-                                | _ -> None
-                        else
-                            None
-                       )
-                    |> Dict.ofArray
+                let all = 
+                    lines 
+                        |> Array.choose parseLine
+                        |> Array.choose (fun (n,s,p) ->
+                            if p.EndsWith ".ttf" then
+                                match s with
+                                    | "regular"     -> Some ((n,FontStyle.Regular), p)
+                                    | "bold"        -> Some ((n,FontStyle.Bold), p)
+                                    | "italic"      -> Some ((n,FontStyle.Italic), p)
+                                    | _ -> None
+                            else
+                                None
+                           )
+                let res = Dict()
+                for (k,v) in all do
+                    res.[k] <- v
+                res
 
             let getSystemFontFileName (name : string) (style : FontStyle) =
                 match allNames.TryGetValue ((name, style)) with
