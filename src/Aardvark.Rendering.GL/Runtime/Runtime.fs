@@ -109,12 +109,14 @@ type Runtime(ctx : Context) =
             | _ ->
                 failwithf "unsupported streaming texture: %A" t
 
-    member private x.CompileRenderInternal (engine : ExecutionEngine, set : aset<RenderJob>) =
-        let task = new RenderTasks.RenderTask(x, ctx, manager, engine, set)
-        task
+    member private x.CompileRenderInternal (engine : IMod<ExecutionEngine>, set : aset<RenderJob>) =
+        new RenderTasks.RenderTask(x, ctx, manager, engine, set)
+
+    member x.CompileRender(engine : IMod<ExecutionEngine>, set : aset<RenderJob>) : IRenderTask =
+        x.CompileRenderInternal(engine, set) :> IRenderTask
 
     member x.CompileRender(engine : ExecutionEngine, set : aset<RenderJob>) : IRenderTask =
-        x.CompileRenderInternal(engine, set) :> IRenderTask // newbackend
+        x.CompileRenderInternal(Mod.constant engine, set) :> IRenderTask
 
     member x.CompileClear(color : IMod<C4f>, depth : IMod<float>) : IRenderTask =
         new RenderTasks.ClearTask(x, color, depth, ctx) :> IRenderTask

@@ -34,10 +34,12 @@ module FragmentHandlers =
 
         member x.TrySetDelay(delay : int) =
             match timer with
-                | Some t -> t.Change(delay, System.Threading.Timeout.Infinite)
-                | None -> let t = new System.Threading.Timer(timerCallback, null, delay, System.Threading.Timeout.Infinite)
-                          timer <- Some t
-                          true
+                | Some t -> 
+                    t.Change(delay, System.Threading.Timeout.Infinite)
+                | None -> 
+                    let t = new System.Threading.Timer(timerCallback, null, delay, System.Threading.Timeout.Infinite)
+                    timer <- Some t
+                    true
 
         member x.Callback
             with get() = !f
@@ -47,6 +49,7 @@ module FragmentHandlers =
 
     let native() =
         let manager = new MemoryManager()
+        let cancel = new System.Threading.CancellationTokenSource()
 
         let prolog =
             let f = new Fragment<unit>(manager, 0)
@@ -65,30 +68,35 @@ module FragmentHandlers =
             let f = new Fragment<unit>(manager, 0)
             NativeDynamicFragment(f)
 
+        let ct = cancel.Token
         let defragment() =
-            Log.startTimed "defragmentation"
+            if not ct.IsCancellationRequested then
+                Log.startTimed "defragmentation"
+                //Log.warn "defragmentation currently disabled"
 
-            //Log.warn "defragmentation currently disabled"
+                let mutable current = prolog.Fragment
+                current.Freeze()
+                try
+                    let mutable index = 0
+                    while current.Next <> null do
+                        ct.ThrowIfCancellationRequested()
+                        
+                        current.DefragmentNext()
+                        let next = current.Next
+                        current.Unfreeze()
 
-            let mutable current = prolog.Fragment
-            current.Freeze()
-                
-            let mutable index = 0
-            while current.Next <> null do
-                //printfn "%d" index
-                current.DefragmentNext()
+                        next.Freeze()
 
-                let next = current.Next
+                        current <- next
+                        index <- index + 1
+
+                with :? OperationCanceledException | :? System.Threading.Tasks.TaskCanceledException ->
+                    Log.line "defragmentation canceled"
+                    ()
+
                 current.Unfreeze()
-                //System.Threading.Thread.Sleep(100)
-                next.Freeze()
 
-                current <- next
-                index <- index + 1
-
-            current.Unfreeze()
-
-            Log.stop()
+                Log.stop()
 
         let defrag = DelayedTask(defragment)
         let totalChanges = ref 0
@@ -102,7 +110,11 @@ module FragmentHandlers =
 
 
         { new IFragmentHandler<NativeDynamicFragment<unit>> with
-            member x.Dispose() = manager.Dispose()
+            member x.Dispose() = 
+                cancel.Cancel()
+                manager.Dispose()
+                cancel.Dispose()
+
             member x.Prolog = prolog
             member x.Epilog = epilog
             member x.Create s = create s

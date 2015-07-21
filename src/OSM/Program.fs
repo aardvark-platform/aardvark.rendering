@@ -30,8 +30,6 @@ open Aardvark.SceneGraph.Semantics
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.NanoVg
 
-do Aardvark.Init()
-
 let app = new OpenGlApplication()
 let source = KnownTileSources.Create(KnownTileSource.BingHybrid)
 let worldBounds = source.Schema.Extent.Box
@@ -326,10 +324,8 @@ let main argv =
     let sg = sg |> Sg.fillMode mode
 
     // compile the rendertask and pass it to the window
-    let engine = ExecutionEngine.Native ||| ExecutionEngine.Optimized
-    let main = app.Runtime.CompileRender(engine, sg) //|> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
 
-
+    let engine = Mod.init (ExecutionEngine.Debug)
     let engines = 
         ref [
             ExecutionEngine.Unmanaged ||| ExecutionEngine.Optimized
@@ -340,11 +336,9 @@ let main argv =
         ]
 
     w.Keyboard.KeyDown(Aardvark.Application.Keys.P).Values.Subscribe (fun _ ->
-        let task = main |> unbox<Aardvark.Rendering.GL.RenderTasks.RenderTask>
-
         match !engines with
             | h::r ->
-                task.SetExecutionEngine h
+                transact(fun () -> Mod.change engine h)
                 engines := r @ [h]
             | _ -> ()
 
@@ -352,7 +346,8 @@ let main argv =
         ()
     ) |> ignore
 
-    w.RenderTask <- RenderTask.ofList [main |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)]
+    let main = app.Runtime.CompileRender(engine, sg.RenderJobs()) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
+    w.RenderTask <- main
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero

@@ -114,14 +114,14 @@ module RenderTasks =
                 let s = seq { for i in 0..keys.Count-1 do yield KeyValuePair(keys.[i], values.[i]) }
                 (s :> System.Collections.IEnumerable).GetEnumerator()
 
-    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : ExecutionEngine, set : aset<RenderJob>) as this =
+    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<ExecutionEngine>, set : aset<RenderJob>) as this =
         inherit AdaptiveObject()
 
-        let mutable engine = engine
-
+        let mutable currentEngine = engine.GetValue()
         let subscriptions = Dictionary()
         let reader = set.GetReader()
         do reader.AddOutput this
+           engine.AddOutput this
 
         let inputs = ReferenceCountingSet<IAdaptiveObject>()
         let mutable programs = Map.empty
@@ -221,15 +221,15 @@ module RenderTasks =
                 | Some p -> p
                 | _ -> 
                     let config = getPassConfig pass
-                    let program = newProgram scope config engine
+                    let program = newProgram scope config (Mod.force engine)
 
                     programs <- Map.add pass program programs
                     program
 
 
         let setExecutionEngine (newEngine : ExecutionEngine) =
-            if engine <> newEngine then
-                engine <- newEngine
+            if currentEngine <> newEngine then
+                currentEngine <- newEngine
                 let newPrograms =
                     programs |> Map.map (fun pass v ->
                         let rj = v.RenderJobs |> Seq.head
@@ -319,6 +319,8 @@ module RenderTasks =
         member x.Run (fbo : IFramebuffer) =
             x.EvaluateAlways (fun () ->
                 using ctx.ResourceLock (fun _ ->
+                    setExecutionEngine (Mod.force engine)
+
                     let old = Array.create 4 0
                     let mutable oldFbo = 0
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
@@ -358,13 +360,6 @@ module RenderTasks =
             programs <- Map.empty
             reader.RemoveOutput x
             reader.Dispose()
-
-        member x.SetExecutionEngine (newEngine : ExecutionEngine) =
-            lock x (fun () ->
-                Log.startTimed "switching execution engine"
-                setExecutionEngine newEngine
-                Log.stop()
-            )
 
         interface IRenderTask with
             member x.Run(fbo) =
