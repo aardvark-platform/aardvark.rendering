@@ -48,12 +48,14 @@ type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
         member x.Samples = getHandle().Samples
         member x.Dispose() = c.Dispose()
 
-type Runtime(ctx : Context) =
+type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
 
     let mutable ctx = ctx
-    let mutable manager = if ctx <> null then ResourceManager(ctx) else null
+    let mutable manager = if ctx <> null then ResourceManager(ctx, shareTextures, shareBuffers) else null
+
+    new(ctx) = new Runtime(ctx, false, false)
 
     member x.SupportsUniformBuffers =
         ExecutionContext.uniformBuffersSupported
@@ -62,7 +64,7 @@ type Runtime(ctx : Context) =
         with get() = ctx
         and set c = 
             ctx <- c
-            manager <- ResourceManager(ctx)
+            manager <- ResourceManager(ctx, shareTextures, shareBuffers)
             //compiler <- Compiler.Compiler(x, c)
             //currentRuntime <- Some (x :> IRuntime)
 
@@ -110,7 +112,8 @@ type Runtime(ctx : Context) =
                 failwithf "unsupported streaming texture: %A" t
 
     member private x.CompileRenderInternal (engine : IMod<ExecutionEngine>, set : aset<RenderJob>) =
-        new RenderTasks.RenderTask(x, ctx, manager, engine, set)
+        let man = ResourceManager(manager, ctx, true, true)
+        new RenderTasks.RenderTask(x, ctx, man, engine, set)
 
     member x.CompileRender(engine : IMod<ExecutionEngine>, set : aset<RenderJob>) : IRenderTask =
         x.CompileRenderInternal(engine, set) :> IRenderTask

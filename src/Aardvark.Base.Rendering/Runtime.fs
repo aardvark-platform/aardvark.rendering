@@ -26,6 +26,82 @@ type ExecutionEngine =
 
     | Default           = 0x011 // Native | Optimized
 
+module BackendConfig =
+    type ExecutionEngine =
+        | Debug = 0
+        | Managed = 1
+        | Unmanaged = 2
+        | Native = 3
+
+    type RedundancyRemoval =
+        | None = 0
+        | Runtime = 1
+        | Static = 2
+
+    [<Flags>]
+    type ResourceSharing =
+        | None      = 0x00
+        | Buffers   = 0x01
+        | Textures  = 0x02
+        | Full      = 0x03
+
+    type Sorting =
+        | Dynamic of cmp : IComparer<RenderJob>
+        | Static of cmp : IComparer<RenderJob>
+        | Grouping of projections : (list<RenderJob -> IAdaptiveObject>)
+
+    type Config = { 
+        execution : ExecutionEngine
+        redundancy : RedundancyRemoval
+        sharing : ResourceSharing
+        sorting : Sorting
+    }
+
+    module Projections =
+        let private empty = Mod.init () :> IAdaptiveObject
+
+        let surface (rj : RenderJob) =
+            rj.Surface :> IAdaptiveObject
+
+        let diffuseTexture (rj : RenderJob) =
+            match rj.Uniforms.TryGetUniform (rj.AttributeScope, DefaultSemantic.DiffuseColorCoordinates) with
+                | Some t -> t :> IAdaptiveObject
+                | _ -> empty
+
+        let indices (rj : RenderJob) =
+            match rj.Indices with
+                | null -> empty
+                | i -> i :> IAdaptiveObject
+
+        let standard = [ surface; diffuseTexture; indices ]
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module Config =
+
+        let native = 
+            { 
+                execution       = ExecutionEngine.Native
+                redundancy      = RedundancyRemoval.Static
+                sharing         = ResourceSharing.Textures
+                sorting         = Sorting.Grouping Projections.standard 
+            }
+
+        let runtime = 
+            { 
+                execution       = ExecutionEngine.Unmanaged
+                redundancy      = RedundancyRemoval.Runtime
+                sharing         = ResourceSharing.Textures
+                sorting         = Sorting.Grouping Projections.standard 
+            }
+
+        let managed = 
+            { 
+                execution       = ExecutionEngine.Managed
+                redundancy      = RedundancyRemoval.Static
+                sharing         = ResourceSharing.Textures
+                sorting         = Sorting.Grouping Projections.standard 
+            }
+
 type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
     member x.Framebuffer = f
     member x.Statistics = stats

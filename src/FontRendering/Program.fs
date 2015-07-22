@@ -39,28 +39,6 @@ module Shader =
             return V4d.IIII
         }
 
-module Overlays =   
-    open Aardvark.Base.Incremental.Operators
-
-    let simple =
-        {
-            transform = ~~(M33d.Translation(V2d(10.0, 10.0)))
-            scissor = ~~Box2d.Infinite
-            fillColor = ~~C4f.White
-            command = 
-                Right {
-                    font = ~~(SystemFont("Arial", FontStyle.Regular))
-                    size = ~~22.0
-                    letterSpacing = ~~0.0
-                    lineHeight = ~~1.0
-                    blur = ~~0.0
-                    align = ~~(TextAlign.Left ||| TextAlign.Top)
-                    content = ~~"This is NanoVg working in Aardvark\r\nThis is pretty cool for rendering simple overlays and stuff..."
-                }
-        }
-    
-
-
 [<EntryPoint>]
 let main argv = 
     use app = new OpenGlApplication()
@@ -94,18 +72,6 @@ let main argv =
 
     let trafos = trafos |> Mod.constant
 
-//    let time = (win :> IRenderTarget).Time
-//    let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
-//    let cam = 
-//        Mod.integrate cam time [ 
-//            DefaultCameraController.controlWSAD win.Keyboard time
-//            DefaultCameraController.controlLookAround win.Mouse
-//            DefaultCameraController.controlPan win.Mouse
-//            DefaultCameraController.controlZoom win.Mouse
-//            DefaultCameraController.controllScroll win.Mouse time
-//        ]
-//
-
     let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
     let controller = 
         AFun.chain [
@@ -120,15 +86,6 @@ let main argv =
 
     let cam = cam |> AFun.integrate controller
 
-//    let cc = 
-//        let impl = win.Control.Implementation
-//        CSharpStuff.DefaultCameraControllers(
-//            CSharpStuff.HciMouseWinFormsAsync(impl),
-//            CSharpStuff.HciKeyboardWinFormsAsync(impl),
-//            cam,
-//            isEnabled = EventSource true
-//        )
-
     win.Mouse.Click.Values.Subscribe(printfn "click %A") |> ignore
     win.Mouse.DoubleClick.Values.Subscribe(printfn "double click %A") |> ignore
 
@@ -136,28 +93,48 @@ let main argv =
         geometry 
             |> Sg.instancedGeometry trafos
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
-            //|> Sg.viewTrafo cam.ViewTrafos.Mod
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
 
+    let g = Sg.ofIndexedGeometry geometry
+    let tex = FileTexture(@"C:\Users\haaser\Development\WorkDirectory\Server\pattern.jpg", true) :> ITexture
+
+    let textures = System.Collections.Generic.List<ModRef<ITexture>>()
+
+    let sgs = 
+        ASet.ofList [
+            for x in -4..4 do
+                for y in -4..4 do
+                    let trafo = Trafo3d.Translation(2.0 * float x - 0.5, 2.0 * float y - 0.5, 0.0)
+
+                    let tex = Mod.init tex
+                    textures.Add tex
+                    yield g |> Sg.trafo (Mod.constant trafo)
+                            |> Sg.texture DefaultSemantic.DiffuseColorTexture tex
+        ]
+
+    let sg = 
+        Sg.set sgs
+            |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
+            |> Sg.projTrafo proj.ProjectionTrafos.Mod
+            |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
+
     let engine = ExecutionEngine.Native ||| ExecutionEngine.Optimized
     let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
-    //let overlay = [Overlays.simple] |> AList.ofList |> app.Runtime.CompileRender
-    
+
+    let r = Random()
+    win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () ->
+        let index = r.Next(textures.Count)
+        let t = textures.[index]
+        textures.RemoveAt index
+
+        transact (fun () ->
+            Mod.change t (FileTexture(@"C:\Users\haaser\Development\WorkDirectory\Server\sand_color.jpg", true) :> ITexture)
+        )
+
+    ) |> ignore
+
+
     win.RenderTask <- RenderTask.ofList [main]
-    
-    
-
-
-//    let f = System.Windows.Media.GlyphTypeface(Uri(@"C:\Windows\Fonts\Arial.ttf"))
-//   
-//    let glyph = f.CharacterToGlyphMap.[int 'g']
-//    let geom = f.GetGlyphOutline(glyph, 16.0, 16.0)
-//
-//    let outline = geom.GetOutlinedPathGeometry()
-//
-//    let b = outline.GetRenderBounds(Pen(Brushes.Black, 1.0))
-//    let b = Box2i(int b.Left, int b.Bottom, int b.Right, int b.Top)
-
     win.Run()
-    0 // return an integer exit code
+    0 

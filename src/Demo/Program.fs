@@ -601,7 +601,7 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
-    //let modelPath =  @"C:\Aardwork\scenes\bench2\1000_128_500_18.dae"
+    let modelPath =  @"C:\Aardwork\scenes\bench\1000_128_500_18.dae"
 
     //let modelPath =  @"C:\Aardwork\scenes\bench2\8000_128_4000_6.dae"
 
@@ -682,7 +682,7 @@ let main args =
                 //Shader.pvLight |> toEffect
                 //Shader.pvFrag  |> toEffect
                 //DefaultSurfaces.trafo |> toEffect
-//                DefaultSurfaces.pointSurface pointSize |> toEffect
+                //DefaultSurfaces.pointSurface pointSize |> toEffect
                 //DefaultSurfaces.uniformColor color |> toEffect
                 DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.diffuseTexture |> toEffect
@@ -695,6 +695,7 @@ let main args =
            //|> Sg.blendMode (Mod.constant BlendMode.Blend)
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
     
+
 
     //Demo.AssimpExporter.save @"C:\Users\Schorsch\Desktop\quadScene\eigi.dae" sg
 
@@ -743,7 +744,33 @@ let main args =
 //       task.Run fbo |> ignore
 //    )   
  
-    let task = app.Runtime.CompileRender(sg.RenderJobs())
+    let engine = Mod.init (ExecutionEngine.Debug)
+    let engines = 
+        ref [
+            ExecutionEngine.Unmanaged ||| ExecutionEngine.Optimized
+            ExecutionEngine.Unmanaged ||| ExecutionEngine.RuntimeOptimized
+            ExecutionEngine.Managed ||| ExecutionEngine.Optimized
+            ExecutionEngine.Managed ||| ExecutionEngine.Unoptimized
+            ExecutionEngine.Native ||| ExecutionEngine.Optimized
+        ]
+
+    ctrl.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->
+        if k = Aardvark.Application.Keys.P then
+            match !engines with
+                | h::r ->
+                    transact(fun () -> Mod.change engine h)
+                    engines := r @ [h]
+                | _ -> ()
+        elif k = Aardvark.Application.Keys.G then
+            System.GC.AddMemoryPressure(1000000000L)
+            System.GC.Collect()
+            System.GC.WaitForFullGCApproach() |> ignore
+            System.GC.RemoveMemoryPressure(1000000000L)
+
+        ()
+    ) |> ignore
+
+    let task = app.Runtime.CompileRender(engine, sg.RenderJobs())
 
     ctrl.RenderTask <- task
 

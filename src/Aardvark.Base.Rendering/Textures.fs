@@ -14,6 +14,16 @@ type BitmapTexture(bmp : System.Drawing.Bitmap, wantMipMaps : bool) =
     interface ITexture with
         member x.WantMipMaps = x.WantMipMaps
 
+    override x.GetHashCode() =
+        HashCode.Combine(bmp.GetHashCode(), wantMipMaps.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? BitmapTexture as o ->
+                bmp = o.Bitmap && wantMipMaps = o.WantMipMaps
+            | _ ->
+                false
+
 type FileTexture(fileName : string, wantMipMaps : bool) =
     do if System.IO.File.Exists fileName |> not then failwithf "File does not exist: %s" fileName
 
@@ -22,11 +32,31 @@ type FileTexture(fileName : string, wantMipMaps : bool) =
     interface ITexture with
         member x.WantMipMaps = x.WantMipMaps
 
+    override x.GetHashCode() =
+        HashCode.Combine(fileName.GetHashCode(), wantMipMaps.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? FileTexture as o ->
+                fileName = o.FileName && wantMipMaps = o.WantMipMaps
+            | _ ->
+                false
+
 type PixTexture2d(data : PixImageMipMap, wantMipMaps : bool) =
     member x.PixImageMipMap = data
     member x.WantMipMaps = wantMipMaps
     interface ITexture with
         member x.WantMipMaps = x.WantMipMaps
+
+    override x.GetHashCode() =
+        HashCode.Combine(data.GetHashCode(), wantMipMaps.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? PixTexture2d as o ->
+                data = o.PixImageMipMap && wantMipMaps = o.WantMipMaps
+            | _ ->
+                false
 
 type PixTextureCube(data : PixImageCube, wantMipMaps : bool) =
     member x.PixImageCube = data
@@ -34,8 +64,28 @@ type PixTextureCube(data : PixImageCube, wantMipMaps : bool) =
     interface ITexture with
         member x.WantMipMaps = x.WantMipMaps
 
+    override x.GetHashCode() =
+        HashCode.Combine(data.GetHashCode(), wantMipMaps.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? PixTextureCube as o ->
+                data = o.PixImageCube && wantMipMaps = o.WantMipMaps
+            | _ ->
+                false
+
 type PixTexture3d(data : PixVolume, wantMipMaps : bool) =
     member x.PixVolume = data
     member x.WantMipMaps = wantMipMaps
     interface ITexture with
         member x.WantMipMaps = x.WantMipMaps
+
+    override x.GetHashCode() =
+        HashCode.Combine(data.GetHashCode(), wantMipMaps.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? PixTexture3d as o ->
+                data = o.PixVolume && wantMipMaps = o.WantMipMaps
+            | _ ->
+                false

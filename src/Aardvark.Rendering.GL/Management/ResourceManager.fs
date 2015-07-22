@@ -188,12 +188,138 @@ module ResourceManager =
              | Some k -> k
              | None -> Error "Unknown surface type. "
 
-    [<AllowNullLiteral>]
-    type ResourceManager(ctx : Context) =
-        let semanticIndices = ConcurrentDictionary<Symbol, int>()
-        let mutable currentId = -1
+    module Sharing =
+        open System.Collections.Generic
 
-        let getSemanticIndex (sem : Symbol) =
+ 
+        type IResourceHandler<'d, 'r> =
+            abstract member Create : 'd -> IMod<'r>
+            abstract member Update : IMod<'r> * 'd -> unit
+            abstract member Delete : IMod<'r> -> unit
+
+        type SharedResource<'a>(key : obj, r : 'a) =
+            let mutable refCount = 0
+            let mutable key = key
+
+            member x.ReferenceCount
+                with get() = refCount
+                and set c = refCount <- c
+
+            member x.Resource = r
+
+            member x.Key
+                with get() = key
+                and set (k : obj) = key <- k
+
+        type SharedResourceView<'a> private(resource : SharedResource<'a>, handle : ModRef<'a>) =
+            inherit AdaptiveDecorator(handle)
+            let mutable resource = resource
+
+            member x.SharedResource
+                with get() = resource
+                and set v = resource <- v
+
+            member x.Handle = handle
+            
+            interface IMod with
+                member x.IsConstant = false
+                member x.GetValue() = handle.GetValue() :> obj
+
+            interface IMod<'a> with
+                member x.GetValue() = handle.GetValue()
+
+            new(r : SharedResource<'a>) = SharedResourceView(r, Mod.init r.Resource)
+
+        type SharedResourceHandler<'d, 'r>(create : 'd -> 'r, update : 'r * 'd -> unit, delete : 'r -> unit) =
+            let cache = Dict<obj, SharedResource<'r>>()
+
+            let getOrCreate (key : 'd) (creator : 'd -> 'r) =
+                let res = 
+                    cache.GetOrCreate(key, fun _ ->
+                        let b = creator key
+                        SharedResource(key,b)
+                    )
+
+                res.ReferenceCount <- res.ReferenceCount + 1
+                SharedResourceView(res)
+
+            member x.Create(arr : 'd) =
+                getOrCreate arr (fun arr ->
+                    create arr
+                )
+
+            member x.Update(b : SharedResourceView<'r>, arr : 'd) =
+                let res = b.SharedResource
+
+                if res.ReferenceCount <= 1 then  
+                    // we're the only reference to that resource
+                    cache.Remove res.Key |> ignore
+
+                    match cache.TryGetValue arr with
+                        | (true, r) ->
+                            // there already is a resource for the given array
+                            // therefore we destroy the old one
+                            delete(res.Resource)
+
+                            // and change the SharedResourceView accordingly
+                            r.ReferenceCount <- r.ReferenceCount + 1
+                            b.SharedResource <- r
+                            transact (fun () -> b.Handle.Value <- r.Resource)
+                            
+                        | _ ->
+                            // no other resource has the same key so we
+                            // may simply upload and store the SharedResource at its
+                            // new "location"
+                            update (res.Resource, arr)
+                            cache.[arr] <- res
+                            res.Key <- arr
+                else
+                    res.ReferenceCount <- res.ReferenceCount - 1
+                    match cache.TryGetValue arr with
+                        | (true, r) ->
+                            r.ReferenceCount <- r.ReferenceCount + 1
+
+                            b.SharedResource <- r
+                            transact (fun () -> b.Handle.Value <- r.Resource)
+
+                        | _ ->
+                            let r = SharedResource(arr, create arr)
+                            r.ReferenceCount <- 1
+                            cache.[arr] <- r
+
+                            b.SharedResource <- r
+                            transact (fun () -> b.Handle.Value <- r.Resource)
+
+            member x.Delete(b : SharedResourceView<'r>) =
+                let res = b.SharedResource
+
+                b.SharedResource <- Unchecked.defaultof<_>
+                b.Handle.UnsafeCache <- Unchecked.defaultof<_>
+
+                if res.ReferenceCount <= 1 then
+                    delete res.Resource
+                    cache.Remove(res.Key) |> ignore
+                else
+                    res.ReferenceCount <- res.ReferenceCount - 1
+
+            interface IResourceHandler<'d, 'r> with
+                member x.Create(data) = x.Create(data) :> IMod<_>
+                member x.Update(res, data) = x.Update(unbox res, data)
+                member x.Delete(res) = x.Delete(unbox res)
+
+        type NopResourceHandler<'d, 'r>(create : 'd -> 'r, update : 'r * 'd -> unit, delete : 'r -> unit) =
+            interface IResourceHandler<'d, 'r> with
+                member x.Create(data) = data |> create |> Mod.constant
+                member x.Update(res, data) = update (res.GetValue(), data)
+                member x.Delete(res) = delete (res.GetValue())
+
+
+    [<AllowNullLiteral>]
+    type ResourceManager(original : ResourceManager, ctx : Context, shareTextures : bool, shareBuffers : bool) =
+        static let semanticIndices = ConcurrentDictionary<Symbol, int>()
+        static let mutable currentId = -1
+
+        static let getSemanticIndex (sem : Symbol) =
             semanticIndices.GetOrAdd(sem, fun s ->
                 let id = Interlocked.Increment(&currentId)
                 id
@@ -209,9 +335,40 @@ module ResourceManager =
         static let vao = Sym.ofString "VertexArrayObject"
 
 
+        let bufferHandler = 
+            if shareBuffers then 
+                let originalHandler = 
+                    match original with
+                        | null -> None
+                        | o when not o.ShareBuffers -> None
+                        | o -> Some o.BufferHandler
+
+                match originalHandler with
+                    | Some h -> h
+                    | None -> Sharing.SharedResourceHandler<Array, Buffer>(ctx.CreateBuffer, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+            else 
+                Sharing.NopResourceHandler<Array, Buffer>(ctx.CreateBuffer, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+
+        let textureHandler = 
+            if shareTextures then 
+                let originalHandler = 
+                    match original with
+                        | null -> None
+                        | o when not o.ShareTextures -> None
+                        | o -> Some o.TextureHandler
+
+                match originalHandler with
+                    | Some h -> h
+                    | None -> Sharing.SharedResourceHandler<ITexture, Texture>(ctx.CreateTexture, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+            else 
+                Sharing.NopResourceHandler<ITexture, Texture>(ctx.CreateTexture, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+
+
         // the overall cache holding caches per identifier
-        let cache = NamedResourceCache()
- 
+        let cache = 
+            match original with
+                | null -> NamedResourceCache()
+                | o -> o.Cache
 
         let compile (s : ISurface) = SurfaceCompilers.compile ctx s
 
@@ -235,8 +392,13 @@ module ResourceManager =
                     life := false
                     m.MarkingCallbacks.Remove !f |> ignore
             }
-            
-
+           
+        member private x.BufferHandler = bufferHandler
+        member private x.TextureHandler = textureHandler 
+        member private x.Original = original
+        member private x.Cache = cache
+        member x.ShareBuffers = shareBuffers
+        member x.ShareTextures = shareTextures 
         member x.Context = ctx
 
         /// <summary>
@@ -248,13 +410,12 @@ module ResourceManager =
                 [data], 
                 fun () ->
                     let current = data.GetValue()
-                    let handle = ctx.CreateBuffer(current)
-
+                    let handle = bufferHandler.Create(current)
                     { dependencies = [data]
                       updateCPU = fun () -> data.GetValue() |> ignore
-                      updateGPU = fun () -> ctx.Upload(handle, data.GetValue())
-                      destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.constant handle }
+                      updateGPU = fun () -> bufferHandler.Update(handle, data.GetValue())
+                      destroy = fun () -> bufferHandler.Delete(handle)
+                      resource = handle } 
             )
 
         /// <summary>
@@ -269,13 +430,12 @@ module ResourceManager =
                         | :? ArrayBuffer as buffer ->
                             let data = buffer.Data
                             let current = data.GetValue()
-                            let handle = ctx.CreateBuffer(current)
-
+                            let handle = bufferHandler.Create(current)
                             { dependencies = [data]
                               updateCPU = fun () -> data.GetValue() |> ignore
-                              updateGPU = fun () -> ctx.Upload(handle, data.GetValue())
-                              destroy = fun () -> ctx.Delete(handle)
-                              resource = Mod.constant handle }
+                              updateGPU = fun () -> bufferHandler.Update(handle, data.GetValue())
+                              destroy = fun () -> bufferHandler.Delete(handle)
+                              resource = handle }
                         | _ ->
                             failwithf "unknown buffer-data: %A" data
             )
@@ -309,10 +469,10 @@ module ResourceManager =
                     let created = ref false
                     let handle = 
                         match current with
-                            | :? Texture as t -> ref t
+                            | :? Texture as t -> ref (Mod.constant t)
                             | _ -> 
                                 created := true
-                                ref <| ctx.CreateTexture(current)
+                                ref <| textureHandler.Create(current)
 
                     let handleMod = Mod.init !handle
 
@@ -322,23 +482,24 @@ module ResourceManager =
                         match data.GetValue() with
                             | :? Texture as t -> 
                                 if !created then
-                                    ctx.Delete(!handle)
+                                    textureHandler.Delete(!handle)
                                     created := false
 
-                                handle := t
-                                transact (fun () -> handleMod.Value <- t)
+                                let h = Mod.constant t
+                                handle := h
+                                transact (fun () -> handleMod.Value <- h)
                             | _ -> 
                                 if !created then
-                                    ctx.Upload(!handle, data.GetValue())
+                                    textureHandler.Update(!handle, data.GetValue())
                                 else
                                     created := true
-                                    handle := ctx.CreateTexture(current)
+                                    handle := textureHandler.Create(current)
 
                                 if handleMod.Value <> !handle then 
                                     transact (fun () -> handleMod.Value <- !handle)
 
-                      destroy = fun () -> if !created then ctx.Delete(!handle)
-                      resource = handleMod }            
+                      destroy = fun () -> if !created then textureHandler.Delete(!handle)
+                      resource = handleMod |> Mod.bind id }            
             )
 
         member x.CreateSurface (s : IMod<ISurface>) =
@@ -549,3 +710,5 @@ module ResourceManager =
                   resource = Mod.constant handle }
 
             new ChangeableResource<Aardvark.Rendering.GL.Framebuffer>(desc)
+
+        new(ctx, shareTextures, shareBuffers) = ResourceManager(null, ctx, shareTextures, shareBuffers)
