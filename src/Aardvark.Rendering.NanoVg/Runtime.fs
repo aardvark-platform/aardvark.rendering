@@ -88,7 +88,11 @@ module internal Interpreter =
                 else
                     (), s
             }
-
+        let resetTransform  = 
+            { runState = fun s -> 
+                NanoVg.nvgResetTransform(s.ctx.Handle)
+                (), { s with transform = M33d.Identity }
+            }
         let setScissor (v : IMod<Box2d>) = 
             { runState = fun s -> 
                 if v <> null && s.scissor <> !!v then 
@@ -273,18 +277,25 @@ module internal Interpreter =
 
                 | Right t ->
                     do! Nvg.setFont t.font
-                    do! Nvg.setFontSize t.size
+                    
                     do! Nvg.setLetterSpacing t.letterSpacing
                     do! Nvg.setLineHeight t.lineHeight
                     do! Nvg.setBlur t.blur
                     let trafo = !!rj.transform
 
                     // important for clear text alignment (aa causing problems when using trafo)
-                    if trafo.UpperLeftM22().IsIdentity(Constant.PositiveTinyValue) then
-                        do! Nvg.setTransform ~~M33d.Identity
+                    let orientation = trafo.UpperLeftM22()
+                    if orientation.IsIdentity(Constant.PositiveTinyValue) then
+                        do! Nvg.resetTransform
+                        do! Nvg.setFontSize t.size
+                        do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
+                    elif orientation.M01.IsTiny() && orientation.M10.IsTiny() && orientation.M00.ApproximateEquals(orientation.M11, Constant.PositiveTinyValue) then
+                        do! Nvg.resetTransform
+                        do! Nvg.setFontSize ~~(orientation.M11 * !!t.size)
                         do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
                     else
                         do! Nvg.setTransform rj.transform
+                        do! Nvg.setFontSize t.size
                         do! Nvg.drawText V2d.Zero !!t.align !!t.content 
 
 

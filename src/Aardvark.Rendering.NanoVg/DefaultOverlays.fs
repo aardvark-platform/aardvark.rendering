@@ -201,7 +201,7 @@ module DefaultOverlays =
                 |> Nvg.text
                 |> Nvg.font ~~(FileFont @"C:\Windows\Fonts\consola.ttf") //"Consolas" FontStyle.Regular
                 |> Nvg.fillColor ~~C4f.White
-                |> Nvg.fontSize ~~10.0
+                |> Nvg.fontSize ~~12.0
 
         let overall = ref Box2d.Invalid
         let rect =
@@ -220,7 +220,6 @@ module DefaultOverlays =
             Nvg.ofList [rect; text]
                 |> Nvg.trafo ~~(M33d.Translation(V2d(20.0, 20.0)))
                 |> Nvg.trafo ~~(M33d.Scale(1.5))
-
         runtime.CompileRender(sg.RenderJobs())
 
     type AnnotationRenderTask(real : IRenderTask, annotation : IRenderTask, emit : RenderingResult -> unit) as this =
