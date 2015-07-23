@@ -97,11 +97,8 @@ module RenderbufferExtensions =
             RenderbufferFormat.DepthComponent32f, RenderbufferStorage.DepthComponent32f
             RenderbufferFormat.Depth32fStencil8, RenderbufferStorage.Depth32fStencil8
             RenderbufferFormat.StencilIndex1, RenderbufferStorage.StencilIndex1
-            RenderbufferFormat.StencilIndex4Ext, RenderbufferStorage.StencilIndex4Ext
             RenderbufferFormat.StencilIndex4, RenderbufferStorage.StencilIndex4
             RenderbufferFormat.StencilIndex8, RenderbufferStorage.StencilIndex8
-            RenderbufferFormat.StencilIndex8Ext, RenderbufferStorage.StencilIndex8Ext
-            RenderbufferFormat.StencilIndex16Ext, RenderbufferStorage.StencilIndex16Ext
             RenderbufferFormat.StencilIndex16, RenderbufferStorage.StencilIndex16
             RenderbufferFormat.Rgba32ui, RenderbufferStorage.Rgba32ui
             RenderbufferFormat.Rgb32ui, RenderbufferStorage.Rgb32ui
