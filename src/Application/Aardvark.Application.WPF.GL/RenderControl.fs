@@ -28,12 +28,13 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
         and set t = ctrl.RenderTask <- t
 
     member x.Sizes = ctrl.Sizes
-
+    member x.Samples = ctrl.Samples
     member x.Context = ctrl.Context
     member x.WindowInfo = ctrl.WindowInfo
 
     member x.Time = ctrl.Time
     interface IRenderTarget with
+        member x.Samples = ctrl.Samples
         member x.Runtime = runtime :> IRuntime
         member x.Time = ctrl.Time
         member x.RenderTask

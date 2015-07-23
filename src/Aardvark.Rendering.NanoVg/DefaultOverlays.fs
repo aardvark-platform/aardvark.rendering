@@ -217,7 +217,7 @@ module DefaultOverlays =
                 fillColor = ~~C4f.Black
                 command = 
                     Right {
-                        font = ~~(SystemFont("Courier New", FontStyle.Bold))
+                        font = ~~(SystemFont("Consolas", FontStyle.Bold))
                         size = ~~18.0
                         letterSpacing = ~~0.0
                         lineHeight = ~~1.0
