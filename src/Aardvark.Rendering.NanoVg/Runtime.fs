@@ -241,23 +241,24 @@ module internal Interpreter =
                     (), s
             }  
 
-        let drawText (align : TextAlign) (content : string) =
+        let drawText (pos : V2d) (align : TextAlign) (content : string) =
             { runState = fun s -> 
                 //NanoVg.nvgTextAlign(s.ctx.Handle, unbox align)
                 //NanoVg.nvgTextBox(s.ctx.Handle, 0.0f, 0.0f, 10000000.0f, content, 0n)
-                NanoVgExt.nvgText(s.ctx.Handle, 0.0f, 0.0f, content, unbox align)
+                NanoVgExt.nvgText(s.ctx.Handle, float32 pos.X, float32 pos.Y, content, unbox align)
                 
                 ((),s)
             }  
 
     let private runRenderJob (rj : NvgRenderJob) =
         state {
-            do! Nvg.setTransform rj.transform
+            
             do! Nvg.setScissor rj.scissor
             do! Nvg.setFillColor rj.fillColor
 
             match rj.command with
                 | Left p ->
+                    do! Nvg.setTransform rj.transform
                     do! Nvg.setStrokeWidth p.strokeWidth
                     do! Nvg.setStrokeColor p.strokeColor
                     do! Nvg.setLineCap p.lineCap
@@ -276,8 +277,17 @@ module internal Interpreter =
                     do! Nvg.setLetterSpacing t.letterSpacing
                     do! Nvg.setLineHeight t.lineHeight
                     do! Nvg.setBlur t.blur
+                    let trafo = !!rj.transform
 
-                    do! Nvg.drawText !!t.align !!t.content 
+                    // important for clear text alignment (aa causing problems when using trafo)
+                    if trafo.UpperLeftM22().IsIdentity(Constant.PositiveTinyValue) then
+                        do! Nvg.setTransform ~~M33d.Identity
+                        do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
+                    else
+                        do! Nvg.setTransform rj.transform
+                        do! Nvg.drawText V2d.Zero !!t.align !!t.content 
+
+
         }
 
     let run (ctx : Context.NanoVgContext) (s : seq<NvgRenderJob>) =
@@ -381,9 +391,8 @@ type RenderTask(glRuntime : Runtime, l : alist<NvgRenderJob>) as this =
                 OpenTK.Graphics.OpenGL.GL.BindSampler(0,0)
                 
                 NanoVg.nvgBeginFrame(ctx.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
-                NanoVg.nvgRestore(ctx.Handle)
+             
                 r.Content |> Seq.map snd |> Interpreter.run ctx
-                NanoVg.nvgSave(ctx.Handle)
                 NanoVg.nvgEndFrame(ctx.Handle)
 
                 OpenTK.Graphics.OpenGL.GL.PopAttrib()
