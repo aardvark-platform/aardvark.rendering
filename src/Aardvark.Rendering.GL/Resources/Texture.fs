@@ -802,13 +802,10 @@ module TextureExtensions =
                         failwith "conversion not implemented"
 
             let gc = GCHandle.Alloc(image.Data, GCHandleType.Pinned)
-            GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
-            
-            OpenTK.Graphics.OpenGL4.GL.GetTexImage(target, level, pixelFormat, pixelType, gc.AddrOfPinnedObject())
-            let err = GL.GetError()
-            printfn "download: %A" err
 
+            OpenTK.Graphics.OpenGL4.GL.GetTexImage(target, level, pixelFormat, pixelType, gc.AddrOfPinnedObject())
             GL.Check "could not download image"
+
             gc.Free()
 
             image
