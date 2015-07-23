@@ -16,3 +16,4 @@ bin/Debug
 *.o
 *~
 src/GLVM/*.so
+/sources.lock
