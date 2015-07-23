@@ -353,7 +353,7 @@ let main argv =
         ()
     ) |> ignore
 
-    let main = app.Runtime.CompileRender(engine, sg.RenderJobs()) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
+    let main = app.Runtime.CompileRender(engine, sg.RenderJobs()) |> DefaultOverlays.withStatistics
     w.RenderTask <- main
 
     // a very sketch controller for changing the viewport
@@ -425,7 +425,6 @@ let main argv =
 //
 //            | _ -> ()
 //    ) |> ignore
-
 
     // finally run the application
     w.Run()

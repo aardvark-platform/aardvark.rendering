@@ -41,7 +41,7 @@ module private Interpreter =
 
     type private NvgState =
         {
-            ctx : NvgContext
+            ctx : Context.NanoVgContext
             transform : M33d
             scissor : Box2d
             fillColor : C4f
@@ -60,9 +60,9 @@ module private Interpreter =
 
     let private emptyState =
         {
-            ctx = 0n
-            transform = M33d.Identity
-            scissor = Box2d.Infinite
+            ctx = null
+            transform = M33d(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            scissor = Box2d.Invalid
             fillColor = C4f(Single.MaxValue, Single.MaxValue, Single.MaxValue, Single.MaxValue)
             pathStrokeWidth = -1.0
             pathStrokeColor = C4f(Single.MaxValue, Single.MaxValue, Single.MaxValue, Single.MaxValue)
@@ -82,8 +82,8 @@ module private Interpreter =
             { runState = fun s -> 
                 if t <> null && s.transform <> !!t then 
                     let t = !!t
-                    NanoVg.nvgResetTransform(s.ctx)
-                    NanoVg.nvgTransform(s.ctx, float32 t.M00, float32 t.M10, float32 t.M01, float32 t.M11, float32 t.M02, float32 t.M12)
+                    NanoVg.nvgResetTransform(s.ctx.Handle)
+                    NanoVg.nvgTransform(s.ctx.Handle, float32 t.M00, float32 t.M10, float32 t.M01, float32 t.M11, float32 t.M02, float32 t.M12)
                     (), { s with transform = t }
                 else
                     (), s
@@ -93,8 +93,9 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.scissor <> !!v then 
                     let v = !!v
-                    NanoVg.nvgResetScissor(s.ctx)
-                    NanoVg.nvgScissor(s.ctx, float32 v.Min.X, float32 v.Min.Y, float32 v.SizeX, float32 v.SizeY)
+                    NanoVg.nvgResetScissor(s.ctx.Handle)
+                    if not v.IsInfinite then
+                        NanoVg.nvgScissor(s.ctx.Handle, float32 v.Min.X, float32 v.Min.Y, float32 v.SizeX, float32 v.SizeY)
                     (), { s with scissor = v }
                 else
                     (), s
@@ -104,7 +105,7 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.fillColor <> !!v then 
                     let v = !!v
-                    NanoVg.nvgFillColor(s.ctx, v)
+                    NanoVg.nvgFillColor(s.ctx.Handle, v)
                     (), { s with fillColor = v }
                 else
                     (), s
@@ -114,7 +115,7 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.pathStrokeWidth <> !!v then 
                     let v = !!v
-                    NanoVg.nvgStrokeWidth(s.ctx, float32 v)
+                    NanoVg.nvgStrokeWidth(s.ctx.Handle, float32 v)
                     (), { s with pathStrokeWidth = v }
                 else
                     (), s
@@ -124,7 +125,7 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.pathStrokeColor <> !!v then 
                     let v = !!v
-                    NanoVg.nvgStrokeColor(s.ctx, v)
+                    NanoVg.nvgStrokeColor(s.ctx.Handle, v)
                     (), { s with pathStrokeColor = v }
                 else
                     (), s
@@ -134,7 +135,7 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.pathLineCap <> !!v then 
                     let v = !!v
-                    NanoVg.nvgLineCap(s.ctx, toNvgCap v)
+                    NanoVg.nvgLineCap(s.ctx.Handle, toNvgCap v)
                     (), { s with pathLineCap = v }
                 else
                     (), s
@@ -146,10 +147,10 @@ module private Interpreter =
                     let v = !!v
                     match v with
                         | MiterJoin cap ->
-                            NanoVg.nvgMiterLimit(s.ctx,float32 cap)
-                            NanoVg.nvgLineJoin(s.ctx, NvgLineCap.Miter)
-                        | BevelJoin -> NanoVg.nvgLineJoin(s.ctx, NvgLineCap.Bevel)
-                        | RoundJoin -> NanoVg.nvgLineJoin(s.ctx, NvgLineCap.Round)
+                            NanoVg.nvgMiterLimit(s.ctx.Handle,float32 cap)
+                            NanoVg.nvgLineJoin(s.ctx.Handle, NvgLineCap.Miter)
+                        | BevelJoin -> NanoVg.nvgLineJoin(s.ctx.Handle, NvgLineCap.Bevel)
+                        | RoundJoin -> NanoVg.nvgLineJoin(s.ctx.Handle, NvgLineCap.Round)
                     (), { s with pathLineJoin = v }
                 else
                     (), s
@@ -164,7 +165,7 @@ module private Interpreter =
                             | Winding.CCW -> NvgWinding.CounterClockwise
                             | _ -> NvgWinding.Clockwise
 
-                    NanoVg.nvgPathWinding(s.ctx, int nvgWinding)
+                    NanoVg.nvgPathWinding(s.ctx.Handle, int nvgWinding)
                     (), { s with pathWinding = v }
                 else
                     (), s
@@ -172,19 +173,19 @@ module private Interpreter =
 
         let drawPrimitive (p : Primitive) =
             { runState = fun s -> 
-                drawPrimitive s.ctx p
+                drawPrimitive s.ctx.Handle p
                 ((), s)
             }
 
         let stroke =
             { runState = fun s -> 
-                NanoVg.nvgStroke(s.ctx)
+                NanoVg.nvgStroke(s.ctx.Handle)
                 ((), s)
             }
 
         let fill =
             { runState = fun s -> 
-                NanoVg.nvgFill(s.ctx)
+                NanoVg.nvgFill(s.ctx.Handle)
                 ((), s)
             }
 
@@ -192,8 +193,9 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.font <> !!v then 
                     let v = !!v
-                    let name = Context.getFontName v
-                    NanoVg.nvgFontFace(s.ctx, name)
+                    let id = s.ctx.GetFontId v
+                    NanoVg.nvgFontFaceId(s.ctx.Handle, id)
+                    //NanoVg.nvgFontFace(s.ctx.Handle, name)
                     (), { s with font = v }
                 else
                     (), s
@@ -203,7 +205,7 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.fontSize <> !!v then 
                     let v = !!v
-                    NanoVg.nvgFontSize(s.ctx, float32 v)
+                    NanoVg.nvgFontSize(s.ctx.Handle, float32 v)
                     (), { s with fontSize = v }
                 else
                     (), s
@@ -213,7 +215,7 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.fontLetterSpacing <> !!v then 
                     let v = !!v
-                    NanoVg.nvgTextLetterSpacing(s.ctx, float32 v)
+                    NanoVg.nvgTextLetterSpacing(s.ctx.Handle, float32 v)
                     (), { s with fontLetterSpacing = v }
                 else
                     (), s
@@ -223,7 +225,7 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.fontLineHeight <> !!v then 
                     let v = !!v
-                    NanoVg.nvgTextLineHeight(s.ctx, float32 v)
+                    NanoVg.nvgTextLineHeight(s.ctx.Handle, float32 v)
                     (), { s with fontLineHeight = v }
                 else
                     (), s
@@ -233,7 +235,7 @@ module private Interpreter =
             { runState = fun s -> 
                 if v <> null && s.fontBlur <> !!v then 
                     let v = !!v
-                    NanoVg.nvgFontBlur(s.ctx, float32 v)
+                    NanoVg.nvgFontBlur(s.ctx.Handle, float32 v)
                     (), { s with fontBlur = v }
                 else
                     (), s
@@ -241,9 +243,10 @@ module private Interpreter =
 
         let drawText (align : TextAlign) (content : string) =
             { runState = fun s -> 
-//                NanoVg.nvgTextAlign(s.ctx, unbox align)
-//                NanoVg.nvgTextBox(s.ctx, 0.0f, 0.0f, 10000000.0f, content, 0n)
-                NanoVgExt.nvgText(s.ctx, 0.0f, 0.0f, content, unbox align)
+                //NanoVg.nvgTextAlign(s.ctx.Handle, unbox align)
+                //NanoVg.nvgTextBox(s.ctx.Handle, 0.0f, 0.0f, 10000000.0f, content, 0n)
+                NanoVgExt.nvgText(s.ctx.Handle, 0.0f, 0.0f, content, unbox align)
+                
                 ((),s)
             }  
 
@@ -277,7 +280,7 @@ module private Interpreter =
                     do! Nvg.drawText !!t.align !!t.content 
         }
 
-    let run (ctx : NvgContext) (s : seq<NvgRenderJob>) =
+    let run (ctx : Context.NanoVgContext) (s : seq<NvgRenderJob>) =
         let mutable state = { emptyState with ctx = ctx }
 
         for rj in s do
@@ -354,18 +357,41 @@ type RenderTask(glRuntime : Runtime, l : alist<NvgRenderJob>) as this =
             i.RemoveOutput x
         inputs.Clear()
 
+
     member x.Run(fbo : IFramebuffer) =
         base.EvaluateAlways (fun () ->
-            let ctx = using glContext.ResourceLock (fun _ -> Context.current())
-
             for d in r.GetDelta() do
                 match d with
                     | Add(_,rj) -> add rj
                     | Rem(_,rj) -> remove rj
 
-            NanoVg.nvgBeginFrame(ctx, fbo.Size.X, fbo.Size.Y, 1.0f)
-            r.Content |> Seq.map snd |> Interpreter.run ctx
-            NanoVg.nvgEndFrame(ctx)
+            using glContext.ResourceLock (fun _ -> 
+                
+                let old = Array.create 4 0
+                let mutable oldFbo = 0
+                OpenTK.Graphics.OpenGL4.GL.GetInteger(OpenTK.Graphics.OpenGL4.GetPName.Viewport, old)
+                OpenTK.Graphics.OpenGL4.GL.GetInteger(OpenTK.Graphics.OpenGL4.GetPName.FramebufferBinding, &oldFbo)
+
+                let ctx = Context.current()
+
+                OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, fbo.Handle :?> int)
+                OpenTK.Graphics.OpenGL4.GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+
+                OpenTK.Graphics.OpenGL.GL.PushAttrib(OpenTK.Graphics.OpenGL.AttribMask.AllAttribBits)
+                OpenTK.Graphics.OpenGL.GL.BindSampler(0,0)
+                
+                NanoVg.nvgBeginFrame(ctx.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
+                NanoVg.nvgRestore(ctx.Handle)
+                r.Content |> Seq.map snd |> Interpreter.run ctx
+                NanoVg.nvgSave(ctx.Handle)
+                NanoVg.nvgEndFrame(ctx.Handle)
+
+                OpenTK.Graphics.OpenGL.GL.PopAttrib()
+
+                OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+                OpenTK.Graphics.OpenGL4.GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+
+            )
         )
 
     interface IRenderTask with

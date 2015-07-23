@@ -14,6 +14,7 @@ module Screenshot =
     let renderToImage (samples : int) (size : V2i) (task : IRenderTask) =
         let runtime = task.Runtime.Value
 
+        //use lock = runtime.ContextLock
         use color = runtime.CreateRenderbuffer(~~size, ~~RenderbufferFormat.Rgba8, ~~samples)
         use depth = runtime.CreateRenderbuffer(~~size, ~~RenderbufferFormat.DepthComponent32, ~~samples)
         use clear = runtime.CompileClear(~~C4f.Black, ~~1.0)

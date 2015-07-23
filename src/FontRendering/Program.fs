@@ -97,7 +97,7 @@ let main argv =
             |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
 
     let g = Sg.ofIndexedGeometry geometry
-    let tex = FileTexture(@"C:\Users\haaser\Development\WorkDirectory\Server\pattern.jpg", true) :> ITexture
+    let tex = FileTexture(@"E:\Development\WorkDirectory\DataSVN\pattern.jpg", true) :> ITexture
 
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 
@@ -120,7 +120,7 @@ let main argv =
             |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
 
     let engine = ExecutionEngine.Native ||| ExecutionEngine.Optimized
-    let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics (Mod.constant C4f.Red)
+    let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics
 
     let r = Random()
     win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () ->
@@ -129,7 +129,7 @@ let main argv =
         textures.RemoveAt index
 
         transact (fun () ->
-            Mod.change t (FileTexture(@"C:\Users\haaser\Development\WorkDirectory\Server\sand_color.jpg", true) :> ITexture)
+            Mod.change t (FileTexture(@"E:\Development\WorkDirectory\DataSVN\sand_color.jpg", true) :> ITexture)
         )
 
     ) |> ignore

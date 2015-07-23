@@ -192,7 +192,7 @@ module DefaultOverlays =
           |> String.concat "\r\n"
 
 
-    let statisticsOverlay (runtime : IRuntime) (color : IMod<C4f>) (m : IMod<FrameStatistics>) =
+    let statisticsOverlay (runtime : IRuntime) (m : IMod<FrameStatistics>) =
         let content = m |> Mod.map (statisticsTable >> tableString)
 
         runtime.CompileRender [ 
@@ -217,7 +217,7 @@ module DefaultOverlays =
                 fillColor = ~~C4f.Black
                 command = 
                     Right {
-                        font = ~~(SystemFont("Consolas", FontStyle.Bold))
+                        font = ~~(SystemFont("Courier New", FontStyle.Bold))
                         size = ~~18.0
                         letterSpacing = ~~0.0
                         lineHeight = ~~1.0
@@ -262,13 +262,13 @@ module DefaultOverlays =
                         RenderingResult(annotation.Framebuffer, real.Statistics + annotation.Statistics)
                 )
 
-    let withStatistics (color : IMod<C4f>) (t : IRenderTask) =
+    let withStatistics (t : IRenderTask) =
         match t.Runtime with
             | Some runtime ->
                 let frame = Statistics.timeFrame (TimeSpan.FromMilliseconds 100.0)
                 let emit (r : RenderingResult) = frame.Emit r.Statistics
 
-                let overlay = statisticsOverlay runtime color frame.Average
+                let overlay = statisticsOverlay runtime frame.Average
 
                 let task = new AnnotationRenderTask(t, overlay, emit)
                 task :> IRenderTask

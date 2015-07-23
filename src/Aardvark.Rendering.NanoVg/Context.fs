@@ -9,8 +9,9 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering.GL
 
 module Context =
-    let mutable private context = 0n
-    let styles = [FontStyle.Regular; FontStyle.Bold; FontStyle.Italic]
+    
+    let private styles = [FontStyle.Regular; FontStyle.Bold; FontStyle.Italic]
+
 
     let private toSysStyle (s : FontStyle) =
         match s with
@@ -19,11 +20,9 @@ module Context =
             | FontStyle.Italic -> System.Drawing.FontStyle.Italic
             | _ -> failwithf "unknown font style: %A" s
 
-    let private fontNames = Dictionary<Font, string>()
-
     module private FontResolver =
 
-        module private Windows =
+        module Windows =
             open System.IO
             open Microsoft.Win32
             let fontFolder = Environment.GetFolderPath Environment.SpecialFolder.Fonts
@@ -40,7 +39,7 @@ module Context =
                             | :? string as path -> Some (Path.Combine(fontFolder, path))
                             | _ -> None
 
-        module private Linux =
+        module Linux =
             open System.Diagnostics
             open System.Text.RegularExpressions
 
@@ -89,53 +88,69 @@ module Context =
                     | (true, p) -> Some p
                     | _ -> None
 
-        module private MacOS =
+        module MacOS =
             let getSystemFontFileName (name : string) (style : FontStyle) =
                 Log.warn "font retrieval not implemented on MacOS X"
                 None
 
-        let getSystemFontFileName (name : string) (style : FontStyle) =
+        let private fontPaths = Dictionary<Font, string>()
+
+        let private getSystemFontFileName (name : string) (style : FontStyle) =
             match Environment.OSVersion.Platform with
                 | PlatformID.Unix -> Linux.getSystemFontFileName name style
                 | PlatformID.MacOSX -> MacOS.getSystemFontFileName name style
                 | _ -> Windows.getSystemFontFileName name style
 
+        let rec getFontNameAndPath (font : Font) =
+            match fontPaths.TryGetValue font with
+                | (true, path) -> 
+                    path
+                | _ ->
+                    let path = 
+                        match font with
+                            | FileFont path ->
+                                path
+                            | SystemFont(name, style) ->
+                                match getSystemFontFileName name style with
+                                    | Some path -> 
+                                        getFontNameAndPath (FileFont path)
+                                    | _ -> failwithf "cannot locate system font: %s with style %A" name style
+
+                    fontPaths.[font] <- path
+                    path
+
+    [<AllowNullLiteral>]
+    type NanoVgContext(handle : nativeint) =
+        let loadedFonts = Dictionary<string, int>()
 
 
-    let init(ctx : Context) =
-        if context = 0n then
-            NanoVgGl.glewInit()
-            using ctx.ResourceLock (fun _ ->
-                context <- NanoVgGl.nvgCreateGL3 NvgCreateFlags.Antialias
-            )
+        member x.Handle = handle
+
+        member x.GetFontId(font : Font) =
+            let path = FontResolver.getFontNameAndPath(font)
+            match loadedFonts.TryGetValue path with
+                | (true, id) -> id
+                | _ ->
+                    let name = Guid.NewGuid().ToString()
+                    let id = NanoVg.nvgCreateFont(handle, name, path)
+                    printfn "font-id: %A %s" id path
+                    loadedFonts.[path] <- id
+                    id
+
+    let private contextMap = ConcurrentDict<obj, NanoVgContext>(Dict())
+    let mutable private glew = false
 
     let current() =
-        if context <> 0n then 
-            context
-        else
-            match ContextHandle.Current with
-                | Some h -> 
-                    NanoVgGl.glewInit()
-                    context <- NanoVgGl.nvgCreateGL3 NvgCreateFlags.Antialias
-                    context
-                | None ->
-                    failwith "cannot initialize NanoVg without a GL context"
+        match ContextHandle.Current with
+            | Some h -> 
+                contextMap.GetOrCreate(h.Handle, fun h ->
+                    if not glew then
+                        glew <- true
+                        NanoVgGl.glewInit()
+                    let handle = NanoVgGl.nvgCreateGL3 NvgCreateFlags.None
 
-    let rec getFontName (font : Font) =
-        match fontNames.TryGetValue font with
-            | (true, name) -> name
-            | _ ->
-                let name = 
-                    match font with
-                        | FileFont path ->
-                            let n = Guid.NewGuid().ToString()
-                            let ctx = current()
-                            let fontId = NanoVg.nvgCreateFont(ctx, n, path)
-                            n
-                        | SystemFont(name, style) ->
-                            match FontResolver.getSystemFontFileName name style with
-                                | Some path -> getFontName (FileFont path)
-                                | _ -> failwithf "cannot locate system font: %s with style %A" name style
-
-                fontNames.[font] <- name
-                name
+                    NanoVgContext(handle)
+                            
+                )
+            | None ->
+                failwith "cannot initialize NanoVg without a GL context"
