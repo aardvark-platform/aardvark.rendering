@@ -327,7 +327,7 @@ let main argv =
 
     // compile the rendertask and pass it to the window
 
-    let engine = Mod.init (ExecutionEngine.Debug)
+    let engine = Mod.init (ExecutionEngine.Native ||| ExecutionEngine.Optimized)
     let engines = 
         ref [
             ExecutionEngine.Unmanaged ||| ExecutionEngine.Optimized
@@ -383,7 +383,11 @@ let main argv =
         )
     ) |> ignore
 
-
+    w.Keyboard.KeyDown(Aardvark.Application.Keys.F12).Values.Subscribe (fun () ->
+        let pi = Screenshot.take w |> Async.RunSynchronously
+        pi.SaveAsImage @"C:\Users\schorsch\Desktop\screeny.jpg"
+        ()
+    ) |> ignore
 
 
 //

@@ -100,7 +100,7 @@ type RenderControl() as this =
 
 
     member x.Sizes = sizes :> IMod<V2i>
-
+    member x.Samples = impl.Value.Samples
     member x.Keyboard = keyboard :> IKeyboard
     member x.Mouse = mouse :> IMouse
 
@@ -119,6 +119,7 @@ type RenderControl() as this =
         member x.Runtime = impl.Value.Runtime
         member x.Time = time
         member x.Sizes = x.Sizes
+        member x.Samples = impl.Value.Samples
 
         member x.Keyboard = x.Keyboard
         member x.Mouse = x.Mouse

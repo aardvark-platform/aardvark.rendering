@@ -668,13 +668,13 @@ module ResourceManager =
 
             new ChangeableResource<Texture>(desc)
 
-        member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<PixFormat>, samples : IMod<int>) : ChangeableResource<Renderbuffer> =
-            let handle = ctx.CreateRenderbuffer(size.GetValue(), ChannelType.ofPixFormat <| format.GetValue(), samples.GetValue())
+        member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<RenderbufferFormat>, samples : IMod<int>) : ChangeableResource<Renderbuffer> =
+            let handle = ctx.CreateRenderbuffer(size.GetValue(), format.GetValue(), samples.GetValue())
             
             let desc =
                 { dependencies = [size :> IMod; format :> IMod; samples :> IMod]
                   updateCPU = fun () -> ()
-                  updateGPU = fun () -> ctx.Update(handle, size.GetValue(), format.GetValue() |> ChannelType.ofPixFormat |> toRenderbufferFormat, samples.GetValue())
+                  updateGPU = fun () -> ctx.Update(handle, size.GetValue(), format.GetValue(), samples.GetValue())
                   destroy = fun () -> ctx.Delete(handle)
                   resource = Mod.constant handle }
 

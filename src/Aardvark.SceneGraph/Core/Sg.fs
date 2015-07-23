@@ -227,7 +227,6 @@ module Sg =
 
         member x.ASet : aset<ISg> = aset :> aset<_>
 
-
         member x.Add v =
             transact (fun () ->
                aset.Add v

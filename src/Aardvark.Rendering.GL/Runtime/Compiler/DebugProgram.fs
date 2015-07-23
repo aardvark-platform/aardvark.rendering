@@ -25,7 +25,7 @@ type DebugProgram(manager : ResourceManager,
     member x.Remove (rj : RenderJob) =
         renderJobs.Remove rj |> ignore
 
-    member x.Run(fbo : Framebuffer, ctx : ContextHandle) =
+    member x.Run(fbo : int, ctx : ContextHandle) =
         let ctxMod = Mod.constant ctx
         let mutable stats = FrameStatistics.Zero
 

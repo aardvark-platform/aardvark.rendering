@@ -107,6 +107,7 @@ type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
     member x.Statistics = stats
 
 type IRuntime =
+    abstract member ContextLock : IDisposable
 
     abstract member CreateTexture : ITexture -> ITexture
     abstract member CreateBuffer : IBuffer -> IBuffer
@@ -116,13 +117,14 @@ type IRuntime =
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
 
-    abstract member CompileClear : IMod<C4f> * IMod<double> -> IRenderTask
+    abstract member CompileClear : clearColor : IMod<C4f> * clearDepth : IMod<double> -> IRenderTask
     abstract member CompileRender : ExecutionEngine * aset<RenderJob> -> IRenderTask
 
-    abstract member CreateTexture : IMod<V2i> * IMod<PixFormat> * IMod<int> * IMod<int> -> IFramebufferTexture
-    abstract member CreateRenderbuffer : IMod<V2i> * IMod<PixFormat> * IMod<int> -> IFramebufferRenderbuffer
+    abstract member CreateTexture : size : IMod<V2i> * format : IMod<PixFormat> * samples : IMod<int> * count : IMod<int> -> IFramebufferTexture
+    abstract member CreateRenderbuffer : size : IMod<V2i> * format : IMod<RenderbufferFormat> * samples : IMod<int> -> IFramebufferRenderbuffer
+    abstract member CreateFramebuffer : attachments : Map<Symbol, IMod<IFramebufferOutput>> -> IFramebuffer
 
-    abstract member CreateFramebuffer : Map<Symbol, IMod<IFramebufferOutput>> -> IFramebuffer
+    abstract member ResolveMultisamples : ms : IFramebufferRenderbuffer * ss : IFramebufferTexture * trafo : ImageTrafo -> unit
 
 and IRenderTask =
     inherit IDisposable

@@ -326,8 +326,7 @@ module RenderTasks =
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                    let fboHandle = fbo |> unbox<Framebuffer>
-                    let handle = fboHandle.Handle
+                    let handle = fbo.Handle |> unbox<int> 
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                     GL.Check "could not bind framebuffer"
@@ -342,7 +341,7 @@ module RenderTasks =
 
                     //render
                     for (KeyValue(_,p)) in programs do
-                        stats <- stats + p.Run(fboHandle, contextHandle)
+                        stats <- stats + p.Run(handle, contextHandle)
 
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
@@ -384,7 +383,7 @@ module RenderTasks =
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                    let handle = (fbo.Handle |> unbox<int>)
+                    let handle = fbo.Handle |> unbox<int>
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)

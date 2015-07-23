@@ -263,7 +263,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             | _ ->
                 failwithf "cannot remove unknown renderjob: %A" rj
 
-    member x.Run(fbo : Framebuffer, ctx : ContextHandle) =
+    member x.Run(fbo : int, ctx : ContextHandle) =
         // change the current context if necessary
         if ctx <> currentContext.UnsafeCache then
             transact (fun () -> Mod.change currentContext ctx)

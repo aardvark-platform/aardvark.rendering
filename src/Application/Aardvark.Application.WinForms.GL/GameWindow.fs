@@ -431,6 +431,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
         member x.Sizes = sizes :> IMod<_>
+        member x.Samples = Mod.constant samples
 
     interface IRenderControl with
         member x.Mouse = mouse :> IMouse

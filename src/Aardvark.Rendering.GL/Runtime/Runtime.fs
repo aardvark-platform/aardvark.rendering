@@ -35,6 +35,10 @@ type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
         member x.GetSize level = getHandle().GetSize level
         member x.Dispose() = c.Dispose()
         member x.WantMipMaps = getHandle().MipMapLevels > 1
+        member x.Download(level) =
+            let handle = getHandle()
+            let format = handle.ChannelType |> ChannelType.toDownloadFormat
+            handle.Context.Download(handle, format, level)
 
 type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
     let getHandle() =
@@ -79,6 +83,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
+        member x.ContextLock = ctx.ResourceLock
         member x.CompileRender (engine : ExecutionEngine, set : aset<RenderJob>) = x.CompileRender(engine,set)
         member x.CompileClear(color, depth) = x.CompileClear(color, depth)
         member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples)
@@ -182,7 +188,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         new ChangeableFramebufferTexture(tex) :> IFramebufferTexture
 
-    member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<PixFormat>, samples : IMod<int>) =
+    member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<RenderbufferFormat>, samples : IMod<int>) =
         let rb = manager.CreateRenderbuffer(size, format, samples)
 
         new ChangeableRenderbuffer(rb) :> IFramebufferRenderbuffer

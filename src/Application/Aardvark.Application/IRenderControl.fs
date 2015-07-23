@@ -17,6 +17,7 @@ type TimeMod() =
 type IRenderTarget =
     abstract member Runtime : IRuntime
     abstract member Sizes : IMod<V2i>
+    abstract member Samples : IMod<int>
     abstract member RenderTask : IRenderTask with get, set
     abstract member Time : IMod<DateTime>
 

@@ -11,78 +11,6 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 
-type RenderbufferFormat =
-    | DepthComponent = 6402
-    | R3G3B2 = 10768
-    | Rgb4 = 32847
-    | Rgb5 = 32848
-    | Rgb8 = 32849
-    | Rgb10 = 32850
-    | Rgb12 = 32851
-    | Rgb16 = 32852
-    | Rgba2 = 32853
-    | Rgba4 = 32854
-    | Rgba8 = 32856
-    | Rgb10A2 = 32857
-    | Rgba12 = 32858
-    | Rgba16 = 32859
-    | DepthComponent16 = 33189
-    | DepthComponent24 = 33190
-    | DepthComponent32 = 33191
-    | R8 = 33321
-    | R16 = 33322
-    | Rg8 = 33323
-    | Rg16 = 33324
-    | R16f = 33325
-    | R32f = 33326
-    | Rg16f = 33327
-    | Rg32f = 33328
-    | R8i = 33329
-    | R8ui = 33330
-    | R16i = 33331
-    | R16ui = 33332
-    | R32i = 33333
-    | R32ui = 33334
-    | Rg8i = 33335
-    | Rg8ui = 33336
-    | Rg16i = 33337
-    | Rg16ui = 33338
-    | Rg32i = 33339
-    | Rg32ui = 33340
-    | DepthStencil = 34041
-    | Rgba32f = 34836
-    | Rgb32f = 34837
-    | Rgba16f = 34842
-    | Rgb16f = 34843
-    | Depth24Stencil8 = 35056
-    | R11fG11fB10f = 35898
-    | Rgb9E5 = 35901
-    | Srgb8 = 35905
-    | Srgb8Alpha8 = 35907
-    | DepthComponent32f = 36012
-    | Depth32fStencil8 = 36013
-    | StencilIndex1Ext = 36166
-    | StencilIndex1 = 36166
-    | StencilIndex4Ext = 36167
-    | StencilIndex4 = 36167
-    | StencilIndex8 = 36168
-    | StencilIndex8Ext = 36168
-    | StencilIndex16Ext = 36169
-    | StencilIndex16 = 36169
-    | Rgba32ui = 36208
-    | Rgb32ui = 36209
-    | Rgba16ui = 36214
-    | Rgb16ui = 36215
-    | Rgba8ui = 36220
-    | Rgb8ui = 36221
-    | Rgba32i = 36226
-    | Rgb32i = 36227
-    | Rgba16i = 36232
-    | Rgb16i = 36233
-    | Rgba8i = 36238
-    | Rgb8i = 36239
-    | Rgb10A2ui = 36975
-
 type Renderbuffer =
     class
         val mutable public Context : Context
@@ -105,7 +33,13 @@ module RenderbufferExtensions =
     open ChannelType
 
     let private lookup (name : string) (l : list<'a * 'b>) =
-        let d = Dict.ofList l
+        let d = Dict.empty
+        for (k,v) in l do
+            match d.TryGetValue k with
+                | (true, vo) -> printfn "duplicated entry in %s: %A (%A, %A)" name k vo v
+                | _ -> ()
+            d.[k] <- v
+
         fun a ->
             match d.TryGetValue a with
                 | (true, b) -> b
@@ -162,7 +96,6 @@ module RenderbufferExtensions =
             RenderbufferFormat.Srgb8Alpha8, RenderbufferStorage.Srgb8Alpha8
             RenderbufferFormat.DepthComponent32f, RenderbufferStorage.DepthComponent32f
             RenderbufferFormat.Depth32fStencil8, RenderbufferStorage.Depth32fStencil8
-            RenderbufferFormat.StencilIndex1Ext, RenderbufferStorage.StencilIndex1Ext
             RenderbufferFormat.StencilIndex1, RenderbufferStorage.StencilIndex1
             RenderbufferFormat.StencilIndex4Ext, RenderbufferStorage.StencilIndex4Ext
             RenderbufferFormat.StencilIndex4, RenderbufferStorage.StencilIndex4
@@ -185,66 +118,66 @@ module RenderbufferExtensions =
             RenderbufferFormat.Rgb10A2ui, RenderbufferStorage.Rgb10A2ui
         ]
 
-    let toRenderbufferFormat (t : ChannelType) : RenderbufferFormat =
-        match t with
-        | R8 -> RenderbufferFormat.R8
-        | R16 -> RenderbufferFormat.R16
-        | R16_SNORM -> 0x8F98 |> unbox<RenderbufferFormat>
-        | RG8 -> RenderbufferFormat.Rg8
-        | RG16 -> RenderbufferFormat.Rg16
-        | RG16_SNORM -> 0x8F99 |> unbox<RenderbufferFormat>
-        | R3_G3_B2 -> RenderbufferFormat.R3G3B2
-        | RGB4 -> RenderbufferFormat.Rgb4
-        | RGB5 -> RenderbufferFormat.Rgb5
-        | RGB8 -> RenderbufferFormat.Rgb8
-        | RGB10 -> RenderbufferFormat.Rgb10
-        | RGB12 -> RenderbufferFormat.Rgb12
-        | RGB16_SNORM -> 0x8F9A |> unbox<RenderbufferFormat> //RenderbufferFormat.Rgb16Snorm
-        | RGBA2 -> RenderbufferFormat.Rgba2
-        | RGBA4 -> RenderbufferFormat.Rgba4
-        | RGBA8 -> RenderbufferFormat.Rgba8
-        | RGB10_A2 -> RenderbufferFormat.Rgb10A2
-        | RGB10_A2UI -> RenderbufferFormat.Rgb10A2ui
-        | RGBA12 -> RenderbufferFormat.Rgba12
-        | RGBA16 -> RenderbufferFormat.Rgba16
-        | SRGB8 -> RenderbufferFormat.Srgb8
-        | SRGB8_ALPHA8 -> RenderbufferFormat.Srgb8Alpha8
-        | R16F -> RenderbufferFormat.R16f
-        | RG16F -> RenderbufferFormat.Rg16f
-        | RGB16F -> RenderbufferFormat.Rgb16f
-        | RGBA16F -> RenderbufferFormat.Rgba16f
-        | R32F -> RenderbufferFormat.R32f
-        | RG32F -> RenderbufferFormat.Rg32f
-        | RGB32F -> RenderbufferFormat.Rgb32f
-        | RGBA32F -> RenderbufferFormat.Rgba32f
-        | R11F_G11F_B10F -> RenderbufferFormat.R11fG11fB10f
-        | RGB9_E5 -> RenderbufferFormat.Rgb9E5
-        | R8I -> RenderbufferFormat.R8i
-        | R8UI -> RenderbufferFormat.R8ui
-        | R16I -> RenderbufferFormat.R16i
-        | R16UI -> RenderbufferFormat.R16ui
-        | R32I -> RenderbufferFormat.R32i
-        | R32UI -> RenderbufferFormat.R32ui
-        | RG8I -> RenderbufferFormat.Rg8i
-        | RG8UI -> RenderbufferFormat.Rg8ui
-        | RG16I -> RenderbufferFormat.Rg16i
-        | RG16UI -> RenderbufferFormat.Rg16ui
-        | RG32I -> RenderbufferFormat.Rg32i
-        | RG32UI -> RenderbufferFormat.Rg32ui
-        | RGB8I -> RenderbufferFormat.Rgb8i
-        | RGB8UI -> RenderbufferFormat.Rgb8ui
-        | RGB16I -> RenderbufferFormat.Rgb16i
-        | RGB16UI -> RenderbufferFormat.Rgb16ui
-        | RGB32I -> RenderbufferFormat.Rgb32i
-        | RGB32UI -> RenderbufferFormat.Rgb32ui
-        | RGBA8I -> RenderbufferFormat.Rgba8i
-        | RGBA8UI -> RenderbufferFormat.Rgba8ui
-        | RGBA16I -> RenderbufferFormat.Rgba16i
-        | RGBA16UI -> RenderbufferFormat.Rgba16ui
-        | RGBA32I -> RenderbufferFormat.Rgba32i
-        | RGBA32UI -> RenderbufferFormat.Rgba32ui
-        | _ -> failwith "unknown internal format"
-
+//    let toRenderbufferFormat (t : ChannelType) : RenderbufferFormat =
+//        match t with
+//        | R8 -> RenderbufferFormat.R8
+//        | R16 -> RenderbufferFormat.R16
+//        | R16_SNORM -> 0x8F98 |> unbox<RenderbufferFormat>
+//        | RG8 -> RenderbufferFormat.Rg8
+//        | RG16 -> RenderbufferFormat.Rg16
+//        | RG16_SNORM -> 0x8F99 |> unbox<RenderbufferFormat>
+//        | R3_G3_B2 -> RenderbufferFormat.R3G3B2
+//        | RGB4 -> RenderbufferFormat.Rgb4
+//        | RGB5 -> RenderbufferFormat.Rgb5
+//        | RGB8 -> RenderbufferFormat.Rgb8
+//        | RGB10 -> RenderbufferFormat.Rgb10
+//        | RGB12 -> RenderbufferFormat.Rgb12
+//        | RGB16_SNORM -> 0x8F9A |> unbox<RenderbufferFormat> //RenderbufferFormat.Rgb16Snorm
+//        | RGBA2 -> RenderbufferFormat.Rgba2
+//        | RGBA4 -> RenderbufferFormat.Rgba4
+//        | RGBA8 -> RenderbufferFormat.Rgba8
+//        | RGB10_A2 -> RenderbufferFormat.Rgb10A2
+//        | RGB10_A2UI -> RenderbufferFormat.Rgb10A2ui
+//        | RGBA12 -> RenderbufferFormat.Rgba12
+//        | RGBA16 -> RenderbufferFormat.Rgba16
+//        | SRGB8 -> RenderbufferFormat.Srgb8
+//        | SRGB8_ALPHA8 -> RenderbufferFormat.Srgb8Alpha8
+//        | R16F -> RenderbufferFormat.R16f
+//        | RG16F -> RenderbufferFormat.Rg16f
+//        | RGB16F -> RenderbufferFormat.Rgb16f
+//        | RGBA16F -> RenderbufferFormat.Rgba16f
+//        | R32F -> RenderbufferFormat.R32f
+//        | RG32F -> RenderbufferFormat.Rg32f
+//        | RGB32F -> RenderbufferFormat.Rgb32f
+//        | RGBA32F -> RenderbufferFormat.Rgba32f
+//        | R11F_G11F_B10F -> RenderbufferFormat.R11fG11fB10f
+//        | RGB9_E5 -> RenderbufferFormat.Rgb9E5
+//        | R8I -> RenderbufferFormat.R8i
+//        | R8UI -> RenderbufferFormat.R8ui
+//        | R16I -> RenderbufferFormat.R16i
+//        | R16UI -> RenderbufferFormat.R16ui
+//        | R32I -> RenderbufferFormat.R32i
+//        | R32UI -> RenderbufferFormat.R32ui
+//        | RG8I -> RenderbufferFormat.Rg8i
+//        | RG8UI -> RenderbufferFormat.Rg8ui
+//        | RG16I -> RenderbufferFormat.Rg16i
+//        | RG16UI -> RenderbufferFormat.Rg16ui
+//        | RG32I -> RenderbufferFormat.Rg32i
+//        | RG32UI -> RenderbufferFormat.Rg32ui
+//        | RGB8I -> RenderbufferFormat.Rgb8i
+//        | RGB8UI -> RenderbufferFormat.Rgb8ui
+//        | RGB16I -> RenderbufferFormat.Rgb16i
+//        | RGB16UI -> RenderbufferFormat.Rgb16ui
+//        | RGB32I -> RenderbufferFormat.Rgb32i
+//        | RGB32UI -> RenderbufferFormat.Rgb32ui
+//        | RGBA8I -> RenderbufferFormat.Rgba8i
+//        | RGBA8UI -> RenderbufferFormat.Rgba8ui
+//        | RGBA16I -> RenderbufferFormat.Rgba16i
+//        | RGBA16UI -> RenderbufferFormat.Rgba16ui
+//        | RGBA32I -> RenderbufferFormat.Rgba32i
+//        | RGBA32UI -> RenderbufferFormat.Rgba32ui
+//        | _ -> failwith "unknown internal format"
+//
 
 
     let private updateRenderbuffer (handle : int) (size : V2i) (format : RenderbufferStorage) (samples : int) =
@@ -275,10 +208,10 @@ module RenderbufferExtensions =
                 Renderbuffer(x, handle, size, format, samples)
             )
 
-        member x.CreateRenderbuffer (size : V2i, format : ChannelType, ?samples : int) =
-            match samples with
-                | Some s -> x.CreateRenderbuffer(size, toRenderbufferFormat format, s)
-                | None -> x.CreateRenderbuffer(size, toRenderbufferFormat format)
+//        member x.CreateRenderbuffer (size : V2i, format : ChannelType, ?samples : int) =
+//            match samples with
+//                | Some s -> x.CreateRenderbuffer(size, toRenderbufferFormat format, s)
+//                | None -> x.CreateRenderbuffer(size, toRenderbufferFormat format)
 
         member x.Update(r : Renderbuffer, size : V2i, format : RenderbufferFormat, ?samples : int) =
             let samples = defaultArg samples 1

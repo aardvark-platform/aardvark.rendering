@@ -24,4 +24,4 @@ type IProgram =
     abstract member Add : RenderJob -> unit
     abstract member Remove : RenderJob -> unit
     abstract member Update : RenderJob -> unit
-    abstract member Run : Framebuffer * ContextHandle -> FrameStatistics
+    abstract member Run : int * ContextHandle -> FrameStatistics

@@ -27,6 +27,7 @@ type SimpleRenderWindow() =
 
     member x.Runtime = ctrl.Runtime
     member x.Sizes = ctrl.Sizes
+    member x.Samples = ctrl.Samples
     member x.Keyboard = ctrl.Keyboard
     member x.Mouse = ctrl.Mouse
     member x.Time = ctrl.Time
@@ -42,6 +43,7 @@ type SimpleRenderWindow() =
             and set t = ctrl.RenderTask <- t
 
         member x.Sizes = ctrl.Sizes
+        member x.Samples = ctrl.Samples
         member x.Keyboard = ctrl.Keyboard
         member x.Mouse = ctrl.Mouse
         member x.Run() = x.Run()
