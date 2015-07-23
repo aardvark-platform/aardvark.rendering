@@ -10,15 +10,15 @@ open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Monads.State
 open Aardvark.Rendering.GL
 
-module private Interpreter =
+module internal Interpreter =
 
-    let private toNvgCap (c : LineCap) =
+    let internal toNvgCap (c : LineCap) =
         match c with
             | ButtCap -> NvgLineCap.Butt
             | RoundCap -> NvgLineCap.Round
             | SquareCap -> NvgLineCap.Square
 
-    let private drawPath (ctx : NvgContext) (p : Path) =
+    let internal drawPath (ctx : NvgContext) (p : Path) =
         for i in p do
             match i with
                 | MoveTo p -> NanoVg.nvgMoveTo(ctx, float32 p.X, float32 p.Y)
@@ -28,7 +28,7 @@ module private Interpreter =
                 | ArcTo(p,t,r) -> NanoVg.nvgArcTo(ctx, float32 p.X, float32 p.Y, float32 t.X, float32 t.Y, float32 r)
                 | ClosePath -> NanoVg.nvgClosePath(ctx)
 
-    let private drawPrimitive (ctx : NvgContext) (p : Primitive) =
+    let internal drawPrimitive (ctx : NvgContext) (p : Primitive) =
         NanoVg.nvgBeginPath(ctx)
 
         match p with
@@ -39,7 +39,7 @@ module private Interpreter =
             | Ellipse(c,r) -> NanoVg.nvgEllipse(ctx, float32 c.X, float32 c.Y, float32 r.X, float32 r.Y)
             | Circle(c,r) -> NanoVg.nvgCircle(ctx, float32 c.X, float32 c.Y, float32 r)
 
-    type private NvgState =
+    type internal NvgState =
         {
             ctx : Context.NanoVgContext
             transform : M33d
@@ -58,7 +58,7 @@ module private Interpreter =
             fontAlign : TextAlign
         }
 
-    let private emptyState =
+    let internal emptyState =
         {
             ctx = null
             transform = M33d(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)

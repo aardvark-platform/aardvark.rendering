@@ -195,38 +195,33 @@ module DefaultOverlays =
     let statisticsOverlay (runtime : IRuntime) (m : IMod<FrameStatistics>) =
         let content = m |> Mod.map (statisticsTable >> tableString)
 
-        runtime.CompileRender [ 
-            {
-                transform = ~~M33d.Identity
-                scissor = ~~Box2d.Infinite
-                fillColor = Mod.constant (C4f(1.0, 1.0, 1.0, 0.5))
-                command = 
-                    Left {
-                        strokeWidth = ~~1.0
-                        strokeColor = ~~C4f.Black
-                        lineCap = ~~RoundCap
-                        lineJoin = ~~RoundJoin
-                        winding = ~~Winding.CCW
-                        primitive = ~~(RoundedRectangle(Box2d(10.0, 10.0, 330.0, 150.0),10.0))
-                        mode = ~~FillPrimitive
-                    }
-            }
-            {
-                transform = ~~(M33d.Translation(V2d(20.0, 20.0)))
-                scissor = ~~Box2d.Infinite
-                fillColor = ~~C4f.Black
-                command = 
-                    Right {
-                        font = ~~(SystemFont("Consolas", FontStyle.Bold))
-                        size = ~~18.0
-                        letterSpacing = ~~0.0
-                        lineHeight = ~~1.0
-                        blur = ~~0.0
-                        align = ~~(TextAlign.Left ||| TextAlign.Top)
-                        content = content
-                    }
-            }
-        ]
+
+        let text =
+            content 
+                |> Nvg.text
+                |> Nvg.font ~~(FileFont @"C:\Windows\Fonts\consola.ttf") //"Consolas" FontStyle.Regular
+                |> Nvg.fillColor ~~C4f.White
+                |> Nvg.fontSize ~~10.0
+
+        let overall = ref Box2d.Invalid
+        let rect =
+            text.LocalBoundingBox() 
+               |> Mod.map (fun bb -> 
+                    let mutable b = bb.EnlargedBy(V2d(13.0, 10.0))
+                    overall := b.Union(!overall)
+                    !overall
+                  )
+               |> Mod.map (fun b -> RoundedRectangle(b, 10.0))
+               |> Nvg.fill
+               |> Nvg.fillColor ~~(C4f(0.0, 0.0, 0.0, 0.5))
+               
+
+        let sg = 
+            Nvg.ofList [rect; text]
+                |> Nvg.trafo ~~(M33d.Translation(V2d(20.0, 20.0)))
+                |> Nvg.trafo ~~(M33d.Scale(1.5))
+
+        runtime.CompileRender(sg.RenderJobs())
 
     type AnnotationRenderTask(real : IRenderTask, annotation : IRenderTask, emit : RenderingResult -> unit) as this =
         inherit AdaptiveObject()
