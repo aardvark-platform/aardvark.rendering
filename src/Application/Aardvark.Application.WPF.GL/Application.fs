@@ -1,6 +1,6 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if BuildingOnWindows
+#if WINDOWS
 
 open System
 open System.Windows.Forms
