@@ -83,15 +83,19 @@ module internal Interpreter =
                 if t <> null && s.transform <> !!t then 
                     let t = !!t
                     NanoVg.nvgResetTransform(s.ctx.Handle)
-                    NanoVg.nvgTransform(s.ctx.Handle, float32 t.M00, float32 t.M10, float32 t.M01, float32 t.M11, float32 t.M02, float32 t.M12)
+                    if not (t.IsIdentity(Constant.PositiveTinyValue)) then
+                        NanoVg.nvgTransform(s.ctx.Handle, float32 t.M00, float32 t.M10, float32 t.M01, float32 t.M11, float32 t.M02, float32 t.M12)
                     (), { s with transform = t }
                 else
                     (), s
             }
         let resetTransform  = 
-            { runState = fun s -> 
-                NanoVg.nvgResetTransform(s.ctx.Handle)
-                (), { s with transform = M33d.Identity }
+            { runState = fun s ->
+                if s.transform <> M33d.Identity then 
+                    NanoVg.nvgResetTransform(s.ctx.Handle)
+                    (), { s with transform = M33d.Identity }
+                else
+                    (), s
             }
         let setScissor (v : IMod<Box2d>) = 
             { runState = fun s -> 
