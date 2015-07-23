@@ -258,7 +258,45 @@ module Sg =
                 aset.SymmetricExceptWith v
             )
 
+        member x.IntersectWith v =
+            transact (fun () ->
+                aset.IntersectWith v
+            )
+
+
         member x.Count = aset.Count
+
+        interface System.Collections.IEnumerable with
+            member x.GetEnumerator() = (aset :> System.Collections.IEnumerable).GetEnumerator()
+
+        interface IEnumerable<ISg> with
+            member x.GetEnumerator() = (aset :> seq<_>).GetEnumerator()
+
+        interface ICollection<ISg> with
+            member x.IsReadOnly = false
+            member x.Add v = x.Add v |> ignore
+            member x.Remove v = x.Remove v
+            member x.Clear() = x.Clear()
+            member x.Contains v = aset.Contains v
+            member x.Count = x.Count
+            member x.CopyTo(arr, index) =
+                let mutable id = index
+                for e in aset do
+                    arr.[id] <- e
+                    id <- id + 1
+
+        interface ISet<ISg> with
+            member x.Add v = x.Add v
+            member x.UnionWith other = x.UnionWith other
+            member x.IntersectWith other = x.IntersectWith other
+            member x.ExceptWith other = x.ExceptWith other
+            member x.SymmetricExceptWith other = x.SymmetricExceptWith other
+            member x.IsSubsetOf other = (aset :> ISet<ISg>).IsSubsetOf other
+            member x.IsSupersetOf other = (aset :> ISet<ISg>).IsSupersetOf other
+            member x.IsProperSubsetOf other = (aset :> ISet<ISg>).IsProperSubsetOf other
+            member x.IsProperSupersetOf other = (aset :> ISet<ISg>).IsProperSupersetOf other
+            member x.Overlaps other = (aset :> ISet<ISg>).Overlaps other
+            member x.SetEquals other = (aset :> ISet<ISg>).SetEquals other
 
         new() = Group(Seq.empty)
         
