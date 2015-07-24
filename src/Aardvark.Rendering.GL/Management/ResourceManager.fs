@@ -507,23 +507,31 @@ module ResourceManager =
                 [s],
                 fun () ->
                     let current = s.GetValue()
-                    let compileResult = compile current
+                    match current with
+                     | :? Program as p -> 
+                        { dependencies = [s]
+                          updateCPU = id
+                          updateGPU = id
+                          destroy = id
+                          resource = s |> Mod.map unbox }    
+                     | _ ->
+                        let compileResult = compile current
 
-                    match compileResult with
-                        | Success p ->
-                            let handle = Mod.init p
+                        match compileResult with
+                            | Success p ->
+                                let handle = Mod.init p
 
-                            { dependencies = [s]
-                              updateCPU = fun () -> 
-                                match compile <| s.GetValue() with
-                                    | Success p -> Mod.change handle p
-                                    | Error e -> Log.warn "could not update surface: %A" e
+                                { dependencies = [s]
+                                  updateCPU = fun () -> 
+                                    match compile <| s.GetValue() with
+                                        | Success p -> Mod.change handle p
+                                        | Error e -> Log.warn "could not update surface: %A" e
 
-                              updateGPU = fun () -> ()
-                              destroy = fun () -> ctx.Delete(p)
-                              resource = handle }         
-                        | Error e ->
-                            failwith e
+                                  updateGPU = fun () -> ()
+                                  destroy = fun () -> ctx.Delete(p)
+                                  resource = handle }         
+                            | Error e ->
+                                failwith e
            )
                 
         member x.CreateUniformBuffer (scope : Ag.Scope, layout : UniformBlock, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
