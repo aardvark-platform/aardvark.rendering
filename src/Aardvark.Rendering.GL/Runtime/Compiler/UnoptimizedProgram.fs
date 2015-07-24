@@ -79,14 +79,19 @@ type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and
                         Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
                     )
             )
-        rj.Surface.AddOutput !self
+        match rj.Surface with
+            | null -> ()
+            | s -> s.AddOutput !self
         !self
 
     member x.Dispose() =
         match frag with
             | null -> ()
             | _ -> 
-                rj.Surface.RemoveOutput changer
+                match rj.Surface with
+                    | null -> ()
+                    | s -> s.RemoveOutput changer
+
                 match frag.Next with
                     | null -> ()
                     | n ->  n.Prev <- frag.Prev
