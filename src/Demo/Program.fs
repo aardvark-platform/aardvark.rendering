@@ -744,14 +744,14 @@ let main args =
 //       task.Run fbo |> ignore
 //    )   
  
-    let engine = Mod.init (ExecutionEngine.Debug)
+    let engine = Mod.init BackendConfiguration.Debug
     let engines = 
         ref [
-            ExecutionEngine.Unmanaged ||| ExecutionEngine.Optimized
-            ExecutionEngine.Unmanaged ||| ExecutionEngine.RuntimeOptimized
-            ExecutionEngine.Managed ||| ExecutionEngine.Optimized
-            ExecutionEngine.Managed ||| ExecutionEngine.Unoptimized
-            ExecutionEngine.Native ||| ExecutionEngine.Optimized
+            BackendConfiguration.UnmanagedOptimized
+            BackendConfiguration.UnmanagedRuntime
+            BackendConfiguration.ManagedOptimized
+            BackendConfiguration.ManagedUnoptimized
+            BackendConfiguration.NativeOptimized
         ]
 
     ctrl.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->

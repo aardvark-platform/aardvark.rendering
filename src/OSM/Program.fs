@@ -327,14 +327,14 @@ let main argv =
 
     // compile the rendertask and pass it to the window
 
-    let engine = Mod.init (ExecutionEngine.Native ||| ExecutionEngine.Optimized)
+    let engine = Mod.init BackendConfiguration.Debug
     let engines = 
         ref [
-            ExecutionEngine.Unmanaged ||| ExecutionEngine.Optimized
-            ExecutionEngine.Unmanaged ||| ExecutionEngine.RuntimeOptimized
-            ExecutionEngine.Managed ||| ExecutionEngine.Optimized
-            ExecutionEngine.Managed ||| ExecutionEngine.Unoptimized
-            ExecutionEngine.Native ||| ExecutionEngine.Optimized
+            BackendConfiguration.UnmanagedOptimized
+            BackendConfiguration.UnmanagedRuntime
+            BackendConfiguration.ManagedOptimized
+            BackendConfiguration.ManagedUnoptimized
+            BackendConfiguration.NativeOptimized
         ]
 
     w.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->

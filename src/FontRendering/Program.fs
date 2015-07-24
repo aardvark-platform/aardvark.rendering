@@ -119,8 +119,7 @@ let main argv =
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
 
-    let engine = ExecutionEngine.Native ||| ExecutionEngine.Optimized
-    let main = app.Runtime.CompileRender(engine, sg) |> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(BackendConfiguration.NativeOptimized, sg) |> DefaultOverlays.withStatistics
 
     let r = Random()
     win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () ->

@@ -87,7 +87,7 @@ module Projections =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BackendConfiguration =
 
-    let native = 
+    let NativeOptimized = 
         { 
             execution       = ExecutionEngine.Native
             redundancy      = RedundancyRemoval.Static
@@ -95,7 +95,23 @@ module BackendConfiguration =
             sorting         = RenderJobSorting.Grouping Projections.standard 
         }
 
-    let runtime = 
+    let NativeUnoptimized = 
+        { 
+            execution       = ExecutionEngine.Native
+            redundancy      = RedundancyRemoval.None
+            sharing         = ResourceSharing.Textures
+            sorting         = RenderJobSorting.Grouping Projections.standard 
+        }
+
+    let UnmanagedOptimized = 
+        { 
+            execution       = ExecutionEngine.Unmanaged
+            redundancy      = RedundancyRemoval.Static
+            sharing         = ResourceSharing.Textures
+            sorting         = RenderJobSorting.Grouping Projections.standard 
+        }
+
+    let UnmanagedRuntime = 
         { 
             execution       = ExecutionEngine.Unmanaged
             redundancy      = RedundancyRemoval.Runtime
@@ -103,10 +119,36 @@ module BackendConfiguration =
             sorting         = RenderJobSorting.Grouping Projections.standard 
         }
 
-    let managed = 
+    let UnmanagedUnoptimized = 
+        { 
+            execution       = ExecutionEngine.Unmanaged
+            redundancy      = RedundancyRemoval.None
+            sharing         = ResourceSharing.Textures
+            sorting         = RenderJobSorting.Grouping Projections.standard 
+        }
+
+    let ManagedOptimized = 
         { 
             execution       = ExecutionEngine.Managed
             redundancy      = RedundancyRemoval.Static
             sharing         = ResourceSharing.Textures
             sorting         = RenderJobSorting.Grouping Projections.standard 
         }
+
+    let ManagedUnoptimized = 
+        { 
+            execution       = ExecutionEngine.Managed
+            redundancy      = RedundancyRemoval.None
+            sharing         = ResourceSharing.Textures
+            sorting         = RenderJobSorting.Grouping Projections.standard 
+        }
+
+    let Debug = 
+        { 
+            execution       = ExecutionEngine.Debug
+            redundancy      = RedundancyRemoval.None
+            sharing         = ResourceSharing.None
+            sorting         = RenderJobSorting.Grouping []
+        }
+
+    let Default = NativeOptimized

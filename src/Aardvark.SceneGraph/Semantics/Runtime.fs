@@ -15,7 +15,7 @@ module RuntimeSemantics =
     type IRuntime with
 
         member x.CompileRender(rjs : aset<RenderJob>) =
-            x.CompileRender(BackendConfiguration.native, rjs)
+            x.CompileRender(BackendConfiguration.Default, rjs)
 
         member x.CompileRender (engine : BackendConfiguration, e : Sg.Environment) =
             let jobs : aset<RenderJob> = e?RenderJobs()
@@ -28,7 +28,7 @@ module RuntimeSemantics =
             x.CompileRender(engine, jobs)
 
         member x.CompileRender (s : ISg) =
-            x.CompileRender(BackendConfiguration.native, s)
+            x.CompileRender(BackendConfiguration.Default, s)
 
 
     [<Semantic>]
