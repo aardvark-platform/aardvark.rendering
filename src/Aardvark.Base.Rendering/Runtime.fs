@@ -20,8 +20,10 @@ type IRuntime =
 
     abstract member CreateTexture : ITexture -> ITexture
     abstract member CreateBuffer : IBuffer -> IBuffer
+    abstract member CreateSurface : ISurface -> ISurface
     abstract member DeleteTexture : ITexture -> unit
     abstract member DeleteBuffer : IBuffer -> unit
+    abstract member DeleteSurface : ISurface -> unit
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit

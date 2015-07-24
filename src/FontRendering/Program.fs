@@ -89,15 +89,19 @@ let main argv =
     win.Mouse.Click.Values.Subscribe(printfn "click %A") |> ignore
     win.Mouse.DoubleClick.Values.Subscribe(printfn "double click %A") |> ignore
 
+    let e = FShade.SequentialComposition.compose [toEffect Shader.trafo; toEffect Shader.white]
+    let s = FShadeSurface(e) :> ISurface
+    let compiled = app.Runtime.CreateSurface s
+
     let sg =
         geometry 
             |> Sg.instancedGeometry trafos
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
-            |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
+            |> Sg.surface (Mod.constant compiled)
 
     let g = Sg.ofIndexedGeometry geometry
-    let tex = FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\Server\pattern.jpg", true) :> ITexture
+    let tex = FileTexture(@"C:\Aardwork\tex.png", true) :> ITexture
 
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 

@@ -83,6 +83,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        member x.CreateSurface s = x.CreateSurface s
+        member x.DeleteSurface s = x.DeleteSurface s
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.ContextLock = ctx.ResourceLock
         member x.CompileRender (engine : BackendConfiguration, set : aset<RenderJob>) = x.CompileRender(engine,set)
@@ -99,9 +101,19 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CreateTexture (t : ITexture) = ctx.CreateTexture t :> ITexture
     member x.CreateBuffer (b : IBuffer) : IBuffer = failwith "not implemented"
+    member x.CreateSurface (s : ISurface) = 
+        match SurfaceCompilers.compile ctx s with
+            | Success prog -> prog :> ISurface
+            | Error e -> failwith e
+
     member x.DeleteTexture (t : ITexture) = 
         match t with
             | :? Texture as t -> ctx.Delete t
+            | _ -> ()
+
+    member x.DeleteSurface (s : ISurface) = 
+        match s with
+            | :? Program as p -> ctx.Delete p
             | _ -> ()
 
     member x.DeleteBuffer (b : IBuffer) : unit =
