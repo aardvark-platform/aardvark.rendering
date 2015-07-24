@@ -68,7 +68,6 @@ type DebugProgram(manager : ResourceManager,
         member x.RenderJobs = renderJobs :> seq<_>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
-        member x.Update rj = failwith "not implemented"
         member x.Dispose() = x.Dispose()
         member x.Run(fbo,ctx) = x.Run(fbo, ctx)
 

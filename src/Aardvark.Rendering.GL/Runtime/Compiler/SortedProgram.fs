@@ -10,8 +10,7 @@ open Aardvark.Rendering.GL
 
 type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         (newHandler : unit -> IFragmentHandler<'f>, 
-         order : Order,
-         newSorter : unit -> ISorter,
+         newSorter : unit -> IDynamicRenderJobSorter,
          manager : ResourceManager, 
          addInput : IAdaptiveObject -> unit, 
          removeInput : IAdaptiveObject -> unit) =
@@ -24,9 +23,6 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let statistics = Mod.init FrameStatistics.Zero
 
     let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
-
-    let mutable currentId = 0
-    let idCache = Cache(Ag.emptyScope, fun m -> System.Threading.Interlocked.Increment &currentId)
 
     let sorter = newSorter()
     
@@ -50,7 +46,6 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         fragments.Clear()
         
         handler.Dispose()
-        idCache.Clear(ignore)
 
         handler.Delete prolog.Fragment
         handler.Delete epilog.Fragment
@@ -58,7 +53,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         epilog <- null
 
     member x.Add (unsorted : RenderJob) =
-        let rj = unsorted |> sorter.ToSortedRenderJob order
+        let rj = unsorted |> sorter.ToSortedRenderJob
         sorter.Add rj
 
         // create a new RenderJobFragment and link it
@@ -149,5 +144,4 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
-        member x.Update rj = failwith "not implemented"
 

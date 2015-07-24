@@ -17,16 +17,16 @@ module RenderTasks =
 
 
 
-
-    let private configs = Dictionary<uint64, Order>()
-
-    let setPassConfig (pass : uint64, config : Order) =
-        configs.[pass] <- config
-
-    let getPassConfig(pass : uint64) =
-        match configs.TryGetValue pass with
-            | (true, c) -> c
-            | _ -> Order.Unordered
+//
+//    let private configs = Dictionary<uint64, Order>()
+//
+//    let setPassConfig (pass : uint64, config : Order) =
+//        configs.[pass] <- config
+//
+//    let getPassConfig(pass : uint64) =
+//        match configs.TryGetValue pass with
+//            | (true, c) -> c
+//            | _ -> Order.Unordered
 
 
     type SortedList<'k, 'v when 'k : comparison>() =
@@ -114,7 +114,7 @@ module RenderTasks =
                 let s = seq { for i in 0..keys.Count-1 do yield KeyValuePair(keys.[i], values.[i]) }
                 (s :> System.Collections.IEnumerable).GetEnumerator()
 
-    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<ExecutionEngine>, set : aset<RenderJob>) as this =
+    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<RenderJob>) as this =
         inherit AdaptiveObject()
 
         let mutable currentEngine = engine.GetValue()
@@ -126,7 +126,6 @@ module RenderTasks =
         let inputs = ReferenceCountingSet<IAdaptiveObject>()
         let mutable programs = Map.empty
         let changer = Mod.init ()
-        let surfaceSubscriptions = Dictionary<RenderJob, IDisposable>()
 
         let mutable additions = 0
         let mutable removals = 0
@@ -142,99 +141,165 @@ module RenderTasks =
         let tryGetProgramForPass (pass : uint64) =
             Map.tryFind pass programs
 
-        let newProgram (scope : Ag.Scope) (config : Order) (engine : ExecutionEngine) =
-            match config with
-                | Order.Unordered -> 
-
-                    let mode = 
-                        if engine = ExecutionEngine.Debug then -1
-                        elif engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
-                        elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
-                        else 2
-
-                    let opt =
-                        if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
-                        elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
-                        else 0
-
-                    match mode with
-                        | -1 -> 
-                            Log.warn "using debug program"
-                            new Compiler.DebugProgram(manager,  addInput, removeInput) :> IProgram
-                        | 2 -> // native
-                            match opt with
-                                | 0 -> // unoptimized
-                                    Log.line "using unoptimized native program"
-                                    new Compiler.UnoptimizedProgram<_>(
-                                        Compiler.FragmentHandlers.native, manager,  addInput, removeInput
-                                    ) :> IProgram
-
-                                | _ ->  // optimized
-                                    Log.line "using optimized native program"
-                                    new Compiler.OptimizedProgram<_>(
-                                        Compiler.FragmentHandlers.native, manager, addInput, removeInput
-                                    ) :> IProgram
-                        | 1 -> // GLVM
-                            match opt with
-                                | 0 -> // unoptimized
-                                    Log.line "using unoptimized GLVM program"
-                                    new Compiler.UnoptimizedProgram<_>(
-                                        Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
-                                    ) :> IProgram
-
-                                | 1 -> // runtime optimized
-                                    Log.line "using runtime optimized GLVM program"
-                                    new Compiler.UnoptimizedProgram<_>(
-                                        Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager,  addInput, removeInput
-                                    ) :> IProgram
-                                | _ -> // optimized
-                                    Log.line "using optimized GLVM program"
-                                    new Compiler.OptimizedProgram<_>(
-                                        Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
-                                    ) :> IProgram
-                        | _ -> // managed
-                            match opt with
-                                | 0 -> // unoptimized
-                                    Log.line "using unoptimized managed program"
-                                    new Compiler.UnoptimizedProgram<_>(
-                                        Compiler.FragmentHandlers.managed, manager,  addInput, removeInput
-                                    ) :> IProgram
-
-                                | _ ->  // optimized
-                                    Log.line "using optimized managed program"
-                                    new Compiler.OptimizedProgram<_>(
-                                        Compiler.FragmentHandlers.managed, manager, addInput, removeInput
-                                    ) :> IProgram
- 
-                | order ->
+        let newProgram (scope : Ag.Scope) (engine : BackendConfiguration) : IProgram =
+            
+            match engine.sorting with
+                | RenderJobSorting.Dynamic newSorter ->
                     // TODO: respect mode here
+                    
                     Log.line "using GLVM sorted program"
                     new Compiler.SortedProgram<_>(
                         Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
-                        order,
-                        Sorting.createSorter scope order,
+                        (fun () -> newSorter scope),
                         manager, addInput, removeInput
                     ) :> IProgram
+                | s ->
+                    match engine.execution, engine.redundancy with
+
+                        | ExecutionEngine.Native, RedundancyRemoval.None ->
+                            Log.line "using unoptimized native program"
+                            new Compiler.UnoptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Native, _ ->
+                            Log.line "using optimized native program"
+                            new Compiler.OptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Unmanaged, RedundancyRemoval.None ->
+                            Log.line "using unoptimized glvm program"
+                            new Compiler.UnoptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Unmanaged, RedundancyRemoval.Runtime ->
+                            Log.line "using runtime-optimized glvm program"
+                            new Compiler.UnoptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Unmanaged, RedundancyRemoval.Static ->
+                            Log.line "using optimized glvm program"
+                            new Compiler.OptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
+                            ) :> IProgram
+
+
+                        | ExecutionEngine.Managed, RedundancyRemoval.None ->
+                            Log.line "using unoptimized managed program"
+                            new Compiler.UnoptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Managed, _->
+                            Log.line "using optimized managed program"
+                            new Compiler.OptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Debug, _ ->
+                            Log.warn "using debug program"
+
+                            new Compiler.DebugProgram(
+                                manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | _ ->
+                            failwith "unsupported configuration: %A" engine
+
+            
+//            match config with
+//                | Order.Unordered -> 
+//
+//                    let mode = 
+//                        if engine = ExecutionEngine.Debug then -1
+//                        elif engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
+//                        elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
+//                        else 2
+//
+//                    let opt =
+//                        if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
+//                        elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
+//                        else 0
+//
+//                    match mode with
+//                        | -1 -> 
+//                            Log.warn "using debug program"
+//                            new Compiler.DebugProgram(manager,  addInput, removeInput) :> IProgram
+//                        | 2 -> // native
+//                            match opt with
+//                                | 0 -> // unoptimized
+//                                    Log.line "using unoptimized native program"
+//                                    new Compiler.UnoptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.native, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//
+//                                | _ ->  // optimized
+//                                    Log.line "using optimized native program"
+//                                    new Compiler.OptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.native, manager, addInput, removeInput
+//                                    ) :> IProgram
+//                        | 1 -> // GLVM
+//                            match opt with
+//                                | 0 -> // unoptimized
+//                                    Log.line "using unoptimized GLVM program"
+//                                    new Compiler.UnoptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//
+//                                | 1 -> // runtime optimized
+//                                    Log.line "using runtime optimized GLVM program"
+//                                    new Compiler.UnoptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//                                | _ -> // optimized
+//                                    Log.line "using optimized GLVM program"
+//                                    new Compiler.OptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//                        | _ -> // managed
+//                            match opt with
+//                                | 0 -> // unoptimized
+//                                    Log.line "using unoptimized managed program"
+//                                    new Compiler.UnoptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.managed, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//
+//                                | _ ->  // optimized
+//                                    Log.line "using optimized managed program"
+//                                    new Compiler.OptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+//                                    ) :> IProgram
+// 
+//                | order ->
+//                    // TODO: respect mode here
+//                    Log.line "using GLVM sorted program"
+//                    new Compiler.SortedProgram<_>(
+//                        Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
+//                        order,
+//                        Sorting.createSorter scope order,
+//                        manager, addInput, removeInput
+//                    ) :> IProgram
 
         let getProgramForPass (pass : uint64) (scope : Ag.Scope) =
             match Map.tryFind pass programs with
                 | Some p -> p
                 | _ -> 
-                    let config = getPassConfig pass
-                    let program = newProgram scope config (Mod.force engine)
+                    let program = newProgram scope (Mod.force engine)
 
                     programs <- Map.add pass program programs
                     program
 
 
-        let setExecutionEngine (newEngine : ExecutionEngine) =
+        let setExecutionEngine (newEngine : BackendConfiguration) =
             if currentEngine <> newEngine then
                 currentEngine <- newEngine
                 let newPrograms =
                     programs |> Map.map (fun pass v ->
                         let rj = v.RenderJobs |> Seq.head
-                        let config = getPassConfig pass
-                        let program = newProgram rj.AttributeScope config newEngine
+                        let program = newProgram rj.AttributeScope newEngine
 
                         for rj in v.RenderJobs do
                             program.Add rj
@@ -254,27 +319,11 @@ module RenderTasks =
             let program = getProgramForPass pass (rj.AttributeScope |> unbox)
             program.Add rj
 
-            let subscription =
-                let initial = ref true
-                rj.Surface |> Mod.registerCallback (fun s ->
-                    if !initial then initial := false
-                    else 
-                        program.Update rj
-                        x.MarkOutdated()
-                )
-            surfaceSubscriptions.Add(rj, subscription)
-
         member private x.Remove(pass : uint64, rj : RenderJob) =
             removals <- removals + 1
             match tryGetProgramForPass pass with
                 | Some p -> p.Remove rj
                 | None -> ()
-
-            match surfaceSubscriptions.TryGetValue rj with
-                | (true, s) -> 
-                    s.Dispose()
-                    Dictionary.remove rj surfaceSubscriptions |> ignore
-                | _ -> ()
 
         member x.Runtime = runtime
         member x.Manager = manager

@@ -15,23 +15,20 @@ module RuntimeSemantics =
     type IRuntime with
 
         member x.CompileRender(rjs : aset<RenderJob>) =
-            x.CompileRender(ExecutionEngine.Default, rjs)
+            x.CompileRender(BackendConfiguration.native, rjs)
 
-        member x.CompileRender (engine : ExecutionEngine, e : Sg.Environment) =
+        member x.CompileRender (engine : BackendConfiguration, e : Sg.Environment) =
             let jobs : aset<RenderJob> = e?RenderJobs()
             x.CompileRender(engine, jobs)
 
-        member x.CompileRender (engine : ExecutionEngine, s : ISg) =
+        member x.CompileRender (engine : BackendConfiguration, s : ISg) =
             let app = Sg.DynamicNode(Mod.constant s)
             app?Runtime <- x
             let jobs : aset<RenderJob> = app?RenderJobs()
             x.CompileRender(engine, jobs)
 
-        member x.CompileRender (e : Sg.Environment) =
-            x.CompileRender(ExecutionEngine.Default, e)
-
         member x.CompileRender (s : ISg) =
-            x.CompileRender(ExecutionEngine.Default, s)
+            x.CompileRender(BackendConfiguration.native, s)
 
 
     [<Semantic>]

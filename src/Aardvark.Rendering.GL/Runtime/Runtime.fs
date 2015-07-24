@@ -85,7 +85,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     interface IRuntime with
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.ContextLock = ctx.ResourceLock
-        member x.CompileRender (engine : ExecutionEngine, set : aset<RenderJob>) = x.CompileRender(engine,set)
+        member x.CompileRender (engine : BackendConfiguration, set : aset<RenderJob>) = x.CompileRender(engine,set)
         member x.CompileClear(color, depth) = x.CompileClear(color, depth)
         member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples)
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
@@ -117,14 +117,18 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             | _ ->
                 failwithf "unsupported streaming texture: %A" t
 
-    member private x.CompileRenderInternal (engine : IMod<ExecutionEngine>, set : aset<RenderJob>) =
-        let man = ResourceManager(manager, ctx, true, true)
+    member private x.CompileRenderInternal (engine : IMod<BackendConfiguration>, set : aset<RenderJob>) =
+        let eng = engine.GetValue()
+        let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
+        let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
+            
+        let man = ResourceManager(manager, ctx, shareTextures, shareBuffers)
         new RenderTasks.RenderTask(x, ctx, man, engine, set)
 
-    member x.CompileRender(engine : IMod<ExecutionEngine>, set : aset<RenderJob>) : IRenderTask =
+    member x.CompileRender(engine : IMod<BackendConfiguration>, set : aset<RenderJob>) : IRenderTask =
         x.CompileRenderInternal(engine, set) :> IRenderTask
 
-    member x.CompileRender(engine : ExecutionEngine, set : aset<RenderJob>) : IRenderTask =
+    member x.CompileRender(engine : BackendConfiguration, set : aset<RenderJob>) : IRenderTask =
         x.CompileRenderInternal(Mod.constant engine, set) :> IRenderTask
 
     member x.CompileClear(color : IMod<C4f>, depth : IMod<float>) : IRenderTask =

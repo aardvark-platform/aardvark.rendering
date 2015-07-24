@@ -97,7 +97,7 @@ let main argv =
             |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
 
     let g = Sg.ofIndexedGeometry geometry
-    let tex = FileTexture(@"E:\Development\WorkDirectory\DataSVN\pattern.jpg", true) :> ITexture
+    let tex = FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\Server\pattern.jpg", true) :> ITexture
 
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 
@@ -129,7 +129,7 @@ let main argv =
         textures.RemoveAt index
 
         transact (fun () ->
-            Mod.change t (FileTexture(@"E:\Development\WorkDirectory\DataSVN\sand_color.jpg", true) :> ITexture)
+            Mod.change t (FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\Server\sand_color.jpg", true) :> ITexture)
         )
 
     ) |> ignore

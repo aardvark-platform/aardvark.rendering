@@ -17,49 +17,52 @@ type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and
     let mutable currentProgram : Option<AdaptiveCode> = None
     let mutable currentChanger = Mod.constant ()
     let mutable frag : 'f = match precompiled with | Some p -> p | None -> null
-    let mutable compiled = false
+    let mutable lastSurface = None
 
     let recompile() =
-        if not compiled then
-            compiled <- true
+        let currentSurface = rj.Surface.GetValue()
 
-            match frag with
-                | null -> frag <- ctx.handler.Create []
-                | _ -> frag.Clear()
+        match lastSurface with
+            | Some s when s = currentSurface -> ()
+            | _ ->
+                lastSurface <- Some currentSurface
+                match frag with
+                    | null -> frag <- ctx.handler.Create []
+                    | _ -> frag.Clear()
 
-            let prog = DeltaCompiler.compileFull ctx.manager ctx.currentContext rj
-            let changer = AdaptiveCode.writeTo prog frag
+                let prog = DeltaCompiler.compileFull ctx.manager ctx.currentContext rj
+                let changer = AdaptiveCode.writeTo prog frag
             
-            // remove old resources/changers
-            match currentProgram with
-                | Some old ->
-                    for r in old.Resources do
-                        r.Dispose()
-                        ctx.resourceSet.Unlisten r
-                    currentProgram <- None
-                | None ->
-                    ()
+                // remove old resources/changers
+                match currentProgram with
+                    | Some old ->
+                        for r in old.Resources do
+                            r.Dispose()
+                            ctx.resourceSet.Unlisten r
+                        currentProgram <- None
+                    | None ->
+                        ()
 
-            // link the fragments
-            let pf = prev.Fragment
-            pf.Next <- frag
-            frag.Prev <- pf
+                // link the fragments
+                let pf = prev.Fragment
+                pf.Next <- frag
+                frag.Prev <- pf
                 
-            match next.FragmentOption with
-                | Some nf ->
-                    nf.Prev <- frag
-                    frag.Next <- nf
-                | None ->
-                    ()
+                match next.FragmentOption with
+                    | Some nf ->
+                        nf.Prev <- frag
+                        frag.Next <- nf
+                    | None ->
+                        ()
 
 
-            // listen to changes
-            for r in prog.Resources do
-                ctx.resourceSet.Listen r
+                // listen to changes
+                for r in prog.Resources do
+                    ctx.resourceSet.Listen r
 
-            // store everything
-            currentChanger <- changer
-            currentProgram <- Some prog
+                // store everything
+                currentChanger <- changer
+                currentProgram <- Some prog
 
     let changer = 
         let self = ref Unchecked.defaultof<_>
@@ -76,12 +79,14 @@ type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and
                         Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
                     )
             )
+        rj.Surface.AddOutput !self
         !self
 
     member x.Dispose() =
         match frag with
             | null -> ()
             | _ -> 
+                rj.Surface.RemoveOutput changer
                 match frag.Next with
                     | null -> ()
                     | n ->  n.Prev <- frag.Prev
@@ -111,7 +116,7 @@ type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and
 
         currentChanger.RemoveOutput changer
         currentChanger <- Mod.constant ()
-        compiled <- false
+        lastSurface <- None
         prev <- null
         next <- null
 
@@ -171,13 +176,15 @@ type private UnoptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and
 
 
 type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
-        (newHandler : unit -> IFragmentHandler<'f>, 
+        (config : BackendConfiguration,
+         newHandler : unit -> IFragmentHandler<'f>, 
          manager : ResourceManager, 
          addInput : IAdaptiveObject -> unit, 
          removeInput : IAdaptiveObject -> unit) =
     
     let sw = System.Diagnostics.Stopwatch()
 
+    let sorter = RenderJobSorters.ofSorting config.sorting
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()
     let changeSet = ChangeSet(addInput, removeInput)
@@ -186,10 +193,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
 
-    let mutable currentId = 0
-    let idCache = Cache(Ag.emptyScope, fun m -> System.Threading.Interlocked.Increment &currentId)
-
-    let sortedFragments = SortedDictionaryExt<list<int>, UnoptimizedRenderJobFragment<'f>>(compare)
+    let sortedFragments = SortedDictionaryExt<RenderJob, UnoptimizedRenderJobFragment<'f>>(curry sorter.Compare)
     let fragments = Dict<RenderJob, UnoptimizedRenderJobFragment<'f>>()
 
     let mutable prolog = new UnoptimizedRenderJobFragment<'f>(handler.Prolog, ctx)
@@ -207,7 +211,6 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         fragments.Clear()
         sortedFragments.Clear()
         handler.Dispose()
-        idCache.Clear(ignore)
 
         handler.Delete prolog.Fragment
         handler.Delete epilog.Fragment
@@ -215,12 +218,10 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         epilog <- null
 
     member x.Add (rj : RenderJob) =
-
-        let key = (rj |> RenderJobSorting.project |> List.map idCache.Invoke) @ [rj.Id]
-
+        sorter.Add rj
         // create a new RenderJobFragment and link it
         let fragment = 
-            sortedFragments |> SortedDictionary.setWithNeighbours key (fun l s r -> 
+            sortedFragments |> SortedDictionary.setWithNeighbours rj (fun l s r -> 
                 match s with
                     | Some f ->
                         failwithf "duplicated renderjob: %A" f.RenderJob
@@ -246,9 +247,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     member x.Remove (rj : RenderJob) =
         match fragments.TryRemove rj with
             | (true, f) ->
-                let key = (rj |> RenderJobSorting.project |> List.map idCache.Revoke) @ [rj.Id]
-
-                sortedFragments |> SortedDictionary.remove key |> ignore
+                sortedFragments |> SortedDictionary.remove rj |> ignore
 
                 // detach the fragment
                 f.Prev.Next <- f.Next
@@ -256,6 +255,9 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 
                 // no longer listen for changes
                 changeSet.Unlisten f.Changer
+
+                
+                sorter.Remove rj
 
                 // finally dispose the fragment
                 f.Dispose()
@@ -300,5 +302,4 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
-        member x.Update rj = failwith "not implemented"
 
