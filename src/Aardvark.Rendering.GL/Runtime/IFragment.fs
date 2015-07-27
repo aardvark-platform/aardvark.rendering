@@ -27,6 +27,7 @@ type IRenderJobSorter =
 type IProgram =
     inherit IDisposable
     abstract member RenderJobs : seq<RenderJob>
+    abstract member Resources : ReferenceCountingSet<IChangeableResource>
     abstract member Add : RenderJob -> unit
     abstract member Remove : RenderJob -> unit
     abstract member Run : int * ContextHandle -> FrameStatistics

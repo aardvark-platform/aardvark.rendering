@@ -10,18 +10,18 @@ open Aardvark.Rendering.GL
 
 type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     let l = obj()
-    let all = HashSet<IMod<unit>>()
-    let set = HashSet<IMod<unit>>()
-    let callbacks = Dictionary<IMod<unit>, (unit -> unit)>()
+    let all = HashSet<IMod<FrameStatistics>>()
+    let set = HashSet<IMod<FrameStatistics>>()
+    let callbacks = Dictionary<IMod<FrameStatistics>, (unit -> unit)>()
     let sw = System.Diagnostics.Stopwatch()
 
-    let dirty (m : IMod<unit>) () =
+    let dirty (m : IMod<FrameStatistics>) () =
         lock l (fun () -> 
             callbacks.Remove m |> ignore
             set.Add m |> ignore
         )
 
-    member x.Listen(m : IMod<unit>) =
+    member x.Listen(m : IMod<FrameStatistics>) =
         if not m.IsConstant then
             lock m (fun () -> 
                 lock l (fun () ->
@@ -36,9 +36,9 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
                 )
             )
         else
-            m |> Mod.force
+            m |> Mod.force |> ignore
 
-    member x.Unlisten (m : IMod<unit>) =
+    member x.Unlisten (m : IMod<FrameStatistics>) =
         if not m.IsConstant then
             lock m (fun () ->
                 lock l (fun () ->
@@ -64,16 +64,17 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
 
         sw.Restart()
         let mutable count = 0
+        let mutable resTime = FrameStatistics.Zero
         for d in dirtySet do
             lock d (fun () ->
-                d |> Mod.force
+                resTime <- resTime + ( d |> Mod.force )
                 count <- count + 1
                 let cb = dirty d
                 callbacks.[d] <- cb
                 d.MarkingCallbacks.Add cb |> ignore
             )
         sw.Stop()
-        count, sw.Elapsed
+        count, sw.Elapsed, resTime
 
 type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     let l = obj()
@@ -87,6 +88,8 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
             callbacks.Remove m |> ignore
             set.Add m |> ignore
         )
+
+    member x.Resources = all
 
     member x.Listen(m : IChangeableResource) =
         lock m (fun () -> 
@@ -129,10 +132,16 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
             )
         sw.Restart()
         let mutable count = 0
+
+        let mutable counts = Map.empty
+
         for d in dirtyResoruces do
             lock d (fun () ->
                 if d.OutOfDate then
+                    let cnt = match Map.tryFind d.Kind counts with | Some v -> v | None -> 0.0
+                    counts <- Map.add d.Kind (cnt + 1.0) counts
                     count <- count + 1
+
                     d.UpdateCPU()
                     d.UpdateGPU()
 
@@ -141,5 +150,5 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
                     d.MarkingCallbacks.Add cb |> ignore
             )
         sw.Stop()
-        count,sw.Elapsed
+        count,counts,sw.Elapsed
 

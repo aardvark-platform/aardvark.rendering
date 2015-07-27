@@ -109,10 +109,10 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
 
         // update resources and instructions
-        let resourceUpdates, resourceUpdateTime = 
+        let resourceUpdates, resourceCounts, resourceUpdateTime = 
             resourceSet.Update()
 
-        let instructionUpdates, instructionUpdateTime = 
+        let instructionUpdates, instructionUpdateTime, createStats = 
             changeSet.Update() 
 
         // wait for the sorting
@@ -123,23 +123,26 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         run prolog.Fragment
         sw.Stop()
 
-        let stats = 
-            { Mod.force statistics with 
+        let fragmentStats = Mod.force statistics
+        let programStats = 
+            { FrameStatistics.Zero with 
                 Programs = 1.0 
                 InstructionUpdateCount = float instructionUpdates
-                InstructionUpdateTime = instructionUpdateTime
+                InstructionUpdateTime = instructionUpdateTime - createStats.ResourceUpdateTime
                 ResourceUpdateCount = float resourceUpdates
-                ResourceUpdateTime = resourceUpdateTime
+                ResourceUpdateCounts = resourceCounts
+                ResourceUpdateTime = resourceUpdateTime 
                 ExecutionTime = sw.Elapsed
                 SortingTime = sortingTime
             }
 
-        stats |> handler.AdjustStatistics
+        fragmentStats + programStats + createStats |> handler.AdjustStatistics
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
     interface IProgram with
+        member x.Resources = resourceSet.Resources
         member x.RenderJobs = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj

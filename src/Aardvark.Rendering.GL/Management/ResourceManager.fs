@@ -19,8 +19,8 @@ module ResourceManager =
           updateCPU : unit -> unit; 
           updateGPU : unit -> unit; 
           destroy : unit -> unit; 
-          resource : IMod<'a> }
-
+          resource : IMod<'a>;
+          kind : ResourceKind }
 
     type IChangeableResource =
         inherit IDisposable
@@ -29,6 +29,7 @@ module ResourceManager =
         abstract member UpdateCPU : unit -> unit
         abstract member UpdateGPU : unit -> unit
         abstract member Resource : obj
+        abstract member Kind : ResourceKind
         
     type ChangeableResource<'a> internal(key : list<obj>, parent : ConcurrentDictionary<list<obj>, obj * int>, desc : ChangeableResourceDescription<'a>) as this =
         inherit AdaptiveObject()
@@ -51,6 +52,7 @@ module ResourceManager =
             )
 
         member x.Resource = desc.resource
+        member x.Kind = desc.kind
 
         member x.Dispose() =
             if parent = null then
@@ -79,6 +81,7 @@ module ResourceManager =
             member x.UpdateCPU() = x.UpdateCPU()
             member x.UpdateGPU() = x.UpdateGPU()
             member x.Resource = desc.resource :> obj
+            member x.Kind = desc.kind
 
         internal new(desc) = new ChangeableResource<'a>([], null, desc)
 
@@ -415,7 +418,9 @@ module ResourceManager =
                       updateCPU = fun () -> data.GetValue() |> ignore
                       updateGPU = fun () -> bufferHandler.Update(handle, data.GetValue())
                       destroy = fun () -> bufferHandler.Delete(handle)
-                      resource = handle } 
+                      resource = handle
+                      kind = ResourceKind.Buffer 
+                    } 
             )
 
         /// <summary>
@@ -435,7 +440,8 @@ module ResourceManager =
                               updateCPU = fun () -> data.GetValue() |> ignore
                               updateGPU = fun () -> bufferHandler.Update(handle, data.GetValue())
                               destroy = fun () -> bufferHandler.Delete(handle)
-                              resource = handle }
+                              resource = handle
+                              kind = ResourceKind.Buffer  }
                         | _ ->
                             failwithf "unknown buffer-data: %A" data
             )
@@ -499,7 +505,8 @@ module ResourceManager =
                                     transact (fun () -> handleMod.Value <- !handle)
 
                       destroy = fun () -> if !created then textureHandler.Delete(!handle)
-                      resource = handleMod |> Mod.bind id }            
+                      resource = handleMod |> Mod.bind id
+                      kind = ResourceKind.Texture  }            
             )
 
         member x.CreateSurface (s : IMod<ISurface>) =
@@ -513,7 +520,8 @@ module ResourceManager =
                           updateCPU = id
                           updateGPU = id
                           destroy = id
-                          resource = s |> Mod.map unbox }    
+                          resource = s |> Mod.map unbox
+                          kind = ResourceKind.ShaderProgram  }    
                      | _ ->
                         let compileResult = compile current
 
@@ -529,7 +537,8 @@ module ResourceManager =
 
                                   updateGPU = fun () -> ()
                                   destroy = fun () -> ctx.Delete(p)
-                                  resource = handle }         
+                                  resource = handle 
+                                  kind = ResourceKind.ShaderProgram }         
                             | Error e ->
                                 failwith e
            )
@@ -588,7 +597,8 @@ module ResourceManager =
                         subscriptions |> List.iter (fun d -> d.Dispose())
                         dirty.Clear()
                         ctx.Delete(b)
-                      resource = Mod.constant b }    
+                      resource = Mod.constant b
+                      kind = ResourceKind.UniformBuffer  }    
             )
 
         member x.CreateUniformLocation(scope : Ag.Scope, u : IUniformProvider, uniform : ActiveUniform) =
@@ -610,7 +620,8 @@ module ResourceManager =
 
                               updateGPU = fun () -> ()
                               destroy = fun () -> ()
-                              resource = Mod.constant loc }    
+                              resource = Mod.constant loc
+                              kind = ResourceKind.UniformBuffer  }    
                     )
                 | _ ->
                     failwithf "could not get uniform: %A" uniform
@@ -626,7 +637,8 @@ module ResourceManager =
                       updateCPU = fun () -> sam.GetValue() |> ignore
                       updateGPU = fun () -> ctx.Update(handle, sam.GetValue())
                       destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.constant handle }
+                      resource = Mod.constant handle 
+                      kind = ResourceKind.SamplerState }
             )
 
         member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>, index : ChangeableResource<Buffer>) =
@@ -641,7 +653,9 @@ module ResourceManager =
                       updateCPU = fun () -> ()
                       updateGPU = fun () -> ctx.Update(handle, index.Resource.GetValue(), bindings |> List.map (fun (i,r) -> i, r |> Mod.force))
                       destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.constant handle }
+                      resource = Mod.constant handle 
+                      kind = ResourceKind.VertexArrayObject
+                    }
             )
 
         member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>) =
@@ -656,7 +670,9 @@ module ResourceManager =
                       updateCPU = fun () -> ()
                       updateGPU = fun () -> ctx.Update(handle,bindings |> List.map (fun (i,r) -> i, r |> Mod.force))
                       destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.constant handle }
+                      resource = Mod.constant handle
+                      kind = ResourceKind.VertexArrayObject 
+                    }
             )
 
         member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>, index : Option<ChangeableResource<Buffer>>) =
@@ -672,7 +688,9 @@ module ResourceManager =
                   updateCPU = fun () -> ()
                   updateGPU = fun () -> ctx.UpdateTexture2D(handle, size.GetValue(), mipLevels.GetValue(), ChannelType.ofPixFormat <| format.GetValue(), samples.GetValue())
                   destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle }
+                  resource = Mod.constant handle
+                  kind = ResourceKind.Texture
+                }
 
             new ChangeableResource<Texture>(desc)
 
@@ -684,7 +702,9 @@ module ResourceManager =
                   updateCPU = fun () -> ()
                   updateGPU = fun () -> ctx.Update(handle, size.GetValue(), format.GetValue(), samples.GetValue())
                   destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle }
+                  resource = Mod.constant handle 
+                  kind = ResourceKind.Renderbuffer
+                }
 
             new ChangeableResource<Renderbuffer>(desc)
 
@@ -715,7 +735,9 @@ module ResourceManager =
                     let c,d = toInternal bindings
                     ctx.Update(handle, c, d)
                   destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle }
+                  resource = Mod.constant handle
+                  kind = ResourceKind.Framebuffer 
+                }
 
             new ChangeableResource<Aardvark.Rendering.GL.Framebuffer>(desc)
 

@@ -8,7 +8,9 @@ open Aardvark.Rendering.GL
 module Resources =
     let private createAndAddResource (f : ResourceManager -> ChangeableResource<'a>) =
         { runCompile = fun s ->
+            s.resourceCreateTime.Start()
             let r = f s.manager
+            s.resourceCreateTime.Stop()
             { s with resources = (r:> IChangeableResource)::s.resources }, r
         }
 
@@ -18,14 +20,18 @@ module Resources =
     let createUniformBuffer scope block surface provider =
         { runCompile = fun s ->
             let mutable values = []
+            s.resourceCreateTime.Start()
             let r = s.manager.CreateUniformBuffer(scope, block, surface, provider, &values)
+            s.resourceCreateTime.Stop()
             {s with resources = (r:> IChangeableResource)::s.resources}, (r,values)
         }
 
     let createUniformLocation scope u provider =
         { runCompile = fun s ->
             let mutable values = []
+            s.resourceCreateTime.Start()
             let r = s.manager.CreateUniformLocation(scope, provider, u)
+            s.resourceCreateTime.Stop()
             {s with resources = (r:> IChangeableResource)::s.resources}, (r,values)
         }
 
@@ -47,6 +53,7 @@ module Resources =
     let createVertexArrayObject (program : Program) (rj : RenderJob) =
         { runCompile = fun s -> 
             let manager = s.manager
+            s.resourceCreateTime.Start()
 
             let buffers = System.Collections.Generic.List<IChangeableResource>()
             let bindings = System.Collections.Generic.Dictionary()
@@ -81,6 +88,8 @@ module Resources =
             let vao = manager.CreateVertexArrayObject(bindings, !index)
 
             let newResources = (vao :> IChangeableResource)::(buffers |> Seq.toList)
+
+            s.resourceCreateTime.Stop()
 
             { s with resources = List.append newResources s.resources }, vao
         }

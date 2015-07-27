@@ -35,7 +35,7 @@ type DebugProgram(manager : ResourceManager,
                 r.UpdateGPU()
 
         for rj in renderJobs do
-            let prog = DeltaCompiler.compileFull manager ctxMod rj
+            let prog, _ = DeltaCompiler.compileFull manager ctxMod rj
 
             for r in prog.Resources do
                 usedResources.Add r |> ignore
@@ -65,6 +65,7 @@ type DebugProgram(manager : ResourceManager,
         allResources.Clear()
 
     interface IProgram with
+        member x.Resources = ReferenceCountingSet()
         member x.RenderJobs = renderJobs :> seq<_>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj

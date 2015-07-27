@@ -329,6 +329,8 @@ module RenderTasks =
         member x.Manager = manager
 
         member x.ProcessDeltas (deltas : list<Delta<RenderJob>>) =
+            let mutable additions = 0
+            let mutable removals = 0
             for d in deltas do
                 match d with
                     | Add a ->
@@ -354,6 +356,7 @@ module RenderTasks =
                         else
                             x.Add(0UL, a)
 
+                        additions <- additions + 1
                     | Rem a ->
                         if a.RenderPass <> null then
                             match subscriptions.TryGetValue a with
@@ -364,6 +367,8 @@ module RenderTasks =
                                 | _ -> ()
                         else
                             x.Remove(0UL, a)
+                        removals <- removals + 1
+            (additions, removals)
 
         member x.Run (fbo : IFramebuffer) =
             x.EvaluateAlways (fun () ->
@@ -382,21 +387,32 @@ module RenderTasks =
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not set viewport"
 
-                    if reader.OutOfDate then
-                        x.ProcessDeltas (reader.GetDelta())
+                    let additions, removals =
+                        if reader.OutOfDate then
+                            x.ProcessDeltas (reader.GetDelta())
+                        else
+                            0,0
 
+                    let mutable resourceCount = 0
                     let mutable stats = FrameStatistics.Zero
                     let contextHandle = ContextHandle.Current.Value
 
                     //render
                     for (KeyValue(_,p)) in programs do
                         stats <- stats + p.Run(handle, contextHandle)
-
+                        resourceCount <- resourceCount + p.Resources.Entries.Count
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
                     GL.Check "could not bind framebuffer"
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                     GL.Check "could not set viewport"
+
+                    let stats = 
+                        { stats with 
+                            AddedRenderJobs = float additions
+                            RemovedRenderJobs = float removals
+                            ResourceCount = float resourceCount 
+                        }
 
                     RenderingResult(fbo, stats)
                 )

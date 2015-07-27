@@ -2,6 +2,32 @@
 
 open System
 
+type ResourceKind =
+    | Unknown = 0
+    | Buffer = 1
+    | VertexArrayObject = 2
+    | Texture = 3
+    | UniformBuffer = 4
+    | UniformLocation = 5
+    | SamplerState = 6
+    | ShaderProgram = 7
+    | Renderbuffer = 8
+    | Framebuffer = 9
+    | StreamingTexture = 10
+
+[<AutoOpen>]
+module Bla = 
+    module Map =
+        let unionWith (f : Map<'k,'v>) (g : Map<'k,'v>) (fuse : 'v -> 'v -> 'v) (zero : 'v) =
+            let mutable result = f
+            for (k,right) in g |> Map.toSeq do
+                let left = 
+                    match Map.tryFind k result with
+                     | Some v ->  v
+                     | None -> zero
+                result <- Map.add k (fuse left right) result
+            result
+
 type FrameStatistics =
     {
         Programs : float
@@ -12,6 +38,10 @@ type FrameStatistics =
         ResourceUpdateCount : float
         PrimitiveCount : float
         JumpDistance : float
+        ResourceCount : float
+        ResourceUpdateCounts : Map<ResourceKind,float>
+        AddedRenderJobs : float
+        RemovedRenderJobs : float
         SortingTime : TimeSpan
         InstructionUpdateTime : TimeSpan
         ResourceUpdateTime : TimeSpan
@@ -28,6 +58,10 @@ type FrameStatistics =
             ResourceUpdateCount = 0.0
             PrimitiveCount = 0.0
             JumpDistance = 0.0
+            ResourceCount = 0.0
+            ResourceUpdateCounts = Map.empty
+            AddedRenderJobs = 0.0
+            RemovedRenderJobs = 0.0
             SortingTime = TimeSpan.Zero
             InstructionUpdateTime = TimeSpan.Zero
             ResourceUpdateTime = TimeSpan.Zero
@@ -47,6 +81,10 @@ type FrameStatistics =
             ResourceUpdateCount = l.ResourceUpdateCount + r.ResourceUpdateCount
             PrimitiveCount = l.PrimitiveCount + r.PrimitiveCount
             JumpDistance = l.JumpDistance + r.JumpDistance
+            ResourceCount = l.ResourceCount + r.ResourceCount
+            ResourceUpdateCounts = Map.unionWith l.ResourceUpdateCounts r.ResourceUpdateCounts (+) 0.0
+            AddedRenderJobs = l.AddedRenderJobs + r.AddedRenderJobs
+            RemovedRenderJobs = l.RemovedRenderJobs + r.RemovedRenderJobs
             SortingTime = l.SortingTime + r.SortingTime
             InstructionUpdateTime = l.InstructionUpdateTime + r.InstructionUpdateTime
             ResourceUpdateTime = l.ResourceUpdateTime + r.ResourceUpdateTime
@@ -63,6 +101,10 @@ type FrameStatistics =
             ResourceUpdateCount = l.ResourceUpdateCount - r.ResourceUpdateCount
             PrimitiveCount = l.PrimitiveCount - r.PrimitiveCount
             JumpDistance = l.JumpDistance - r.JumpDistance
+            ResourceCount = l.ResourceCount - r.ResourceCount
+            ResourceUpdateCounts = Map.unionWith l.ResourceUpdateCounts r.ResourceUpdateCounts (-) 0.0
+            AddedRenderJobs = l.AddedRenderJobs - r.AddedRenderJobs
+            RemovedRenderJobs = l.RemovedRenderJobs - r.RemovedRenderJobs
             SortingTime = l.SortingTime - r.SortingTime
             InstructionUpdateTime = l.InstructionUpdateTime - r.InstructionUpdateTime
             ResourceUpdateTime = l.ResourceUpdateTime - r.ResourceUpdateTime
@@ -79,6 +121,10 @@ type FrameStatistics =
             ResourceUpdateCount = l.ResourceUpdateCount / r
             PrimitiveCount = l.PrimitiveCount / r
             JumpDistance = l.JumpDistance / r
+            ResourceCount = l.ResourceCount / r
+            ResourceUpdateCounts = Map.map (fun k v -> v / r) l.ResourceUpdateCounts
+            AddedRenderJobs = l.AddedRenderJobs / r
+            RemovedRenderJobs = l.RemovedRenderJobs / r
             SortingTime = TimeSpan.FromTicks(int64 (float l.SortingTime.Ticks / r))
             InstructionUpdateTime = TimeSpan.FromTicks(int64 (float l.InstructionUpdateTime.Ticks / r))
             ResourceUpdateTime = TimeSpan.FromTicks(int64 (float l.ResourceUpdateTime.Ticks / r))

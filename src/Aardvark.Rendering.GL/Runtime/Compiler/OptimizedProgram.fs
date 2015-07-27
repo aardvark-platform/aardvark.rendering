@@ -24,7 +24,7 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
     let mutable next : OptimizedRenderJobFragment<'f> = null
     let mutable prev : OptimizedRenderJobFragment<'f> = null
     let mutable currentProgram : Option<AdaptiveCode> = None
-    let mutable currentChanger = Mod.constant ()
+    let mutable currentChanger = Mod.constant FrameStatistics.Zero
     let mutable frag : 'f = match precompiled with | Some p -> p | None -> null
     let mutable lastPrevAndSurface = None
 
@@ -47,7 +47,7 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
                 | null -> frag <- ctx.handler.Create []
                 | _ ->  frag.Clear()
 
-            let prog = DeltaCompiler.compileDelta ctx.manager ctx.currentContext prevRj rj
+            let prog, resTime = DeltaCompiler.compileDelta ctx.manager ctx.currentContext prevRj rj
             let changer = AdaptiveCode.writeTo prog frag
             
             // remove old resources/changers
@@ -80,6 +80,8 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
             // store everything
             currentChanger <- changer
             currentProgram <- Some prog
+            resTime
+        else FrameStatistics.Zero
 
     let changer = 
         let self = ref Unchecked.defaultof<_>
@@ -88,13 +90,15 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
                 if prev <> null then
                     let oldStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
                     currentChanger.RemoveOutput !self
-                    recompile()
-                    currentChanger |> Mod.force
+                    let resTime = recompile()
+                    let _ = currentChanger |> Mod.force
                     currentChanger.AddOutput !self
                     let newStats = frag.Statistics
                     transact (fun () ->
                         Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
                     )
+                    resTime
+                else FrameStatistics.Zero
             )
         match rj.Surface with
             | null -> ()
@@ -137,7 +141,7 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
 
 
         currentChanger.RemoveOutput changer
-        currentChanger <- Mod.constant ()
+        currentChanger <- Mod.constant FrameStatistics.Zero
         lastPrevAndSurface <- None
         prev <- null
         next <- null
@@ -153,7 +157,7 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
         match precompiled with
             | Some p -> p
             | None ->
-                Mod.force changer
+                Mod.force changer |> ignore
                 frag
 
     member private x.FragmentOption : Option<'f> = 
@@ -293,10 +297,10 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             transact (fun () -> Mod.change currentContext ctx)
 
         // update resources and instructions
-        let resourceUpdates, resourceUpdateTime = 
+        let resourceUpdates, resourceCounts, resourceUpdateTime = 
             resourceSet.Update()
 
-        let instructionUpdates, instructionUpdateTime = 
+        let instructionUpdates, instructionUpdateTime, createStats = 
             changeSet.Update() 
 
         handler.Hint(RunProgram)
@@ -306,22 +310,25 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         run prolog.Fragment
         sw.Stop()
 
-        let stats = 
-            { Mod.force statistics with 
+        let fragmentStats = Mod.force statistics
+        let programStats = 
+            { FrameStatistics.Zero with 
                 Programs = 1.0 
                 InstructionUpdateCount = float instructionUpdates
-                InstructionUpdateTime = instructionUpdateTime
+                InstructionUpdateTime = instructionUpdateTime - createStats.ResourceUpdateTime
                 ResourceUpdateCount = float resourceUpdates
-                ResourceUpdateTime = resourceUpdateTime
+                ResourceUpdateCounts = resourceCounts
+                ResourceUpdateTime = resourceUpdateTime 
                 ExecutionTime = sw.Elapsed
             }
 
-        stats |> handler.AdjustStatistics
+        fragmentStats + programStats + createStats |> handler.AdjustStatistics
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
     interface IProgram with
+        member x.Resources = resourceSet.Resources
         member x.RenderJobs = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj

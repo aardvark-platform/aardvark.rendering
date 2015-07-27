@@ -12,6 +12,8 @@ type CompilerState =
 
         resources : list<IChangeableResource>
         instructions : list<MetaInstruction>
+
+        resourceCreateTime : System.Diagnostics.Stopwatch
     }
 
 type Compiled<'a> = { runCompile : CompilerState -> CompilerState * 'a }

@@ -165,6 +165,33 @@ module DefaultOverlays =
         else
             "0µs"
 
+    let mapKind (k : ResourceKind) =
+        match k with 
+         | ResourceKind.Buffer -> "B"
+         | ResourceKind.Texture -> "T"
+         | ResourceKind.Framebuffer -> "F"
+         | ResourceKind.SamplerState -> "S"
+         | ResourceKind.Renderbuffer -> "R"
+         | ResourceKind.StreamingTexture -> "ST"
+         | ResourceKind.ShaderProgram -> "P"
+         | ResourceKind.UniformLocation -> "UL"
+         | ResourceKind.UniformBuffer -> "U"
+         | ResourceKind.VertexArrayObject -> "V"
+         | _ -> "?"
+         
+    let printResourceUpdateCounts (r : Map<ResourceKind,float>) =
+        let sorted = r |> Map.filter (fun k v -> v <> 0.0) |> Map.toArray
+        sorted.QuickSortDescending(snd)
+        let takes = min (Array.length sorted) 3
+        let mutable result = ""
+        for i in 0 .. takes - 1 do
+            let k,v = sorted.[i] 
+            if i <> 0 then
+             result <- sprintf "%s/%.0f%s" result v (mapKind k)
+            else result <- sprintf "%.0f%s" v (mapKind k) 
+        if result = "" then "none" else result
+            
+    
     let statisticsTable (s : FrameStatistics) =
         [
             "draw calls", sprintf "%.0f" s.DrawCallCount
@@ -172,7 +199,10 @@ module DefaultOverlays =
             "primitives", sprintf "%.0f" s.PrimitiveCount
             "execute", timeString s.ExecutionTime
             "resource update", timeString s.ResourceUpdateTime
+            "resource updates", printResourceUpdateCounts s.ResourceUpdateCounts
             "instruction update", timeString s.InstructionUpdateTime
+            "renderjobs", sprintf "+%.0f/-%.0f" s.AddedRenderJobs s.RemovedRenderJobs
+            "resources", sprintf "%.0f" s.ResourceCount
         ]
 
     let tableString (t : list<string * string>) =

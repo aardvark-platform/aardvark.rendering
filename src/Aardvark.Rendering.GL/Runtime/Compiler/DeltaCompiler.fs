@@ -21,9 +21,9 @@ module AdaptiveCode =
             )  
             
         if List.isEmpty changers then
-            Mod.constant ()
+            Mod.constant FrameStatistics.Zero
         else
-            changers |> Mod.mapN (fun _ -> ())  
+            changers |> Mod.mapN (fun _ -> FrameStatistics.Zero)  
     
 
 module DeltaCompiler =
@@ -161,6 +161,13 @@ module DeltaCompiler =
             yield Instructions.draw program next.Indices next.DrawCallInfo next.IsActive 
         }
 
+    let private stateToStats (s : CompilerState) = 
+        { FrameStatistics.Zero with 
+            ResourceUpdateTime = s.resourceCreateTime.Elapsed
+            ResourceUpdateCounts = 
+                 s.resources |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k,float v) |> Map.ofSeq 
+        }
+
     /// <summary>
     /// compileDelta compiles all instructions needed to render [rj] 
     /// assuming [prev] was rendered immediately before.
@@ -169,16 +176,16 @@ module DeltaCompiler =
     /// </summary>
     let compileDelta (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : RenderJob) (rj : RenderJob) =
         let c = compileDeltaInternal prev rj
-
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext
                 manager = manager
                 instructions = []
                 resources = []
+                resourceCreateTime = System.Diagnostics.Stopwatch()
             }
 
-        AdaptiveCode(s.instructions, s.resources)
+        AdaptiveCode(s.instructions, s.resources), stateToStats s
 
     /// <summary>
     /// compileFull compiles all instructions needed to render [rj] 
@@ -193,6 +200,7 @@ module DeltaCompiler =
                 manager = manager
                 instructions = []
                 resources = []
+                resourceCreateTime = System.Diagnostics.Stopwatch()
             }
 
-        AdaptiveCode(s.instructions, s.resources)
+        AdaptiveCode(s.instructions, s.resources), stateToStats s
