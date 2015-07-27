@@ -57,9 +57,15 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
     member x.Update() =
         let dirtySet = 
             lock l (fun () ->
-                let dirty = set |> Seq.toArray
+                let dirtySet = set |> Seq.toArray
                 set.Clear()
-                dirty
+
+                for d in dirtySet do
+                    let cb = dirty d
+                    callbacks.[d] <- cb
+                    d.MarkingCallbacks.Add cb |> ignore
+
+                dirtySet
             )
 
         sw.Restart()
@@ -69,9 +75,6 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
             lock d (fun () ->
                 resTime <- resTime + ( d |> Mod.force )
                 count <- count + 1
-                let cb = dirty d
-                callbacks.[d] <- cb
-                d.MarkingCallbacks.Add cb |> ignore
             )
         sw.Stop()
         count, sw.Elapsed, resTime
@@ -124,11 +127,15 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
         let dirtyResoruces = 
             lock l (fun () ->
                 
-
-                let dirty = set |> Seq.toArray
-
+                let dirtySet = set |> Seq.toArray
                 set.Clear()
-                dirty
+
+                for d in dirtySet do
+                    let cb = dirty d
+                    callbacks.[d] <- cb
+                    d.MarkingCallbacks.Add cb |> ignore
+
+                dirtySet
             )
         sw.Restart()
         let mutable count = 0
@@ -144,10 +151,6 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
 
                     d.UpdateCPU()
                     d.UpdateGPU()
-
-                    let cb = dirty d
-                    callbacks.[d] <- cb
-                    d.MarkingCallbacks.Add cb |> ignore
             )
         sw.Stop()
         count,counts,sw.Elapsed
