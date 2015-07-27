@@ -128,9 +128,9 @@ module DeltaCompiler =
                                                 yield Instructions.bindTexture texture
 
                                     | _ ->
-                                        Log.warn "Urdar: using default texture since none was found"
+                                        Log.warn "unexpected texture type %s: %A" uniform.semantic value
                             | _ ->
-                                Log.warn "using default texture since none was found"
+                                Log.warn "texture %s not found" uniform.semantic
                                 yield Instructions.setActiveTexture uniform.index 
                                 //let tex = Texture(program.Context, 0, TextureDimension.Texture2D, 1, V3i(1,1,0), 1, ChannelType.RGBA8)
                                 yield Instruction.BindTexture 0x0DE1 0 //bindTexture tex

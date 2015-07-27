@@ -59,7 +59,6 @@ module ResourceManager =
                 desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
 
             elif not isDisposed then
-                isDisposed <- true
                 let _, r =
                     parent.AddOrUpdate(key,
                         (fun key -> x :> obj, 0),
@@ -67,6 +66,7 @@ module ResourceManager =
                     )
 
                 if r = 0 then
+                    isDisposed <- true
                     parent.TryRemove key |> ignore
                     desc.destroy()
                     desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
