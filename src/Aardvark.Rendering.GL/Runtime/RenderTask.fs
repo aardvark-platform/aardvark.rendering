@@ -283,7 +283,10 @@ module RenderTasks =
 //                        manager, addInput, removeInput
 //                    ) :> IProgram
 
+        let mutable lastScope = None
+
         let getProgramForPass (pass : uint64) (scope : Ag.Scope) =
+            match lastScope with | Some v -> () | None -> lastScope <- Some scope
             match Map.tryFind pass programs with
                 | Some p -> p
                 | _ -> 
@@ -296,10 +299,12 @@ module RenderTasks =
         let setExecutionEngine (newEngine : BackendConfiguration) =
             if currentEngine <> newEngine then
                 currentEngine <- newEngine
+
+                let scope = match lastScope with | Some v -> v | None -> failwith "no last scope set"
+
                 let newPrograms =
                     programs |> Map.map (fun pass v ->
-                        let rj = v.RenderJobs |> Seq.head
-                        let program = newProgram rj.AttributeScope newEngine
+                        let program = newProgram scope newEngine
 
                         for rj in v.RenderJobs do
                             program.Add rj
