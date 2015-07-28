@@ -139,7 +139,7 @@ let main argv =
 
 
 
-    let svg = Svg.ofFile @"C:\Users\schorsch\Desktop\SVG_logo.svg"
+    let svg = Svg.ofFile @"C:\Users\schorsch\Desktop\tiger.svg"
     let svgTask = app.Runtime.CompileRender (svg.RenderJobs())
 
     win.RenderTask <- RenderTask.ofList [main; svgTask]

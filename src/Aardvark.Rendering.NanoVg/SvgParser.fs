@@ -42,7 +42,10 @@ module Svg =
                 let readhex (str : string) = 
                     let mutable res = 255
                     if System.Int32.TryParse(str, System.Globalization.NumberStyles.HexNumber, null, &res) then
-                        res
+                        if l = 3 then
+                            res * 16
+                        else
+                            res
                     else
                         255
 
@@ -56,6 +59,8 @@ module Svg =
             else
                 match str with
                     | "black" -> Some C4f.Black
+                    | "white" -> Some C4f.White
+                    | "none" -> Some (C4f(0.0, 0.0, 0.0, 0.0))
                     | _ ->
                         None
 
@@ -116,15 +121,27 @@ module Svg =
         module PathParser = 
             open System.Text.RegularExpressions
             open Aardvark.Base.Monads.State
-            type PathState = { text : Text; pos : V2d; lastC2 : Option<V2d> }
+            type PathState = { text : Text; pos : V2d; lastC2 : Option<V2d>; lastCommand : Option<string> }
 
+            let charRx = Regex @"^[a-zA-Z]"
             let floatRx = Regex @"^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?"
             let isWhiteSpace (c : char) =
                 c = ' ' || c = '\t' || c = '\r' || c = '\n' || c = ','
 
             let readChar = { runState = fun s -> s.text.[0], { s with text = s.text.SubText(1).TrimmedAtStart(fun c -> isWhiteSpace c) }}
-            let readCommand = { runState = fun s -> (string s.text.[0]), { s with text = s.text.SubText(1).TrimmedAtStart(fun c -> isWhiteSpace c) }}
+            let readCommand = 
+                { runState = 
+                    fun s -> 
+                        let cmd = string s.text.[0]
+                        if not (charRx.IsMatch cmd) then
+                            s.lastCommand.Value, s
+                        else
+                            cmd, 
+                            { s with text = s.text.SubText(1).TrimmedAtStart(fun c -> isWhiteSpace c); lastCommand = Some cmd }
+                }
+
             let isEmpty = { runState = fun s -> s.text.Count = 0, s}
+
             let readDouble = 
                 { runState = fun s ->
                     let m = floatRx.Match(s.text.String, s.text.Start, s.text.Count)
@@ -150,7 +167,6 @@ module Svg =
             let currentPos = { runState = fun s -> s.pos, s}
             let setPos p = { runState = fun s -> (), { s with pos = p } }
 
-
             let readPos (relative : bool) =
                 state {
                     if relative then
@@ -168,6 +184,7 @@ module Svg =
                         return []
                     else
                         let! cmd = readCommand
+                        
                         match cmd with
                             | "m" | "M" ->
                                 let! p = readPos (cmd = "m")
@@ -276,7 +293,7 @@ module Svg =
                 }
         
             let parse (p : string) =
-                let state = { text = Text(p).TrimmedAtStart(fun c -> isWhiteSpace c); pos = V2d.Zero; lastC2 = None }
+                let state = { text = Text(p).TrimmedAtStart(fun c -> isWhiteSpace c); pos = V2d.Zero; lastC2 = None; lastCommand = None }
                 let (path, s) = parsePath().runState state
                 path
 
@@ -396,8 +413,7 @@ module Svg =
                 |> List.map (parseNode initialState)
                 |> Nvg.ofList
                 |> Nvg.fillColor (Mod.constant C4f.Black)
-                |> Nvg.trafo (Mod.constant (M33d.Scale(5.0)))
-
+                |> Nvg.trafo (Mod.constant (M33d.Translation(V2d(400.0, 300.0)) * M33d.Scale(2.0)))
 
     let ofString (str : string) =
         str |> XDocument.Parse |> Parser.parseDocument
