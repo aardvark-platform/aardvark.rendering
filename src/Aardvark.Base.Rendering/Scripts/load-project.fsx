@@ -10,4 +10,6 @@
       @"..\RenderJob.fs"
       @"..\GPUVendor.fs"
       @"..\Framebuffers.fs"
+      @"..\Config.fs"
       @"..\Runtime.fs"
+      @"..\RenderTask.fs"

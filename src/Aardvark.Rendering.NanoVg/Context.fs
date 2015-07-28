@@ -147,7 +147,7 @@ module Context =
                     if not glew then
                         glew <- true
                         NanoVgGl.glewInit()
-                    let handle = NanoVgGl.nvgCreateGL3 NvgCreateFlags.None
+                    let handle = NanoVgGl.nvgCreateGL3 NvgCreateFlags.Antialias
 
                     NanoVgContext(handle)
                             

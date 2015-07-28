@@ -101,7 +101,7 @@ let main argv =
             |> Sg.surface (Mod.constant compiled)
 
     let g = Sg.ofIndexedGeometry geometry
-    let tex = FileTexture(@"C:\Aardwork\tex.png", true) :> ITexture
+    let tex = FileTexture(@"E:\Development\WorkDirectory\DataSVN\pattern.jpg", true) :> ITexture
 
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 
@@ -138,6 +138,10 @@ let main argv =
     ) |> ignore
 
 
-    win.RenderTask <- RenderTask.ofList [main]
+
+    let svg = Svg.ofFile @"C:\Users\schorsch\Desktop\SVG_logo.svg"
+    let svgTask = app.Runtime.CompileRender (svg.RenderJobs())
+
+    win.RenderTask <- RenderTask.ofList [main; svgTask]
     win.Run()
     0 

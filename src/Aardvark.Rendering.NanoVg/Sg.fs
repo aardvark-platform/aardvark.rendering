@@ -61,7 +61,8 @@ module Nvg =
         inherit AbstractApplicator(child)
         member x.Winding = winding
 
-
+    type EmptyLeaf() =
+        interface INvg
 
     type TextLeaf(content : IMod<string>) =
         interface INvg
@@ -122,6 +123,9 @@ module ``Semantic Extensions`` =
 
 
     module Nvg =
+        let empty =
+            Nvg.EmptyLeaf() :> INvg
+
         let text (content : IMod<string>) = 
             Nvg.TextLeaf(content) :> INvg
 
@@ -515,6 +519,9 @@ module Semantics =
                     yield! c.RenderJobs()
             }
 
+        member x.RenderJobs(e : Nvg.EmptyLeaf) : alist<NvgRenderJob> =
+            AList.empty
+
     [<Semantic>]
     type BBSem() =
         
@@ -560,3 +567,6 @@ module Semantics =
 
         member x.LocalBoundingBox(app : Nvg.PrimitiveLeaf) =
             Mod.constant (Box2d())
+
+        member x.LocalBoundingBox(l : Nvg.EmptyLeaf) : IMod<Box2d> =
+            Mod.constant Box2d.Invalid
