@@ -359,6 +359,16 @@ module Svg =
 
                     Circle(V2d(cx,cy), r) |> renderPrimitive
 
+                | "ellipse" ->
+
+                    let cx = n |> tryReadAttribute "cx" |> withDefault 0.0
+                    let cy = n |> tryReadAttribute "cy" |> withDefault 0.0
+                    let rx = n |> tryReadAttribute "rx" |> withDefault 1.0
+                    let ry = n |> tryReadAttribute "ry" |> withDefault 1.0
+
+                    Ellipse(V2d(cx,cy), V2d(rx,ry)) |> renderPrimitive
+
+
                 | "path" ->
                     
                     let segments = n |> tryReadAttribute "d" |> withDefault ""
@@ -370,6 +380,33 @@ module Svg =
                         |> Primitive.Path
                         |> renderPrimitive
                         |> maybeApp Nvg.strokeWidth width
+
+
+                | "polyline" ->
+                    let points = n |> tryReadAttribute "points" |> withDefault ""
+                    let width = n |> tryReadAttribute "stroke-width"
+
+                    let readPoint (str : string) =
+                        let arr = str.Split ','
+                        V2d(float (arr.[0].Trim()), float (arr.[1].Trim()))
+
+                    let arr = points.SplitOnWhitespace() |> Array.map readPoint
+
+                    if arr.Length > 0 then
+                        let commands =
+                            [
+                                yield MoveTo(arr.[0])
+                                for i in 1..arr.Length-1 do
+                                    yield LineTo(arr.[i])
+                            ]
+
+
+                        commands 
+                            |> Primitive.Path
+                            |> renderPrimitive
+                            |> maybeApp Nvg.strokeWidth width
+                    else
+                        Nvg.empty
 
                 | "polygon" ->
                     let points = n |> tryReadAttribute "points" |> withDefault ""
@@ -399,6 +436,13 @@ module Svg =
                             |> maybeApp Nvg.strokeWidth width
                     else
                         Nvg.empty
+
+                | "text" ->
+                    let x = n |> tryReadAttribute "x" |> withDefault 0.0
+                    let y = n |> tryReadAttribute "y" |> withDefault 0.0
+                    let content = n.Value
+                    Nvg.text (Mod.constant content)
+                        |> Nvg.trafo (Mod.constant (M33d.Translation(V2d(x,y))))
 
 
                 | _ -> 
