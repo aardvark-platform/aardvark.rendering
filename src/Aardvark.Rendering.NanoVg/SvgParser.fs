@@ -60,9 +60,84 @@ module Svg =
                 match str with
                     | "black" -> Some C4f.Black
                     | "white" -> Some C4f.White
+                    | "red" -> Some C4f.Red
+                    | "green" -> Some C4f.Green
+                    | "blue" -> Some C4f.Blue
                     | "none" -> Some (C4f(0.0, 0.0, 0.0, 0.0))
                     | _ ->
                         None
+
+
+        let private whiteSpaceRx = System.Text.RegularExpressions.Regex @"[ \t\r\n]+"
+        let private functionRx = System.Text.RegularExpressions.Regex @"(?<name>[a-zA-Z_]+)\((?<args>.*)\)"
+        let private parseTrafo (str : string) : Option<M33d> =
+            let str = whiteSpaceRx.Replace(str, "")
+            let mutable m = functionRx.Match str
+            let mutable trafo = M33d.Identity
+            while m.Success do
+                let f = m.Groups.["name"].Value
+                let args = m.Groups.["args"].Value.Split(',') |> Array.map float
+
+                let mat = 
+                    match f.ToLower() with
+                        | "matrix" -> 
+                            if args.Length >= 6 then
+                                M33d(args.[0], args.[1], args.[2], args.[3], args.[4], args.[5], 0.0, 0.0, 1.0)
+                            else
+                                Log.warn "invalid matrix command: %A" m.Value
+                                M33d.Identity
+                        | "translate" ->
+                            match args with
+                                | [|x; y|] -> M33d.Translation(x,y)
+                                | [|x|] -> M33d.Translation(x,0.0)
+                                | _ ->
+                                    Log.warn "invalid translate command: %A" m.Value
+                                    M33d.Identity
+                        | "scale" ->
+                            match args with
+                                | [|x; y|] -> M33d.Scale(x,y)
+                                | [|x|] -> M33d.Scale(x)
+                                | _ ->
+                                    Log.warn "invalid scale command: %A" m.Value
+                                    M33d.Identity
+
+                        | "rotate" ->
+                            match args with
+                                | [| angle |] -> 
+                                    M33d.Rotation(-Constant.RadiansPerDegree * angle)
+                                | [| angle; cx; cy|] ->
+                                    let rot = M33d.Rotation(-Constant.RadiansPerDegree * angle)
+                                    M33d.Translation(cx, cy) * rot * M33d.Translation(-cx, -cy)
+                                | _ -> 
+                                    Log.warn "invalid rotate command: %A" m.Value
+                                    M33d.Identity
+
+                        | "skewx" ->
+                            if args.Length > 0 then
+                                M33d(1.0, tan (Constant.RadiansPerDegree * args.[0]), 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+                            else
+                                Log.warn "invalid skewX command: %A" m.Value
+                                M33d.Identity
+
+                        | "skewy" ->
+                            if args.Length > 0 then
+                                M33d(1.0, 0.0, 0.0, tan (Constant.RadiansPerDegree * args.[0]), 1.0, 0.0, 0.0, 0.0, 1.0)
+                            else
+                                Log.warn "invalid skewX command: %A" m.Value
+                                M33d.Identity
+                        | _ ->
+                            Log.warn "unknown command: %A" m.Value
+                            M33d.Identity
+
+                trafo <- mat * trafo
+                m <- m.NextMatch()
+            
+
+            if trafo.IsIdentity(Constant.PositiveTinyValue) then
+                None
+            else
+                Some trafo
+
 
 
         let private readers =
@@ -83,6 +158,7 @@ module Svg =
                 typeof<int>, wrap System.Int32.TryParse
                 typeof<float>, wrap System.Double.TryParse
                 typeof<C4f>, cast parseColor
+                typeof<M33d>, cast parseTrafo
             ]
 
 
@@ -303,6 +379,18 @@ module Svg =
 
             let fill = ownFill |> withDefault state.fillColor
             let stroke = ownStroke |> withDefault state.strokeColor
+            let strokeWidth = n |> tryReadAttribute "stroke-width"
+            let transform = n |> tryReadAttribute "transform"
+            let fontSize = n |> tryReadAttribute "font-size"
+            let fontFamily = n |> tryReadAttribute "font-family" |> Option.map (fun n -> SystemFont(n, FontStyle.Regular))
+
+            let ret sg =
+                sg |> maybeApp Nvg.fillColor ownFill
+                   |> maybeApp Nvg.strokeColor ownStroke
+                   |> maybeApp Nvg.strokeWidth strokeWidth
+                   |> maybeApp Nvg.trafo transform
+                   |> maybeApp Nvg.fontSize fontSize
+                   |> maybeApp Nvg.font fontFamily
 
             let renderPrimitive (p : Primitive) =
                 let leafs = 
@@ -318,8 +406,8 @@ module Svg =
 
                 leafs
                     |> Nvg.ofList
-                    |> maybeApp Nvg.fillColor ownFill
-                    |> maybeApp Nvg.strokeColor ownStroke
+                    |> ret
+
 
             match n.Name.LocalName with
                 | "a" | "g" ->
@@ -330,8 +418,7 @@ module Svg =
                         |> Seq.toList
                         |> List.map (parseNode state)
                         |> Nvg.ofList
-                        |> maybeApp Nvg.fillColor ownFill
-                        |> maybeApp Nvg.strokeColor ownStroke
+                        |> ret
 
                 | "rect" ->
                     let x = n |> tryReadAttribute "x" |> withDefault 0.0
@@ -372,19 +459,16 @@ module Svg =
                 | "path" ->
                     
                     let segments = n |> tryReadAttribute "d" |> withDefault ""
-                    let width = n |> tryReadAttribute "stroke-width"
 
   
                     segments 
                         |> PathParser.parse
                         |> Primitive.Path
                         |> renderPrimitive
-                        |> maybeApp Nvg.strokeWidth width
 
 
                 | "polyline" ->
                     let points = n |> tryReadAttribute "points" |> withDefault ""
-                    let width = n |> tryReadAttribute "stroke-width"
 
                     let readPoint (str : string) =
                         let arr = str.Split ','
@@ -404,13 +488,11 @@ module Svg =
                         commands 
                             |> Primitive.Path
                             |> renderPrimitive
-                            |> maybeApp Nvg.strokeWidth width
                     else
                         Nvg.empty
 
                 | "polygon" ->
                     let points = n |> tryReadAttribute "points" |> withDefault ""
-                    let width = n |> tryReadAttribute "stroke-width"
 
                     let readPoint (str : string) =
                         let arr = str.Split ','
@@ -433,7 +515,6 @@ module Svg =
                         commands 
                             |> Primitive.Path
                             |> renderPrimitive
-                            |> maybeApp Nvg.strokeWidth width
                     else
                         Nvg.empty
 
@@ -443,7 +524,17 @@ module Svg =
                     let content = n.Value
                     Nvg.text (Mod.constant content)
                         |> Nvg.trafo (Mod.constant (M33d.Translation(V2d(x,y))))
+                        |> ret
 
+                | "line" ->
+                    let x0 = n |> tryReadAttribute "x1" |> withDefault 0.0
+                    let y0 = n |> tryReadAttribute "y1" |> withDefault 0.0
+                    let x1 = n |> tryReadAttribute "x2" |> withDefault 0.0
+                    let y1 = n |> tryReadAttribute "y2" |> withDefault 0.0
+
+                    [MoveTo(V2d(x0, y0)); LineTo(V2d(x1, y1))]
+                        |> Primitive.Path
+                        |> renderPrimitive
 
                 | _ -> 
                     Log.warn "unknown element-type: %A" n.Name.LocalName
@@ -457,7 +548,8 @@ module Svg =
                 |> List.map (parseNode initialState)
                 |> Nvg.ofList
                 |> Nvg.fillColor (Mod.constant C4f.Black)
-                |> Nvg.trafo (Mod.constant (M33d.Translation(V2d(400.0, 300.0)) * M33d.Scale(2.0)))
+                |> Nvg.align (Mod.constant (TextAlign.Left ||| TextAlign.BaseLine))
+                //|> Nvg.trafo (Mod.constant (M33d.Translation(V2d(400.0, 300.0)) * M33d.Scale(2.0)))
 
     let ofString (str : string) =
         str |> XDocument.Parse |> Parser.parseDocument
