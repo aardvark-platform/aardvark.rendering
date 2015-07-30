@@ -139,6 +139,13 @@ module Svg =
                 Some trafo
 
 
+        let private parseAlign (str : string) : Option<TextAlign> =
+            match str.ToLower() with
+                | "start" -> Some TextAlign.Left
+                | "middle" -> Some TextAlign.Center
+                | "end" -> Some TextAlign.Right
+                | _ -> Some TextAlign.Left
+
 
         let private readers =
 
@@ -159,6 +166,7 @@ module Svg =
                 typeof<float>, wrap System.Double.TryParse
                 typeof<C4f>, cast parseColor
                 typeof<M33d>, cast parseTrafo
+                typeof<TextAlign>, cast parseAlign
             ]
 
 
@@ -383,6 +391,7 @@ module Svg =
             let transform = n |> tryReadAttribute "transform"
             let fontSize = n |> tryReadAttribute "font-size"
             let fontFamily = n |> tryReadAttribute "font-family" |> Option.map (fun n -> SystemFont(n, FontStyle.Regular))
+            let anchor = n |> tryReadAttribute "text-anchor"
 
             let ret sg =
                 sg |> maybeApp Nvg.fillColor ownFill
@@ -391,6 +400,7 @@ module Svg =
                    |> maybeApp Nvg.trafo transform
                    |> maybeApp Nvg.fontSize fontSize
                    |> maybeApp Nvg.font fontFamily
+                   |> maybeApp Nvg.align anchor
 
             let renderPrimitive (p : Primitive) =
                 let leafs = 

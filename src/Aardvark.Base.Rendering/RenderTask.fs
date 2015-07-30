@@ -3,6 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Incremental
+open Aardvark.Base.Incremental.Operators
 open System.Collections.Generic
 open Aardvark.Base.Rendering
 
@@ -134,8 +135,30 @@ module RenderTask =
                 processDeltas()
                 runtime
 
+    type private CustomRenderTask(f : afun<IFramebuffer, RenderingResult>) as this =
+        inherit AdaptiveObject()
+        do f.AddOutput this
+        interface IRenderTask with
+            member x.Run(fbo) =
+                base.EvaluateAlways(fun () ->
+                    f.Evaluate(fbo)
+                )
+
+            member x.Dispose() =
+                f.RemoveOutput this
+                
+            member x.Runtime =
+                None
+
 
     let empty = new EmptyRenderTask() :> IRenderTask
+
+    let ofAFun (f : afun<IFramebuffer, RenderingResult>) =
+        new CustomRenderTask(f) :> IRenderTask
+
+    let custom (f : IFramebuffer -> RenderingResult) =
+        new CustomRenderTask(AFun.create f) :> IRenderTask
+
 
     let ofMod (m : IMod<IRenderTask>) : IRenderTask =
         new ModRenderTask(m) :> IRenderTask
@@ -156,7 +179,7 @@ module RenderTask =
         new AListRenderTask(s) :> IRenderTask
 
     let ofASet (s : aset<IRenderTask>) =
-        new AListRenderTask(s |> ASet.sortWith (fun a b -> 0)) :> IRenderTask
+        new AListRenderTask(s |> ASet.sortWith (fun a b -> compare a.Id b.Id)) :> IRenderTask
 
     let mapResult (f : RenderingResult -> RenderingResult) (t : IRenderTask) =
         new SequentialRenderTask(f, [|t|]) :> IRenderTask
@@ -165,6 +188,87 @@ module RenderTask =
         t |> mapResult (fun r -> RenderingResult(r.Framebuffer, f r.Statistics))
 
 
+    // rendering to textures
+
+    let renderTo (target : IFramebuffer) (task : IRenderTask) =
+        let runtime = task.Runtime.Value
+        [task :> IAdaptiveObject] 
+            |> Mod.mapCustom(fun () ->
+                task.Run(target) |> ignore
+                target
+            )
+
+    let renderToColorMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+        let runtime = task.Runtime.Value
+
+        //use lock = runtime.ContextLock
+        let color = runtime.CreateTexture(size, format, samples, ~~1)
+        let depth = runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
+        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+
+        let fbo = 
+            runtime.CreateFramebuffer(
+                Map.ofList [
+                    DefaultSemantic.Colors, ~~({ texture = color; level = 0; slice = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                ]
+            )
+
+
+        new SequentialRenderTask([|clear; task|]) 
+            |> renderTo fbo
+            |> Mod.map (fun _ -> color :> ITexture)
+
+    let renderToDepthMS (samples : IMod<int>) (size : IMod<V2i>) (task : IRenderTask) =
+        let runtime = task.Runtime.Value
+
+        //use lock = runtime.ContextLock
+        let depth = runtime.CreateTexture(size, ~~PixFormat.FloatGray, samples, ~~1)
+        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+
+        let fbo = 
+            runtime.CreateFramebuffer(
+                Map.ofList [
+                    DefaultSemantic.Depth, ~~({ texture = depth; level = 0; slice = 0 } :> IFramebufferOutput)
+                ]
+            )
+
+
+        new SequentialRenderTask([|clear; task|]) 
+            |> renderTo fbo
+            |> Mod.map (fun _ -> depth :> ITexture)
+
+    let renderToColorAndDepthMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+        let runtime = task.Runtime.Value
+
+        //use lock = runtime.ContextLock
+        let color = runtime.CreateTexture(size, format, samples, ~~1)
+        let depth = runtime.CreateTexture(size, ~~PixFormat.FloatGray, samples, ~~1)
+        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+
+        let fbo = 
+            runtime.CreateFramebuffer(
+                Map.ofList [
+                    DefaultSemantic.Colors, ~~({ texture = color; level = 0; slice = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, ~~({ texture = depth; level = 0; slice = 0 } :> IFramebufferOutput)
+                ]
+            )
+
+        let result = 
+            new SequentialRenderTask([|clear; task|]) 
+                |> renderTo fbo
+
+        (Mod.map (fun _ -> color :> ITexture) result, Mod.map (fun _ -> depth :> ITexture) result)
+
+
+    let inline renderToColor (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+        renderToColorMS ~~1 size format task
+
+    let inline renderToDepth (size : IMod<V2i>) (task : IRenderTask) =
+        renderToDepthMS ~~1 size task
+
+    let inline renderToColorAndDepth (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+        renderToColorAndDepthMS ~~1 size format task
 
 [<AutoOpen>]
 module ``RenderTask Builder`` =
