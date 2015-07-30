@@ -7,6 +7,7 @@ open NanoVgSharp
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering.GL
+open System.Threading
 
 module Context =
     
@@ -120,7 +121,7 @@ module Context =
                     path
 
     [<AllowNullLiteral>]
-    type NanoVgContext(handle : nativeint) =
+    type NanoVgContextHandle(handle : nativeint) =
         let loadedFonts = Dictionary<string, int>()
 
 
@@ -137,7 +138,7 @@ module Context =
                     loadedFonts.[path] <- id
                     id
 
-    let private contextMap = ConcurrentDict<obj, NanoVgContext>(Dict())
+    let private contextMap = ConcurrentDict<obj, NanoVgContextHandle>(Dict())
     let mutable private glew = false
 
     let current() =
@@ -149,8 +150,54 @@ module Context =
                         NanoVgGl.glewInit()
                     let handle = NanoVgGl.nvgCreateGL3 NvgCreateFlags.Antialias
 
-                    NanoVgContext(handle)
+                    NanoVgContextHandle(handle)
                             
                 )
             | None ->
                 failwith "cannot initialize NanoVg without a GL context"
+
+    type NanoVgContext(context : Aardvark.Rendering.GL.Context) =
+        static let nopDisposable = { new IDisposable with member x.Dispose() = () }
+        let contextTable = ConcurrentDict<ContextHandle, NanoVgContextHandle>(Dict())
+        
+        let getOrCreate (gl : ContextHandle) =
+            contextTable.GetOrCreate(gl, fun gl ->
+                if not glew then
+                    glew <- true
+                    NanoVgGl.glewInit()
+                let handle = NanoVgGl.nvgCreateGL3 NvgCreateFlags.Antialias
+                NanoVgContextHandle(handle)
+            )
+
+        let mutable current = new ThreadLocal<Option<NanoVgContextHandle>>(fun () -> None)
+
+
+        member x.Current = current.Value
+
+        member x.ResourceLock =
+            match current.Value with
+                | Some h -> nopDisposable
+                | None ->
+                    match ContextHandle.Current with
+                        | None ->
+                            let glLock = context.ResourceLock
+                            let glContext = ContextHandle.Current.Value
+                            current.Value <- Some (getOrCreate glContext)
+                            { new IDisposable with
+                                member x.Dispose() = 
+                                    current.Value <- None
+                                    glLock.Dispose()
+                            }
+                        | Some glContext ->
+                            current.Value <- Some (getOrCreate glContext)
+                            { new IDisposable with
+                                member x.Dispose() = 
+                                    current.Value <- None
+                            }
+
+        member x.Use (f : NanoVgContextHandle -> 'a) =
+            using x.ResourceLock (fun _ ->
+                let current = current.Value.Value
+                f current
+            )
+        

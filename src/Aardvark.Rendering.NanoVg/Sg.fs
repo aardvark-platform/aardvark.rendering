@@ -2,6 +2,7 @@
 
 #nowarn "9"
 
+open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open NanoVgSharp
@@ -22,6 +23,10 @@ module Nvg =
             member x.Child = child
 
         new(child : INvg) = AbstractApplicator(Mod.constant child)
+
+    type ContextApplicator(context : Context.NanoVgContext, child : IMod<INvg>) =
+        inherit AbstractApplicator(child)
+        member x.Context = context
 
     type TrafoApplicator(trafo : IMod<M33d>, child : IMod<INvg>) =
         inherit AbstractApplicator(child)
@@ -102,6 +107,7 @@ module ``Semantic Extensions`` =
     open Aardvark.Base.Ag
 
     type INvg with
+        member x.Context : Context.NanoVgContext = x?Context
         member x.StrokeWidth : IMod<float> = x?StrokeWidth
         member x.StrokeColor : IMod<C4f> = x?StrokeColor
         member x.LineCap : IMod<LineCap> = x?LineCap
@@ -120,7 +126,6 @@ module ``Semantic Extensions`` =
         member x.RenderJobs() : alist<NvgRenderJob> = x?RenderJobs()
         member x.LocalBoundingBox() : IMod<Box2d> = x?LocalBoundingBox()
         member x.GlobalBoundingBox() : IMod<Box2d> = x?GlobalBoundingBox()
-
 
     module Nvg =
         let empty =
@@ -187,7 +192,14 @@ module ``Semantic Extensions`` =
         let ofList (l : list<INvg>) =
             Nvg.Group(AList.ofList l) :> INvg
 
-
+[<AbstractClass; Sealed; Extension>]
+type RuntimeExtensions private() =
+    [<Extension>]
+    static member CompileRender(this : IRuntime, sg : INvg) =
+        let ctx = this.GetNanoVgContext()
+        let app = Nvg.ContextApplicator(ctx, Mod.constant sg)
+        let renderJobs = app.RenderJobs()
+        this.CompileRender(renderJobs)
 
 module Semantics =
     open Aardvark.Base.Ag
@@ -372,6 +384,12 @@ module Semantics =
     [<Semantic>]
     type InheritedSem() =
         
+        member x.Context(r : Root) =
+            r.Child?Context <- Unchecked.defaultof<Context.NanoVgContext>
+
+        member x.Context(app : Nvg.ContextApplicator) =
+            app.Child?Context <- app.Context
+
         member x.StrokeWidth(r : Root) =
             r.Child?StrokeWidth <- Mod.constant 1.0
 
@@ -525,23 +543,23 @@ module Semantics =
     [<Semantic>]
     type BBSem() =
         
-        let textBounds (text : string) (align : TextAlign) (font : Font) (size : float) (spacing : float) (lineh : float) : Box2d =
-            let ctx = Context.current()
+        let textBounds (ctx : Context.NanoVgContext) (text : string) (align : TextAlign) (font : Font) (size : float) (spacing : float) (lineh : float) : Box2d =
+            ctx.Use (fun ctx ->
+                NanoVg.nvgSave(ctx.Handle)
 
-            NanoVg.nvgSave(ctx.Handle)
+                NanoVg.nvgTextAlign(ctx.Handle, unbox align)
+                NanoVg.nvgFontFaceId(ctx.Handle, ctx.GetFontId font)
+                NanoVg.nvgFontSize(ctx.Handle, float32 size)
+                NanoVg.nvgTextLetterSpacing(ctx.Handle, float32 spacing)
+                NanoVg.nvgTextLineHeight(ctx.Handle, float32 lineh)
 
-            NanoVg.nvgTextAlign(ctx.Handle, unbox align)
-            NanoVg.nvgFontFaceId(ctx.Handle, ctx.GetFontId font)
-            NanoVg.nvgFontSize(ctx.Handle, float32 size)
-            NanoVg.nvgTextLetterSpacing(ctx.Handle, float32 spacing)
-            NanoVg.nvgTextLineHeight(ctx.Handle, float32 lineh)
-
-            let bounds = NanoVgExt.nvgTextBounds(ctx.Handle, 0.0f, 0.0f, text, unbox align)
+                let bounds = NanoVgExt.nvgTextBounds(ctx.Handle, 0.0f, 0.0f, text, unbox align)
 
 
-            NanoVg.nvgRestore(ctx.Handle)
+                NanoVg.nvgRestore(ctx.Handle)
 
-            Box2d(bounds)
+                Box2d(bounds)
+            )
 
         member x.LocalBoundingBox(app : INvgApplicator) =
             adaptive {
@@ -562,7 +580,7 @@ module Semantics =
                 let! (font,size) = app.Font, app.FontSize
                 let! content = app.Content
 
-                return textBounds content align font size letterSpacing lineHeight
+                return textBounds app.Context content align font size letterSpacing lineHeight
             }
 
         member x.LocalBoundingBox(app : Nvg.PrimitiveLeaf) =

@@ -225,7 +225,6 @@ module DefaultOverlays =
     let statisticsOverlay (runtime : IRuntime) (m : IMod<FrameStatistics>) =
         let content = m |> Mod.map (statisticsTable >> tableString)
 
-
         let text =
             content 
                 |> Nvg.text
@@ -249,7 +248,7 @@ module DefaultOverlays =
         let sg = 
             Nvg.ofList [rect; text]
                 |> Nvg.trafo ~~(M33d.Translation(V2d(20.0, 20.0)))
-        runtime.CompileRender(sg.RenderJobs())
+        runtime.CompileRender sg
 
     type AnnotationRenderTask(real : IRenderTask, annotation : IRenderTask, emit : RenderingResult -> unit) as this =
         inherit AdaptiveObject()

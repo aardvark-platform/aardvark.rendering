@@ -41,7 +41,7 @@ module internal Interpreter =
 
     type internal NvgState =
         {
-            ctx : Context.NanoVgContext
+            ctx : Context.NanoVgContextHandle
             transform : M33d
             scissor : Box2d
             fillColor : C4f
@@ -302,10 +302,9 @@ module internal Interpreter =
                         do! Nvg.setFontSize t.size
                         do! Nvg.drawText V2d.Zero !!t.align !!t.content 
 
-
         }
 
-    let run (ctx : Context.NanoVgContext) (s : seq<NvgRenderJob>) =
+    let run (ctx : Context.NanoVgContextHandle) (s : seq<NvgRenderJob>) =
         let mutable state = { emptyState with ctx = ctx }
 
         for rj in s do
@@ -313,9 +312,9 @@ module internal Interpreter =
             state <- n
         ()
 
-type RenderTask(glRuntime : Runtime, l : alist<NvgRenderJob>) as this =
+type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRenderJob>) as this =
+    
     inherit AdaptiveObject()
-    let glContext = glRuntime.Context
     let r = l.GetReader()
     let inputs = ReferenceCountingSet<IAdaptiveObject>()
     do r.AddOutput this
@@ -390,8 +389,10 @@ type RenderTask(glRuntime : Runtime, l : alist<NvgRenderJob>) as this =
                     | Add(_,rj) -> add rj
                     | Rem(_,rj) -> remove rj
 
-            using glContext.ResourceLock (fun _ -> 
-                
+            using ctx.ResourceLock (fun _ -> 
+
+                let current = ctx.Current.Value
+
                 let old = Array.create 4 0
                 let mutable oldFbo = 0
                 OpenTK.Graphics.OpenGL4.GL.GetInteger(OpenTK.Graphics.OpenGL4.GetPName.Viewport, old)
@@ -407,7 +408,7 @@ type RenderTask(glRuntime : Runtime, l : alist<NvgRenderJob>) as this =
                 
                 NanoVg.nvgBeginFrame(ctx.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
              
-                r.Content |> Seq.map snd |> Interpreter.run ctx
+                r.Content |> Seq.map snd |> Interpreter.run current
                 NanoVg.nvgEndFrame(ctx.Handle)
 
                 OpenTK.Graphics.OpenGL.GL.PopAttrib()
@@ -419,7 +420,7 @@ type RenderTask(glRuntime : Runtime, l : alist<NvgRenderJob>) as this =
         )
 
     interface IRenderTask with
-        member x.Runtime = glRuntime :> IRuntime |> Some
+        member x.Runtime = runtime :> IRuntime |> Some
         member x.Run(fbo) = 
             x.Run(fbo)
             RenderingResult(fbo, FrameStatistics.Zero)
@@ -428,17 +429,29 @@ type RenderTask(glRuntime : Runtime, l : alist<NvgRenderJob>) as this =
             x.Dispose()
 
 [<Extension; AbstractClass; Sealed>]
-type RuntimeExtensions private() =
+type LowLevelRuntimeExtensions private() =
+    static let table = ConcurrentDict<Aardvark.Rendering.GL.Context, Context.NanoVgContext>(Dict())
+
+    static let getOrCreateContext (ctx) =
+        table.GetOrCreate(ctx, fun ctx -> Context.NanoVgContext(ctx))
+
+    [<Extension>]
+    static member GetNanoVgContext (this : IRuntime) =
+        match this with
+            | :? Runtime as this ->
+                getOrCreateContext this.Context
+            | _ -> failwithf "unsupported NanoVg runtime: %A" this
+
     [<Extension>]
     static member CompileRender(this : IRuntime, list : alist<NvgRenderJob>) =
         match this with
             | :? Runtime as this ->
-                new RenderTask(this, list) :> IRenderTask
+                new RenderTask(this, getOrCreateContext this.Context, list) :> IRenderTask
             | _ -> failwithf "unsupported NanoVg runtime: %A" this
 
     [<Extension>]
     static member CompileRender(this : IRuntime, list : list<NvgRenderJob>) =
         match this with
             | :? Runtime as this ->
-                new RenderTask(this, AList.ofList list) :> IRenderTask
+                new RenderTask(this, getOrCreateContext this.Context, AList.ofList list) :> IRenderTask
             | _ -> failwithf "unsupported NanoVg runtime: %A" this
