@@ -80,9 +80,12 @@ module GLVM =
 
 [<AllowNullLiteral>]
 type SwitchFragment(mode : VMMode) =
+    static let instructionSize = uint64 (5 *  sizeof<nativeint> + sizeof<int>)
+
     let frag = GLVM.vmCreate()
     let mutable next : SwitchFragment = null
     let mutable prev : SwitchFragment = null
+    let mutable instructionCount = 0
 
     let cachedStats = Dictionary<int, FrameStatistics>()
     let mutable statistics = FrameStatistics.Zero
@@ -122,15 +125,17 @@ type SwitchFragment(mode : VMMode) =
             next <- v
 
     member x.Append(instructions : seq<Instruction>) =
+        let instructions = Seq.toArray instructions
         let id = GLVM.vmNewBlock(frag)
-        let stats = instructions |> Seq.map InstructionStatistics.toStats |> Seq.sum
+        let stats = { (instructions |> Seq.map InstructionStatistics.toStats |> Seq.sum) with ProgramSize = instructionSize * uint64 instructions.Length }
         statistics <- statistics + stats
         cachedStats.[id] <- stats
         appendToBlock id instructions
         id
 
     member x.Update(id : int, instructions : seq<Instruction>) =
-        let newStats = instructions |> Seq.map InstructionStatistics.toStats |> Seq.sum
+        let instructions = Seq.toArray instructions
+        let newStats = { (instructions |> Seq.map InstructionStatistics.toStats |> Seq.sum) with ProgramSize = instructionSize * uint64 instructions.Length }
         let oldStats = cachedStats.[id]
         statistics <- statistics - oldStats + newStats
         cachedStats.[id] <- newStats

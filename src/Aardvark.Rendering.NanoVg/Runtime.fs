@@ -389,16 +389,14 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
                     | Add(_,rj) -> add rj
                     | Rem(_,rj) -> remove rj
 
-            using ctx.ResourceLock (fun _ -> 
-
-                let current = ctx.Current.Value
+            ctx.Use (fun current -> 
 
                 let old = Array.create 4 0
                 let mutable oldFbo = 0
                 OpenTK.Graphics.OpenGL4.GL.GetInteger(OpenTK.Graphics.OpenGL4.GetPName.Viewport, old)
                 OpenTK.Graphics.OpenGL4.GL.GetInteger(OpenTK.Graphics.OpenGL4.GetPName.FramebufferBinding, &oldFbo)
 
-                let ctx = Context.current()
+                //let ctx = Context.current()
 
                 OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, fbo.Handle :?> int)
                 OpenTK.Graphics.OpenGL4.GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
@@ -406,10 +404,10 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
                 OpenTK.Graphics.OpenGL.GL.PushAttrib(OpenTK.Graphics.OpenGL.AttribMask.AllAttribBits)
                 OpenTK.Graphics.OpenGL.GL.BindSampler(0,0)
                 
-                NanoVg.nvgBeginFrame(ctx.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
+                NanoVg.nvgBeginFrame(current.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
              
                 r.Content |> Seq.map snd |> Interpreter.run current
-                NanoVg.nvgEndFrame(ctx.Handle)
+                NanoVg.nvgEndFrame(current.Handle)
 
                 OpenTK.Graphics.OpenGL.GL.PopAttrib()
 

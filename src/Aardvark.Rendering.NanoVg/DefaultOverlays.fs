@@ -190,8 +190,17 @@ module DefaultOverlays =
              result <- sprintf "%s/%.0f%s" result v (mapKind k)
             else result <- sprintf "%.0f%s" v (mapKind k) 
         if result = "" then "none" else result
-            
-    
+        
+    let memoryString (mem : uint64) =
+        if mem > 1073741824UL then
+            sprintf "%.3fGB" (float mem / 1073741824.0) 
+        elif mem > 1048576UL then
+            sprintf "%.3fMB" (float mem / 1048576.0) 
+        elif mem > 1024UL then
+            sprintf "%.3fkB" (float mem / 1024.0)
+        else
+            sprintf "%db" mem
+
     let statisticsTable (s : FrameStatistics) =
         [
             "draw calls", sprintf "%.0f" s.DrawCallCount
@@ -203,6 +212,7 @@ module DefaultOverlays =
             "instruction update", timeString s.InstructionUpdateTime
             "renderjobs", sprintf "+%.0f/-%.0f" s.AddedRenderJobs s.RemovedRenderJobs
             "resources", sprintf "%.0f" s.ResourceCount
+            "memory", memoryString s.ProgramSize
         ]
 
     let tableString (t : list<string * string>) =
@@ -231,6 +241,8 @@ module DefaultOverlays =
                 |> Nvg.systemFont "Consolas" FontStyle.Bold
                 |> Nvg.fillColor ~~C4f.White
                 |> Nvg.fontSize ~~13.0
+        
+        let text = Nvg.ContextApplicator(runtime.GetNanoVgContext(), Mod.constant text)
 
         let overall = ref Box2d.Invalid
         let rect =
@@ -241,6 +253,7 @@ module DefaultOverlays =
                     !overall
                   )
                |> Mod.map (fun b -> RoundedRectangle(b, 10.0))
+
                |> Nvg.fill
                |> Nvg.fillColor ~~(C4f(0.0, 0.0, 0.0, 0.5))
                
@@ -248,6 +261,7 @@ module DefaultOverlays =
         let sg = 
             Nvg.ofList [rect; text]
                 |> Nvg.trafo ~~(M33d.Translation(V2d(20.0, 20.0)))
+
         runtime.CompileRender sg
 
     type AnnotationRenderTask(real : IRenderTask, annotation : IRenderTask, emit : RenderingResult -> unit) as this =

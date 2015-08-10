@@ -46,6 +46,7 @@ type FrameStatistics =
         InstructionUpdateTime : TimeSpan
         ResourceUpdateTime : TimeSpan
         ExecutionTime : TimeSpan
+        ProgramSize : uint64
     } with
 
     static member Zero =
@@ -66,6 +67,7 @@ type FrameStatistics =
             InstructionUpdateTime = TimeSpan.Zero
             ResourceUpdateTime = TimeSpan.Zero
             ExecutionTime = TimeSpan.Zero
+            ProgramSize = 0UL
         }
 
     static member DivideByInt(l : FrameStatistics, r : int) =
@@ -89,6 +91,7 @@ type FrameStatistics =
             InstructionUpdateTime = l.InstructionUpdateTime + r.InstructionUpdateTime
             ResourceUpdateTime = l.ResourceUpdateTime + r.ResourceUpdateTime
             ExecutionTime = l.ExecutionTime + r.ExecutionTime
+            ProgramSize = l.ProgramSize + r.ProgramSize
         }
 
     static member (-) (l : FrameStatistics, r : FrameStatistics) =
@@ -109,6 +112,7 @@ type FrameStatistics =
             InstructionUpdateTime = l.InstructionUpdateTime - r.InstructionUpdateTime
             ResourceUpdateTime = l.ResourceUpdateTime - r.ResourceUpdateTime
             ExecutionTime = l.ExecutionTime - r.ExecutionTime
+            ProgramSize = l.ProgramSize - r.ProgramSize
         }
 
     static member (/) (l : FrameStatistics, r : float) =
@@ -129,6 +133,7 @@ type FrameStatistics =
             InstructionUpdateTime = TimeSpan.FromTicks(int64 (float l.InstructionUpdateTime.Ticks / r))
             ResourceUpdateTime = TimeSpan.FromTicks(int64 (float l.ResourceUpdateTime.Ticks / r))
             ExecutionTime = TimeSpan.FromTicks(int64 (float l.ExecutionTime.Ticks / r))
+            ProgramSize = uint64 (float l.ProgramSize / r)
         }
 
 

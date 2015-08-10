@@ -140,21 +140,21 @@ module Context =
 
     let private contextMap = ConcurrentDict<obj, NanoVgContextHandle>(Dict())
     let mutable private glew = false
-
-    let current() =
-        match ContextHandle.Current with
-            | Some h -> 
-                contextMap.GetOrCreate(h.Handle, fun h ->
-                    if not glew then
-                        glew <- true
-                        NanoVgGl.glewInit()
-                    let handle = NanoVgGl.nvgCreateGL3 NvgCreateFlags.Antialias
-
-                    NanoVgContextHandle(handle)
-                            
-                )
-            | None ->
-                failwith "cannot initialize NanoVg without a GL context"
+//
+//    let current() =
+//        match ContextHandle.Current with
+//            | Some h -> 
+//                contextMap.GetOrCreate(h.Handle, fun h ->
+//                    if not glew then
+//                        glew <- true
+//                        NanoVgGl.glewInit()
+//                    let handle = NanoVgGl.nvgCreateGL3 NvgCreateFlags.Antialias
+//
+//                    NanoVgContextHandle(handle)
+//                            
+//                )
+//            | None ->
+//                failwith "cannot initialize NanoVg without a GL context"
 
     type NanoVgContext(context : Aardvark.Rendering.GL.Context) =
         static let nopDisposable = { new IDisposable with member x.Dispose() = () }

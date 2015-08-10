@@ -9,6 +9,7 @@ open Aardvark.SceneGraph.Semantics
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.NanoVg
 
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -601,7 +602,7 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
-    let modelPath =  @"C:\Aardwork\scenes\bench\1000_128_500_18.dae"
+    let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
     //let modelPath =  @"C:\Aardwork\scenes\bench2\8000_128_4000_6.dae"
 
@@ -744,14 +745,15 @@ let main args =
 //       task.Run fbo |> ignore
 //    )   
  
-    let engine = Mod.init BackendConfiguration.Debug
+    let engine = Mod.init BackendConfiguration.UnmanagedOptimized
     let engines = 
         ref [
             BackendConfiguration.UnmanagedOptimized
             BackendConfiguration.UnmanagedRuntime
+            BackendConfiguration.UnmanagedUnoptimized
             BackendConfiguration.ManagedOptimized
-            BackendConfiguration.ManagedUnoptimized
             BackendConfiguration.NativeOptimized
+            BackendConfiguration.NativeUnoptimized
         ]
 
     ctrl.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->
@@ -772,7 +774,7 @@ let main args =
 
     let task = app.Runtime.CompileRender(engine, sg.RenderJobs())
 
-    ctrl.RenderTask <- task
+    ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
 
 
 //    w.Run()

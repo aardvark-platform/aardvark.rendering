@@ -78,6 +78,9 @@ module Fragments =
 
         member x.Tag = tag
 
+        member x.SizeInBytes =
+            block.Size
+
         member x.Size =
             block.Size - jumpSize
 
