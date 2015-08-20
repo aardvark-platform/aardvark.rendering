@@ -102,6 +102,11 @@ module Nvg =
         interface INvg
         member x.List = l
 
+    type OnOffNode(isActive : IMod<bool>, child : IMod<INvg>) =
+        inherit AbstractApplicator(child)
+        member x.IsActive = isActive
+        member x.Child = child
+
 [<AutoOpen>]
 module ``Semantic Extensions`` =
     open Aardvark.Base.Ag
@@ -126,6 +131,7 @@ module ``Semantic Extensions`` =
         member x.RenderJobs() : alist<NvgRenderJob> = x?RenderJobs()
         member x.LocalBoundingBox() : IMod<Box2d> = x?LocalBoundingBox()
         member x.GlobalBoundingBox() : IMod<Box2d> = x?GlobalBoundingBox()
+        member x.IsActive : IMod<bool> = x?IsActive
 
     module Nvg =
         let empty =
@@ -133,8 +139,6 @@ module ``Semantic Extensions`` =
 
         let text (content : IMod<string>) = 
             Nvg.TextLeaf(content) :> INvg
-
-        
 
         let fill (content : IMod<Primitive>) =
             Nvg.PrimitiveLeaf(Mod.constant PrimitiveMode.FillPrimitive, content) :> INvg
@@ -188,6 +192,9 @@ module ``Semantic Extensions`` =
 
         let group (l : alist<INvg>) =
             Nvg.Group(l) :> INvg
+
+        let onOff (m : IMod<bool>) (c : INvg) =
+            Nvg.OnOffNode(m, Mod.constant c) :> INvg
 
         let ofList (l : list<INvg>) =
             Nvg.Group(AList.ofList l) :> INvg
@@ -488,6 +495,13 @@ module Semantics =
         member x.FillColor(app : Nvg.FillColorApplicator) =
             app.Child?FillColor <- app.Color
 
+        member x.IsActive(app : INvgApplicator) =
+            app.Child?IsActive <- app?IsActive
+
+        member x.IsActive(t : Nvg.OnOffNode) =
+            t.Child?IsActive <- t.IsActive
+
+
     [<Semantic>]
     type RenderJobSem() =
 
@@ -496,6 +510,7 @@ module Semantics =
                 let! c = app.Child
                 yield! c.RenderJobs()
             }
+
 
         member x.RenderJobs(t : Nvg.TextLeaf) =
             AList.single {
@@ -512,6 +527,7 @@ module Semantics =
                         align = t.TextAlign
                         content = t.Content
                     }
+                isActive = t.IsActive
             }
 
         member x.RenderJobs(t : Nvg.PrimitiveLeaf) =
@@ -529,6 +545,7 @@ module Semantics =
                         primitive = t.Primitive
                         mode = t.Mode
                     }
+                isActive = t.IsActive
             }
 
         member x.RenderJobs(t : Nvg.Group) =

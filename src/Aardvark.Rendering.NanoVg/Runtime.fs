@@ -261,46 +261,48 @@ module internal Interpreter =
     let private runRenderJob (rj : NvgRenderJob) =
         state {
             
-            do! Nvg.setScissor rj.scissor
-            do! Nvg.setFillColor rj.fillColor
+            if !!rj.isActive
+            then
+                do! Nvg.setScissor rj.scissor
+                do! Nvg.setFillColor rj.fillColor
 
-            match rj.command with
-                | Left p ->
-                    do! Nvg.setTransform rj.transform
-                    do! Nvg.setStrokeWidth p.strokeWidth
-                    do! Nvg.setStrokeColor p.strokeColor
-                    do! Nvg.setLineCap p.lineCap
-                    do! Nvg.setLineJoin p.lineJoin
-                    do! Nvg.setWinding p.winding
-
-                    do! Nvg.drawPrimitive !!p.primitive
-
-                    match !!p.mode with
-                        | FillPrimitive -> do! Nvg.fill
-                        | StrokePrimitive -> do! Nvg.stroke
-
-                | Right t ->
-                    do! Nvg.setFont t.font
-                    
-                    do! Nvg.setLetterSpacing t.letterSpacing
-                    do! Nvg.setLineHeight t.lineHeight
-                    do! Nvg.setBlur t.blur
-                    let trafo = !!rj.transform
-
-                    // important for clear text alignment (aa causing problems when using trafo)
-                    let orientation = trafo.UpperLeftM22()
-                    if orientation.IsIdentity(Constant.PositiveTinyValue) then
-                        do! Nvg.resetTransform
-                        do! Nvg.setFontSize t.size
-                        do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
-                    elif orientation.M01.IsTiny() && orientation.M10.IsTiny() && orientation.M00.ApproximateEquals(orientation.M11, Constant.PositiveTinyValue) then
-                        do! Nvg.resetTransform
-                        do! Nvg.setFontSize ~~(orientation.M11 * !!t.size)
-                        do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
-                    else
+                match rj.command with
+                    | Left p ->
                         do! Nvg.setTransform rj.transform
-                        do! Nvg.setFontSize t.size
-                        do! Nvg.drawText V2d.Zero !!t.align !!t.content 
+                        do! Nvg.setStrokeWidth p.strokeWidth
+                        do! Nvg.setStrokeColor p.strokeColor
+                        do! Nvg.setLineCap p.lineCap
+                        do! Nvg.setLineJoin p.lineJoin
+                        do! Nvg.setWinding p.winding
+
+                        do! Nvg.drawPrimitive !!p.primitive
+
+                        match !!p.mode with
+                            | FillPrimitive -> do! Nvg.fill
+                            | StrokePrimitive -> do! Nvg.stroke
+
+                    | Right t ->
+                        do! Nvg.setFont t.font
+                    
+                        do! Nvg.setLetterSpacing t.letterSpacing
+                        do! Nvg.setLineHeight t.lineHeight
+                        do! Nvg.setBlur t.blur
+                        let trafo = !!rj.transform
+
+                        // important for clear text alignment (aa causing problems when using trafo)
+                        let orientation = trafo.UpperLeftM22()
+                        if orientation.IsIdentity(Constant.PositiveTinyValue) then
+                            do! Nvg.resetTransform
+                            do! Nvg.setFontSize t.size
+                            do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
+                        elif orientation.M01.IsTiny() && orientation.M10.IsTiny() && orientation.M00.ApproximateEquals(orientation.M11, Constant.PositiveTinyValue) then
+                            do! Nvg.resetTransform
+                            do! Nvg.setFontSize ~~(orientation.M11 * !!t.size)
+                            do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
+                        else
+                            do! Nvg.setTransform rj.transform
+                            do! Nvg.setFontSize t.size
+                            do! Nvg.drawText V2d.Zero !!t.align !!t.content 
 
         }
 

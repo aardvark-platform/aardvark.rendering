@@ -30,6 +30,7 @@ type NvgRenderJob =
         transform : IMod<M33d>
         scissor : IMod<Box2d>
         fillColor : IMod<C4f>
+        isActive : IMod<bool>
 
         command : Either<PathRenderJob, TextRenderJob>
     }
