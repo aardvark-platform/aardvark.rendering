@@ -276,8 +276,11 @@ module ProgramExtensions =
         let newCode = 
             versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
                 let v = m.Groups.["version"].Value
+                let v = "130"
                 replaced := true
-                sprintf "#version %s\r\n%s" v def
+                let explcitAttribHack = "#extension GL_ARB_explicit_attrib_location : enable\r\n#extension GL_ARB_separate_shader_objects : enable\r\n#extension GL_ARB_uniform_buffer_object : enable\r\n"
+                Aardvark.Base.Report.Warn "intel HD hack active."
+                sprintf "#version %s\r\n%s\r\n%s" v explcitAttribHack def 
             ))
 
         if !replaced then newCode
