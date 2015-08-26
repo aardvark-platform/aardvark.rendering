@@ -252,6 +252,8 @@ module ProgramReflector =
 module ProgramExtensions =
     //type UniformField = Aardvark.Rendering.GL.UniformField
 
+    let mutable IntelHack = false
+
     let private parsePath (path : string) =
         // TODO: really parse path here
         Aardvark.Rendering.GL.ValuePath path
@@ -276,11 +278,14 @@ module ProgramExtensions =
         let newCode = 
             versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
                 let v = m.Groups.["version"].Value
-                let v = "130"
                 replaced := true
-                let explcitAttribHack = "#extension GL_ARB_explicit_attrib_location : enable\r\n#extension GL_ARB_separate_shader_objects : enable\r\n#extension GL_ARB_uniform_buffer_object : enable\r\n"
-                Aardvark.Base.Report.Warn "intel HD hack active."
-                sprintf "#version %s\r\n%s\r\n%s" v explcitAttribHack def 
+                if IntelHack
+                then
+                    let v = "130"
+                    let explcitAttribHack = "#extension GL_ARB_explicit_attrib_location : enable\r\n#extension GL_ARB_separate_shader_objects : enable\r\n#extension GL_ARB_uniform_buffer_object : enable\r\n"
+                    Aardvark.Base.Report.Warn "intel HD hack active."
+                    sprintf "#version %s\r\n%s\r\n%s" v explcitAttribHack def 
+                else sprintf "#version %s\r\n%s" v def
             ))
 
         if !replaced then newCode
