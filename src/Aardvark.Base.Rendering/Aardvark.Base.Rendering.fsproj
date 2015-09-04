@@ -68,8 +68,6 @@
     <Compile Include="Config.fs" />
     <Compile Include="Runtime.fs" />
     <Compile Include="RenderTask.fs" />
-    <None Include="Scripts\load-references.fsx" />
-    <None Include="Scripts\load-project.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

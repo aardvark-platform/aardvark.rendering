@@ -219,7 +219,7 @@ module AssimpExporter =
         | LeafNode of RenderObject
 
 
-    let buildTree (renderJobs : list<RenderObject>) : Tree =
+    let buildTree (renderObjects : list<RenderObject>) : Tree =
 
         let rec build (nextLevel : Dictionary<Scope, Tree>) (finished : List<Tree>) =
             if nextLevel.Count = 0 then
@@ -264,21 +264,21 @@ module AssimpExporter =
                 let treeDict = trees |> Dictionary.ofSeq
                 build treeDict finished
 
-        let leafs = renderJobs |> List.map (fun rj -> rj.AttributeScope |> unbox<Ag.Scope>, LeafNode rj) |> Dictionary.ofList
+        let leafs = renderObjects |> List.map (fun rj -> rj.AttributeScope |> unbox<Ag.Scope>, LeafNode rj) |> Dictionary.ofList
 
         build leafs (List())
 
-    let saveRenderJobs (file : string) (renderJobs : list<RenderObject>) =
+    let saveRenderJobs (file : string) (renderObjects : list<RenderObject>) =
         let env = SceneEnv file
 
-        let renderJobMeshes = Dictionary<RenderObject, Mesh>()
-        let renderJobMaterials = Dictionary<RenderObject, Material>()
+        let renderObjectMeshes = Dictionary<RenderObject, Mesh>()
+        let renderObjectMaterials = Dictionary<RenderObject, Material>()
         
         let materials = 
-            renderJobs 
+            renderObjects 
                 |> Seq.map (fun rj -> 
                     let mat = createMaterial env rj.Uniforms
-                    renderJobMaterials.[rj] <- mat
+                    renderObjectMaterials.[rj] <- mat
                     mat
                 ) 
                 |> Seq.distinct 
@@ -287,7 +287,7 @@ module AssimpExporter =
         let materialIndices = materials |> Array.mapi (fun i m -> (m,i)) |> Dictionary.ofArray
 
         let meshes = 
-            renderJobs
+            renderObjects
                 |> Seq.map (fun rj -> 
                     let index =
                         if rj.Indices <> null then rj.Indices |> Mod.force
@@ -306,9 +306,9 @@ module AssimpExporter =
 
                     let info = rj.DrawCallInfo |> Mod.force
 
-                    let matIndex = materialIndices.[renderJobMaterials.[rj]]
+                    let matIndex = materialIndices.[renderObjectMaterials.[rj]]
                     let mesh = createMesh matIndex info index attributes
-                    renderJobMeshes.[rj] <- mesh
+                    renderObjectMeshes.[rj] <- mesh
                     mesh
                 )
                 |> Seq.distinct 
@@ -317,12 +317,12 @@ module AssimpExporter =
         let meshIndices = meshes |> Array.mapi (fun i m -> (m,i)) |> Dictionary.ofArray
 
 
-        let tree = buildTree renderJobs
+        let tree = buildTree renderObjects
 
         let rec getNodes (currentTrafo : Trafo3d) (t : Tree) =
             match t with
                 | LeafNode rj -> 
-                    let meshIndex = meshIndices.[renderJobMeshes.[rj]]
+                    let meshIndex = meshIndices.[renderObjectMeshes.[rj]]
                     let node = Node(rj.CreationPath)
 
                     let trafo = 

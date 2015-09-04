@@ -134,7 +134,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
             | None -> changer
             | _ -> currentChanger
 
-    member x.RenderJob = rj
+    member x.RenderObject = rj
 
     member x.Fragment : 'f = 
         match precompiled with
@@ -233,7 +233,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             sortedFragments |> SortedDictionary.setWithNeighbours rj (fun l s r -> 
                 match s with
                     | Some f ->
-                        failwithf "duplicated renderjob: %A" f.RenderJob
+                        failwithf "duplicated renderobject: %A" f.RenderObject
                     | None ->
                         let l = match l with | Some (_,l) -> l | None -> prolog
                         let r = match r with | Some (_,r) -> r | None -> epilog
@@ -272,7 +272,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 f.Dispose()
 
             | _ ->
-                failwithf "cannot remove unknown renderjob: %A" rj
+                failwithf "cannot remove unknown renderobject: %A" rj
 
     member x.Run(fbo : int, ctx : ContextHandle) =
         // change the current context if necessary

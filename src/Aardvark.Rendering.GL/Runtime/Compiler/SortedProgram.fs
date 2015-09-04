@@ -27,8 +27,8 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let sorter = newSorter()
     
     let fragments = Dict<RenderObject, UnoptimizedRenderObjectFragment<'f>>()
-    let sortedRenderJobs = sorter.SortedList
-    do addInput sortedRenderJobs
+    let sortedRenderObjects = sorter.SortedList
+    do addInput sortedRenderObjects
 
     let mutable prolog = new UnoptimizedRenderObjectFragment<'f>(handler.Prolog, ctx)
     let mutable epilog = new UnoptimizedRenderObjectFragment<'f>(handler.Epilog, ctx)
@@ -56,7 +56,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         let rj = unsorted |> sorter.ToSortedRenderObject
         sorter.Add rj
 
-        // create a new RenderJobFragment and link it
+        // create a new RenderObjectFragment and link it
         let fragment = new UnoptimizedRenderObjectFragment<'f>(rj, ctx)
         fragments.[rj] <- fragment
         
@@ -79,7 +79,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 f.Dispose()
 
             | _ ->
-                failwithf "cannot remove unknown renderjob: %A" rj
+                failwithf "cannot remove unknown renderobject: %A" rj
 
     member x.Run(fbo : int, ctx : ContextHandle) =
         // change the current context if necessary
@@ -89,7 +89,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         let applySorting =
             async {
                 sw.Restart()
-                let sorted = sortedRenderJobs |> Mod.force
+                let sorted = sortedRenderObjects |> Mod.force
 
                 let prev = ref prolog
                 for rj in sorted do
@@ -99,7 +99,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                             f.Prev <- !prev
                             prev := f
                         | _ ->
-                            Log.warn "sorter returned unknown renderjob"
+                            Log.warn "sorter returned unknown renderobject"
 
                 prev.Value.Next <- epilog
                 epilog.Prev <- !prev

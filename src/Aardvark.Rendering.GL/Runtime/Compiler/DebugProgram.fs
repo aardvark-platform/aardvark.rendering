@@ -17,13 +17,13 @@ type DebugProgram(manager : ResourceManager,
 
     let mutable allResources = HashSet<IChangeableResource>()
     let mutable usedResources = HashSet<IChangeableResource>()
-    let renderJobs = HashSet<RenderObject>()
+    let renderObjects = HashSet<RenderObject>()
 
     member x.Add (rj : RenderObject) =
-        renderJobs.Add rj |> ignore
+        renderObjects.Add rj |> ignore
     
     member x.Remove (rj : RenderObject) =
-        renderJobs.Remove rj |> ignore
+        renderObjects.Remove rj |> ignore
 
     member x.Run(fbo : int, ctx : ContextHandle) =
         let ctxMod = Mod.constant ctx
@@ -34,7 +34,7 @@ type DebugProgram(manager : ResourceManager,
                 r.UpdateCPU()
                 r.UpdateGPU()
 
-        for rj in renderJobs do
+        for rj in renderObjects do
             let prog, _ = DeltaCompiler.compileFull manager ctxMod rj
 
             for r in prog.Resources do
@@ -66,7 +66,7 @@ type DebugProgram(manager : ResourceManager,
 
     interface IProgram with
         member x.Resources = ReferenceCountingSet()
-        member x.RenderObjects = renderJobs :> seq<_>
+        member x.RenderObjects = renderObjects :> seq<_>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Dispose() = x.Dispose()
