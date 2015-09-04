@@ -50,7 +50,7 @@ module Resources =
             )
         ))
 
-    let createVertexArrayObject (program : Program) (rj : RenderJob) =
+    let createVertexArrayObject (program : Program) (rj : RenderObject) =
         { runCompile = fun s -> 
             let manager = s.manager
             s.resourceCreateTime.Start()

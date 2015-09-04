@@ -25,22 +25,22 @@ type ResourceSharing =
     | Textures  = 0x02
     | Full      = 0x03
 
-type RenderJobOrder = 
+type RenderObjectOrder = 
     | Unordered = 0
     | FrontToBack = 1
     | BackToFront = 2
 
-type IDynamicRenderJobSorter =
-    abstract member Add : RenderJob -> unit
-    abstract member Remove : RenderJob -> unit
-    abstract member SortedList : IMod<list<RenderJob>> 
-    abstract member ToSortedRenderJob : RenderJob -> RenderJob
+type IDynamicRenderObjectSorter =
+    abstract member Add : RenderObject -> unit
+    abstract member Remove : RenderObject -> unit
+    abstract member SortedList : IMod<list<RenderObject>> 
+    abstract member ToSortedRenderObject : RenderObject -> RenderObject
 
 [<CustomEquality; NoComparison>]
-type RenderJobSorting =
-    | Dynamic of (Ag.Scope -> IDynamicRenderJobSorter)
-    | Static of cmp : IComparer<RenderJob>
-    | Grouping of projections : (list<RenderJob -> IMod>) with
+type RenderObjectSorting =
+    | Dynamic of (Ag.Scope -> IDynamicRenderObjectSorter)
+    | Static of cmp : IComparer<RenderObject>
+    | Grouping of projections : (list<RenderObject -> IMod>) with
 
     override x.GetHashCode() =
         match x with
@@ -50,7 +50,7 @@ type RenderJobSorting =
 
     override x.Equals o =
         match o with
-            | :? RenderJobSorting as o ->
+            | :? RenderObjectSorting as o ->
                 match x, o with
                     | Dynamic x, Dynamic o -> System.Object.Equals(x,o)
                     | Static x, Static o -> x.Equals o
@@ -63,21 +63,21 @@ type BackendConfiguration = {
     execution : ExecutionEngine
     redundancy : RedundancyRemoval
     sharing : ResourceSharing
-    sorting : RenderJobSorting
+    sorting : RenderObjectSorting
 }
 
 module Projections =
     let private empty = Mod.init () :> IMod
 
-    let surface (rj : RenderJob) =
+    let surface (rj : RenderObject) =
         rj.Surface :> IMod
 
-    let diffuseTexture (rj : RenderJob) =
+    let diffuseTexture (rj : RenderObject) =
         match rj.Uniforms.TryGetUniform (rj.AttributeScope, DefaultSemantic.DiffuseColorCoordinates) with
             | Some t -> t
             | _ -> empty
 
-    let indices (rj : RenderJob) =
+    let indices (rj : RenderObject) =
         match rj.Indices with
             | null -> empty
             | i -> i :> IMod
@@ -92,7 +92,7 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Native
             redundancy      = RedundancyRemoval.Static
             sharing         = ResourceSharing.Textures
-            sorting         = RenderJobSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard 
         }
 
     let NativeUnoptimized = 
@@ -100,7 +100,7 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Native
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.Textures
-            sorting         = RenderJobSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard 
         }
 
     let UnmanagedOptimized = 
@@ -108,7 +108,7 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Unmanaged
             redundancy      = RedundancyRemoval.Static
             sharing         = ResourceSharing.Textures
-            sorting         = RenderJobSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard 
         }
 
     let UnmanagedRuntime = 
@@ -116,7 +116,7 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Unmanaged
             redundancy      = RedundancyRemoval.Runtime
             sharing         = ResourceSharing.Textures
-            sorting         = RenderJobSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard 
         }
 
     let UnmanagedUnoptimized = 
@@ -124,7 +124,7 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Unmanaged
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.Textures
-            sorting         = RenderJobSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard 
         }
 
     let ManagedOptimized = 
@@ -132,7 +132,7 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Managed
             redundancy      = RedundancyRemoval.Static
             sharing         = ResourceSharing.Textures
-            sorting         = RenderJobSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard 
         }
 
     let ManagedUnoptimized = 
@@ -140,7 +140,7 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Managed
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.Textures
-            sorting         = RenderJobSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard 
         }
 
     let Debug = 
@@ -148,7 +148,7 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Debug
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.None
-            sorting         = RenderJobSorting.Grouping []
+            sorting         = RenderObjectSorting.Grouping []
         }
 
     let Default = NativeOptimized

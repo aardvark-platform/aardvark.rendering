@@ -18,18 +18,18 @@ type IDynamicFragment<'a when 'a :> IDynamicFragment<'a>> =
     abstract member Next : 'a with get, set
     abstract member Prev : 'a with get, set
 
-type IRenderJobSorter =
-    inherit IComparer<RenderJob>
-    abstract member Add : RenderJob -> unit
-    abstract member Remove : RenderJob -> unit
+type IRenderObjectSorter =
+    inherit IComparer<RenderObject>
+    abstract member Add : RenderObject -> unit
+    abstract member Remove : RenderObject -> unit
 
 [<AllowNullLiteral>]
 type IProgram =
     inherit IDisposable
-    abstract member RenderJobs : seq<RenderJob>
+    abstract member RenderObjects : seq<RenderObject>
     abstract member Resources : ReferenceCountingSet<IChangeableResource>
-    abstract member Add : RenderJob -> unit
-    abstract member Remove : RenderJob -> unit
+    abstract member Add : RenderObject -> unit
+    abstract member Remove : RenderObject -> unit
     abstract member Run : int * ContextHandle -> FrameStatistics
 
 

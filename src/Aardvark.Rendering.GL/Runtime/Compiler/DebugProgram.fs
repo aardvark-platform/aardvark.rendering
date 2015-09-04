@@ -17,12 +17,12 @@ type DebugProgram(manager : ResourceManager,
 
     let mutable allResources = HashSet<IChangeableResource>()
     let mutable usedResources = HashSet<IChangeableResource>()
-    let renderJobs = HashSet<RenderJob>()
+    let renderJobs = HashSet<RenderObject>()
 
-    member x.Add (rj : RenderJob) =
+    member x.Add (rj : RenderObject) =
         renderJobs.Add rj |> ignore
     
-    member x.Remove (rj : RenderJob) =
+    member x.Remove (rj : RenderObject) =
         renderJobs.Remove rj |> ignore
 
     member x.Run(fbo : int, ctx : ContextHandle) =
@@ -66,7 +66,7 @@ type DebugProgram(manager : ResourceManager,
 
     interface IProgram with
         member x.Resources = ReferenceCountingSet()
-        member x.RenderJobs = renderJobs :> seq<_>
+        member x.RenderObjects = renderJobs :> seq<_>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Dispose() = x.Dispose()

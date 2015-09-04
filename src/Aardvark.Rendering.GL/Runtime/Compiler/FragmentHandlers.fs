@@ -9,8 +9,8 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
 type OperationHint =
-    | AddRenderJob of int
-    | RemoveRenderJob of int
+    | AddRenderObject of int
+    | RemoveRenderObject of int
     | RunProgram
 
 type IFragmentHandler<'f when 'f :> IDynamicFragment<'f>> =
@@ -140,8 +140,8 @@ module FragmentHandlers =
             member x.AdjustStatistics s = s
             member x.Hint op =
                 match op with 
-                    | AddRenderJob v -> hintDefragmentation v
-                    | RemoveRenderJob v -> hintDefragmentation -v
+                    | AddRenderObject v -> hintDefragmentation v
+                    | RemoveRenderObject v -> hintDefragmentation -v
                     | RunProgram -> 
                         ranOnce := true
                         hintDefragmentation 0

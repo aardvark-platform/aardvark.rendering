@@ -29,7 +29,7 @@ type IRuntime =
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
 
     abstract member CompileClear : clearColor : IMod<C4f> * clearDepth : IMod<double> -> IRenderTask
-    abstract member CompileRender : BackendConfiguration * aset<RenderJob> -> IRenderTask
+    abstract member CompileRender : BackendConfiguration * aset<RenderObject> -> IRenderTask
 
     abstract member CreateTexture : size : IMod<V2i> * format : IMod<PixFormat> * samples : IMod<int> * count : IMod<int> -> IFramebufferTexture
     abstract member CreateRenderbuffer : size : IMod<V2i> * format : IMod<RenderbufferFormat> * samples : IMod<int> -> IFramebufferRenderbuffer

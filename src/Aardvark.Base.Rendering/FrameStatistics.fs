@@ -40,8 +40,8 @@ type FrameStatistics =
         JumpDistance : float
         ResourceCount : float
         ResourceUpdateCounts : Map<ResourceKind,float>
-        AddedRenderJobs : float
-        RemovedRenderJobs : float
+        AddedRenderObjects : float
+        RemovedRenderObjects : float
         SortingTime : TimeSpan
         InstructionUpdateTime : TimeSpan
         ResourceUpdateTime : TimeSpan
@@ -61,8 +61,8 @@ type FrameStatistics =
             JumpDistance = 0.0
             ResourceCount = 0.0
             ResourceUpdateCounts = Map.empty
-            AddedRenderJobs = 0.0
-            RemovedRenderJobs = 0.0
+            AddedRenderObjects = 0.0
+            RemovedRenderObjects = 0.0
             SortingTime = TimeSpan.Zero
             InstructionUpdateTime = TimeSpan.Zero
             ResourceUpdateTime = TimeSpan.Zero
@@ -85,8 +85,8 @@ type FrameStatistics =
             JumpDistance = l.JumpDistance + r.JumpDistance
             ResourceCount = l.ResourceCount + r.ResourceCount
             ResourceUpdateCounts = Map.unionWith l.ResourceUpdateCounts r.ResourceUpdateCounts (+) 0.0
-            AddedRenderJobs = l.AddedRenderJobs + r.AddedRenderJobs
-            RemovedRenderJobs = l.RemovedRenderJobs + r.RemovedRenderJobs
+            AddedRenderObjects = l.AddedRenderObjects + r.AddedRenderObjects
+            RemovedRenderObjects = l.RemovedRenderObjects + r.RemovedRenderObjects
             SortingTime = l.SortingTime + r.SortingTime
             InstructionUpdateTime = l.InstructionUpdateTime + r.InstructionUpdateTime
             ResourceUpdateTime = l.ResourceUpdateTime + r.ResourceUpdateTime
@@ -106,8 +106,8 @@ type FrameStatistics =
             JumpDistance = l.JumpDistance - r.JumpDistance
             ResourceCount = l.ResourceCount - r.ResourceCount
             ResourceUpdateCounts = Map.unionWith l.ResourceUpdateCounts r.ResourceUpdateCounts (-) 0.0
-            AddedRenderJobs = l.AddedRenderJobs - r.AddedRenderJobs
-            RemovedRenderJobs = l.RemovedRenderJobs - r.RemovedRenderJobs
+            AddedRenderObjects = l.AddedRenderObjects - r.AddedRenderObjects
+            RemovedRenderObjects = l.RemovedRenderObjects - r.RemovedRenderObjects
             SortingTime = l.SortingTime - r.SortingTime
             InstructionUpdateTime = l.InstructionUpdateTime - r.InstructionUpdateTime
             ResourceUpdateTime = l.ResourceUpdateTime - r.ResourceUpdateTime
@@ -127,8 +127,8 @@ type FrameStatistics =
             JumpDistance = l.JumpDistance / r
             ResourceCount = l.ResourceCount / r
             ResourceUpdateCounts = Map.map (fun k v -> v / r) l.ResourceUpdateCounts
-            AddedRenderJobs = l.AddedRenderJobs / r
-            RemovedRenderJobs = l.RemovedRenderJobs / r
+            AddedRenderObjects = l.AddedRenderObjects / r
+            RemovedRenderObjects = l.RemovedRenderObjects / r
             SortingTime = TimeSpan.FromTicks(int64 (float l.SortingTime.Ticks / r))
             InstructionUpdateTime = TimeSpan.FromTicks(int64 (float l.InstructionUpdateTime.Ticks / r))
             ResourceUpdateTime = TimeSpan.FromTicks(int64 (float l.ResourceUpdateTime.Ticks / r))

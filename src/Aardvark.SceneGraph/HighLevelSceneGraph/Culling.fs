@@ -15,7 +15,7 @@
 //
 //                yield! jobs |> ASet.filterM (fun rj -> Mod.map2 intersectsFrustum (rj.GetBoundingBox()) viewProjTrafo)
 ////
-////                for rj : RenderJob in jobs do
+////                for rj : RenderObject in jobs do
 ////                    let! viewProjTrafo = c?ViewProjTrafo() : Mod<Trafo3d>
 ////                    let! bb = rj.GetBoundingBox().Mod
 ////                    if intersectsFrustum bb viewProjTrafo 

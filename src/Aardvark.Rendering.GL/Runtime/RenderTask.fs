@@ -114,7 +114,7 @@ module RenderTasks =
                 let s = seq { for i in 0..keys.Count-1 do yield KeyValuePair(keys.[i], values.[i]) }
                 (s :> System.Collections.IEnumerable).GetEnumerator()
 
-    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<RenderJob>) as this =
+    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<RenderObject>) as this =
         inherit AdaptiveObject()
 
         let mutable currentEngine = engine.GetValue()
@@ -144,7 +144,7 @@ module RenderTasks =
         let newProgram (scope : Ag.Scope) (engine : BackendConfiguration) : IProgram =
             
             match engine.sorting with
-                | RenderJobSorting.Dynamic newSorter ->
+                | RenderObjectSorting.Dynamic newSorter ->
                     // TODO: respect mode here
                     
                     Log.line "using GLVM sorted program"
@@ -306,7 +306,7 @@ module RenderTasks =
                     programs |> Map.map (fun pass v ->
                         let program = newProgram scope newEngine
 
-                        for rj in v.RenderJobs do
+                        for rj in v.RenderObjects do
                             program.Add rj
 
                         program
@@ -319,12 +319,12 @@ module RenderTasks =
 
     
 
-        member private x.Add(pass : uint64, rj : RenderJob) =
+        member private x.Add(pass : uint64, rj : RenderObject) =
             additions <- additions + 1
             let program = getProgramForPass pass (rj.AttributeScope |> unbox)
             program.Add rj
 
-        member private x.Remove(pass : uint64, rj : RenderJob) =
+        member private x.Remove(pass : uint64, rj : RenderObject) =
             removals <- removals + 1
             match tryGetProgramForPass pass with
                 | Some p -> p.Remove rj
@@ -333,7 +333,7 @@ module RenderTasks =
         member x.Runtime = runtime
         member x.Manager = manager
 
-        member x.ProcessDeltas (deltas : list<Delta<RenderJob>>) =
+        member x.ProcessDeltas (deltas : list<Delta<RenderObject>>) =
             let mutable additions = 0
             let mutable removals = 0
             for d in deltas do
@@ -414,8 +414,8 @@ module RenderTasks =
 
                     let stats = 
                         { stats with 
-                            AddedRenderJobs = float additions
-                            RemovedRenderJobs = float removals
+                            AddedRenderObjects = float additions
+                            RemovedRenderObjects = float removals
                             ResourceCount = float resourceCount 
                         }
 

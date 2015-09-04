@@ -21,14 +21,17 @@ type IUniformProvider =
     abstract member TryGetUniform : scope : Ag.Scope * name : Symbol -> Option<IMod>
 
 
-module private RenderJobIds =
+module private RenderObjectIds =
     open System.Threading
     let mutable private currentId = 0
     let newId() = Interlocked.Increment &currentId
 
+[<AllowNullLiteral>]
+type ICompiledRenderObj = interface end
+
 [<CustomEquality>]
 [<CustomComparison>]
-type RenderJob =
+type RenderObject =
     {
         Id : int
         CreationPath : string
@@ -51,10 +54,12 @@ type RenderJob =
         mutable VertexAttributes : IAttributeProvider
                 
         mutable Uniforms : IUniformProvider
+
+        mutable OptimizedRepr : ICompiledRenderObj
     }
 
     static member Create(path : string) =
-        { Id = RenderJobIds.newId()
+        { Id = RenderObjectIds.newId()
           CreationPath = path;
           AttributeScope = Ag.emptyScope
           IsActive = null
@@ -70,24 +75,25 @@ type RenderJob =
           InstanceAttributes = null
           VertexAttributes = null
           Uniforms = null
+          OptimizedRepr = null
         }
 
-    static member Create() = RenderJob.Create("UNKNWON")
+    static member Create() = RenderObject.Create("UNKNWON")
 
     override x.GetHashCode() = x.Id
     override x.Equals o =
         match o with
-            | :? RenderJob as o -> x.Id = o.Id
+            | :? RenderObject as o -> x.Id = o.Id
             | _ -> false
 
     interface IComparable with
         member x.CompareTo o =
             match o with
-                | :? RenderJob as o -> compare x.Id o.Id
+                | :? RenderObject as o -> compare x.Id o.Id
                 | _ -> failwith "uncomparable"
 
 [<AutoOpen>]
-module RenderJobExtensions =
+module RenderObjectExtensions =
 
     let private emptyUniforms =
         { new IUniformProvider with
@@ -119,10 +125,11 @@ module RenderJobExtensions =
           InstanceAttributes = emptyAttributes
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms
+          OptimizedRepr = null
         }
 
 
-    type RenderJob with
+    type RenderObject with
         static member Empty =
             empty
 

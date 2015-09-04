@@ -210,7 +210,7 @@ module DefaultOverlays =
             "resource update", timeString s.ResourceUpdateTime
             "resource updates", printResourceUpdateCounts s.ResourceUpdateCounts
             "instruction update", timeString s.InstructionUpdateTime
-            "renderjobs", sprintf "+%.0f/-%.0f" s.AddedRenderJobs s.RemovedRenderJobs
+            "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
             "resources", sprintf "%.0f" s.ResourceCount
             "memory", memoryString s.ProgramSize
         ]

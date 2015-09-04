@@ -216,10 +216,10 @@ module AssimpExporter =
     type Tree =
         | TrafoNode of Trafo3d * Tree
         | GroupNode of list<Tree>
-        | LeafNode of RenderJob
+        | LeafNode of RenderObject
 
 
-    let buildTree (renderJobs : list<RenderJob>) : Tree =
+    let buildTree (renderJobs : list<RenderObject>) : Tree =
 
         let rec build (nextLevel : Dictionary<Scope, Tree>) (finished : List<Tree>) =
             if nextLevel.Count = 0 then
@@ -268,11 +268,11 @@ module AssimpExporter =
 
         build leafs (List())
 
-    let saveRenderJobs (file : string) (renderJobs : list<RenderJob>) =
+    let saveRenderJobs (file : string) (renderJobs : list<RenderObject>) =
         let env = SceneEnv file
 
-        let renderJobMeshes = Dictionary<RenderJob, Mesh>()
-        let renderJobMaterials = Dictionary<RenderJob, Material>()
+        let renderJobMeshes = Dictionary<RenderObject, Mesh>()
+        let renderJobMaterials = Dictionary<RenderObject, Material>()
         
         let materials = 
             renderJobs 

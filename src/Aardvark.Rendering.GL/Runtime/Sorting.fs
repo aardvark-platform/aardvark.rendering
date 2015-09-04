@@ -6,7 +6,7 @@ open Aardvark.Base.Incremental
 
  
 //module DynamicSorting =
-//    let mutable private create = fun (scope : Aardvark.Base.Ag.Scope) (o : RenderJobOrder) (u : unit) -> failwith "no sorter registered"
+//    let mutable private create = fun (scope : Aardvark.Base.Ag.Scope) (o : RenderObjectOrder) (u : unit) -> failwith "no sorter registered"
 //
 //    let registerSorter(createSorter : Aardvark.Base.Ag.Scope -> RenderJobOrder -> unit -> IDynamicRenderJobSorter) =
 //        create <- createSorter
@@ -15,21 +15,21 @@ open Aardvark.Base.Incremental
 //        create scope order
 //        
 
-module RenderJobSorters =
+module RenderObjectSorters =
     open System.Threading
     open System.Collections.Generic
 
-    type private RenderJobComparisonSorter(cmp : IComparer<RenderJob>) =
-        member x.Add (rj : RenderJob) = ()
-        member x.Remove (rj : RenderJob) = ()
-        member x.Compare(l : RenderJob, r : RenderJob) = cmp.Compare(l,r)
+    type private RenderObjectComparisonSorter(cmp : IComparer<RenderObject>) =
+        member x.Add (rj : RenderObject) = ()
+        member x.Remove (rj : RenderObject) = ()
+        member x.Compare(l : RenderObject, r : RenderObject) = cmp.Compare(l,r)
 
-        interface IRenderJobSorter with
+        interface IRenderObjectSorter with
             member x.Add rj = x.Add rj
             member x.Remove rj = x.Remove rj
             member x.Compare(l,r) = x.Compare(l,r)
 
-    type private RenderJobGroupingSorter(projections : list<RenderJob -> IMod>) =
+    type private RenderObjectGroupingSorter(projections : list<RenderObject -> IMod>) =
         let mutable currentId = 0
         let idCache = ConcurrentDict<IMod, ref<int> * int>(Dict())
         let rjCache = Dict()
@@ -61,33 +61,33 @@ module RenderJobSorters =
             else
                 a.Id
 
-        let invoke (rj : RenderJob) =
+        let invoke (rj : RenderObject) =
             rjCache.GetOrCreate(rj, fun _ ->
                 (projections |> List.map (fun f -> invokeId (f rj))) @ [rj.Id]
             )
 
-        let revoke (rj : RenderJob) =
+        let revoke (rj : RenderObject) =
             rjCache.Remove rj |> ignore
             (projections |> List.map (fun f -> revokeId (f rj))) @ [rj.Id]
 
-        let lookup (rj : RenderJob) =
+        let lookup (rj : RenderObject) =
             rjCache.[rj]
 
 
-        member x.Add (rj : RenderJob) = invoke rj |> ignore
-        member x.Remove (rj : RenderJob) = revoke rj |> ignore
-        member x.Compare(l : RenderJob, r : RenderJob) = compare (lookup l) (lookup r)
+        member x.Add (rj : RenderObject) = invoke rj |> ignore
+        member x.Remove (rj : RenderObject) = revoke rj |> ignore
+        member x.Compare(l : RenderObject, r : RenderObject) = compare (lookup l) (lookup r)
 
-        interface IRenderJobSorter with
+        interface IRenderObjectSorter with
             member x.Add rj = x.Add rj
             member x.Remove rj = x.Remove rj
             member x.Compare(l,r) = x.Compare(l,r)
 
-    let ofSorting (s : RenderJobSorting) =
+    let ofSorting (s : RenderObjectSorting) =
         match s with
             | Static cmp ->
-                RenderJobComparisonSorter(cmp) :> IRenderJobSorter
+                RenderObjectComparisonSorter(cmp) :> IRenderObjectSorter
             | Grouping proj ->
-                RenderJobGroupingSorter(proj) :> IRenderJobSorter
+                RenderObjectGroupingSorter(proj) :> IRenderObjectSorter
             | Dynamic order ->
                 failwith "cannot create trie for dynamic sorting"

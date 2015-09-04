@@ -13,29 +13,29 @@ open Aardvark.SceneGraph.Internal
 module RenderJobSemantics =
 
     type ISg with
-        member x.RenderJobs() : aset<RenderJob> = x?RenderJobs()
+        member x.RenderJobs() : aset<RenderObject> = x?RenderJobs()
 
     module Semantic =
-        let renderJobs (s : ISg) : aset<RenderJob> = s?RenderJobs()
+        let renderJobs (s : ISg) : aset<RenderObject> = s?RenderJobs()
 
     [<Semantic>]
     type RenderJobSem() =
 
-        member x.RenderJobs(a : IApplicator) : aset<RenderJob> =
+        member x.RenderJobs(a : IApplicator) : aset<RenderObject> =
             aset {
                 let! c = a.Child
                 yield! c.RenderJobs()
             }
 
-        member x.RenderJobs(g : IGroup) : aset<RenderJob> =
+        member x.RenderJobs(g : IGroup) : aset<RenderObject> =
             aset {
                 for c in g.Children do
                     yield! c.RenderJobs()
             }
 
-        member x.RenderJobs(r : Sg.RenderNode) : aset<RenderJob> =
+        member x.RenderJobs(r : Sg.RenderNode) : aset<RenderObject> =
             let scope = Ag.getContext()
-            let rj = RenderJob.Create(scope.Path)
+            let rj = RenderObject.Create(scope.Path)
             
             rj.AttributeScope <- scope 
             rj.Indices <- let index  = r.VertexIndexArray in if index = AttributeSemantics.emptyIndex then null else index 

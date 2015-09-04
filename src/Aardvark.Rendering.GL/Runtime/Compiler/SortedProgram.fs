@@ -10,7 +10,7 @@ open Aardvark.Rendering.GL
 
 type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         (newHandler : unit -> IFragmentHandler<'f>, 
-         newSorter : unit -> IDynamicRenderJobSorter,
+         newSorter : unit -> IDynamicRenderObjectSorter,
          manager : ResourceManager, 
          addInput : IAdaptiveObject -> unit, 
          removeInput : IAdaptiveObject -> unit) =
@@ -26,12 +26,12 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     let sorter = newSorter()
     
-    let fragments = Dict<RenderJob, UnoptimizedRenderJobFragment<'f>>()
+    let fragments = Dict<RenderObject, UnoptimizedRenderObjectFragment<'f>>()
     let sortedRenderJobs = sorter.SortedList
     do addInput sortedRenderJobs
 
-    let mutable prolog = new UnoptimizedRenderJobFragment<'f>(handler.Prolog, ctx)
-    let mutable epilog = new UnoptimizedRenderJobFragment<'f>(handler.Epilog, ctx)
+    let mutable prolog = new UnoptimizedRenderObjectFragment<'f>(handler.Prolog, ctx)
+    let mutable epilog = new UnoptimizedRenderObjectFragment<'f>(handler.Epilog, ctx)
     let mutable run = handler.Compile ()
 
 
@@ -52,18 +52,18 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         prolog <- null
         epilog <- null
 
-    member x.Add (unsorted : RenderJob) =
-        let rj = unsorted |> sorter.ToSortedRenderJob
+    member x.Add (unsorted : RenderObject) =
+        let rj = unsorted |> sorter.ToSortedRenderObject
         sorter.Add rj
 
         // create a new RenderJobFragment and link it
-        let fragment = new UnoptimizedRenderJobFragment<'f>(rj, ctx)
+        let fragment = new UnoptimizedRenderObjectFragment<'f>(rj, ctx)
         fragments.[rj] <- fragment
         
         // listen to changes
         changeSet.Listen fragment.Changer
 
-    member x.Remove (rj : RenderJob) =
+    member x.Remove (rj : RenderObject) =
         match fragments.TryRemove rj with
             | (true, f) ->
                 sorter.Remove rj
@@ -143,7 +143,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     interface IProgram with
         member x.Resources = resourceSet.Resources
-        member x.RenderJobs = fragments.Keys
+        member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)

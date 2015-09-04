@@ -15,8 +15,8 @@ module BoundingBoxExtensions =
 
     open System.Runtime.CompilerServices
 
-    let private bbCache = ConditionalWeakTable<RenderJob, IMod<Box3d>>()
-    type RenderJob with
+    let private bbCache = ConditionalWeakTable<RenderObject, IMod<Box3d>>()
+    type RenderObject with
         member x.GetBoundingBox() =
             match bbCache.TryGetValue x with
                 | (true, v) -> v

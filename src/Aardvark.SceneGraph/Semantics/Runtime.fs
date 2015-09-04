@@ -14,17 +14,17 @@ module RuntimeSemantics =
 
     type IRuntime with
 
-        member x.CompileRender(rjs : aset<RenderJob>) =
+        member x.CompileRender(rjs : aset<RenderObject>) =
             x.CompileRender(BackendConfiguration.Default, rjs)
 
         member x.CompileRender (engine : BackendConfiguration, e : Sg.Environment) =
-            let jobs : aset<RenderJob> = e?RenderJobs()
+            let jobs : aset<RenderObject> = e?RenderJobs()
             x.CompileRender(engine, jobs)
 
         member x.CompileRender (engine : BackendConfiguration, s : ISg) =
             let app = Sg.DynamicNode(Mod.constant s)
             app?Runtime <- x
-            let jobs : aset<RenderJob> = app?RenderJobs()
+            let jobs : aset<RenderObject> = app?RenderJobs()
             x.CompileRender(engine, jobs)
 
         member x.CompileRender (s : ISg) =

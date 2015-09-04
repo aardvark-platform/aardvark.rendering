@@ -29,8 +29,8 @@ module AdaptiveCode =
 module DeltaCompiler =
 
     /// determines if all uniforms (given in values) are equal to the uniforms
-    /// of the given RenderJob
-    let rec private allUniformsEqual (rj : RenderJob) (values : list<string * IMod>) =
+    /// of the given RenderObject
+    let rec private allUniformsEqual (rj : RenderObject) (values : list<string * IMod>) =
         match values with
             | (k,v)::xs -> 
                 match rj.Uniforms.TryGetUniform(rj.AttributeScope, Symbol.Create k) with
@@ -50,7 +50,7 @@ module DeltaCompiler =
     /// This function is the core-ingredient making our rendering-system
     /// fast as hell \o/.
     /// </summary>
-    let private compileDeltaInternal (prev : RenderJob) (next : RenderJob) =
+    let private compileDeltaInternal (prev : RenderObject) (next : RenderObject) =
         compiled {
                 
             //set all modes if needed
@@ -117,7 +117,7 @@ module DeltaCompiler =
                                         let! sampler = Resources.createSampler (Mod.constant sampler)
                               
                                         //ISSUE:      
-                                        //there is a special case when the prev renderjob has the same texture but binds it to
+                                        //there is a special case when the prev renderobject has the same texture but binds it to
                                         //a different slot!!!
                                         match prevTexture with
                                             | Some old when old = (value :> IMod) ->
@@ -147,7 +147,7 @@ module DeltaCompiler =
                         Log.warn "trying to set unknown top-level uniform: %A" uniform
 
             let! vao = Resources.createVertexArrayObject program next
-            if prev <> RenderJob.Empty then
+            if prev <> RenderObject.Empty then
                 if prev.Surface = next.Surface then
                     let! vaoPrev = Resources.runLocal (Resources.createVertexArrayObject program prev)
                     vaoPrev.Dispose()
@@ -174,7 +174,7 @@ module DeltaCompiler =
     /// This function is the core-ingredient making our rendering-system
     /// fast as hell \o/.
     /// </summary>
-    let compileDelta (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : RenderJob) (rj : RenderJob) =
+    let compileDelta (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : RenderObject) (rj : RenderObject) =
         let c = compileDeltaInternal prev rj
         let (s,()) =
             c.runCompile {
@@ -191,8 +191,8 @@ module DeltaCompiler =
     /// compileFull compiles all instructions needed to render [rj] 
     /// making no assumpltions about the previous GL state.
     /// </summary>
-    let compileFull (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : RenderJob) =
-        let c = compileDeltaInternal RenderJob.Empty rj
+    let compileFull (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : RenderObject) =
+        let c = compileDeltaInternal RenderObject.Empty rj
 
         let (s,()) =
             c.runCompile {

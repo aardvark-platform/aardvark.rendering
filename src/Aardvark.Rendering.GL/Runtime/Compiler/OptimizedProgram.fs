@@ -18,11 +18,11 @@ type CompileContext<'f when 'f :> IDynamicFragment<'f>> =
     }
 
 [<AllowNullLiteral>]
-type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
-    private (precompiled : Option<'f>, rj : RenderJob, ctx : CompileContext<'f>) =
+type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
+    private (precompiled : Option<'f>, rj : RenderObject, ctx : CompileContext<'f>) =
 
-    let mutable next : OptimizedRenderJobFragment<'f> = null
-    let mutable prev : OptimizedRenderJobFragment<'f> = null
+    let mutable next : OptimizedRenderObjectFragment<'f> = null
+    let mutable prev : OptimizedRenderObjectFragment<'f> = null
     let mutable currentProgram : Option<AdaptiveCode> = None
     let mutable currentChanger = Mod.constant FrameStatistics.Zero
     let mutable frag : 'f = match precompiled with | Some p -> p | None -> null
@@ -31,8 +31,8 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
     let recompile() =
         let prevRj =
             match prev with
-                | null -> RenderJob.Empty
-                | _ -> prev.RenderJob
+                | null -> RenderObject.Empty
+                | _ -> prev.RenderObject
 
         let currentSurface = rj.Surface.GetValue()
         let changed =
@@ -151,7 +151,7 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
             | None -> changer
             | _ -> currentChanger
 
-    member x.RenderJob = rj
+    member x.RenderObject = rj
 
     member x.Fragment : 'f = 
         match precompiled with
@@ -170,7 +170,7 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
 
     member x.Next
         with get() = next
-        and set (n : OptimizedRenderJobFragment<'f>) = 
+        and set (n : OptimizedRenderObjectFragment<'f>) = 
             match frag with
                 | null -> ()
                 | _ ->
@@ -183,7 +183,7 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
 
     member x.Prev
         with get() = prev
-        and set (p : OptimizedRenderJobFragment<'f>) = 
+        and set (p : OptimizedRenderObjectFragment<'f>) = 
             match frag with
                 | null -> ()
                 | _ ->
@@ -198,14 +198,14 @@ type private OptimizedRenderJobFragment<'f when 'f :> IDynamicFragment<'f> and '
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    new(rj : RenderJob, ctx : CompileContext<'f>) = new OptimizedRenderJobFragment<'f>(None, rj, ctx)
-    new(precompiled : 'f, ctx : CompileContext<'f>) = new OptimizedRenderJobFragment<'f>(Some precompiled, RenderJob.Empty, ctx)
+    new(rj : RenderObject, ctx : CompileContext<'f>) = new OptimizedRenderObjectFragment<'f>(None, rj, ctx)
+    new(precompiled : 'f, ctx : CompileContext<'f>) = new OptimizedRenderObjectFragment<'f>(Some precompiled, RenderObject.Empty, ctx)
 
 
 type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     (config : BackendConfiguration, newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     
-    let sorter = RenderJobSorters.ofSorting config.sorting
+    let sorter = RenderObjectSorters.ofSorting config.sorting
     let sw = System.Diagnostics.Stopwatch()
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()
@@ -215,11 +215,11 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
 
-    let sortedFragments = SortedDictionaryExt<RenderJob, OptimizedRenderJobFragment<'f>>(curry sorter.Compare)
-    let fragments = Dict<RenderJob, OptimizedRenderJobFragment<'f>>()
+    let sortedFragments = SortedDictionaryExt<RenderObject, OptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
+    let fragments = Dict<RenderObject, OptimizedRenderObjectFragment<'f>>()
 
-    let mutable prolog = new OptimizedRenderJobFragment<'f>(handler.Prolog, ctx)
-    let mutable epilog = new OptimizedRenderJobFragment<'f>(handler.Epilog, ctx)
+    let mutable prolog = new OptimizedRenderObjectFragment<'f>(handler.Prolog, ctx)
+    let mutable epilog = new OptimizedRenderObjectFragment<'f>(handler.Epilog, ctx)
     let mutable run = handler.Compile ()
 
 
@@ -239,7 +239,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         prolog <- null
         epilog <- null
 
-    member x.Add (rj : RenderJob) =
+    member x.Add (rj : RenderObject) =
 
         sorter.Add rj
 
@@ -248,12 +248,12 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             sortedFragments |> SortedDictionary.setWithNeighbours rj (fun l s r -> 
                 match s with
                     | Some f ->
-                        failwithf "duplicated renderjob: %A" f.RenderJob
+                        failwithf "duplicated renderobject: %A" f.RenderObject
                     | None ->
                         let l = match l with | Some (_,l) -> l | None -> prolog
                         let r = match r with | Some (_,r) -> r | None -> epilog
 
-                        let f = new OptimizedRenderJobFragment<'f>(rj, ctx)
+                        let f = new OptimizedRenderObjectFragment<'f>(rj, ctx)
                         f.Prev <- l
                         l.Next <- f
 
@@ -265,11 +265,11 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         fragments.[rj] <- fragment
         
-        handler.Hint(AddRenderJob 1)
+        handler.Hint(AddRenderObject 1)
         // listen to changes
         changeSet.Listen fragment.Changer
 
-    member x.Remove (rj : RenderJob) =
+    member x.Remove (rj : RenderObject) =
         match fragments.TryRemove rj with
             | (true, f) ->
                 
@@ -286,10 +286,10 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 f.Dispose()
 
                 sorter.Remove rj
-                handler.Hint(RemoveRenderJob 1)
+                handler.Hint(RemoveRenderObject 1)
 
             | _ ->
-                failwithf "cannot remove unknown renderjob: %A" rj
+                failwithf "cannot remove unknown renderobject: %A" rj
 
     member x.Run(fbo : int, ctx : ContextHandle) =
         // change the current context if necessary
@@ -329,7 +329,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     interface IProgram with
         member x.Resources = resourceSet.Resources
-        member x.RenderJobs = fragments.Keys
+        member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
