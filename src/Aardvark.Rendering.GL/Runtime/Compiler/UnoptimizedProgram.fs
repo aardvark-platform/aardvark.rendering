@@ -228,7 +228,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     member x.Add (rj : RenderObject) =
         sorter.Add rj
-        // create a new RenderJobFragment and link it
+        // create a new RenderObjectFragment and link it
         let fragment = 
             sortedFragments |> SortedDictionary.setWithNeighbours rj (fun l s r -> 
                 match s with
