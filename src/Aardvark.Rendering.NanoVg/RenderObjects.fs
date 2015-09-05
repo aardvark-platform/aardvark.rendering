@@ -3,7 +3,7 @@
 open Aardvark.Base
 open Aardvark.Base.Incremental
 
-type PathRenderJob =
+type PathRenderObject =
     {
         strokeWidth : IMod<float>
         strokeColor : IMod<C4f>
@@ -14,7 +14,7 @@ type PathRenderJob =
         mode : IMod<PrimitiveMode>
     }     
 
-type TextRenderJob =
+type TextRenderObject =
     {
         font : IMod<Font>
         size : IMod<float>
@@ -25,12 +25,12 @@ type TextRenderJob =
         content : IMod<string>
     }     
 
-type NvgRenderJob =
+type NvgRenderObject =
     {
         transform : IMod<M33d>
         scissor : IMod<Box2d>
         fillColor : IMod<C4f>
         isActive : IMod<bool>
 
-        command : Either<PathRenderJob, TextRenderJob>
+        command : Either<PathRenderObject, TextRenderObject>
     }

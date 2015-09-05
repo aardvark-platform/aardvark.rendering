@@ -268,7 +268,7 @@ module AssimpExporter =
 
         build leafs (List())
 
-    let saveRenderJobs (file : string) (renderObjects : list<RenderObject>) =
+    let saveRenderObjects (file : string) (renderObjects : list<RenderObject>) =
         let env = SceneEnv file
 
         let renderObjectMeshes = Dictionary<RenderObject, Mesh>()
@@ -386,7 +386,7 @@ module AssimpExporter =
             failwithf "could not save scene to %A" file
 
     let save (file : string) (sg : ISg) =
-        saveRenderJobs file (sg.RenderJobs() |> ASet.toList)
+        saveRenderObjects file (sg.RenderObjects() |> ASet.toList)
 
     let test() =
         let ig = IndexedGeometry()

@@ -10,30 +10,30 @@ open Aardvark.Base.Rendering
 open Aardvark.SceneGraph.Internal
 
 [<AutoOpen>]
-module RenderJobSemantics =
+module RenderObjectSemantics =
 
     type ISg with
-        member x.RenderJobs() : aset<RenderObject> = x?RenderJobs()
+        member x.RenderObjects() : aset<RenderObject> = x?RenderObjects()
 
     module Semantic =
-        let renderJobs (s : ISg) : aset<RenderObject> = s?RenderJobs()
+        let renderJobs (s : ISg) : aset<RenderObject> = s?RenderObjects()
 
     [<Semantic>]
-    type RenderJobSem() =
+    type RenderObjectSem() =
 
-        member x.RenderJobs(a : IApplicator) : aset<RenderObject> =
+        member x.RenderObjects(a : IApplicator) : aset<RenderObject> =
             aset {
                 let! c = a.Child
-                yield! c.RenderJobs()
+                yield! c.RenderObjects()
             }
 
-        member x.RenderJobs(g : IGroup) : aset<RenderObject> =
+        member x.RenderObjects(g : IGroup) : aset<RenderObject> =
             aset {
                 for c in g.Children do
-                    yield! c.RenderJobs()
+                    yield! c.RenderObjects()
             }
 
-        member x.RenderJobs(r : Sg.RenderNode) : aset<RenderObject> =
+        member x.RenderObjects(r : Sg.RenderNode) : aset<RenderObject> =
             let scope = Ag.getContext()
             let rj = RenderObject.Create(scope.Path)
             

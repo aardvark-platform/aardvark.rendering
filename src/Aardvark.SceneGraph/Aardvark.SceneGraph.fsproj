@@ -57,7 +57,7 @@
     <Compile Include="Semantics\BoundingBoxes.fs" />
     <Compile Include="Semantics\Modes.fs" />
     <Compile Include="Semantics\Uniforms.fs" />
-    <Compile Include="Semantics\RenderJob.fs" />
+    <Compile Include="Semantics\RenderObject.fs" />
     <Compile Include="Semantics\Runtime.fs" />
     <Compile Include="Semantics\Adapter.fs" />
     <Compile Include="Semantics\Textures.fs" />

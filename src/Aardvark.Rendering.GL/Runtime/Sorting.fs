@@ -8,7 +8,7 @@ open Aardvark.Base.Incremental
 //module DynamicSorting =
 //    let mutable private create = fun (scope : Aardvark.Base.Ag.Scope) (o : RenderObjectOrder) (u : unit) -> failwith "no sorter registered"
 //
-//    let registerSorter(createSorter : Aardvark.Base.Ag.Scope -> RenderJobOrder -> unit -> IDynamicRenderJobSorter) =
+//    let registerSorter(createSorter : Aardvark.Base.Ag.Scope -> RenderObjectOrder -> unit -> IDynamicRenderObjectSorter) =
 //        create <- createSorter
 //
 //    let createSorter scope order =

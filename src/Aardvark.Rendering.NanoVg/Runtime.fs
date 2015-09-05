@@ -258,7 +258,7 @@ module internal Interpreter =
                 ((),s)
             }  
 
-    let private runRenderJob (rj : NvgRenderJob) =
+    let private runRenderObject (rj : NvgRenderObject) =
         state {
             
             if !!rj.isActive
@@ -306,15 +306,15 @@ module internal Interpreter =
 
         }
 
-    let run (ctx : Context.NanoVgContextHandle) (s : seq<NvgRenderJob>) =
+    let run (ctx : Context.NanoVgContextHandle) (s : seq<NvgRenderObject>) =
         let mutable state = { emptyState with ctx = ctx }
 
         for rj in s do
-            let ((), n) = runRenderJob(rj).runState state
+            let ((), n) = runRenderObject(rj).runState state
             state <- n
         ()
 
-type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRenderJob>) as this =
+type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRenderObject>) as this =
     
     inherit AdaptiveObject()
     let r = l.GetReader()
@@ -329,7 +329,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         if v <> null && inputs.Remove v then
             v.RemoveOutput this
 
-    let add (rj : NvgRenderJob) =
+    let add (rj : NvgRenderObject) =
         addInput rj.transform
         addInput rj.scissor
         addInput rj.fillColor
@@ -352,7 +352,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
                 addInput t.lineHeight
                 addInput t.size
 
-    let remove (rj : NvgRenderJob) =
+    let remove (rj : NvgRenderObject) =
         removeInput rj.transform
         removeInput rj.scissor
         removeInput rj.fillColor
@@ -443,14 +443,14 @@ type LowLevelRuntimeExtensions private() =
             | _ -> failwithf "unsupported NanoVg runtime: %A" this
 
     [<Extension>]
-    static member CompileRender(this : IRuntime, list : alist<NvgRenderJob>) =
+    static member CompileRender(this : IRuntime, list : alist<NvgRenderObject>) =
         match this with
             | :? Runtime as this ->
                 new RenderTask(this, getOrCreateContext this.Context, list) :> IRenderTask
             | _ -> failwithf "unsupported NanoVg runtime: %A" this
 
     [<Extension>]
-    static member CompileRender(this : IRuntime, list : list<NvgRenderJob>) =
+    static member CompileRender(this : IRuntime, list : list<NvgRenderObject>) =
         match this with
             | :? Runtime as this ->
                 new RenderTask(this, getOrCreateContext this.Context, AList.ofList list) :> IRenderTask

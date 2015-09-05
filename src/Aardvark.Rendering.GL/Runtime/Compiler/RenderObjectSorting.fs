@@ -8,7 +8,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 //
-//module RenderJobSorting =
+//module RenderObjectSorting =
 //
 //    let private emptyMod = Mod.constant () :> IMod
 //    let private projections = 

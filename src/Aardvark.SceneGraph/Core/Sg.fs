@@ -330,7 +330,7 @@ module SceneGraphCompletenessCheck =
 
     let semantics =
         [
-            "RenderJobs"
+            "RenderObjects"
             "GlobalBoundingBox"
             "LocalBoundingBox"
         ]

@@ -128,7 +128,7 @@ module ``Semantic Extensions`` =
         member x.Scissor : IMod<Box2d> = x?Scissor
         member x.FillColor : IMod<C4f> = x?FillColor
 
-        member x.RenderJobs() : alist<NvgRenderJob> = x?RenderJobs()
+        member x.RenderObjects() : alist<NvgRenderObject> = x?RenderObjects()
         member x.LocalBoundingBox() : IMod<Box2d> = x?LocalBoundingBox()
         member x.GlobalBoundingBox() : IMod<Box2d> = x?GlobalBoundingBox()
         member x.IsActive : IMod<bool> = x?IsActive
@@ -205,7 +205,7 @@ type RuntimeExtensions private() =
     static member CompileRender(this : IRuntime, sg : INvg) =
         let ctx = this.GetNanoVgContext()
         let app = Nvg.ContextApplicator(ctx, Mod.constant sg)
-        let renderJobs = app.RenderJobs()
+        let renderJobs = app.RenderObjects()
         this.CompileRender(renderJobs)
 
 module Semantics =
@@ -503,16 +503,16 @@ module Semantics =
 
 
     [<Semantic>]
-    type RenderJobSem() =
+    type RenderObjectSem() =
 
-        member x.RenderJobs(app : INvgApplicator) =
+        member x.RenderObjects(app : INvgApplicator) =
             alist {
                 let! c = app.Child
-                yield! c.RenderJobs()
+                yield! c.RenderObjects()
             }
 
 
-        member x.RenderJobs(t : Nvg.TextLeaf) =
+        member x.RenderObjects(t : Nvg.TextLeaf) =
             AList.single {
                 transform = t.Trafo
                 scissor = t.Scissor
@@ -530,7 +530,7 @@ module Semantics =
                 isActive = t.IsActive
             }
 
-        member x.RenderJobs(t : Nvg.PrimitiveLeaf) =
+        member x.RenderObjects(t : Nvg.PrimitiveLeaf) =
             AList.single {
                 transform = t.Trafo
                 scissor = t.Scissor
@@ -548,13 +548,13 @@ module Semantics =
                 isActive = t.IsActive
             }
 
-        member x.RenderJobs(t : Nvg.Group) =
+        member x.RenderObjects(t : Nvg.Group) =
             alist {
                 for c in t.List do
-                    yield! c.RenderJobs()
+                    yield! c.RenderObjects()
             }
 
-        member x.RenderJobs(e : Nvg.EmptyLeaf) : alist<NvgRenderJob> =
+        member x.RenderObjects(e : Nvg.EmptyLeaf) : alist<NvgRenderObject> =
             AList.empty
 
     [<Semantic>]

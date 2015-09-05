@@ -93,7 +93,7 @@
     <Compile Include="Runtime\Compiler\InstructionCompiler.fs" />
     <Compile Include="Runtime\Compiler\ResourceCompiler.fs" />
     <Compile Include="Runtime\Compiler\DeltaCompiler.fs" />
-    <Compile Include="Runtime\Compiler\RenderJobSorting.fs" />
+    <Compile Include="Runtime\Compiler\RenderObjectSorting.fs" />
     <Compile Include="Runtime\Compiler\OptimizedProgram.fs" />
     <Compile Include="Runtime\Compiler\UnoptimizedProgram.fs" />
     <Compile Include="Runtime\Compiler\SortedProgram.fs" />

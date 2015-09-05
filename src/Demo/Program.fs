@@ -27,17 +27,17 @@ module Assimp =
     type Node with
         member x.Scene : Scene = x?AssimpScene
 
-        member x.RenderJobs() : aset<RenderObject> = x?RenderJobs()
+        member x.RenderObjects() : aset<RenderObject> = x?RenderObjects()
 
         member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
 
     type Scene with
         member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
-        member x.RenderJobs() : aset<RenderObject> = x?RenderJobs()
+        member x.RenderObjects() : aset<RenderObject> = x?RenderObjects()
 
 
     // in order to integrate Assimo's scene structure we
-    // need to define several attributes for it (namely RenderJobs, ModelTrafo, etc.)
+    // need to define several attributes for it (namely RenderObjects, ModelTrafo, etc.)
     // which can be done using s single or multiple semantic-types. 
     // Since the implementation is relatively dense we opted for only one type here.
     [<Semantic>]
@@ -110,9 +110,9 @@ module Assimp =
 
 
         
-        // toSg is used by toRenderJobs in order to simplify 
+        // toSg is used by toRenderObjects in order to simplify 
         // things here.
-        // Note that it would also be possible here to create RenderJobs 
+        // Note that it would also be possible here to create RenderObjects 
         //      directly. However this is very wordy and we therefore create
         //      a partial SceneGraph for each mesh
         let toSg (m : Mesh) =
@@ -196,12 +196,12 @@ module Assimp =
                         cache.Add(m, sg)
                         sg
 
-        // since Meshes need to be converted to RenderJobs somehow we
+        // since Meshes need to be converted to RenderObjects somehow we
         // define a utility-function performing this transformation.
-        // Note that RenderJobs cannot be cached per Mesh since they
+        // Note that RenderObjects cannot be cached per Mesh since they
         //      can differ when seen in different paths
-        let toRenderJobs (m : Mesh) =
-            (toSg m).RenderJobs()
+        let toRenderObjects (m : Mesh) =
+            (toSg m).RenderObjects()
 
         // another utility function for converting
         // transformation matrices
@@ -255,29 +255,29 @@ module Assimp =
                     n.AllChildren?ModelTrafo <- Mod.map (fun t -> t * mine) p
         
 
-        // here we define the RenderJobs semantic for the Assimp-Scene
-        // which directly queries RenderJobs from its contained Scene-Root
-        member x.RenderJobs(scene : Scene) : aset<RenderObject> =
-            scene.RootNode?RenderJobs()
+        // here we define the RenderObjects semantic for the Assimp-Scene
+        // which directly queries RenderObjects from its contained Scene-Root
+        member x.RenderObjects(scene : Scene) : aset<RenderObject> =
+            scene.RootNode?RenderObjects()
 
-        // here we define the RenderJobs semantic for Assimp's Nodes
+        // here we define the RenderObjects semantic for Assimp's Nodes
         // which basically enumerates all directly contained 
         // Geometries and recursively yields all child-renderjobs
-        member x.RenderJobs(n : Node) : aset<RenderObject> =
+        member x.RenderObjects(n : Node) : aset<RenderObject> =
             aset {
                 // get the inherited Scene attribute (needed for Mesh lookups here)
                 let scene = n.Scene
 
                 // enumerate over all meshes and yield their 
-                // RenderJobs (according to the current scope)
+                // RenderObjects (according to the current scope)
                 for i in n.MeshIndices do
                     let mesh = scene.Meshes.[i]
                     
-                    yield! toRenderJobs mesh
+                    yield! toRenderObjects mesh
 
                 // recursively yield all child-renderjobs
                 for c in n.Children do
-                    yield! c.RenderJobs()
+                    yield! c.RenderObjects()
 
             }
 
@@ -730,7 +730,7 @@ let main args =
 //        for i in 0 .. 10000 do
 //            printfn "run %d" i
 //            sw.Restart()
-//            let task = app.Runtime.CompileRender(sg.RenderJobs())
+//            let task = app.Runtime.CompileRender(sg.RenderObjects())
 //            task.Run fbo |> ignore
 //            sw.Stop ()
 //            task.Dispose()
@@ -740,7 +740,7 @@ let main args =
 //    )
 // 
  
-//    let task = app.Runtime.CompileRender(sg.RenderJobs())
+//    let task = app.Runtime.CompileRender(sg.RenderObjects())
 //    using ctx.ResourceLock (fun _ ->
 //       task.Run fbo |> ignore
 //    )   
@@ -772,7 +772,7 @@ let main args =
         ()
     ) |> ignore
 
-    let task = app.Runtime.CompileRender(engine, sg.RenderJobs())
+    let task = app.Runtime.CompileRender(engine, sg.RenderObjects())
 
     ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
 

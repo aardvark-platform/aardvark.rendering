@@ -64,7 +64,7 @@
       <Paket>True</Paket>
     </Content>
     <Compile Include="Core.fs" />
-    <Compile Include="RenderJobs.fs" />
+    <Compile Include="RenderObjects.fs" />
     <Compile Include="Context.fs" />
     <Compile Include="Runtime.fs" />
     <Compile Include="Sg.fs" />
