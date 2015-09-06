@@ -56,7 +56,8 @@ type Program =
        SupportedModes : Option<Set<IndexedGeometryMode>>
     } with
 
-    interface ISurface
+    interface IBackendSurface with
+        member x.Handle = x.Handle :> obj
 
     member x.InterfaceBlock =
         let uniformBlocks = 

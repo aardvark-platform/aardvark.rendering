@@ -91,7 +91,7 @@ let main argv =
 
     let e = FShade.SequentialComposition.compose [toEffect Shader.trafo; toEffect Shader.white]
     let s = FShadeSurface(e) :> ISurface
-    let compiled = app.Runtime.CreateSurface s
+    let compiled = app.Runtime.CreateSurface s :> ISurface
 
     let sg =
         geometry 

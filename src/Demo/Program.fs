@@ -67,7 +67,7 @@ module Assimp =
 
                     arr :> Array
                 )
-            BufferView(ArrayBuffer data, typeof<'b>)
+            BufferView(data |> Mod.map (fun data -> ArrayBuffer data :> IBuffer), typeof<'b>)
 
         // try to find the Mesh's diffuse texture
         // and convert it into a file-texture.

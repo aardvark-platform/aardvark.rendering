@@ -11,6 +11,6 @@ module CompiledRenderObjects =
     let prepare (runtime : Runtime) (ro : RenderObject) =
         if ro.OptimizedRepr <> null then failwith "tried to optimize and optimized render object."
         
-        let indices = ro.Indices |> ArrayBuffer |> runtime.CreateBuffer
+        //let indices = ro.Indices |> ArrayBuffer |> runtime.CreateBuffer
         
         failwith "JD" 

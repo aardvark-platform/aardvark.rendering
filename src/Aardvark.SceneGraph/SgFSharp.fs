@@ -102,14 +102,14 @@ module SgFSharp =
                     r
 
         let vertexAttribute<'a when 'a : struct> (s : Symbol) (value : IMod<'a[]>) (sg : ISg) =
-            let view = BufferView(ArrayBuffer(modOfArray value), typeof<'a>)
+            let view = BufferView(value |> Mod.map (fun data -> ArrayBuffer(data) :> IBuffer), typeof<'a>)
             Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
 
         let index<'a when 'a : struct> (value : IMod<'a[]>) (sg : ISg) =
             Sg.VertexIndexApplicator(modOfArray value, sg) :> ISg
 
         let vertexAttribute'<'a when 'a : struct> (s : Symbol) (value : 'a[]) (sg : ISg) =
-            let view = BufferView(ArrayBuffer(Mod.constant (value :> Array)), typeof<'a>)
+            let view = BufferView(Mod.constant (ArrayBuffer(value :> Array) :> IBuffer), typeof<'a>)
             Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
 
         let index'<'a when 'a : struct> (value : 'a[]) (sg : ISg) =
@@ -131,7 +131,7 @@ module SgFSharp =
             let attributes = 
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
                     let t = v.GetType().GetElementType()
-                    let view = BufferView(ArrayBuffer(Mod.constant v), t)
+                    let view = BufferView(Mod.constant (ArrayBuffer(v) :> IBuffer), t)
 
                     k, view
                 ) |> Map.ofSeq
@@ -163,7 +163,7 @@ module SgFSharp =
             let vertexAttributes = 
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
                     let t = v.GetType().GetElementType()
-                    let view = BufferView(ArrayBuffer(Mod.constant v), t)
+                    let view = BufferView(Mod.constant (ArrayBuffer(v) :> IBuffer), t)
 
                     k, view
                 ) |> Map.ofSeq
@@ -193,7 +193,7 @@ module SgFSharp =
                     sg
 
             let m44Trafos = trafos |> Mod.map (fun a -> a |> Array.map (fun (t : Trafo3d) -> (M44f.op_Explicit t.Forward).Transposed) :> Array)
-            let m44View = BufferView(ArrayBuffer m44Trafos, typeof<M44f>)
+            let m44View = BufferView(m44Trafos |> Mod.map (fun a -> ArrayBuffer a :> IBuffer), typeof<M44f>)
 
             Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
 

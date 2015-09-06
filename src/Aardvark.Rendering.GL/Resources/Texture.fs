@@ -484,8 +484,9 @@ type Texture =
             member x.Context = x.Context
             member x.Handle = x.Handle
 
-        interface ITexture with
+        interface IBackendTexture with
             member x.WantMipMaps = x.MipMapLevels > 1
+            member x.Handle = x.Handle :> obj
 
         member x.GetSize (level : int)  =
             if level = 0 then x.Size2D

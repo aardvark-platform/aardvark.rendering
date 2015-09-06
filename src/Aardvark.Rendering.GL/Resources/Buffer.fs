@@ -22,7 +22,8 @@ type BufferUsage = Static | Dynamic
 /// </summary>
 type Buffer =
     class
-        interface IBuffer
+        interface IBackendBuffer with
+            member x.Handle = x.Handle :> obj
 
         val mutable public Handle : int
         val mutable public Context : Context
@@ -149,6 +150,23 @@ module BufferExtensions =
 
             )
 
+        member x.CreateBuffer(data : IBuffer) =
+            match data with
+                | :? Buffer as bb ->
+                    bb
+                | :? ArrayBuffer as ab ->
+                    x.CreateBuffer(ab.Data)
+
+                | _ -> 
+                    failwith "unsupported buffer-type"
+
+        member x.Upload(b : Buffer, data : IBuffer) =
+            match data with
+                | :? ArrayBuffer as ab -> x.Upload(b, ab.Data)
+                | :? Buffer as bb ->
+                    if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
+                | _ ->
+                    failwithf "unsupported buffer-data-type: %A" data
 
 
         // =======================================================================================================================

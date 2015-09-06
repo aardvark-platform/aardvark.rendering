@@ -83,8 +83,6 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
-        member x.CreateSurface s = x.CreateSurface s
-        member x.DeleteSurface s = x.DeleteSurface s
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.ContextLock = ctx.ResourceLock
         member x.CompileRender (engine : BackendConfiguration, set : aset<RenderObject>) = x.CompileRender(engine,set)
@@ -92,32 +90,43 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples)
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
         member x.CreateFramebuffer bindings = x.CreateFramebuffer bindings
-        member x.CreateTexture t = x.CreateTexture t
-        member x.CreateBuffer b = x.CreateBuffer b
-        member x.DeleteTexture t = x.DeleteTexture t
-        member x.DeleteBuffer b = x.DeleteBuffer b
+        
+        member x.CreateSurface s = x.CreateSurface s :> IBackendSurface
+        member x.DeleteSurface s = 
+            match s with
+                | :? Program as p -> x.DeleteSurface p
+                | _ -> failwithf "unsupported program-type: %A" s
+
+        member x.CreateTexture t = x.CreateTexture t :> IBackendTexture
+        member x.DeleteTexture t =
+            match t with
+                | :? Texture as t -> x.DeleteTexture t
+                | _ -> failwithf "unsupported texture-type: %A" t
+
+        member x.CreateBuffer b = x.CreateBuffer b :> IBackendBuffer
+        member x.DeleteBuffer b = 
+            match b with
+                | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
+                | _ -> failwithf "unsupported buffer-type: %A" b
+
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
 
-    member x.CreateTexture (t : ITexture) = ctx.CreateTexture t :> ITexture
-    member x.CreateBuffer (b : IBuffer) : IBuffer = failwith "not implemented"
+    member x.CreateTexture (t : ITexture) = ctx.CreateTexture t
+    member x.CreateBuffer (b : IBuffer) : Aardvark.Rendering.GL.Buffer = failwith "not implemented"
     member x.CreateSurface (s : ISurface) = 
         match SurfaceCompilers.compile ctx s with
-            | Success prog -> prog :> ISurface
+            | Success prog -> prog
             | Error e -> failwith e
 
-    member x.DeleteTexture (t : ITexture) = 
-        match t with
-            | :? Texture as t -> ctx.Delete t
-            | _ -> ()
+    member x.DeleteTexture (t : Texture) = 
+        ctx.Delete t
 
-    member x.DeleteSurface (s : ISurface) = 
-        match s with
-            | :? Program as p -> ctx.Delete p
-            | _ -> ()
+    member x.DeleteSurface (p : Program) = 
+        ctx.Delete p
 
-    member x.DeleteBuffer (b : IBuffer) : unit =
-        failwith "not implemented"
+    member x.DeleteBuffer (b : Aardvark.Rendering.GL.Buffer) =
+        ctx.Delete b
 
     member x.CreateStreamingTexture(mipMaps : bool) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture

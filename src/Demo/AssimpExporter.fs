@@ -297,8 +297,8 @@ module AssimpExporter =
                         rj.VertexAttributes.All 
                             |> Seq.map (fun (s,b) ->
                                 let array =
-                                    match b.Buffer with
-                                        | :? ArrayBuffer as ab -> ab.Data |> Mod.force
+                                    match b.Buffer |> Mod.force with
+                                        | :? ArrayBuffer as ab -> ab.Data
                                         | _ -> failwith "could not get buffer data"
                                 s,array
                             )

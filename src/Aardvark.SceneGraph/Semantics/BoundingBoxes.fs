@@ -24,17 +24,19 @@ module BoundingBoxExtensions =
                     let v = 
                         match x.VertexAttributes.TryGetAttribute DefaultSemantic.Positions with
                             | Some v ->
-                                match v.Buffer with
-                                    | :? ArrayBuffer as pos ->
-                                        let trafo : IMod<Trafo3d> = x.AttributeScope?ModelTrafo
+                                v.Buffer |> Mod.bind (fun buffer ->
+                                    match buffer with
+                                        | :? ArrayBuffer as pos ->
+                                            let trafo : IMod<Trafo3d> = x.AttributeScope?ModelTrafo
 
-                                        Mod.map2 (fun arr trafo ->
-                                            let box = Box3f.op_Explicit (Box3f(arr |> unbox<V3f[]>))
-                                            box
-                                        ) pos.Data trafo
+                                            Mod.map (fun trafo ->
+                                                let box = Box3f.op_Explicit (Box3f(pos.Data |> unbox<V3f[]>))
+                                                box
+                                            ) trafo
 
-                                    | _ ->
-                                        failwithf "invalid positions in renderjob: %A" x
+                                        | _ ->
+                                            failwithf "invalid positions in renderjob: %A" x
+                                )
                             | _ ->
                                 failwithf "no positions in renderjob: %A" x
                     bbCache.Add(x,v)
@@ -64,13 +66,12 @@ module BoundingBoxes =
                     | Some v -> v
                     | _ -> failwith "no positions specified"
 
-            match positions.Buffer with
-                | :? ArrayBuffer as ab ->
-                    let positions = ab.Data
+            adaptive {
+                let! buffer =  positions.Buffer
+                match buffer with
+                    | :? ArrayBuffer as ab ->
+                        let positions = ab.Data |> unbox<V3f[]>
 
-                    adaptive {
-                        let! positions = positions
-                        let positions = positions |> unbox<V3f[]>
                         let! trafo = node.ModelTrafo
                         match node.VertexIndexArray with
                             | a when a = Aardvark.SceneGraph.Semantics.AttributeSemantics.emptyIndex -> 
@@ -81,9 +82,10 @@ module BoundingBoxes =
                                                             then indices |> unbox<uint16[]> |> Array.map (fun i -> positions.[int i])
                                                             else indices |> unbox<int[]> |> Array.map (fun i -> positions.[i])
                                     return filteredPositions |> Array.map (fun p -> trafo.Forward.TransformPos(V3d p)) |> boxFromArray
-                    }
-                | _ ->
-                    failwithf "unknown IBuffer for positions: %A" positions.Buffer
+
+                    | _ ->
+                        return failwithf "unknown IBuffer for positions: %A" buffer
+            }
 
         member x.GlobalBoundingBox(app : IGroup) : IMod<Box3d> =
             app.Children 
@@ -112,12 +114,12 @@ module BoundingBoxes =
                     | Some v -> v
                     | _ -> failwith "no positions specified"
 
-            match positions.Buffer with
-                | :? ArrayBuffer as ab ->
-                    let positions = ab.Data
-                    adaptive {
-                        let! positions = positions
-                        let positions = positions |> unbox<V3f[]>
+            adaptive {
+                let! buffer = positions.Buffer
+                match buffer with
+                    | :? ArrayBuffer as ab ->
+                        let positions = ab.Data |> unbox<V3f[]>
+
                         match node.VertexIndexArray with
                             | a when a = Aardvark.SceneGraph.Semantics.AttributeSemantics.emptyIndex -> 
                                     return positions |> boxFromArray
@@ -125,10 +127,9 @@ module BoundingBoxes =
                                     let! indices = indices
                                     let indices = indices |> unbox<int[]>
                                     return indices |> Array.map (fun (i : int) -> positions.[i]) |> boxFromArray
-                    }
-                | _ ->
-                    failwithf "unknown IBuffer for positions: %A" positions.Buffer
-
+                    | _ ->
+                        return failwithf "unknown IBuffer for positions: %A" buffer
+            }
             
         member x.LocalBoundingBox(app : IGroup) : IMod<Box3d> =
             app.Children 

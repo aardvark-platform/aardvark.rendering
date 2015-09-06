@@ -64,7 +64,7 @@ module Textures =
                 C4b.Gray
         ) |> ignore
 
-        app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true))
+        app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true)) :> ITexture
 
     let getTileTexure (coord : V2i) (zoom : string)=
         init()
@@ -96,7 +96,7 @@ module Textures =
             let run =
                 async {
                     let! img = source.GetTileAsync info
-                    return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.CreateTexture
+                    return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.CreateTexture :> ITexture
                 }
 
             run |> Async.StartAsTask |> Mod.async noTexture

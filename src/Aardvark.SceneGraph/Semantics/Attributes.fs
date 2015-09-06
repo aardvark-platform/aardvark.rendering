@@ -45,11 +45,15 @@ module AttributeSemantics =
             else
                 match Map.tryFind DefaultSemantic.Positions app.Values with
                     | Some pos ->
-                        match pos.Buffer with
-                            | :? ArrayBuffer as ab ->
-                                app.Child?FaceVertexCount <- ab.Data |> Mod.map (fun a -> a.Length - pos.Offset)
+                        app.Child?FaceVertexCount <- 
+                            pos.Buffer 
+                                |> Mod.bind (fun buffer ->
+                                    match buffer with
+                                        | :? ArrayBuffer as a ->
+                                            Mod.constant (a.Data.Length - pos.Offset)
             
-                            | _ -> app.Child?FaceVertexCount <- app.FaceVertexCount
+                                        | _ -> app.FaceVertexCount
+                                   )
                     | _ -> app.Child?FaceVertexCount <- app.FaceVertexCount
 
         member x.InstanceAttributes(root : Root) = 

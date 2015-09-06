@@ -15,15 +15,29 @@ type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
     member x.Framebuffer = f
     member x.Statistics = stats
 
+
+type IBackendTexture =
+    inherit ITexture
+    abstract member Handle : obj
+
+type IBackendBuffer =
+    inherit IBuffer
+    abstract member Handle : obj
+
+type IBackendSurface =
+    inherit ISurface
+    abstract member Handle : obj
+
+
 type IRuntime =
     abstract member ContextLock : IDisposable
 
-    abstract member CreateTexture : ITexture -> ITexture
-    abstract member CreateBuffer : IBuffer -> IBuffer
-    abstract member CreateSurface : ISurface -> ISurface
-    abstract member DeleteTexture : ITexture -> unit
-    abstract member DeleteBuffer : IBuffer -> unit
-    abstract member DeleteSurface : ISurface -> unit
+    abstract member CreateTexture : ITexture -> IBackendTexture
+    abstract member CreateBuffer : IBuffer -> IBackendBuffer
+    abstract member CreateSurface : ISurface -> IBackendSurface
+    abstract member DeleteTexture : IBackendTexture -> unit
+    abstract member DeleteBuffer : IBackendBuffer -> unit
+    abstract member DeleteSurface : IBackendSurface -> unit
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit

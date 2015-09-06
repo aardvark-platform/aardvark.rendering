@@ -348,9 +348,9 @@ module ResourceManager =
 
                 match originalHandler with
                     | Some h -> h
-                    | None -> Sharing.SharedResourceHandler<Array, Buffer>(ctx.CreateBuffer, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+                    | None -> Sharing.SharedResourceHandler<IBuffer, Buffer>(ctx.CreateBuffer, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
             else 
-                Sharing.NopResourceHandler<Array, Buffer>(ctx.CreateBuffer, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+                Sharing.NopResourceHandler<IBuffer, Buffer>(ctx.CreateBuffer, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
 
         let textureHandler = 
             if shareTextures then 
@@ -413,10 +413,10 @@ module ResourceManager =
                 [data], 
                 fun () ->
                     let current = data.GetValue()
-                    let handle = bufferHandler.Create(current)
+                    let handle = bufferHandler.Create(ArrayBuffer(current))
                     { dependencies = [data]
                       updateCPU = fun () -> data.GetValue() |> ignore
-                      updateGPU = fun () -> bufferHandler.Update(handle, data.GetValue())
+                      updateGPU = fun () -> bufferHandler.Update(handle, ArrayBuffer(data.GetValue()))
                       destroy = fun () -> bufferHandler.Delete(handle)
                       resource = handle
                       kind = ResourceKind.Buffer 
@@ -427,24 +427,51 @@ module ResourceManager =
         /// creates a buffer from a mod-array simply updating its
         /// content whenever the array changes
         /// </summary>
-        member x.CreateBuffer(data : IBuffer) =
+        member x.CreateBuffer(data : IMod<IBuffer>) =
+            
             cache.[arrayBuffer].GetOrAdd(
                 [data], 
                 fun () ->
-                    match data with
-                        | :? ArrayBuffer as buffer ->
-                            let data = buffer.Data
-                            let current = data.GetValue()
-                            let handle = bufferHandler.Create(current)
-                            { dependencies = [data]
-                              updateCPU = fun () -> data.GetValue() |> ignore
-                              updateGPU = fun () -> bufferHandler.Update(handle, data.GetValue())
-                              destroy = fun () -> bufferHandler.Delete(handle)
-                              resource = handle
-                              kind = ResourceKind.Buffer  }
-                        | _ ->
-                            failwithf "unknown buffer-data: %A" data
+                    let created = ref false
+                    let current = data.GetValue()
+                    let handle = 
+                        match current with
+                            | :? Buffer as bb ->
+                                ref (Mod.constant bb)
+                            | _ ->
+                                created := true
+                                ref (bufferHandler.Create(current))
+
+                    let handleMod = Mod.init !handle
+
+
+                    { dependencies = [data]
+                      updateCPU = fun () -> data.GetValue() |> ignore
+                      updateGPU = fun () ->
+                        match data.GetValue() with
+                            | :? Buffer as t -> 
+                                if !created then
+                                    bufferHandler.Delete(!handle)
+                                    created := false
+
+                                let h = Mod.constant t
+                                handle := h
+                                transact (fun () -> handleMod.Value <- h)
+                            | _ -> 
+                                if !created then
+                                    bufferHandler.Update(!handle, data.GetValue())
+                                else
+                                    created := true
+                                    handle := bufferHandler.Create(current)
+
+                                if handleMod.Value <> !handle then 
+                                    transact (fun () -> handleMod.Value <- !handle)
+                      destroy = fun () -> if !created then bufferHandler.Delete(!handle)
+                      resource = handleMod |> Mod.bind id
+                      kind = ResourceKind.Buffer  }
             )
+
+
 
         /// <summary>
         /// creates a buffer from an untyped mod using one of the
@@ -460,7 +487,10 @@ module ResourceManager =
                     m.Invoke(x, [|data :> obj|]) |> unbox<ChangeableResource<Buffer>>
 
                 | ModOf(UntypedArray) ->
-                    x.CreateBuffer(ArrayBuffer ( data |> unbox<IMod<Array>> ) )
+                    x.CreateBuffer( data |> unbox<IMod<Array>> |> Mod.map (fun arr -> ArrayBuffer(arr) :> IBuffer))
+
+                | ModOf(t) when t = typeof<IBuffer> ->
+                    x.CreateBuffer( data |> unbox<IMod<IBuffer>> )
 
                 | _ ->
                     raise <| ResourceManagerException(sprintf "failed to create buffer for type: %A" t.FullName)
