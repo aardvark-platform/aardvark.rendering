@@ -309,3 +309,18 @@ module DeltaCompiler =
             }
 
         AdaptiveCode(s.instructions, s.resources), stateToStats s
+
+
+    let compileFullPrepared (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
+        let c = compileDeltaInternalPrepared PreparedRenderObject.Empty rj
+
+        let (s,()) =
+            c.runCompile {
+                currentContext = currentContext
+                manager = manager
+                instructions = []
+                resources = []
+                resourceCreateTime = System.Diagnostics.Stopwatch()
+            }
+
+        AdaptiveCode(s.instructions, s.resources), stateToStats s

@@ -10,7 +10,7 @@ open Aardvark.Rendering.GL
 
 [<AllowNullLiteral>]
 type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> and 'f : null>
-    private (precompiled : Option<'f>, rj : RenderObject, ctx : CompileContext<'f>) =
+    private (precompiled : Option<'f>, rj : PreparedRenderObject, ctx : CompileContext<'f>) =
 
     let mutable next : UnoptimizedRenderObjectFragment<'f> = null
     let mutable prev : UnoptimizedRenderObjectFragment<'f> = null
@@ -20,8 +20,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
     let mutable lastSurface = None
 
     let recompile() =
-        let currentSurface = rj.Surface.GetValue()
-
+        let currentSurface = rj.Original.Surface.GetValue()
         match lastSurface with
             | Some s when s = currentSurface -> FrameStatistics.Zero
             | _ ->
@@ -30,7 +29,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
                     | null -> frag <- ctx.handler.Create []
                     | _ -> frag.Clear()
 
-                let prog, resTime= DeltaCompiler.compileFull ctx.manager ctx.currentContext rj
+                let prog, resTime = DeltaCompiler.compileFullPrepared ctx.manager ctx.currentContext rj
                 let changer = AdaptiveCode.writeTo prog frag
             
                 // remove old resources/changers
@@ -83,18 +82,17 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
                     resTime
                 else FrameStatistics.Zero
             )
-        match rj.Surface with
-            | null -> ()
-            | s -> s.AddOutput !self
+
+        if precompiled.IsNone then 
+            rj.Program.AddOutput !self
         !self
 
     member x.Dispose() =
         match frag with
             | null -> ()
             | _ -> 
-                match rj.Surface with
-                    | null -> ()
-                    | s -> s.RemoveOutput changer
+                if precompiled.IsNone then
+                    rj.Program.RemoveOutput changer
 
                 match frag.Next with
                     | null -> ()
@@ -180,8 +178,8 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    new(rj : RenderObject, ctx : CompileContext<'f>) = new UnoptimizedRenderObjectFragment<'f>(None, rj, ctx)
-    new(precompiled : 'f, ctx : CompileContext<'f>) = new UnoptimizedRenderObjectFragment<'f>(Some precompiled, RenderObject.Empty, ctx)
+    new(rj : PreparedRenderObject, ctx : CompileContext<'f>) = new UnoptimizedRenderObjectFragment<'f>(None, rj, ctx)
+    new(precompiled : 'f, ctx : CompileContext<'f>) = new UnoptimizedRenderObjectFragment<'f>(Some precompiled, PreparedRenderObject.Empty, ctx)
 
 
 type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
@@ -202,8 +200,9 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
 
-    let sortedFragments = SortedDictionaryExt<RenderObject, UnoptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
-    let fragments = Dict<RenderObject, UnoptimizedRenderObjectFragment<'f>>()
+    let sortedFragments = SortedDictionaryExt<IRenderObject, UnoptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
+    let fragments = Dict<IRenderObject, UnoptimizedRenderObjectFragment<'f>>()
+    let preparedRenderObjects = Dict<RenderObject,PreparedRenderObject>()
 
     let mutable prolog = new UnoptimizedRenderObjectFragment<'f>(handler.Prolog, ctx)
     let mutable epilog = new UnoptimizedRenderObjectFragment<'f>(handler.Epilog, ctx)
@@ -227,8 +226,13 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         epilog <- null
 
     member x.Add (rj : IRenderObject) =
-        1
-        let rj = unbox rj
+        let prep = 
+            match rj with
+              | :? PreparedRenderObject as p -> p
+              | :? RenderObject as rj -> 
+                    preparedRenderObjects.GetOrCreate(rj,fun rj -> manager.Prepare rj)
+              | _ -> failwith "unsupported IRenderObject"
+
         sorter.Add rj
         // create a new RenderObjectFragment and link it
         let fragment = 
@@ -240,7 +244,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                         let l = match l with | Some (_,l) -> l | None -> prolog
                         let r = match r with | Some (_,r) -> r | None -> epilog
 
-                        let f = new UnoptimizedRenderObjectFragment<'f>(rj, ctx)
+                        let f = new UnoptimizedRenderObjectFragment<'f>(prep, ctx)
                         f.Prev <- l
                         l.Next <- f
 
@@ -256,8 +260,15 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         changeSet.Listen fragment.Changer
 
     member x.Remove (rj : IRenderObject) =
-        1
-        let rj = unbox rj
+        let prep = 
+            match rj with 
+              | :? PreparedRenderObject as p -> p
+              | :? RenderObject as rj -> 
+                 match preparedRenderObjects.TryRemove rj with
+                  | (true,v)-> v
+                  | _ -> failwith "could not find associated prepared render object"
+              | _ -> failwith "unsupported IRenderObject"
+
         match fragments.TryRemove rj with
             | (true, f) ->
                 sortedFragments |> SortedDictionary.remove rj |> ignore

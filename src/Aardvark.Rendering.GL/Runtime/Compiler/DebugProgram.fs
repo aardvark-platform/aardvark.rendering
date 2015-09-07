@@ -17,15 +17,13 @@ type DebugProgram(manager : ResourceManager,
 
     let mutable allResources = HashSet<IChangeableResource>()
     let mutable usedResources = HashSet<IChangeableResource>()
-    let renderObjects = HashSet<RenderObject>()
+    let renderObjects = HashSet<IRenderObject>()
 
     member x.Add (rj : IRenderObject) =
-        1
-        renderObjects.Add (unbox rj) |> ignore
+        renderObjects.Add rj |> ignore
     
     member x.Remove (rj : IRenderObject) =
-        1
-        renderObjects.Remove (unbox rj) |> ignore
+        renderObjects.Remove rj |> ignore
 
     member x.Run(fbo : int, ctx : ContextHandle) =
         let ctxMod = Mod.constant ctx
@@ -37,7 +35,16 @@ type DebugProgram(manager : ResourceManager,
                 r.UpdateGPU()
 
         for rj in renderObjects do
-            let prog, _ = DeltaCompiler.compileFull manager ctxMod rj
+            let prep, own =
+                match rj with
+                    | :? PreparedRenderObject as p -> p, false
+                    | :? RenderObject as rj -> (manager.Prepare rj, true)
+                    | _ -> failwith "unsupported RenderObject type"
+
+            let prog, _ = DeltaCompiler.compileFullPrepared manager ctxMod prep
+
+            // release (duplicated) resources whose reference count was incremented by compileFullPrepared
+            if own then prep.Dispose()
 
             for r in prog.Resources do
                 usedResources.Add r |> ignore

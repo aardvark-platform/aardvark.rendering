@@ -26,7 +26,7 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     let sorter = newSorter()
     
-    let fragments = Dict<RenderObject, UnoptimizedRenderObjectFragment<'f>>()
+    let fragments = Dict<IRenderObject, UnoptimizedRenderObjectFragment<'f>>()
     let sortedRenderObjects = sorter.SortedList
     do addInput sortedRenderObjects
 
@@ -53,20 +53,21 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         epilog <- null
 
     member x.Add (unsorted : IRenderObject) =
-        1
+        
         let unsorted = unbox unsorted
         let rj = unsorted |> sorter.ToSortedRenderObject
         sorter.Add rj
 
+        let prep : PreparedRenderObject = failwith "how to handle prepared render objects???"
+
         // create a new RenderObjectFragment and link it
-        let fragment = new UnoptimizedRenderObjectFragment<'f>(rj, ctx)
+        let fragment = new UnoptimizedRenderObjectFragment<'f>(prep, ctx)
         fragments.[rj] <- fragment
         
         // listen to changes
         changeSet.Listen fragment.Changer
 
     member x.Remove (rj : IRenderObject) =
-        1
         let rj = unbox rj
         match fragments.TryRemove rj with
             | (true, f) ->

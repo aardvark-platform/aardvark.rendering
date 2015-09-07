@@ -26,7 +26,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
     let mutable currentProgram : Option<AdaptiveCode> = None
     let mutable currentChanger = Mod.constant FrameStatistics.Zero
     let mutable frag : 'f = match precompiled with | Some p -> p | None -> null
-    let mutable lastPrevAndSurface = None
+    let mutable lastSurface = None
 
     let hasProgram =
         match precompiled with
@@ -39,47 +39,51 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
                 | null -> PreparedRenderObject.Empty
                 | _ -> prev.RenderObject
 
-        if isNull frag || rj.Program.OutOfDate then // is changed?
+        let mySurface = rj.Original.Surface.GetValue()
 
-            match frag with
-                | null -> frag <- ctx.handler.Create []
-                | _ ->  frag.Clear()
+        match lastSurface with
+            | Some s when s = mySurface -> FrameStatistics.Zero
+            | _ ->
+                lastSurface <- Some mySurface
 
-            let prog, resTime = DeltaCompiler.compileDeltaPrepared ctx.manager ctx.currentContext prevRj rj
-            let changer = AdaptiveCode.writeTo prog frag
+                match frag with
+                    | null -> frag <- ctx.handler.Create []
+                    | _ ->  frag.Clear()
+
+                let prog, resTime = DeltaCompiler.compileDeltaPrepared ctx.manager ctx.currentContext prevRj rj
+                let changer = AdaptiveCode.writeTo prog frag
             
-            // remove old resources/changers
-            match currentProgram with
-                | Some old ->
-                    for r in old.Resources do
-                        r.Dispose()
-                        ctx.resourceSet.Unlisten r
-                    currentProgram <- None
-                | None ->
-                    ()
+                // remove old resources/changers
+                match currentProgram with
+                    | Some old ->
+                        for r in old.Resources do
+                            r.Dispose()
+                            ctx.resourceSet.Unlisten r
+                        currentProgram <- None
+                    | None ->
+                        ()
 
-            // link the fragments
-            let pf = prev.Fragment
-            pf.Next <- frag
-            frag.Prev <- pf
+                // link the fragments
+                let pf = prev.Fragment
+                pf.Next <- frag
+                frag.Prev <- pf
                 
-            match next.FragmentOption with
-                | Some nf ->
-                    nf.Prev <- frag
-                    frag.Next <- nf
-                | None ->
-                    ()
+                match next.FragmentOption with
+                    | Some nf ->
+                        nf.Prev <- frag
+                        frag.Next <- nf
+                    | None ->
+                        ()
 
 
-            // listen to changes
-            for r in prog.Resources do
-                ctx.resourceSet.Listen r
+                // listen to changes
+                for r in prog.Resources do
+                    ctx.resourceSet.Listen r
 
-            // store everything
-            currentChanger <- changer
-            currentProgram <- Some prog
-            resTime
-        else FrameStatistics.Zero
+                // store everything
+                currentChanger <- changer
+                currentProgram <- Some prog
+                resTime
 
     let changer = 
         if hasProgram
@@ -139,7 +143,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
 
         currentChanger.RemoveOutput changer
         currentChanger <- Mod.constant FrameStatistics.Zero
-        lastPrevAndSurface <- None
+        lastSurface <- None
         prev <- null
         next <- null
 
@@ -212,8 +216,8 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
 
-    let sortedFragments = SortedDictionaryExt<PreparedRenderObject, OptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
-    let fragments = Dict<PreparedRenderObject, OptimizedRenderObjectFragment<'f>>()
+    let sortedFragments = SortedDictionaryExt<IRenderObject, OptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
+    let fragments = Dict<IRenderObject, OptimizedRenderObjectFragment<'f>>()
     let preparedRenderObjects = Dict<RenderObject,PreparedRenderObject>()
 
     let mutable prolog = new OptimizedRenderObjectFragment<'f>(handler.Prolog, ctx)
@@ -239,7 +243,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     member x.Add (rj : IRenderObject) =
 
-        let rj = 
+        let prep = 
             match rj with
               | :? PreparedRenderObject as p -> p
               | :? RenderObject as rj -> 
@@ -258,7 +262,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                         let l = match l with | Some (_,l) -> l | None -> prolog
                         let r = match r with | Some (_,r) -> r | None -> epilog
 
-                        let f = new OptimizedRenderObjectFragment<'f>(rj, ctx)
+                        let f = new OptimizedRenderObjectFragment<'f>(prep, ctx)
                         f.Prev <- l
                         l.Next <- f
 
@@ -275,7 +279,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         changeSet.Listen fragment.Changer
 
     member x.Remove (rj : IRenderObject) =
-        let rj = 
+        let prep = 
             match rj with 
               | :? PreparedRenderObject as p -> p
               | :? RenderObject as rj -> 
@@ -343,7 +347,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     interface IProgram with
         member x.Resources = resourceSet.Resources
-        member x.RenderObjects = fragments.Keys |> Seq.map (fun s -> s.Original)
+        member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)

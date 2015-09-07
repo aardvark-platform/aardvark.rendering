@@ -26,7 +26,7 @@ type IRenderObjectSorter =
 [<AllowNullLiteral>]
 type IProgram =
     inherit IDisposable
-    abstract member RenderObjects : seq<RenderObject>
+    abstract member RenderObjects : seq<IRenderObject>
     abstract member Resources : ReferenceCountingSet<IChangeableResource>
     abstract member Add : IRenderObject -> unit
     abstract member Remove : IRenderObject -> unit
