@@ -319,12 +319,12 @@ module RenderTasks =
 
     
 
-        member private x.Add(pass : uint64, rj : RenderObject) =
+        member private x.Add(pass : uint64, rj : IRenderObject) =
             additions <- additions + 1
-            let program = getProgramForPass pass (rj.AttributeScope |> unbox)
+            let program = getProgramForPass pass rj.AttributeScope
             program.Add rj
 
-        member private x.Remove(pass : uint64, rj : RenderObject) =
+        member private x.Remove(pass : uint64, rj : IRenderObject) =
             removals <- removals + 1
             match tryGetProgramForPass pass with
                 | Some p -> p.Remove rj
@@ -339,8 +339,6 @@ module RenderTasks =
             for d in deltas do
                 match d with
                     | Add a ->
-                        1
-                        let a = a |> unbox<RenderObject>
                         if a.RenderPass <> null then
                             let oldPass = ref System.UInt64.MaxValue
                             let s = a.RenderPass |> Mod.registerCallback (fun k ->
@@ -365,8 +363,6 @@ module RenderTasks =
 
                         additions <- additions + 1
                     | Rem a ->    
-                        1
-                        let a = a |> unbox<RenderObject>
                         if a.RenderPass <> null then
                             match subscriptions.TryGetValue a with
                                 | (true,(d,k)) ->

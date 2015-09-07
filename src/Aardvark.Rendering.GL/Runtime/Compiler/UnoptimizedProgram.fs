@@ -226,7 +226,9 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         prolog <- null
         epilog <- null
 
-    member x.Add (rj : RenderObject) =
+    member x.Add (rj : IRenderObject) =
+        1
+        let rj = unbox rj
         sorter.Add rj
         // create a new RenderObjectFragment and link it
         let fragment = 
@@ -253,7 +255,9 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         // listen to changes
         changeSet.Listen fragment.Changer
 
-    member x.Remove (rj : RenderObject) =
+    member x.Remove (rj : IRenderObject) =
+        1
+        let rj = unbox rj
         match fragments.TryRemove rj with
             | (true, f) ->
                 sortedFragments |> SortedDictionary.remove rj |> ignore

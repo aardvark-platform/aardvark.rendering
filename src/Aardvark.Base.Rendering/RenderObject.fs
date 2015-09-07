@@ -26,7 +26,9 @@ module private RenderObjectIds =
     let mutable private currentId = 0
     let newId() = Interlocked.Increment &currentId
 
-type IRenderObject = interface end
+type IRenderObject =
+    abstract member RenderPass : IMod<uint64>
+    abstract member AttributeScope : Ag.Scope
 
 [<CustomEquality>]
 [<CustomComparison>]
@@ -54,7 +56,9 @@ type RenderObject =
                 
         mutable Uniforms : IUniformProvider
     }  
-    interface IRenderObject
+    interface IRenderObject with
+        member x.RenderPass = x.RenderPass
+        member x.AttributeScope = x.AttributeScope
 
     static member Create(path : string) =
         { Id = RenderObjectIds.newId()

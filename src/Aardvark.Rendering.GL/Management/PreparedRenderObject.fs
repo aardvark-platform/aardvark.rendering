@@ -22,7 +22,10 @@ type PreparedRenderObject =
         IndexBuffer : Option<ChangeableResource<Buffer>>
         VertexArray : ChangeableResource<VertexArrayObject>
 
-    } with
+    } 
+    interface IRenderObject with
+        member x.RenderPass = x.RenderPass
+        member x.AttributeScope = x.AttributeScope
 
     member x.Id = x.Original.Id
     member x.CreationPath = x.Original.CreationPath
@@ -106,6 +109,26 @@ type PreparedRenderObject =
         match o with
             | :? PreparedRenderObject as o -> x.Original = o.Original
             | _ -> false
+
+
+[<AutoOpen>]
+module ``Prepared render object extensions`` =
+    let private empty = {
+                Context = Unchecked.defaultof<_>
+                Original = RenderObject.Empty
+
+                LastTextureSlot = -1
+                Program = Unchecked.defaultof<_>
+                UniformBuffers = Map.empty
+                Uniforms = Map.empty
+                Textures = Map.empty
+                Buffers = Map.empty
+                IndexBuffer = None
+                VertexArray = Unchecked.defaultof<_>
+            }
+
+    type PreparedRenderObject with
+        static member Empty = empty
 
 
 [<Extension; AbstractClass; Sealed>]

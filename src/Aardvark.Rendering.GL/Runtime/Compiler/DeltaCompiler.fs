@@ -180,6 +180,8 @@ module DeltaCompiler =
             if prev.StencilMode <> me.StencilMode && me.StencilMode <> null then
                 yield Instructions.setStencilMode me.StencilMode
         
+//            me.Program.IncrementReferenceCount()
+//            let! _ = me.Program
             // bind the program (if needed)
             if prev.Program <> me.Program then
                 yield Instructions.bindProgram me.Program
@@ -247,6 +249,25 @@ module DeltaCompiler =
     /// </summary>
     let compileDelta (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : RenderObject) (rj : RenderObject) =
         let c = compileDeltaInternal prev rj
+        let (s,()) =
+            c.runCompile {
+                currentContext = currentContext
+                manager = manager
+                instructions = []
+                resources = []
+                resourceCreateTime = System.Diagnostics.Stopwatch()
+            }
+
+        AdaptiveCode(s.instructions, s.resources), stateToStats s
+
+    /// <summary>
+    /// compileDelta compiles all instructions needed to render [rj] 
+    /// assuming [prev] was rendered immediately before.
+    /// This function is the core-ingredient making our rendering-system
+    /// fast as hell \o/.
+    /// </summary>
+    let compileDeltaPrepared (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
+        let c = compileDeltaInternalPrepared prev rj
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext

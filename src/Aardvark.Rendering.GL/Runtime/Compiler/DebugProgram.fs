@@ -19,11 +19,13 @@ type DebugProgram(manager : ResourceManager,
     let mutable usedResources = HashSet<IChangeableResource>()
     let renderObjects = HashSet<RenderObject>()
 
-    member x.Add (rj : RenderObject) =
-        renderObjects.Add rj |> ignore
+    member x.Add (rj : IRenderObject) =
+        1
+        renderObjects.Add (unbox rj) |> ignore
     
-    member x.Remove (rj : RenderObject) =
-        renderObjects.Remove rj |> ignore
+    member x.Remove (rj : IRenderObject) =
+        1
+        renderObjects.Remove (unbox rj) |> ignore
 
     member x.Run(fbo : int, ctx : ContextHandle) =
         let ctxMod = Mod.constant ctx

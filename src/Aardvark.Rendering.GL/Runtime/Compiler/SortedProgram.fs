@@ -52,7 +52,9 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         prolog <- null
         epilog <- null
 
-    member x.Add (unsorted : RenderObject) =
+    member x.Add (unsorted : IRenderObject) =
+        1
+        let unsorted = unbox unsorted
         let rj = unsorted |> sorter.ToSortedRenderObject
         sorter.Add rj
 
@@ -63,7 +65,9 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         // listen to changes
         changeSet.Listen fragment.Changer
 
-    member x.Remove (rj : RenderObject) =
+    member x.Remove (rj : IRenderObject) =
+        1
+        let rj = unbox rj
         match fragments.TryRemove rj with
             | (true, f) ->
                 sorter.Remove rj
