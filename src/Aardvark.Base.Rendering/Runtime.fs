@@ -39,6 +39,12 @@ type IRuntime =
     abstract member DeleteBuffer : IBackendBuffer -> unit
     abstract member DeleteSurface : IBackendSurface -> unit
 
+    abstract member CreateTexture : IMod<ITexture> -> IMod<ITexture>
+    abstract member CreateBuffer : IMod<IBuffer> -> IMod<IBuffer>
+    abstract member DeleteTexture : IMod<ITexture> -> unit
+    abstract member DeleteBuffer : IMod<IBuffer> -> unit
+
+
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
 

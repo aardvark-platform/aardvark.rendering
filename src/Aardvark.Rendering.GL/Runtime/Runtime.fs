@@ -52,12 +52,42 @@ type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
         member x.Samples = getHandle().Samples
         member x.Dispose() = c.Dispose()
 
+type ResourceMod<'a, 'b>(res : ChangeableResource<'a>, f : 'a -> 'b) as this =
+    inherit AdaptiveObject()
+    do res.AddOutput this
+       res.Resource.AddOutput this
+
+    member x.GetValue() =
+        x.EvaluateAlways (fun () ->
+            if res.OutOfDate then
+                res.UpdateCPU()
+                res.UpdateGPU()
+            let r = res.Resource.GetValue()
+            f r
+        )
+
+    member x.Dispose() =
+        res.RemoveOutput this
+        res.Resource.RemoveOutput this
+        res.Dispose()
+
+    interface IMod with
+        member x.IsConstant = false
+        member x.GetValue() = x.GetValue() :> obj
+
+    interface IMod<'b> with
+        member x.GetValue() = x.GetValue()
+
+
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
 
     let mutable ctx = ctx
     let mutable manager = if ctx <> null then ResourceManager(ctx, shareTextures, shareBuffers) else null
+
+    let resourceMod (f : 'a -> 'b) (a : ChangeableResource<'a>) =
+        ResourceMod(a, f) :> IMod<_>
 
     new(ctx) = new Runtime(ctx, false, false)
 
@@ -91,23 +121,44 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
         member x.CreateFramebuffer bindings = x.CreateFramebuffer bindings
         
-        member x.CreateSurface s = x.CreateSurface s :> IBackendSurface
-        member x.DeleteSurface s = 
+        member x.CreateSurface (s : ISurface) = x.CreateSurface s :> IBackendSurface
+        member x.DeleteSurface (s : IBackendSurface) = 
             match s with
                 | :? Program as p -> x.DeleteSurface p
                 | _ -> failwithf "unsupported program-type: %A" s
 
-        member x.CreateTexture t = x.CreateTexture t :> IBackendTexture
-        member x.DeleteTexture t =
+        member x.CreateTexture (t : ITexture) = x.CreateTexture t :> IBackendTexture
+        member x.DeleteTexture (t : IBackendTexture) =
             match t with
                 | :? Texture as t -> x.DeleteTexture t
                 | _ -> failwithf "unsupported texture-type: %A" t
 
-        member x.CreateBuffer b = x.CreateBuffer b :> IBackendBuffer
-        member x.DeleteBuffer b = 
+        member x.CreateBuffer (b : IBuffer) = x.CreateBuffer b :> IBackendBuffer
+        member x.DeleteBuffer (b : IBackendBuffer) = 
             match b with
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
                 | _ -> failwithf "unsupported buffer-type: %A" b
+
+
+        member x.CreateBuffer (b : IMod<IBuffer>) : IMod<IBuffer>=
+            manager.CreateBuffer(b) |> resourceMod (fun b -> b :> IBuffer)
+
+        member x.CreateTexture (b : IMod<ITexture>) : IMod<ITexture>=
+            manager.CreateTexture(b) |> resourceMod (fun b -> b :> ITexture)
+
+        member x.DeleteBuffer (b : IMod<IBuffer>) =
+            match b with
+                | :? ResourceMod<Buffer, IBuffer> as r ->
+                    r.Dispose()
+                | _ ->
+                    failwithf "cannot dispose buffer: %A" b
+
+        member x.DeleteTexture (t : IMod<ITexture>) =
+            match t with
+                | :? ResourceMod<Texture, ITexture> as r ->
+                    r.Dispose()
+                | _ ->
+                    failwithf "cannot dispose texture: %A" t
 
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
