@@ -21,10 +21,12 @@ type AsyncLoadSemantics() =
                 let! prep = 
                     Mod.async (
                         async { 
-                            printfn "starting"
-                            do! Async.Sleep (r.Next(5000, 50000))
-                            printfn "done!!!!"
-                            return runtime.PrepareRenderObject ro 
+//                            printfn "starting"
+//                            do! Async.Sleep (r.Next(5000, 50000))
+                            printfn "preparing render object..."
+                            let ro = runtime.PrepareRenderObject ro 
+                            printfn "prepared render object"
+                            return ro
                         }
                     )
                 match prep with
