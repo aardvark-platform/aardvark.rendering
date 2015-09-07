@@ -225,6 +225,7 @@ module SgFSharp =
 
         let normalizeAdaptive sg = sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
 
+        let loadAsync (sg : ISg) = Sg.AsyncLoadApplicator(Mod.constant sg) :> ISg
 
 
     type IndexedGeometry with

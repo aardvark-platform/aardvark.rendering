@@ -85,13 +85,13 @@ type PreparedRenderObject =
             x.VertexArray.UpdateGPU()
 
     member x.Dispose() =
-        x.VertexArray.Dispose()
+        x.VertexArray.Dispose() 
         x.Buffers |> Map.iter (fun _ (b,_) -> b.Dispose())
         x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
         x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
         x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
         x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-        x.Program.Dispose()
+        x.Program.Dispose() 
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

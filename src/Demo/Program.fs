@@ -3,13 +3,13 @@ open Aardvark.Base
 open Aardvark.Base.Ag
 open Aardvark.Base.AgHelpers
 open Aardvark.Rendering.GL
-open Aardvark.SceneGraph
-open Aardvark.SceneGraph.CSharp
-open Aardvark.SceneGraph.Semantics
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.NanoVg
+open Aardvark.SceneGraph
+open Aardvark.SceneGraph.CSharp
+open Aardvark.SceneGraph.Semantics
 
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -602,7 +602,7 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
-    let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
+    //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
     //let modelPath =  @"C:\Aardwork\scenes\bench2\8000_128_4000_6.dae"
 
@@ -610,7 +610,7 @@ let main args =
     Aardvark.Init()
 
     use app = new OpenGlApplication()
-    let f = app.CreateGameWindow(1)
+    let f = app.CreateSimpleRenderWindow(1)
     let ctrl = f //f.Control
 
 //    ctrl.Mouse.Events.Values.Subscribe(fun e ->
@@ -772,7 +772,10 @@ let main args =
         ()
     ) |> ignore
 
-    let task = app.Runtime.CompileRender(engine, sg.RenderObjects())
+    let sg = sg |> Sg.loadAsync
+
+
+    let task = app.Runtime.CompileRender(engine.GetValue(), sg)
 
     ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
 

@@ -12,6 +12,9 @@ open Aardvark.SceneGraph.Internal
 [<AutoOpen>]
 module RuntimeSemantics =
 
+    type ISg with
+        member x.Runtime : IRuntime = x?Runtime
+
     type IRuntime with
 
         member x.CompileRender(rjs : aset<IRenderObject>) =

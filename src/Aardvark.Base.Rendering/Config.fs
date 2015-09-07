@@ -39,7 +39,7 @@ type IDynamicRenderObjectSorter =
 [<CustomEquality; NoComparison>]
 type RenderObjectSorting =
     | Dynamic of (Ag.Scope -> IDynamicRenderObjectSorter)
-    | Static of cmp : IComparer<RenderObject>
+    | Static of cmp : IComparer<IRenderObject>
     | Grouping of projections : (list<RenderObject -> IMod>) with
 
     override x.GetHashCode() =

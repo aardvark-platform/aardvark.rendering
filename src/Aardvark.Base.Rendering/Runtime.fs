@@ -35,6 +35,9 @@ type IRuntime =
     abstract member CreateTexture : ITexture -> IBackendTexture
     abstract member CreateBuffer : IBuffer -> IBackendBuffer
     abstract member CreateSurface : ISurface -> IBackendSurface
+    
+    abstract member PrepareRenderObject : IRenderObject -> IRenderObject
+    
     abstract member DeleteTexture : IBackendTexture -> unit
     abstract member DeleteBuffer : IBackendBuffer -> unit
     abstract member DeleteSurface : IBackendSurface -> unit
@@ -50,6 +53,7 @@ type IRuntime =
 
     abstract member CompileClear : clearColor : IMod<C4f> * clearDepth : IMod<double> -> IRenderTask
     abstract member CompileRender : BackendConfiguration * aset<IRenderObject> -> IRenderTask
+
 
     abstract member CreateTexture : size : IMod<V2i> * format : IMod<PixFormat> * samples : IMod<int> * count : IMod<int> -> IFramebufferTexture
     abstract member CreateRenderbuffer : size : IMod<V2i> * format : IMod<RenderbufferFormat> * samples : IMod<int> -> IFramebufferRenderbuffer

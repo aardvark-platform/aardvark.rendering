@@ -28,15 +28,18 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
     let mutable frag : 'f = match precompiled with | Some p -> p | None -> null
     let mutable lastPrevAndSurface = None
 
+    let hasProgram =
+        match precompiled with
+         | Some v -> false 
+         | _ -> true
+
     let recompile() =
         let prevRj =
             match prev with
                 | null -> PreparedRenderObject.Empty
                 | _ -> prev.RenderObject
 
-        let changed = rj.Program.OutOfDate
-
-        if changed then
+        if isNull frag || rj.Program.OutOfDate then // is changed?
 
             match frag with
                 | null -> frag <- ctx.handler.Create []
@@ -79,24 +82,27 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
         else FrameStatistics.Zero
 
     let changer = 
-        let self = ref Unchecked.defaultof<_>
-        self :=
-            Mod.custom (fun () ->
-                if prev <> null then
-                    let oldStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
-                    currentChanger.RemoveOutput !self
-                    let resTime = recompile()
-                    let _ = currentChanger |> Mod.force
-                    currentChanger.AddOutput !self
-                    let newStats = frag.Statistics
-                    transact (fun () ->
-                        Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
-                    )
-                    resTime
-                else FrameStatistics.Zero
-            )
-        rj.Program.AddOutput !self
-        !self
+        if hasProgram
+        then
+            let self = ref Unchecked.defaultof<_>
+            self :=
+                Mod.custom (fun () ->
+                    if prev <> null then
+                        let oldStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
+                        currentChanger.RemoveOutput !self
+                        let resTime = recompile()
+                        let _ = currentChanger |> Mod.force
+                        currentChanger.AddOutput !self
+                        let newStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
+                        transact (fun () ->
+                            Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
+                        )
+                        resTime
+                    else FrameStatistics.Zero
+                )
+            rj.Program.AddOutput !self
+            !self
+        else Mod.init FrameStatistics.Zero :> IMod<_>
 
     member x.Dispose() =
         match frag with

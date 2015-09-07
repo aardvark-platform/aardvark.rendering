@@ -19,10 +19,10 @@ module RenderObjectSorters =
     open System.Threading
     open System.Collections.Generic
 
-    type private RenderObjectComparisonSorter(cmp : IComparer<RenderObject>) =
-        member x.Add (rj : RenderObject) = ()
-        member x.Remove (rj : RenderObject) = ()
-        member x.Compare(l : RenderObject, r : RenderObject) = cmp.Compare(l,r)
+    type private RenderObjectComparisonSorter(cmp : IComparer<IRenderObject>) =
+        member x.Add (rj : IRenderObject) = ()
+        member x.Remove (rj : IRenderObject) = ()
+        member x.Compare(l : IRenderObject, r : IRenderObject) = cmp.Compare(l,r)
 
         interface IRenderObjectSorter with
             member x.Add rj = x.Add rj
@@ -61,22 +61,32 @@ module RenderObjectSorters =
             else
                 a.Id
 
-        let invoke (rj : RenderObject) =
+
+        let toRj (rj : IRenderObject) =
+            match rj with
+                | :? RenderObject as rj -> rj
+                | :? PreparedRenderObject as p -> p.Original
+                | _ -> failwith "unknown render object type"
+
+        let invoke (rj : IRenderObject) =
+            let ro = rj |> toRj
+
             rjCache.GetOrCreate(rj, fun _ ->
-                (projections |> List.map (fun f -> invokeId (f rj))) @ [rj.Id]
+                (projections |> List.map (fun f -> invokeId (f ro))) @ [ro.Id]
             )
 
-        let revoke (rj : RenderObject) =
+        let revoke (rj : IRenderObject) =
+            let ro = rj |> toRj
+
             rjCache.Remove rj |> ignore
-            (projections |> List.map (fun f -> revokeId (f rj))) @ [rj.Id]
+            (projections |> List.map (fun f -> revokeId (f ro))) @ [ro.Id]
 
-        let lookup (rj : RenderObject) =
-            rjCache.[rj]
+        let lookup (rj : IRenderObject) = rjCache.[rj]
 
 
-        member x.Add (rj : RenderObject) = invoke rj |> ignore
-        member x.Remove (rj : RenderObject) = revoke rj |> ignore
-        member x.Compare(l : RenderObject, r : RenderObject) = compare (lookup l) (lookup r)
+        member x.Add (rj : IRenderObject) = invoke rj |> ignore
+        member x.Remove (rj : IRenderObject) = revoke rj |> ignore
+        member x.Compare(l : IRenderObject, r : IRenderObject) = compare (lookup l) (lookup r)
 
         interface IRenderObjectSorter with
             member x.Add rj = x.Add rj

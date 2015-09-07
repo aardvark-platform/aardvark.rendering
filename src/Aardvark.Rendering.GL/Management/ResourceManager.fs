@@ -31,13 +31,15 @@ module ResourceManager =
         abstract member Resource : obj
         abstract member Kind : ResourceKind
         
-    type ChangeableResource<'a> internal(key : list<obj>, parent : ConcurrentDictionary<list<obj>, obj * int>, desc : ChangeableResourceDescription<'a>) as this =
+    type ChangeableResource<'a> internal(key : list<obj>, parent : ConcurrentDictionary<list<obj>, obj>, 
+                                         desc : ChangeableResourceDescription<'a>) as this =
         inherit AdaptiveObject()
 
         do desc.dependencies |> List.iter (fun a -> a.GetValue() |> ignore; a.AddOutput this)
            this.OutOfDate <- false
 
         let mutable isDisposed = false
+        let mutable refCount = 1
         
 
         //member x.Dependencies = desc.dependencies
@@ -54,6 +56,8 @@ module ResourceManager =
         member x.Resource = desc.resource
         member x.Kind = desc.kind
 
+        member x.IncrementRefCount () = Interlocked.Increment &refCount
+
         member x.Dispose() =
             if parent = null then
                 isDisposed <- true
@@ -61,12 +65,7 @@ module ResourceManager =
                 desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
 
             elif not isDisposed then
-                let _, r =
-                    parent.AddOrUpdate(key,
-                        (fun key -> x :> obj, 0),
-                        (fun key (o,r) -> o, r - 1)
-                    )
-
+                let r = Interlocked.Decrement &refCount
                 if r = 0 then
                     isDisposed <- true
                     parent.TryRemove key |> ignore
@@ -95,17 +94,18 @@ module ResourceManager =
     [<AutoOpen>]
     module private Caching =
         type ResourceCache() =
-            let created = ConcurrentDictionary<list<obj>, obj * int>()
+            let created = ConcurrentDictionary<list<obj>, obj>()
 
             member x.GetOrAdd(key : list<obj>, create : unit -> ChangeableResourceDescription<'a>) =
 
-                let res,_ = 
+                let res = 
                     created.AddOrUpdate(key, 
                         (fun key -> 
                             let desc = create()
-                            new ChangeableResource<'a>(key, created, desc) :> obj, 1),
-                        fun key (o,r) ->
-                            (o,r+1)
+                            new ChangeableResource<'a>(key, created, desc) :> obj),
+                        fun key o ->
+                            (o |> unbox<ChangeableResource<'a>>).IncrementRefCount () |> ignore
+                            o
                     )
 
                 let res = res |> unbox<ChangeableResource<'a>>

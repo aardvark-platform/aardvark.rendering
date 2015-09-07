@@ -162,6 +162,13 @@ module DeltaCompiler =
         }
 
 
+    let useResource (r : ChangeableResource<'a>) : Compiled<unit> =
+        { runCompile = 
+            fun s -> 
+                r.IncrementRefCount () |> ignore
+                { s with resources = (r :> _) :: s.resources }, ()
+        }
+
     let private compileDeltaInternalPrepared (prev : PreparedRenderObject) (me : PreparedRenderObject) =
         compiled {
             //set all modes if needed
@@ -180,14 +187,15 @@ module DeltaCompiler =
             if prev.StencilMode <> me.StencilMode && me.StencilMode <> null then
                 yield Instructions.setStencilMode me.StencilMode
         
-//            me.Program.IncrementReferenceCount()
-//            let! _ = me.Program
+            do! useResource me.Program
+
             // bind the program (if needed)
             if prev.Program <> me.Program then
                 yield Instructions.bindProgram me.Program
 
             // bind all uniform-buffers (if needed)
             for (id,ub) in Map.toSeq me.UniformBuffers do
+                do! useResource ub
                 match Map.tryFind id prev.UniformBuffers with
                     | Some old when old = ub -> 
                         // the same UniformBuffer has already been bound
@@ -198,6 +206,8 @@ module DeltaCompiler =
             // bind all textures/samplers (if needed)
             let latestSlot = ref prev.LastTextureSlot
             for (id,(tex,sam)) in Map.toSeq me.Textures do
+                do! useResource tex
+                do! useResource sam
                 let texEqual, samEqual =
                     match Map.tryFind id prev.Textures with
                         | Some (ot, os) -> (ot = tex), (os = sam)
@@ -216,12 +226,15 @@ module DeltaCompiler =
 
             // bind all top-level uniforms (if needed)
             for (id,u) in Map.toSeq me.Uniforms do
+                do! useResource u
                 match Map.tryFind id prev.Uniforms with
                     | Some old when old = u -> ()
                     | _ ->
                         // TODO: UniformLocations cannot change structurally atm.
                         yield ExecutionContext.bindUniformLocation id (u.Resource.GetValue())
-          
+
+            do! useResource me.VertexArray
+
             // bind the VAO (if needed)
             if prev.VertexArray <> me.VertexArray then
                 yield Instructions.bindVertexArray me.VertexArray

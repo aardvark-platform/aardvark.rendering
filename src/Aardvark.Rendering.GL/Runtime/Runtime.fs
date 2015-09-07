@@ -127,6 +127,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | :? Program as p -> x.DeleteSurface p
                 | _ -> failwithf "unsupported program-type: %A" s
 
+        member x.PrepareRenderObject(rj : IRenderObject) = x.PrepareRenderObject rj :> _
+
         member x.CreateTexture (t : ITexture) = x.CreateTexture t :> IBackendTexture
         member x.DeleteTexture (t : IBackendTexture) =
             match t with
@@ -196,6 +198,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             
         let man = ResourceManager(manager, ctx, shareTextures, shareBuffers)
         new RenderTasks.RenderTask(x, ctx, man, engine, set)
+
+    member x.PrepareRenderObject(rj : IRenderObject) =
+        match rj with
+             | :? RenderObject as rj -> manager.Prepare rj
+             | :? PreparedRenderObject -> failwith "tried to prepare prepared render object"
+             | _ -> failwith "unknown render object type"
 
     member x.CompileRender(engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(engine, set) :> IRenderTask
