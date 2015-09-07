@@ -114,7 +114,7 @@ module RenderTasks =
                 let s = seq { for i in 0..keys.Count-1 do yield KeyValuePair(keys.[i], values.[i]) }
                 (s :> System.Collections.IEnumerable).GetEnumerator()
 
-    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<RenderObject>) as this =
+    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) as this =
         inherit AdaptiveObject()
 
         let mutable currentEngine = engine.GetValue()
@@ -333,12 +333,14 @@ module RenderTasks =
         member x.Runtime = runtime
         member x.Manager = manager
 
-        member x.ProcessDeltas (deltas : list<Delta<RenderObject>>) =
+        member x.ProcessDeltas (deltas : list<Delta<IRenderObject>>) =
             let mutable additions = 0
             let mutable removals = 0
             for d in deltas do
                 match d with
                     | Add a ->
+                        1
+                        let a = a |> unbox<RenderObject>
                         if a.RenderPass <> null then
                             let oldPass = ref System.UInt64.MaxValue
                             let s = a.RenderPass |> Mod.registerCallback (fun k ->
@@ -362,7 +364,9 @@ module RenderTasks =
                             x.Add(0UL, a)
 
                         additions <- additions + 1
-                    | Rem a ->
+                    | Rem a ->    
+                        1
+                        let a = a |> unbox<RenderObject>
                         if a.RenderPass <> null then
                             match subscriptions.TryGetValue a with
                                 | (true,(d,k)) ->

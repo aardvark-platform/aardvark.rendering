@@ -46,17 +46,17 @@ type PreparedRenderObject =
             x.Program.UpdateCPU()
             x.Program.UpdateGPU()
 
-        for (_,ub) in x.UniformBuffers do
+        for (_,ub) in x.UniformBuffers |> Map.toSeq do
             if ub.OutOfDate then
                 ub.UpdateCPU()
                 ub.UpdateGPU()
 
-        for (_,ul) in x.Uniforms do
+        for (_,ul) in x.Uniforms |> Map.toSeq do
             if ul.OutOfDate then
                 ul.UpdateCPU()
                 ul.UpdateGPU()
 
-        for (_,t,s) in x.Textures do
+        for (_,(t,s)) in x.Textures |> Map.toSeq do
             if t.OutOfDate then
                 t.UpdateCPU()
                 t.UpdateGPU()
@@ -65,7 +65,7 @@ type PreparedRenderObject =
                 s.UpdateCPU()
                 s.UpdateGPU()
 
-        for (_,b,_) in x.Buffers do
+        for (_,(b,_)) in x.Buffers |> Map.toSeq do
             if b.OutOfDate then
                 b.UpdateCPU()
                 b.UpdateGPU()
@@ -83,11 +83,11 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         x.VertexArray.Dispose()
-        x.Buffers |> List.iter (fun (_,b,_) -> b.Dispose())
+        x.Buffers |> Map.iter (fun _ (b,_) -> b.Dispose())
         x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
-        x.Textures |> List.iter (fun (_,t,s) -> t.Dispose(); s.Dispose())
-        x.Uniforms |> List.iter (fun (_,ul) -> ul.Dispose())
-        x.UniformBuffers |> List.iter (fun (_,ub) -> ub.Dispose())
+        x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
+        x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
+        x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
         x.Program.Dispose()
 
     interface IDisposable with

@@ -26,8 +26,7 @@ module private RenderObjectIds =
     let mutable private currentId = 0
     let newId() = Interlocked.Increment &currentId
 
-[<AllowNullLiteral>]
-type ICompiledRenderObj = interface end
+type IRenderObject = interface end
 
 [<CustomEquality>]
 [<CustomComparison>]
@@ -54,9 +53,8 @@ type RenderObject =
         mutable VertexAttributes : IAttributeProvider
                 
         mutable Uniforms : IUniformProvider
-
-        mutable OptimizedRepr : ICompiledRenderObj
-    }
+    }  
+    interface IRenderObject
 
     static member Create(path : string) =
         { Id = RenderObjectIds.newId()
@@ -75,7 +73,6 @@ type RenderObject =
           InstanceAttributes = null
           VertexAttributes = null
           Uniforms = null
-          OptimizedRepr = null
         }
 
     static member Create() = RenderObject.Create("UNKNWON")
@@ -125,7 +122,6 @@ module RenderObjectExtensions =
           InstanceAttributes = emptyAttributes
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms
-          OptimizedRepr = null
         }
 
 

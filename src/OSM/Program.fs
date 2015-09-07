@@ -327,7 +327,7 @@ let main argv =
 
     // compile the rendertask and pass it to the window
 
-    let engine = Mod.init BackendConfiguration.Debug
+    let engine = Mod.init BackendConfiguration.NativeOptimized
     let engines = 
         ref [
             BackendConfiguration.UnmanagedOptimized

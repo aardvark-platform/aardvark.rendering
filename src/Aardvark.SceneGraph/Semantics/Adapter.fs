@@ -13,7 +13,7 @@ module AdapterSemantics =
 
     [<Semantic>]
     type AdapterSem() =
-        member x.RenderObjects(a : Sg.AdapterNode) : aset<RenderObject> =
+        member x.RenderObjects(a : Sg.AdapterNode) : aset<IRenderObject> =
             a.Node?RenderObjects()
 
         member x.GlobalBoundingBox(a : Sg.AdapterNode) : IMod<Box3d> =

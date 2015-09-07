@@ -39,7 +39,7 @@ module Ext =
 
         [<Semantic>]
         type LodSem() =
-            member x.RenderObjects(node : LodNode) : aset<RenderObject> =
+            member x.RenderObjects(node : LodNode) : aset<IRenderObject> =
 
                 let mvTrafo = node?ModelViewTrafo()
 
@@ -48,8 +48,8 @@ module Ext =
 
                     let! highSg,lowSg = node.High,node.Low
 
-                    let lowJobs = lowSg?RenderObjects() : aset<RenderObject> 
-                    let highJobs = highSg?RenderObjects() : aset<RenderObject>
+                    let lowJobs = lowSg?RenderObjects() : aset<IRenderObject> 
+                    let highJobs = highSg?RenderObjects() : aset<IRenderObject>
 
                     //this parallel read is absolutely crucial for performance, since otherwise the 
                     //resulting set will no longer be referentially equal (cannot really be solved any other way)

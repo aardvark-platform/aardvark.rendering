@@ -27,13 +27,13 @@ module Assimp =
     type Node with
         member x.Scene : Scene = x?AssimpScene
 
-        member x.RenderObjects() : aset<RenderObject> = x?RenderObjects()
+        member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
 
         member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
 
     type Scene with
         member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
-        member x.RenderObjects() : aset<RenderObject> = x?RenderObjects()
+        member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
 
 
     // in order to integrate Assimo's scene structure we
@@ -257,13 +257,13 @@ module Assimp =
 
         // here we define the RenderObjects semantic for the Assimp-Scene
         // which directly queries RenderObjects from its contained Scene-Root
-        member x.RenderObjects(scene : Scene) : aset<RenderObject> =
+        member x.RenderObjects(scene : Scene) : aset<IRenderObject> =
             scene.RootNode?RenderObjects()
 
         // here we define the RenderObjects semantic for Assimp's Nodes
         // which basically enumerates all directly contained 
         // Geometries and recursively yields all child-renderjobs
-        member x.RenderObjects(n : Node) : aset<RenderObject> =
+        member x.RenderObjects(n : Node) : aset<IRenderObject> =
             aset {
                 // get the inherited Scene attribute (needed for Mesh lookups here)
                 let scene = n.Scene
