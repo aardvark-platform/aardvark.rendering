@@ -36,7 +36,7 @@ module Config =
     /// The number of resource context to be created for a default
     /// rendering context instance.
     /// </summary>
-    let NumberOfResourceContexts = 1
+    let NumberOfResourceContexts = 2
 
     /// <summary>
     /// defines whether the GL context should log errors
