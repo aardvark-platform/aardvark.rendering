@@ -77,6 +77,7 @@
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\StreamingTexture.fs" />
     <Compile Include="Management\ResourceManager.fs" />
+    <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\ReferenceCountingSet.fs" />
     <Compile Include="Runtime\IFragment.fs" />
@@ -100,7 +101,6 @@
     <Compile Include="Runtime\Compiler\DebugProgram.fs" />
     <Compile Include="Runtime\RenderTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />
-    <Compile Include="Runtime\CompiledRenderObject.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
