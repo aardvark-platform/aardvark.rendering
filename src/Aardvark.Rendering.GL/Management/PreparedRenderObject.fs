@@ -13,11 +13,12 @@ type PreparedRenderObject =
         Context : Context
         Original : RenderObject
 
+        LastTextureSlot : int
         Program : ChangeableResource<Program>
-        UniformBuffers : list<int * ChangeableResource<UniformBuffer>>
-        Uniforms : list<int * ChangeableResource<UniformLocation>>
-        Textures : list<int * ChangeableResource<Texture> * ChangeableResource<Sampler>>
-        Buffers : list<int * ChangeableResource<Buffer> * IMod<AttributeDescription>>
+        UniformBuffers : Map<int, ChangeableResource<UniformBuffer>>
+        Uniforms : Map<int, ChangeableResource<UniformLocation>>
+        Textures : Map<int, ChangeableResource<Texture> * ChangeableResource<Sampler>>
+        Buffers : Map<int, ChangeableResource<Buffer> * IMod<AttributeDescription>>
         IndexBuffer : Option<ChangeableResource<Buffer>>
         VertexArray : ChangeableResource<VertexArrayObject>
 
@@ -25,11 +26,13 @@ type PreparedRenderObject =
 
     member x.Id = x.Original.Id
     member x.CreationPath = x.Original.CreationPath
-
     member x.AttributeScope = x.Original.AttributeScope
+
     member x.IsActive = x.Original.IsActive
     member x.RenderPass = x.Original.RenderPass
+
     member x.DrawCallInfo = x.Original.DrawCallInfo
+
     member x.DepthTest = x.Original.DepthTest
     member x.CullMode = x.Original.CullMode
     member x.BlendMode = x.Original.BlendMode
@@ -119,22 +122,29 @@ type ResourceManagerExtensions private() =
 
     [<Extension>]
     static member Prepare (x : ResourceManager, rj : RenderObject) : PreparedRenderObject =
+        // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
 
+        // create a program and get its handle (ISSUE: assumed to be constant here)
         let program = x.CreateSurface(rj.Surface)
-
         let prog = program.Resource.GetValue()
 
+        // create all UniformBuffers requested by the program
         let uniformBuffers =
-            prog.UniformBlocks |> List.map (fun block ->
-                let mutable values = []
-                // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
-                block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
-            )
+            prog.UniformBlocks 
+                |> List.map (fun block ->
+                    let mutable values = []
+                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
+                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
+                   )
+                |> Map.ofList
 
+        // partition all requested (top-level) uniforms into Textures and other
         let textureUniforms, otherUniforms = 
             prog.Uniforms |> List.partition (fun uniform -> match uniform.uniformType with | SamplerType -> true | _ -> false)
 
+        // create all requested Textures
+        let lastTextureSlot = ref -1
         let textures =
             textureUniforms
                 |> List.choose (fun uniform ->
@@ -158,8 +168,9 @@ type ResourceManagerExtensions private() =
 
                                     let t = x.CreateTexture(value)
                                     let s = x.CreateSampler(Mod.constant sampler)
+                                    lastTextureSlot := uniform.index
 
-                                    Some (uniform.index, t, s)
+                                    Some (uniform.index, (t, s))
                                 | _ ->
                                     Log.warn "unexpected texture type %s: %A" uniform.semantic value
                                     None
@@ -167,45 +178,57 @@ type ResourceManagerExtensions private() =
                             Log.warn "texture %s not found" uniform.semantic
                             None
                     )
+                |> Map.ofList
 
+        // create all requested UniformLocations
         let uniforms =
             otherUniforms
                 |> List.map (fun uniform ->
                     let r = x.CreateUniformLocation(rj.AttributeScope, rj.Uniforms, uniform)
                     (uniform.location, r)
-                )
+                   )
+                |> Map.ofList
 
+        // create all requested vertex-/instance-inputs
         let buffers =
-            prog.Inputs |> List.map (fun v ->
-                match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
-                    | Some value ->
-                        let dep = x.CreateBuffer(value.Buffer)
-                        let view = createView AttributeFrequency.PerVertex value dep
-                        (v.attributeIndex, dep, view)
-                    | _  -> 
-                        match rj.InstanceAttributes with
-                            | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" v.semantic rj
-                            | _ -> 
-                                printfn "looking up %s in instance attribs" v.semantic
-                                match rj.InstanceAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
-                                    | Some value ->
-                                        let dep = x.CreateBuffer(value.Buffer)
-                                        let view = createView (AttributeFrequency.PerInstances 1) value dep
-                                        (v.attributeIndex, dep, view)
-                                    | _ -> 
-                                        failwithf "could not get attribute %A" v.semantic
-            )
+            prog.Inputs 
+                |> List.map (fun v ->
+                    match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
+                        | Some value ->
+                            let dep = x.CreateBuffer(value.Buffer)
+                            let view = createView AttributeFrequency.PerVertex value dep
+                            (v.attributeIndex, (dep, view))
+                        | _  -> 
+                            match rj.InstanceAttributes with
+                                | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" v.semantic rj
+                                | _ -> 
+                                    printfn "looking up %s in instance attribs" v.semantic
+                                    match rj.InstanceAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
+                                        | Some value ->
+                                            let dep = x.CreateBuffer(value.Buffer)
+                                            let view = createView (AttributeFrequency.PerInstances 1) value dep
+                                            (v.attributeIndex, (dep, view))
+                                        | _ -> 
+                                            failwithf "could not get attribute %A" v.semantic
+                   )
+                |> Map.ofList
 
+        // create the index buffer (if present)
         let index =
             if isNull rj.Indices then None
             else x.CreateBuffer rj.Indices |> Some
 
+        // create the VertexArrayObject
         let vao =
-            x.CreateVertexArrayObject(buffers |> List.map (fun (i,_,a) -> (i,a)), index)
+            x.CreateVertexArrayObject(buffers |> Map.toList |> List.map (fun (i,(_,a)) -> (i,a)), index)
 
+        
+        // finally return the PreparedRenderObject
         {
             Context = x.Context
             Original = rj
+
+            LastTextureSlot = !lastTextureSlot
             Program = program
             UniformBuffers = uniformBuffers
             Uniforms = uniforms
