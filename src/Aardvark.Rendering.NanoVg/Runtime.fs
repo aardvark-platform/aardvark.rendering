@@ -321,6 +321,8 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     let inputs = ReferenceCountingSet<IAdaptiveObject>()
     do r.AddOutput this
 
+    let mutable frameId = 0UL
+
     let addInput (v : IAdaptiveObject) =
         if v <> null && inputs.Add v then
             v.AddOutput this
@@ -411,6 +413,8 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
                 r.Content |> Seq.map snd |> Interpreter.run current
                 NanoVg.nvgEndFrame(current.Handle)
 
+                frameId <- frameId + 1UL
+
                 OpenTK.Graphics.OpenGL.GL.PopAttrib()
 
                 OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
@@ -427,6 +431,8 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
 
         member x.Dispose() =
             x.Dispose()
+
+        member x.FrameId = frameId
 
 [<Extension; AbstractClass; Sealed>]
 type LowLevelRuntimeExtensions private() =

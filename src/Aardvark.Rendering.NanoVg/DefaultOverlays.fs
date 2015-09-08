@@ -268,6 +268,7 @@ module DefaultOverlays =
         inherit AdaptiveObject()
 
         let mutable upToDateExec = 0
+        let mutable frameId = 0UL
 
         do real.AddOutput this
            annotation.AddOutput this
@@ -286,6 +287,7 @@ module DefaultOverlays =
                     if not x.OutOfDate then upToDateExec <- upToDateExec + 1
                     else upToDateExec <- 0
 
+                    frameId <- frameId + 1UL
 
                     if real.OutOfDate || upToDateExec > 1 then
                         let real = real.Run f
@@ -297,6 +299,8 @@ module DefaultOverlays =
                         let annotation = annotation.Run f
                         RenderingResult(annotation.Framebuffer, real.Statistics + annotation.Statistics)
                 )
+
+            member x.FrameId = frameId
 
     let withStatistics (t : IRenderTask) =
         match t.Runtime with

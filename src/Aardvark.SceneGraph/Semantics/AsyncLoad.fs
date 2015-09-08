@@ -25,7 +25,7 @@ type AsyncLoadSemantics() =
                             let ro = runtime.PrepareRenderObject ro 
                             printfn "prepared render object"
                             return ro
-                        }
+                        } 
                     )
                 match prep with
                     | None -> ()

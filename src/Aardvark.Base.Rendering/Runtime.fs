@@ -66,6 +66,7 @@ and IRenderTask =
     inherit IAdaptiveObject
     abstract member Runtime : Option<IRuntime>
     abstract member Run : IFramebuffer -> RenderingResult
+    abstract member FrameId : uint64
 
 type ShaderStage =
     | Vertex = 1

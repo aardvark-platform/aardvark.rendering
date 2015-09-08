@@ -129,6 +129,7 @@ module RenderTasks =
 
         let mutable additions = 0
         let mutable removals = 0
+        let mutable frameId = 0UL
 
         let addInput m =
             if inputs.Add m then
@@ -419,6 +420,8 @@ module RenderTasks =
                             ResourceCount = float resourceCount 
                         }
 
+                    frameId <- frameId + 1UL
+
                     RenderingResult(fbo, stats)
                 )
             )
@@ -439,11 +442,15 @@ module RenderTasks =
 
             member x.Runtime = runtime |> Some
 
+            member x.FrameId = frameId
+
 
     type ClearTask(runtime : IRuntime, color : IMod<C4f>, depth : IMod<float>, ctx : Context) as this =
         inherit AdaptiveObject()
         do color.AddOutput this
            depth.AddOutput this
+
+        let mutable frameId = 0UL
 
         member x.Run(fbo : IFramebuffer) =
             using ctx.ResourceLock (fun _ ->
@@ -469,6 +476,8 @@ module RenderTasks =
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                     GL.Check "could not bind framebuffer"
 
+                    frameId <- frameId + 1UL
+
                     RenderingResult(fbo, FrameStatistics.Zero)
                 )
             )
@@ -484,3 +493,5 @@ module RenderTasks =
 
             member x.Dispose() =
                 x.Dispose()
+
+            member x.FrameId = frameId

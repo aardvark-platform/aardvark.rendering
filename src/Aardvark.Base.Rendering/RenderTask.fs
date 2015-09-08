@@ -16,6 +16,7 @@ module RenderTask =
             member x.Dispose() = ()
             member x.Run(fbo) = RenderingResult(fbo, FrameStatistics.Zero)
             member x.Runtime = None
+            member x.FrameId = 0UL
 
     type private SequentialRenderTask(f : RenderingResult -> RenderingResult, tasks : IRenderTask[]) as this =
         inherit AdaptiveObject()
@@ -23,6 +24,7 @@ module RenderTask =
         do for t in tasks do t.AddOutput this
 
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
+        let mutable frameId = 0UL
 
         interface IRenderTask with
             member x.Run(fbo) =
@@ -30,7 +32,9 @@ module RenderTask =
                     let mutable stats = FrameStatistics.Zero
                     for t in tasks do
                         let res = t.Run(fbo)
+                        frameId <- max frameId t.FrameId
                         stats <- stats + res.Statistics
+
                     RenderingResult(fbo, stats) |> f
                 )
 
@@ -39,12 +43,15 @@ module RenderTask =
 
             member x.Runtime = runtime
 
+            member x.FrameId = frameId
+
         new(tasks : IRenderTask[]) = new SequentialRenderTask(id, tasks)
 
     type private ModRenderTask(input : IMod<IRenderTask>) as this =
         inherit AdaptiveObject()
         do input.AddOutput this
         let mutable inner : Option<IRenderTask> = None
+        let mutable frameId = 0UL
 
         interface IRenderTask with
             member x.Run(fbo) =
@@ -62,6 +69,7 @@ module RenderTask =
                             ni.AddOutput x
 
                     inner <- Some ni
+                    frameId <- ni.FrameId
                     ni.Run fbo
                 )
 
@@ -74,6 +82,8 @@ module RenderTask =
                     | _ -> ()
 
             member x.Runtime = input.GetValue().Runtime
+            
+            member x.FrameId = frameId
 
     type private AListRenderTask(tasks : alist<IRenderTask>) as this =
         inherit AdaptiveObject()
@@ -82,6 +92,8 @@ module RenderTask =
 
         let mutable runtime = None
         let tasks = ReferenceCountingSet()
+
+        let mutable frameId = 0UL
 
         let add (t : IRenderTask) =
             if tasks.Add t then
@@ -117,6 +129,7 @@ module RenderTask =
                     let mutable stats = FrameStatistics.Zero
                     for (_,t) in reader.Content do
                         let res = t.Run(fbo)
+                        frameId <- max frameId t.FrameId
                         stats <- stats + res.Statistics
 
                     // return the accumulated statistics
@@ -135,6 +148,8 @@ module RenderTask =
                 processDeltas()
                 runtime
 
+            member x.FrameId = frameId
+
     type private CustomRenderTask(f : afun<IFramebuffer, RenderingResult>) as this =
         inherit AdaptiveObject()
         do f.AddOutput this
@@ -149,6 +164,8 @@ module RenderTask =
                 
             member x.Runtime =
                 None
+            
+            member x.FrameId = 0UL
 
 
     let empty = new EmptyRenderTask() :> IRenderTask

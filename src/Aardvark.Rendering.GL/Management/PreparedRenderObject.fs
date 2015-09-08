@@ -148,6 +148,9 @@ type ResourceManagerExtensions private() =
         // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
 
+
+        let fence = OpenTK.Graphics.OpenGL.GL.FenceSync(OpenTK.Graphics.OpenGL.ArbSync.SyncGpuCommandsComplete,0)
+
         // create a program and get its handle (ISSUE: assumed to be constant here)
         let program = x.CreateSurface(rj.Surface)
         let prog = program.Resource.GetValue()
@@ -245,7 +248,10 @@ type ResourceManagerExtensions private() =
         let vao =
             x.CreateVertexArrayObject(buffers |> Map.toList |> List.map (fun (i,(_,a)) -> (i,a)), index)
 
-        
+        let status = OpenTK.Graphics.OpenGL.GL.WaitSync(fence,OpenTK.Graphics.OpenGL.WaitSyncFlags.None,1000L)
+       
+        if status = OpenTK.Graphics.OpenGL.WaitSyncStatus.TimeoutExpired then printfn "sync lagged"
+
         // finally return the PreparedRenderObject
         {
             Context = x.Context
