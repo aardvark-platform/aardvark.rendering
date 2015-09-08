@@ -11,7 +11,6 @@ open Aardvark.Base.Rendering
 
 [<Semantic>]
 type AsyncLoadSemantics() =
-    let r = System.Random()
 
     member x.RenderObjects(app : Sg.AsyncLoadApplicator) : aset<IRenderObject> =
         aset {
@@ -21,9 +20,9 @@ type AsyncLoadSemantics() =
                 let! prep = 
                     Mod.async (
                         async { 
-                            printfn "preparing render object..."
+                            //printfn "preparing render object..."
                             let ro = runtime.PrepareRenderObject ro 
-                            printfn "prepared render object"
+                            //printfn "prepared render object"
                             return ro
                         } 
                     )
