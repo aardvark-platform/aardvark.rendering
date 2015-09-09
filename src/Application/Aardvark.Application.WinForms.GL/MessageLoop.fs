@@ -75,7 +75,7 @@ type MyTimer(f : unit -> unit, due : int64, interval : int64) =
             Log.line "Timer cancelled"
             ()
 
-    let thread = Thread(ThreadStart(run), Priority = ThreadPriority.Highest)
+    let thread = Thread(ThreadStart(run), Priority = ThreadPriority.Highest, IsBackground = true)
     do thread.Start()
 
     member x.Dispose() =
