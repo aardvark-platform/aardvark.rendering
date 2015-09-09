@@ -1,21 +1,23 @@
 NUGET
   remote: \\hobel\NuGet\
   specs:
-    Aardvark.Base (1.3.26)
+    Aardvark.Base (1.3.27)
       DevILSharp (>= 0.0.9 < 0.1.0)
-    Aardvark.Base.Essentials (1.3.26)
-      Aardvark.Base (>= 1.3.26)
+    Aardvark.Base.Essentials (1.3.27)
+      Aardvark.Base (>= 1.3.27)
       Rx-Linq (>= 2.2.5 < 2.3.0)
       System.Collections.Immutable (>= 1.1.36 < 1.2.0)
-    Aardvark.Base.FSharp (1.3.26)
-      Aardvark.Base (>= 1.3.26)
+    Aardvark.Base.FSharp (1.3.27)
+      Aardvark.Base (>= 1.3.27)
       DevILSharp (>= 0.0.9 < 0.1.0)
       FSharp.Compiler.Service (>= 0.0.90 < 0.1.0)
       RegexProvider (>= 0.0.5 < 0.1.0)
-    Aardvark.Base.Incremental (1.3.26)
-      Aardvark.Base (1.3.26)
-      Aardvark.Base.Essentials (1.3.26)
-      Aardvark.Base.FSharp (1.3.26)
+    Aardvark.Base.Incremental (1.3.27)
+      Aardvark.Base (1.3.27)
+      Aardvark.Base.Essentials (1.3.27)
+      Aardvark.Base.FSharp (1.3.27)
+    AssimpNet (3.3.1)
+    BruTile (0.12.0)
     FShade (1.3.23)
       Aardvark.Base (>= 1.3.11 < 1.4.0)
       Aardvark.Base.FSharp (>= 1.3.11 < 1.4.0)
@@ -25,6 +27,17 @@ NUGET
       FSPowerPack.Linq.Community
       FSPowerPack.Metadata.Community
       FSPowerPack.Parallel.Seq.Community
+    NanoVgSharp (0.0.6)
+      Aardvark.Base (>= 1.3.7 < 1.4.0)
+      Aardvark.Base.FSharp (>= 1.3.7 < 1.4.0)
+      Aardvark.Base.Incremental (>= 1.3.7 < 1.4.0)
+    RegexProvider (0.0.5)
+    Rx-Linq (2.2.5)
+      Rx-Core (>= 2.2.5)
+      Rx-Interfaces (>= 2.2.5)
+  remote: https://nuget.org/api/v2
+  specs:
+    DevILSharp (0.0.10)
     FSPowerPack.Core.Community (3.0.0.0)
     FSPowerPack.Linq.Community (3.0.0.0)
       FSPowerPack.Core.Community
@@ -32,23 +45,10 @@ NUGET
       FSPowerPack.Core.Community
     FSPowerPack.Parallel.Seq.Community (3.0.0.0)
       FSPowerPack.Core.Community
-    NanoVgSharp (0.0.6)
-      Aardvark.Base (>= 1.3.7 < 1.4.0)
-      Aardvark.Base.FSharp (>= 1.3.7 < 1.4.0)
-      Aardvark.Base.Incremental (>= 1.3.7 < 1.4.0)
-    RegexProvider (0.0.5)
+    OpenHardwareMonitor (0.7.1)
     Rx-Core (2.2.5)
       Rx-Interfaces (>= 2.2.5)
     Rx-Interfaces (2.2.5)
-    Rx-Linq (2.2.5)
-      Rx-Core (>= 2.2.5)
-      Rx-Interfaces (>= 2.2.5)
-  remote: https://nuget.org/api/v2
-  specs:
-    AssimpNet (3.3.1)
-    BruTile (0.12.0)
-    DevILSharp (0.0.10)
-    OpenHardwareMonitor (0.7.1)
     System.Collections (4.0.10)
       System.Diagnostics.Debug (>= 4.0.0)
       System.Resources.ResourceManager (>= 4.0.0)
