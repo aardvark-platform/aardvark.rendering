@@ -23,9 +23,13 @@ type PreparedRenderObject =
         VertexArray : ChangeableResource<VertexArrayObject>
 
     } 
+
     interface IRenderObject with
         member x.RenderPass = x.RenderPass
         member x.AttributeScope = x.AttributeScope
+
+    interface IPreparedRenderObject with
+        member x.Update() = x.Update()
 
     member x.Id = x.Original.Id
     member x.CreationPath = x.Original.CreationPath

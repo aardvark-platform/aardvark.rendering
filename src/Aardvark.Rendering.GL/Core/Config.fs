@@ -7,6 +7,7 @@ open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
+open Aardvark.Base
 
 /// <summary>
 /// A module containing default GL configuration properties
@@ -81,6 +82,18 @@ module Error =
                 if err <> ErrorCode.NoError then
                     Aardvark.Base.Report.Warn("{0}:{1}",err,str)
                     //raise <| OpenGLException(err, str)
+
+        static member inline Sync() =
+            let fence = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
+            let status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.None, ~~~0UL)
+            GL.DeleteSync(fence)
+
+            match status with
+                | WaitSyncStatus.TimeoutExpired ->
+                    Log.warn "[GL] wait timeout"
+                | WaitSyncStatus.WaitFailed ->
+                    Log.warn "[GL] wait failed"
+                | _ -> ()
 
 
     // Here's a comparison of what ILSpy says:

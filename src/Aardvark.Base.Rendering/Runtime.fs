@@ -29,6 +29,13 @@ type IBackendSurface =
     abstract member Handle : obj
 
 
+type IPreparedRenderObject =
+    inherit IRenderObject
+    inherit IDisposable
+
+    abstract member Update : unit -> unit
+
+
 type IRuntime =
     abstract member ContextLock : IDisposable
 
@@ -36,7 +43,7 @@ type IRuntime =
     abstract member CreateBuffer : IBuffer -> IBackendBuffer
     abstract member CreateSurface : ISurface -> IBackendSurface
     
-    abstract member PrepareRenderObject : IRenderObject -> IRenderObject
+    abstract member PrepareRenderObject : IRenderObject -> IPreparedRenderObject
     
     abstract member DeleteTexture : IBackendTexture -> unit
     abstract member DeleteBuffer : IBackendBuffer -> unit

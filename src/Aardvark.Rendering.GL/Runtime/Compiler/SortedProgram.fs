@@ -126,6 +126,8 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         sw.Restart()
         // run everything
         run prolog.Fragment
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+
         sw.Stop()
 
         let fragmentStats = Mod.force statistics

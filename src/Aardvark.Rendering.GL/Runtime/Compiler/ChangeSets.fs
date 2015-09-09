@@ -152,6 +152,10 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
                     d.UpdateCPU()
                     d.UpdateGPU()
             )
+
+
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+
         sw.Stop()
         count,counts,sw.Elapsed
 
