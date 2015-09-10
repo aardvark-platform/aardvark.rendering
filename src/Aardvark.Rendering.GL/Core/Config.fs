@@ -95,6 +95,72 @@ module Error =
                     Log.warn "[GL] wait failed"
                 | _ -> ()
 
+    type GLTimer private() =
+        let counter = GL.GenQuery()
+        do GL.BeginQuery(QueryTarget.TimeElapsed, counter)
+
+        static member Start() = new GLTimer()
+
+        member x.GetElapsedSeconds() =
+            GL.EndQuery(QueryTarget.TimeElapsed)
+
+            let mutable nanoseconds = 0L
+            GL.GetQueryObject(counter, GetQueryObjectParam.QueryResult, &nanoseconds)
+
+            float nanoseconds / 1000000000.0
+
+        member x.Dispose() =
+            GL.DeleteQuery(counter)
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    type OpenGlStopwatch() =
+        let mutable totalTime = 0L
+        let mutable handle = -1
+
+        member private x.TotalTime
+            with get() = totalTime
+            and set v = totalTime <- v
+
+        member x.IsRunning = handle >= 0
+
+        member x.Start() =
+            if not x.IsRunning then
+                handle <- GL.GenQuery()
+                GL.QueryCounter(handle, QueryCounterTarget.Timestamp)
+                //GL.BeginQuery(QueryTarget.TimeElapsed, handle)
+
+        member x.Stop() =
+            if x.IsRunning then
+                let mutable startTime = 0L
+                let mutable endTime = 0L
+                GL.GetQueryObject(handle, GetQueryObjectParam.QueryResult, &startTime)
+
+
+                GL.QueryCounter(handle, QueryCounterTarget.Timestamp)
+                GL.GetQueryObject(handle, GetQueryObjectParam.QueryResult, &endTime)
+
+                totalTime <- totalTime + (endTime - startTime)
+
+                GL.DeleteQuery(handle)
+                handle <- -1
+
+        member x.Restart() =
+            x.Stop()
+            totalTime <- 0L
+            x.Start()
+
+        member x.ElapsedNanoseconds =
+            if x.IsRunning then
+                x.Stop()
+                x.Start()
+            totalTime
+
+        member x.ElapsedMicroseconds = float x.ElapsedNanoseconds / 1000.0
+        member x.ElapsedMilliseconds = float x.ElapsedNanoseconds / 1000000.0
+
+        member x.Elapsed = TimeSpan.FromTicks (int64 (float x.ElapsedNanoseconds / 100.0))
 
     // Here's a comparison of what ILSpy says:
     //   Debug:
