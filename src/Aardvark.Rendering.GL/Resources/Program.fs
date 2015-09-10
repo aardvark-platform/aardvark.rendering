@@ -400,7 +400,7 @@ module ProgramExtensions =
                             UniformGetters = SymDict.empty
                             SamplerStates = SymDict.empty
                             Inputs = ProgramReflector.getActiveInputs handle
-                            Outputs = ProgramReflector.getActiveOutputs handle
+                            Outputs = [] //ProgramReflector.getActiveOutputs handle
                             SupportedModes = supported
                         }
 

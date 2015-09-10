@@ -395,6 +395,9 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
 
             ctx.Use (fun current -> 
 
+                let wasEnabled = OpenTK.Graphics.OpenGL4.GL.IsEnabled OpenTK.Graphics.OpenGL4.EnableCap.DebugOutput
+                OpenTK.Graphics.OpenGL4.GL.Disable OpenTK.Graphics.OpenGL4.EnableCap.DebugOutput
+
                 let old = Array.create 4 0
                 let mutable oldFbo = 0
                 OpenTK.Graphics.OpenGL4.GL.GetInteger(OpenTK.Graphics.OpenGL4.GetPName.Viewport, old)
@@ -419,6 +422,8 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
 
                 OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
                 OpenTK.Graphics.OpenGL4.GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+
+                if wasEnabled then OpenTK.Graphics.OpenGL4.GL.Enable OpenTK.Graphics.OpenGL4.EnableCap.DebugOutput
 
             )
         )

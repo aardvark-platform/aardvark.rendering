@@ -64,6 +64,7 @@ type BackendConfiguration = {
     redundancy : RedundancyRemoval
     sharing : ResourceSharing
     sorting : RenderObjectSorting
+    useDebugOutput : bool
 }
 
 module Projections =
@@ -93,6 +94,7 @@ module BackendConfiguration =
             redundancy      = RedundancyRemoval.Static
             sharing         = ResourceSharing.Textures
             sorting         = RenderObjectSorting.Grouping Projections.standard 
+            useDebugOutput  = false
         }
 
     let NativeUnoptimized = 
@@ -101,6 +103,7 @@ module BackendConfiguration =
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.Textures
             sorting         = RenderObjectSorting.Grouping Projections.standard 
+            useDebugOutput  = false
         }
 
     let UnmanagedOptimized = 
@@ -108,7 +111,8 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Unmanaged
             redundancy      = RedundancyRemoval.Static
             sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard
+            useDebugOutput  = false
         }
 
     let UnmanagedRuntime = 
@@ -116,7 +120,8 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Unmanaged
             redundancy      = RedundancyRemoval.Runtime
             sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard
+            useDebugOutput  = false 
         }
 
     let UnmanagedUnoptimized = 
@@ -124,7 +129,8 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Unmanaged
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard
+            useDebugOutput  = false 
         }
 
     let ManagedOptimized = 
@@ -132,7 +138,8 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Managed
             redundancy      = RedundancyRemoval.Static
             sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard
+            useDebugOutput  = false 
         }
 
     let ManagedUnoptimized = 
@@ -140,7 +147,8 @@ module BackendConfiguration =
             execution       = ExecutionEngine.Managed
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.Textures
-            sorting         = RenderObjectSorting.Grouping Projections.standard 
+            sorting         = RenderObjectSorting.Grouping Projections.standard
+            useDebugOutput  = false 
         }
 
     let Debug = 
@@ -149,6 +157,7 @@ module BackendConfiguration =
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.None
             sorting         = RenderObjectSorting.Grouping []
+            useDebugOutput  = true
         }
 
     let Default = NativeOptimized

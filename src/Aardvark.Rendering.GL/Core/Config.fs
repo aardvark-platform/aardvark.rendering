@@ -70,7 +70,23 @@ module Config =
 [<AutoOpen>]
 module Error =
 
+    open System.Runtime.InteropServices
+
     exception OpenGLException of ErrorCode * string
+
+    let debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
+         let message = Marshal.PtrToStringAnsi(message,length)
+         match severity with
+             | DebugSeverity.DebugSeverityMedium ->
+                 Report.Warn("[GL] {0}", message)
+             | DebugSeverity.DebugSeverityNotification -> () 
+             | DebugSeverity.DebugSeverityHigh ->
+                 Report.Error("[GL] {0}", message)
+             | _ ->
+                Report.Line("[GL] {0}", message)
+
+
+    let private debugHandler = DebugProc debug
 
     // in release the literal value of CheckErrors in combination
     // with this inline function leads to a complete elimination of
@@ -94,6 +110,13 @@ module Error =
                 | WaitSyncStatus.WaitFailed ->
                     Log.warn "[GL] wait failed"
                 | _ -> ()
+
+        static member SetupDebugOutput() =
+             GL.DebugMessageCallback(debugHandler,nativeint 0)
+             let arr : uint32[] = null
+             let severity = DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
+             GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
+
 
     type GLTimer private() =
         let counter = GL.GenQuery()

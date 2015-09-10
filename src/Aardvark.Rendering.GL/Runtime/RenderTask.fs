@@ -381,6 +381,9 @@ module RenderTasks =
                 using ctx.ResourceLock (fun _ ->
                     setExecutionEngine (Mod.force engine)
 
+                    let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
+                    if currentEngine.useDebugOutput then GL.Enable EnableCap.DebugOutput
+
                     let old = Array.create 4 0
                     let mutable oldFbo = 0
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
@@ -412,6 +415,11 @@ module RenderTasks =
                     GL.Check "could not bind framebuffer"
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                     GL.Check "could not set viewport"
+                    
+                    if wasEnabled <> currentEngine.useDebugOutput 
+                    then
+                        if wasEnabled then GL.Enable EnableCap.DebugOutput
+                        else GL.Disable EnableCap.DebugOutput
 
                     let stats = 
                         { stats with 

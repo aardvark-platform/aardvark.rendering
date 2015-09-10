@@ -18,6 +18,11 @@ open Aardvark.Base
 type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     static let current = new ThreadLocal<Option<ContextHandle>>(fun () -> None)
 
+    do let wasCurrent = handle.IsCurrent
+       if not wasCurrent then handle.MakeCurrent window
+       GL.SetupDebugOutput()
+       if not wasCurrent then handle.MakeCurrent null
+
     let l = obj()
     let mutable onMakeCurrent : ConcurrentHashSet<unit -> unit> = null
 
@@ -76,7 +81,7 @@ module ContextHandle =
     /// <summary>
     /// creates a new context using the default configuration
     /// </summary>
-    let create() =
+    let create () =
         let window, context =
             if primaryContext <> null then primaryContext.MakeCurrent()
             
@@ -101,7 +106,7 @@ module ContextHandle =
 
     primaryContext <- create()
 
-    let createContexts resourceContextCount =
+    let createContexts resourceContextCount  =
         // if there is a current context release it before creating
         // the GameWindow since the GameWindow makes itself curret
         GraphicsContext.ShareContexts <- true;
@@ -113,7 +118,7 @@ module ContextHandle =
 
         let contexts =
             [ for i in 1..resourceContextCount do
-                yield create()
+                yield create ()
             ]
 
         // make the old context current again
