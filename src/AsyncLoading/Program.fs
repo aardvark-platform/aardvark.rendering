@@ -32,6 +32,8 @@ let newPoints (count : int) =
     ig |> Sg.ofIndexedGeometry
 
 
+let running = new ManualResetEventSlim()
+
 [<EntryPoint>]
 let main argv = 
     use app = new OpenGlApplication()
@@ -41,14 +43,12 @@ let main argv =
 
 
     let objectCount = 1000000
-    let parallelLoads = 50
-    let objectSize = 10
-    let minLoadTimeinMS = 0
-    let maxLoadTimeInMS = 500
+    let parallelLoads = 20
+    let objectSize = 100
+    let minLoadTimeinMS = 1
+    let maxLoadTimeInMS = 1
 
     let leafs = CSet.ofList [newPoints 100]
-
-    let submit = obj()
 
 
     let start (f : unit -> unit) =
@@ -59,30 +59,38 @@ let main argv =
     let fac = TaskFactory(TaskCreationOptions.LongRunning,TaskContinuationOptions.AttachedToParent)
 
     let startTask (f : unit -> unit) =
-        Task.Factory.StartNew(f)//, TaskCreationOptions.LongRunning)
+        Task.Factory.StartNew(f, TaskCreationOptions.LongRunning)
 
     let pfor (s : seq<'a>) (f : 'a -> unit) =
         s |> Seq.toList
           |> List.map (fun v -> startTask (fun () -> f v))
           |> List.iter (fun t -> t.Wait())
 
+
+    let inputCounter = ref 0
     let start() =
         Task.Factory.StartNew(fun () ->
             for _ in 0..(objectCount / parallelLoads) do
+                running.Wait()
                 pfor [1..parallelLoads] (fun _ ->
                     let points = newPoints objectSize
 
                     // simulate something long-running
                     Thread.Sleep(random.Next(minLoadTimeinMS, maxLoadTimeInMS))
 
-                    Log.startTimed "adding"
+
+                    //Log.startTimed "adding"
                     // submit the new point-set
                     transact (fun () ->
-                        lock submit (fun () -> leafs.Add points |> ignore)
+                        lock leafs (fun () -> leafs.Add points |> ignore)
                     )
-                    Log.stop()
+                    Interlocked.Increment(&inputCounter.contents) |> ignore
+                    Log.line "added: %A" !inputCounter
+                    //Log.stop()
                 )
         ) |> ignore
+
+    start()
 
     let initialView = CameraView.LookAt(V3d(3,3,3), V3d.Zero)
     let view = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
@@ -99,9 +107,14 @@ let main argv =
     let task = app.Runtime.CompileRender(BackendConfiguration.UnmanagedOptimized, sg)
 
     win.Keyboard.Down.Values.Subscribe (fun k ->
-        printfn "starting"
         if k = Keys.Enter then
-            start()
+            if running.IsSet then 
+                printfn "stopping"
+                running.Reset()
+            else 
+                printfn "starting"
+                running.Set()
+
     ) |> ignore
 
     win.RenderTask <- task |> DefaultOverlays.withStatistics
