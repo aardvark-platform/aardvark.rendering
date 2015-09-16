@@ -16,7 +16,9 @@ module RenderObjectSemantics =
         member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
 
     module Semantic =
+        [<System.Obsolete("renderJobs is deprecated, please use renderObjects instead.")>]        
         let renderJobs (s : ISg) : aset<IRenderObject> = s?RenderObjects()
+        let renderObjects (s : ISg) : aset<IRenderObject> = s?RenderObjects()
 
     [<Semantic>]
     type RenderObjectSem() =
