@@ -34,6 +34,7 @@ type IPreparedRenderObject =
     inherit IDisposable
 
     abstract member Update : unit -> unit
+    abstract member Original : Option<RenderObject>
 
 
 type IRuntime =

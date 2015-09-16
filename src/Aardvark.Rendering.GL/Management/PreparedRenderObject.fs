@@ -30,6 +30,7 @@ type PreparedRenderObject =
 
     interface IPreparedRenderObject with
         member x.Update() = x.Update()
+        member x.Original = Some x.Original
 
     member x.Id = x.Original.Id
     member x.CreationPath = x.Original.CreationPath
