@@ -229,6 +229,8 @@ Target "MyGetDeploy" (fun () ->
     deploy "https://vrvis.myget.org/F/aardvark/api/v2" (Some "myget.key") 
 )
 
+"MyGetDeploy" ==> "Push"
+
 "CopyGLVM" ==> "Compile"
 "Compile" ==> "InjectNativeDependencies" ==> "CreatePackage"
 "CreatePackage" ==> "Deploy"
