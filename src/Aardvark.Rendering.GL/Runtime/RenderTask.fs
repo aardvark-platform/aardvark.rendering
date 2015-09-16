@@ -382,7 +382,12 @@ module RenderTasks =
                     setExecutionEngine (Mod.force engine)
 
                     let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
-                    if currentEngine.useDebugOutput then GL.Enable EnableCap.DebugOutput
+                    if currentEngine.useDebugOutput 
+                    then
+                        match ContextHandle.Current with
+                         | Some v -> v.AttachDebugOutputIfNeeded()
+                         | None -> Report.Warn("No active context handle in RenderTask.Run")
+                        GL.Enable EnableCap.DebugOutput
 
                     let old = Array.create 4 0
                     let mutable oldFbo = 0
@@ -395,7 +400,7 @@ module RenderTasks =
                     GL.Check "could not bind framebuffer"
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not set viewport"
-
+                    
                     let additions, removals =
                         if reader.OutOfDate then
                             x.ProcessDeltas (reader.GetDelta())

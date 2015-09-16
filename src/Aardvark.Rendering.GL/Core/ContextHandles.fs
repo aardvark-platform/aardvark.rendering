@@ -18,12 +18,8 @@ open Aardvark.Base
 type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     static let current = new ThreadLocal<Option<ContextHandle>>(fun () -> None)
 
-    do let wasCurrent = handle.IsCurrent
-       if not wasCurrent then handle.MakeCurrent window
-       GL.SetupDebugOutput()
-       if not wasCurrent then handle.MakeCurrent null
-
     let l = obj()
+    let mutable debugCallbackInstalled = false
     let mutable onMakeCurrent : ConcurrentHashSet<unit -> unit> = null
 
     static member Current
@@ -66,6 +62,13 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         else
             Log.warn "cannot release context which is not current"
         ContextHandle.Current <- None
+
+    // Installs debug callback if not yet installed (context is assumed to be current)
+    member x.AttachDebugOutputIfNeeded() =
+        if debugCallbackInstalled then ()
+        else
+            debugCallbackInstalled <- true
+            GL.SetupDebugOutput()
 
 
 /// <summary>

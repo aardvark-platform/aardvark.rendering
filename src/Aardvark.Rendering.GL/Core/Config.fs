@@ -112,10 +112,10 @@ module Error =
                 | _ -> ()
 
         static member SetupDebugOutput() =
-             GL.DebugMessageCallback(debugHandler,nativeint 0)
-             let arr : uint32[] = null
-             let severity = DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
-             GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
+            GL.DebugMessageCallback(debugHandler,nativeint 0)
+            let arr : uint32[] = null
+            let severity = DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
+            GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
 
 
     type GLTimer private() =
