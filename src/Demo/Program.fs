@@ -591,6 +591,69 @@ type IEvent<'a> with
         subscribe, { new IDisposable with member x.Dispose() = live := false; self.Value.Dispose() }
 
 
+open Aardvark.Base.Incremental.Operators
+let testGpuThroughput () =
+    use app = new OpenGlApplication()
+    let runtime = app.Runtime
+
+    let size = ~~V2i(10000,5000)
+    let color = runtime.CreateRenderbuffer(size,Mod.constant RenderbufferFormat.R8, ~~1)
+    let outputView = color :> IFramebufferOutput
+    let color = runtime.CreateTexture(size,~~PixFormat.ByteBGRA,~~1,~~1)
+    let outputView = { texture = color; level = 0; slice = 0 } :> IFramebufferOutput
+
+    let fbo = runtime.CreateFramebuffer([(DefaultSemantic.Colors,~~outputView)] |> Map.ofList)
+
+    let sizex,sizey = 250,200
+    let geometry = 
+        [| for x in 0 .. sizex - 1 do
+            for y in 0 .. sizey - 1 do
+                let v0 = V3f(float32 x,float32 y,0.0f) * 2.0f
+                let v1 = v0 + V3f.IOO
+                let v2 = v0 + V3f.IIO
+                let v3 = v0 + V3f.OIO
+                let vs = [| v0; v1; v2; v0; v2; v3 |] 
+                            |> Array.map (fun x ->
+                                (x / V3f(float32 (sizex * 2),float32 (sizey*2),1.0f)) * 2.0f - V3f.IIO
+                            )
+                yield! vs
+        |]
+    let geom = IndexedGeometry(Mode = IndexedGeometryMode.TriangleList,IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions,geometry :> System.Array ])
+
+    let sg = Sg.ofIndexedGeometry geom
+
+    let sg = sg |> Sg.effect [ DefaultSurfaces.constantColor C4f.Red |> toEffect ]        
+                |> Sg.depthTest ~~DepthTestMode.None
+                |> Sg.cullMode ~~CullMode.Clockwise
+                |> Sg.blendMode ~~BlendMode.None
+                    
+    let task = runtime.CompileRender(sg)
+    let clear = runtime.CompileClear(~~C4f.Black,~~1.0)
+    
+    use token = runtime.Context.ResourceLock
+    let sw = System.Diagnostics.Stopwatch()
+
+    task.Run(fbo) |> ignore
+
+    sw.Start()
+    let mutable cnt = 0
+    while true do
+        clear.Run fbo |> ignore
+        let r = task.Run(fbo)
+
+        cnt <- cnt + 1
+        if cnt = 1000
+        then
+            cnt <- 0
+            printfn "elapsed for 1000 frames: %A [ms]" sw.Elapsed.TotalMilliseconds
+            let pi = color.Download(0).[0]
+            //pi.SaveAsImage(@"C:\Aardwork\blub.jpg")
+            sw.Restart()
+            //System.Environment.Exit 0
+
+    ()
+
+
 
 [<EntryPoint>]
 [<STAThread>]
@@ -608,6 +671,9 @@ let main args =
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
+
+    testGpuThroughput()
+    System.Environment.Exit 0
 
     use app = new OpenGlApplication()
     let f = app.CreateSimpleRenderWindow(1)
