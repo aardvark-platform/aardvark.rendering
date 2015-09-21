@@ -15,18 +15,17 @@ type ResourceKind =
     | Framebuffer = 9
     | StreamingTexture = 10
 
-[<AutoOpen>]
-module Bla = 
-    module Map =
-        let unionWith (f : Map<'k,'v>) (g : Map<'k,'v>) (fuse : 'v -> 'v -> 'v) (zero : 'v) =
-            let mutable result = f
-            for (k,right) in g |> Map.toSeq do
-                let left = 
-                    match Map.tryFind k result with
-                     | Some v ->  v
-                     | None -> zero
-                result <- Map.add k (fuse left right) result
-            result
+
+module Map =
+    let unionWith (f : Map<'k,'v>) (g : Map<'k,'v>) (fuse : 'v -> 'v -> 'v) (zero : 'v) =
+        let mutable result = f
+        for (k,right) in g |> Map.toSeq do
+            let left = 
+                match Map.tryFind k result with
+                    | Some v ->  v
+                    | None -> zero
+            result <- Map.add k (fuse left right) result
+        result
 
 type FrameStatistics =
     {
