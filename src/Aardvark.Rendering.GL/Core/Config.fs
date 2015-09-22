@@ -107,7 +107,7 @@ module Error =
 
         static member inline Sync() =
             let fence = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
-            let status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.None, ~~~0UL)
+            let status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, ~~~0UL)
             GL.DeleteSync(fence)
 
             match status with
