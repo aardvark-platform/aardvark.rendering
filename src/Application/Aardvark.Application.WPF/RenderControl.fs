@@ -22,6 +22,17 @@ type RenderControl() =
     let keyboard = new Aardvark.Application.WinForms.Keyboard()
     let mouse = new Aardvark.Application.WinForms.Mouse()
     let sizes = Mod.init (V2i(base.ActualWidth, base.ActualHeight))
+
+    let actualSize = 
+        adaptive {
+            let! s = sizes
+            match impl with
+             | Some v -> 
+                printfn "switched to impl"
+                return! v.Sizes
+             | None -> return s
+        }
+
     let mutable inner : Option<IMod<DateTime>> = None
     let time = 
         Mod.custom (fun () -> 
@@ -30,7 +41,7 @@ type RenderControl() =
                 | None -> DateTime.Now
            )
 
-    let setControl (self : RenderControl) (c : FrameworkElement) (cr : IRenderTarget) =
+    member x.SetControl (self : RenderControl) (c : FrameworkElement) (cr : IRenderTarget) =
         match impl with
             | Some i -> failwith "implementation can only be set once per control"
             | None -> ()
@@ -50,13 +61,15 @@ type RenderControl() =
             | Some task -> cr.RenderTask <- task
             | None -> ()
 
-        transact(fun () ->
-            cr.Time.AddOutput(time)
-            inner <- Some cr.Time
-        )
 
         ctrl <- Some c
         impl <- Some cr
+        transact(fun () ->
+            cr.Time.AddOutput(time)
+            inner <- Some cr.Time
+
+            Mod.change sizes V2i.OO
+        )
 
     override x.OnRenderSizeChanged(e) =
         base.OnRenderSizeChanged(e)
@@ -64,10 +77,10 @@ type RenderControl() =
 
     member x.Implementation
         with get() = match ctrl with | Some c -> c | _ -> null
-        and set v = setControl x v (v |> unbox<IRenderTarget>)
+        and set v = x.SetControl x v (v |> unbox<IRenderTarget>)
 
     member x.Runtime = runtime
-    member x.Sizes = sizes :> IMod<V2i>
+    member x.Sizes = actualSize 
     member x.Samples = impl.Value.Samples
 
     member x.Keyboard = keyboard :> IKeyboard
