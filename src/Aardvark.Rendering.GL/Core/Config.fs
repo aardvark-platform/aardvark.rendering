@@ -45,6 +45,12 @@ module Config =
     [<Literal>]
     let CheckErrors = false
 
+    /// ResourceSet.Update and Program.Run use a GL fence sync if true.
+    /// This flag improves timings for gpu uploads but also incurs a (possible) performance
+    /// penality as well as incompatibiliy on some drivers.
+    [<Literal>]
+    let SyncUploadsAndFrames = true
+
     /// <summary>
     /// The number of bits used for color values in default contexts
     /// </summary>

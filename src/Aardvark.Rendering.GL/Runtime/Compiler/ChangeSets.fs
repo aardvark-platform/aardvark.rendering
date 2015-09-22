@@ -156,7 +156,7 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
             )
 
 
-        OpenTK.Graphics.OpenGL4.GL.Sync()
+        if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
         glsw.Stop()
         sw.Stop()
 
