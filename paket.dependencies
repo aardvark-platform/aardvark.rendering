@@ -1,8 +1,8 @@
 source https://nuget.org/api/v2
-source \\hobel\NuGet\
+source https://vrvis.myget.org/F/aardvark/api/v2
 
-nuget Aardvark.Base.Incremental ~> 1.3.5
-nuget FShade ~> 1.3.5
+nuget Aardvark.Base.Incremental ~> 1.3.28
+nuget FShade ~> 1.4.1
 nuget RegexProvider ~> 0.0.5
 nuget BruTile ~> 0.12.0
 nuget FSPowerPack.Community ~> 3.0.0
