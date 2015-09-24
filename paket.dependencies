@@ -1,5 +1,5 @@
 source https://nuget.org/api/v2
-source https://vrvis.myget.org/F/aardvark/api/v2
+source https://vrvis.myget.org/F/aardvark_public/api/v2
 
 nuget Aardvark.Base.Incremental ~> 1.3.28
 nuget FShade ~> 1.4.1
