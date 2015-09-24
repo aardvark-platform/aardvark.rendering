@@ -19,8 +19,8 @@ module ResourceManager =
           updateCPU : unit -> unit; 
           updateGPU : unit -> unit; 
           destroy : unit -> unit; 
-          resource : IMod<'a> }
-
+          resource : IMod<'a>;
+          kind : ResourceKind }
 
     type IChangeableResource =
         inherit IDisposable
@@ -29,14 +29,17 @@ module ResourceManager =
         abstract member UpdateCPU : unit -> unit
         abstract member UpdateGPU : unit -> unit
         abstract member Resource : obj
+        abstract member Kind : ResourceKind
         
-    type ChangeableResource<'a> internal(key : list<obj>, parent : ConcurrentDictionary<list<obj>, obj * int>, desc : ChangeableResourceDescription<'a>) as this =
+    type ChangeableResource<'a> internal(key : list<obj>, parent : ConcurrentDictionary<list<obj>, obj>, 
+                                         desc : ChangeableResourceDescription<'a>) as this =
         inherit AdaptiveObject()
 
         do desc.dependencies |> List.iter (fun a -> a.GetValue() |> ignore; a.AddOutput this)
            this.OutOfDate <- false
 
         let mutable isDisposed = false
+        let mutable refCount = 1
         
 
         //member x.Dependencies = desc.dependencies
@@ -51,6 +54,9 @@ module ResourceManager =
             )
 
         member x.Resource = desc.resource
+        member x.Kind = desc.kind
+
+        member x.IncrementRefCount () = Interlocked.Increment &refCount
 
         member x.Dispose() =
             if parent = null then
@@ -59,14 +65,9 @@ module ResourceManager =
                 desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
 
             elif not isDisposed then
-                isDisposed <- true
-                let _, r =
-                    parent.AddOrUpdate(key,
-                        (fun key -> x :> obj, 0),
-                        (fun key (o,r) -> o, r - 1)
-                    )
-
+                let r = Interlocked.Decrement &refCount
                 if r = 0 then
+                    isDisposed <- true
                     parent.TryRemove key |> ignore
                     desc.destroy()
                     desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
@@ -79,6 +80,7 @@ module ResourceManager =
             member x.UpdateCPU() = x.UpdateCPU()
             member x.UpdateGPU() = x.UpdateGPU()
             member x.Resource = desc.resource :> obj
+            member x.Kind = desc.kind
 
         internal new(desc) = new ChangeableResource<'a>([], null, desc)
 
@@ -92,17 +94,18 @@ module ResourceManager =
     [<AutoOpen>]
     module private Caching =
         type ResourceCache() =
-            let created = ConcurrentDictionary<list<obj>, obj * int>()
+            let created = ConcurrentDictionary<list<obj>, obj>()
 
             member x.GetOrAdd(key : list<obj>, create : unit -> ChangeableResourceDescription<'a>) =
 
-                let res,_ = 
+                let res = 
                     created.AddOrUpdate(key, 
                         (fun key -> 
                             let desc = create()
-                            new ChangeableResource<'a>(key, created, desc) :> obj, 1),
-                        fun key (o,r) ->
-                            (o,r+1)
+                            new ChangeableResource<'a>(key, created, desc) :> obj),
+                        fun key o ->
+                            (o |> unbox<ChangeableResource<'a>>).IncrementRefCount () |> ignore
+                            o
                     )
 
                 let res = res |> unbox<ChangeableResource<'a>>
@@ -188,12 +191,138 @@ module ResourceManager =
              | Some k -> k
              | None -> Error "Unknown surface type. "
 
-    [<AllowNullLiteral>]
-    type ResourceManager(ctx : Context) =
-        let semanticIndices = ConcurrentDictionary<Symbol, int>()
-        let mutable currentId = -1
+    module Sharing =
+        open System.Collections.Generic
 
-        let getSemanticIndex (sem : Symbol) =
+ 
+        type IResourceHandler<'d, 'r> =
+            abstract member Create : 'd -> IMod<'r>
+            abstract member Update : IMod<'r> * 'd -> unit
+            abstract member Delete : IMod<'r> -> unit
+
+        type SharedResource<'a>(key : obj, r : 'a) =
+            let mutable refCount = 0
+            let mutable key = key
+
+            member x.ReferenceCount
+                with get() = refCount
+                and set c = refCount <- c
+
+            member x.Resource = r
+
+            member x.Key
+                with get() = key
+                and set (k : obj) = key <- k
+
+        type SharedResourceView<'a> private(resource : SharedResource<'a>, handle : ModRef<'a>) =
+            inherit AdaptiveDecorator(handle)
+            let mutable resource = resource
+
+            member x.SharedResource
+                with get() = resource
+                and set v = resource <- v
+
+            member x.Handle = handle
+            
+            interface IMod with
+                member x.IsConstant = false
+                member x.GetValue() = handle.GetValue() :> obj
+
+            interface IMod<'a> with
+                member x.GetValue() = handle.GetValue()
+
+            new(r : SharedResource<'a>) = SharedResourceView(r, Mod.init r.Resource)
+
+        type SharedResourceHandler<'d, 'r>(create : 'd -> 'r, update : 'r * 'd -> unit, delete : 'r -> unit) =
+            let cache = Dict<obj, SharedResource<'r>>()
+
+            let getOrCreate (key : 'd) (creator : 'd -> 'r) =
+                let res = 
+                    cache.GetOrCreate(key, fun _ ->
+                        let b = creator key
+                        SharedResource(key,b)
+                    )
+
+                res.ReferenceCount <- res.ReferenceCount + 1
+                SharedResourceView(res)
+
+            member x.Create(arr : 'd) =
+                getOrCreate arr (fun arr ->
+                    create arr
+                )
+
+            member x.Update(b : SharedResourceView<'r>, arr : 'd) =
+                let res = b.SharedResource
+
+                if res.ReferenceCount <= 1 then  
+                    // we're the only reference to that resource
+                    cache.Remove res.Key |> ignore
+
+                    match cache.TryGetValue arr with
+                        | (true, r) ->
+                            // there already is a resource for the given array
+                            // therefore we destroy the old one
+                            delete(res.Resource)
+
+                            // and change the SharedResourceView accordingly
+                            r.ReferenceCount <- r.ReferenceCount + 1
+                            b.SharedResource <- r
+                            transact (fun () -> b.Handle.Value <- r.Resource)
+                            
+                        | _ ->
+                            // no other resource has the same key so we
+                            // may simply upload and store the SharedResource at its
+                            // new "location"
+                            update (res.Resource, arr)
+                            cache.[arr] <- res
+                            res.Key <- arr
+                else
+                    res.ReferenceCount <- res.ReferenceCount - 1
+                    match cache.TryGetValue arr with
+                        | (true, r) ->
+                            r.ReferenceCount <- r.ReferenceCount + 1
+
+                            b.SharedResource <- r
+                            transact (fun () -> b.Handle.Value <- r.Resource)
+
+                        | _ ->
+                            let r = SharedResource(arr, create arr)
+                            r.ReferenceCount <- 1
+                            cache.[arr] <- r
+
+                            b.SharedResource <- r
+                            transact (fun () -> b.Handle.Value <- r.Resource)
+
+            member x.Delete(b : SharedResourceView<'r>) =
+                let res = b.SharedResource
+
+                b.SharedResource <- Unchecked.defaultof<_>
+                b.Handle.UnsafeCache <- Unchecked.defaultof<_>
+
+                if res.ReferenceCount <= 1 then
+                    delete res.Resource
+                    cache.Remove(res.Key) |> ignore
+                else
+                    res.ReferenceCount <- res.ReferenceCount - 1
+
+            interface IResourceHandler<'d, 'r> with
+                member x.Create(data) = x.Create(data) :> IMod<_>
+                member x.Update(res, data) = x.Update(unbox res, data)
+                member x.Delete(res) = x.Delete(unbox res)
+
+        type NopResourceHandler<'d, 'r>(create : 'd -> 'r, update : 'r * 'd -> unit, delete : 'r -> unit) =
+            interface IResourceHandler<'d, 'r> with
+                member x.Create(data) = data |> create |> Mod.constant
+                member x.Update(res, data) = update (res.GetValue(), data)
+                member x.Delete(res) = delete (res.GetValue())
+
+
+    [<AllowNullLiteral>]
+    type ResourceManager(original : ResourceManager, ctx : Context, shareTextures : bool, shareBuffers : bool) =
+        static let semanticIndices = ConcurrentDictionary<Symbol, int>()
+        static let mutable currentId = -1
+
+        static let getSemanticIndex (sem : Symbol) =
             semanticIndices.GetOrAdd(sem, fun s ->
                 let id = Interlocked.Increment(&currentId)
                 id
@@ -209,9 +338,40 @@ module ResourceManager =
         static let vao = Sym.ofString "VertexArrayObject"
 
 
+        let bufferHandler = 
+            if shareBuffers then 
+                let originalHandler = 
+                    match original with
+                        | null -> None
+                        | o when not o.ShareBuffers -> None
+                        | o -> Some o.BufferHandler
+
+                match originalHandler with
+                    | Some h -> h
+                    | None -> Sharing.SharedResourceHandler<IBuffer, Buffer>(ctx.CreateBuffer, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+            else 
+                Sharing.NopResourceHandler<IBuffer, Buffer>(ctx.CreateBuffer, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+
+        let textureHandler = 
+            if shareTextures then 
+                let originalHandler = 
+                    match original with
+                        | null -> None
+                        | o when not o.ShareTextures -> None
+                        | o -> Some o.TextureHandler
+
+                match originalHandler with
+                    | Some h -> h
+                    | None -> Sharing.SharedResourceHandler<ITexture, Texture>(ctx.CreateTexture, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+            else 
+                Sharing.NopResourceHandler<ITexture, Texture>(ctx.CreateTexture, ctx.Upload, ctx.Delete) :> Sharing.IResourceHandler<_,_>
+
+
         // the overall cache holding caches per identifier
-        let cache = NamedResourceCache()
- 
+        let cache = 
+            match original with
+                | null -> NamedResourceCache()
+                | o -> o.Cache
 
         let compile (s : ISurface) = SurfaceCompilers.compile ctx s
 
@@ -235,8 +395,13 @@ module ResourceManager =
                     life := false
                     m.MarkingCallbacks.Remove !f |> ignore
             }
-            
-
+           
+        member private x.BufferHandler = bufferHandler
+        member private x.TextureHandler = textureHandler 
+        member private x.Original = original
+        member private x.Cache = cache
+        member x.ShareBuffers = shareBuffers
+        member x.ShareTextures = shareTextures 
         member x.Context = ctx
 
         /// <summary>
@@ -248,37 +413,65 @@ module ResourceManager =
                 [data], 
                 fun () ->
                     let current = data.GetValue()
-                    let handle = ctx.CreateBuffer(current)
-
+                    let handle = bufferHandler.Create(ArrayBuffer(current))
                     { dependencies = [data]
                       updateCPU = fun () -> data.GetValue() |> ignore
-                      updateGPU = fun () -> ctx.Upload(handle, data.GetValue())
-                      destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.initConstant handle }
+                      updateGPU = fun () -> bufferHandler.Update(handle, ArrayBuffer(data.GetValue()))
+                      destroy = fun () -> bufferHandler.Delete(handle)
+                      resource = handle
+                      kind = ResourceKind.Buffer 
+                    } 
             )
 
         /// <summary>
         /// creates a buffer from a mod-array simply updating its
         /// content whenever the array changes
         /// </summary>
-        member x.CreateBuffer(data : IBuffer) =
+        member x.CreateBuffer(data : IMod<IBuffer>) =
+            
             cache.[arrayBuffer].GetOrAdd(
                 [data], 
                 fun () ->
-                    match data with
-                        | :? ArrayBuffer as buffer ->
-                            let data = buffer.Data
-                            let current = data.GetValue()
-                            let handle = ctx.CreateBuffer(current)
+                    let created = ref false
+                    let current = data.GetValue()
+                    let handle = 
+                        match current with
+                            | :? Buffer as bb ->
+                                ref (Mod.constant bb)
+                            | _ ->
+                                created := true
+                                ref (bufferHandler.Create(current))
 
-                            { dependencies = [data]
-                              updateCPU = fun () -> data.GetValue() |> ignore
-                              updateGPU = fun () -> ctx.Upload(handle, data.GetValue())
-                              destroy = fun () -> ctx.Delete(handle)
-                              resource = Mod.initConstant handle }
-                        | _ ->
-                            failwithf "unknown buffer-data: %A" data
+                    let handleMod = Mod.init !handle
+
+
+                    { dependencies = [data]
+                      updateCPU = fun () -> data.GetValue() |> ignore
+                      updateGPU = fun () ->
+                        match data.GetValue() with
+                            | :? Buffer as t -> 
+                                if !created then
+                                    bufferHandler.Delete(!handle)
+                                    created := false
+
+                                let h = Mod.constant t
+                                handle := h
+                                transact (fun () -> handleMod.Value <- h)
+                            | _ -> 
+                                if !created then
+                                    bufferHandler.Update(!handle, data.GetValue())
+                                else
+                                    created := true
+                                    handle := bufferHandler.Create(current)
+
+                                if handleMod.Value <> !handle then 
+                                    transact (fun () -> handleMod.Value <- !handle)
+                      destroy = fun () -> if !created then bufferHandler.Delete(!handle)
+                      resource = handleMod |> Mod.bind id
+                      kind = ResourceKind.Buffer  }
             )
+
+
 
         /// <summary>
         /// creates a buffer from an untyped mod using one of the
@@ -294,7 +487,10 @@ module ResourceManager =
                     m.Invoke(x, [|data :> obj|]) |> unbox<ChangeableResource<Buffer>>
 
                 | ModOf(UntypedArray) ->
-                    x.CreateBuffer(ArrayBuffer ( data |> unbox<IMod<Array>> ) )
+                    x.CreateBuffer( data |> unbox<IMod<Array>> |> Mod.map (fun arr -> ArrayBuffer(arr) :> IBuffer))
+
+                | ModOf(t) when t = typeof<IBuffer> ->
+                    x.CreateBuffer( data |> unbox<IMod<IBuffer>> )
 
                 | _ ->
                     raise <| ResourceManagerException(sprintf "failed to create buffer for type: %A" t.FullName)
@@ -309,12 +505,12 @@ module ResourceManager =
                     let created = ref false
                     let handle = 
                         match current with
-                            | :? Texture as t -> ref t
+                            | :? Texture as t -> ref (Mod.constant t)
                             | _ -> 
                                 created := true
-                                ref <| ctx.CreateTexture(current)
+                                ref <| textureHandler.Create(current)
 
-                    let handleMod = Mod.initMod !handle
+                    let handleMod = Mod.init !handle
 
                     { dependencies = [data]
                       updateCPU = fun () -> data.GetValue() |> ignore
@@ -322,23 +518,25 @@ module ResourceManager =
                         match data.GetValue() with
                             | :? Texture as t -> 
                                 if !created then
-                                    ctx.Delete(!handle)
+                                    textureHandler.Delete(!handle)
                                     created := false
 
-                                handle := t
-                                transact (fun () -> handleMod.Value <- t)
+                                let h = Mod.constant t
+                                handle := h
+                                transact (fun () -> handleMod.Value <- h)
                             | _ -> 
                                 if !created then
-                                    ctx.Upload(!handle, data.GetValue())
+                                    textureHandler.Update(!handle, data.GetValue())
                                 else
                                     created := true
-                                    handle := ctx.CreateTexture(current)
+                                    handle := textureHandler.Create(current)
 
                                 if handleMod.Value <> !handle then 
                                     transact (fun () -> handleMod.Value <- !handle)
 
-                      destroy = fun () -> if !created then ctx.Delete(!handle)
-                      resource = handleMod }            
+                      destroy = fun () -> if !created then textureHandler.Delete(!handle)
+                      resource = handleMod |> Mod.bind id
+                      kind = ResourceKind.Texture  }            
             )
 
         member x.CreateSurface (s : IMod<ISurface>) =
@@ -346,23 +544,33 @@ module ResourceManager =
                 [s],
                 fun () ->
                     let current = s.GetValue()
-                    let compileResult = compile current
+                    match current with
+                     | :? Program as p -> 
+                        { dependencies = [s]
+                          updateCPU = id
+                          updateGPU = id
+                          destroy = id
+                          resource = s |> Mod.map unbox
+                          kind = ResourceKind.ShaderProgram  }    
+                     | _ ->
+                        let compileResult = compile current
 
-                    match compileResult with
-                        | Success p ->
-                            let handle = Mod.initMod p
+                        match compileResult with
+                            | Success p ->
+                                let handle = Mod.init p
 
-                            { dependencies = [s]
-                              updateCPU = fun () -> 
-                                match compile <| s.GetValue() with
-                                    | Success p -> Mod.change handle p
-                                    | Error e -> Log.warn "could not update surface: %A" e
+                                { dependencies = [s]
+                                  updateCPU = fun () -> 
+                                    match compile <| s.GetValue() with
+                                        | Success p -> Mod.change handle p
+                                        | Error e -> Log.warn "could not update surface: %A" e
 
-                              updateGPU = fun () -> ()
-                              destroy = fun () -> ctx.Delete(p)
-                              resource = handle }         
-                        | Error e ->
-                            failwith e
+                                  updateGPU = fun () -> ()
+                                  destroy = fun () -> ctx.Delete(p)
+                                  resource = handle 
+                                  kind = ResourceKind.ShaderProgram }         
+                            | Error e ->
+                                failwith e
            )
                 
         member x.CreateUniformBuffer (scope : Ag.Scope, layout : UniformBlock, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
@@ -419,7 +627,8 @@ module ResourceManager =
                         subscriptions |> List.iter (fun d -> d.Dispose())
                         dirty.Clear()
                         ctx.Delete(b)
-                      resource = Mod.initConstant b }    
+                      resource = Mod.constant b
+                      kind = ResourceKind.UniformBuffer  }    
             )
 
         member x.CreateUniformLocation(scope : Ag.Scope, u : IUniformProvider, uniform : ActiveUniform) =
@@ -441,7 +650,8 @@ module ResourceManager =
 
                               updateGPU = fun () -> ()
                               destroy = fun () -> ()
-                              resource = Mod.initConstant loc }    
+                              resource = Mod.constant loc
+                              kind = ResourceKind.UniformBuffer  }    
                     )
                 | _ ->
                     failwithf "could not get uniform: %A" uniform
@@ -457,7 +667,8 @@ module ResourceManager =
                       updateCPU = fun () -> sam.GetValue() |> ignore
                       updateGPU = fun () -> ctx.Update(handle, sam.GetValue())
                       destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.initConstant handle }
+                      resource = Mod.constant handle 
+                      kind = ResourceKind.SamplerState }
             )
 
         member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>, index : ChangeableResource<Buffer>) =
@@ -472,7 +683,9 @@ module ResourceManager =
                       updateCPU = fun () -> ()
                       updateGPU = fun () -> ctx.Update(handle, index.Resource.GetValue(), bindings |> List.map (fun (i,r) -> i, r |> Mod.force))
                       destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.initConstant handle }
+                      resource = Mod.constant handle 
+                      kind = ResourceKind.VertexArrayObject
+                    }
             )
 
         member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>) =
@@ -487,7 +700,9 @@ module ResourceManager =
                       updateCPU = fun () -> ()
                       updateGPU = fun () -> ctx.Update(handle,bindings |> List.map (fun (i,r) -> i, r |> Mod.force))
                       destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.initConstant handle }
+                      resource = Mod.constant handle
+                      kind = ResourceKind.VertexArrayObject 
+                    }
             )
 
         member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>, index : Option<ChangeableResource<Buffer>>) =
@@ -503,19 +718,23 @@ module ResourceManager =
                   updateCPU = fun () -> ()
                   updateGPU = fun () -> ctx.UpdateTexture2D(handle, size.GetValue(), mipLevels.GetValue(), ChannelType.ofPixFormat <| format.GetValue(), samples.GetValue())
                   destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.initConstant handle }
+                  resource = Mod.constant handle
+                  kind = ResourceKind.Texture
+                }
 
             new ChangeableResource<Texture>(desc)
 
-        member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<PixFormat>, samples : IMod<int>) : ChangeableResource<Renderbuffer> =
-            let handle = ctx.CreateRenderbuffer(size.GetValue(), ChannelType.ofPixFormat <| format.GetValue(), samples.GetValue())
+        member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<RenderbufferFormat>, samples : IMod<int>) : ChangeableResource<Renderbuffer> =
+            let handle = ctx.CreateRenderbuffer(size.GetValue(), format.GetValue(), samples.GetValue())
             
             let desc =
                 { dependencies = [size :> IMod; format :> IMod; samples :> IMod]
                   updateCPU = fun () -> ()
-                  updateGPU = fun () -> ctx.Update(handle, size.GetValue(), format.GetValue() |> ChannelType.ofPixFormat |> toRenderbufferFormat, samples.GetValue())
+                  updateGPU = fun () -> ctx.Update(handle, size.GetValue(), format.GetValue(), samples.GetValue())
                   destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.initConstant handle }
+                  resource = Mod.constant handle 
+                  kind = ResourceKind.Renderbuffer
+                }
 
             new ChangeableResource<Renderbuffer>(desc)
 
@@ -546,6 +765,10 @@ module ResourceManager =
                     let c,d = toInternal bindings
                     ctx.Update(handle, c, d)
                   destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.initConstant handle }
+                  resource = Mod.constant handle
+                  kind = ResourceKind.Framebuffer 
+                }
 
             new ChangeableResource<Aardvark.Rendering.GL.Framebuffer>(desc)
+
+        new(ctx, shareTextures, shareBuffers) = ResourceManager(null, ctx, shareTextures, shareBuffers)

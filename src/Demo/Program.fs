@@ -3,12 +3,13 @@ open Aardvark.Base
 open Aardvark.Base.Ag
 open Aardvark.Base.AgHelpers
 open Aardvark.Rendering.GL
-open Aardvark.SceneGraph
-open Aardvark.SceneGraph.CSharp
-open Aardvark.SceneGraph.Semantics
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.NanoVg
+open Aardvark.SceneGraph
+open Aardvark.SceneGraph.CSharp
+open Aardvark.SceneGraph.Semantics
 
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -26,17 +27,17 @@ module Assimp =
     type Node with
         member x.Scene : Scene = x?AssimpScene
 
-        member x.RenderJobs() : aset<RenderJob> = x?RenderJobs()
+        member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
 
         member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
 
     type Scene with
         member x.LocalBoundingBox() : IMod<Box3d> = x?LocalBoundingBox()
-        member x.RenderJobs() : aset<RenderJob> = x?RenderJobs()
+        member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
 
 
     // in order to integrate Assimo's scene structure we
-    // need to define several attributes for it (namely RenderJobs, ModelTrafo, etc.)
+    // need to define several attributes for it (namely RenderObjects, ModelTrafo, etc.)
     // which can be done using s single or multiple semantic-types. 
     // Since the implementation is relatively dense we opted for only one type here.
     [<Semantic>]
@@ -66,7 +67,7 @@ module Assimp =
 
                     arr :> Array
                 )
-            BufferView(ArrayBuffer data, typeof<'b>)
+            BufferView(data |> Mod.map (fun data -> ArrayBuffer data :> IBuffer), typeof<'b>)
 
         // try to find the Mesh's diffuse texture
         // and convert it into a file-texture.
@@ -99,7 +100,7 @@ module Assimp =
                             Some tex
                         | _ ->
                             let tex = FileTexture(path, true)
-                            let m = Mod.initConstant (tex :> ITexture)
+                            let m = Mod.constant (tex :> ITexture)
                             textureCache.[path] <- m
                             Some m
                 else
@@ -109,9 +110,9 @@ module Assimp =
 
 
         
-        // toSg is used by toRenderJobs in order to simplify 
+        // toSg is used by toRenderObjects in order to simplify 
         // things here.
-        // Note that it would also be possible here to create RenderJobs 
+        // Note that it would also be possible here to create RenderObjects 
         //      directly. However this is very wordy and we therefore create
         //      a partial SceneGraph for each mesh
         let toSg (m : Mesh) =
@@ -141,7 +142,7 @@ module Assimp =
 
                                 if m.TextureCoordinateChannelCount > 0 then
                                     let tc = m.TextureCoordinateChannels.[0]
-                                    yield DefaultSemantic.DiffuseColorCoordinates, tc |> mapAttribute (fun v -> V2f(v.X, 1.0f - v.Y))
+                                    yield DefaultSemantic.DiffuseColorCoordinates, tc |> mapAttribute (fun v -> V2f(v.X, v.Y))
 
                             ]
 
@@ -175,7 +176,7 @@ module Assimp =
 
                         let sg =
                             if indexArray <> null then
-                                Sg.VertexIndexApplicator(Mod.initConstant (indexArray :> Array), sg) :> ISg
+                                Sg.VertexIndexApplicator(Mod.constant (indexArray :> Array), sg) :> ISg
                             else
                                 sg
 
@@ -195,12 +196,12 @@ module Assimp =
                         cache.Add(m, sg)
                         sg
 
-        // since Meshes need to be converted to RenderJobs somehow we
+        // since Meshes need to be converted to RenderObjects somehow we
         // define a utility-function performing this transformation.
-        // Note that RenderJobs cannot be cached per Mesh since they
+        // Note that RenderObjects cannot be cached per Mesh since they
         //      can differ when seen in different paths
-        let toRenderJobs (m : Mesh) =
-            (toSg m).RenderJobs()
+        let toRenderObjects (m : Mesh) =
+            (toSg m).RenderObjects()
 
         // another utility function for converting
         // transformation matrices
@@ -249,34 +250,34 @@ module Assimp =
                 n.AllChildren?ModelTrafo <- p
             else
                 if p = Aardvark.SceneGraph.Semantics.TrafoSemantics.rootTrafo then
-                    n.AllChildren?ModelTrafo <- Mod.initConstant mine
+                    n.AllChildren?ModelTrafo <- Mod.constant mine
                 else
                     n.AllChildren?ModelTrafo <- Mod.map (fun t -> t * mine) p
         
 
-        // here we define the RenderJobs semantic for the Assimp-Scene
-        // which directly queries RenderJobs from its contained Scene-Root
-        member x.RenderJobs(scene : Scene) : aset<RenderJob> =
-            scene.RootNode?RenderJobs()
+        // here we define the RenderObjects semantic for the Assimp-Scene
+        // which directly queries RenderObjects from its contained Scene-Root
+        member x.RenderObjects(scene : Scene) : aset<IRenderObject> =
+            scene.RootNode?RenderObjects()
 
-        // here we define the RenderJobs semantic for Assimp's Nodes
+        // here we define the RenderObjects semantic for Assimp's Nodes
         // which basically enumerates all directly contained 
         // Geometries and recursively yields all child-renderjobs
-        member x.RenderJobs(n : Node) : aset<RenderJob> =
+        member x.RenderObjects(n : Node) : aset<IRenderObject> =
             aset {
                 // get the inherited Scene attribute (needed for Mesh lookups here)
                 let scene = n.Scene
 
                 // enumerate over all meshes and yield their 
-                // RenderJobs (according to the current scope)
+                // RenderObjects (according to the current scope)
                 for i in n.MeshIndices do
                     let mesh = scene.Meshes.[i]
                     
-                    yield! toRenderJobs mesh
+                    yield! toRenderObjects mesh
 
                 // recursively yield all child-renderjobs
                 for c in n.Children do
-                    yield! c.RenderJobs()
+                    yield! c.RenderObjects()
 
             }
 
@@ -314,7 +315,7 @@ module Assimp =
         let tex =
             PixTexture2d(PixImageMipMap [|image :> PixImage|], true) :> ITexture
 
-        Mod.initConstant tex
+        Mod.constant tex
 
 
     // a scene can simply be loaded using assimp.
@@ -481,7 +482,7 @@ let inline differentiate (m : IMod< ^a >) =
 
 let timeTest() =
     
-    let down = Mod.initMod false
+    let down = Mod.init false
 
     let pos = ref 0.0
 
@@ -590,6 +591,69 @@ type IEvent<'a> with
         subscribe, { new IDisposable with member x.Dispose() = live := false; self.Value.Dispose() }
 
 
+open Aardvark.Base.Incremental.Operators
+let testGpuThroughput () =
+    use app = new OpenGlApplication()
+    let runtime = app.Runtime
+
+    let size = ~~V2i(10000,5000)
+    let color = runtime.CreateRenderbuffer(size,Mod.constant RenderbufferFormat.R8, ~~1)
+    let outputView = color :> IFramebufferOutput
+    let color = runtime.CreateTexture(size,~~PixFormat.ByteBGRA,~~1,~~1)
+    let outputView = { texture = color; level = 0; slice = 0 } :> IFramebufferOutput
+
+    let fbo = runtime.CreateFramebuffer([(DefaultSemantic.Colors,~~outputView)] |> Map.ofList)
+
+    let sizex,sizey = 250,200
+    let geometry = 
+        [| for x in 0 .. sizex - 1 do
+            for y in 0 .. sizey - 1 do
+                let v0 = V3f(float32 x,float32 y,0.0f) * 2.0f
+                let v1 = v0 + V3f.IOO
+                let v2 = v0 + V3f.IIO
+                let v3 = v0 + V3f.OIO
+                let vs = [| v0; v1; v2; v0; v2; v3 |] 
+                            |> Array.map (fun x ->
+                                (x / V3f(float32 (sizex * 2),float32 (sizey*2),1.0f)) * 2.0f - V3f.IIO
+                            )
+                yield! vs
+        |]
+    let geom = IndexedGeometry(Mode = IndexedGeometryMode.TriangleList,IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions,geometry :> System.Array ])
+
+    let sg = Sg.ofIndexedGeometry geom
+
+    let sg = sg |> Sg.effect [ DefaultSurfaces.constantColor C4f.Red |> toEffect ]        
+                |> Sg.depthTest ~~DepthTestMode.None
+                |> Sg.cullMode ~~CullMode.Clockwise
+                |> Sg.blendMode ~~BlendMode.None
+                    
+    let task = runtime.CompileRender(sg)
+    let clear = runtime.CompileClear(~~C4f.Black,~~1.0)
+    
+    use token = runtime.Context.ResourceLock
+    let sw = System.Diagnostics.Stopwatch()
+
+    task.Run(fbo) |> ignore
+
+    sw.Start()
+    let mutable cnt = 0
+    while true do
+        clear.Run fbo |> ignore
+        let r = task.Run(fbo)
+
+        cnt <- cnt + 1
+        if cnt = 1000
+        then
+            cnt <- 0
+            printfn "elapsed for 1000 frames: %A [ms]" sw.Elapsed.TotalMilliseconds
+            let pi = color.Download(0).[0]
+            //pi.SaveAsImage(@"C:\Aardwork\blub.jpg")
+            sw.Restart()
+            //System.Environment.Exit 0
+
+    ()
+
+
 
 [<EntryPoint>]
 [<STAThread>]
@@ -601,15 +665,18 @@ let main args =
                       | [path] -> printfn "using path: %s" path; path
                       | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
     
-    let modelPath =  @"C:\Aardwork\scenes\bench2\1000_128_500_18.dae"
+    //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
     //let modelPath =  @"C:\Aardwork\scenes\bench2\8000_128_4000_6.dae"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
 
+    testGpuThroughput()
+    System.Environment.Exit 0
+
     use app = new OpenGlApplication()
-    let f = app.CreateGameWindow(1)
+    let f = app.CreateSimpleRenderWindow(1)
     let ctrl = f //f.Control
 
 //    ctrl.Mouse.Events.Values.Subscribe(fun e ->
@@ -625,8 +692,8 @@ let main args =
 //    ) |> ignore
 
     let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-    let proj = CameraProjectionPerspective(60.0, 0.1, 10000.0, float ctrl.Sizes.Latest.X / float ctrl.Sizes.Latest.Y)
-    let mode = Mod.initMod FillMode.Fill
+    let proj = CameraProjectionPerspective(60.0, 0.1, 10000.0, float (ctrl.Sizes.GetValue().X) / float (ctrl.Sizes.GetValue().Y))
+    let mode = Mod.init FillMode.Fill
 
 
 
@@ -661,12 +728,12 @@ let main args =
 
         let trafo = Trafo3d.Translation(-source.Center) * Trafo3d.Scale(scale) * Trafo3d.Translation(target.Center)
 
-        sg |> Sg.trafo (Mod.initConstant trafo)
+        sg |> Sg.trafo (Mod.constant trafo)
 
 
     let view = DefaultCameraController.control ctrl.Mouse ctrl.Keyboard ctrl.Time view
 
-    let color = Mod.initMod C4f.Red
+    let color = Mod.init C4f.Red
 
     f.Keyboard.KeyDown(Keys.C).Values.Subscribe(fun () ->
         let v = C4f(C3f.White - (Mod.force color).ToC3f())
@@ -675,25 +742,27 @@ let main args =
         )
     ) |> ignore
 
-    let pointSize = Mod.initConstant <| V2d(0.06, 0.08)
+    let pointSize = Mod.constant <| V2d(0.06, 0.08)
 
     let sg =
         sg |> Sg.effect [
-                Shader.pvLight |> toEffect
-                Shader.pvFrag  |> toEffect
+                //Shader.pvLight |> toEffect
+                //Shader.pvFrag  |> toEffect
                 //DefaultSurfaces.trafo |> toEffect
-//                DefaultSurfaces.pointSurface pointSize |> toEffect
+                //DefaultSurfaces.pointSurface pointSize |> toEffect
                 //DefaultSurfaces.uniformColor color |> toEffect
-                //DefaultSurfaces.diffuseTexture |> toEffect
-                //DefaultSurfaces.simpleLighting |> toEffect
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.diffuseTexture |> toEffect
+                DefaultSurfaces.simpleLighting |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
-           //|> Sg.trafo (Mod.initConstant <| Trafo3d.ChangeYZ)
+           |> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
            //|> Sg.fillMode mode
-           //|> Sg.blendMode (Mod.initConstant BlendMode.Blend)
-           //|> normalizeTo (Box3d(-V3d.III, V3d.III))
+           //|> Sg.blendMode (Mod.constant BlendMode.Blend)
+           |> normalizeTo (Box3d(-V3d.III, V3d.III))
     
+
 
     //Demo.AssimpExporter.save @"C:\Users\Schorsch\Desktop\quadScene\eigi.dae" sg
 
@@ -712,7 +781,7 @@ let main args =
 //    transact <| fun () ->
 //        arr.Value <- [||]
     
-    ctrl.Sizes.Values.Subscribe(fun s ->
+    ctrl.Sizes |> Mod.registerCallback (fun s ->
         let aspect = float s.X / float s.Y
         proj.AspectRatio <- aspect
     ) |> ignore
@@ -727,7 +796,7 @@ let main args =
 //        for i in 0 .. 10000 do
 //            printfn "run %d" i
 //            sw.Restart()
-//            let task = app.Runtime.CompileRender(sg.RenderJobs())
+//            let task = app.Runtime.CompileRender(sg.RenderObjects())
 //            task.Run fbo |> ignore
 //            sw.Stop ()
 //            task.Dispose()
@@ -737,14 +806,44 @@ let main args =
 //    )
 // 
  
-//    let task = app.Runtime.CompileRender(sg.RenderJobs())
+//    let task = app.Runtime.CompileRender(sg.RenderObjects())
 //    using ctx.ResourceLock (fun _ ->
 //       task.Run fbo |> ignore
 //    )   
  
-    let task = app.Runtime.CompileRender(sg.RenderJobs())
+    let engine = Mod.init BackendConfiguration.UnmanagedOptimized
+    let engines = 
+        ref [
+            BackendConfiguration.UnmanagedOptimized
+            BackendConfiguration.UnmanagedRuntime
+            BackendConfiguration.UnmanagedUnoptimized
+            BackendConfiguration.ManagedOptimized
+            BackendConfiguration.NativeOptimized
+            BackendConfiguration.NativeUnoptimized
+        ]
 
-    ctrl.RenderTask <- task
+    ctrl.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->
+        if k = Aardvark.Application.Keys.P then
+            match !engines with
+                | h::r ->
+                    transact(fun () -> Mod.change engine h)
+                    engines := r @ [h]
+                | _ -> ()
+        elif k = Aardvark.Application.Keys.G then
+            System.GC.AddMemoryPressure(1000000000L)
+            System.GC.Collect()
+            System.GC.WaitForFullGCApproach() |> ignore
+            System.GC.RemoveMemoryPressure(1000000000L)
+
+        ()
+    ) |> ignore
+
+    let sg = sg |> Sg.loadAsync
+
+
+    let task = app.Runtime.CompileRender(engine.GetValue(), sg)
+
+    ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
 
 
 //    w.Run()

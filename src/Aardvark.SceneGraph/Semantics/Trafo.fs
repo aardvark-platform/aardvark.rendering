@@ -44,7 +44,7 @@ module TrafoExtensions =
 module TrafoSemantics =
 
     /// the root trafo for the entire Sg (used when no trafos are applied)
-    let rootTrafo = Mod.initConstant Trafo3d.Identity
+    let rootTrafo = Mod.constant Trafo3d.Identity
   
     [<Semantic>]
     type Trafos() =
@@ -71,6 +71,12 @@ module TrafoSemantics =
 
         member x.ProjTrafo(p : Sg.ProjectionTrafoApplicator) =
             p.Child?ProjTrafo <- p.ProjectionTrafo
+
+        member x.ViewTrafo(r : Root) =
+            r.Child?ViewTrafo <- rootTrafo
+
+        member x.ProjTrafo(r : Root) =
+            r.Child?ProjTrafo <- rootTrafo
 
         member x.ViewTrafo(e : Sg.Environment) =
             e.Child?ViewTrafo <- e.ViewTrafo

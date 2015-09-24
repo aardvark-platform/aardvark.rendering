@@ -12,6 +12,7 @@ type IKeyboard =
     abstract member KeyUp : Keys -> IEvent<unit>
 
     abstract member Down : IEvent<Keys>
+    abstract member DownWithRepeats : IEvent<Keys>
     abstract member Up : IEvent<Keys>
     abstract member Press : IEvent<char>
 
@@ -23,10 +24,12 @@ type EventKeyboard() =
     let upEvents = ConcurrentDictionary<Keys, EventSource<unit>>()
     let downEvent = EventSource<Keys>()
     let upEvent = EventSource<Keys>()
+    let downWithRepeats = EventSource<Keys>()
     let input = EventSource<char>()
 
 
     member x.KeyDown(k : Keys) =
+        downWithRepeats.Emit k
         if CSet.add k downKeys then
             downEvent.Emit k
 
@@ -56,7 +59,7 @@ type EventKeyboard() =
 
     interface IKeyboard with
         member x.IsDown (k : Keys) =
-            let r = isDown.GetOrAdd(k, fun k -> Mod.initMod (downKeys.Contains k))
+            let r = isDown.GetOrAdd(k, fun k -> Mod.init (downKeys.Contains k))
             r :> IMod<_>
 
         member x.KeyDown (k : Keys) =
@@ -68,6 +71,7 @@ type EventKeyboard() =
             e :> IEvent<_>
 
         member x.Down = downEvent :> IEvent<_>
+        member x.DownWithRepeats = downWithRepeats :> IEvent<_>
         member x.Up = upEvent :> IEvent<_>
         member x.Press = input :> IEvent<_>
 

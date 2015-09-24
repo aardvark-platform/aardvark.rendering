@@ -1,0 +1,9 @@
+type project
+id Aardvark.Application.WPF.GL
+authors VRVis Research Center
+description
+    Aardvark.Application.WPF.GL
+files
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.GL.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.GL.pdb ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.GL.xml ==> lib\net45

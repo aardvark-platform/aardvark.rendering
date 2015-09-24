@@ -127,11 +127,78 @@ module FShadeSceneGraph =
 
         r
 
+    open System
+    open FShade.GLSL
 
     type FShadeSurface(effect : FShadeEffect) =
         let mutable cache = None
         let uniforms = SymDict.empty
         let samplerStates = SymDict.empty
+
+        let glslConfigCache = ConcurrentDict<_,_>(Dict())
+
+
+        let glsl410 = 
+            {
+                languageVersion = Version(4,1)
+                enabledExtensions = Set.empty
+                createUniformBuffers = true
+                createGlobalUniforms = false
+                createBindings = false
+                createDescriptorSets = false
+                createInputLocations = true
+                createRowMajorMatrices = false
+                createPerStageUniforms = false
+                flipHandedness = false
+                depthRange = Range1d(-1.0,1.0)
+            }
+
+        let glsl120 = 
+            {
+                languageVersion = Version(1,2)
+                enabledExtensions = Set.empty
+                createUniformBuffers = false
+                createGlobalUniforms = true
+                createBindings = false
+                createDescriptorSets = false
+                createInputLocations = false
+                createRowMajorMatrices = false
+                createPerStageUniforms = false
+                flipHandedness = false
+                depthRange = Range1d(-1.0,1.0)
+            }
+
+        let vulkan =
+            {
+                languageVersion = Version(1,4)
+                enabledExtensions = Set.ofList ["GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack"]
+                createUniformBuffers = true
+                createGlobalUniforms = false
+                createBindings = true
+                createDescriptorSets = true
+                createInputLocations = true
+                createRowMajorMatrices = true
+                createPerStageUniforms = true
+                flipHandedness = true
+                depthRange = Range1d(0.0,1.0)
+            }
+
+        let tryGetGlslConfig (r : IRuntime) =
+            glslConfigCache.GetOrCreate(r, Func<_,_>(fun r ->
+                let t = r.GetType()
+                let n = t.FullName.ToLower()
+
+                if n.Contains ".gl" then 
+                    let supportsUniformBuffers = t.GetProperty("SupportsUniformBuffers").GetValue(r) |> unbox<bool>
+                    if supportsUniformBuffers then Some glsl410
+                    else Some glsl120
+
+                elif n.Contains "vulkan" then
+                    Some vulkan
+
+                else
+                    None
+            ))
 
         member x.Effect = effect
 
@@ -140,36 +207,34 @@ module FShadeSceneGraph =
                 match cache with
                     | Some c -> c
                     | None ->
-                        let t = r.GetType()
-                        if t.FullName.Contains "GL" then
-                            let supportsUniformBuffers = t.GetProperty("SupportsUniformBuffers").GetValue(r) |> unbox<bool>
+                        match tryGetGlslConfig r with
+                            | Some glslConfig ->
 
-                            let compileEffect =
-                                if supportsUniformBuffers then GLSL.compileEffect
-                                else GLSL.compileEffect120
+                                let compileEffect =
+                                    GLSL.compileEffect glslConfig
 
-                            match effect |> compileEffect with
-                                | Success(map, code) ->
-                                    let semanticMap = SymDict.empty
+                                match effect |> compileEffect with
+                                    | Success(map, code) ->
+                                        let semanticMap = SymDict.empty
 
-                                    for KeyValue(k,v) in map do
-                                        if not v.IsSamplerUniform then
-                                            uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
-                                        else
-                                            let sem, sam = v.Value |> unbox<string * SamplerState>
-                                            semanticMap.[Sym.ofString k] <- Sym.ofString sem
-                                            samplerStates.[Sym.ofString sem] <- toSamplerStateDescription sam
-                                            ()
+                                        for KeyValue(k,v) in map do
+                                            if not v.IsSamplerUniform then
+                                                uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
+                                            else
+                                                let sem, sam = v.Value |> unbox<string * SamplerState>
+                                                semanticMap.[Sym.ofString k] <- Sym.ofString sem
+                                                samplerStates.[Sym.ofString sem] <- toSamplerStateDescription sam
+                                                ()
 
-                                    let bs = getOrCreateSurface code 
-                                    let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplerStates, semanticMap) 
-                                    cache <- Some result
-                                    result
+                                        let bs = getOrCreateSurface code 
+                                        let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplerStates, semanticMap) 
+                                        cache <- Some result
+                                        result
     
-                                | Error e -> 
-                                    failwithf "could not compile shader for GLSL: %A" e
-                        else
-                            failwithf "unsupported runtime type: %A" r     
+                                    | Error e -> 
+                                        failwithf "could not compile shader for GLSL: %A" e
+                            | None ->
+                                failwithf "unsupported runtime type: %A" r     
                     
 
     let toFShadeSurface (e : FShadeEffect) =
@@ -185,7 +250,7 @@ module FShadeSceneGraph =
 
         let effect (s : #seq<FShadeEffect>) (sg : ISg) =
             let e = FShade.SequentialComposition.compose s
-            let s = constantSurfaceCache.Memoized1 (fun e -> Mod.initConstant (FShadeSurface(e) :> ISurface)) e
+            let s = constantSurfaceCache.Memoized1 (fun e -> Mod.constant (FShadeSurface(e) :> ISurface)) e
             Sg.SurfaceApplicator(s, sg) :> ISg
 
         let effect' (e : IMod<FShadeEffect>) (sg : ISg) =

@@ -6,13 +6,15 @@ open FShade
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering
+open Aardvark.Rendering.NanoVg
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open System.Windows.Media
 open System.Windows
-open System.Windows.Media.Imaging
+open FontRendering
+
 
 module Shader =
     type Vertex = { 
@@ -59,59 +61,87 @@ let main argv =
                 ]
         )
 
+
+
     let trafos =
         [|
-            for x in 0..10 do
-                for y in 0..10 do
-                    yield Trafo3d.Translation(2.0 * float x, 2.0 * float y, 0.0)
+            for x in -4..4 do
+                for y in -4..4 do
+                    yield Trafo3d.Translation(2.0 * float x - 0.5, 2.0 * float y - 0.5, 0.0)
         |]
 
-    let trafos = trafos |> Mod.initConstant
+    let trafos = trafos |> Mod.constant
 
-    let time = (win :> IRenderTarget).Time
     let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
-    let cam = 
-        Mod.integrate cam time [ 
-            DefaultCameraController.controlWSAD win.Keyboard time
-            DefaultCameraController.controlLookAround win.Mouse
-            DefaultCameraController.controlPan win.Mouse
-            DefaultCameraController.controlZoom win.Mouse
-            DefaultCameraController.controllScroll win.Mouse time
+    let controller = 
+        AFun.chain [
+            CameraController.controlLook win.Mouse
+            CameraController.controlWSAD win.Keyboard 1.2
+            CameraController.controlPan win.Mouse 0.05
+            CameraController.controlZoom win.Mouse 0.05
+            CameraController.controlScroll win.Mouse 0.1 0.004
+//            CameraController.controlOrbit win.Mouse V3d.Zero
+//            CameraController.controlOrbitScroll win.Mouse V3d.Zero 0.1 0.004
         ]
 
+    let cam = cam |> AFun.integrate controller
 
-//    let cc = 
-//        let impl = win.Control.Implementation
-//        CSharpStuff.DefaultCameraControllers(
-//            CSharpStuff.HciMouseWinFormsAsync(impl),
-//            CSharpStuff.HciKeyboardWinFormsAsync(impl),
-//            cam,
-//            isEnabled = EventSource true
-//        )
+    win.Mouse.Click.Values.Subscribe(printfn "click %A") |> ignore
+    win.Mouse.DoubleClick.Values.Subscribe(printfn "double click %A") |> ignore
+
+    let e = FShade.SequentialComposition.compose [toEffect Shader.trafo; toEffect Shader.white]
+    let s = FShadeSurface(e) :> ISurface
+    let compiled = app.Runtime.CreateSurface s :> ISurface
 
     let sg =
         geometry 
             |> Sg.instancedGeometry trafos
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
-            //|> Sg.viewTrafo cam.ViewTrafos.Mod
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
-            |> Sg.effect [toEffect Shader.trafo; toEffect Shader.white]
+            |> Sg.surface (Mod.constant compiled)
 
-    win.RenderTask <- app.Runtime.CompileRender(sg.RenderJobs())
+    let g = Sg.ofIndexedGeometry geometry
+    let tex = FileTexture(@"E:\Development\WorkDirectory\DataSVN\pattern.jpg", true) :> ITexture
 
-    
-    
+    let textures = System.Collections.Generic.List<ModRef<ITexture>>()
+
+    let sgs = 
+        ASet.ofList [
+            for x in -4..4 do
+                for y in -4..4 do
+                    let trafo = Trafo3d.Translation(2.0 * float x - 0.5, 2.0 * float y - 0.5, 0.0)
+
+                    let tex = Mod.init tex
+                    textures.Add tex
+                    yield g |> Sg.trafo (Mod.constant trafo)
+                            |> Sg.texture DefaultSemantic.DiffuseColorTexture tex
+        ]
+
+    let sg = 
+        Sg.set sgs
+            |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
+            |> Sg.projTrafo proj.ProjectionTrafos.Mod
+            |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
+
+    let main = app.Runtime.CompileRender(BackendConfiguration.NativeOptimized, sg) |> DefaultOverlays.withStatistics
+
+    let r = Random()
+    win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () ->
+        let index = r.Next(textures.Count)
+        let t = textures.[index]
+        textures.RemoveAt index
+
+        transact (fun () ->
+            Mod.change t (FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\Server\sand_color.jpg", true) :> ITexture)
+        )
+
+    ) |> ignore
 
 
-//    let f = System.Windows.Media.GlyphTypeface(Uri(@"C:\Windows\Fonts\Arial.ttf"))
-//   
-//    let glyph = f.CharacterToGlyphMap.[int 'g']
-//    let geom = f.GetGlyphOutline(glyph, 16.0, 16.0)
-//
-//    let outline = geom.GetOutlinedPathGeometry()
-//
-//    let b = outline.GetRenderBounds(Pen(Brushes.Black, 1.0))
-//    let b = Box2i(int b.Left, int b.Bottom, int b.Right, int b.Top)
 
-    System.Windows.Forms.Application.Run win
-    0 // return an integer exit code
+    let svg = Svg.ofFile @"C:\Users\schorsch\Desktop\tiger.svg"
+    let svgTask = app.Runtime.CompileRender svg
+
+    win.RenderTask <- RenderTask.ofList [main; svgTask]
+    win.Run()
+    0 

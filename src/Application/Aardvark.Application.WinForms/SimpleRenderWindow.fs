@@ -18,6 +18,8 @@ type SimpleRenderWindow() =
 
     member x.Control = ctrl
 
+    member x.Location = ctrl.Location
+
     member x.RenderTask
         with get() = ctrl.RenderTask
         and set t = ctrl.RenderTask <- t
@@ -26,20 +28,26 @@ type SimpleRenderWindow() =
         with get() = V2i(base.ClientSize.Width, base.ClientSize.Height)
         and set (size : V2i) = base.ClientSize <- System.Drawing.Size(size.X, size.Y)
 
+    member x.Runtime = ctrl.Runtime
     member x.Sizes = ctrl.Sizes
+    member x.Samples = ctrl.Samples
     member x.Keyboard = ctrl.Keyboard
     member x.Mouse = ctrl.Mouse
     member x.Time = ctrl.Time
+    member x.Run() = Application.Run(x)
 
-    interface IRenderControl with
+    interface IRenderWindow with
+        member x.Runtime = ctrl.Runtime
         member x.Time = ctrl.Time
         member x.RenderTask
             with get() = ctrl.RenderTask
             and set t = ctrl.RenderTask <- t
 
         member x.Sizes = ctrl.Sizes
+        member x.Samples = ctrl.Samples
         member x.Keyboard = ctrl.Keyboard
         member x.Mouse = ctrl.Mouse
+        member x.Run() = x.Run()
 
 
 [<AbstractClass; Sealed; Extension>]

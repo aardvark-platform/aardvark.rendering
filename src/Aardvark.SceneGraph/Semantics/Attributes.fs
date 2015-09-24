@@ -24,11 +24,11 @@ module AttributeExtensions =
 
 module AttributeSemantics =
 
-    let emptyIndex : IMod<Array> = Mod.initConstant ([||] :> Array)
+    let emptyIndex : IMod<Array> = Mod.constant ([||] :> Array)
 
     [<Semantic>]
     type AttributeSem() =
-        static let zero = Mod.initConstant 0
+        static let zero = Mod.constant 0
         let (~%) (m : Map<Symbol, BufferView>) = m
 
         member x.FaceVertexCount (root : Root) =
@@ -45,11 +45,15 @@ module AttributeSemantics =
             else
                 match Map.tryFind DefaultSemantic.Positions app.Values with
                     | Some pos ->
-                        match pos.Buffer with
-                            | :? ArrayBuffer as ab ->
-                                app.Child?FaceVertexCount <- ab.Data |> Mod.map (fun a -> a.Length - pos.Offset)
+                        app.Child?FaceVertexCount <- 
+                            pos.Buffer 
+                                |> Mod.bind (fun buffer ->
+                                    match buffer with
+                                        | :? ArrayBuffer as a ->
+                                            Mod.constant (a.Data.Length - pos.Offset)
             
-                            | _ -> app.Child?FaceVertexCount <- app.FaceVertexCount
+                                        | _ -> app.FaceVertexCount
+                                   )
                     | _ -> app.Child?FaceVertexCount <- app.FaceVertexCount
 
         member x.InstanceAttributes(root : Root) = 

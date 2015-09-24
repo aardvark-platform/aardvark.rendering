@@ -67,35 +67,35 @@ module FramebufferExtensions =
         let handle = GL.GenFramebuffer()
         GL.Check "could not create framebuffer"
 
+        let mutable oldFbo = 0
+        GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
+
         GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
         GL.Check "could not bind framebuffer"
 
         let attach (o : IFramebufferOutput) (attachment) =
             match o with
-                | :? Renderbuffer as o ->
-                    GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle)
+                | :? Aardvark.Base.IFramebufferRenderbuffer as o ->
+                    GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle :?> int)
                     GL.Check "could not attach renderbuffer"
 
                 | :? TextureOutputView as r ->
-                    match r with
-                        | { texture = :? Texture as o; level = level; slice = slice } ->
-                            match o.Dimension with
-                                | TextureDimension.TextureCube ->
-                                    let (_,target) = TextureExtensions.cubeSides.[slice]
-                                    if o.IsArray then
-                                        failwith "cubemaparray currently not implemented"
-                                    else
-                                        GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
-                                    GL.Check "could not attach texture"
-                                | _ ->
-                                    if o.IsArray then
-                                        GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, slice)
-                                    else
-                                        GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
-                                    GL.Check "could not attach texture"
+                    let { texture = o; level = level; slice = slice } = r
 
+                    match o.Dimension with
+                        | TextureDimension.TextureCube ->
+                            let (_,target) = TextureExtensions.cubeSides.[slice]
+                            if o.ArraySize > 1 then
+                                failwith "cubemaparray currently not implemented"
+                            else
+                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle :?> int, level)
+                            GL.Check "could not attach texture"
                         | _ ->
-                            failwith "unsupported texture type"
+                            if o.ArraySize > 1 then
+                                GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle :?> int, level, slice)
+                            else
+                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, TextureTarget.Texture2D, o.Handle :?> int, level)
+                            GL.Check "could not attach texture"
                 | _ ->
                     failwith "unsupported view"
 
@@ -119,7 +119,7 @@ module FramebufferExtensions =
             raise <| OpenGLException(ErrorCode.InvalidFramebufferOperation, sprintf "framebuffer incomplete: %A" status)
 
         // unbind
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+        GL.BindFramebuffer(FramebufferTarget.Framebuffer, oldFbo)
         GL.Check "could not unbind framebuffer"
 
         handle

@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Application.WPF
 
+#if WINDOWS
 
 open System.Runtime.CompilerServices
 open System.Windows
@@ -24,20 +25,29 @@ type SimpleRenderWindow() =
         with get() = ctrl.RenderTask
         and set t = ctrl.RenderTask <- t
 
+    member x.Runtime = ctrl.Runtime
     member x.Sizes = ctrl.Sizes
+    member x.Samples = ctrl.Samples
     member x.Keyboard = ctrl.Keyboard
     member x.Mouse = ctrl.Mouse
     member x.Time = ctrl.Time
+    member x.Run() = 
+        let app = Application()
+        app.Run(x) |> ignore
 
-    interface IRenderControl with
+    interface IRenderWindow with
+        member x.Runtime = ctrl.Runtime
         member x.Time = ctrl.Time
         member x.RenderTask
             with get() = ctrl.RenderTask
             and set t = ctrl.RenderTask <- t
 
         member x.Sizes = ctrl.Sizes
+        member x.Samples = ctrl.Samples
         member x.Keyboard = ctrl.Keyboard
         member x.Mouse = ctrl.Mouse
+        member x.Run() = x.Run()
+
 
 [<AbstractClass; Sealed; Extension>]
 type WPFApplicationExtensions private() =
@@ -52,4 +62,4 @@ type WPFApplicationExtensions private() =
     static member CreateSimpleRenderWindow(this : IApplication) =
         WPFApplicationExtensions.CreateSimpleRenderWindow(this, 1)
 
-
+#endif

@@ -1,0 +1,14 @@
+type project
+id Aardvark.Rendering.GL
+authors VRVis Research Center
+description
+    Aardvark.Rendering.GL
+files
+    ..\..\bin\BUILDCONFIG\Aardvark.Rendering.GL.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Rendering.GL.pdb ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Rendering.GL.xml ==> lib\net45
+    ..\..\lib\Release\OpenTK.Compatibility.dll ==> lib\net45
+    ..\..\lib\Release\OpenTK.dll ==> lib\net45
+    ..\..\lib\Release\OpenTK.GLControl.dll ==> lib\net45
+    ..\..\lib\Release\OpenTK.dll.config ==> lib\net45
+    ..\..\lib\Release\OpenTK.Compatibility.dll.config ==> lib\net45

@@ -19,6 +19,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     static let current = new ThreadLocal<Option<ContextHandle>>(fun () -> None)
 
     let l = obj()
+    let mutable debugCallbackInstalled = false
     let mutable onMakeCurrent : ConcurrentHashSet<unit -> unit> = null
 
     static member Current
@@ -62,6 +63,13 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
             Log.warn "cannot release context which is not current"
         ContextHandle.Current <- None
 
+    // Installs debug callback if not yet installed (context is assumed to be current)
+    member x.AttachDebugOutputIfNeeded() =
+        if debugCallbackInstalled then ()
+        else
+            debugCallbackInstalled <- true
+            GL.SetupDebugOutput()
+
 
 /// <summary>
 /// A module for managing context handles
@@ -73,19 +81,10 @@ module ContextHandle =
 
     let mutable primaryContext : ContextHandle = null
 
-    let usePrimaryContext (f : unit -> 'a) =
-        if primaryContext = null then f()
-        else
-            try
-                primaryContext.MakeCurrent()
-                f()
-            finally
-                primaryContext.ReleaseCurrent()
-
     /// <summary>
     /// creates a new context using the default configuration
     /// </summary>
-    let create() =
+    let create () =
         let window, context =
             if primaryContext <> null then primaryContext.MakeCurrent()
             
@@ -105,15 +104,12 @@ module ContextHandle =
         // garbage collected.
         if not <| windows.TryAdd(handle, window) then failwith "failed to add new context to live-set"
     
-        // store the primary context (if not already existing)
-        if primaryContext = null then
-            primaryContext <- handle
     
         handle
-      
-    
 
-    let createContexts resourceContextCount =
+    primaryContext <- create()
+
+    let createContexts resourceContextCount  =
         // if there is a current context release it before creating
         // the GameWindow since the GameWindow makes itself curret
         GraphicsContext.ShareContexts <- true;
@@ -125,7 +121,7 @@ module ContextHandle =
 
         let contexts =
             [ for i in 1..resourceContextCount do
-                yield create()
+                yield create ()
             ]
 
         // make the old context current again

@@ -12,7 +12,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-type OpenGlRenderControl(ctx : Context, samples : int) =
+type OpenGlRenderControl(runtime : Runtime, samples : int) =
     inherit GLControl(
         Graphics.GraphicsMode(
             OpenTK.Graphics.ColorFormat(Config.BitsPerPixel), 
@@ -31,6 +31,7 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
     static let messageLoop = MessageLoop()
     static do messageLoop.Start()
 
+    let ctx = runtime.Context
     let mutable loaded = false
     let statistics = EventSource<FrameStatistics>(FrameStatistics.Zero)
 
@@ -41,7 +42,7 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
     let defaultFramebuffer = new Framebuffer(ctx, (fun _ -> 0), ignore, [], None)
 
     let avgFrameTime = RunningMean(10)
-    let sizes = EventSource<V2i>(V2i(base.ClientSize.Width, base.ClientSize.Height))
+    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
     let time = Mod.custom (fun () -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
     let mutable needsRedraw = false
     let mutable first = true
@@ -78,7 +79,8 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
             task <- Some t
             taskSubscription <- t.AddMarkingCallback x.ForceRedraw
 
-    member x.Sizes = sizes :> IEvent<_>
+    member x.Sizes = sizes :> IMod<_>
+    member x.Samples = Mod.constant samples
 
     override x.OnHandleCreated(e) =
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
@@ -106,8 +108,8 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
                         needsRedraw <- false
                         let sw = System.Diagnostics.Stopwatch()
                         sw.Start()
-                        if size <> sizes.Latest then
-                            transact (fun () -> sizes.Emit size)
+                        if size <> sizes.Value then
+                            transact (fun () -> Mod.change sizes size)
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                         GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
                         GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
@@ -143,8 +145,8 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
                     )
 
                 | None ->
-                    if size <> sizes.Latest then
-                        transact (fun () -> sizes.Emit size)
+                    if size <> sizes.Value then
+                        transact (fun () -> Mod.change sizes size)
 
                     needsRedraw <- false
                     
@@ -155,11 +157,13 @@ type OpenGlRenderControl(ctx : Context, samples : int) =
     member x.Time = time
 
     interface IRenderTarget with
+        member x.Runtime = runtime :> IRuntime
         member x.Time = time
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
-        member x.Sizes = sizes :> IEvent<_>
+        member x.Sizes = sizes :> IMod<_>
+        member x.Samples = Mod.constant samples
 
-    new(ctx : Context) = new OpenGlRenderControl(ctx, 1)
+    new(runtime : Runtime) = new OpenGlRenderControl(runtime, 1)
 

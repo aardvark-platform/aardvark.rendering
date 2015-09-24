@@ -1002,351 +1002,362 @@ module VirtualKeys =
 
 module KeyConverter =
     
+    let keyDict =
+        Dictionary.ofList [
+            VirtualKeys.VK_CANCEL, Keys.Cancel
+            VirtualKeys.VK_BACK, Keys.Back
+            VirtualKeys.VK_TAB, Keys.Tab
+            VirtualKeys.VK_CLEAR, Keys.Clear
+            VirtualKeys.VK_RETURN, Keys.Return
+            VirtualKeys.VK_PAUSE, Keys.Pause
+            VirtualKeys.VK_CAPITAL, Keys.Capital
+            VirtualKeys.VK_KANA, Keys.KanaMode
+            VirtualKeys.VK_JUNJA, Keys.JunjaMode
+            VirtualKeys.VK_FINAL, Keys.FinalMode
+            VirtualKeys.VK_KANJI, Keys.KanjiMode
+            VirtualKeys.VK_ESCAPE, Keys.Escape
+            VirtualKeys.VK_CONVERT, Keys.ImeConvert
+            VirtualKeys.VK_NONCONVERT, Keys.ImeNonConvert
+            VirtualKeys.VK_ACCEPT, Keys.ImeAccept
+            VirtualKeys.VK_MODECHANGE, Keys.ImeModeChange
+            VirtualKeys.VK_SPACE, Keys.Space
+            VirtualKeys.VK_PRIOR, Keys.Prior
+            VirtualKeys.VK_NEXT, Keys.Next
+            VirtualKeys.VK_END, Keys.End
+            VirtualKeys.VK_HOME, Keys.Home
+            VirtualKeys.VK_LEFT, Keys.Left
+            VirtualKeys.VK_UP, Keys.Up
+            VirtualKeys.VK_RIGHT, Keys.Right
+            VirtualKeys.VK_DOWN, Keys.Down
+            VirtualKeys.VK_SELECT, Keys.Select
+            VirtualKeys.VK_PRINT, Keys.Print
+            VirtualKeys.VK_EXECUTE, Keys.Execute
+            VirtualKeys.VK_SNAPSHOT, Keys.Snapshot
+            VirtualKeys.VK_INSERT, Keys.Insert
+            VirtualKeys.VK_DELETE, Keys.Delete
+            VirtualKeys.VK_HELP, Keys.Help
+            VirtualKeys.VK_0, Keys.D0
+            VirtualKeys.VK_1, Keys.D1
+            VirtualKeys.VK_2, Keys.D2
+            VirtualKeys.VK_3, Keys.D3
+            VirtualKeys.VK_4, Keys.D4
+            VirtualKeys.VK_5, Keys.D5
+            VirtualKeys.VK_6, Keys.D6
+            VirtualKeys.VK_7, Keys.D7
+            VirtualKeys.VK_8, Keys.D8
+            VirtualKeys.VK_9, Keys.D9
+            VirtualKeys.VK_A, Keys.A
+            VirtualKeys.VK_B, Keys.B
+            VirtualKeys.VK_C, Keys.C
+            VirtualKeys.VK_D, Keys.D
+            VirtualKeys.VK_E, Keys.E
+            VirtualKeys.VK_F, Keys.F
+            VirtualKeys.VK_G, Keys.G
+            VirtualKeys.VK_H, Keys.H
+            VirtualKeys.VK_I, Keys.I
+            VirtualKeys.VK_J, Keys.J
+            VirtualKeys.VK_K, Keys.K
+            VirtualKeys.VK_L, Keys.L
+            VirtualKeys.VK_M, Keys.M
+            VirtualKeys.VK_N, Keys.N
+            VirtualKeys.VK_O, Keys.O
+            VirtualKeys.VK_P, Keys.P
+            VirtualKeys.VK_Q, Keys.Q
+            VirtualKeys.VK_R, Keys.R
+            VirtualKeys.VK_S, Keys.S
+            VirtualKeys.VK_T, Keys.T
+            VirtualKeys.VK_U, Keys.U
+            VirtualKeys.VK_V, Keys.V
+            VirtualKeys.VK_W, Keys.W
+            VirtualKeys.VK_X, Keys.X
+            VirtualKeys.VK_Y, Keys.Y
+            VirtualKeys.VK_Z, Keys.Z
+            VirtualKeys.VK_LWIN, Keys.LWin
+            VirtualKeys.VK_RWIN, Keys.RWin
+            VirtualKeys.VK_APPS, Keys.Apps
+            VirtualKeys.VK_SLEEP, Keys.Sleep
+            VirtualKeys.VK_NUMPAD0, Keys.NumPad0
+            VirtualKeys.VK_NUMPAD1, Keys.NumPad1
+            VirtualKeys.VK_NUMPAD2, Keys.NumPad2
+            VirtualKeys.VK_NUMPAD3, Keys.NumPad3
+            VirtualKeys.VK_NUMPAD4, Keys.NumPad4
+            VirtualKeys.VK_NUMPAD5, Keys.NumPad5
+            VirtualKeys.VK_NUMPAD6, Keys.NumPad6
+            VirtualKeys.VK_NUMPAD7, Keys.NumPad7
+            VirtualKeys.VK_NUMPAD8, Keys.NumPad8
+            VirtualKeys.VK_NUMPAD9, Keys.NumPad9
+            VirtualKeys.VK_MULTIPLY, Keys.Multiply
+            VirtualKeys.VK_ADD, Keys.Add
+            VirtualKeys.VK_SEPARATOR, Keys.Separator
+            VirtualKeys.VK_SUBTRACT, Keys.Subtract
+            VirtualKeys.VK_DECIMAL, Keys.Decimal
+            VirtualKeys.VK_DIVIDE, Keys.Divide
+            VirtualKeys.VK_F1, Keys.F1
+            VirtualKeys.VK_F2, Keys.F2
+            VirtualKeys.VK_F3, Keys.F3
+            VirtualKeys.VK_F4, Keys.F4
+            VirtualKeys.VK_F5, Keys.F5
+            VirtualKeys.VK_F6, Keys.F6
+            VirtualKeys.VK_F7, Keys.F7
+            VirtualKeys.VK_F8, Keys.F8
+            VirtualKeys.VK_F9, Keys.F9
+            VirtualKeys.VK_F10, Keys.F10
+            VirtualKeys.VK_F11, Keys.F11
+            VirtualKeys.VK_F12, Keys.F12
+            VirtualKeys.VK_F13, Keys.F13
+            VirtualKeys.VK_F14, Keys.F14
+            VirtualKeys.VK_F15, Keys.F15
+            VirtualKeys.VK_F16, Keys.F16
+            VirtualKeys.VK_F17, Keys.F17
+            VirtualKeys.VK_F18, Keys.F18
+            VirtualKeys.VK_F19, Keys.F19
+            VirtualKeys.VK_F20, Keys.F20
+            VirtualKeys.VK_F21, Keys.F21
+            VirtualKeys.VK_F22, Keys.F22
+            VirtualKeys.VK_F23, Keys.F23
+            VirtualKeys.VK_F24, Keys.F24
+            VirtualKeys.VK_NUMLOCK, Keys.NumLock
+            VirtualKeys.VK_SCROLL, Keys.Scroll
+            VirtualKeys.VK_SHIFT, Keys.LeftShift
+            VirtualKeys.VK_LSHIFT, Keys.LeftShift
+            VirtualKeys.VK_RSHIFT, Keys.RightShift
+            VirtualKeys.VK_CONTROL, Keys.LeftCtrl
+            VirtualKeys.VK_LCONTROL, Keys.LeftCtrl
+            VirtualKeys.VK_RCONTROL, Keys.RightCtrl
+            VirtualKeys.VK_MENU, Keys.LeftAlt
+            VirtualKeys.VK_LMENU, Keys.LeftAlt
+            VirtualKeys.VK_RMENU, Keys.RightAlt
+            VirtualKeys.VK_BROWSER_BACK, Keys.BrowserBack
+            VirtualKeys.VK_BROWSER_FORWARD, Keys.BrowserForward
+            VirtualKeys.VK_BROWSER_REFRESH, Keys.BrowserRefresh
+            VirtualKeys.VK_BROWSER_STOP, Keys.BrowserStop
+            VirtualKeys.VK_BROWSER_SEARCH, Keys.BrowserSearch
+            VirtualKeys.VK_BROWSER_FAVORITES, Keys.BrowserFavorites
+            VirtualKeys.VK_BROWSER_HOME, Keys.BrowserHome
+            VirtualKeys.VK_VOLUME_MUTE, Keys.VolumeMute
+            VirtualKeys.VK_VOLUME_DOWN, Keys.VolumeDown
+            VirtualKeys.VK_VOLUME_UP, Keys.VolumeUp
+            VirtualKeys.VK_MEDIA_NEXT_TRACK, Keys.MediaNextTrack
+            VirtualKeys.VK_MEDIA_PREV_TRACK, Keys.MediaPreviousTrack
+            VirtualKeys.VK_MEDIA_STOP, Keys.MediaStop
+            VirtualKeys.VK_MEDIA_PLAY_PAUSE, Keys.MediaPlayPause
+            VirtualKeys.VK_LAUNCH_MAIL, Keys.LaunchMail
+            VirtualKeys.VK_LAUNCH_MEDIA_SELECT, Keys.SelectMedia
+            VirtualKeys.VK_LAUNCH_APP1, Keys.LaunchApplication1
+            VirtualKeys.VK_LAUNCH_APP2, Keys.LaunchApplication2
+            VirtualKeys.VK_OEM_1, Keys.OemSemicolon
+            VirtualKeys.VK_OEM_PLUS, Keys.OemPlus
+            VirtualKeys.VK_OEM_COMMA, Keys.OemComma
+            VirtualKeys.VK_OEM_MINUS, Keys.OemMinus
+            VirtualKeys.VK_OEM_PERIOD, Keys.OemPeriod
+            VirtualKeys.VK_OEM_2, Keys.OemQuestion
+            VirtualKeys.VK_OEM_3, Keys.OemTilde
+            VirtualKeys.VK_C1, Keys.AbntC1
+            VirtualKeys.VK_C2, Keys.AbntC2
+            VirtualKeys.VK_OEM_4, Keys.OemOpenBrackets
+            VirtualKeys.VK_OEM_5, Keys.OemPipe
+            VirtualKeys.VK_OEM_6, Keys.OemCloseBrackets
+            VirtualKeys.VK_OEM_7, Keys.OemQuotes
+            VirtualKeys.VK_OEM_8, Keys.Oem8
+            VirtualKeys.VK_OEM_102, Keys.OemBackslash
+            VirtualKeys.VK_PROCESSKEY, Keys.ImeProcessed
+            VirtualKeys.VK_OEM_ATTN, Keys.OemAttn
+            VirtualKeys.VK_OEM_FINISH, Keys.OemFinish
+            VirtualKeys.VK_OEM_COPY, Keys.OemCopy
+            VirtualKeys.VK_OEM_AUTO, Keys.OemAuto
+            VirtualKeys.VK_OEM_ENLW, Keys.OemEnlw
+            VirtualKeys.VK_OEM_BACKTAB, Keys.OemBackTab
+            VirtualKeys.VK_ATTN, Keys.Attn
+            VirtualKeys.VK_CRSEL, Keys.CrSel
+            VirtualKeys.VK_EXSEL, Keys.ExSel
+            VirtualKeys.VK_EREOF, Keys.EraseEof
+            VirtualKeys.VK_PLAY, Keys.Play
+            VirtualKeys.VK_ZOOM, Keys.Zoom
+            VirtualKeys.VK_NONAME, Keys.NoName
+            VirtualKeys.VK_PA1, Keys.Pa1
+            VirtualKeys.VK_OEM_CLEAR, Keys.OemClear 
+
+        ]
+
+    let virtualKeyDict =
+        Dictionary.ofList [
+            Keys.Cancel, VirtualKeys.VK_CANCEL
+            Keys.Back, VirtualKeys.VK_BACK
+            Keys.Tab, VirtualKeys.VK_TAB
+            Keys.Clear, VirtualKeys.VK_CLEAR
+            Keys.Return, VirtualKeys.VK_RETURN
+            Keys.Pause, VirtualKeys.VK_PAUSE
+            Keys.Capital, VirtualKeys.VK_CAPITAL
+            Keys.KanaMode, VirtualKeys.VK_KANA
+            Keys.JunjaMode, VirtualKeys.VK_JUNJA
+            Keys.FinalMode, VirtualKeys.VK_FINAL
+            Keys.KanjiMode, VirtualKeys.VK_KANJI
+            Keys.Escape, VirtualKeys.VK_ESCAPE
+            Keys.ImeConvert, VirtualKeys.VK_CONVERT
+            Keys.ImeNonConvert, VirtualKeys.VK_NONCONVERT
+            Keys.ImeAccept, VirtualKeys.VK_ACCEPT
+            Keys.ImeModeChange, VirtualKeys.VK_MODECHANGE
+            Keys.Space, VirtualKeys.VK_SPACE
+            Keys.Prior, VirtualKeys.VK_PRIOR
+            Keys.Next, VirtualKeys.VK_NEXT
+            Keys.End, VirtualKeys.VK_END
+            Keys.Home, VirtualKeys.VK_HOME
+            Keys.Left, VirtualKeys.VK_LEFT
+            Keys.Up, VirtualKeys.VK_UP
+            Keys.Right, VirtualKeys.VK_RIGHT
+            Keys.Down, VirtualKeys.VK_DOWN
+            Keys.Select, VirtualKeys.VK_SELECT
+            Keys.Print, VirtualKeys.VK_PRINT
+            Keys.Execute, VirtualKeys.VK_EXECUTE
+            Keys.Snapshot, VirtualKeys.VK_SNAPSHOT
+            Keys.Insert, VirtualKeys.VK_INSERT
+            Keys.Delete, VirtualKeys.VK_DELETE
+            Keys.Help, VirtualKeys.VK_HELP
+            Keys.D0, VirtualKeys.VK_0
+            Keys.D1, VirtualKeys.VK_1
+            Keys.D2, VirtualKeys.VK_2
+            Keys.D3, VirtualKeys.VK_3
+            Keys.D4, VirtualKeys.VK_4
+            Keys.D5, VirtualKeys.VK_5
+            Keys.D6, VirtualKeys.VK_6
+            Keys.D7, VirtualKeys.VK_7
+            Keys.D8, VirtualKeys.VK_8
+            Keys.D9, VirtualKeys.VK_9
+            Keys.A, VirtualKeys.VK_A
+            Keys.B, VirtualKeys.VK_B
+            Keys.C, VirtualKeys.VK_C
+            Keys.D, VirtualKeys.VK_D
+            Keys.E, VirtualKeys.VK_E
+            Keys.F, VirtualKeys.VK_F
+            Keys.G, VirtualKeys.VK_G
+            Keys.H, VirtualKeys.VK_H
+            Keys.I, VirtualKeys.VK_I
+            Keys.J, VirtualKeys.VK_J
+            Keys.K, VirtualKeys.VK_K
+            Keys.L, VirtualKeys.VK_L
+            Keys.M, VirtualKeys.VK_M
+            Keys.N, VirtualKeys.VK_N
+            Keys.O, VirtualKeys.VK_O
+            Keys.P, VirtualKeys.VK_P
+            Keys.Q, VirtualKeys.VK_Q
+            Keys.R, VirtualKeys.VK_R
+            Keys.S, VirtualKeys.VK_S
+            Keys.T, VirtualKeys.VK_T
+            Keys.U, VirtualKeys.VK_U
+            Keys.V, VirtualKeys.VK_V
+            Keys.W, VirtualKeys.VK_W
+            Keys.X, VirtualKeys.VK_X
+            Keys.Y, VirtualKeys.VK_Y
+            Keys.Z, VirtualKeys.VK_Z
+            Keys.LWin, VirtualKeys.VK_LWIN
+            Keys.RWin, VirtualKeys.VK_RWIN
+            Keys.Apps, VirtualKeys.VK_APPS
+            Keys.Sleep, VirtualKeys.VK_SLEEP
+            Keys.NumPad0, VirtualKeys.VK_NUMPAD0
+            Keys.NumPad1, VirtualKeys.VK_NUMPAD1
+            Keys.NumPad2, VirtualKeys.VK_NUMPAD2
+            Keys.NumPad3, VirtualKeys.VK_NUMPAD3
+            Keys.NumPad4, VirtualKeys.VK_NUMPAD4
+            Keys.NumPad5, VirtualKeys.VK_NUMPAD5
+            Keys.NumPad6, VirtualKeys.VK_NUMPAD6
+            Keys.NumPad7, VirtualKeys.VK_NUMPAD7
+            Keys.NumPad8, VirtualKeys.VK_NUMPAD8
+            Keys.NumPad9, VirtualKeys.VK_NUMPAD9
+            Keys.Multiply, VirtualKeys.VK_MULTIPLY
+            Keys.Add, VirtualKeys.VK_ADD
+            Keys.Separator, VirtualKeys.VK_SEPARATOR
+            Keys.Subtract, VirtualKeys.VK_SUBTRACT
+            Keys.Decimal, VirtualKeys.VK_DECIMAL
+            Keys.Divide, VirtualKeys.VK_DIVIDE
+            Keys.F1, VirtualKeys.VK_F1
+            Keys.F2, VirtualKeys.VK_F2
+            Keys.F3, VirtualKeys.VK_F3
+            Keys.F4, VirtualKeys.VK_F4
+            Keys.F5, VirtualKeys.VK_F5
+            Keys.F6, VirtualKeys.VK_F6
+            Keys.F7, VirtualKeys.VK_F7
+            Keys.F8, VirtualKeys.VK_F8
+            Keys.F9, VirtualKeys.VK_F9
+            Keys.F10, VirtualKeys.VK_F10
+            Keys.F11, VirtualKeys.VK_F11
+            Keys.F12, VirtualKeys.VK_F12
+            Keys.F13, VirtualKeys.VK_F13
+            Keys.F14, VirtualKeys.VK_F14
+            Keys.F15, VirtualKeys.VK_F15
+            Keys.F16, VirtualKeys.VK_F16
+            Keys.F17, VirtualKeys.VK_F17
+            Keys.F18, VirtualKeys.VK_F18
+            Keys.F19, VirtualKeys.VK_F19
+            Keys.F20, VirtualKeys.VK_F20
+            Keys.F21, VirtualKeys.VK_F21
+            Keys.F22, VirtualKeys.VK_F22
+            Keys.F23, VirtualKeys.VK_F23
+            Keys.F24, VirtualKeys.VK_F24
+            Keys.NumLock, VirtualKeys.VK_NUMLOCK
+            Keys.Scroll, VirtualKeys.VK_SCROLL
+            Keys.LeftShift, VirtualKeys.VK_SHIFT
+            Keys.RightShift, VirtualKeys.VK_RSHIFT
+            Keys.LeftCtrl, VirtualKeys.VK_CONTROL
+            Keys.RightCtrl, VirtualKeys.VK_RCONTROL
+            Keys.LeftAlt, VirtualKeys.VK_MENU
+            Keys.RightAlt, VirtualKeys.VK_RMENU
+            Keys.BrowserBack, VirtualKeys.VK_BROWSER_BACK
+            Keys.BrowserForward, VirtualKeys.VK_BROWSER_FORWARD
+            Keys.BrowserRefresh, VirtualKeys.VK_BROWSER_REFRESH
+            Keys.BrowserStop, VirtualKeys.VK_BROWSER_STOP
+            Keys.BrowserSearch, VirtualKeys.VK_BROWSER_SEARCH
+            Keys.BrowserFavorites, VirtualKeys.VK_BROWSER_FAVORITES
+            Keys.BrowserHome, VirtualKeys.VK_BROWSER_HOME
+            Keys.VolumeMute, VirtualKeys.VK_VOLUME_MUTE
+            Keys.VolumeDown, VirtualKeys.VK_VOLUME_DOWN
+            Keys.VolumeUp, VirtualKeys.VK_VOLUME_UP
+            Keys.MediaNextTrack, VirtualKeys.VK_MEDIA_NEXT_TRACK
+            Keys.MediaPreviousTrack, VirtualKeys.VK_MEDIA_PREV_TRACK
+            Keys.MediaStop, VirtualKeys.VK_MEDIA_STOP
+            Keys.MediaPlayPause, VirtualKeys.VK_MEDIA_PLAY_PAUSE
+            Keys.LaunchMail, VirtualKeys.VK_LAUNCH_MAIL
+            Keys.SelectMedia, VirtualKeys.VK_LAUNCH_MEDIA_SELECT
+            Keys.LaunchApplication1, VirtualKeys.VK_LAUNCH_APP1
+            Keys.LaunchApplication2, VirtualKeys.VK_LAUNCH_APP2
+            Keys.OemSemicolon, VirtualKeys.VK_OEM_1
+            Keys.OemPlus, VirtualKeys.VK_OEM_PLUS
+            Keys.OemComma, VirtualKeys.VK_OEM_COMMA
+            Keys.OemMinus, VirtualKeys.VK_OEM_MINUS
+            Keys.OemPeriod, VirtualKeys.VK_OEM_PERIOD
+            Keys.OemQuestion, VirtualKeys.VK_OEM_2
+            Keys.OemTilde, VirtualKeys.VK_OEM_3
+            Keys.AbntC1, VirtualKeys.VK_C1
+            Keys.AbntC2, VirtualKeys.VK_C2
+            Keys.OemOpenBrackets, VirtualKeys.VK_OEM_4
+            Keys.OemPipe, VirtualKeys.VK_OEM_5
+            Keys.OemCloseBrackets, VirtualKeys.VK_OEM_6
+            Keys.OemQuotes, VirtualKeys.VK_OEM_7
+            Keys.Oem8, VirtualKeys.VK_OEM_8
+            Keys.OemBackslash, VirtualKeys.VK_OEM_102
+            Keys.ImeProcessed, VirtualKeys.VK_PROCESSKEY
+            Keys.OemAttn, VirtualKeys.VK_OEM_ATTN
+            Keys.OemFinish, VirtualKeys.VK_OEM_FINISH
+            Keys.OemCopy, VirtualKeys.VK_OEM_COPY
+            Keys.OemAuto, VirtualKeys.VK_OEM_AUTO
+            Keys.OemEnlw, VirtualKeys.VK_OEM_ENLW
+            Keys.OemBackTab, VirtualKeys.VK_OEM_BACKTAB
+            Keys.Attn, VirtualKeys.VK_ATTN
+            Keys.CrSel, VirtualKeys.VK_CRSEL
+            Keys.ExSel, VirtualKeys.VK_EXSEL
+            Keys.EraseEof, VirtualKeys.VK_EREOF
+            Keys.Play, VirtualKeys.VK_PLAY
+            Keys.Zoom, VirtualKeys.VK_ZOOM
+            Keys.NoName, VirtualKeys.VK_NONAME
+            Keys.Pa1, VirtualKeys.VK_PA1
+            Keys.OemClear , VirtualKeys.VK_OEM_CLEAR
+        ]
+
     let keyFromVirtualKey (k : int) =
-        match k with
-            | VirtualKeys.VK_CANCEL -> Keys.Cancel
-            | VirtualKeys.VK_BACK -> Keys.Back
-            | VirtualKeys.VK_TAB -> Keys.Tab
-            | VirtualKeys.VK_CLEAR -> Keys.Clear
-            | VirtualKeys.VK_RETURN -> Keys.Return
-            | VirtualKeys.VK_PAUSE -> Keys.Pause
-            | VirtualKeys.VK_CAPITAL -> Keys.Capital
-            | VirtualKeys.VK_KANA -> Keys.KanaMode
-            | VirtualKeys.VK_JUNJA -> Keys.JunjaMode
-            | VirtualKeys.VK_FINAL -> Keys.FinalMode
-            | VirtualKeys.VK_KANJI -> Keys.KanjiMode
-            | VirtualKeys.VK_ESCAPE -> Keys.Escape
-            | VirtualKeys.VK_CONVERT -> Keys.ImeConvert
-            | VirtualKeys.VK_NONCONVERT -> Keys.ImeNonConvert
-            | VirtualKeys.VK_ACCEPT -> Keys.ImeAccept
-            | VirtualKeys.VK_MODECHANGE -> Keys.ImeModeChange
-            | VirtualKeys.VK_SPACE -> Keys.Space
-            | VirtualKeys.VK_PRIOR -> Keys.Prior
-            | VirtualKeys.VK_NEXT -> Keys.Next
-            | VirtualKeys.VK_END -> Keys.End
-            | VirtualKeys.VK_HOME -> Keys.Home
-            | VirtualKeys.VK_LEFT -> Keys.Left
-            | VirtualKeys.VK_UP -> Keys.Up
-            | VirtualKeys.VK_RIGHT -> Keys.Right
-            | VirtualKeys.VK_DOWN -> Keys.Down
-            | VirtualKeys.VK_SELECT -> Keys.Select
-            | VirtualKeys.VK_PRINT -> Keys.Print
-            | VirtualKeys.VK_EXECUTE -> Keys.Execute
-            | VirtualKeys.VK_SNAPSHOT -> Keys.Snapshot
-            | VirtualKeys.VK_INSERT -> Keys.Insert
-            | VirtualKeys.VK_DELETE -> Keys.Delete
-            | VirtualKeys.VK_HELP -> Keys.Help
-            | VirtualKeys.VK_0 -> Keys.D0
-            | VirtualKeys.VK_1 -> Keys.D1
-            | VirtualKeys.VK_2 -> Keys.D2
-            | VirtualKeys.VK_3 -> Keys.D3
-            | VirtualKeys.VK_4 -> Keys.D4
-            | VirtualKeys.VK_5 -> Keys.D5
-            | VirtualKeys.VK_6 -> Keys.D6
-            | VirtualKeys.VK_7 -> Keys.D7
-            | VirtualKeys.VK_8 -> Keys.D8
-            | VirtualKeys.VK_9 -> Keys.D9
-            | VirtualKeys.VK_A -> Keys.A
-            | VirtualKeys.VK_B -> Keys.B
-            | VirtualKeys.VK_C -> Keys.C
-            | VirtualKeys.VK_D -> Keys.D
-            | VirtualKeys.VK_E -> Keys.E
-            | VirtualKeys.VK_F -> Keys.F
-            | VirtualKeys.VK_G -> Keys.G
-            | VirtualKeys.VK_H -> Keys.H
-            | VirtualKeys.VK_I -> Keys.I
-            | VirtualKeys.VK_J -> Keys.J
-            | VirtualKeys.VK_K -> Keys.K
-            | VirtualKeys.VK_L -> Keys.L
-            | VirtualKeys.VK_M -> Keys.M
-            | VirtualKeys.VK_N -> Keys.N
-            | VirtualKeys.VK_O -> Keys.O
-            | VirtualKeys.VK_P -> Keys.P
-            | VirtualKeys.VK_Q -> Keys.Q
-            | VirtualKeys.VK_R -> Keys.R
-            | VirtualKeys.VK_S -> Keys.S
-            | VirtualKeys.VK_T -> Keys.T
-            | VirtualKeys.VK_U -> Keys.U
-            | VirtualKeys.VK_V -> Keys.V
-            | VirtualKeys.VK_W -> Keys.W
-            | VirtualKeys.VK_X -> Keys.X
-            | VirtualKeys.VK_Y -> Keys.Y
-            | VirtualKeys.VK_Z -> Keys.Z
-            | VirtualKeys.VK_LWIN -> Keys.LWin
-            | VirtualKeys.VK_RWIN -> Keys.RWin
-            | VirtualKeys.VK_APPS -> Keys.Apps
-            | VirtualKeys.VK_SLEEP -> Keys.Sleep
-            | VirtualKeys.VK_NUMPAD0 -> Keys.NumPad0
-            | VirtualKeys.VK_NUMPAD1 -> Keys.NumPad1
-            | VirtualKeys.VK_NUMPAD2 -> Keys.NumPad2
-            | VirtualKeys.VK_NUMPAD3 -> Keys.NumPad3
-            | VirtualKeys.VK_NUMPAD4 -> Keys.NumPad4
-            | VirtualKeys.VK_NUMPAD5 -> Keys.NumPad5
-            | VirtualKeys.VK_NUMPAD6 -> Keys.NumPad6
-            | VirtualKeys.VK_NUMPAD7 -> Keys.NumPad7
-            | VirtualKeys.VK_NUMPAD8 -> Keys.NumPad8
-            | VirtualKeys.VK_NUMPAD9 -> Keys.NumPad9
-            | VirtualKeys.VK_MULTIPLY -> Keys.Multiply
-            | VirtualKeys.VK_ADD -> Keys.Add
-            | VirtualKeys.VK_SEPARATOR -> Keys.Separator
-            | VirtualKeys.VK_SUBTRACT -> Keys.Subtract
-            | VirtualKeys.VK_DECIMAL -> Keys.Decimal
-            | VirtualKeys.VK_DIVIDE -> Keys.Divide
-            | VirtualKeys.VK_F1 -> Keys.F1
-            | VirtualKeys.VK_F2 -> Keys.F2
-            | VirtualKeys.VK_F3 -> Keys.F3
-            | VirtualKeys.VK_F4 -> Keys.F4
-            | VirtualKeys.VK_F5 -> Keys.F5
-            | VirtualKeys.VK_F6 -> Keys.F6
-            | VirtualKeys.VK_F7 -> Keys.F7
-            | VirtualKeys.VK_F8 -> Keys.F8
-            | VirtualKeys.VK_F9 -> Keys.F9
-            | VirtualKeys.VK_F10 -> Keys.F10
-            | VirtualKeys.VK_F11 -> Keys.F11
-            | VirtualKeys.VK_F12 -> Keys.F12
-            | VirtualKeys.VK_F13 -> Keys.F13
-            | VirtualKeys.VK_F14 -> Keys.F14
-            | VirtualKeys.VK_F15 -> Keys.F15
-            | VirtualKeys.VK_F16 -> Keys.F16
-            | VirtualKeys.VK_F17 -> Keys.F17
-            | VirtualKeys.VK_F18 -> Keys.F18
-            | VirtualKeys.VK_F19 -> Keys.F19
-            | VirtualKeys.VK_F20 -> Keys.F20
-            | VirtualKeys.VK_F21 -> Keys.F21
-            | VirtualKeys.VK_F22 -> Keys.F22
-            | VirtualKeys.VK_F23 -> Keys.F23
-            | VirtualKeys.VK_F24 -> Keys.F24
-            | VirtualKeys.VK_NUMLOCK -> Keys.NumLock
-            | VirtualKeys.VK_SCROLL -> Keys.Scroll
-            | VirtualKeys.VK_SHIFT -> Keys.LeftShift
-            | VirtualKeys.VK_LSHIFT -> Keys.LeftShift
-            | VirtualKeys.VK_RSHIFT -> Keys.RightShift
-            | VirtualKeys.VK_CONTROL -> Keys.LeftCtrl
-            | VirtualKeys.VK_LCONTROL -> Keys.LeftCtrl
-            | VirtualKeys.VK_RCONTROL -> Keys.RightCtrl
-            | VirtualKeys.VK_MENU -> Keys.LeftAlt
-            | VirtualKeys.VK_LMENU -> Keys.LeftAlt
-            | VirtualKeys.VK_RMENU -> Keys.RightAlt
-            | VirtualKeys.VK_BROWSER_BACK -> Keys.BrowserBack
-            | VirtualKeys.VK_BROWSER_FORWARD -> Keys.BrowserForward
-            | VirtualKeys.VK_BROWSER_REFRESH -> Keys.BrowserRefresh
-            | VirtualKeys.VK_BROWSER_STOP -> Keys.BrowserStop
-            | VirtualKeys.VK_BROWSER_SEARCH -> Keys.BrowserSearch
-            | VirtualKeys.VK_BROWSER_FAVORITES -> Keys.BrowserFavorites
-            | VirtualKeys.VK_BROWSER_HOME -> Keys.BrowserHome
-            | VirtualKeys.VK_VOLUME_MUTE -> Keys.VolumeMute
-            | VirtualKeys.VK_VOLUME_DOWN -> Keys.VolumeDown
-            | VirtualKeys.VK_VOLUME_UP -> Keys.VolumeUp
-            | VirtualKeys.VK_MEDIA_NEXT_TRACK -> Keys.MediaNextTrack
-            | VirtualKeys.VK_MEDIA_PREV_TRACK -> Keys.MediaPreviousTrack
-            | VirtualKeys.VK_MEDIA_STOP -> Keys.MediaStop
-            | VirtualKeys.VK_MEDIA_PLAY_PAUSE -> Keys.MediaPlayPause
-            | VirtualKeys.VK_LAUNCH_MAIL -> Keys.LaunchMail
-            | VirtualKeys.VK_LAUNCH_MEDIA_SELECT -> Keys.SelectMedia
-            | VirtualKeys.VK_LAUNCH_APP1 -> Keys.LaunchApplication1
-            | VirtualKeys.VK_LAUNCH_APP2 -> Keys.LaunchApplication2
-            | VirtualKeys.VK_OEM_1 -> Keys.OemSemicolon
-            | VirtualKeys.VK_OEM_PLUS -> Keys.OemPlus
-            | VirtualKeys.VK_OEM_COMMA -> Keys.OemComma
-            | VirtualKeys.VK_OEM_MINUS -> Keys.OemMinus
-            | VirtualKeys.VK_OEM_PERIOD -> Keys.OemPeriod
-            | VirtualKeys.VK_OEM_2 -> Keys.OemQuestion
-            | VirtualKeys.VK_OEM_3 -> Keys.OemTilde
-            | VirtualKeys.VK_C1 -> Keys.AbntC1
-            | VirtualKeys.VK_C2 -> Keys.AbntC2
-            | VirtualKeys.VK_OEM_4 -> Keys.OemOpenBrackets
-            | VirtualKeys.VK_OEM_5 -> Keys.OemPipe
-            | VirtualKeys.VK_OEM_6 -> Keys.OemCloseBrackets
-            | VirtualKeys.VK_OEM_7 -> Keys.OemQuotes
-            | VirtualKeys.VK_OEM_8 -> Keys.Oem8
-            | VirtualKeys.VK_OEM_102 -> Keys.OemBackslash
-            | VirtualKeys.VK_PROCESSKEY -> Keys.ImeProcessed
-            | VirtualKeys.VK_OEM_ATTN -> Keys.OemAttn
-            | VirtualKeys.VK_OEM_FINISH -> Keys.OemFinish
-            | VirtualKeys.VK_OEM_COPY -> Keys.OemCopy
-            | VirtualKeys.VK_OEM_AUTO -> Keys.OemAuto
-            | VirtualKeys.VK_OEM_ENLW -> Keys.OemEnlw
-            | VirtualKeys.VK_OEM_BACKTAB -> Keys.OemBackTab
-            | VirtualKeys.VK_ATTN -> Keys.Attn
-            | VirtualKeys.VK_CRSEL -> Keys.CrSel
-            | VirtualKeys.VK_EXSEL -> Keys.ExSel
-            | VirtualKeys.VK_EREOF -> Keys.EraseEof
-            | VirtualKeys.VK_PLAY -> Keys.Play
-            | VirtualKeys.VK_ZOOM -> Keys.Zoom
-            | VirtualKeys.VK_NONAME -> Keys.NoName
-            | VirtualKeys.VK_PA1 -> Keys.Pa1
-            | VirtualKeys.VK_OEM_CLEAR -> Keys.OemClear 
+        match keyDict.TryGetValue k with
+            | (true, k) -> k
             | _ -> Keys.None
 
     let virtualKeyFromKey (k : Keys) =
-        match k with
-            | Keys.Cancel -> VirtualKeys.VK_CANCEL
-            | Keys.Back -> VirtualKeys.VK_BACK
-            | Keys.Tab -> VirtualKeys.VK_TAB
-            | Keys.Clear -> VirtualKeys.VK_CLEAR
-            | Keys.Return -> VirtualKeys.VK_RETURN
-            | Keys.Pause -> VirtualKeys.VK_PAUSE
-            | Keys.Capital -> VirtualKeys.VK_CAPITAL
-            | Keys.KanaMode -> VirtualKeys.VK_KANA
-            | Keys.JunjaMode -> VirtualKeys.VK_JUNJA
-            | Keys.FinalMode -> VirtualKeys.VK_FINAL
-            | Keys.KanjiMode -> VirtualKeys.VK_KANJI
-            | Keys.Escape -> VirtualKeys.VK_ESCAPE
-            | Keys.ImeConvert -> VirtualKeys.VK_CONVERT
-            | Keys.ImeNonConvert -> VirtualKeys.VK_NONCONVERT
-            | Keys.ImeAccept -> VirtualKeys.VK_ACCEPT
-            | Keys.ImeModeChange -> VirtualKeys.VK_MODECHANGE
-            | Keys.Space -> VirtualKeys.VK_SPACE
-            | Keys.Prior -> VirtualKeys.VK_PRIOR
-            | Keys.Next -> VirtualKeys.VK_NEXT
-            | Keys.End -> VirtualKeys.VK_END
-            | Keys.Home -> VirtualKeys.VK_HOME
-            | Keys.Left -> VirtualKeys.VK_LEFT
-            | Keys.Up -> VirtualKeys.VK_UP
-            | Keys.Right -> VirtualKeys.VK_RIGHT
-            | Keys.Down -> VirtualKeys.VK_DOWN
-            | Keys.Select -> VirtualKeys.VK_SELECT
-            | Keys.Print -> VirtualKeys.VK_PRINT
-            | Keys.Execute -> VirtualKeys.VK_EXECUTE
-            | Keys.Snapshot -> VirtualKeys.VK_SNAPSHOT
-            | Keys.Insert -> VirtualKeys.VK_INSERT
-            | Keys.Delete -> VirtualKeys.VK_DELETE
-            | Keys.Help -> VirtualKeys.VK_HELP
-            | Keys.D0 -> VirtualKeys.VK_0
-            | Keys.D1 -> VirtualKeys.VK_1
-            | Keys.D2 -> VirtualKeys.VK_2
-            | Keys.D3 -> VirtualKeys.VK_3
-            | Keys.D4 -> VirtualKeys.VK_4
-            | Keys.D5 -> VirtualKeys.VK_5
-            | Keys.D6 -> VirtualKeys.VK_6
-            | Keys.D7 -> VirtualKeys.VK_7
-            | Keys.D8 -> VirtualKeys.VK_8
-            | Keys.D9 -> VirtualKeys.VK_9
-            | Keys.A -> VirtualKeys.VK_A
-            | Keys.B -> VirtualKeys.VK_B
-            | Keys.C -> VirtualKeys.VK_C
-            | Keys.D -> VirtualKeys.VK_D
-            | Keys.E -> VirtualKeys.VK_E
-            | Keys.F -> VirtualKeys.VK_F
-            | Keys.G -> VirtualKeys.VK_G
-            | Keys.H -> VirtualKeys.VK_H
-            | Keys.I -> VirtualKeys.VK_I
-            | Keys.J -> VirtualKeys.VK_J
-            | Keys.K -> VirtualKeys.VK_K
-            | Keys.L -> VirtualKeys.VK_L
-            | Keys.M -> VirtualKeys.VK_M
-            | Keys.N -> VirtualKeys.VK_N
-            | Keys.O -> VirtualKeys.VK_O
-            | Keys.P -> VirtualKeys.VK_P
-            | Keys.Q -> VirtualKeys.VK_Q
-            | Keys.R -> VirtualKeys.VK_R
-            | Keys.S -> VirtualKeys.VK_S
-            | Keys.T -> VirtualKeys.VK_T
-            | Keys.U -> VirtualKeys.VK_U
-            | Keys.V -> VirtualKeys.VK_V
-            | Keys.W -> VirtualKeys.VK_W
-            | Keys.X -> VirtualKeys.VK_X
-            | Keys.Y -> VirtualKeys.VK_Y
-            | Keys.Z -> VirtualKeys.VK_Z
-            | Keys.LWin -> VirtualKeys.VK_LWIN
-            | Keys.RWin -> VirtualKeys.VK_RWIN
-            | Keys.Apps -> VirtualKeys.VK_APPS
-            | Keys.Sleep -> VirtualKeys.VK_SLEEP
-            | Keys.NumPad0 -> VirtualKeys.VK_NUMPAD0
-            | Keys.NumPad1 -> VirtualKeys.VK_NUMPAD1
-            | Keys.NumPad2 -> VirtualKeys.VK_NUMPAD2
-            | Keys.NumPad3 -> VirtualKeys.VK_NUMPAD3
-            | Keys.NumPad4 -> VirtualKeys.VK_NUMPAD4
-            | Keys.NumPad5 -> VirtualKeys.VK_NUMPAD5
-            | Keys.NumPad6 -> VirtualKeys.VK_NUMPAD6
-            | Keys.NumPad7 -> VirtualKeys.VK_NUMPAD7
-            | Keys.NumPad8 -> VirtualKeys.VK_NUMPAD8
-            | Keys.NumPad9 -> VirtualKeys.VK_NUMPAD9
-            | Keys.Multiply -> VirtualKeys.VK_MULTIPLY
-            | Keys.Add -> VirtualKeys.VK_ADD
-            | Keys.Separator -> VirtualKeys.VK_SEPARATOR
-            | Keys.Subtract -> VirtualKeys.VK_SUBTRACT
-            | Keys.Decimal -> VirtualKeys.VK_DECIMAL
-            | Keys.Divide -> VirtualKeys.VK_DIVIDE
-            | Keys.F1 -> VirtualKeys.VK_F1
-            | Keys.F2 -> VirtualKeys.VK_F2
-            | Keys.F3 -> VirtualKeys.VK_F3
-            | Keys.F4 -> VirtualKeys.VK_F4
-            | Keys.F5 -> VirtualKeys.VK_F5
-            | Keys.F6 -> VirtualKeys.VK_F6
-            | Keys.F7 -> VirtualKeys.VK_F7
-            | Keys.F8 -> VirtualKeys.VK_F8
-            | Keys.F9 -> VirtualKeys.VK_F9
-            | Keys.F10 -> VirtualKeys.VK_F10
-            | Keys.F11 -> VirtualKeys.VK_F11
-            | Keys.F12 -> VirtualKeys.VK_F12
-            | Keys.F13 -> VirtualKeys.VK_F13
-            | Keys.F14 -> VirtualKeys.VK_F14
-            | Keys.F15 -> VirtualKeys.VK_F15
-            | Keys.F16 -> VirtualKeys.VK_F16
-            | Keys.F17 -> VirtualKeys.VK_F17
-            | Keys.F18 -> VirtualKeys.VK_F18
-            | Keys.F19 -> VirtualKeys.VK_F19
-            | Keys.F20 -> VirtualKeys.VK_F20
-            | Keys.F21 -> VirtualKeys.VK_F21
-            | Keys.F22 -> VirtualKeys.VK_F22
-            | Keys.F23 -> VirtualKeys.VK_F23
-            | Keys.F24 -> VirtualKeys.VK_F24
-            | Keys.NumLock -> VirtualKeys.VK_NUMLOCK
-            | Keys.Scroll -> VirtualKeys.VK_SCROLL
-            | Keys.LeftShift -> VirtualKeys.VK_SHIFT
-            | Keys.RightShift -> VirtualKeys.VK_RSHIFT
-            | Keys.LeftCtrl -> VirtualKeys.VK_CONTROL
-            | Keys.RightCtrl -> VirtualKeys.VK_RCONTROL
-            | Keys.LeftAlt -> VirtualKeys.VK_MENU
-            | Keys.RightAlt -> VirtualKeys.VK_RMENU
-            | Keys.BrowserBack -> VirtualKeys.VK_BROWSER_BACK
-            | Keys.BrowserForward -> VirtualKeys.VK_BROWSER_FORWARD
-            | Keys.BrowserRefresh -> VirtualKeys.VK_BROWSER_REFRESH
-            | Keys.BrowserStop -> VirtualKeys.VK_BROWSER_STOP
-            | Keys.BrowserSearch -> VirtualKeys.VK_BROWSER_SEARCH
-            | Keys.BrowserFavorites -> VirtualKeys.VK_BROWSER_FAVORITES
-            | Keys.BrowserHome -> VirtualKeys.VK_BROWSER_HOME
-            | Keys.VolumeMute -> VirtualKeys.VK_VOLUME_MUTE
-            | Keys.VolumeDown -> VirtualKeys.VK_VOLUME_DOWN
-            | Keys.VolumeUp -> VirtualKeys.VK_VOLUME_UP
-            | Keys.MediaNextTrack -> VirtualKeys.VK_MEDIA_NEXT_TRACK
-            | Keys.MediaPreviousTrack -> VirtualKeys.VK_MEDIA_PREV_TRACK
-            | Keys.MediaStop -> VirtualKeys.VK_MEDIA_STOP
-            | Keys.MediaPlayPause -> VirtualKeys.VK_MEDIA_PLAY_PAUSE
-            | Keys.LaunchMail -> VirtualKeys.VK_LAUNCH_MAIL
-            | Keys.SelectMedia -> VirtualKeys.VK_LAUNCH_MEDIA_SELECT
-            | Keys.LaunchApplication1 -> VirtualKeys.VK_LAUNCH_APP1
-            | Keys.LaunchApplication2 -> VirtualKeys.VK_LAUNCH_APP2
-            | Keys.OemSemicolon -> VirtualKeys.VK_OEM_1
-            | Keys.OemPlus -> VirtualKeys.VK_OEM_PLUS
-            | Keys.OemComma -> VirtualKeys.VK_OEM_COMMA
-            | Keys.OemMinus -> VirtualKeys.VK_OEM_MINUS
-            | Keys.OemPeriod -> VirtualKeys.VK_OEM_PERIOD
-            | Keys.OemQuestion -> VirtualKeys.VK_OEM_2
-            | Keys.OemTilde -> VirtualKeys.VK_OEM_3
-            | Keys.AbntC1 -> VirtualKeys.VK_C1
-            | Keys.AbntC2 -> VirtualKeys.VK_C2
-            | Keys.OemOpenBrackets -> VirtualKeys.VK_OEM_4
-            | Keys.OemPipe -> VirtualKeys.VK_OEM_5
-            | Keys.OemCloseBrackets -> VirtualKeys.VK_OEM_6
-            | Keys.OemQuotes -> VirtualKeys.VK_OEM_7
-            | Keys.Oem8 -> VirtualKeys.VK_OEM_8
-            | Keys.OemBackslash -> VirtualKeys.VK_OEM_102
-            | Keys.ImeProcessed -> VirtualKeys.VK_PROCESSKEY
-            | Keys.OemAttn -> VirtualKeys.VK_OEM_ATTN
-            | Keys.OemFinish -> VirtualKeys.VK_OEM_FINISH
-            | Keys.OemCopy -> VirtualKeys.VK_OEM_COPY
-            | Keys.OemAuto -> VirtualKeys.VK_OEM_AUTO
-            | Keys.OemEnlw -> VirtualKeys.VK_OEM_ENLW
-            | Keys.OemBackTab -> VirtualKeys.VK_OEM_BACKTAB
-            | Keys.Attn -> VirtualKeys.VK_ATTN
-            | Keys.CrSel -> VirtualKeys.VK_CRSEL
-            | Keys.ExSel -> VirtualKeys.VK_EXSEL
-            | Keys.EraseEof -> VirtualKeys.VK_EREOF
-            | Keys.Play -> VirtualKeys.VK_PLAY
-            | Keys.Zoom -> VirtualKeys.VK_ZOOM
-            | Keys.NoName -> VirtualKeys.VK_NONAME
-            | Keys.Pa1 -> VirtualKeys.VK_PA1
-            | Keys.OemClear  -> VirtualKeys.VK_OEM_CLEAR
+        match virtualKeyDict.TryGetValue k with
+            | (true, k) -> k
             | _ -> 0

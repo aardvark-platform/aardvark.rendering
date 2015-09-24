@@ -1,0 +1,16 @@
+type project
+id Aardvark.Application.WPF
+authors VRVis Research Center
+description
+    Aardvark.Application.WPF
+frameworkAssemblies
+    System.Xaml
+    PresentationCore
+    PresentationFramework
+    UIAutomationTypes
+    WindowsBase
+    WindowsFormsIntegration
+files
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.pdb ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.WPF.xml ==> lib\net45

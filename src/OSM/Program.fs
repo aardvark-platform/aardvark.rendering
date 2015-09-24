@@ -27,6 +27,8 @@ open System.Net
 open System.Web
 open System.Globalization
 open Aardvark.SceneGraph.Semantics
+open Aardvark.Base.Rendering
+open Aardvark.Rendering.NanoVg
 
 let app = new OpenGlApplication()
 let source = KnownTileSources.Create(KnownTileSource.BingHybrid)
@@ -62,7 +64,7 @@ module Textures =
                 C4b.Gray
         ) |> ignore
 
-        app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true))
+        app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true)) :> ITexture
 
     let getTileTexure (coord : V2i) (zoom : string)=
         init()
@@ -94,7 +96,7 @@ module Textures =
             let run =
                 async {
                     let! img = source.GetTileAsync info
-                    return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.CreateTexture
+                    return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.CreateTexture :> ITexture
                 }
 
             run |> Async.StartAsTask |> Mod.async noTexture
@@ -111,7 +113,7 @@ module Geometry =
         q.IndexArray <- [|0;1;2; 0;2;3|]
         q.IndexedAttributes <- SymDict.ofList [
             DefaultSemantic.Positions, [|V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO|] :> Array
-            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OI; V2f.II; V2f.IO; V2f.OO|] :> Array
+            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array
         ]
 
         Sg.ofIndexedGeometry q
@@ -144,19 +146,22 @@ module Shader =
 
 [<EntryPoint; STAThread>]
 let main argv = 
+//    Hardware.test()
+//    Environment.Exit 0
     Aardvark.Init()
     
 
-    let w = app.CreateSimpleRenderWindow()
+
+    let w = app.CreateGameWindow()
     //w.Size <- V2i(1280, 1024)
 
     // initialize a viewport (small part of the world currently)
     let viewportOrigin, viewportSize = 
         let horizontal = worldBounds.Size.X * 0.05
-        let vertical = (float w.Sizes.Latest.Y / float w.Sizes.Latest.X) * horizontal
+        let vertical = (float (w.Sizes.GetValue().Y) / float (w.Sizes.GetValue().X)) * horizontal
         let box = Box2d.FromCenterAndSize(worldBounds.Center, V2d(horizontal, vertical))
 
-        Mod.initMod box.Min, Mod.initMod box.Size
+        Mod.init box.Min, Mod.init box.Size
 
     // compose viewportOrigin/Size to a Box2d
     let viewport = Mod.map2 (schönfinkel Box2d.FromMinAndSize) viewportOrigin viewportSize
@@ -164,7 +169,7 @@ let main argv =
     // whenever the window size changes we'd like to adjust the viewport's aspect
     // Note that we don't do this in the mod-system since we want to be able to override
     // this behavoiur.
-    w.Sizes.Values.Subscribe(fun s ->
+    w.Sizes |> Mod.registerCallback (fun s ->
         let aspect = float s.X / float s.Y
         transact (fun () ->
             let vp = viewport.GetValue()
@@ -179,7 +184,7 @@ let main argv =
 
 
     // in order to determine the appropriate grid-size we will need the view's size
-    let viewResolution = w.Sizes.Mod
+    let viewResolution = w.Sizes
 
     // determine the zoom-level using the current viewport and view-size
     let zoomLevel = 
@@ -190,7 +195,7 @@ let main argv =
             let res = viewportSize / V2d viewResolution
 
             return Utilities.GetNearestLevel(source.Schema.Resolutions, max res.X res.Y)
-        } |> Mod.always
+        } |> Mod.onPush
 
     // determine the tile-size in world-space
     let tileSize = 
@@ -216,7 +221,7 @@ let main argv =
 
             let res =  V2i(ceil (1.0 / rel.X), ceil (1.0 / rel.Y)) + V2i.II
             return res
-        } |> Mod.always
+        } |> Mod.onPush
 
 
     // calculate the integer index for the first (upper-left) tile 
@@ -280,7 +285,7 @@ let main argv =
         aset {
             for coord in tileIndices do
                 yield zeroOneQuad |> Sg.trafo (getTileTrafo coord)
-                                  |> Sg.diffuseTexture (getTileTexture coord)
+                                  |> Sg.diffuseTexture (getTileTexture coord |> Mod.onPush)
                 
         }
 
@@ -290,7 +295,7 @@ let main argv =
         let normal01FrameTrafo = Trafo3d.ViewTrafo(V3d(-1.0, 1.0, 0.0), V3d.IOO * 2.0, -V3d.OIO * 2.0, V3d.OOI).Inverse
         sgs |> Sg.set
             |> Sg.effect [toEffect vertex; toEffect fragment]
-            |> Sg.trafo (Mod.initConstant normal01FrameTrafo)
+            |> Sg.trafo (Mod.constant normal01FrameTrafo)
 
 
 
@@ -305,8 +310,51 @@ let main argv =
 
     //let sg = Sg.group' [sg]
 
+    let mode = Mod.init FillMode.Fill
+
+    w.Keyboard.DownWithRepeats.Values.Subscribe(fun k ->
+        if k = Aardvark.Application.Keys.X then
+            transact (fun () ->
+                match mode.Value with
+                    | FillMode.Fill -> Mod.change mode FillMode.Line
+                    | FillMode.Line -> Mod.change mode FillMode.Point
+                    | _ -> Mod.change mode FillMode.Fill
+            )
+
+    ) |> ignore
+
+    let sg = sg |> Sg.fillMode mode
+
     // compile the rendertask and pass it to the window
-    w.RenderTask <- app.Runtime.CompileRender(sg.RenderJobs())
+
+    let engine = Mod.init BackendConfiguration.NativeOptimized
+    let engines = 
+        ref [
+            BackendConfiguration.UnmanagedOptimized
+            BackendConfiguration.UnmanagedRuntime
+            BackendConfiguration.ManagedOptimized
+            BackendConfiguration.ManagedUnoptimized
+            BackendConfiguration.NativeOptimized
+        ]
+
+    w.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->
+        if k = Aardvark.Application.Keys.P then
+            match !engines with
+                | h::r ->
+                    transact(fun () -> Mod.change engine h)
+                    engines := r @ [h]
+                | _ -> ()
+        elif k = Aardvark.Application.Keys.G then
+            System.GC.AddMemoryPressure(1000000000L)
+            System.GC.Collect()
+            System.GC.WaitForFullGCApproach() |> ignore
+            System.GC.RemoveMemoryPressure(1000000000L)
+
+        ()
+    ) |> ignore
+
+    let main = app.Runtime.CompileRender(engine, sg.RenderObjects()) |> DefaultOverlays.withStatistics
+    w.RenderTask <- main
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero
@@ -334,6 +382,14 @@ let main argv =
             viewportSize.Value <- newViewport.Size
         )
     ) |> ignore
+
+    w.Keyboard.KeyDown(Aardvark.Application.Keys.F12).Values.Subscribe (fun () ->
+        let pi = Screenshot.take w |> Async.RunSynchronously
+        pi.SaveAsImage @"C:\Users\schorsch\Desktop\screeny.jpg"
+        ()
+    ) |> ignore
+
+
 //
 //    w.Mouse.Events.Values.Subscribe(fun e ->
 //        match e with
@@ -370,8 +426,7 @@ let main argv =
 //            | _ -> ()
 //    ) |> ignore
 
-
     // finally run the application
-    Application.Run w
+    w.Run()
 
     0

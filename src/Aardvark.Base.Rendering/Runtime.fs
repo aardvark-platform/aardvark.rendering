@@ -6,30 +6,75 @@ open Aardvark.Base.Incremental
 open System.Collections.Generic
 open Aardvark.Base.Rendering
 
+type IStreamingTexture =
+    inherit IMod<ITexture>
+    abstract member Update : format : PixFormat * size : V2i * data : nativeint -> unit
+    abstract member ReadPixel : pos : V2i -> C4b
+
 type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
     member x.Framebuffer = f
     member x.Statistics = stats
 
-type IRenderTask =
+
+type IBackendTexture =
+    inherit ITexture
+    abstract member Handle : obj
+
+type IBackendBuffer =
+    inherit IBuffer
+    abstract member Handle : obj
+
+type IBackendSurface =
+    inherit ISurface
+    abstract member Handle : obj
+
+
+type IPreparedRenderObject =
+    inherit IRenderObject
     inherit IDisposable
-    inherit IAdaptiveObject
-    abstract member Run : IFramebuffer -> RenderingResult
+
+    abstract member Update : unit -> unit
+    abstract member Original : Option<RenderObject>
+
 
 type IRuntime =
+    abstract member ContextLock : IDisposable
 
-    abstract member CreateTexture : ITexture -> ITexture
-    abstract member CreateBuffer : IBuffer -> IBuffer
-    abstract member DeleteTexture : ITexture -> unit
-    abstract member DeleteBuffer : IBuffer -> unit
+    abstract member CreateTexture : ITexture -> IBackendTexture
+    abstract member CreateBuffer : IBuffer -> IBackendBuffer
+    abstract member CreateSurface : ISurface -> IBackendSurface
+    
+    abstract member PrepareRenderObject : IRenderObject -> IPreparedRenderObject
+    
+    abstract member DeleteTexture : IBackendTexture -> unit
+    abstract member DeleteBuffer : IBackendBuffer -> unit
+    abstract member DeleteSurface : IBackendSurface -> unit
 
-    abstract member CompileClear : IMod<C4f> * IMod<double> -> IRenderTask
-    abstract member CompileRender : aset<RenderJob> -> IRenderTask
+    abstract member CreateTexture : IMod<ITexture> -> IMod<ITexture>
+    abstract member CreateBuffer : IMod<IBuffer> -> IMod<IBuffer>
+    abstract member DeleteTexture : IMod<ITexture> -> unit
+    abstract member DeleteBuffer : IMod<IBuffer> -> unit
 
-    abstract member CreateTexture : IMod<V2i> * IMod<PixFormat> * IMod<int> * IMod<int> -> IFramebufferTexture
-    abstract member CreateRenderbuffer : IMod<V2i> * IMod<PixFormat> * IMod<int> -> IFramebufferRenderbuffer
 
-    abstract member CreateFramebuffer : Map<Symbol, IMod<IFramebufferOutput>> -> IFramebuffer
+    abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
+    abstract member DeleteStreamingTexture : IStreamingTexture -> unit
 
+    abstract member CompileClear : clearColor : IMod<C4f> * clearDepth : IMod<double> -> IRenderTask
+    abstract member CompileRender : BackendConfiguration * aset<IRenderObject> -> IRenderTask
+
+
+    abstract member CreateTexture : size : IMod<V2i> * format : IMod<PixFormat> * samples : IMod<int> * count : IMod<int> -> IFramebufferTexture
+    abstract member CreateRenderbuffer : size : IMod<V2i> * format : IMod<RenderbufferFormat> * samples : IMod<int> -> IFramebufferRenderbuffer
+    abstract member CreateFramebuffer : attachments : Map<Symbol, IMod<IFramebufferOutput>> -> IFramebuffer
+
+    abstract member ResolveMultisamples : ms : IFramebufferRenderbuffer * ss : IFramebufferTexture * trafo : ImageTrafo -> unit
+
+and IRenderTask =
+    inherit IDisposable
+    inherit IAdaptiveObject
+    abstract member Runtime : Option<IRuntime>
+    abstract member Run : IFramebuffer -> RenderingResult
+    abstract member FrameId : uint64
 
 type ShaderStage =
     | Vertex = 1

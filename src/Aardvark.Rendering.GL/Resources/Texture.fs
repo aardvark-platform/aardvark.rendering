@@ -343,9 +343,89 @@ module ChannelType =
         elif t = typeof<int> then ChannelKind.Signed, 32
         else failwithf "unsuppoorted pixel-type: %A" t
 
+    let getChannelType (bits : int) (kind : ChannelKind) =
+        match kind, bits with
+            | ChannelKind.Unsigned, 8 -> typeof<byte>
+            | ChannelKind.Unsigned, 16 -> typeof<uint16>
+            | ChannelKind.Unsigned, 32 -> typeof<uint32>
+            | ChannelKind.Unsigned, 64 -> typeof<uint64>
+
+            | ChannelKind.Float,    16 -> failwith "half is not supported by the .NET environment"
+            | ChannelKind.Float,    32 -> typeof<float32>
+            | ChannelKind.Float,    64 -> typeof<float>
+
+            | ChannelKind.Signed,   8 -> typeof<sbyte>
+            | ChannelKind.Signed,   16 -> typeof<int16>
+            | ChannelKind.Signed,   32 -> typeof<int>
+            | ChannelKind.Signed,   64 -> typeof<int64>
+
+            | _ -> failwithf "unsuppoorted bits/kind: %A/%A" bits kind
+
+    let getDownloadChannelType (bits : int) (kind : ChannelKind) =
+        match kind, bits with
+            | ChannelKind.Unsigned,     8   -> typeof<byte>
+            | ChannelKind.Unsigned,     10  -> typeof<uint16>
+            | ChannelKind.Unsigned,     16  -> typeof<uint16>
+            | ChannelKind.Unsigned,     32  -> typeof<uint32>
+            | ChannelKind.Unsigned,     64  -> typeof<uint64>
+
+            | ChannelKind.Signed,       8   -> typeof<sbyte>
+            | ChannelKind.Signed,       16  -> typeof<int16>
+            | ChannelKind.Signed,       32  -> typeof<int>
+            | ChannelKind.Signed,       64  -> typeof<int64>
+
+            | ChannelKind.Norm,         2   -> typeof<byte>
+            | ChannelKind.Norm,         3   -> typeof<byte>
+            | ChannelKind.Norm,         4   -> typeof<byte>
+            | ChannelKind.Norm,         5   -> typeof<byte>
+            | ChannelKind.Norm,         8   -> typeof<byte>
+            | ChannelKind.Norm,         9   -> typeof<uint16>
+            | ChannelKind.Norm,         16  -> typeof<uint16>
+            | ChannelKind.Norm,         32  -> typeof<uint32>
+            | ChannelKind.Norm,         64  -> typeof<uint64>
+
+            | ChannelKind.SignedNorm,   8   -> typeof<sbyte>
+            | ChannelKind.SignedNorm,   16  -> typeof<int16>
+
+            | ChannelKind.Float,        11  -> typeof<float32>
+            | ChannelKind.Float,        16  -> typeof<float32>
+            | ChannelKind.Float,        32  -> typeof<float32>
+
+
+            | _ -> failwithf "unsuppoorted bits/kind: %A/%A" bits kind
+
+
     let ofPixFormat (fmt : PixFormat) =
         let (kind, bits) = getBitsAndKind fmt.Type
         ofColFormatAndBits kind fmt.Format bits
+
+    let toPixFormat (ChannelType(kind, r, g, b, a)) =
+        let bits = [r;g;b;a] |> List.tryFind (fun b -> b <> 0)
+        match bits with
+            | Some bits ->
+                let baseType = getChannelType bits kind
+
+                match r,g,b,a with
+                    | _,0,0,0 -> PixFormat(baseType, Col.Format.Gray)
+                    | _,_,0,0 -> failwith "RG images are unsupported by Col.Format"
+                    | _,_,_,0 -> PixFormat(baseType, Col.Format.RGB)
+                    | _,_,_,_ -> PixFormat(baseType, Col.Format.RGBA)
+            | _ ->
+                failwith "ChannelType has to specify at least a one component"
+      
+    let toDownloadFormat (ChannelType(kind, r, g, b, a)) =
+        let bits = [r;g;b;a] |> List.max
+        match bits with
+            | 0 ->
+                failwith "ChannelType has to specify at least a one component"
+            | bits ->
+                let baseType = getDownloadChannelType bits kind
+
+                match r,g,b,a with
+                    | _,0,0,0 -> PixFormat(baseType, Col.Format.Gray)
+                    | _,_,0,0 -> failwith "RG images are unsupported by Col.Format"
+                    | _,_,_,0 -> PixFormat(baseType, Col.Format.RGB)
+                    | _,_,_,_ -> PixFormat(baseType, Col.Format.RGBA)      
 
     let toSizedInternalFormat (t : ChannelType) =
         match t with
@@ -374,9 +454,9 @@ module ChannelType =
         | RG32I -> SizedInternalFormat.Rg32i
         | RG32UI -> SizedInternalFormat.Rg32ui
         | RGBA8I -> SizedInternalFormat.Rgba8i
-        | RGBA8UI -> SizedInternalFormat.Rgba8ui
+        | RGBA8UI -> SizedInternalFormat.Rgba8
         | RGBA16I -> SizedInternalFormat.Rgba16i
-        | RGBA16UI -> SizedInternalFormat.Rgba16ui
+        | RGBA16UI -> SizedInternalFormat.Rgba16
         | RGBA32I -> SizedInternalFormat.Rgba32i
         | RGBA32UI -> SizedInternalFormat.Rgba32ui
         | _ -> failwith "unknown internal format"
@@ -404,8 +484,9 @@ type Texture =
             member x.Context = x.Context
             member x.Handle = x.Handle
 
-        interface ITexture with
+        interface IBackendTexture with
             member x.WantMipMaps = x.MipMapLevels > 1
+            member x.Handle = x.Handle :> obj
 
         member x.GetSize (level : int)  =
             if level = 0 then x.Size2D
@@ -715,15 +796,17 @@ module TextureExtensions =
             GL.BindTexture(target, t.Handle)
             GL.Check "could not bind texture"
 
-            let pixelFormat, pixelType, image =
+            let pixelType, pixelFormat, image =
                 match ChannelType.tryGetFormat format with
-                    | Some(f,t) -> (f,t,image)
+                    | Some(t,f) -> (t,f,image)
                     | _ ->
                         failwith "conversion not implemented"
 
             let gc = GCHandle.Alloc(image.Data, GCHandleType.Pinned)
-            GL.GetTexImage(target, level, pixelType, pixelFormat, gc.AddrOfPinnedObject())
+
+            OpenTK.Graphics.OpenGL4.GL.GetTexImage(target, level, pixelFormat, pixelType, gc.AddrOfPinnedObject())
             GL.Check "could not download image"
+
             gc.Free()
 
             image
@@ -819,6 +902,10 @@ module TextureExtensions =
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
                     GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, ifmt, size.X, size.Y, false)
                 GL.Check "could allocate texture"
+
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, mipMapLevels)
+                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBaseLevel, 0)
+
 
                 GL.BindTexture(TextureTarget.Texture2D, 0)
                 GL.Check "could not unbind texture"

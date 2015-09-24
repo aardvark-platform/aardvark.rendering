@@ -22,7 +22,7 @@ module ActiveSemantics =
     [<Semantic>]
     type ActiveSemantics() =
 
-        let trueConstant = Mod.initConstant true
+        let trueConstant = Mod.constant true
         let andCache = Caching.BinaryOpCache (Mod.map2 (&&))
 
         let (<&>) (a : IMod<bool>) (b : IMod<bool>) =
@@ -40,7 +40,7 @@ module ActiveSemantics =
     [<Semantic>]
     type PassSemantics() =
 
-        let defaultPass = Mod.initConstant 0UL
+        let defaultPass = Mod.constant 0UL
         
         member x.RenderPass(e : Root) =
             e.Child?RenderPass <- defaultPass

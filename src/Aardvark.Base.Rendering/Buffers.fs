@@ -6,16 +6,16 @@ open System.Runtime.InteropServices
 
 type IBuffer = interface end
 
-type BufferView(b : IBuffer, elementType : Type, offset : int, stride : int) =
+type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
     member x.Buffer = b
     member x.ElementType = elementType
     member x.Stride = stride
     member x.Offset = offset
 
-    new(b : IBuffer, elementType : Type, offset : int) =
+    new(b : IMod<IBuffer>, elementType : Type, offset : int) =
         BufferView(b, elementType, offset, 0)
 
-    new(b : IBuffer, elementType : Type) =
+    new(b : IMod<IBuffer>, elementType : Type) =
         BufferView(b, elementType, 0, 0)
 
     override x.GetHashCode() =
@@ -27,7 +27,7 @@ type BufferView(b : IBuffer, elementType : Type, offset : int, stride : int) =
                 o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
             | _ -> false
 
-type ArrayBuffer(data : IMod<Array>) =
+type ArrayBuffer(data : Array) =
     interface IBuffer
     member x.Data = data
 

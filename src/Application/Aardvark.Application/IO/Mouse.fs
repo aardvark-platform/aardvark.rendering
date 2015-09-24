@@ -8,6 +8,7 @@ open System.Reactive
 open System.Reactive.Linq
 open System.Runtime.CompilerServices
 open System.Collections.Concurrent
+open System.Windows.Forms
 
 type MouseButtons =
     | None   = 0x0000
@@ -33,10 +34,10 @@ type IMouse =
     abstract member Leave : IEvent<PixelPosition> 
 
 type EventMouse() =
-    let position = Mod.initMod <| PixelPosition()
+    let position = Mod.init <| PixelPosition()
     let buttons = ConcurrentDictionary<MouseButtons, ModRef<bool>>()
-    let scroll = Mod.initMod 0.0
-    let inside = Mod.initMod false
+    let scroll = Mod.init 0.0
+    let inside = Mod.init false
 
     let downEvent = EventSource<MouseButtons>()
     let upEvent = EventSource<MouseButtons>()
@@ -47,27 +48,63 @@ type EventMouse() =
     let leaveEvent = EventSource<PixelPosition>()
     let moveEvent = EventSource<PixelPosition * PixelPosition>()
 
+
     let setPos (p : PixelPosition) =
         if p <> position.GetValue() then
             Mod.change position p
 
     let getDown button =
-        buttons.GetOrAdd(button, fun b -> Mod.initMod false)
+        buttons.GetOrAdd(button, fun b -> Mod.init false)
+
+    let downPosAndTime = System.Collections.Generic.Dictionary<MouseButtons, int * DateTime * PixelPosition>()
+
+    let handleDown (pos : PixelPosition) (b : MouseButtons) =
+        match downPosAndTime.TryGetValue b with
+            | (true, (oc, ot,op)) ->
+                let dt = DateTime.Now - ot
+                let dp = pos.Position - op.Position
+                    
+                if dt.TotalMilliseconds < float SystemInformation.DoubleClickTime && abs dp.X <= SystemInformation.DoubleClickSize.Width && abs dp.Y < SystemInformation.DoubleClickSize.Height then
+                    downPosAndTime.[b] <- (oc + 1, DateTime.Now, pos)
+                else
+                    downPosAndTime.[b] <- (1, DateTime.Now, pos)
+
+            | _ ->
+                downPosAndTime.[b] <- (1, DateTime.Now, pos)
+
+        downEvent.Emit(b)
+
+    let handleUp (pos : PixelPosition) (b : MouseButtons) =
+        match downPosAndTime.TryGetValue b with
+            | (true, (c,t,p)) ->
+                let dt = DateTime.Now - t
+                let dp = pos.Position - p.Position
+                    
+                if dt.TotalMilliseconds < float SystemInformation.DoubleClickTime && abs dp.X <= SystemInformation.DoubleClickSize.Width && abs dp.Y < SystemInformation.DoubleClickSize.Height then
+                    if c < 2 then clickEvent.Emit(b)
+                    else doubleClickEvent.Emit(b)
+                else
+                    ()
+            | _ ->
+                ()
+        upEvent.Emit(b)
 
     member x.Down(pos : PixelPosition, b : MouseButtons) =
         let m = getDown b
         transact (fun () -> Mod.change m true; setPos pos)
-        downEvent.Emit b
+        handleDown pos b
 
     member x.Up(pos : PixelPosition, b : MouseButtons) =
         let m = getDown b
         transact (fun () -> Mod.change m false; setPos pos)
-        upEvent.Emit b
+        handleUp pos b
 
+    [<Obsolete>]
     member x.Click(pos : PixelPosition, b : MouseButtons) =
         transact (fun () -> setPos pos)
         clickEvent.Emit b
 
+    [<Obsolete>]
     member x.DoubleClick(pos : PixelPosition, b : MouseButtons) =
         transact (fun () -> setPos pos)
         doubleClickEvent.Emit b

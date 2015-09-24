@@ -1,0 +1,9 @@
+type project
+id Aardvark.Application
+authors VRVis Research Center
+description
+    Aardvark.Application
+files
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.pdb ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Application.xml ==> lib\net45

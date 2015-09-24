@@ -214,13 +214,14 @@ module GameWindowIO =
 
 
         let onMouseDownHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Down(%%e, %e.Button))
-        let onMouseUpHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Up (%%e, %e.Button))
+        let onMouseUpHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Up(%%e, %e.Button))
         let onMouseMoveHandler = EventHandler<MouseMoveEventArgs>(fun s e -> this.Move %%e)
-        let onMouseClickHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Click (%%e, %e.Button))
-        let onMouseDoubleClickHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.DoubleClick (%%e, %e.Button))
         let onMouseWheelHandler = EventHandler<MouseWheelEventArgs>(fun s e -> this.Scroll (%%e, (float e.Delta * 120.0)))
         let onMouseEnter = EventHandler<EventArgs>(fun s e -> this.Enter (mousePos()))
         let onMouseLeave = EventHandler<EventArgs>(fun s e -> this.Leave (mousePos()))
+
+        
+
 
         let addHandlers() =
             match ctrl with
@@ -228,8 +229,6 @@ module GameWindowIO =
                     ctrl.MouseDown.AddHandler onMouseDownHandler
                     ctrl.MouseUp.AddHandler onMouseUpHandler
                     ctrl.MouseMove.AddHandler onMouseMoveHandler
-//                    ctrl.MouseClick.AddHandler onMouseClickHandler
-//                    ctrl.MouseDoubleClick.AddHandler onMouseDoubleClickHandler
                     ctrl.MouseWheel.AddHandler onMouseWheelHandler
                     ctrl.MouseEnter.AddHandler onMouseEnter
                     ctrl.MouseLeave.AddHandler onMouseLeave
@@ -241,8 +240,6 @@ module GameWindowIO =
                     ctrl.MouseDown.RemoveHandler onMouseDownHandler
                     ctrl.MouseUp.RemoveHandler onMouseUpHandler
                     ctrl.MouseMove.RemoveHandler onMouseMoveHandler
-//                    ctrl.MouseClick.RemoveHandler onMouseClickHandler
-//                    ctrl.MouseDoubleClick.RemoveHandler onMouseDoubleClickHandler
                     ctrl.MouseWheel.RemoveHandler onMouseWheelHandler
                     ctrl.MouseEnter.RemoveHandler onMouseEnter
                     ctrl.MouseLeave.RemoveHandler onMouseLeave
@@ -311,7 +308,7 @@ module GameWindowIO =
 
 
 
-type GameWindow(ctx : Context, samples : int) as this =
+type GameWindow(runtime : Runtime, samples : int) as this =
     inherit OpenTK.GameWindow(
         1024,
         768,
@@ -332,6 +329,7 @@ type GameWindow(ctx : Context, samples : int) as this =
         Config.ContextFlags,
         VSync = VSyncMode.Off
     )
+    let ctx = runtime.Context
 
     let mutable loaded = false
     let statistics = EventSource<FrameStatistics>(FrameStatistics.Zero)
@@ -342,7 +340,7 @@ type GameWindow(ctx : Context, samples : int) as this =
     let defaultFramebuffer = new Framebuffer(ctx, (fun _ -> 0), ignore, [], None)
 
     let avgFrameTime = RunningMean(10)
-    let sizes = EventSource<V2i>(V2i(base.ClientSize.Width, base.ClientSize.Height))
+    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
     let time = Mod.custom (fun () -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
     let mutable first = true
 
@@ -356,7 +354,7 @@ type GameWindow(ctx : Context, samples : int) as this =
         with get() = task.Value
         and set t = task <- Some t
             
-    member x.Sizes = sizes :> IEvent<_>
+    member x.Sizes = sizes :> IMod<_>
 
     member x.Time = time :> IMod<_>
 
@@ -385,8 +383,10 @@ type GameWindow(ctx : Context, samples : int) as this =
                     using (ctx.RenderingLock contextHandle) (fun _ ->
                         let sw = System.Diagnostics.Stopwatch()
                         sw.Start()
-                        if size <> sizes.Latest then
-                            transact (fun () -> sizes.Emit size)
+
+                        if size <> sizes.Value then
+                            transact (fun () -> Mod.change sizes size)
+
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                         GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
                         GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
@@ -416,21 +416,26 @@ type GameWindow(ctx : Context, samples : int) as this =
                     )
 
                 | None ->
-                    if size <> sizes.Latest then
-                        transact (fun () -> sizes.Emit size)
+                    if size <> sizes.Value then
+                        transact (fun () -> Mod.change sizes size)
    
    
     member x.Mouse = mouse :> IMouse
     member x.Keyboard = keyboard :> IKeyboard     
+    member x.Run() = x.Run()
 
     interface IRenderTarget with
+        member x.Runtime = runtime :> IRuntime
         member x.Time = time
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
-        member x.Sizes = sizes :> IEvent<_>
+        member x.Sizes = sizes :> IMod<_>
+        member x.Samples = Mod.constant samples
 
     interface IRenderControl with
         member x.Mouse = mouse :> IMouse
         member x.Keyboard = keyboard :> IKeyboard
 
+    interface IRenderWindow with
+        member x.Run() = x.Run()

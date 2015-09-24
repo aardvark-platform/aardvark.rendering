@@ -20,7 +20,7 @@ module Ext =
             member x.Child = sg
         member x.Child = sg
 
-        new(s : ISg) = ViewFrustumCullNode(Mod.initConstant s)
+        new(s : ISg) = ViewFrustumCullNode(Mod.constant s)
         new(s : IEvent<ISg>) = ViewFrustumCullNode(Mod.fromEvent  s)
 
     type LodNode(viewDecider : (LodScope -> bool), 
@@ -33,13 +33,13 @@ module Ext =
         member val Name = "" with get, set
 
         new(viewDecider : System.Func<LodScope, bool>, low : ISg, high : ISg) = 
-            LodNode((fun t -> viewDecider.Invoke t), Mod.initConstant low, Mod.initConstant high)
+            LodNode((fun t -> viewDecider.Invoke t), Mod.constant low, Mod.constant high)
 
     module LodSemantics =
 
         [<Semantic>]
         type LodSem() =
-            member x.RenderJobs(node : LodNode) : aset<RenderJob> =
+            member x.RenderObjects(node : LodNode) : aset<IRenderObject> =
 
                 let mvTrafo = node?ModelViewTrafo()
 
@@ -48,8 +48,8 @@ module Ext =
 
                     let! highSg,lowSg = node.High,node.Low
 
-                    let lowJobs = lowSg?RenderJobs() : aset<RenderJob> 
-                    let highJobs = highSg?RenderJobs() : aset<RenderJob>
+                    let lowJobs = lowSg?RenderObjects() : aset<IRenderObject> 
+                    let highJobs = highSg?RenderObjects() : aset<IRenderObject>
 
                     //this parallel read is absolutely crucial for performance, since otherwise the 
                     //resulting set will no longer be referentially equal (cannot really be solved any other way)

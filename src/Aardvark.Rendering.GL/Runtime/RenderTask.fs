@@ -17,16 +17,16 @@ module RenderTasks =
 
 
 
-
-    let private configs = Dictionary<uint64, Order>()
-
-    let setPassConfig (pass : uint64, config : Order) =
-        configs.[pass] <- config
-
-    let getPassConfig(pass : uint64) =
-        match configs.TryGetValue pass with
-            | (true, c) -> c
-            | _ -> Order.Unordered
+//
+//    let private configs = Dictionary<uint64, Order>()
+//
+//    let setPassConfig (pass : uint64, config : Order) =
+//        configs.[pass] <- config
+//
+//    let getPassConfig(pass : uint64) =
+//        match configs.TryGetValue pass with
+//            | (true, c) -> c
+//            | _ -> Order.Unordered
 
 
     type SortedList<'k, 'v when 'k : comparison>() =
@@ -114,20 +114,22 @@ module RenderTasks =
                 let s = seq { for i in 0..keys.Count-1 do yield KeyValuePair(keys.[i], values.[i]) }
                 (s :> System.Collections.IEnumerable).GetEnumerator()
 
-    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, set : aset<RenderJob>) as this =
+    type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) as this =
         inherit AdaptiveObject()
 
+        let mutable currentEngine = engine.GetValue()
         let subscriptions = Dictionary()
         let reader = set.GetReader()
         do reader.AddOutput this
+           engine.AddOutput this
 
         let inputs = ReferenceCountingSet<IAdaptiveObject>()
         let mutable programs = Map.empty
-        let changer = Mod.initMod ()
-        let surfaceSubscriptions = Dictionary<RenderJob, IDisposable>()
+        let changer = Mod.init ()
 
         let mutable additions = 0
         let mutable removals = 0
+        let mutable frameId = 0UL
 
         let addInput m =
             if inputs.Add m then
@@ -140,60 +142,201 @@ module RenderTasks =
         let tryGetProgramForPass (pass : uint64) =
             Map.tryFind pass programs
 
+        let newProgram (scope : Ag.Scope) (engine : BackendConfiguration) : IProgram =
+            
+            match engine.sorting with
+                | RenderObjectSorting.Dynamic newSorter ->
+                    // TODO: respect mode here
+                    
+                    Log.line "using GLVM sorted program"
+                    new Compiler.SortedProgram<_>(
+                        Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
+                        (fun () -> newSorter scope),
+                        manager, addInput, removeInput
+                    ) :> IProgram
+                | s ->
+                    match engine.execution, engine.redundancy with
+
+                        | ExecutionEngine.Native, RedundancyRemoval.None ->
+                            Log.line "using unoptimized native program"
+                            new Compiler.UnoptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Native, _ ->
+                            Log.line "using optimized native program"
+                            new Compiler.OptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Unmanaged, RedundancyRemoval.None ->
+                            Log.line "using unoptimized glvm program"
+                            new Compiler.UnoptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Unmanaged, RedundancyRemoval.Runtime ->
+                            Log.line "using runtime-optimized glvm program"
+                            new Compiler.UnoptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Unmanaged, RedundancyRemoval.Static ->
+                            Log.line "using optimized glvm program"
+                            new Compiler.OptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
+                            ) :> IProgram
+
+
+                        | ExecutionEngine.Managed, RedundancyRemoval.None ->
+                            Log.line "using unoptimized managed program"
+                            new Compiler.UnoptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Managed, _->
+                            Log.line "using optimized managed program"
+                            new Compiler.OptimizedProgram<_>(
+                                engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | ExecutionEngine.Debug, _ ->
+                            Log.warn "using debug program"
+
+                            new Compiler.DebugProgram(
+                                manager, addInput, removeInput
+                            ) :> IProgram
+
+                        | _ ->
+                            failwith "unsupported configuration: %A" engine
+
+            
+//            match config with
+//                | Order.Unordered -> 
+//
+//                    let mode = 
+//                        if engine = ExecutionEngine.Debug then -1
+//                        elif engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
+//                        elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
+//                        else 2
+//
+//                    let opt =
+//                        if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
+//                        elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
+//                        else 0
+//
+//                    match mode with
+//                        | -1 -> 
+//                            Log.warn "using debug program"
+//                            new Compiler.DebugProgram(manager,  addInput, removeInput) :> IProgram
+//                        | 2 -> // native
+//                            match opt with
+//                                | 0 -> // unoptimized
+//                                    Log.line "using unoptimized native program"
+//                                    new Compiler.UnoptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.native, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//
+//                                | _ ->  // optimized
+//                                    Log.line "using optimized native program"
+//                                    new Compiler.OptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.native, manager, addInput, removeInput
+//                                    ) :> IProgram
+//                        | 1 -> // GLVM
+//                            match opt with
+//                                | 0 -> // unoptimized
+//                                    Log.line "using unoptimized GLVM program"
+//                                    new Compiler.UnoptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//
+//                                | 1 -> // runtime optimized
+//                                    Log.line "using runtime optimized GLVM program"
+//                                    new Compiler.UnoptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//                                | _ -> // optimized
+//                                    Log.line "using optimized GLVM program"
+//                                    new Compiler.OptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//                        | _ -> // managed
+//                            match opt with
+//                                | 0 -> // unoptimized
+//                                    Log.line "using unoptimized managed program"
+//                                    new Compiler.UnoptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.managed, manager,  addInput, removeInput
+//                                    ) :> IProgram
+//
+//                                | _ ->  // optimized
+//                                    Log.line "using optimized managed program"
+//                                    new Compiler.OptimizedProgram<_>(
+//                                        Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+//                                    ) :> IProgram
+// 
+//                | order ->
+//                    // TODO: respect mode here
+//                    Log.line "using GLVM sorted program"
+//                    new Compiler.SortedProgram<_>(
+//                        Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
+//                        order,
+//                        Sorting.createSorter scope order,
+//                        manager, addInput, removeInput
+//                    ) :> IProgram
+
+        let mutable lastScope = None
+
         let getProgramForPass (pass : uint64) (scope : Ag.Scope) =
+            match lastScope with | Some v -> () | None -> lastScope <- Some scope
             match Map.tryFind pass programs with
                 | Some p -> p
                 | _ -> 
-                    let config = getPassConfig pass
+                    let program = newProgram scope (Mod.force engine)
 
-                    let p = 
-                        match config with
-                            | Order.Unordered -> 
-                                //new UnoptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                //new RuntimeOptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                //new OptimizedSwitchProgram(manager, addInput, removeInput) :> IProgram
-                                new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
-                                
-
-                                //new OptimizedNativeProgram(manager, addInput, removeInput) :> IProgram
-                                //new OptimizedManagedProgram(manager,addInput,removeInput) :> IProgram
-                                //new OptimizedSwitchProgram(manager,addInput,removeInput) :> IProgram
-                            | order ->
-                                //let sorter = fun () -> BspSorting.BBTreeSorter(scope, bspOrder) :> ISorter
-                                new SortedProgram(order, manager, addInput, removeInput, Sorting.createSorter scope order) :> IProgram
-
-                    programs <- Map.add pass p programs
-                    p
+                    programs <- Map.add pass program programs
+                    program
 
 
-        member private x.Add(pass : uint64, rj : RenderJob) =
+        let setExecutionEngine (newEngine : BackendConfiguration) =
+            if currentEngine <> newEngine then
+                currentEngine <- newEngine
+
+                let scope = match lastScope with | Some v -> v | None -> failwith "no last scope set"
+
+                let newPrograms =
+                    programs |> Map.map (fun pass v ->
+                        let program = newProgram scope newEngine
+
+                        for rj in v.RenderObjects do
+                            program.Add rj
+
+                        program
+                    )
+
+                let old = System.Threading.Interlocked.Exchange(&programs, newPrograms)
+
+                for (_,o) in Map.toSeq old do
+                    o.Dispose()
+
+    
+
+        member private x.Add(pass : uint64, rj : IRenderObject) =
             additions <- additions + 1
-            let program = getProgramForPass pass (rj.AttributeScope |> unbox)
+            let program = getProgramForPass pass rj.AttributeScope
             program.Add rj
 
-            let subscription =
-                let initial = ref true
-                rj.Surface |> Mod.registerCallback (fun s ->
-                    if !initial then initial := false
-                    else 
-                        program.Update rj
-                        x.MarkOutdated()
-                )
-            surfaceSubscriptions.Add(rj, subscription)
-
-        member private x.Remove(pass : uint64, rj : RenderJob) =
+        member private x.Remove(pass : uint64, rj : IRenderObject) =
             removals <- removals + 1
             match tryGetProgramForPass pass with
                 | Some p -> p.Remove rj
                 | None -> ()
 
-            match surfaceSubscriptions.TryGetValue rj with
-                | (true, s) -> 
-                    s.Dispose()
-                    Dictionary.remove rj surfaceSubscriptions |> ignore
-                | _ -> ()
+        member x.Runtime = runtime
+        member x.Manager = manager
 
-        member x.ProcessDeltas (deltas : list<Delta<RenderJob>>) =
+        member x.ProcessDeltas (deltas : list<Delta<IRenderObject>>) =
+            let mutable additions = 0
+            let mutable removals = 0
             for d in deltas do
                 match d with
                     | Add a ->
@@ -219,7 +362,8 @@ module RenderTasks =
                         else
                             x.Add(0UL, a)
 
-                    | Rem a ->
+                        additions <- additions + 1
+                    | Rem a ->    
                         if a.RenderPass <> null then
                             match subscriptions.TryGetValue a with
                                 | (true,(d,k)) ->
@@ -229,38 +373,67 @@ module RenderTasks =
                                 | _ -> ()
                         else
                             x.Remove(0UL, a)
+                        removals <- removals + 1
+            (additions, removals)
 
         member x.Run (fbo : IFramebuffer) =
             x.EvaluateAlways (fun () ->
                 using ctx.ResourceLock (fun _ ->
+                    setExecutionEngine (Mod.force engine)
+
+                    let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
+                    if currentEngine.useDebugOutput 
+                    then
+                        match ContextHandle.Current with
+                         | Some v -> v.AttachDebugOutputIfNeeded()
+                         | None -> Report.Warn("No active context handle in RenderTask.Run")
+                        GL.Enable EnableCap.DebugOutput
+
                     let old = Array.create 4 0
                     let mutable oldFbo = 0
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                    let fboHandle = fbo |> unbox<Framebuffer>
-                    let handle = fboHandle.Handle
+                    let handle = fbo.Handle |> unbox<int> 
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                     GL.Check "could not bind framebuffer"
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not set viewport"
+                    
+                    let additions, removals =
+                        if reader.OutOfDate then
+                            x.ProcessDeltas (reader.GetDelta())
+                        else
+                            0,0
 
-                    if reader.OutOfDate then
-                        x.ProcessDeltas (reader.GetDelta())
-
+                    let mutable resourceCount = 0
                     let mutable stats = FrameStatistics.Zero
                     let contextHandle = ContextHandle.Current.Value
 
                     //render
                     for (KeyValue(_,p)) in programs do
-                        stats <- stats + p.Run(fboHandle, contextHandle)
-
+                        stats <- stats + p.Run(handle, contextHandle)
+                        resourceCount <- resourceCount + p.Resources.Entries.Count
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
                     GL.Check "could not bind framebuffer"
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                     GL.Check "could not set viewport"
+                    
+                    if wasEnabled <> currentEngine.useDebugOutput 
+                    then
+                        if wasEnabled then GL.Enable EnableCap.DebugOutput
+                        else GL.Disable EnableCap.DebugOutput
+
+                    let stats = 
+                        { stats with 
+                            AddedRenderObjects = float additions
+                            RemovedRenderObjects = float removals
+                            ResourceCount = float resourceCount 
+                        }
+
+                    frameId <- frameId + 1UL
 
                     RenderingResult(fbo, stats)
                 )
@@ -273,7 +446,6 @@ module RenderTasks =
             reader.RemoveOutput x
             reader.Dispose()
 
-
         interface IRenderTask with
             member x.Run(fbo) =
                 x.Run(fbo)
@@ -281,11 +453,17 @@ module RenderTasks =
             member x.Dispose() =
                 x.Dispose()
 
+            member x.Runtime = runtime |> Some
+
+            member x.FrameId = frameId
+
 
     type ClearTask(runtime : IRuntime, color : IMod<C4f>, depth : IMod<float>, ctx : Context) as this =
         inherit AdaptiveObject()
         do color.AddOutput this
            depth.AddOutput this
+
+        let mutable frameId = 0UL
 
         member x.Run(fbo : IFramebuffer) =
             using ctx.ResourceLock (fun _ ->
@@ -295,7 +473,7 @@ module RenderTasks =
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                    let handle = (fbo.Handle |> unbox<int>)
+                    let handle = fbo.Handle |> unbox<int>
 
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
@@ -311,6 +489,8 @@ module RenderTasks =
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                     GL.Check "could not bind framebuffer"
 
+                    frameId <- frameId + 1UL
+
                     RenderingResult(fbo, FrameStatistics.Zero)
                 )
             )
@@ -320,8 +500,11 @@ module RenderTasks =
             depth.RemoveOutput x
 
         interface IRenderTask with
+            member x.Runtime = runtime |> Some
             member x.Run(fbo) =
                 x.Run(fbo)
 
             member x.Dispose() =
                 x.Dispose()
+
+            member x.FrameId = frameId

@@ -56,6 +56,8 @@ type Program =
        SupportedModes : Option<Set<IndexedGeometryMode>>
     } with
 
+    interface IBackendSurface with
+        member x.Handle = x.Handle :> obj
 
     member x.InterfaceBlock =
         let uniformBlocks = 
@@ -109,6 +111,8 @@ module ProgramReflector =
             if fs = 1 then yield ShaderStage.Pixel
         ]
 
+    let samplerHackRegex = System.Text.RegularExpressions.Regex("_samplerState[0-9]+$")
+
     let getActiveUniform (p : int) (index : int) =
         let mutable length = 0
         let mutable size = 0
@@ -121,7 +125,11 @@ module ProgramReflector =
 
         let location = GL.GetUniformLocation(p, name)
 
-        { index = index; location = location; name = name; semantic = name; samplerState = None; size = -1; uniformType = uniformType; offset = -1; isRowMajor = false }
+        let semantic = samplerHackRegex.Replace(name,"")
+        if semantic <> name 
+        then Log.warn "replaced uniform semantic value (%s -> %s), this might be an error or due to usage of lins." name semantic
+
+        { index = index; location = location; name = name; semantic = semantic; samplerState = None; size = -1; uniformType = uniformType; offset = -1; isRowMajor = false }
 
     let getActiveUniformBlocks (p : int) =
         [
@@ -230,7 +238,8 @@ module ProgramReflector =
 //                            GL.Check "could not get program resource"
 
                             let location = GL.GetFragDataLocation(p, name)
-                            GL.Check "could not get frag data location"
+                            GL.GetError() |> ignore
+                            //GL.Check "could not get frag data location"
 
                             yield { attributeIndex = i; size = size; name = name; semantic = name; attributeType = outputType }
 
@@ -391,7 +400,7 @@ module ProgramExtensions =
                             UniformGetters = SymDict.empty
                             SamplerStates = SymDict.empty
                             Inputs = ProgramReflector.getActiveInputs handle
-                            Outputs = ProgramReflector.getActiveOutputs handle
+                            Outputs = [] //ProgramReflector.getActiveOutputs handle
                             SupportedModes = supported
                         }
 

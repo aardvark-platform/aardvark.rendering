@@ -7,7 +7,7 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Application
 
-type RenderControl() =
+type RenderControl() as this =
     inherit Control()
 
     let mutable renderTask : Option<IRenderTask> = None
@@ -16,7 +16,7 @@ type RenderControl() =
 
     let keyboard = new Keyboard()
     let mouse = new Mouse()
-    let sizes = new EventSource<V2i>()
+    let sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
     let mutable inner : Option<IMod<DateTime>> = None
     let time = 
         Mod.custom (fun () -> 
@@ -46,18 +46,61 @@ type RenderControl() =
         ctrl <- Some c
         impl <- Some cr
 
+
+    static let rec subscribeToLocationChange (ctrl : Control) (action : EventHandler) : IDisposable =
+        if ctrl <> null then
+            let inner = ref <| subscribeToLocationChange ctrl.Parent action
+            
+            let parentChange = EventHandler (fun s e ->
+                inner.Value.Dispose()
+                inner := subscribeToLocationChange ctrl.Parent action
+                action.Invoke(s, e)
+            )
+            ctrl.LocationChanged.AddHandler parentChange
+            ctrl.ParentChanged.AddHandler action
+            
+            { new IDisposable with 
+                member x.Dispose() =
+                    inner.Value.Dispose()
+                    ctrl.LocationChanged.RemoveHandler action
+                    ctrl.ParentChanged.RemoveHandler parentChange
+            }
+        else
+            { new IDisposable with member x.Dispose() = () }
+
+    static let getScreenLocation (ctrl : Control) =
+        let currentPos() =
+            let point = ctrl.PointToScreen(Point(0,0))
+            V2i(point.X, point.Y)
+
+        let res = Mod.init (currentPos())
+
+        let update (s : obj) (e : EventArgs) =
+            transact (fun () ->
+                Mod.change res (currentPos())
+            )
+
+        let d = subscribeToLocationChange ctrl (EventHandler update)
+        d, res :> IMod<_>
+
+    let locationAndSub = lazy ( getScreenLocation this )
+
+    member x.Location =
+        locationAndSub.Value |> snd
+
+
     member x.Implementation
         with get() = match ctrl with | Some c -> c | _ -> null
         and set v = setControl x v (v |> unbox<IRenderTarget>)
 
     override x.OnResize(e) =
         base.OnResize(e)
-        sizes.Emit (V2i(base.ClientSize.Width, base.ClientSize.Height))
+        transact (fun () -> Mod.change sizes (V2i(x.ClientSize.Width, x.ClientSize.Height)))
 
 
 
-    member x.Sizes = sizes :> IEvent<V2i>
-
+    member x.Sizes = sizes :> IMod<V2i>
+    member x.Samples = impl.Value.Samples
     member x.Keyboard = keyboard :> IKeyboard
     member x.Mouse = mouse :> IMouse
 
@@ -69,11 +112,14 @@ type RenderControl() =
                 | Some i -> i.RenderTask <- t
                 | None -> ()
 
+    member x.Runtime = impl.Value.Runtime
     member x.Time = time
 
     interface IRenderControl with
+        member x.Runtime = impl.Value.Runtime
         member x.Time = time
         member x.Sizes = x.Sizes
+        member x.Samples = impl.Value.Samples
 
         member x.Keyboard = x.Keyboard
         member x.Mouse = x.Mouse

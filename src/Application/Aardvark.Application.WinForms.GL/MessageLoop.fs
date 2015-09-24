@@ -52,6 +52,39 @@ type Periodic(interval : int, f : float -> unit) =
                 f(times.Average / 1000.0)
 
 
+[<AllowNullLiteral>]
+type MyTimer(f : unit -> unit, due : int64, interval : int64) =
+    
+    let sw = Stopwatch()
+    let cancel = new CancellationTokenSource()
+
+    let run() =
+        let ct = cancel.Token
+        try
+            Thread.Sleep(int due)
+            while true do
+                ct.ThrowIfCancellationRequested()
+                sw.Restart()
+                f()
+                sw.Stop()
+                let t = sw.Elapsed.TotalMilliseconds |> int64
+                let sleep = max 0L (interval - t) |> int
+                Thread.Sleep(sleep)
+
+        with :? OperationCanceledException ->
+            Log.line "Timer cancelled"
+            ()
+
+    let thread = Thread(ThreadStart(run), Priority = ThreadPriority.Highest, IsBackground = true)
+    do thread.Start()
+
+    member x.Dispose() =
+        cancel.Cancel()
+        thread.Join()
+        cancel.Dispose()
+
+    
+
 
 type MessageLoop() as this =
 
@@ -67,7 +100,7 @@ type MessageLoop() as this =
             ex <- Interlocked.CompareExchange(&location, newValue, oldValue)
 
     let mutable q : PersistentHashSet<IControl> = PersistentHashSet.empty
-    let mutable timer : Timer = null
+    let mutable timer : MyTimer = null
     let periodic = ConcurrentHashSet<Periodic>()
 
     let rec processAll() =
@@ -90,8 +123,8 @@ type MessageLoop() as this =
         if timer <> null then
             timer.Dispose()
 
-   
-        timer <- new Timer(TimerCallback(fun _ -> this.Process()), null, 0L, 2L)
+    
+        timer <- new MyTimer((fun _ -> this.Process()), 0L, 2L)
 
     member x.Draw(c : IControl) =
         interlockedChange &q (fun q -> PersistentHashSet.add c q)

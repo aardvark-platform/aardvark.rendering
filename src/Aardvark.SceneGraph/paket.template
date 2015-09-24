@@ -1,0 +1,9 @@
+type project
+id Aardvark.SceneGraph
+authors VRVis Research Center
+description
+    Aardvark.SceneGraph
+files
+    ..\..\bin\BUILDCONFIG\Aardvark.SceneGraph.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.SceneGraph.pdb ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.SceneGraph.xml ==> lib\net45

@@ -1,0 +1,8 @@
+type project
+id Aardvark.Base.Rendering
+authors VRVis Research Center
+description
+    Aardvark.Base.Rendering
+files
+    ..\..\bin\BUILDCONFIG\Aardvark.Base.Rendering.dll ==> lib\net45
+    ..\..\bin\BUILDCONFIG\Aardvark.Base.Rendering.pdb ==> lib\net45

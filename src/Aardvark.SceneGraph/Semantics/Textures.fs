@@ -16,8 +16,8 @@ module TextureSemantics =
     [<Semantic>]
     type DerivedSem() =
 
-        let trueM = Mod.initConstant true
-        let falseM = Mod.initConstant false
+        let trueM = Mod.constant true
+        let falseM = Mod.constant false
 
         member x.HasDiffuseColorTexture(sg : ISg) = 
             let uniforms : IUniformProvider list = sg?Uniforms 
