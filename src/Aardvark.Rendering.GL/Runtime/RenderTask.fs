@@ -142,7 +142,7 @@ module RenderTasks =
         let tryGetProgramForPass (pass : uint64) =
             Map.tryFind pass programs
 
-        let newProgram (scope : Ag.Scope) (engine : BackendConfiguration) : IProgram =
+        let newProgram (scope : Ag.Scope) (engine : BackendConfiguration) : IRenderProgram =
             
             match engine.sorting with
                 | RenderObjectSorting.Dynamic newSorter ->
@@ -153,7 +153,7 @@ module RenderTasks =
                         Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
                         (fun () -> newSorter scope),
                         manager, addInput, removeInput
-                    ) :> IProgram
+                    ) :> IRenderProgram
                 | s ->
                     match engine.execution, engine.redundancy with
 
@@ -161,51 +161,51 @@ module RenderTasks =
                             Log.line "using unoptimized native program"
                             new Compiler.UnoptimizedProgram<_>(
                                 engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
-                            ) :> IProgram
+                            ) :> IRenderProgram
 
                         | ExecutionEngine.Native, _ ->
                             Log.line "using optimized native program"
                             new Compiler.OptimizedProgram<_>(
                                 engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
-                            ) :> IProgram
+                            ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.None ->
                             Log.line "using unoptimized glvm program"
                             new Compiler.UnoptimizedProgram<_>(
                                 engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
-                            ) :> IProgram
+                            ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Runtime ->
                             Log.line "using runtime-optimized glvm program"
                             new Compiler.UnoptimizedProgram<_>(
                                 engine, Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager, addInput, removeInput
-                            ) :> IProgram
+                            ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Static ->
                             Log.line "using optimized glvm program"
                             new Compiler.OptimizedProgram<_>(
                                 engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
-                            ) :> IProgram
+                            ) :> IRenderProgram
 
 
                         | ExecutionEngine.Managed, RedundancyRemoval.None ->
                             Log.line "using unoptimized managed program"
                             new Compiler.UnoptimizedProgram<_>(
                                 engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
-                            ) :> IProgram
+                            ) :> IRenderProgram
 
                         | ExecutionEngine.Managed, _->
                             Log.line "using optimized managed program"
                             new Compiler.OptimizedProgram<_>(
                                 engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
-                            ) :> IProgram
+                            ) :> IRenderProgram
 
                         | ExecutionEngine.Debug, _ ->
                             Log.warn "using debug program"
 
                             new Compiler.DebugProgram(
                                 manager, addInput, removeInput
-                            ) :> IProgram
+                            ) :> IRenderProgram
 
                         | _ ->
                             failwith "unsupported configuration: %A" engine

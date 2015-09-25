@@ -347,7 +347,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    interface IProgram with
+    interface IRenderProgram with
         member x.Resources = resourceSet.Resources
         member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj

@@ -73,7 +73,7 @@ type DebugProgram(manager : ResourceManager,
 
         allResources.Clear()
 
-    interface IProgram with
+    interface IRenderProgram with
         member x.Resources = ReferenceCountingSet()
         member x.RenderObjects = renderObjects :> seq<_>
         member x.Add rj = x.Add rj
