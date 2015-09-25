@@ -85,7 +85,6 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
     let set = HashSet<IChangeableResource>()
     let callbacks = Dictionary<IChangeableResource, (unit -> unit)>()
     let sw = System.Diagnostics.Stopwatch()
-    let glsw = OpenGlStopwatch()
 
     let dirty (m : IChangeableResource) () =
         lock l (fun () -> 
@@ -139,7 +138,6 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
                 dirtySet
             )
         sw.Restart()
-        glsw.Restart()
         let mutable count = 0
 
         let mutable counts = Map.empty
@@ -157,7 +155,6 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
 
 
         if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
-        glsw.Stop()
         sw.Stop()
 
         //printfn "GL: %fms vs .NET: %fms" glsw.Elapsed.TotalMilliseconds sw.Elapsed.TotalMilliseconds 
