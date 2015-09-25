@@ -272,13 +272,18 @@ module ProgramExtensions =
     let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
     let private addPreprocessorDefine (define : string) (code : string) =
         let replaced = ref false
-        let def = sprintf "#define %s\r\nlayout(row_major) uniform;\r\n" define
+        let def = sprintf "#define %s\r\n" define
+        let layout = "layout(row_major) uniform;\r\n"
 
         let newCode = 
             versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
                 let v = m.Groups.["version"].Value
                 replaced := true
-                sprintf "#version %s\r\n%s" v def
+                match Int32.TryParse v with
+                    | (true, vers) when vers > 120 ->
+                        sprintf "#version %s\r\n%s%s" v def layout
+                    | _ ->
+                        sprintf "#version %s\r\n%s" v def
             ))
 
         if !replaced then newCode
@@ -357,6 +362,9 @@ module ProgramExtensions =
                     if gs then yield "Geometry", "GS", ShaderStage.Geometry
                     if fs then yield "Pixel", "PS", ShaderStage.Pixel
                 ]
+
+            let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
+            printfn "CODE: %s" codeWithDefine
 
             using x.ResourceLock (fun _ ->
                 let results =

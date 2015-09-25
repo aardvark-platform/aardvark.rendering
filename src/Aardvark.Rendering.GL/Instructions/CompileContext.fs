@@ -24,25 +24,36 @@ module ExecutionContext =
     /// <summary>
     /// determines whether the current OpenGL implementation supports VAOs
     /// </summary>
-    let vertexArrayObjectsSupported = OpenGl.Pointers.BindVertexArray <> 0n
+    let vertexArrayObjectsSupported = 
+        Config.enableVertexArrayObjectsIfPossible && OpenGl.Pointers.BindVertexArray <> 0n
 
     /// <summary>
     /// determines whether the current OpenGL implementation supports sampler objects
     /// </summary>
-    let samplersSupported = OpenGl.Pointers.BindSampler <> 0n
+    let samplersSupported = 
+        Config.enableSamplersIfPossible && OpenGl.Pointers.BindSampler <> 0n
 
     /// <summary>
     /// determines whether the current OpenGL implementation supports uniform buffers
     /// </summary>
-    let uniformBuffersSupported = OpenGl.Pointers.BindBufferRange <> 0n
+    let uniformBuffersSupported = 
+        Config.enableUniformBuffersIfPossible && OpenGl.Pointers.BindBufferRange <> 0n
 
     /// <summary>
     /// determines whether the current OpenGL implementation supports hardware instancing
     /// </summary>
     let instancingSupported = OpenGl.Pointers.VertexAttribDivisor <> 0n
 
-
+    /// <summary>
+    /// determines whether the current OpenGL implementation supports framebuffer objects
+    /// </summary>
     let framebuffersSupported = OpenGl.Pointers.BindVertexArray <> 0n
+
+    /// <summary>
+    /// determines whether the current OpenGL implementation supports synchronization via glFence
+    /// </summary>
+    let syncSupported = OpenGl.getProcAddress "glFence" <> 0n
+
 
     /// <summary>
     /// determines whether the given instruction-code can be performed on
@@ -109,6 +120,8 @@ module ExecutionContext =
             | InstructionCode.UniformMatrix3fv         -> OpenGl.Pointers.UniformMatrix3fv
             | InstructionCode.UniformMatrix4fv         -> OpenGl.Pointers.UniformMatrix4fv
             | InstructionCode.EnableVertexAttribArray  -> OpenGl.Pointers.EnableVertexAttribArray
+            | InstructionCode.TexParameteri            -> OpenGl.Pointers.TexParameteri
+            | InstructionCode.TexParameterf            -> OpenGl.Pointers.TexParameterf
 
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 
@@ -193,3 +206,25 @@ module ExecutionContext =
             let str = sprintf "%A failed with code: %A" i err
             System.Diagnostics.Debugger.Break()
             Log.warn "%s" str
+
+
+
+[<AutoOpen>]
+module GLExtensionsPossiblyNotWorkingEverywhere =
+    open OpenTK.Graphics.OpenGL4
+    open System.Runtime.InteropServices
+
+    type GL with
+        static member inline Sync() =
+            if ExecutionContext.syncSupported then
+                let fence = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
+                let status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, ~~~0UL)
+                GL.DeleteSync(fence)
+
+                match status with
+                    | WaitSyncStatus.TimeoutExpired ->
+                        Log.warn "[GL] wait timeout"
+                    | WaitSyncStatus.WaitFailed ->
+                        Log.warn "[GL] wait failed"
+                    | _ -> ()
+

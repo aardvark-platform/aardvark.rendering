@@ -64,25 +64,29 @@ module SamplerExtensions =
             SamplerComparisonFunction.LessOrEqual, All.Lequal
         ]
 
-    let private wrapMode m =
-        match wrapModes.TryGetValue m with
-            | (true, r) -> int r
-            | _ -> int TextureWrapMode.Repeat //failwithf "unsupported WrapMode: %A"  m
+    module SamplerStateHelpers =
 
-    let private minFilter min mip =
-        match minFilters.TryGetValue ((min, mip)) with
-            | (true, f) -> int f
-            | _ -> int TextureMinFilter.Linear //failwithf "unsupported filter combination min: %A mip: %A" min mip
+        let wrapMode m =
+            match wrapModes.TryGetValue m with
+                | (true, r) -> int r
+                | _ -> int TextureWrapMode.Repeat //failwithf "unsupported WrapMode: %A"  m
 
-    let private magFilter mag =
-        match magFilters.TryGetValue (mag) with
-            | (true, f) -> int f
-            | _ -> int TextureMagFilter.Linear //failwithf "unsupported mag filter: %A" mag
+        let minFilter min mip =
+            match minFilters.TryGetValue ((min, mip)) with
+                | (true, f) -> int f
+                | _ -> int TextureMinFilter.Linear //failwithf "unsupported filter combination min: %A mip: %A" min mip
 
-    let private compareFunc f =
-        match compareFuncs.TryGetValue f with
-            | (true, f) -> int f
-            | _ -> int All.Lequal //failwithf "unsupported comparison function: %A" f
+        let magFilter mag =
+            match magFilters.TryGetValue (mag) with
+                | (true, f) -> int f
+                | _ -> int TextureMagFilter.Linear //failwithf "unsupported mag filter: %A" mag
+
+        let compareFunc f =
+            match compareFuncs.TryGetValue f with
+                | (true, f) -> int f
+                | _ -> int All.Lequal //failwithf "unsupported comparison function: %A" f
+
+    open SamplerStateHelpers
 
     let private setSamplerParameters (handle : int) (d : SamplerStateDescription) =
         GL.SamplerParameter(handle, SamplerParameterName.TextureBorderColor, [|d.BorderColor.R; d.BorderColor.G; d.BorderColor.B; d.BorderColor.A|])
@@ -140,9 +144,10 @@ module SamplerExtensions =
             )
 
         member x.Update(s : Sampler, description : SamplerStateDescription) =
-            using x.ResourceLock (fun _ ->
-                setSamplerParameters s.Handle description
-            )
+            if ExecutionContext.samplersSupported then
+                using x.ResourceLock (fun _ ->
+                    setSamplerParameters s.Handle description
+                )
 
         member x.Delete(s : Sampler) =
             if ExecutionContext.samplersSupported then

@@ -72,6 +72,11 @@ module Config =
     let Buffers = 2
 
 
+    let enableVertexArrayObjectsIfPossible = true
+    let enableSamplersIfPossible = true
+    let enableUniformBuffersIfPossible = true
+
+
 
 [<AutoOpen>]
 module Error =
@@ -80,7 +85,8 @@ module Error =
 
     exception OpenGLException of ErrorCode * string
 
-    let debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
+
+    let private debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
          let message = Marshal.PtrToStringAnsi(message,length)
          match severity with
              | DebugSeverity.DebugSeverityMedium ->
@@ -90,7 +96,6 @@ module Error =
                  Report.Error("[GL] {0}", message)
              | _ ->
                 Report.Line("[GL] {0}", message)
-
 
     let private debugHandler = DebugProc debug
 
@@ -105,24 +110,11 @@ module Error =
                     Aardvark.Base.Report.Warn("{0}:{1}",err,str)
                     //raise <| OpenGLException(err, str)
 
-        static member inline Sync() =
-            let fence = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
-            let status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, ~~~0UL)
-            GL.DeleteSync(fence)
-
-            match status with
-                | WaitSyncStatus.TimeoutExpired ->
-                    Log.warn "[GL] wait timeout"
-                | WaitSyncStatus.WaitFailed ->
-                    Log.warn "[GL] wait failed"
-                | _ -> ()
-
         static member SetupDebugOutput() =
             GL.DebugMessageCallback(debugHandler,nativeint 0)
             let arr : uint32[] = null
             let severity = DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
             GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
-
 
     type GLTimer private() =
         let counter = GL.GenQuery()

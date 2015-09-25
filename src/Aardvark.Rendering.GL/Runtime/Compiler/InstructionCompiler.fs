@@ -6,7 +6,8 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
 module Instructions =
-    
+    open OpenTK.Graphics.OpenGL4
+
     let setDepthTest (m : IMod<DepthTestMode>) =
         m |> Mod.map (fun dt ->
             if dt <> DepthTestMode.None then
@@ -92,7 +93,25 @@ module Instructions =
         Instruction.ActiveTexture ((int OpenGl.Enums.TextureUnit.Texture0) + index)
 
     let bindSampler (index : int) (sampler : ChangeableResource<Sampler>) =
-        sampler.Resource |> Mod.map (fun r -> [Instruction.BindSampler index r.Handle])
+        if ExecutionContext.samplersSupported then
+            sampler.Resource |> Mod.map (fun r -> [Instruction.BindSampler index r.Handle])
+        else
+            let s = sampler.Resource.GetValue().Description
+            let target = int OpenGl.Enums.TextureTarget.Texture2D
+            let unit = int OpenGl.Enums.TextureUnit.Texture0 + index 
+            Mod.constant [
+                Instruction.TexParameteri target (int TextureParameterName.TextureWrapS) (SamplerStateHelpers.wrapMode s.AddressU)
+                Instruction.TexParameteri target (int TextureParameterName.TextureWrapT) (SamplerStateHelpers.wrapMode s.AddressV)
+                Instruction.TexParameteri target (int TextureParameterName.TextureWrapR) (SamplerStateHelpers.wrapMode s.AddressW)
+                Instruction.TexParameteri target (int TextureParameterName.TextureMinFilter) (SamplerStateHelpers.minFilter s.Filter.Min s.Filter.Mip)
+                Instruction.TexParameteri target (int TextureParameterName.TextureMagFilter) (SamplerStateHelpers.magFilter s.Filter.Mag)
+
+                // TODO: set all sampler state parameters. (float args needed for that)
+
+//                Instruction.TexParameterf target (int TextureParameterName.TextureLodBias) (s.MipLodBias)
+//                Instruction.TexParameterf target (int TextureParameterName.TextureMinLod) (s.MinLod)
+//                Instruction.TexParameterf target (int TextureParameterName.TextureMaxLod) (s.MaxLod)
+            ]
 
     let bindTexture (tex : ChangeableResource<Texture>) =
         tex.Resource |> Mod.map(fun r -> 

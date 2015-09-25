@@ -219,11 +219,11 @@ module DeltaCompiler =
                     yield Instructions.setActiveTexture id
                     latestSlot := id 
 
-                if not samEqual then
-                    yield Instructions.bindSampler id sam
-
                 if not texEqual then 
                     yield Instructions.bindTexture tex
+
+                if not samEqual || (not ExecutionContext.samplersSupported && not texEqual) then
+                    yield Instructions.bindSampler id sam
 
             // bind all top-level uniforms (if needed)
             for (id,u) in Map.toSeq me.Uniforms do

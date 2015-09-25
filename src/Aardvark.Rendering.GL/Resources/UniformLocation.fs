@@ -86,13 +86,13 @@ module UniformLocationExtensions =
 
 
                     | FloatMatrixType(2,2) ->
-                        yield Instruction.UniformMatrix2fv l 1 0 loc.Data
+                        yield Instruction.UniformMatrix2fv l 1 1 loc.Data
 
                     | FloatMatrixType(3,3) ->
-                        yield Instruction.UniformMatrix3fv l 1 0 loc.Data
+                        yield Instruction.UniformMatrix3fv l 1 1 loc.Data
 
                     | FloatMatrixType(4,4) ->
-                        yield Instruction.UniformMatrix4fv l 1 0 loc.Data
+                        yield Instruction.UniformMatrix4fv l 1 1 loc.Data
 
                     | _ ->
                         failwithf "no uniform-setter for: %A" loc

@@ -396,7 +396,6 @@ module OpenGl =
     let getProcAddress (name : string) =
          let address = getProcAddressProbing [""; "ARB"; "EXT"] name
          if address = 0n then
-              Log.line "got no address for %A" name
               0n
          else
               address
@@ -594,8 +593,8 @@ module OpenGl =
         let UniformMatrix2fv = getProcAddress "glUniformMatrix2fv"
         let UniformMatrix3fv = getProcAddress "glUniformMatrix3fv"
         let UniformMatrix4fv = getProcAddress "glUniformMatrix4fv"
-
-
+        let TexParameteri = getProcAddress "glTexParameteri"
+        let TexParameterf = getProcAddress "glTexParameterf"
 
         let private pointerNames = 
             [ BindVertexArray, "glBindVertexArray" 
@@ -635,9 +634,18 @@ module OpenGl =
 
               Uniform1iv, "glUniform1iv"
               Uniform1fv, "glUniform1fv"
+              Uniform2iv, "glUniform2iv"
+              Uniform2fv, "glUniform2fv"
+              Uniform3iv, "glUniform3iv"
+              Uniform3fv, "glUniform3fv"
+              Uniform4iv, "glUniform4iv"
+              Uniform4fv, "glUniform4fv"
               UniformMatrix2fv, "glUniformMatrix2fv"
               UniformMatrix3fv, "glUniformMatrix3fv"
               UniformMatrix4fv, "glUniformMatrix4fv"
+
+              TexParameterf, "glTexParameterf"
+              TexParameteri, "glTexParameteri"
 
             ] |> Map.ofList
 
@@ -695,6 +703,9 @@ module OpenGl =
         let UniformMatrix2fv : int -> int -> int -> nativeint -> unit = wrap Pointers.UniformMatrix2fv
         let UniformMatrix3fv : int -> int -> int -> nativeint -> unit = wrap Pointers.UniformMatrix3fv
         let UniformMatrix4fv : int -> int -> int -> nativeint -> unit = wrap Pointers.UniformMatrix4fv
+
+        let TexParameteri : int -> int -> int -> unit = wrap Pointers.TexParameteri
+        let TexParameterf : int -> int -> float32 -> unit = wrap Pointers.TexParameterf
 
         let ClearColor : int -> int -> int -> int -> unit = wrap Pointers.ClearColor
         let ClearDepth : int64 -> unit = wrap Pointers.ClearDepth

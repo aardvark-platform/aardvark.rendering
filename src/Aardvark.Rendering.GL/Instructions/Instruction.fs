@@ -54,6 +54,9 @@ type InstructionCode =
     | UniformMatrix3fv         = 44
     | UniformMatrix4fv         = 45
 
+    | TexParameteri            = 46
+    | TexParameterf            = 47
+
 /// <summary>
 /// an instrution consists of an instruction-code and the corresponding arguments
 /// which are internally held as object-array. 
@@ -135,3 +138,9 @@ type Instruction private(code : InstructionCode, args : obj[]) =
 
     static member UniformMatrix4fv (location : int) (count : int) (transpose : int) (ptr : nativeint)  = 
         Instruction(InstructionCode.UniformMatrix4fv, [|location :> obj; count :> obj; transpose :> obj; ptr :> obj|])
+
+    static member TexParameteri (target : int) (pname : int) (param : int) =
+        Instruction(InstructionCode.TexParameteri, [|target :> obj; pname :> obj; param :> obj|])
+
+    static member TexParameterf (target : int) (pname : int) (param : float32) =
+        Instruction(InstructionCode.TexParameterf, [|target :> obj; pname :> obj; param :> obj|])

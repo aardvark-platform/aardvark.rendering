@@ -63,8 +63,6 @@ module FShadeSceneGraph =
             if code.Contains "TCS(" then entries.Add(ShaderStage.TessControl, "TCS")
             if code.Contains "TEV(" then entries.Add(ShaderStage.TessEval, "TEV")
 
-            printfn "CODE: %A" code
-
             BackendSurface(code, entries, null)
         ) 
 
