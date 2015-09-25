@@ -101,7 +101,23 @@ module Instructions =
         )
 
     let bindVertexArray (vao : ChangeableResource<VertexArrayObject>) =
-        fun (ctx : ContextHandle) -> Instruction.BindVertexArray(vao.Resource.GetValue().Handle)
+        if ExecutionContext.vertexArrayObjectsSupported then
+            fun (ctx : ContextHandle) -> 
+                [Instruction.BindVertexArray(vao.Resource.GetValue().Handle)]
+        else
+            let vao = vao.Resource.GetValue()
+
+            fun (ctx : ContextHandle) ->
+                [
+                    for (i,b) in vao.Bindings do
+                        yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ArrayBuffer) b.Buffer.Handle
+                        yield Instruction.EnableVertexAttribArray i
+                        yield Instruction.VertexAttribPointer i b.Dimension (int b.VertexAttributeType) b.Normalized b.Stride 0n
+                    
+                    match vao.Index with
+                        | Some i -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) i.Handle
+                        | None -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) 0
+                ]
 
     let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<DrawCallInfo>) (isActive : IMod<bool>) =
         let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
