@@ -124,7 +124,8 @@ module DeltaCompiler =
                                                 ()
                                             | _ ->
                                                 yield Instructions.setActiveTexture uniform.index
-                                                yield Instructions.bindSampler uniform.index sampler
+                                                if ExecutionContext.samplersSupported then
+                                                    yield Instructions.bindSampler uniform.index sampler
                                                 yield Instructions.bindTexture texture
 
                                     | _ ->

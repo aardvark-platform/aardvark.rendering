@@ -8,7 +8,7 @@
     <ProjectGuid>275853bc-f5a5-485d-8f15-cbab95735399</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>AsncLoading</RootNamespace>
-    <AssemblyName>AsncLoading</AssemblyName>
+    <AssemblyName>AsyncLoading</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>

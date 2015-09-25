@@ -107,6 +107,7 @@ module ExecutionContext =
             | InstructionCode.UniformMatrix2fv         -> OpenGl.Pointers.UniformMatrix2fv
             | InstructionCode.UniformMatrix3fv         -> OpenGl.Pointers.UniformMatrix3fv
             | InstructionCode.UniformMatrix4fv         -> OpenGl.Pointers.UniformMatrix4fv
+            | InstructionCode.EnableVertexAttribArray  -> OpenGl.Pointers.EnableVertexAttribArray
 
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 

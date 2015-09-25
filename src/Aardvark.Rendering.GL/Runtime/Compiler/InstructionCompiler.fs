@@ -112,8 +112,12 @@ module Instructions =
                     for (i,b) in vao.Bindings do
                         yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ArrayBuffer) b.Buffer.Handle
                         yield Instruction.EnableVertexAttribArray i
-                        yield Instruction.VertexAttribPointer i b.Dimension (int b.VertexAttributeType) b.Normalized b.Stride 0n
-                    
+                        if b.BaseType = typeof<C4b> then
+                            yield Instruction.VertexAttribPointer i 0x80E1 (int b.VertexAttributeType) b.Normalized b.Stride (nativeint b.Offset)
+                        else
+                            yield Instruction.VertexAttribPointer i b.Dimension (int b.VertexAttributeType) b.Normalized b.Stride (nativeint b.Offset)
+
+          
                     match vao.Index with
                         | Some i -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) i.Handle
                         | None -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) 0
