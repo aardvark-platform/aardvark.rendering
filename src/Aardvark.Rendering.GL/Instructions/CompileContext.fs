@@ -42,6 +42,7 @@ module ExecutionContext =
     let instancingSupported = OpenGl.Pointers.VertexAttribDivisor <> 0n
 
 
+    let framebuffersSupported = OpenGl.Pointers.BindVertexArray <> 0n
 
     /// <summary>
     /// determines whether the given instruction-code can be performed on

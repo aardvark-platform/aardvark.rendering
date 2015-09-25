@@ -32,10 +32,10 @@ type OpenGlApplication() =
 
                     Log.startTimed "initializing OpenGL runtime"
 
-                    Aardvark.Rendering.GL.OpenGl.Unsafe.BindFramebuffer (int OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer) 0
-                    OpenTK.Graphics.OpenGL4.GL.GetError() |> ignore
-                    OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, 0)
-                    OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
+//                    Aardvark.Rendering.GL.OpenGl.Unsafe.BindFramebuffer (int OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer) 0
+//                    OpenTK.Graphics.OpenGL4.GL.GetError() |> ignore
+//                    OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, 0)
+//                    OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
                     OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
                     OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
                 

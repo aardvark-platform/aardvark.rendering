@@ -396,8 +396,13 @@ module RenderTasks =
 
                     let handle = fbo.Handle |> unbox<int> 
 
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                    GL.Check "could not bind framebuffer"
+                    if ExecutionContext.framebuffersSupported then
+                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                        GL.Check "could not bind framebuffer"
+                    elif handle <> 0 then
+                        failwithf "cannot render to texture on this OpenGL driver"
+
+
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not set viewport"
                     
@@ -416,8 +421,9 @@ module RenderTasks =
                         stats <- stats + p.Run(handle, contextHandle)
                         resourceCount <- resourceCount + p.Resources.Entries.Count
 
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
-                    GL.Check "could not bind framebuffer"
+                    if ExecutionContext.framebuffersSupported then
+                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+                        GL.Check "could not bind framebuffer"
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                     GL.Check "could not set viewport"
                     
@@ -475,7 +481,12 @@ module RenderTasks =
 
                     let handle = fbo.Handle |> unbox<int>
 
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                    if ExecutionContext.framebuffersSupported then
+                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                        GL.Check "could not bind framebuffer"
+                    elif handle <> 0 then
+                        failwithf "cannot render to texture on this OpenGL driver"
+
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not bind framebuffer"
 
@@ -485,7 +496,9 @@ module RenderTasks =
                     GL.ClearDepth(d)
                     GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
 
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+                    if ExecutionContext.framebuffersSupported then
+                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                     GL.Check "could not bind framebuffer"
 

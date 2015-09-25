@@ -117,6 +117,6 @@ let main argv =
 
     ) |> ignore
 
-    win.RenderTask <- task |> DefaultOverlays.withStatistics
+    win.RenderTask <- task
     win.Run()
     0 
