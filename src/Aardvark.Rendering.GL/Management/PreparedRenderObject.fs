@@ -40,6 +40,7 @@ type PreparedRenderObject =
     member x.RenderPass = x.Original.RenderPass
 
     member x.DrawCallInfo = x.Original.DrawCallInfo
+    member x.Mode = x.Original.Mode
 
     member x.DepthTest = x.Original.DepthTest
     member x.CullMode = x.Original.CullMode

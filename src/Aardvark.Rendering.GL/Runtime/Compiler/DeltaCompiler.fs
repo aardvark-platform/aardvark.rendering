@@ -127,7 +127,7 @@ module DeltaCompiler =
             // draw the thing
             // TODO: surface assumed to be constant here
             let prog = me.Program.Resource.GetValue()
-            yield Instructions.draw prog me.Original.Indices me.DrawCallInfo me.IsActive
+            yield Instructions.draw prog me.Original.Indices me.DrawCallInfo me.Mode me.IsActive
 
         }   
 

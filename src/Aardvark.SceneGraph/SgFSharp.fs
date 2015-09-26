@@ -123,8 +123,9 @@ module SgFSharp =
                     InstanceCount = 1,
                     FirstIndex = 0,
                     FaceVertexCount = -1,
-                    Mode = mode
-                )
+                    BaseVertex = 0
+                ),
+                mode
             ) :> ISg
 
         let ofIndexedGeometry (g : IndexedGeometry) =
@@ -149,10 +150,10 @@ module SgFSharp =
                     FirstIndex = 0,
                     InstanceCount = 1,
                     FirstInstance = 0,
-                    Mode = g.Mode
+                    BaseVertex = 0
                 )
 
-            let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call)) :> ISg
+            let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call,g.Mode)) :> ISg
             if index <> null then
                 Sg.VertexIndexApplicator(Mod.constant index, sg) :> ISg
             else
@@ -180,11 +181,11 @@ module SgFSharp =
                         FirstIndex = 0,
                         InstanceCount = t.Length,
                         FirstInstance = 0,
-                        Mode = g.Mode
+                        BaseVertex = 0
                     )
                 )
 
-            let sg = Sg.VertexAttributeApplicator(vertexAttributes, Sg.RenderNode(call)) :> ISg
+            let sg = Sg.VertexAttributeApplicator(vertexAttributes, Sg.RenderNode(call, Mod.constant g.Mode)) :> ISg
         
             let sg =
                 if index <> null then

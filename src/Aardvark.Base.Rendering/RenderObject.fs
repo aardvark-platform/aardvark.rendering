@@ -42,6 +42,7 @@ type RenderObject =
         mutable RenderPass : IMod<uint64>
                 
         mutable DrawCallInfo : IMod<DrawCallInfo>
+        mutable Mode : IMod<IndexedGeometryMode>
         mutable Surface : IMod<ISurface>
                 
         mutable DepthTest : IMod<DepthTestMode>
@@ -67,6 +68,7 @@ type RenderObject =
           IsActive = null
           RenderPass = null
           DrawCallInfo = null
+          Mode = null
           Surface = null
           DepthTest = null
           CullMode = null
@@ -116,6 +118,7 @@ module RenderObjectExtensions =
           IsActive = null
           RenderPass = null
           DrawCallInfo = null
+          Mode = null
           Surface = null
           DepthTest = null
           CullMode = null

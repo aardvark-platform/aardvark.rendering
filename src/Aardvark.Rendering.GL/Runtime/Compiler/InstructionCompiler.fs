@@ -142,7 +142,7 @@ module Instructions =
                         | None -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) 0
                 ]
 
-    let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<DrawCallInfo>) (isActive : IMod<bool>) =
+    let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<DrawCallInfo>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
         let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
         let indexType = 
@@ -160,6 +160,7 @@ module Instructions =
 
         let instruction =
             adaptive {
+                let! igMode = mode
                 let! (indexed, indexType) = indexType
                 let! (call, isActive) = call, isActive
 
@@ -173,13 +174,13 @@ module Instructions =
                         let realMode = 
                             match program.SupportedModes with
                                 | Some set ->
-                                    if Set.contains call.Mode set then 
-                                        call.Mode
+                                    if Set.contains igMode set then 
+                                        igMode
                                     elif Set.contains IndexedGeometryMode.PointList set then
                                         IndexedGeometryMode.PointList
-                                    else failwith "invalid mode for program: %A (should be in: %A)" call.Mode set
+                                    else failwith "invalid mode for program: %A (should be in: %A)" igMode set
                                 | None -> 
-                                    call.Mode
+                                    igMode
 
                         Translations.toGLMode realMode
 
@@ -196,12 +197,12 @@ module Instructions =
                         else failwithf "unsupported index type: %A"  indexType
 
                     match call.InstanceCount with
-                        | 1 -> return call.Mode, Instruction.DrawElements mode faceVertexCount indexType offset
-                        | n -> return call.Mode, Instruction.DrawElementsInstanced mode faceVertexCount indexType offset n
+                        | 1 -> return igMode, Instruction.DrawElements mode faceVertexCount indexType offset
+                        | n -> return igMode, Instruction.DrawElementsInstanced mode faceVertexCount indexType offset n
                 else
                     match call.InstanceCount with
-                        | 1 -> return call.Mode, Instruction.DrawArrays mode call.FirstIndex faceVertexCount
-                        | n -> return call.Mode, Instruction.DrawArraysInstanced mode call.FirstIndex faceVertexCount n
+                        | 1 -> return igMode, Instruction.DrawArrays mode call.FirstIndex faceVertexCount
+                        | n -> return igMode, Instruction.DrawArraysInstanced mode call.FirstIndex faceVertexCount n
             }
 
         instruction |> Mod.map (fun (mode,i) ->

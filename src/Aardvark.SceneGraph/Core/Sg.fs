@@ -27,13 +27,14 @@ module Sg =
 
     type DynamicNode(child : IMod<ISg>) = inherit AbstractApplicator(child)
 
-    type RenderNode(call : IMod<DrawCallInfo>) =
+    type RenderNode(call : IMod<DrawCallInfo>, mode : IMod<IndexedGeometryMode>) =
         interface ISg
 
+        member x.Mode = mode
         member x.DrawCallInfo = call
 
-        new(call : IEvent<DrawCallInfo>) = RenderNode(Mod.fromEvent call)
-        new(call : DrawCallInfo) = RenderNode(Mod.constant call)
+        new(call : IEvent<DrawCallInfo>, mode : IEvent<IndexedGeometryMode>) = RenderNode(Mod.fromEvent call, Mod.fromEvent mode)
+        new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(Mod.constant call, Mod.constant mode)
     
     type VertexAttributeApplicator(values : Map<Symbol, BufferView>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)

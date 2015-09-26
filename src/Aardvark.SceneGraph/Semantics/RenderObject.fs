@@ -69,12 +69,12 @@ module RenderObjectSemantics =
                                 FirstInstance = info.FirstInstance,
                                 InstanceCount = info.InstanceCount,
                                 FaceVertexCount = count,
-                                Mode = info.Mode
+                                BaseVertex = 0
                             )
                     else
                         return info
                 }
 
             rj.DrawCallInfo <- callInfo
-
+            rj.Mode <- r.Mode
             ASet.single (rj :> IRenderObject)

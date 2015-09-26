@@ -167,10 +167,10 @@ module Assimp =
                             Sg.VertexAttributeApplicator(attributes,
                                 Sg.RenderNode(
                                     DrawCallInfo(
-                                        Mode = IndexedGeometryMode.TriangleList,
                                         FaceVertexCount = faceVertexCount,
                                         InstanceCount = 1
-                                    )
+                                    ),
+                                    IndexedGeometryMode.TriangleList
                                 )
                             ) :> ISg
 
