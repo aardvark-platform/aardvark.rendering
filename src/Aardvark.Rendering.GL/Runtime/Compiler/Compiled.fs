@@ -10,6 +10,8 @@ type CompilerState =
         currentContext : IMod<ContextHandle>
         manager : ResourceManager
 
+        useResources : bool
+
         resources : list<IChangeableResource>
         instructions : list<MetaInstruction>
 

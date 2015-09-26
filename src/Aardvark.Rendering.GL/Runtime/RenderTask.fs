@@ -445,6 +445,9 @@ module RenderTasks =
                 )
             )
 
+        member x.Disassemble() =
+            programs |> Map.map (fun _ p -> p.Disassemble() |> Seq.toList)
+
         member x.Dispose() = 
             for _,p in Map.toSeq programs do
                 p.Dispose()

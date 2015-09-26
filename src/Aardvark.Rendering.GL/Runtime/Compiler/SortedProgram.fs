@@ -145,10 +145,25 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         fragmentStats + programStats + createStats |> handler.AdjustStatistics
 
+    member x.Disassemble() =
+        let mutable fragment = prolog.Next
+        let result = System.Collections.Generic.List()
+        while fragment <> epilog do
+            let current = fragment.RenderObject
+
+            let instructions = DeltaCompilerDebug.compileFullDebugNoResources manager currentContext current
+            result.AddRange instructions
+            fragment <- fragment.Next
+        
+        result :> seq<_>
+
+
+
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
     interface IRenderProgram with
+        member x.Disassemble() = x.Disassemble()
         member x.Resources = resourceSet.Resources
         member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj

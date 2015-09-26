@@ -26,10 +26,15 @@ type IRenderObjectSorter =
 [<AllowNullLiteral>]
 type IRenderProgram =
     inherit IDisposable
+    
+    abstract member Disassemble : unit -> seq<Instruction>
     abstract member RenderObjects : seq<IRenderObject>
-    abstract member Resources : ReferenceCountingSet<IChangeableResource>
+
     abstract member Add : IRenderObject -> unit
     abstract member Remove : IRenderObject -> unit
+
+    abstract member Resources : ReferenceCountingSet<IChangeableResource>
+
     abstract member Run : int * ContextHandle -> FrameStatistics
 
 

@@ -667,13 +667,13 @@ let main args =
     
     //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
-    //let modelPath =  @"C:\Aardwork\scenes\bench2\8000_128_4000_6.dae"
+    let modelPath =  @"E:\Development\VulkanSharp\bin\Release\Sponza_bunt\sponza_cm.obj"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
-
-    testGpuThroughput()
-    System.Environment.Exit 0
+//
+//    testGpuThroughput()
+//    System.Environment.Exit 0
 
     use app = new OpenGlApplication()
     let f = app.CreateSimpleRenderWindow(1)

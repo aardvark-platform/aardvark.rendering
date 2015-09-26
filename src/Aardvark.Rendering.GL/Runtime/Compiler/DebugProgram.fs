@@ -41,7 +41,7 @@ type DebugProgram(manager : ResourceManager,
                     | :? RenderObject as rj -> (manager.Prepare rj, true)
                     | _ -> failwith "unsupported RenderObject type"
 
-            let prog, _ = DeltaCompiler.compileFullPrepared manager ctxMod prep
+            let prog, _ = DeltaCompiler.compileFull manager ctxMod prep
 
             // release (duplicated) resources whose reference count was incremented by compileFullPrepared
             if own then prep.Dispose()
@@ -74,6 +74,7 @@ type DebugProgram(manager : ResourceManager,
         allResources.Clear()
 
     interface IRenderProgram with
+        member x.Disassemble() = Seq.empty // TODO: disassemble debug program
         member x.Resources = ReferenceCountingSet()
         member x.RenderObjects = renderObjects :> seq<_>
         member x.Add rj = x.Add rj

@@ -44,133 +44,17 @@ module DeltaCompiler =
 
             | [] -> true
 
-    /// <summary>
-    /// compileDeltaInternal compiles all instructions needed to render [next] 
-    /// assuming [prev] was rendered immediately before.
-    /// This function is the core-ingredient making our rendering-system
-    /// fast as hell \o/.
-    /// </summary>
-    let private compileDeltaInternal (prev : RenderObject) (next : RenderObject) =
-        compiled {
-                
-            //set all modes if needed
-            if prev.DepthTest <> next.DepthTest && next.DepthTest <> null then
-                yield Instructions.setDepthTest next.DepthTest
-
-            if prev.FillMode <> next.FillMode && next.FillMode <> null then
-                yield Instructions.setFillMode next.FillMode
-
-            if prev.CullMode <> next.CullMode && next.CullMode <> null then
-                yield Instructions.setCullMode next.CullMode
-
-            if prev.BlendMode <> next.BlendMode && next.BlendMode <> null then
-                yield Instructions.setBlendMode next.BlendMode
-
-            if prev.StencilMode <> next.StencilMode && next.StencilMode <> null then
-                yield Instructions.setStencilMode next.StencilMode
-
-
-            //bind the program
-            let! program = Resources.createProgram next.Surface
-            let programEqual = prev.Surface = next.Surface
-
-            if prev.Surface <> next.Surface then
-                yield Instructions.bindProgram program
-
-                
-
-            //create and bind all needed uniform-buffers
-            let program = program.Resource.GetValue()
-
-            for b in program.UniformBlocks do
-                let! (uniformBuffer, values) = Resources.createUniformBuffer next.AttributeScope b program next.Uniforms
-
-                //ISSUE: what if the programs are not equal but use the same uniform buffers?
-                if not programEqual || not (allUniformsEqual prev values) then
-                    yield Instructions.bindUniformBuffer b.index uniformBuffer
-
-            //create and bind all textures/samplers
-            for uniform in program.Uniforms do
-                let nextTexture = next.Uniforms.TryGetUniform(next.AttributeScope, uniform.semantic |> Symbol.Create)
-                let prevTexture = prev.Uniforms.TryGetUniform(prev.AttributeScope, uniform.semantic |> Symbol.Create)
-
-
-                match uniform.uniformType with
-                    | SamplerType ->
-                        let sampler =
-                            match program.SamplerStates.TryGetValue (Symbol.Create uniform.semantic) with
-                                | (true, sampler) -> sampler
-                                | _ -> 
-                                    match uniform.samplerState with
-                                        | Some sam ->
-                                            match program.SamplerStates.TryGetValue (Symbol.Create sam) with
-                                                | (true, sampler) -> sampler
-                                                | _ -> SamplerStateDescription()
-                                        | None ->
-                                            SamplerStateDescription()
-
-                        match nextTexture with
-                            | Some value ->
-                                match value with
-                                    | :? IMod<ITexture> as value ->
-                                        let! texture = Resources.createTexture value
-                                        let! sampler = Resources.createSampler (Mod.constant sampler)
-                              
-                                        //ISSUE:      
-                                        //there is a special case when the prev renderobject has the same texture but binds it to
-                                        //a different slot!!!
-                                        match prevTexture with
-                                            | Some old when old = (value :> IMod) ->
-                                                ()
-                                            | _ ->
-                                                yield Instructions.setActiveTexture uniform.index
-                                                if ExecutionContext.samplersSupported then
-                                                    yield Instructions.bindSampler uniform.index sampler
-                                                yield Instructions.bindTexture texture
-
-                                    | _ ->
-                                        Log.warn "unexpected texture type %s: %A" uniform.semantic value
-                            | _ ->
-                                Log.warn "texture %s not found" uniform.semantic
-                                yield Instructions.setActiveTexture uniform.index 
-                                //let tex = Texture(program.Context, 0, TextureDimension.Texture2D, 1, V3i(1,1,0), 1, ChannelType.RGBA8)
-                                yield Instruction.BindTexture 0x0DE1 0 //bindTexture tex
-
-                    | _ ->
-                        match prevTexture, nextTexture with
-                            | Some p, Some n when p = n -> ()
-                            | _ ->
-                                let! (loc,_) = Resources.createUniformLocation next.AttributeScope uniform next.Uniforms
-                                let l = ExecutionContext.bindUniformLocation uniform.location (loc.Resource.GetValue())
-                                yield l
-
-                    | _ ->
-                        Log.warn "trying to set unknown top-level uniform: %A" uniform
-
-            let! vao = Resources.createVertexArrayObject program next
-            if prev <> RenderObject.Empty then
-                if prev.Surface = next.Surface then
-                    let! vaoPrev = Resources.runLocal (Resources.createVertexArrayObject program prev)
-                    vaoPrev.Dispose()
-                    if vao <> vaoPrev then
-                        yield Instructions.bindVertexArray vao
-                else
-                    yield Instructions.bindVertexArray vao
-            else
-                yield Instructions.bindVertexArray vao
-
-            yield Instructions.draw program next.Indices next.DrawCallInfo next.IsActive 
-        }
-
-
     let useResource (r : ChangeableResource<'a>) : Compiled<unit> =
         { runCompile = 
             fun s -> 
-                r.IncrementRefCount () |> ignore
-                { s with resources = (r :> _) :: s.resources }, ()
+                if s.useResources then
+                    r.IncrementRefCount () |> ignore
+                    { s with resources = (r :> _) :: s.resources }, ()
+                else
+                    s, ()
         }
 
-    let private compileDeltaInternalPrepared (prev : PreparedRenderObject) (me : PreparedRenderObject) =
+    let internal compileDeltaInternal (prev : PreparedRenderObject) (me : PreparedRenderObject) =
         compiled {
             //set all modes if needed
             if prev.DepthTest <> me.DepthTest && me.DepthTest <> null then
@@ -261,31 +145,13 @@ module DeltaCompiler =
     /// This function is the core-ingredient making our rendering-system
     /// fast as hell \o/.
     /// </summary>
-    let compileDelta (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : RenderObject) (rj : RenderObject) =
+    let compileDelta (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
         let c = compileDeltaInternal prev rj
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext
                 manager = manager
-                instructions = []
-                resources = []
-                resourceCreateTime = System.Diagnostics.Stopwatch()
-            }
-
-        AdaptiveCode(s.instructions, s.resources), stateToStats s
-
-    /// <summary>
-    /// compileDelta compiles all instructions needed to render [rj] 
-    /// assuming [prev] was rendered immediately before.
-    /// This function is the core-ingredient making our rendering-system
-    /// fast as hell \o/.
-    /// </summary>
-    let compileDeltaPrepared (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternalPrepared prev rj
-        let (s,()) =
-            c.runCompile {
-                currentContext = currentContext
-                manager = manager
+                useResources = true
                 instructions = []
                 resources = []
                 resourceCreateTime = System.Diagnostics.Stopwatch()
@@ -297,13 +163,14 @@ module DeltaCompiler =
     /// compileFull compiles all instructions needed to render [rj] 
     /// making no assumpltions about the previous GL state.
     /// </summary>
-    let compileFull (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : RenderObject) =
-        let c = compileDeltaInternal RenderObject.Empty rj
+    let compileFull (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
+        let c = compileDeltaInternal PreparedRenderObject.Empty rj
 
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext
                 manager = manager
+                useResources = true
                 instructions = []
                 resources = []
                 resourceCreateTime = System.Diagnostics.Stopwatch()
@@ -312,16 +179,42 @@ module DeltaCompiler =
         AdaptiveCode(s.instructions, s.resources), stateToStats s
 
 
-    let compileFullPrepared (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternalPrepared PreparedRenderObject.Empty rj
+module internal DeltaCompilerDebug =
+    open DeltaCompiler
 
+    let compileDeltaDebugNoResources (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
+        let c = compileDeltaInternal prev rj
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext
                 manager = manager
+                useResources = false
                 instructions = []
                 resources = []
                 resourceCreateTime = System.Diagnostics.Stopwatch()
             }
 
-        AdaptiveCode(s.instructions, s.resources), stateToStats s
+        s.instructions |> List.collect (fun mi ->
+            match mi with
+                | FixedInstruction l -> l
+                | AdaptiveInstruction l -> l.GetValue()
+        )
+
+    let compileFullDebugNoResources (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
+        let c = compileDeltaInternal PreparedRenderObject.Empty rj
+
+        let (s,()) =
+            c.runCompile {
+                currentContext = currentContext
+                manager = manager
+                useResources = false
+                instructions = []
+                resources = []
+                resourceCreateTime = System.Diagnostics.Stopwatch()
+            }
+
+        s.instructions |> List.collect (fun mi ->
+            match mi with
+                | FixedInstruction l -> l
+                | AdaptiveInstruction l -> l.GetValue()
+        )

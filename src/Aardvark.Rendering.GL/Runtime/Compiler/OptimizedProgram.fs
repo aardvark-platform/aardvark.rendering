@@ -50,7 +50,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
                     | null -> frag <- ctx.handler.Create []
                     | _ ->  frag.Clear()
 
-                let prog, resTime = DeltaCompiler.compileDeltaPrepared ctx.manager ctx.currentContext prevRj rj
+                let prog, resTime = DeltaCompiler.compileDelta ctx.manager ctx.currentContext prevRj rj
                 let changer = AdaptiveCode.writeTo prog frag
             
                 // remove old resources/changers
@@ -344,10 +344,27 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         fragmentStats + programStats + createStats |> handler.AdjustStatistics
 
+    member x.Disassemble() =
+        let mutable fragment = prolog.Next
+        let mutable last = PreparedRenderObject.Empty
+        let result = System.Collections.Generic.List()
+        while fragment <> epilog do
+            let current = fragment.RenderObject
+
+            let instructions = DeltaCompilerDebug.compileDeltaDebugNoResources manager currentContext last current
+            result.AddRange instructions
+
+            last <- current
+            fragment <- fragment.Next
+        
+        result :> seq<_>
+
+
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
     interface IRenderProgram with
+        member x.Disassemble() = x.Disassemble()
         member x.Resources = resourceSet.Resources
         member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj
