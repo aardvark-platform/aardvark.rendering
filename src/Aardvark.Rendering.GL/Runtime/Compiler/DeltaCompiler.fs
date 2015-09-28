@@ -54,6 +54,17 @@ module DeltaCompiler =
                     s, ()
         }
 
+    let useResources (resources : seq<ChangeableResource<'a>>) : Compiled<unit> =
+        { runCompile = 
+            fun s -> 
+                if s.useResources then
+                    for r in resources do
+                        r.IncrementRefCount () |> ignore
+                    { s with resources = (resources |> Seq.cast |> Seq.toList) @ s.resources }, ()
+                else
+                    s, ()
+        }
+
     let internal compileDeltaInternal (prev : PreparedRenderObject) (me : PreparedRenderObject) =
         compiled {
             //set all modes if needed
@@ -118,6 +129,7 @@ module DeltaCompiler =
                         // TODO: UniformLocations cannot change structurally atm.
                         yield ExecutionContext.bindUniformLocation id (u.Resource.GetValue())
 
+            do! me.Buffers |> Map.toSeq |> Seq.map (fun (_,(b,_)) -> b) |> useResources
             do! useResource me.VertexArray
 
             // bind the VAO (if needed)
