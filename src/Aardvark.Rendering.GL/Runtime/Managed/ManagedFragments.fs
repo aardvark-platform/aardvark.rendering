@@ -108,8 +108,9 @@ type ManagedDynamicFragment() =
 
     member x.RunAll() =
         let all = x.AllInstructions |> Seq.toArray
-        for i in all do
-            ExecutionContext.debug i
+        for i in 0 .. all.Length - 1 do
+            let instruction = all.[i]
+            ExecutionContext.debug instruction
 
     interface IDynamicFragment<ManagedDynamicFragment> with
         member x.Statistics = statistics

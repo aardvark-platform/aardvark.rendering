@@ -176,8 +176,6 @@ module Instructions =
                                 | Some set ->
                                     if Set.contains igMode set then 
                                         igMode
-                                    elif Set.contains IndexedGeometryMode.PointList set then
-                                        IndexedGeometryMode.PointList
                                     else failwith "invalid mode for program: %A (should be in: %A)" igMode set
                                 | None -> 
                                     igMode
