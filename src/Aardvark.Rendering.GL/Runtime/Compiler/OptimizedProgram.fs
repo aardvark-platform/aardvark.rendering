@@ -26,7 +26,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
     let mutable currentProgram : Option<AdaptiveCode> = None
     let mutable currentChanger = Mod.constant FrameStatistics.Zero
     let mutable frag : 'f = match precompiled with | Some p -> p | None -> null
-    let mutable lastSurface = None
+    let mutable lastPrev = None
 
     let hasProgram =
         match precompiled with
@@ -39,12 +39,10 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
                 | null -> PreparedRenderObject.Empty
                 | _ -> prev.RenderObject
 
-        let mySurface = rj.Original.Surface.GetValue()
-
-        match lastSurface with
-            | Some s when s = mySurface -> FrameStatistics.Zero
+        match lastPrev with
+            | Some s when s = prev.RenderObject -> FrameStatistics.Zero
             | _ ->
-                lastSurface <- Some mySurface
+                lastPrev <- Some prev.RenderObject
 
                 match frag with
                     | null -> frag <- ctx.handler.Create []
@@ -143,7 +141,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
 
         currentChanger.RemoveOutput changer
         currentChanger <- Mod.constant FrameStatistics.Zero
-        lastSurface <- None
+        lastPrev <- None
         prev <- null
         next <- null
 
