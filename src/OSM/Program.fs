@@ -169,7 +169,7 @@ let main argv =
     // whenever the window size changes we'd like to adjust the viewport's aspect
     // Note that we don't do this in the mod-system since we want to be able to override
     // this behavoiur.
-    w.Sizes |> Mod.registerCallback (fun s ->
+    w.Sizes |> Mod.unsafeRegisterCallbackKeepDisposable (fun s ->
         let aspect = float s.X / float s.Y
         transact (fun () ->
             let vp = viewport.GetValue()

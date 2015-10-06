@@ -564,7 +564,7 @@ let controlWSAD (view : ICameraView) (keyboard : IKeyboard) (time : IMod<DateTim
         }
 
     viewTrafoChanger.AddOutput(view.ViewTrafos.Mod)
-    let d = viewTrafoChanger |> Mod.registerCallback id
+    let d = viewTrafoChanger |> Mod.unsafeRegisterCallbackKeepDisposable id
 
     { new IDisposable with
         member x.Dispose() = 
@@ -781,7 +781,7 @@ let main args =
 //    transact <| fun () ->
 //        arr.Value <- [||]
     
-    ctrl.Sizes |> Mod.registerCallback (fun s ->
+    ctrl.Sizes |> Mod.unsafeRegisterCallbackKeepDisposable (fun s ->
         let aspect = float s.X / float s.Y
         proj.AspectRatio <- aspect
     ) |> ignore
