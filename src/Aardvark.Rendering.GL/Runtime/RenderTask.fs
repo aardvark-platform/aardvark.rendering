@@ -342,7 +342,7 @@ module RenderTasks =
                     | Add a ->
                         if a.RenderPass <> null then
                             let oldPass = ref System.UInt64.MaxValue
-                            let s = a.RenderPass |> Mod.registerCallback (fun k ->
+                            let s = a.RenderPass |> Mod.unsafeRegisterCallbackKeepDisposable (fun k ->
                                 if !oldPass <> k  // phantom change here might lead to duplicate additions.
                                     then
                                         oldPass := k

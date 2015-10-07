@@ -51,9 +51,10 @@ module VertexArrayObjectExtensions =
                 GL.EnableVertexAttribArray(id)
                 GL.Check "could not enable vertex attribute array"
 
-                match att.Frequency with
-                    | PerVertex -> GL.VertexAttribDivisor(id, 0)
-                    | PerInstances s -> GL.VertexAttribDivisor(id, s)
+                if ExecutionContext.instancingSupported then
+                    match att.Frequency with
+                        | PerVertex -> GL.VertexAttribDivisor(id, 0)
+                        | PerInstances s -> GL.VertexAttribDivisor(id, s)
                 GL.Check "could not set vertex attribute frequency"
 
                 let attType = glTypes.[att.BaseType]
