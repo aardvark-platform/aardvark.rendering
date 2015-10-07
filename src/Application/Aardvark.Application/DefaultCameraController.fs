@@ -63,6 +63,30 @@ module DefaultCameraController =
                 return AdaptiveFunc.Identity
         }
 
+
+    let controlOrbitAround (m : IMouse) (center : IMod<V3d>) =
+        let down = m.IsDown(MouseButtons.Left)
+        let location = m.Position |> Mod.map (fun pp -> pp.Position)
+
+        adaptive {
+            let! d = down
+            let! center' = center
+            if d then
+                return location |> Mod.step (fun op delta (cam : CameraView) ->
+                    let trafo =
+                        M44d.Rotation(cam.Right, float delta.Y * -0.01) *
+                        M44d.Rotation(cam.Sky, float delta.X * -0.01)
+
+                    let newLocation = trafo.TransformDir cam.Location
+                    let tempcam = cam.WithLocation newLocation
+                    let newForward = center' - newLocation |> Vec.normalize
+
+                    tempcam.WithForward newForward
+                ) 
+            else
+                return AdaptiveFunc.Identity
+        }
+
     let controlPan (m : IMouse) =
         let down = m.IsDown(MouseButtons.Middle)
         let location = m.Position |> Mod.map (fun pp -> pp.Position)
