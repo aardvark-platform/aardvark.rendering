@@ -335,6 +335,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         addInput rj.transform
         addInput rj.scissor
         addInput rj.fillColor
+        addInput rj.isActive
 
         match rj.command with
             | Left p ->
@@ -358,6 +359,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         removeInput rj.transform
         removeInput rj.scissor
         removeInput rj.fillColor
+        removeInput rj.isActive
 
         match rj.command with
             | Left p ->
