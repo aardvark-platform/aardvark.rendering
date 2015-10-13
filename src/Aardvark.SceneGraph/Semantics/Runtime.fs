@@ -6,14 +6,20 @@ open Aardvark.Base.Ag
 open Aardvark.Base.AgHelpers
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
-
 open Aardvark.SceneGraph.Internal
+
+open System.Runtime.CompilerServices
 
 [<AutoOpen>]
 module RuntimeSemantics =
 
     type ISg with
         member x.Runtime : IRuntime = x?Runtime
+
+    [<Semantic>]
+    type RuntimeSem() =
+        member x.Runtime(e : Sg.Environment) =
+            e.Child?Runtime <- e.Runtime
 
     type IRuntime with
 
@@ -34,7 +40,21 @@ module RuntimeSemantics =
             x.CompileRender(BackendConfiguration.Default, s)
 
 
-    [<Semantic>]
-    type RuntimeSem() =
-        member x.Runtime(e : Sg.Environment) =
-            e.Child?Runtime <- e.Runtime
+[<Extension; AbstractClass; Sealed>]
+type RuntimeExtensions private() =
+
+    [<Extension>]
+    static member CompileRender(x : IRuntime, rjs : aset<IRenderObject>) =
+        x.CompileRender(rjs)
+
+    [<Extension>]   
+    static member CompileRender (x : IRuntime, engine : BackendConfiguration, e : Sg.Environment) =
+        x.CompileRender(engine,e)
+
+    [<Extension>]   
+    static member  CompileRender (x : IRuntime, engine : BackendConfiguration, s : ISg) =
+        x.CompileRender(engine,s)
+
+    [<Extension>]   
+    static member CompileRender (x : IRuntime, s : ISg) =
+        x.CompileRender(s)
