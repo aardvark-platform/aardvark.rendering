@@ -23,7 +23,7 @@ open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
-open Microsoft.FSharp.Linq.QuotationEvaluation
+open FSharp.Quotations.Evaluator
 open Aardvark.Base.Incremental
 
 type UniformPath =
@@ -192,7 +192,7 @@ module private ValueConverter =
             let input = Var("input", typeof<'a>)
             let e = createUniformPath (Expr.Var input) path
             let lambda = Expr.Lambda(input, createLeafTransformation e)
-            lambda.CompileUntyped() () |> unbox<'a -> 'b>
+            lambda.CompileUntyped() |> unbox<'a -> 'b>
 
     module private Convert =
         open System.Collections.Generic
@@ -340,7 +340,7 @@ module private ValueConverter =
                     | Lambda(v, Lambda(ptr, b)) -> Expr.Lambda(m, Expr.Lambda(ptr, Expr.Let(v, getter, b)))
                     | _ -> failwith "asdasd"
 
-            ex.CompileUntyped() () |> unbox<obj -> nativeint -> unit>
+            ex.CompileUntyped() |> unbox<obj -> nativeint -> unit>
 
         let key = (paths,t)
 
