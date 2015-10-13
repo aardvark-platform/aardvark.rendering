@@ -30,17 +30,7 @@ NUGET
     BruTile (0.12.0)
     DevILSharp (0.0.11)
     FSharp.Compiler.Service (0.0.90)
-    FSPowerPack.Community (3.0.0.0)
-      FSPowerPack.Linq.Community
-      FSPowerPack.Metadata.Community
-      FSPowerPack.Parallel.Seq.Community
-    FSPowerPack.Core.Community (3.0.0.0)
-    FSPowerPack.Linq.Community (3.0.0.0)
-      FSPowerPack.Core.Community
-    FSPowerPack.Metadata.Community (3.0.0.0)
-      FSPowerPack.Core.Community
-    FSPowerPack.Parallel.Seq.Community (3.0.0.0)
-      FSPowerPack.Core.Community
+    FSharp.Quotations.Evaluator (1.0.6)
     OpenHardwareMonitor (0.7.1)
     RegexProvider (0.0.5)
     Rx-Core (2.2.5)
