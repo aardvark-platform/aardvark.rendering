@@ -347,7 +347,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
     let mouse = new GameWindowIO.Mouse()
     let keyboard = new GameWindowIO.Keyboard()
 
-    let sw = System.Diagnostics.Stopwatch()
+    let startupTime = System.Diagnostics.Stopwatch()
 
     do mouse.SetControl this
        keyboard.SetControl this
@@ -405,7 +405,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 //                        while sw.Elapsed.TotalMilliseconds < 10.0 do 1;
 
                         if first then
-                            sw.Stop()
+                            startupTime.Stop()
                             printfn "startup time: %As" sw.Elapsed.TotalSeconds
 
 
@@ -429,7 +429,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
     member x.Keyboard = keyboard :> IKeyboard     
 
     member x.Run()  =
-        sw.Start()
+        startupTime.Start()
         x.Run()
 
 
