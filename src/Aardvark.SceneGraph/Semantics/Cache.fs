@@ -27,8 +27,8 @@ module internal Caching =
             ( f : 'a -> 'b ) =
         let table = ConditionalWeakTable<'a,'b>()
 
-        member x.Invoke a b = 
-            match table.TryGetValue b with
+        member x.Invoke a = 
+            match table.TryGetValue a with
                 | true,v' -> v'
                 | _ ->
                     let r = f a

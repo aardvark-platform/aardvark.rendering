@@ -59,10 +59,10 @@ module private ValueConverter =
             // * -> M44f
             <@@ fun (t : Trafo3d)   -> M44f.op_Explicit (Trafo.forward t) @@>
             <@@ fun (t : M44d)      -> M44f.op_Explicit t @@>
-            <@@ fun (v : M44d)      -> M34f(float32 v.M00, float32 v.M10, float32 v.M20, float32 v.M30, float32 v.M01, float32 v.M11, float32 v.M21, float32 v.M31, float32 v.M02, float32 v.M12, float32 v.M22, float32 v.M32) @@>
+            <@@ fun (v : M44d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, float32 v.M03, float32 v.M10, float32 v.M11, float32 v.M12, float32 v.M13, float32 v.M20, float32 v.M21, float32 v.M22, float32 v.M23) @@>
 
-            <@@ fun (v : M33f)      -> M34f(v.M00, v.M10, v.M20, 0.0f, v.M01, v.M11, v.M21, 0.0f, v.M02, v.M12, v.M22, 0.0f) @@>
-            <@@ fun (v : M33d)      -> M34f(float32 v.M00, float32 v.M10, float32 v.M20, 0.0f, float32 v.M01, float32 v.M11, float32 v.M21, 0.0f, float32 v.M02, float32 v.M12, float32 v.M22, 0.0f) @@>
+            <@@ fun (v : M33f)      -> M34f(v.M00, v.M01, v.M02, 0.0f, v.M10, v.M11, v.M12, 0.0f, v.M20, v.M21, v.M22, 0.0f) @@>
+            <@@ fun (v : M33d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, 0.0f, float32 v.M10, float32 v.M11, float32 v.M12, 0.0f, float32 v.M20, float32 v.M21, float32 v.M22, 0.0f) @@>
 
             <@@ fun (v : V4d)       -> V4f.op_Explicit v @@>
             <@@ fun (v : V3d)       -> V3f.op_Explicit v @@>
