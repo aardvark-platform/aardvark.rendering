@@ -49,18 +49,98 @@ module DefaultSurfaces =
 
         }
 
-    let thickLine (width : float) (line : Line<Vertex>) =
+
+    type ThickLineVertex = {
+        [<Position>]                pos     : V4d
+        [<Color>]                   c       : V4d
+        [<Semantic("LineCoord")>]   lc      : V2d
+        [<Semantic("Width")>]       w       : float
+    }
+
+    let thickLine (line : Line<ThickLineVertex>) =
         triangle {
-            let p0 = line.[0].pos.XYZ / line.[0].pos.W
-            let p1 = line.[1].pos.XYZ / line.[1].pos.W
+            let t = uniform.LineWidth
+            let sizeF = V3d(float uniform.ViewportSize.X, float uniform.ViewportSize.Y, 1.0)
 
-            let fw = p1 - p0
-            let r = V3d(-fw.Y, fw.X, fw.Z)
+            let w0 = max line.P0.pos.W 0.001
+            let w1 = max line.P1.pos.W 0.001
+            let p0 = line.P0.pos.XYZ / w0
+            let p1 = line.P1.pos.XYZ / w1
+
+            let fwp = (p1.XYZ - p0.XYZ) * sizeF
+
+            let fw = V3d(fwp.XY * 2.0, 0.0) |> Vec.normalize
+            let r = V3d(-fw.Y, fw.X, 0.0) / sizeF
+            let d = fw / sizeF
+            let p00 = p0 - r * t - d * t
+            let p10 = p0 + r * t - d * t
+            let p11 = p1 + r * t + d * t
+            let p01 = p1 - r * t + d * t
+
+            let rel = t / (Vec.length fwp)
+
+            yield { line.P0 with pos = V4d(p00, 1.0); lc = V2d(-1.0, -rel); w = rel }
+            yield { line.P0 with pos = V4d(p10, 1.0); lc = V2d(1.0, -rel); w = rel }
+            yield { line.P1 with pos = V4d(p01, 1.0); lc = V2d(-1.0, 1.0 + rel); w = rel }
+            yield { line.P1 with pos = V4d(p11, 1.0); lc = V2d(1.0, 1.0 + rel); w = rel }
+
+        }
+        
+    let thickLineRoundCaps (v : ThickLineVertex) =
+        fragment {
+            if v.lc.Y < 0.0 then
+                let tc = v.lc / V2d(1.0, v.w)
+                if tc.Length > 1.0 then discard()
+
+            elif v.lc.Y >= 1.0 then
+                let tc = (v.lc - V2d.OI) / V2d(1.0, v.w)
+                if tc.Length > 1.0 then discard()
 
 
-            let p00 = width
+            return v.c
+        }
+    
+    let thickLineSparePointSizeCaps (v : ThickLineVertex) =
+        fragment {
+            let r = uniform.PointSize / uniform.LineWidth
+            if v.lc.Y < 0.5 then
+                let tc = v.lc / V2d(1.0, v.w)
+                if v.lc.Y < 0.0 || tc.Length < r then discard()
 
-            yield line.[0]
+            else
+                let tc = (v.lc - V2d.OI) / V2d(1.0, v.w)
+                if v.lc.Y > 1.0 || tc.Length < r then discard()
+
+
+            return v.c
+        }
+
+
+    let pointSprite (p : Point<Vertex>) =
+        triangle {
+            let s = uniform.PointSize / V2d uniform.ViewportSize
+            let pos = p.Value.pos
+            let pxyz = pos.XYZ / pos.W
+
+            let p00 = V3d(pxyz + V3d( -s.X, -s.Y, 0.0 ))
+            let p01 = V3d(pxyz + V3d( -s.X,  s.Y, 0.0 ))
+            let p10 = V3d(pxyz + V3d(  s.X, -s.Y, 0.0 ))
+            let p11 = V3d(pxyz + V3d(  s.X,  s.Y, 0.0 ))
+
+            yield { p.Value with pos = V4d(p00 * pos.W, pos.W); tc = V2d.OO }
+            yield { p.Value with pos = V4d(p10 * pos.W, pos.W); tc = V2d.IO }
+            yield { p.Value with pos = V4d(p01 * pos.W, pos.W); tc = V2d.OI }
+            yield { p.Value with pos = V4d(p11 * pos.W, pos.W); tc = V2d.II }
+
+        }
+
+    let pointSpriteFragment (v : Vertex) =
+        fragment {
+            let c = 2.0 * v.tc - V2d.II
+            if c.Length > 1.0 then
+                discard()
+
+            return v.c
         }
 
     let uniformColor (c : IMod<C4f>) (v : Vertex) =
@@ -72,6 +152,12 @@ module DefaultSurfaces =
     let constantColor (c : C4f) (v : Vertex) =
         let c = c.ToV4d()
         fragment {
+            return c
+        }
+
+    let sgColor (v : Vertex) =
+        fragment {
+            let c : V4d = uniform?Color
             return c
         }
 

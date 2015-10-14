@@ -35,6 +35,16 @@ module DefaultSems =
         member x.CameraLocation : V3d = x?PerView?CameraLocation
         member x.LightLocation : V3d = x?PerLight?LightLocation
 
+
+
+        member x.LineWidth : float = x?LineWidth
+        member x.LineColor : V4d = x?LineColor
+
+        member x.PointSize : float = x?PointSize
+        member x.PointColor : V4d = x?PointColor
+
+        member x.ViewportSize : V2i = x?PerView?ViewportSize
+
 [<AutoOpen>]
 module FShadeSceneGraph =
     open Aardvark.Base
