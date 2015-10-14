@@ -248,11 +248,11 @@ module Sg =
 [<EntryPoint>]
 let main argv = 
     use app = new OpenGlApplication()
-    use win = app.CreateSimpleRenderWindow()
+    let win = app.CreateSimpleRenderWindow(8)
 
     Aardvark.Init()
 
-    let proj = CameraProjectionPerspective(60.0, 0.1, 1000.0, float win.Width / float win.Height)
+    let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y) |> Frustum.toTrafo) //CameraProjectionPerspective(60.0, 0.1, 1000.0, float win.Width / float win.Height)
 
     let geometry = 
         IndexedGeometry(
@@ -279,7 +279,7 @@ let main argv =
     let active = win.Keyboard.IsDown(Keys.X)
 
     let viewTrafo = cam |> Mod.map CameraView.viewTrafo
-    let vp = Mod.map2 ((*)) viewTrafo proj.ProjectionTrafos.Mod
+    let vp = Mod.map2 ((*)) viewTrafo proj
 
     let plane = Mod.init Plane3d.ZPlane
 
@@ -336,48 +336,34 @@ let main argv =
                ) 
             |> Sg.wirePolygon (Mod.constant 10.0) (Mod.constant C4f.Green)
 
-    let finals = 
-        sketched 
-            |> Workflow.finals 
-            |> AStream.all 
-            |> ASet.map (Mod.constant >> Sg.solidPolygon (Mod.constant C4f.VRVisGreen))
-
-    let rays = 
-        win.Mouse.Position
-            |> Mod.map (fun pp ->
-                let n = pp.NormalizedPosition 
-                let ndc = V3d(2.0*n.X - 1.0, 1.0 - 2.0*n.Y,0.0)
-
-                let ndcToWorld = vp |> Mod.force |> Trafo.backward
-                let near = Mat.transformPosProj ndcToWorld ndc
-                let cam = viewTrafo.GetValue().Backward.TransformPos V3d.Zero
-
-                    
-                Ray3d(cam, near - cam |> Vec.normalize)
-            )
-
-
     let config = 
         { 
             viewProj = vp
             mousePosition = win.Mouse.Position
-            pointSize = Mod.constant 35.0
+            pointSize = Mod.constant 40.0
             lineWidth = Mod.constant 15.0 
             highlightColor = C4b.Red
-            pointColor = C4b.Blue
+            pointColor = C4b.Yellow
             lineColor = C4b.Green
         }
 
     let active = Mod.init true
 
+    let finals = 
+        sketched 
+            |> Workflow.finals 
+            |> AStream.all 
+            |> ASet.map (Mod.constant >> Sg.highlightedWirePolygon config active)
+
+
     let sg =
-        [ intermediate |> Sg.pass 1UL :> ISg; 
+        [ intermediate; 
           Sg.highlightedWirePolygon config active (Mod.constant (Polygon3d [V3d.OOO; V3d.IOO; V3d.IIO; V3d.OIO]))
 
-          Sg.set finals |> Sg.pass 1UL :> ISg ]
+          Sg.set finals ]
             |> Sg.group
             |> Sg.viewTrafo viewTrafo
-            |> Sg.projTrafo proj.ProjectionTrafos.Mod
+            |> Sg.projTrafo proj
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect; DefaultSurfaces.simpleLighting |> toEffect ]
             |> Sg.uniform "ViewportSize" win.Sizes
 
