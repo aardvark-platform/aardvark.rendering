@@ -35,5 +35,5 @@ type ArrayBuffer(data : Array) =
     override x.GetHashCode() = data.GetHashCode()
     override x.Equals o =
         match o with
-            | :? ArrayBuffer as o -> o.Data = data
+            | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
             | _ -> false
