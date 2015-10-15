@@ -70,33 +70,33 @@ module FragmentHandlers =
             NativeDynamicFragment(f)
 
         let ct = cancel.Token
-        let defragment() =
-            if not ct.IsCancellationRequested then
-                Log.startTimed "defragmentation"
-                //Log.warn "defragmentation currently disabled"
-
-                let mutable current = prolog.Fragment
-                current.Freeze()
-                try
-                    let mutable index = 0
-                    while current.Next <> null do
-                        ct.ThrowIfCancellationRequested()
-
-                        current.DefragmentNext()
-                        let next = current.Next
-                        current.Unfreeze()
-
-                        next.Freeze()
-
-                        current <- next
-                        index <- index + 1
-
-                with :? OperationCanceledException | :? System.Threading.Tasks.TaskCanceledException ->
-                    Log.line "defragmentation canceled"
-
-                current.Unfreeze()
-
-                Log.stop()
+        let defragment() = ()
+//            if not ct.IsCancellationRequested then
+//                Log.startTimed "defragmentation"
+//                //Log.warn "defragmentation currently disabled"
+//
+//                let mutable current = prolog.Fragment
+//                current.Freeze()
+//                try
+//                    let mutable index = 0
+//                    while current.Next <> null do
+//                        ct.ThrowIfCancellationRequested()
+//
+//                        current.DefragmentNext()
+//                        let next = current.Next
+//                        current.Unfreeze()
+//
+//                        next.Freeze()
+//
+//                        current <- next
+//                        index <- index + 1
+//
+//                with :? OperationCanceledException | :? System.Threading.Tasks.TaskCanceledException ->
+//                    Log.line "defragmentation canceled"
+//
+//                current.Unfreeze()
+//
+//                Log.stop()
 
         let defrag = DelayedTask(defragment)
         let totalChanges = ref 0
