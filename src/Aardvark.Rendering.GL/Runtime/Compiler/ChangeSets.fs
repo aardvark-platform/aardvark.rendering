@@ -12,12 +12,17 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
     let l = obj()
     let all = HashSet<IMod<FrameStatistics>>()
     let set = HashSet<IMod<FrameStatistics>>()
-    let callbacks = Dictionary<IMod<FrameStatistics>, (unit -> unit)>()
+    let callbacks = Dictionary<IMod<FrameStatistics>, IDisposable>()
     let sw = System.Diagnostics.Stopwatch()
 
     let dirty (m : IMod<FrameStatistics>) () =
         lock l (fun () -> 
-            callbacks.Remove m |> ignore
+            match callbacks.TryGetValue m with
+                | (true, d) -> 
+                    d.Dispose()
+                    callbacks.Remove m |> ignore
+                | _ -> ()
+
             set.Add m |> ignore
         )
 
@@ -31,8 +36,7 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
                         set.Add m |> ignore
                     else
                         let cb = dirty m
-                        callbacks.[m] <- cb
-                        m.MarkingCallbacks.Add cb |> ignore
+                        callbacks.[m] <- m.AddVolatileMarkingCallback cb
                 )
             )
         else
@@ -46,11 +50,10 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
 
                     set.Remove m |> ignore
                     match callbacks.TryGetValue m with
-                        | (true, cb) ->
+                        | (true, d) -> 
+                            d.Dispose()
                             callbacks.Remove m |> ignore
-                            m.MarkingCallbacks.Remove cb |> ignore
-                        | _ ->
-                            ()
+                        | _ -> ()
                 )
             )
 
@@ -62,8 +65,7 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
 
                 for d in dirtySet do
                     let cb = dirty d
-                    callbacks.[d] <- cb
-                    d.MarkingCallbacks.Add cb |> ignore
+                    callbacks.[d] <- d.AddVolatileMarkingCallback cb
 
                 dirtySet
             )
@@ -83,12 +85,16 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
     let l = obj()
     let all = ReferenceCountingSet<IChangeableResource>()
     let set = HashSet<IChangeableResource>()
-    let callbacks = Dictionary<IChangeableResource, (unit -> unit)>()
+    let callbacks = Dictionary<IChangeableResource, IDisposable>()
     let sw = System.Diagnostics.Stopwatch()
 
     let dirty (m : IChangeableResource) () =
         lock l (fun () -> 
-            callbacks.Remove m |> ignore
+            match callbacks.TryGetValue m with
+                | (true, d) -> 
+                    d.Dispose()
+                    callbacks.Remove m |> ignore
+                | _ -> ()
             set.Add m |> ignore
         )
 
@@ -103,8 +109,7 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
                         set.Add m |> ignore
                     else
                         let cb = dirty m
-                        callbacks.[m] <- cb
-                        m.MarkingCallbacks.Add cb |> ignore
+                        callbacks.[m] <- m.AddVolatileMarkingCallback cb
             )
         )
 
@@ -115,11 +120,10 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
                     removeInput m
                     set.Remove m |> ignore
                     match callbacks.TryGetValue m with
-                        | (true, cb) ->
+                        | (true, d) -> 
+                            d.Dispose()
                             callbacks.Remove m |> ignore
-                            m.MarkingCallbacks.Remove cb |> ignore
-                        | _ ->
-                            ()
+                        | _ -> ()
             )
         )
 
@@ -132,8 +136,7 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
 
                 for d in dirtySet do
                     let cb = dirty d
-                    callbacks.[d] <- cb
-                    d.MarkingCallbacks.Add cb |> ignore
+                    callbacks.[d] <- d.AddVolatileMarkingCallback cb
 
                 dirtySet
             )

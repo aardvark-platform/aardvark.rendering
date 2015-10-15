@@ -78,7 +78,7 @@ module Mod =
                 currentValue := v
                 if not !isSubscribed then
                     isSubscribed := true
-                    time.MarkingCallbacks.Add (fun () ->
+                    time.AddVolatileMarkingCallback (fun () ->
                         isSubscribed := false
                         transact (fun () -> current.MarkOutdated())
                     ) |> ignore
