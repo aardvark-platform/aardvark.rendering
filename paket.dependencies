@@ -1,11 +1,11 @@
 source https://nuget.org/api/v2
 source https://vrvis.myget.org/F/aardvark_public/api/v2
 
-nuget Aardvark.Base.Incremental ~> 1.3.28
-nuget FShade ~> 1.4.1
+nuget Aardvark.Base.Incremental ~> 1.5.0
+nuget FShade ~> 1.4.7
 nuget RegexProvider ~> 0.0.5
 nuget BruTile ~> 0.12.0
 nuget FSharp.Quotations.Evaluator ~> 1.0.6
 nuget AssimpNet ~> 3.3.1
 nuget OpenHardwareMonitor ~> 0.7.1
-nuget NanoVgSharp ~> 0.0.2
+nuget NanoVgSharp ~> 0.0.10
