@@ -378,23 +378,46 @@ module ResourceManager =
         let volatileSubscribtion (m : IMod) (cb : (unit -> unit) -> unit) : IDisposable =
             let f = ref Unchecked.defaultof<_>
             let life = ref true
+            let current = ref null
 
             let subscribe() =
                 if !life then
                     lock m (fun () ->
-                        m.MarkingCallbacks.Add !f |> ignore
-                    )
-
+                        current := m.AddVolatileMarkingCallback !f
+                    )  
+                    
             f := fun () ->
                 cb(subscribe)
 
-            subscribe()
+            subscribe()   
 
             { new IDisposable with
                 member x.Dispose() =
                     life := false
-                    m.MarkingCallbacks.Remove !f |> ignore
-            }
+                    if not (isNull !current) then
+                        current.Value.Dispose()
+                        current := null
+            } 
+//            failwith "not impl"
+//            let f = ref Unchecked.defaultof<_>
+//            let life = ref true
+//
+//            let subscribe() =
+//                if !life then
+//                    lock m (fun () ->
+//                        m.MarkingCallbacks.Add !f |> ignore
+//                    )
+//
+//            f := fun () ->
+//                cb(subscribe)
+//
+//            subscribe()
+//
+//            { new IDisposable with
+//                member x.Dispose() =
+//                    life := false
+//                    m.MarkingCallbacks.Remove !f |> ignore
+//            }
            
         member private x.BufferHandler = bufferHandler
         member private x.TextureHandler = textureHandler 
