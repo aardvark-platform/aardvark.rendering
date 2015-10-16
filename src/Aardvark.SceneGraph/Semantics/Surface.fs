@@ -25,7 +25,7 @@ module SurfaceSemantics =
     [<Semantic>]
     type SurfaceSem() =
 
-        member x.Surface(e : Root) =
+        member x.Surface(e : Root<ISg>) =
             e.Child?Surface <- emptySurface
 
         member x.Surface(s : Sg.SurfaceApplicator) =

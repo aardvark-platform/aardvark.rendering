@@ -30,7 +30,7 @@ module ActiveSemantics =
             elif b = trueConstant then a
             else andCache.Invoke a b
 
-        member x.IsActive(r : Root) =
+        member x.IsActive(r : Root<ISg>) =
             r.Child?IsActive <- trueConstant
 
         member x.IsActive(o : Sg.OnOffNode) =
@@ -42,7 +42,7 @@ module ActiveSemantics =
 
         let defaultPass = Mod.constant 0UL
         
-        member x.RenderPass(e : Root) =
+        member x.RenderPass(e : Root<ISg>) =
             e.Child?RenderPass <- defaultPass
 
         member x.RenderPass(p : Sg.PassApplicator) =

@@ -391,90 +391,90 @@ module Semantics =
     [<Semantic>]
     type InheritedSem() =
         
-        member x.Context(r : Root) =
+        member x.Context(r : Root<INvg>) =
             r.Child?Context <- Unchecked.defaultof<Context.NanoVgContext>
 
         member x.Context(app : Nvg.ContextApplicator) =
             app.Child?Context <- app.Context
 
-        member x.StrokeWidth(r : Root) =
+        member x.StrokeWidth(r : Root<INvg>) =
             r.Child?StrokeWidth <- Mod.constant 1.0
 
         member x.StrokeWidth(app : Nvg.StrokeWidthApplicator) =
             app.Child?StrokeWidth <- app.Width
 
 
-        member x.StrokeColor(r : Root) =
+        member x.StrokeColor(r : Root<INvg>) =
             r.Child?StrokeColor <- Mod.constant C4f.White
 
         member x.StrokeColor(app : Nvg.StrokeColorApplicator) =
             app.Child?StrokeColor <- app.Color
 
 
-        member x.LineCap(r : Root) =
+        member x.LineCap(r : Root<INvg>) =
             r.Child?LineCap <- Mod.constant LineCap.ButtCap
 
         member x.LineCap(app : Nvg.LineCapApplicator) =
             app.Child?LineCap <- app.LineCap
 
 
-        member x.LineJoin(r : Root) =
+        member x.LineJoin(r : Root<INvg>) =
             r.Child?LineJoin <- Mod.constant LineJoin.RoundJoin
 
         member x.LineJoin(app : Nvg.LineJoinApplicator) =
             app.Child?LineJoin <- app.LineJoin
 
 
-        member x.Winding(r : Root) =
+        member x.Winding(r : Root<INvg>) =
             r.Child?Winding <- Mod.constant Winding.CCW
 
         member x.Winding(app : Nvg.WindingApplicator) =
             app.Child?Winding <- app.Winding
 
 
-        member x.Font(r : Root) =
+        member x.Font(r : Root<INvg>) =
             r.Child?Font <- Mod.constant (SystemFont("Consolas", FontStyle.Regular))
 
         member x.Font(app : Nvg.FontApplicator) =
             app.Child?Font <- app.Font
 
 
-        member x.FontSize(r : Root) =
+        member x.FontSize(r : Root<INvg>) =
             r.Child?FontSize <- Mod.constant 12.0
 
         member x.FontSize(app : Nvg.FontSizeApplicator) =
             app.Child?FontSize <- app.FontSize
 
 
-        member x.LetterSpacing(r : Root) =
+        member x.LetterSpacing(r : Root<INvg>) =
             r.Child?LetterSpacing <- Mod.constant 0.0
 
         member x.LetterSpacing(app : Nvg.LetterSpacingApplicator) =
             app.Child?LetterSpacing <- app.LetterSpacing
 
 
-        member x.LineHeight(r : Root) =
+        member x.LineHeight(r : Root<INvg>) =
             r.Child?LineHeight <- Mod.constant 1.0
 
         member x.LineHeight(app : Nvg.LineHeightApplicator) =
             app.Child?LineHeight <- app.LineHeight
 
 
-        member x.FontBlur(r : Root) =
+        member x.FontBlur(r : Root<INvg>) =
             r.Child?FontBlur <- Mod.constant 0.0
 
         member x.FontBlur(app : Nvg.BlurApplicator) =
             app.Child?FontBlur <- app.Blur
 
 
-        member x.TextAlign(r : Root) =
+        member x.TextAlign(r : Root<INvg>) =
             r.Child?TextAlign <- Mod.constant (TextAlign.Left ||| TextAlign.Top)
 
         member x.TextAlign(app : Nvg.TextAlignApplicator) =
             app.Child?TextAlign <- app.TextAlign
 
 
-        member x.Trafo(r : Root) =
+        member x.Trafo(r : Root<INvg>) =
             r.Child?Trafo <- Mod.constant M33d.Identity
 
         member x.Trafo(app : Nvg.TrafoApplicator) =
@@ -482,14 +482,14 @@ module Semantics =
             app.Child?Trafo <- Mod.map2 (*) parent app.Trafo
 
 
-        member x.Scissor(r : Root) =
+        member x.Scissor(r : Root<INvg>) =
             r.Child?Scissor <- Mod.constant Box2d.Infinite
 
         member x.Scissor(app : Nvg.ScissorApplicator) =
             app.Child?Scissor <- app.Bounds
 
 
-        member x.FillColor(r : Root) =
+        member x.FillColor(r : Root<INvg>) =
             r.Child?FillColor <- Mod.constant C4f.White
 
         member x.FillColor(app : Nvg.FillColorApplicator) =
