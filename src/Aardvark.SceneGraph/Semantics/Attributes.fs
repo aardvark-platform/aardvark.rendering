@@ -31,7 +31,7 @@ module AttributeSemantics =
         static let zero = Mod.constant 0
         let (~%) (m : Map<Symbol, BufferView>) = m
 
-        member x.FaceVertexCount (root : Root) =
+        member x.FaceVertexCount (root : Root<ISg>) =
             root.Child?FaceVertexCount <- zero
 
         member x.FaceVertexCount (app : Sg.VertexIndexApplicator) =
@@ -56,16 +56,16 @@ module AttributeSemantics =
                                    )
                     | _ -> app.Child?FaceVertexCount <- app.FaceVertexCount
 
-        member x.InstanceAttributes(root : Root) = 
+        member x.InstanceAttributes(root : Root<ISg>) = 
             root.Child?InstanceAttributes <- %Map.empty
 
-        member x.VertexIndexArray(e : Root) =
+        member x.VertexIndexArray(e : Root<ISg>) =
             e.Child?VertexIndexArray <- emptyIndex
 
         member x.VertexIndexArray(v : Sg.VertexIndexApplicator) =
             v.Child?VertexIndexArray <- v.Value
 
-        member x.VertexAttributes(e : Root) =
+        member x.VertexAttributes(e : Root<ISg>) =
             e.Child?VertexAttributes <- %Map.empty
 
         member x.VertexAttributes(v : Sg.VertexAttributeApplicator) =

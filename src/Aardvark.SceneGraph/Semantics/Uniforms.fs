@@ -20,7 +20,7 @@ module UniformSemantics =
 
     [<Semantic>]
     type UniformSem() =
-        member x.Uniforms(e : Root) =
+        member x.Uniforms(e : Root<ISg>) =
             e.Child?Uniforms <- ([] : list<IUniformProvider>)
 
         member x.Uniforms(u : Sg.UniformApplicator) =

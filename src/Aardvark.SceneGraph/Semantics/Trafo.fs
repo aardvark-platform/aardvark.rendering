@@ -58,7 +58,7 @@ module TrafoSemantics =
 
         let inverse t = invCache.Invoke t
 
-        member x.ModelTrafo(e : Root) = 
+        member x.ModelTrafo(e : Root<ISg>) = 
             e.Child?ModelTrafo <- rootTrafo
 
         member x.ModelTrafo(t : Sg.TrafoApplicator) =
@@ -72,10 +72,10 @@ module TrafoSemantics =
         member x.ProjTrafo(p : Sg.ProjectionTrafoApplicator) =
             p.Child?ProjTrafo <- p.ProjectionTrafo
 
-        member x.ViewTrafo(r : Root) =
+        member x.ViewTrafo(r : Root<ISg>) =
             r.Child?ViewTrafo <- rootTrafo
 
-        member x.ProjTrafo(r : Root) =
+        member x.ProjTrafo(r : Root<ISg>) =
             r.Child?ProjTrafo <- rootTrafo
 
         member x.ViewTrafo(e : Sg.Environment) =

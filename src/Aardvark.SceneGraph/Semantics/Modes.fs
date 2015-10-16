@@ -34,19 +34,19 @@ module ModeSemantics =
         let defaultStencil = Mod.constant StencilMode.Disabled
         let defaultBlend = Mod.constant BlendMode.None
 
-        member x.DepthTestMode(e : Root) =
+        member x.DepthTestMode(e : Root<ISg>) =
             e.Child?DepthTestMode <- defaultDepth
 
-        member x.CullMode(e : Root) =
+        member x.CullMode(e : Root<ISg>) =
             e.Child?CullMode <- defaultCull
 
-        member x.FillMode(e : Root) =
+        member x.FillMode(e : Root<ISg>) =
             e.Child?FillMode <- defaultFill
 
-        member x.StencilMode(e : Root) =
+        member x.StencilMode(e : Root<ISg>) =
             e.Child?StencilMode <- defaultStencil
 
-        member x.BlendMode(e : Root) =
+        member x.BlendMode(e : Root<ISg>) =
             e.Child?BlendMode <- defaultBlend
 
 
