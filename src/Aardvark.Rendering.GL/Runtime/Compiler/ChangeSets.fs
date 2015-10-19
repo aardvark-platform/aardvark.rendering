@@ -17,12 +17,6 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
 
     let dirty (m : IMod<FrameStatistics>) () =
         lock l (fun () -> 
-            match callbacks.TryGetValue m with
-                | (true, d) -> 
-                    d.Dispose()
-                    callbacks.Remove m |> ignore
-                | _ -> ()
-
             set.Add m |> ignore
         )
 
@@ -30,13 +24,12 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
         if not m.IsConstant then
             lock m (fun () -> 
                 lock l (fun () ->
-                    if all.Add m then addInput m
+                    if all.Add m then 
+                        addInput m
+                        callbacks.[m] <- m.AddMarkingCallback (dirty m)
 
                     if m.OutOfDate then
                         set.Add m |> ignore
-                    else
-                        let cb = dirty m
-                        callbacks.[m] <- m.AddVolatileMarkingCallback cb
                 )
             )
         else
@@ -46,14 +39,15 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
         if not m.IsConstant then
             lock m (fun () ->
                 lock l (fun () ->
-                    if all.Remove m then removeInput m
+                    if all.Remove m then 
+                        removeInput m
 
-                    set.Remove m |> ignore
-                    match callbacks.TryGetValue m with
-                        | (true, d) -> 
-                            d.Dispose()
-                            callbacks.Remove m |> ignore
-                        | _ -> ()
+                        set.Remove m |> ignore
+                        match callbacks.TryGetValue m with
+                            | (true, d) -> 
+                                d.Dispose()
+                                callbacks.Remove m |> ignore
+                            | _ -> ()
                 )
             )
 
@@ -62,11 +56,6 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
             lock l (fun () ->
                 let dirtySet = set |> Seq.toArray
                 set.Clear()
-
-                for d in dirtySet do
-                    let cb = dirty d
-                    callbacks.[d] <- d.AddVolatileMarkingCallback cb
-
                 dirtySet
             )
 
@@ -90,11 +79,6 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
 
     let dirty (m : IChangeableResource) () =
         lock l (fun () -> 
-            match callbacks.TryGetValue m with
-                | (true, d) -> 
-                    d.Dispose()
-                    callbacks.Remove m |> ignore
-                | _ -> ()
             set.Add m |> ignore
         )
 
@@ -105,11 +89,11 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
             lock l (fun () ->
                 if all.Add m then
                     addInput m
+                    let cb = dirty m
+                    callbacks.[m] <- m.AddMarkingCallback cb
+
                     if m.OutOfDate then
                         set.Add m |> ignore
-                    else
-                        let cb = dirty m
-                        callbacks.[m] <- m.AddVolatileMarkingCallback cb
             )
         )
 
@@ -130,14 +114,8 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
     member x.Update() =
         let dirtyResoruces = 
             lock l (fun () ->
-                
                 let dirtySet = set |> Seq.toArray
                 set.Clear()
-
-                for d in dirtySet do
-                    let cb = dirty d
-                    callbacks.[d] <- d.AddVolatileMarkingCallback cb
-
                 dirtySet
             )
         sw.Restart()

@@ -375,29 +375,29 @@ module ResourceManager =
 
         let compile (s : ISurface) = SurfaceCompilers.compile ctx s
 
-        let volatileSubscribtion (m : IMod) (cb : (unit -> unit) -> unit) : IDisposable =
-            let f = ref Unchecked.defaultof<_>
-            let life = ref true
-            let current = ref null
-
-            let subscribe() =
-                if !life then
-                    lock m (fun () ->
-                        current := m.AddVolatileMarkingCallback !f
-                    )  
-                    
-            f := fun () ->
-                cb(subscribe)
-
-            subscribe()   
-
-            { new IDisposable with
-                member x.Dispose() =
-                    life := false
-                    if not (isNull !current) then
-                        current.Value.Dispose()
-                        current := null
-            } 
+//        let volatileSubscribtion (m : IMod) (cb : (unit -> unit) -> unit) : IDisposable =
+//            let f = ref Unchecked.defaultof<_>
+//            let life = ref true
+//            let current = ref null
+//
+//            let subscribe() =
+//                if !life then
+//                    lock m (fun () ->
+//                        current := m.AddVolatileMarkingCallback !f
+//                    )  
+//                    
+//            f := fun () ->
+//                cb(subscribe)
+//
+//            subscribe()   
+//
+//            { new IDisposable with
+//                member x.Dispose() =
+//                    life := false
+//                    if not (isNull !current) then
+//                        current.Value.Dispose()
+//                        current := null
+//            } 
 //            failwith "not impl"
 //            let f = ref Unchecked.defaultof<_>
 //            let life = ref true
@@ -626,7 +626,7 @@ module ResourceManager =
                     let subscriptions =
                         writers |> List.map (fun (m,w) ->
                             w()
-                            volatileSubscribtion m (fun s -> lock dirty (fun () -> dirty.Add (m, w, s)))
+                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add (m, w)))
                         )
 
                     ctx.Upload(b)
@@ -641,8 +641,8 @@ module ResourceManager =
                             )
 
                         if not <| List.isEmpty d then
-                            for (m,w,s) in d do
-                                w(); s();
+                            for (m,w) in d do
+                                w();
                             
 
                       updateGPU = fun () -> ctx.Upload(b)
