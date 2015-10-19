@@ -495,6 +495,9 @@ module Semantics =
         member x.FillColor(app : Nvg.FillColorApplicator) =
             app.Child?FillColor <- app.Color
 
+        member x.IsActive(root : Root<INvg>) =
+            root.Child?IsActive <- Mod.constant true
+
         member x.IsActive(app : INvgApplicator) =
             app.Child?IsActive <- app?IsActive
 
