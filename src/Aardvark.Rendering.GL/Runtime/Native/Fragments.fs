@@ -258,7 +258,7 @@ module Fragments =
             //store our nextPointer since the relative offset will change
             //when relocated.
             let next = x.Next
-            manager.Copy(newBlock.Pointer, block.Pointer, block.Size)
+            manager.Move(newBlock.Pointer, block.Pointer, block.Size)
 
             let oldBlock = block
             block <- newBlock
