@@ -8,6 +8,8 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Base.Incremental.Operators
+open Aardvark.Application
+open System.Diagnostics
 
 module Vector =
 
@@ -294,3 +296,99 @@ module RenderingTests =
 
         ()
 
+
+    [<Test>]
+    let ``[GL] nested trafos``() =
+        
+        let leaf = quad |> Sg.ofIndexedGeometry
+        let screen = V2i(2048, 2048)
+
+        let grid (size : V2i) (inner : ISg) =
+            Sg.group' [
+                for x in -size.X/2..size.X/2 do
+                    for y in -size.Y/2..size.Y/2 do
+                        yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
+            ]
+
+
+        let rec buildGrid (depth : int) =
+            if depth <= 0 then 
+                leaf   
+            else 
+                depth - 1 
+                    |> buildGrid 
+                    |> Sg.trafo (~~Trafo3d.Scale(0.5))
+                    |> grid (5 * V2i.II)
+
+
+        let cam = CameraView.lookAt (6.0 * V3d.III) V3d.Zero V3d.OOI
+        let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
+
+        let rootTrafo = Mod.init Trafo3d.Identity
+
+        let sg =
+            buildGrid 3
+                |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
+                |> Sg.trafo rootTrafo
+                |> Sg.viewTrafo ~~(cam |> CameraView.viewTrafo)
+                |> Sg.projTrafo ~~(frustum |> Frustum.toTrafo)
+
+        use runtime = new Runtime()
+        use ctx = new Context(runtime)
+        runtime.Context <- ctx
+
+        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let task = runtime.CompileRender sg
+
+        let color = runtime.CreateTexture(~~screen, ~~PixFormat.ByteBGRA, ~~1, ~~1)
+        let depth = runtime.CreateRenderbuffer(~~screen, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
+
+        let fbo = 
+            runtime.CreateFramebuffer(
+                Map.ofList [
+                    DefaultSemantic.Colors, ~~({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                ]
+            )
+
+        clear.Run fbo |> ignore
+        task.Run fbo |> ignore
+
+
+        let pi = color.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
+        pi.SaveAsImage @"C:\Users\haaser\Desktop\test.png"
+
+        let mutable iterations = 0
+        let sw = Stopwatch()
+        sw.Start()
+        while sw.Elapsed.TotalSeconds < 10.0 do
+            clear.Run fbo |> ignore
+            task.Run fbo |> ignore
+            iterations <- iterations + 1
+        sw.Stop()
+
+        let pureRenderTime = sw.Elapsed.TotalSeconds / float iterations
+
+
+        let mutable iterations = 0
+        let sw = Stopwatch()
+        sw.Start()
+        while sw.Elapsed.TotalSeconds < 10.0 do
+            transact(fun () -> Mod.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
+            clear.Run fbo |> ignore
+            task.Run fbo |> ignore
+            iterations <- iterations + 1
+        sw.Stop()
+
+        let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
+            
+
+        let updateTime = updateAndRenderTime - pureRenderTime
+
+        Log.line "total:        %.2ffps" (1.0 / updateAndRenderTime)
+        Log.line "rendering:    %.2ffps" (1.0 / pureRenderTime)
+        Log.line "updates:      %.2ffps" (1.0 / updateTime)
+
+
+
+        ()
