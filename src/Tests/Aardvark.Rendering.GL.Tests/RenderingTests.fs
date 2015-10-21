@@ -313,15 +313,15 @@ module RenderingTests =
 
         let rec buildGrid (depth : int) =
             if depth <= 0 then 
-                leaf   
+                leaf |> Sg.trafo (~~Trafo3d.Scale(0.5))  
             else 
                 depth - 1 
                     |> buildGrid 
-                    |> Sg.trafo (~~Trafo3d.Scale(0.5))
                     |> grid (5 * V2i.II)
+                    |> Sg.trafo (~~Trafo3d.Scale(0.125))
 
 
-        let cam = CameraView.lookAt (6.0 * V3d.III) V3d.Zero V3d.OOI
+        let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
         let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
 
         let rootTrafo = Mod.init Trafo3d.Identity
@@ -352,11 +352,11 @@ module RenderingTests =
             )
 
         clear.Run fbo |> ignore
-        task.Run fbo |> ignore
-
+        let stats = task.Run fbo
+        Log.line "%.0f objects" stats.Statistics.DrawCallCount
 
         let pi = color.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
-        pi.SaveAsImage @"C:\Users\haaser\Desktop\test.png"
+        pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
 
         let mutable iterations = 0
         let sw = Stopwatch()
