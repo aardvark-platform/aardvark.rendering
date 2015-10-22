@@ -33,7 +33,7 @@ type PreparedRenderObject =
         member x.Original = Some x.Original
 
     member x.Id = x.Original.Id
-    member x.CreationPath = x.Original.CreationPath
+    member x.CreationPath = x.Original.Path
     member x.AttributeScope = x.Original.AttributeScope
 
     member x.IsActive = x.Original.IsActive

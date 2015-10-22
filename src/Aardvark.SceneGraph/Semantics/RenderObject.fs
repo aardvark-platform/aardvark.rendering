@@ -37,7 +37,7 @@ module RenderObjectSemantics =
 
         member x.RenderObjects(r : Sg.RenderNode) : aset<IRenderObject> =
             let scope = Ag.getContext()
-            let rj = RenderObject.Create(scope.Path)
+            let rj = RenderObject.Create()
             
             rj.AttributeScope <- scope 
             rj.Indices <- let index  = r.VertexIndexArray in if index = AttributeSemantics.emptyIndex then null else index 
