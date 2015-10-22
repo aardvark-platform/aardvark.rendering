@@ -35,7 +35,6 @@ type IRenderObject =
 type RenderObject =
     {
         Id : int
-        CreationPath : string
         mutable AttributeScope : Ag.Scope
                 
         mutable IsActive : IMod<bool>
@@ -61,9 +60,13 @@ type RenderObject =
         member x.RenderPass = x.RenderPass
         member x.AttributeScope = x.AttributeScope
 
-    static member Create(path : string) =
+    member x.Path = 
+        if System.Object.ReferenceEquals(x.AttributeScope,Ag.emptyScope) 
+        then "EMPTY" 
+        else x.AttributeScope.Path
+
+    static member Create() =
         { Id = RenderObjectIds.newId()
-          CreationPath = path;
           AttributeScope = Ag.emptyScope
           IsActive = null
           RenderPass = null
@@ -80,8 +83,6 @@ type RenderObject =
           VertexAttributes = null
           Uniforms = null
         }
-
-    static member Create() = RenderObject.Create("UNKNWON")
 
     override x.GetHashCode() = x.Id
     override x.Equals o =
@@ -113,7 +114,6 @@ module RenderObjectExtensions =
 
     let private empty =
         { Id = -1
-          CreationPath = "EMPTY";
           AttributeScope = Ag.emptyScope
           IsActive = null
           RenderPass = null
