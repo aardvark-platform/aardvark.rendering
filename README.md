@@ -19,3 +19,6 @@ Linux:
 - run xbuild src/Aardvark.Rendering.sln or use MonoDevelop to build src/Aardvark.Rendering
 
 
+[1] https://visualfsharp.codeplex.com/releases/view/161288
+
+
