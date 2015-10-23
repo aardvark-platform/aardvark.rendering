@@ -626,7 +626,8 @@ module ResourceManager =
                     let subscriptions =
                         writers |> List.map (fun (m,w) ->
                             w()
-                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add (m, w)))
+                            let upd = (m, w)
+                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add upd))
                         )
 
                     ctx.Upload(b)
