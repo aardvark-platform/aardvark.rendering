@@ -963,49 +963,52 @@ module TextureExtensions =
 
         member x.CreateTexture(data : ITexture) =
             using x.ResourceLock (fun _ ->
-                let h = GL.GenTexture()
-                GL.Check "could not create texture"
-
-                let mutable t = Texture(x, h, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), 1, ChannelType.RGBA8)
+                let newTexture () = // not all cases need new textures
+                    let h = GL.GenTexture()
+                    GL.Check "could not create texture"
+                    Texture(x, h, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), 1, ChannelType.RGBA8)
 
                 match data with
 
                     | :? BitmapTexture as bmp ->
+                        let t = newTexture ()
                         uploadTexture2DBitmap t true bmp
+                        t
 
                     | FileTexture(info, file) ->
                         
+                        let t = newTexture ()
                         // TODO: maybe there's a better way for loading file-textures
                         if file = null then 
-                            ()
+                            t
                         else
                             let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
                             let mm = PixImageMipMap [|pi|]
                             uploadTexture2D t info mm |> ignore
+                            t
 
                     | PixTexture2D(wantMipMaps, data) -> 
 
 //                        if data.LevelCount > 0 then
 //                            t.ChannelType <- data.[0].PixFormat |> ChannelType.ofPixFormat
-
+                        let t = newTexture ()
                         uploadTexture2D t wantMipMaps data |> ignore
+                        t
 //
 //                    | PixTextureCube(info, data) -> 
 //                        uploadTextureCube t info data
 //
 //                    | PixTexture3D(info, image) ->
 //                        uploadTexture3D t info image
+                    | :? NullTexture ->
+                        Texture(x, 0, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), 1, ChannelType.RGBA8)
 
                     | :? Texture as o ->
-                        GL.DeleteTexture(h)
-                        GL.Check "could not delete texture"
-
-                        // TODO: don't create a texture-handle here
-                        t <- o
+                        o
 
                     | _ ->
                         failwith "unsupported texture data"
-                t
+
             )
 
         member x.Upload(t : Texture, data : ITexture) =

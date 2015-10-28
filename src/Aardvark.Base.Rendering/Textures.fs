@@ -42,6 +42,15 @@ type FileTexture(fileName : string, wantMipMaps : bool) =
             | _ ->
                 false
 
+type NullTexture() =
+    interface ITexture with 
+        member x.WantMipMaps = false
+    override x.GetHashCode() = 0
+    override x.Equals o =
+        match o with
+            | :? NullTexture -> true
+            | _ -> false
+
 type PixTexture2d(data : PixImageMipMap, wantMipMaps : bool) =
     member x.PixImageMipMap = data
     member x.WantMipMaps = wantMipMaps
