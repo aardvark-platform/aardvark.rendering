@@ -629,10 +629,9 @@ module ResourceManager =
                     
                     let dirty = System.Collections.Generic.List()
                     let subscriptions =
-                        writers |> List.map (fun (m,w) ->
+                        writers |> List.map (fun ((m,w) as value) ->
                             w()
-                            let upd = (m, w)
-                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add upd))
+                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add value))
                         )
 
                     ctx.Upload(b)
