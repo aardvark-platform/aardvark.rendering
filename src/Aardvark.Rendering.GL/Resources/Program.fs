@@ -241,7 +241,7 @@ module ProgramReflector =
                             GL.GetError() |> ignore
                             //GL.Check "could not get frag data location"
 
-                            yield { attributeIndex = i; size = size; name = name; semantic = name; attributeType = outputType }
+                            yield { attributeIndex = i; size = 1; name = name; semantic = name; attributeType = outputType }
 
             ]
             GL.Check "could not get active outputs"

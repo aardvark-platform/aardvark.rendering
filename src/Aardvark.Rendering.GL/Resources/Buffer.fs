@@ -133,7 +133,7 @@ module BufferExtensions =
                     handle
                 )
 
-            Buffer(x, nativeint size, handle)
+            Buffer(x, nativeint sizeInBytes, handle)
 
         /// <summary>
         /// creates a new buffer and initializes its content (copy to GPU memory)

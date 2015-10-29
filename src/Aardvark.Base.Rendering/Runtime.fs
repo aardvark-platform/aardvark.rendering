@@ -101,3 +101,18 @@ type IGeneratedSurface =
     inherit ISurface
 
     abstract member Generate : IRuntime -> BackendSurface
+
+
+[<AutoOpen>]
+module NullResources =
+
+    let isNullResource (obj : obj) =
+        match obj with 
+         | :? NullBuffer -> true
+         | :? NullTexture -> true
+         | _ -> false
+         
+    let isValidResourceAdaptive (m : IMod) =
+      [m :> IAdaptiveObject] |> Mod.mapCustom (fun () ->
+            not <| isNullResource (m.GetValue())
+      ) 
