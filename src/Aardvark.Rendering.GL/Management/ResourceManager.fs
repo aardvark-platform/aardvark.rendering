@@ -467,19 +467,21 @@ module ResourceManager =
 
                     let handleMod = Mod.init !handle
 
+                    let updateTo (t : Buffer) =
+                        if !created then
+                            bufferHandler.Delete(!handle)
+                            created := false
+
+                        let h = Mod.constant t
+                        handle := h
+                        transact (fun () -> handleMod.Value <- h)
 
                     { dependencies = [data]
                       updateCPU = fun () -> data.GetValue() |> ignore
                       updateGPU = fun () ->
                         match data.GetValue() with
-                            | :? Buffer as t -> 
-                                if !created then
-                                    bufferHandler.Delete(!handle)
-                                    created := false
-
-                                let h = Mod.constant t
-                                handle := h
-                                transact (fun () -> handleMod.Value <- h)
+                            | :? Buffer as t -> updateTo t
+                            | :? NullBuffer as n -> updateTo ( Buffer(ctx,0n,0) )
                             | _ -> 
                                 if !created then
                                     bufferHandler.Update(!handle, data.GetValue())
@@ -535,18 +537,21 @@ module ResourceManager =
 
                     let handleMod = Mod.init !handle
 
+                    let updateTo (t : Texture) =
+                        if !created then
+                            textureHandler.Delete(!handle)
+                            created := false
+
+                        let h = Mod.constant t
+                        handle := h
+                        transact (fun () -> handleMod.Value <- h)
+
                     { dependencies = [data]
                       updateCPU = fun () -> data.GetValue() |> ignore
                       updateGPU = fun () -> 
                         match data.GetValue() with
-                            | :? Texture as t -> 
-                                if !created then
-                                    textureHandler.Delete(!handle)
-                                    created := false
-
-                                let h = Mod.constant t
-                                handle := h
-                                transact (fun () -> handleMod.Value <- h)
+                            | :? Texture as t -> updateTo t
+                            | :? NullTexture as t -> updateTo Texture.empty
                             | _ -> 
                                 if !created then
                                     textureHandler.Update(!handle, data.GetValue())

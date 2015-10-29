@@ -109,6 +109,14 @@ module BufferExtensions =
         /// to treat the buffer internally
         /// </summary>
         member x.CreateBuffer(data : Array, usage : BufferUsage) =
+            let size = data.GetType().GetElementType().GLSize * data.Length
+            let gcHandle = GCHandle.Alloc(data, GCHandleType.Pinned)
+            let result = x.CreateBuffer(gcHandle.AddrOfPinnedObject(), size, usage)     
+            gcHandle.Free()
+            result
+
+
+        member x.CreateBuffer(data : nativeint, sizeInBytes : int, usage : BufferUsage) =
             let handle = 
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
@@ -116,13 +124,8 @@ module BufferExtensions =
                     GL.BindBuffer(BufferTarget.ArrayBuffer, handle)
                     GL.Check "failed to create buffer"
 
-                    let size = data.GetType().GetElementType().GLSize * data.Length
-                    let gcHandle = GCHandle.Alloc(data, GCHandleType.Pinned)
-
-                    GL.BufferData(BufferTarget.ArrayBuffer, (nativeint size), gcHandle.AddrOfPinnedObject(), usageHint usage)
+                    GL.BufferData(BufferTarget.ArrayBuffer, (nativeint sizeInBytes), data, usageHint usage)
                     GL.Check "failed to upload buffer"
-
-                    gcHandle.Free()
 
                     GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
                     GL.Check "failed to unbind buffer"
@@ -156,15 +159,24 @@ module BufferExtensions =
                     bb
                 | :? ArrayBuffer as ab ->
                     x.CreateBuffer(ab.Data)
+                | :? NullBuffer -> 
+                    Buffer(x,0n,0)
+                | :? NativeMemoryBuffer as nativeBuffer ->
+                    x.CreateBuffer(nativeBuffer.Ptr,nativeBuffer.SizeInBytes, Static)
 
                 | _ -> 
                     failwith "unsupported buffer-type"
 
         member x.Upload(b : Buffer, data : IBuffer) =
+            if b.Handle = 0 then failwith "cannot update null buffer"
             match data with
                 | :? ArrayBuffer as ab -> x.Upload(b, ab.Data)
                 | :? Buffer as bb ->
                     if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
+                | :? NullBuffer ->
+                    failwith "cannot create null buffer out of non-null buffer"
+                | :? NativeMemoryBuffer as n ->
+                   x.Upload(b,n.Ptr,n.SizeInBytes)
                 | _ ->
                     failwithf "unsupported buffer-data-type: %A" data
 

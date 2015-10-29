@@ -45,10 +45,13 @@ module RenderObjectSemantics =
             rj.IsActive <- r.IsActive
             rj.RenderPass <- r.RenderPass
             
-            
-            rj.Uniforms <- new Providers.UniformProvider(scope, r?Uniforms)
-            rj.VertexAttributes <- new Providers.AttributeProvider(scope, "VertexAttributes")
-            rj.InstanceAttributes <- new Providers.AttributeProvider(scope, "InstanceAttributes")
+            let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes")
+            let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
+
+            rj.Uniforms <- new Providers.UniformProvider(scope, r?Uniforms, 
+                                                         [vertexAttributes; instanceAttributes])
+            rj.VertexAttributes <- vertexAttributes
+            rj.InstanceAttributes <- instanceAttributes
             
             rj.DepthTest <- r.DepthTestMode
             rj.CullMode <- r.CullMode

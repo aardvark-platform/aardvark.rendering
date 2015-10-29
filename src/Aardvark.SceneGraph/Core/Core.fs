@@ -109,9 +109,47 @@ module private Providers =
 
 
 
-    type UniformProvider(scope : Scope,  uniforms : list<IUniformProvider>) =
+    type UniformProvider(scope : Scope,  uniforms : list<IUniformProvider>, attributeProviders : list<IAttributeProvider>) =
         let mutable scope = scope
         let mutable cache = SymbolDict<IMod>()
+
+        
+        member x.TryGetUniform(dynamicScope, s : Symbol) =
+            
+            let contains (s : Symbol) =
+                attributeProviders |> List.exists (fun p ->
+                    match p.TryGetAttribute s with
+                     | Some v -> true
+                     | None -> false
+                )
+
+            let str = s.ToString()
+            match cache.TryGetValue s with
+                | (true, m) -> 
+                    Some m
+
+                | _ -> 
+                    match uniforms |> List.tryPick (fun u -> u.TryGetUniform (scope,s)) with
+                        | Some u -> 
+                            let cs = u
+                            cache.Add(s, cs)
+                            Some cs
+                        | None -> 
+                            match scope.TryGetAttributeValue (str) with
+                                | Success (v : IMod) -> 
+                                    let cs = v
+                                    cache.Add(s, cs)
+                                    Some cs
+                                | _ ->
+                                    if str.StartsWith("Has") then
+                                        let baseName = str.Substring(3).ToSymbol()
+                                        let sourceUniform = x.TryGetUniform(dynamicScope, baseName)
+                                        match sourceUniform with    
+                                            | Some v -> Some (Mod.constant true :> IMod)
+                                            | None -> 
+                                                let inAttributes = contains baseName
+                                                Some (Mod.constant inAttributes :> IMod)
+                                    else None
 
         interface IUniformProvider with
 
@@ -119,23 +157,6 @@ module private Providers =
                 cache.Clear()
                 scope <- emptyScope
 
-            member x.TryGetUniform(_, s : Symbol) =
-                match cache.TryGetValue s with
-                    | (true, m) -> 
-                        Some m
+            member x.TryGetUniform(dynamicScope,s) = x.TryGetUniform(dynamicScope,s)
 
-                    | _ -> 
-                        match uniforms |> List.tryPick (fun u -> u.TryGetUniform (scope,s)) with
-                            | Some u -> 
-                                let cs = u
-                                cache.Add(s, cs)
-                                Some cs
-                            | None -> 
-                                match scope.TryGetAttributeValue (s.ToString()) with
-                                    | Success (v : IMod) -> 
-                                        let cs = v
-                                        cache.Add(s, cs)
-                                        Some cs
-                                    | _ ->
-                                        None
 

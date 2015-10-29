@@ -1031,6 +1031,7 @@ module TextureExtensions =
                         let mm = PixImageMipMap [|pi|]
                         uploadTexture2D t info mm |> ignore
 
+                    | :? NullTexture -> failwith "cannot update texture with null texture"
 
                     | :? Texture as o ->
                         if t.Handle <> o.Handle then
@@ -1092,6 +1093,10 @@ module TextureExtensions =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Texture =
+
+    let empty =
+        Texture(null,0,TextureDimension.Texture2D,0,0,V3i.Zero,0,ChannelType.RGBA8)
+
     let create1D (c : Context) (size : int) (mipLevels : int) (channelType : ChannelType) =
         c.CreateTexture1D(size, mipLevels, channelType)
 

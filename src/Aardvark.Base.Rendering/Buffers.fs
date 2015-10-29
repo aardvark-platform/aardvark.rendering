@@ -37,3 +37,25 @@ type ArrayBuffer(data : Array) =
         match o with
             | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
             | _ -> false
+
+type NullBuffer() =
+    interface IBuffer
+
+    override x.GetHashCode() = 0
+    override x.Equals o =
+        match o with
+            | :? NullBuffer -> true
+            | _ -> false
+
+type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
+    interface IBuffer
+
+    member x.Ptr = ptr
+    member x.SizeInBytes = sizeInBytes
+
+    override x.GetHashCode() = HashCode.Combine(ptr.GetHashCode(),sizeInBytes)
+    override x.Equals o =
+        match o with
+            | :? NativeMemoryBuffer as n ->
+                n.Ptr = ptr && n.SizeInBytes = sizeInBytes
+            | _ -> false
