@@ -8,39 +8,61 @@ open System.Runtime.InteropServices
 type ITexture = 
     abstract member WantMipMaps : bool
 
-type BitmapTexture(bmp : System.Drawing.Bitmap, wantMipMaps : bool) =
-    member x.WantMipMaps = wantMipMaps
+type TextureParams =
+    {
+        wantMipMaps : bool
+        wantSrgb : bool
+        wantCompressed : bool
+    }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module TextureParams =
+    
+    let empty = { wantMipMaps = false; wantSrgb = false; wantCompressed = false}
+
+type BitmapTexture(bmp : System.Drawing.Bitmap, textureParams : TextureParams) =
+    [<Obsolete("use texture params instead")>]
+    member x.WantMipMaps = textureParams.wantMipMaps
+    member x.TextureParams = textureParams
     member x.Bitmap = bmp
     interface ITexture with
-        member x.WantMipMaps = x.WantMipMaps
+        member x.WantMipMaps = textureParams.wantMipMaps
 
     override x.GetHashCode() =
-        HashCode.Combine(bmp.GetHashCode(), wantMipMaps.GetHashCode())
+        HashCode.Combine(bmp.GetHashCode(), textureParams.GetHashCode())
 
     override x.Equals o =
         match o with
             | :? BitmapTexture as o ->
-                bmp = o.Bitmap && wantMipMaps = o.WantMipMaps
+                bmp = o.Bitmap && textureParams = o.TextureParams
             | _ ->
                 false
+    new(bmp : System.Drawing.Bitmap, wantMipMaps : bool) = 
+        BitmapTexture(bmp, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
 
-type FileTexture(fileName : string, wantMipMaps : bool) =
+
+type FileTexture(fileName : string, textureParams : TextureParams) =
     do if System.IO.File.Exists fileName |> not then failwithf "File does not exist: %s" fileName
 
     member x.FileName = fileName
-    member x.WantMipMaps = wantMipMaps
+    [<Obsolete("use texture params instead")>]
+    member x.WantMipMaps = textureParams.wantMipMaps
+    member x.TextureParams = textureParams
     interface ITexture with
-        member x.WantMipMaps = x.WantMipMaps
+        member x.WantMipMaps = textureParams.wantMipMaps
 
     override x.GetHashCode() =
-        HashCode.Combine(fileName.GetHashCode(), wantMipMaps.GetHashCode())
+        HashCode.Combine(fileName.GetHashCode(), textureParams.GetHashCode())
 
     override x.Equals o =
         match o with
             | :? FileTexture as o ->
-                fileName = o.FileName && wantMipMaps = o.WantMipMaps
+                fileName = o.FileName && textureParams = o.TextureParams
             | _ ->
                 false
+
+    new(fileName : string, wantMipMaps : bool) = 
+        FileTexture(fileName, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
 
 type NullTexture() =
     interface ITexture with 
@@ -51,53 +73,66 @@ type NullTexture() =
             | :? NullTexture -> true
             | _ -> false
 
-type PixTexture2d(data : PixImageMipMap, wantMipMaps : bool) =
+type PixTexture2d(data : PixImageMipMap, textureParams : TextureParams) =
     member x.PixImageMipMap = data
-    member x.WantMipMaps = wantMipMaps
+    [<Obsolete("use texture params instead")>]
+    member x.WantMipMaps = textureParams.wantMipMaps
+    member x.TextureParams = textureParams
     interface ITexture with
-        member x.WantMipMaps = x.WantMipMaps
+        member x.WantMipMaps = textureParams.wantMipMaps
 
     override x.GetHashCode() =
-        HashCode.Combine(data.GetHashCode(), wantMipMaps.GetHashCode())
+        HashCode.Combine(data.GetHashCode(), textureParams.GetHashCode())
 
     override x.Equals o =
         match o with
             | :? PixTexture2d as o ->
-                data = o.PixImageMipMap && wantMipMaps = o.WantMipMaps
+                data = o.PixImageMipMap && textureParams = o.TextureParams
             | _ ->
                 false
 
-type PixTextureCube(data : PixImageCube, wantMipMaps : bool) =
+    new(data : PixImageMipMap, wantMipMaps : bool) = 
+        PixTexture2d(data, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
+
+type PixTextureCube(data : PixImageCube,  textureParams : TextureParams) =
     member x.PixImageCube = data
-    member x.WantMipMaps = wantMipMaps
+    [<Obsolete("use texture params instead")>]
+    member x.WantMipMaps = textureParams.wantMipMaps
+    member x.TextureParams = textureParams
     interface ITexture with
-        member x.WantMipMaps = x.WantMipMaps
+        member x.WantMipMaps = textureParams.wantMipMaps
 
     override x.GetHashCode() =
-        HashCode.Combine(data.GetHashCode(), wantMipMaps.GetHashCode())
+        HashCode.Combine(data.GetHashCode(), textureParams.GetHashCode())
 
     override x.Equals o =
         match o with
             | :? PixTextureCube as o ->
-                data = o.PixImageCube && wantMipMaps = o.WantMipMaps
+                data = o.PixImageCube && textureParams = o.TextureParams
             | _ ->
                 false
+    new(data : PixImageCube, wantMipMaps : bool) = 
+        PixTextureCube(data, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
 
-type PixTexture3d(data : PixVolume, wantMipMaps : bool) =
+type PixTexture3d(data : PixVolume, textureParams : TextureParams) =
     member x.PixVolume = data
-    member x.WantMipMaps = wantMipMaps
+    [<Obsolete("use texture params instead")>]
+    member x.WantMipMaps = textureParams.wantMipMaps
+    member x.TextureParams = textureParams
     interface ITexture with
-        member x.WantMipMaps = x.WantMipMaps
+        member x.WantMipMaps = textureParams.wantMipMaps
 
     override x.GetHashCode() =
-        HashCode.Combine(data.GetHashCode(), wantMipMaps.GetHashCode())
+        HashCode.Combine(data.GetHashCode(), textureParams.GetHashCode())
 
     override x.Equals o =
         match o with
             | :? PixTexture3d as o ->
-                data = o.PixVolume && wantMipMaps = o.WantMipMaps
+                data = o.PixVolume && textureParams = o.TextureParams
             | _ ->
                 false
+    new(data : PixVolume, wantMipMaps : bool) = 
+        PixTexture3d(data, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
 
 
 module DefaultTextures =

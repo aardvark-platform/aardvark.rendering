@@ -528,7 +528,7 @@ module TextureExtensions =
     module private Patterns =
         let (|FileTexture|_|) (t : ITexture) =
             match t with
-                | :? FileTexture as t -> Some(FileTexture(t.WantMipMaps, t.FileName))
+                | :? FileTexture as t -> Some(FileTexture(t.TextureParams, t.FileName))
                 | _ -> None
 
 //        let (|PixTextureCube|_|) (t : ITexture) =
@@ -538,7 +538,7 @@ module TextureExtensions =
 //
         let (|PixTexture2D|_|) (t : ITexture) =
             match t with
-                | :? PixTexture2d as t -> Some(t.WantMipMaps, t.PixImageMipMap)
+                | :? PixTexture2d as t -> Some(t.TextureParams, t.PixImageMipMap)
                 | _ -> None
 //
 //        let (|PixTexture3D|_|) (t : ITexture) =
@@ -580,20 +580,20 @@ module TextureExtensions =
 
             result
 
-        let private uploadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (mipMaps : bool) (data : PixImageMipMap) =
+        let private uploadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (textureParams : TextureParams) (data : PixImageMipMap) =
             if data.LevelCount <= 0 then
                 failwith "cannot upload texture having 0 levels"
 
             let size = data.[0].Size
             let expectedLevels = Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int //int(Fun.Ceiling(Fun.Log2(Fun.Min(size.X, size.Y))))
-            let uploadLevels = if mipMaps then data.LevelCount else 1
-            let generateMipMap = mipMaps && data.LevelCount < expectedLevels
+            let uploadLevels = if textureParams.wantMipMaps then data.LevelCount else 1
+            let generateMipMap = textureParams.wantMipMaps && data.LevelCount < expectedLevels
             // TODO: think about texture format here
             let newFormat = ChannelType.ofPixFormat data.[0].PixFormat
             let formatChanged = t.ChannelType <> newFormat
             t.ChannelType <- newFormat
 
-            let internalFormat = ChannelType.toGlInternalFormat t.ChannelType
+            let internalFormat = TextureFormat.ofPixFormat data.[0].PixFormat textureParams |> unbox<PixelInternalFormat>
             let sizeChanged = size <> t.Size2D
 
             GL.BindTexture(target, t.Handle)
@@ -699,10 +699,10 @@ module TextureExtensions =
             t.Dimension <- TextureDimension.Texture2D
             t.ChannelType <- ChannelType.fromGlFormat internalFormat
 
-        let uploadTexture2D (t : Texture) (mipMaps : bool) (data : PixImageMipMap) =
-            uploadTexture2DInternal TextureTarget.Texture2D true t mipMaps data |> ignore
+        let uploadTexture2D (t : Texture) (textureParams : TextureParams) (data : PixImageMipMap) =
+            uploadTexture2DInternal TextureTarget.Texture2D true t textureParams data |> ignore
 
-        let uploadTextureCube (t : Texture) (mipMaps : bool) (data : PixImageCube) =
+        let uploadTextureCube (t : Texture) (textureParams : TextureParams) (data : PixImageCube) =
             for (s,_) in cubeSides do
                 if data.[s].LevelCount <= 0 then
                     failwith "cannot upload texture having 0 levels"
@@ -712,9 +712,9 @@ module TextureExtensions =
 
             for (side, target) in cubeSides do
                 let data = data.[side]
-                let generate = uploadTexture2DInternal target false t mipMaps data
+                let generate = uploadTexture2DInternal target false t textureParams data
 
-                if generate && mipMaps then
+                if generate && textureParams.wantMipMaps then
                     generateMipMaps <- true
 
             if generateMipMaps then
