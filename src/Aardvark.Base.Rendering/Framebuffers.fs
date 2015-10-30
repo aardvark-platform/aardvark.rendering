@@ -304,6 +304,14 @@ module TextureFormat =
             PixFormat.ByteRGBP , rgba
         ]
         
+    let toDownloadFormat =
+        lookupTable [
+            TextureFormat.Rgba8, PixFormat.ByteRGBA
+            TextureFormat.Rgb8, PixFormat.ByteRGB
+            TextureFormat.CompressedRgb, PixFormat.ByteRGB
+            TextureFormat.CompressedRgba, PixFormat.ByteRGBA
+
+        ]
 
 type IFramebufferRenderbuffer =
     inherit IDisposable

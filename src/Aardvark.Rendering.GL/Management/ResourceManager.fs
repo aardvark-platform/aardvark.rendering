@@ -740,12 +740,16 @@ module ResourceManager =
                 | None -> x.CreateVertexArrayObject(bindings)
 
         member x.CreateTexture(size : IMod<V2i>, mipLevels : IMod<int>, format : IMod<PixFormat>, samples : IMod<int>) : ChangeableResource<Texture> =
-            let handle = ctx.CreateTexture2D(size.GetValue(), mipLevels.GetValue(), ChannelType.ofPixFormat <| format.GetValue(), samples.GetValue())
+            
+            let textureFormat =
+                Mod.map2 (fun pf mips -> TextureFormat.ofPixFormat pf { TextureParams.empty with wantMipMaps = mips > 1 }) format mipLevels
+            
+            let handle = ctx.CreateTexture2D(size.GetValue(), mipLevels.GetValue(), textureFormat.GetValue(), samples.GetValue())
             
             let desc =
-                { dependencies = [size :> IMod; format :> IMod; samples :> IMod]
+                { dependencies = [size :> IMod; textureFormat :> IMod; samples :> IMod]
                   updateCPU = fun () -> ()
-                  updateGPU = fun () -> ctx.UpdateTexture2D(handle, size.GetValue(), mipLevels.GetValue(), ChannelType.ofPixFormat <| format.GetValue(), samples.GetValue())
+                  updateGPU = fun () -> ctx.UpdateTexture2D(handle, size.GetValue(), mipLevels.GetValue(), textureFormat.GetValue(), samples.GetValue())
                   destroy = fun () -> ctx.Delete(handle)
                   resource = Mod.constant handle
                   kind = ResourceKind.Texture

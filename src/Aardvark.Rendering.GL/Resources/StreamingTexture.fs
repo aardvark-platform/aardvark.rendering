@@ -22,7 +22,7 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
         if mipMap then Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int
         else 1
 
-    let texture = Texture(ctx, handle, TextureDimension.Texture2D, expectedLevels V2i.II, 1, V3i(1,1,0), 1, ChannelType.R11F_G11F_B10F)
+    let texture = Texture(ctx, handle, TextureDimension.Texture2D, expectedLevels V2i.II, 1, V3i(1,1,0), 1, TextureFormat.R11fG11fB10f)
     let mutable size = V2i.Zero
     let mutable format = PixFormat()
     let mutable formatSize = 0
@@ -49,8 +49,8 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
         pixelBuffers.[(currentPixelBuffer + pixelBuffers.Length - 1) % pixelBuffers.Length]
 
     let uploadUsingPBO (pbo : PixelBuffer) (fmt : PixFormat) (s : V2i) (data : nativeint) =
-        match ChannelType.tryGetFormat fmt with
-            | Some(pixelType, pixelFormat) ->
+        match toPixelType fmt.Type, toPixelFormat fmt.Format with
+            | Some pixelType, Some pixelFormat ->
                 if fmt <> format then formatSize <- fmt.ChannelCount * Marshal.SizeOf fmt.Type
                 let bufferSize = s.X * s.Y * formatSize |> int64
 
@@ -80,12 +80,11 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
                 GL.Check "could not bind texture"
 
                 if textureResized then
-                    let channelType = fmt |> ChannelType.ofPixFormat
-                    let ifmt = channelType |> ChannelType.toGlInternalFormat
-                    GL.TexImage2D(TextureTarget.Texture2D, 0, ifmt, s.X, s.Y, 0, pixelFormat, pixelType, 0n)
+                    let tfmt = TextureFormat.ofPixFormat fmt TextureParams.empty
+                    GL.TexImage2D(TextureTarget.Texture2D, 0, unbox tfmt, s.X, s.Y, 0, pixelFormat, pixelType, 0n)
                     GL.Check "could not copy PBO to texture"
 
-                    texture.ChannelType <- channelType
+                    texture.Format <- tfmt
                     texture.Size <- V3i(size.X, size.Y, 1)
                     texture.MipMapLevels <- expectedLevels size
                 else

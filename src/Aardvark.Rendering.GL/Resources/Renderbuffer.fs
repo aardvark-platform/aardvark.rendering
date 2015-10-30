@@ -30,7 +30,6 @@ type Renderbuffer =
 
 [<AutoOpen>]
 module RenderbufferExtensions =
-    open ChannelType
 
     let private lookup (name : string) (l : list<'a * 'b>) =
         let d = Dict.empty

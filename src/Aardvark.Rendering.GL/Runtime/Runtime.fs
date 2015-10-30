@@ -37,7 +37,7 @@ type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
         member x.WantMipMaps = getHandle().MipMapLevels > 1
         member x.Download(level) =
             let handle = getHandle()
-            let format = handle.ChannelType |> ChannelType.toDownloadFormat
+            let format = handle.Format |> TextureFormat.toDownloadFormat
             handle.Context.Download(handle, format, level)
 
 type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
