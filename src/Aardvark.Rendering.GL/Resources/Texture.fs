@@ -142,7 +142,35 @@ module TextureExtensions =
     let private toSizedInternalFormat =
         let tryGet = 
             lookupTable [
-            
+                TextureFormat.R16, SizedInternalFormat.R16
+                TextureFormat.R16f, SizedInternalFormat.R16f
+                TextureFormat.R16i, SizedInternalFormat.R16i
+                TextureFormat.R16ui, SizedInternalFormat.R16ui
+                TextureFormat.R32f, SizedInternalFormat.R32f
+                TextureFormat.R32i, SizedInternalFormat.R32i
+                TextureFormat.R32ui, SizedInternalFormat.R32ui
+                TextureFormat.R8, SizedInternalFormat.R8
+                TextureFormat.R8i, SizedInternalFormat.R8i
+                TextureFormat.R8ui, SizedInternalFormat.R8ui
+                TextureFormat.Rg16, SizedInternalFormat.Rg16
+                TextureFormat.Rg16i, SizedInternalFormat.Rg16i
+                TextureFormat.Rg16ui, SizedInternalFormat.Rg16ui
+                TextureFormat.Rg32f, SizedInternalFormat.Rg32f
+                TextureFormat.Rg32i, SizedInternalFormat.Rg32i
+                TextureFormat.Rg32ui, SizedInternalFormat.Rg32ui
+                TextureFormat.Rg8, SizedInternalFormat.Rg8
+                TextureFormat.Rg8i, SizedInternalFormat.Rg8i
+                TextureFormat.Rg8ui, SizedInternalFormat.Rg8ui
+                TextureFormat.Rgba16, SizedInternalFormat.Rgba16
+                TextureFormat.Rgba16f, SizedInternalFormat.Rgba16f
+                TextureFormat.Rgba16i, SizedInternalFormat.Rgba16i
+                TextureFormat.Rgba16ui, SizedInternalFormat.Rgba16ui
+                TextureFormat.Rgba32f, SizedInternalFormat.Rgba32f
+                TextureFormat.Rgba32i, SizedInternalFormat.Rgba32i
+                TextureFormat.Rgba32ui, SizedInternalFormat.Rgba32ui
+                TextureFormat.Rgba8, SizedInternalFormat.Rgba8
+                TextureFormat.Rgba8i, SizedInternalFormat.Rgba8i
+                TextureFormat.Rgba8ui, SizedInternalFormat.Rgba8ui
             ]
 
         fun i ->
