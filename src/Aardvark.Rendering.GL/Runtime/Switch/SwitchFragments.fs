@@ -95,6 +95,7 @@ type SwitchFragment(mode : VMMode) =
             match arg with
                 | :? int as i -> nativeint i
                 | :? nativeint as i -> i
+                | :? float32 as f -> BitConverter.ToInt32(BitConverter.GetBytes(f), 0) |> nativeint
                 | _ -> failwith "invalid argument"
         )
 

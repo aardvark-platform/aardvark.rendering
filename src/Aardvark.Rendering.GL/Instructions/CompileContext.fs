@@ -123,6 +123,12 @@ module ExecutionContext =
             | InstructionCode.TexParameteri            -> OpenGl.Pointers.TexParameteri
             | InstructionCode.TexParameterf            -> OpenGl.Pointers.TexParameterf
 
+            | InstructionCode.VertexAttrib1f           -> OpenGl.Pointers.VertexAttrib1f
+            | InstructionCode.VertexAttrib2f           -> OpenGl.Pointers.VertexAttrib2f
+            | InstructionCode.VertexAttrib3f           -> OpenGl.Pointers.VertexAttrib3f
+            | InstructionCode.VertexAttrib4f           -> OpenGl.Pointers.VertexAttrib4f
+
+
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 
     /// <summary>
@@ -144,6 +150,7 @@ module ExecutionContext =
         checkOperation i.Operation
         
         let inline int id = i.Arguments.[id] |> unbox<int>
+        let inline float id = i.Arguments.[id] |> unbox<float32>
         let inline int64 id = i.Arguments.[id] |> unbox<int64>
         let inline ptr id = i.Arguments.[id] |> unbox<nativeint>
 
@@ -190,6 +197,11 @@ module ExecutionContext =
             | InstructionCode.UniformMatrix2fv         -> OpenGl.Unsafe.UniformMatrix2fv (int 0) (int 1) (int 2) (ptr 3)
             | InstructionCode.UniformMatrix3fv         -> OpenGl.Unsafe.UniformMatrix3fv (int 0) (int 1) (int 2) (ptr 3)
             | InstructionCode.UniformMatrix4fv         -> OpenGl.Unsafe.UniformMatrix4fv (int 0) (int 1) (int 2) (ptr 3)
+
+            | InstructionCode.VertexAttrib1f           -> OpenGl.Unsafe.VertexAttrib1f (int 0) (float 1)
+            | InstructionCode.VertexAttrib2f           -> OpenGl.Unsafe.VertexAttrib2f (int 0) (float 1) (float 2)
+            | InstructionCode.VertexAttrib3f           -> OpenGl.Unsafe.VertexAttrib3f (int 0) (float 1) (float 2) (float 3)
+            | InstructionCode.VertexAttrib4f           -> OpenGl.Unsafe.VertexAttrib4f (int 0) (float 1) (float 2) (float 3) (float 4)
 
             | InstructionCode.GetError                 -> ()
             | _ -> failwithf "unknown instruction: %A" i

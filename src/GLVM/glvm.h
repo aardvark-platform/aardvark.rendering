@@ -45,6 +45,12 @@ static PFNGLUNIFORM4IVPROC				glUniform4iv;
 static PFNGLUNIFORMMATRIX2FVPROC		glUniformMatrix2fv;
 static PFNGLUNIFORMMATRIX3FVPROC		glUniformMatrix3fv;
 static PFNGLUNIFORMMATRIX4FVPROC		glUniformMatrix4fv;
+static PFNGLVERTEXATTRIB1FPROC			glVertexAttrib1f;
+static PFNGLVERTEXATTRIB2FPROC			glVertexAttrib2f;
+static PFNGLVERTEXATTRIB3FPROC			glVertexAttrib3f;
+static PFNGLVERTEXATTRIB4FPROC			glVertexAttrib4f;
+
+
 
 // enum holding the available instruction codes
 typedef enum {
@@ -92,7 +98,14 @@ typedef enum {
 	Uniform4iv = 42,
 	UniformMatrix2fv = 43,
 	UniformMatrix3fv = 44,
-	UniformMatrix4fv = 45 
+	UniformMatrix4fv = 45,
+	TexParameteri = 46,
+	TexParameterf = 47,
+	VertexAttrib1f = 48,
+	VertexAttrib2f = 49,
+	VertexAttrib3f = 50,
+	VertexAttrib4f = 51
+
 } InstructionCode;
 
 // enum controlling the current execution mode

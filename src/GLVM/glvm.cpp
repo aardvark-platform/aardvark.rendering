@@ -73,6 +73,10 @@ DllExport(void) vmInit()
 	glUniformMatrix2fv = (PFNGLUNIFORMMATRIX2FVPROC)getProc("glUniformMatrix2fv");
 	glUniformMatrix3fv = (PFNGLUNIFORMMATRIX3FVPROC)getProc("glUniformMatrix3fv");
 	glUniformMatrix4fv = (PFNGLUNIFORMMATRIX4FVPROC)getProc("glUniformMatrix4fv");
+	glVertexAttrib1f = (PFNGLVERTEXATTRIB1FPROC)getProc("glVertexAttrib1f");
+	glVertexAttrib2f = (PFNGLVERTEXATTRIB2FPROC)getProc("glVertexAttrib2f");
+	glVertexAttrib3f = (PFNGLVERTEXATTRIB3FPROC)getProc("glVertexAttrib3f");
+	glVertexAttrib4f = (PFNGLVERTEXATTRIB4FPROC)getProc("glVertexAttrib4f");
 }
 
 DllExport(Fragment*) vmCreate()
@@ -268,6 +272,24 @@ void runInstruction(Instruction* i)
 		break;
 	case UniformMatrix4fv:
 		glUniformMatrix4fv((GLint)i->Arg0, (GLsizei)i->Arg1, (GLboolean)i->Arg2, (GLfloat*)i->Arg3);
+		break;
+	case TexParameteri:
+		glTexParameteri((GLenum)i->Arg0, (GLenum)i->Arg1, (GLint)i->Arg2);
+		break;
+	case TexParameterf:
+		glTexParameterf((GLenum)i->Arg0, (GLenum)i->Arg1, *((GLfloat*)&i->Arg2));
+		break;
+	case VertexAttrib1f:
+		glVertexAttrib1f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1));
+		break;
+	case VertexAttrib2f:
+		glVertexAttrib2f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2));
+		break;
+	case VertexAttrib3f:
+		glVertexAttrib3f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2), *((GLfloat*)&i->Arg3));
+		break;
+	case VertexAttrib4f:
+		glVertexAttrib4f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2), *((GLfloat*)&i->Arg3), *((GLfloat*)&i->Arg4));
 		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
@@ -483,6 +505,26 @@ Statistics runRedundancyChecks(Fragment* frag)
 				case UniformMatrix4fv:
 					glUniformMatrix4fv((GLint)i->Arg0, (GLsizei)i->Arg1, (GLboolean)i->Arg2, (GLfloat*)i->Arg3);
 					break;
+
+				case TexParameteri:
+					glTexParameteri((GLenum)i->Arg0, (GLenum)i->Arg1, (GLint)i->Arg2);
+					break;
+				case TexParameterf:
+					glTexParameterf((GLenum)i->Arg0, (GLenum)i->Arg1, *((GLfloat*)&i->Arg2));
+					break;
+				case VertexAttrib1f:
+					glVertexAttrib1f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1));
+					break;
+				case VertexAttrib2f:
+					glVertexAttrib2f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2));
+					break;
+				case VertexAttrib3f:
+					glVertexAttrib3f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2), *((GLfloat*)&i->Arg3));
+					break;
+				case VertexAttrib4f:
+					glVertexAttrib4f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2), *((GLfloat*)&i->Arg3), *((GLfloat*)&i->Arg4));
+					break;
+
 				default:
 					printf("unknown instruction code: %d\n", i->Code);
 					break;

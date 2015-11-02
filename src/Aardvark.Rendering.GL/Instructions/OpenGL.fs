@@ -595,6 +595,10 @@ module OpenGl =
         let UniformMatrix4fv = getProcAddress "glUniformMatrix4fv"
         let TexParameteri = getProcAddress "glTexParameteri"
         let TexParameterf = getProcAddress "glTexParameterf"
+        let VertexAttrib1f = getProcAddress "glVertexAttrib1f"
+        let VertexAttrib2f = getProcAddress "glVertexAttrib2f"
+        let VertexAttrib3f = getProcAddress "glVertexAttrib3f"
+        let VertexAttrib4f = getProcAddress "glVertexAttrib4f"
 
         let private pointerNames = 
             [ BindVertexArray, "glBindVertexArray" 
@@ -646,6 +650,11 @@ module OpenGl =
 
               TexParameterf, "glTexParameterf"
               TexParameteri, "glTexParameteri"
+
+              VertexAttrib1f, "glVertexAttrib1f"
+              VertexAttrib2f, "glVertexAttrib2f"
+              VertexAttrib3f, "glVertexAttrib3f"
+              VertexAttrib4f, "glVertexAttrib4f"
 
             ] |> Map.ofList
 
@@ -706,6 +715,11 @@ module OpenGl =
 
         let TexParameteri : int -> int -> int -> unit = wrap Pointers.TexParameteri
         let TexParameterf : int -> int -> float32 -> unit = wrap Pointers.TexParameterf
+
+        let VertexAttrib1f : int -> float32 -> unit = wrap Pointers.VertexAttrib1f
+        let VertexAttrib2f : int -> float32 -> float32 -> unit = wrap Pointers.VertexAttrib1f
+        let VertexAttrib3f : int -> float32 -> float32 -> float32 -> unit = wrap Pointers.VertexAttrib1f
+        let VertexAttrib4f : int -> float32 -> float32 -> float32 -> float32 -> unit = wrap Pointers.VertexAttrib1f
 
         let ClearColor : int -> int -> int -> int -> unit = wrap Pointers.ClearColor
         let ClearDepth : int64 -> unit = wrap Pointers.ClearDepth

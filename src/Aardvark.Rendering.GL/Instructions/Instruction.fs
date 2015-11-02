@@ -56,6 +56,11 @@ type InstructionCode =
 
     | TexParameteri            = 46
     | TexParameterf            = 47
+    
+    | VertexAttrib1f           = 48
+    | VertexAttrib2f           = 49
+    | VertexAttrib3f           = 50
+    | VertexAttrib4f           = 51
 
 /// <summary>
 /// an instrution consists of an instruction-code and the corresponding arguments
@@ -144,3 +149,17 @@ type Instruction private(code : InstructionCode, args : obj[]) =
 
     static member TexParameterf (target : int) (pname : int) (param : float32) =
         Instruction(InstructionCode.TexParameterf, [|target :> obj; pname :> obj; param :> obj|])
+
+    static member VertexAttrib1f (index : int) (v0 : float32) =
+        Instruction(InstructionCode.VertexAttrib1f, [|index :> obj; v0 :> obj|])
+
+    static member VertexAttrib2f (index : int) (v0 : float32) (v1 : float32) =
+        Instruction(InstructionCode.VertexAttrib2f, [|index :> obj; v0 :> obj; v1 :> obj|])
+
+    static member VertexAttrib3f (index : int) (v0 : float32) (v1 : float32) (v2 : float32) =
+        Instruction(InstructionCode.VertexAttrib3f, [|index :> obj; v0 :> obj; v1 :> obj; v2 :> obj|])
+
+    static member VertexAttrib4f (index : int) (v0 : float32) (v1 : float32) (v2 : float32) (v3 : float32) =
+        Instruction(InstructionCode.VertexAttrib4f, [|index :> obj; v0 :> obj; v1 :> obj; v2 :> obj; v3 :> obj|])
+
+
