@@ -81,7 +81,7 @@ module RenderTask =
                         inner <- None
                     | _ -> ()
 
-            member x.Runtime = input.GetValue().Runtime
+            member x.Runtime = input.GetValue(x).Runtime
             
             member x.FrameId = frameId
 

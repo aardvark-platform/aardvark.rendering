@@ -26,9 +26,10 @@ module Mod =
                 oldState := s 
                 newA
             )
-        oldState := state.GetValue(!res)
-
+        oldState := state.GetValue(null)
+        state.Outputs.Add !res |> ignore
         state.AddOutputNew !res
+
         !res
 
     let inline step (f : 's -> 'sd -> 'a -> 'a) (state : IMod<'s>) : AdaptiveFunc<'a> =
@@ -46,6 +47,7 @@ module Mod =
                 oldState := s 
                 newA
             )
+        state.Outputs.Add !res |> ignore
         state.AddOutputNew !res
         !res       
 

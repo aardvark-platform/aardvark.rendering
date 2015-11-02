@@ -117,7 +117,7 @@ module RenderTasks =
     type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) as this =
         inherit AdaptiveObject()
 
-        let mutable currentEngine = engine.GetValue()
+        let mutable currentEngine = engine.GetValue(this)
         let subscriptions = Dictionary()
         let reader = set.GetReader()
         do reader.AddOutputNew this
@@ -130,6 +130,9 @@ module RenderTasks =
         let mutable additions = 0
         let mutable removals = 0
         let mutable frameId = 0UL
+
+        let renderPassChangers = Dictionary<IRenderObject, IMod<unit> * ref<uint64>>()
+        let renderPassChangeSet = MutableVolatileDirtySet<IMod<unit>, unit>(fun m -> m.GetValue this)
 
         let addInput m =
             if inputs.Add m then
@@ -210,79 +213,7 @@ module RenderTasks =
                         | _ ->
                             failwith "unsupported configuration: %A" engine
 
-            
-//            match config with
-//                | Order.Unordered -> 
-//
-//                    let mode = 
-//                        if engine = ExecutionEngine.Debug then -1
-//                        elif engine &&& ExecutionEngine.Managed <> ExecutionEngine.None then 0
-//                        elif engine &&& ExecutionEngine.Unmanaged <> ExecutionEngine.None then 1
-//                        else 2
-//
-//                    let opt =
-//                        if engine &&& ExecutionEngine.Optimized <> ExecutionEngine.None then 2
-//                        elif engine &&& ExecutionEngine.RuntimeOptimized <> ExecutionEngine.None then 1
-//                        else 0
-//
-//                    match mode with
-//                        | -1 -> 
-//                            Log.warn "using debug program"
-//                            new Compiler.DebugProgram(manager,  addInput, removeInput) :> IProgram
-//                        | 2 -> // native
-//                            match opt with
-//                                | 0 -> // unoptimized
-//                                    Log.line "using unoptimized native program"
-//                                    new Compiler.UnoptimizedProgram<_>(
-//                                        Compiler.FragmentHandlers.native, manager,  addInput, removeInput
-//                                    ) :> IProgram
-//
-//                                | _ ->  // optimized
-//                                    Log.line "using optimized native program"
-//                                    new Compiler.OptimizedProgram<_>(
-//                                        Compiler.FragmentHandlers.native, manager, addInput, removeInput
-//                                    ) :> IProgram
-//                        | 1 -> // GLVM
-//                            match opt with
-//                                | 0 -> // unoptimized
-//                                    Log.line "using unoptimized GLVM program"
-//                                    new Compiler.UnoptimizedProgram<_>(
-//                                        Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
-//                                    ) :> IProgram
-//
-//                                | 1 -> // runtime optimized
-//                                    Log.line "using runtime optimized GLVM program"
-//                                    new Compiler.UnoptimizedProgram<_>(
-//                                        Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager,  addInput, removeInput
-//                                    ) :> IProgram
-//                                | _ -> // optimized
-//                                    Log.line "using optimized GLVM program"
-//                                    new Compiler.OptimizedProgram<_>(
-//                                        Compiler.FragmentHandlers.glvm, manager,  addInput, removeInput
-//                                    ) :> IProgram
-//                        | _ -> // managed
-//                            match opt with
-//                                | 0 -> // unoptimized
-//                                    Log.line "using unoptimized managed program"
-//                                    new Compiler.UnoptimizedProgram<_>(
-//                                        Compiler.FragmentHandlers.managed, manager,  addInput, removeInput
-//                                    ) :> IProgram
-//
-//                                | _ ->  // optimized
-//                                    Log.line "using optimized managed program"
-//                                    new Compiler.OptimizedProgram<_>(
-//                                        Compiler.FragmentHandlers.managed, manager, addInput, removeInput
-//                                    ) :> IProgram
-// 
-//                | order ->
-//                    // TODO: respect mode here
-//                    Log.line "using GLVM sorted program"
-//                    new Compiler.SortedProgram<_>(
-//                        Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
-//                        order,
-//                        Sorting.createSorter scope order,
-//                        manager, addInput, removeInput
-//                    ) :> IProgram
+           
 
         let mutable lastScope = None
 
@@ -340,37 +271,56 @@ module RenderTasks =
             for d in deltas do
                 match d with
                     | Add a ->
-                        if a.RenderPass <> null then
-                            let oldPass = ref System.UInt64.MaxValue
-                            let s = a.RenderPass |> Mod.unsafeRegisterCallbackKeepDisposable (fun k ->
-                                if !oldPass <> k  // phantom change here might lead to duplicate additions.
-                                    then
-                                        oldPass := k
-                                        x.Add(k,a)
-
-                                        match subscriptions.TryGetValue a with
-                                            | (true,(s,old)) ->
-                                                x.Remove(old, a)
-                                                subscriptions.[a] <- (s,k)
-                                            | _ -> ()
-                                    else 
-                                        printfn "changed pass to old value (phantom)"
-                            
-                            )
-                            let sortKey = a.RenderPass.GetValue()
-                            subscriptions.[a] <- (s, sortKey)
+                        if a.RenderPass <> null then 
+                            let currentPass = ref System.UInt64.MaxValue
+                            let changed =
+                                a.RenderPass |> Mod.map (fun p ->
+                                    let old = !currentPass
+                                    if old <> p then
+                                        currentPass := p
+                                        x.Add(p,a)
+                                        x.Remove(old, a)
+                                )
+                            changed.GetValue(x)
+                            renderPassChangers.Add(a, (changed, currentPass))
+                            renderPassChangeSet.Add changed
+//
+//                            let s = a.RenderPass |> Mod.unsafeRegisterCallbackKeepDisposable (fun k ->
+//                                if !oldPass <> k  // phantom change here might lead to duplicate additions.
+//                                    then
+//                                        oldPass := k
+//                                        x.Add(k,a)
+//
+//                                        match subscriptions.TryGetValue a with
+//                                            | (true,(s,old)) ->
+//                                                x.Remove(old, a)
+//                                                subscriptions.[a] <- (s,k)
+//                                            | _ -> ()
+//                                    else 
+//                                        printfn "changed pass to old value (phantom)"
+//                            
+//                            )
+//                            let sortKey = a.RenderPass.GetValue(x)
+//                            subscriptions.[a] <- (s, sortKey)
                         else
                             x.Add(0UL, a)
 
                         additions <- additions + 1
                     | Rem a ->    
                         if a.RenderPass <> null then
-                            match subscriptions.TryGetValue a with
-                                | (true,(d,k)) ->
-                                    x.Remove(k, a)
-                                    d.Dispose()
-                                    subscriptions.Remove a |> ignore
-                                | _ -> ()
+                            match renderPassChangers.TryGetValue a with
+                                | (true, (changer, current)) ->
+                                    x.Remove(!current, a)
+                                    renderPassChangeSet.Remove changer
+                                    renderPassChangers.Remove a |> ignore
+                                | _ -> 
+                                    ()
+//                            match subscriptions.TryGetValue a with
+//                                | (true,(d,k)) ->
+//                                    x.Remove(k, a)
+//                                    d.Dispose()
+//                                    subscriptions.Remove a |> ignore
+//                                | _ -> ()
                         else
                             x.Remove(0UL, a)
                         removals <- removals + 1
@@ -379,6 +329,7 @@ module RenderTasks =
         member x.Run (caller : IAdaptiveObject, fbo : IFramebuffer) =
             x.EvaluateAlways caller (fun () ->
                 using ctx.ResourceLock (fun _ ->
+                    
                     setExecutionEngine (engine.GetValue(x))
 
                     let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
@@ -408,9 +359,11 @@ module RenderTasks =
                     
                     let additions, removals =
                         if reader.OutOfDate then
-                            x.ProcessDeltas (reader.GetDelta())
+                            x.ProcessDeltas (reader.GetDelta(x))
                         else
                             0,0
+
+                    renderPassChangeSet.Evaluate() |> ignore
 
                     let mutable resourceCount = 0
                     let mutable stats = FrameStatistics.Zero

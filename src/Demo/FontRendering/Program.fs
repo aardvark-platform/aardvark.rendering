@@ -84,7 +84,7 @@ let main argv =
 //            CameraController.controlOrbitScroll win.Mouse V3d.Zero 0.1 0.004
         ]
 
-    let cam = cam |> AFun.integrate controller
+    let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
 
     win.Mouse.Click.Values.Subscribe(printfn "click %A") |> ignore
     win.Mouse.DoubleClick.Values.Subscribe(printfn "double click %A") |> ignore
@@ -139,9 +139,7 @@ let main argv =
 
 
 
-    let svg = Svg.ofFile @"C:\Users\schorsch\Desktop\tiger.svg"
-    let svgTask = app.Runtime.CompileRender svg
 
-    win.RenderTask <- RenderTask.ofList [main; svgTask]
+    win.RenderTask <- RenderTask.ofList [main]
     win.Run()
     0 

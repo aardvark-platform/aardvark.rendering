@@ -31,6 +31,7 @@ module RenderObjectSorters =
 
     type private RenderObjectGroupingSorter(projections : list<RenderObject -> IMod>) =
         let mutable currentId = 0
+        let passCache = ConcurrentDict<IRenderObject, int>(Dict())
         let idCache = ConcurrentDict<IMod, ref<int> * int>(Dict())
         let rjCache = Dict()
 
@@ -84,8 +85,12 @@ module RenderObjectSorters =
         let lookup (rj : IRenderObject) = rjCache.[rj]
 
 
-        member x.Add (rj : IRenderObject) = invoke rj |> ignore
-        member x.Remove (rj : IRenderObject) = revoke rj |> ignore
+        member x.Add (rj : IRenderObject) = 
+            invoke rj |> ignore
+
+        member x.Remove (rj : IRenderObject) = 
+            revoke rj |> ignore
+
         member x.Compare(l : IRenderObject, r : IRenderObject) = compare (lookup l) (lookup r)
 
         interface IRenderObjectSorter with

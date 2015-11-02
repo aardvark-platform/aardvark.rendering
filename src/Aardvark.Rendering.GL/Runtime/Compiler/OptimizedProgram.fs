@@ -208,8 +208,8 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let sw = System.Diagnostics.Stopwatch()
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()
-    let changeSet = ChangeSet(addInput, removeInput)
-    let resourceSet = ResourceSet(addInput, removeInput)
+    let changeSet = ChangeSet(parent, addInput, removeInput)
+    let resourceSet = ResourceSet(parent, addInput, removeInput)
     let statistics = Mod.init FrameStatistics.Zero
 
     let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
@@ -314,10 +314,10 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         // update resources and instructions
         let resourceUpdates, resourceCounts, resourceUpdateTime = 
-            resourceSet.Update(parent)
+            resourceSet.Update()
 
         let instructionUpdates, instructionUpdateTime, createStats = 
-            changeSet.Update(parent) 
+            changeSet.Update() 
 
         handler.Hint(RunProgram)
 

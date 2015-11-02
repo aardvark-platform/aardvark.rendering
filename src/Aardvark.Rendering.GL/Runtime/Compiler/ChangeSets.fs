@@ -8,7 +8,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
-type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
+type ChangeSet(renderTask : IRenderTask, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     let l = obj()
     let all = HashSet<IMod<FrameStatistics>>()
     let set = HashSet<IMod<FrameStatistics>>()
@@ -30,10 +30,12 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
 
                     if m.OutOfDate then
                         set.Add m |> ignore
+                    else
+                        m.Outputs.Add renderTask |> ignore
                 )
             )
         else
-            m |> Mod.force |> ignore
+            m.GetValue(null) |> ignore
 
     member x.Unlisten (m : IMod<FrameStatistics>) =
         if not m.IsConstant then
@@ -51,7 +53,7 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
                 )
             )
 
-    member x.Update(caller : IAdaptiveObject) =
+    member x.Update() =
         let dirtySet = 
             lock l (fun () ->
                 let dirtySet = set |> Seq.toArray
@@ -64,13 +66,13 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
         let mutable resTime = FrameStatistics.Zero
         for d in dirtySet do
             lock d (fun () ->
-                resTime <- resTime + ( d.GetValue caller )
+                resTime <- resTime + ( d.GetValue renderTask )
                 count <- count + 1
             )
         sw.Stop()
         count, sw.Elapsed, resTime
 
-type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
+type ResourceSet(renderTask : IRenderTask, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     let l = obj()
     let all = ReferenceCountingSet<IChangeableResource>()
     let set = HashSet<IChangeableResource>()
@@ -88,12 +90,15 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
         lock m (fun () -> 
             lock l (fun () ->
                 if all.Add m then
+                    
                     addInput m
                     let cb = dirty m
                     callbacks.[m] <- m.AddMarkingCallback cb
 
                     if m.OutOfDate then
                         set.Add m |> ignore
+                    else
+                        m.Outputs.Add renderTask |> ignore
             )
         )
 
@@ -111,7 +116,7 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
             )
         )
 
-    member x.Update(caller : IAdaptiveObject) =
+    member x.Update() =
         let dirtyResoruces = 
             lock l (fun () ->
                 let dirtySet = set |> Seq.toArray
@@ -130,8 +135,10 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
                     counts <- Map.add d.Kind (cnt + 1.0) counts
                     count <- count + 1
 
-                    d.UpdateCPU(caller)
-                    d.UpdateGPU(caller)
+                    d.UpdateCPU(renderTask)
+                    d.UpdateGPU(renderTask)
+                else
+                    d.Outputs.Add renderTask |> ignore
             )
 
 
