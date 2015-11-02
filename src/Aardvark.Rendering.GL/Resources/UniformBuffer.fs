@@ -323,16 +323,17 @@ module private ValueConverter =
         (getMethodInfoInternal e).Value
 
     let private unboxMeth = getMethodInfo <@ unbox<_> @>
-    let dict = ConcurrentDictionary<list<UniformField> * Type, (obj -> nativeint -> unit)>()
+    let dict = ConcurrentDictionary<list<UniformField> * Type, (IAdaptiveObject -> obj -> nativeint -> unit)>()
 
-    let compileSetter (target : ConversionTarget) (paths : list<UniformField>) (t : Type) : obj -> nativeint -> unit =
+    let compileSetter (target : ConversionTarget) (paths : list<UniformField>) (t : Type) : IAdaptiveObject -> obj -> nativeint -> unit =
         let create (paths, t) =
             let mt = typedefof<IMod<_>>.MakeGenericType([|t|])
             let ub = unboxMeth.MakeGenericMethod [|mt|]
             let ex = createSetter target (paths, t)
             let m = Var("mod", typeof<obj>)
+            let caller = Var("caller", typeof<IAdaptiveObject>)
             let mi = mt.GetMethod("GetValue")
-            let getter = Expr.Call(Expr.Call(ub, [Expr.Var m]), mi, [])
+            let getter = Expr.Call(Expr.Call(ub, [Expr.Var m]), mi, [Expr.Var(caller)])
             let ptr = Var("ptr", typeof<nativeint>)
 
             let ex = 
@@ -340,11 +341,11 @@ module private ValueConverter =
                     | Lambda(v, Lambda(ptr, b)) -> Expr.Lambda(m, Expr.Lambda(ptr, Expr.Let(v, getter, b)))
                     | _ -> failwith "asdasd"
 
-            ex.CompileUntyped() |> unbox<obj -> nativeint -> unit>
+            Expr.Lambda(caller, ex).CompileUntyped() |> unbox<IAdaptiveObject -> obj -> nativeint -> unit>
 
         let key = (paths,t)
 
-        dict.GetOrAdd(key, Func<list<UniformField> * Type, obj -> nativeint -> unit>(create))
+        dict.GetOrAdd(key, Func<list<UniformField> * Type, IAdaptiveObject -> obj -> nativeint -> unit>(create))
 
     let getTotalFieldSize (target : ConversionTarget) (f : UniformField) =
         let t = Convert.getExpectedType target f.uniformType
@@ -357,7 +358,7 @@ type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<Unifor
 
     let paths = fields |> Seq.groupBy(fun f -> f.UniformName) |> Seq.map (fun (n,g) -> Sym.ofString n, g |> Seq.toList) |> SymDict.ofSeq 
 
-    member x.CompileSetter (name : Symbol) (m : IMod) : unit -> unit =
+    member x.CompileSetter (name : Symbol) (m : IMod) : IAdaptiveObject -> unit =
         let t = m.GetType()
 
         match t with
@@ -366,13 +367,13 @@ type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<Unifor
                     | (true, paths) ->
                         let write = ValueConverter.compileSetter ValueConverter.ConversionTarget.ConvertForBuffer paths t
 
-                        fun () -> 
+                        fun (caller : IAdaptiveObject) -> 
                             dirty <- true
-                            write (m :> obj) data
+                            write caller (m :> obj) data
                     
 
                     | _ ->
-                        id
+                        ignore
             | _ ->
                 failwith "unsupported mod-type"
 

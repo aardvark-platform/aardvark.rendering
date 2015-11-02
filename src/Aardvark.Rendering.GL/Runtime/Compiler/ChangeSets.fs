@@ -51,7 +51,7 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
                 )
             )
 
-    member x.Update() =
+    member x.Update(caller : IAdaptiveObject) =
         let dirtySet = 
             lock l (fun () ->
                 let dirtySet = set |> Seq.toArray
@@ -64,7 +64,7 @@ type ChangeSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject
         let mutable resTime = FrameStatistics.Zero
         for d in dirtySet do
             lock d (fun () ->
-                resTime <- resTime + ( d |> Mod.force )
+                resTime <- resTime + ( d.GetValue caller )
                 count <- count + 1
             )
         sw.Stop()
@@ -111,7 +111,7 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
             )
         )
 
-    member x.Update() =
+    member x.Update(caller : IAdaptiveObject) =
         let dirtyResoruces = 
             lock l (fun () ->
                 let dirtySet = set |> Seq.toArray
@@ -130,8 +130,8 @@ type ResourceSet(addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObje
                     counts <- Map.add d.Kind (cnt + 1.0) counts
                     count <- count + 1
 
-                    d.UpdateCPU()
-                    d.UpdateGPU()
+                    d.UpdateCPU(caller)
+                    d.UpdateGPU(caller)
             )
 
 

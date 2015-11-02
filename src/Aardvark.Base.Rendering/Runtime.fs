@@ -33,7 +33,7 @@ type IPreparedRenderObject =
     inherit IRenderObject
     inherit IDisposable
 
-    abstract member Update : unit -> unit
+    abstract member Update : IAdaptiveObject -> unit
     abstract member Original : Option<RenderObject>
 
 
@@ -73,8 +73,16 @@ and IRenderTask =
     inherit IDisposable
     inherit IAdaptiveObject
     abstract member Runtime : Option<IRuntime>
-    abstract member Run : IFramebuffer -> RenderingResult
+    abstract member Run : IAdaptiveObject * IFramebuffer -> RenderingResult
     abstract member FrameId : uint64
+
+open System.Runtime.CompilerServices
+
+[<Extension>]
+type RenderTaskRunExtensions() =
+    [<Extension>]
+    static member Run(t : IRenderTask, fbo : IFramebuffer) =
+        t.Run(null, fbo)
 
 type ShaderStage =
     | Vertex = 1
@@ -113,6 +121,6 @@ module NullResources =
          | _ -> false
          
     let isValidResourceAdaptive (m : IMod) =
-      [m :> IAdaptiveObject] |> Mod.mapCustom (fun () ->
-            not <| isNullResource (m.GetValue())
+      [m :> IAdaptiveObject] |> Mod.mapCustom (fun s ->
+            not <| isNullResource (m.GetValue s)
       ) 

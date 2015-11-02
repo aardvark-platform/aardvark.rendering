@@ -9,7 +9,8 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
 type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
-        (newHandler : unit -> IFragmentHandler<'f>, 
+        (parent : IRenderTask,
+         newHandler : unit -> IFragmentHandler<'f>, 
          newSorter : unit -> IDynamicRenderObjectSorter,
          manager : ResourceManager, 
          addInput : IAdaptiveObject -> unit, 
@@ -115,10 +116,10 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         // update resources and instructions
         let resourceUpdates, resourceCounts, resourceUpdateTime = 
-            resourceSet.Update()
+            resourceSet.Update(parent)
 
         let instructionUpdates, instructionUpdateTime, createStats = 
-            changeSet.Update() 
+            changeSet.Update(parent) 
 
         // wait for the sorting
         let sortingTime = applySorting.Result

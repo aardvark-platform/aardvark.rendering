@@ -35,9 +35,9 @@ type RenderControl() =
 
     let mutable inner : Option<IMod<DateTime>> = None
     let time = 
-        Mod.custom (fun () -> 
+        Mod.custom (fun s -> 
             match inner with
-                | Some m -> m.GetValue()
+                | Some m -> m.GetValue s
                 | None -> DateTime.Now
            )
 
@@ -65,7 +65,7 @@ type RenderControl() =
         ctrl <- Some c
         impl <- Some cr
         transact(fun () ->
-            cr.Time.AddOutput(time)
+            cr.Time.AddOutputNew(time)
             inner <- Some cr.Time
 
             Mod.change sizes V2i.OO

@@ -88,13 +88,13 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
         then
             let self = ref Unchecked.defaultof<_>
             self :=
-                Mod.custom (fun () ->
+                Mod.custom (fun s ->
                     if prev <> null then
                         let oldStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
                         currentChanger.RemoveOutput !self
                         let resTime = recompile()
-                        let _ = currentChanger |> Mod.force
-                        currentChanger.AddOutput !self
+                        let _ = currentChanger.GetValue(s)
+                        currentChanger.AddOutputNew !self
                         let newStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
                         transact (fun () ->
                             Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
@@ -102,7 +102,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
                         resTime
                     else FrameStatistics.Zero
                 )
-            rj.Program.AddOutput !self
+            rj.Program.AddOutputNew !self
             !self
         else Mod.init FrameStatistics.Zero :> IMod<_>
 
@@ -202,7 +202,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
 
 
 type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
-    (config : BackendConfiguration, newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
+    (parent : IRenderTask, config : BackendConfiguration, newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
     
     let sorter = RenderObjectSorters.ofSorting config.sorting
     let sw = System.Diagnostics.Stopwatch()
@@ -314,10 +314,10 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         // update resources and instructions
         let resourceUpdates, resourceCounts, resourceUpdateTime = 
-            resourceSet.Update()
+            resourceSet.Update(parent)
 
         let instructionUpdates, instructionUpdateTime, createStats = 
-            changeSet.Update() 
+            changeSet.Update(parent) 
 
         handler.Hint(RunProgram)
 

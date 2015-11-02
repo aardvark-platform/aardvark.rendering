@@ -67,13 +67,13 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
     let changer = 
         let self = ref Unchecked.defaultof<_>
         self :=
-            Mod.custom (fun () ->
+            Mod.custom (fun s ->
                 if prev <> null then
                     let oldStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
                     currentChanger.RemoveOutput !self
                     let resTime = recompile()
-                    let _ = currentChanger |> Mod.force
-                    currentChanger.AddOutput !self
+                    let _ = currentChanger.GetValue(s)
+                    currentChanger.AddOutputNew !self
                     let newStats = frag.Statistics
                     transact (fun () ->
                         Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
@@ -83,7 +83,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
             )
 
         if precompiled.IsNone then 
-            rj.Program.AddOutput !self
+            rj.Program.AddOutputNew !self
         !self
 
     member x.Dispose() =
@@ -182,7 +182,8 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
 
 
 type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
-        (config : BackendConfiguration,
+        (parent : IRenderTask,
+         config : BackendConfiguration,
          newHandler : unit -> IFragmentHandler<'f>, 
          manager : ResourceManager, 
          addInput : IAdaptiveObject -> unit, 
@@ -295,10 +296,10 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         // update resources and instructions
         let resourceUpdates, resourceUpdateCounts, resourceUpdateTime = 
-            resourceSet.Update()
+            resourceSet.Update(parent)
 
         let instructionUpdates, instructionUpdateTime, createStats = 
-            changeSet.Update() 
+            changeSet.Update(parent) 
 
         sw.Restart()
         // run everything

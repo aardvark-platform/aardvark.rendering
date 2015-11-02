@@ -341,7 +341,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 
     let avgFrameTime = RunningMean(10)
     let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
-    let time = Mod.custom (fun () -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
+    let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
     let mutable first = true
 
     let mouse = new GameWindowIO.Mouse()
@@ -396,7 +396,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
 
                         
-                        let res = t.Run(defaultFramebuffer)
+                        let res = t.Run(null, defaultFramebuffer)
                         
                         statistics.Emit res.Statistics
                         

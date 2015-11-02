@@ -44,7 +44,7 @@ module Statistics =
                 Thread.Sleep(0)
         
     type TimeFrame<'a when 'a : not struct>(length : TimeSpan, zero : 'a, add : 'a -> 'a -> 'a, sub : 'a -> 'a -> 'a, div : 'a -> int -> 'a) =
-        let changer = Mod.custom id
+        let changer = Mod.custom ignore
         let values = ConcurrentQueue<DateTime * 'a>()
         let mutable tickInstalled = false
 
@@ -270,8 +270,8 @@ module DefaultOverlays =
         let mutable upToDateExec = 0
         let mutable frameId = 0UL
 
-        do real.AddOutput this
-           annotation.AddOutput this
+        do real.AddOutputNew this
+           annotation.AddOutputNew this
 
         interface IRenderTask with
             member x.Dispose() =
@@ -280,8 +280,8 @@ module DefaultOverlays =
 
             member x.Runtime = real.Runtime
 
-            member x.Run f =
-                base.EvaluateAlways (fun () ->
+            member x.Run(caller, f) =
+                x.EvaluateAlways caller (fun () ->
                     // TODO: 1) does not work when rendering continuously
                     //       2) does also not work when annotating the same task multiple times
                     if not x.OutOfDate then upToDateExec <- upToDateExec + 1
@@ -290,13 +290,13 @@ module DefaultOverlays =
                     frameId <- frameId + 1UL
 
                     if real.OutOfDate || upToDateExec > 1 then
-                        let real = real.Run f
+                        let real = real.Run(x,f)
                         emit real
-                        let annotation = annotation.Run f
+                        let annotation = annotation.Run(x,f)
                         RenderingResult(annotation.Framebuffer, real.Statistics + annotation.Statistics)
                     else
-                        let real = real.Run f
-                        let annotation = annotation.Run f
+                        let real = real.Run(x,f)
+                        let annotation = annotation.Run(x,f)
                         RenderingResult(annotation.Framebuffer, real.Statistics + annotation.Statistics)
                 )
 

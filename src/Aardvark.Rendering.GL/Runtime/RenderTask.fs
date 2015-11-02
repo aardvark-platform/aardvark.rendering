@@ -120,8 +120,8 @@ module RenderTasks =
         let mutable currentEngine = engine.GetValue()
         let subscriptions = Dictionary()
         let reader = set.GetReader()
-        do reader.AddOutput this
-           engine.AddOutput this
+        do reader.AddOutputNew this
+           engine.AddOutputNew this
 
         let inputs = ReferenceCountingSet<IAdaptiveObject>()
         let mutable programs = Map.empty
@@ -133,7 +133,7 @@ module RenderTasks =
 
         let addInput m =
             if inputs.Add m then
-                transact (fun () -> m.AddOutput this)
+                transact (fun () -> m.AddOutputNew this)
 
         let removeInput m =
             if inputs.Remove m then
@@ -149,7 +149,7 @@ module RenderTasks =
                     // TODO: respect mode here
                     
                     Log.line "using GLVM sorted program"
-                    new Compiler.SortedProgram<_>(
+                    new Compiler.SortedProgram<_>(this,
                         Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
                         (fun () -> newSorter scope),
                         manager, addInput, removeInput
@@ -159,51 +159,51 @@ module RenderTasks =
 
                         | ExecutionEngine.Native, RedundancyRemoval.None ->
                             Log.line "using unoptimized native program"
-                            new Compiler.UnoptimizedProgram<_>(
+                            new Compiler.UnoptimizedProgram<_>(this,
                                 engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Native, _ ->
                             Log.line "using optimized native program"
-                            new Compiler.OptimizedProgram<_>(
+                            new Compiler.OptimizedProgram<_>(this,
                                 engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.None ->
                             Log.line "using unoptimized glvm program"
-                            new Compiler.UnoptimizedProgram<_>(
+                            new Compiler.UnoptimizedProgram<_>(this,
                                 engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Runtime ->
                             Log.line "using runtime-optimized glvm program"
-                            new Compiler.UnoptimizedProgram<_>(
+                            new Compiler.UnoptimizedProgram<_>(this,
                                 engine, Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager, addInput, removeInput
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Static ->
                             Log.line "using optimized glvm program"
-                            new Compiler.OptimizedProgram<_>(
+                            new Compiler.OptimizedProgram<_>(this,
                                 engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
                             ) :> IRenderProgram
 
 
                         | ExecutionEngine.Managed, RedundancyRemoval.None ->
                             Log.line "using unoptimized managed program"
-                            new Compiler.UnoptimizedProgram<_>(
+                            new Compiler.UnoptimizedProgram<_>(this,
                                 engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Managed, _->
                             Log.line "using optimized managed program"
-                            new Compiler.OptimizedProgram<_>(
+                            new Compiler.OptimizedProgram<_>(this,
                                 engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Debug, _ ->
                             Log.warn "using debug program"
 
-                            new Compiler.DebugProgram(
+                            new Compiler.DebugProgram(this,
                                 manager, addInput, removeInput
                             ) :> IRenderProgram
 
@@ -291,7 +291,7 @@ module RenderTasks =
             match Map.tryFind pass programs with
                 | Some p -> p
                 | _ -> 
-                    let program = newProgram scope (Mod.force engine)
+                    let program = newProgram scope (engine.GetValue(this))
 
                     programs <- Map.add pass program programs
                     program
@@ -376,10 +376,10 @@ module RenderTasks =
                         removals <- removals + 1
             (additions, removals)
 
-        member x.Run (fbo : IFramebuffer) =
-            x.EvaluateAlways (fun () ->
+        member x.Run (caller : IAdaptiveObject, fbo : IFramebuffer) =
+            x.EvaluateAlways caller (fun () ->
                 using ctx.ResourceLock (fun _ ->
-                    setExecutionEngine (Mod.force engine)
+                    setExecutionEngine (engine.GetValue(x))
 
                     let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
                     if currentEngine.useDebugOutput 
@@ -456,8 +456,8 @@ module RenderTasks =
             reader.Dispose()
 
         interface IRenderTask with
-            member x.Run(fbo) =
-                x.Run(fbo)
+            member x.Run(caller, fbo) =
+                x.Run(caller, fbo)
 
             member x.Dispose() =
                 x.Dispose()
@@ -469,14 +469,14 @@ module RenderTasks =
 
     type ClearTask(runtime : IRuntime, color : IMod<C4f>, depth : IMod<float>, ctx : Context) as this =
         inherit AdaptiveObject()
-        do color.AddOutput this
-           depth.AddOutput this
+        do color.AddOutputNew this
+           depth.AddOutputNew this
 
         let mutable frameId = 0UL
 
-        member x.Run(fbo : IFramebuffer) =
+        member x.Run(caller : IAdaptiveObject, fbo : IFramebuffer) =
             using ctx.ResourceLock (fun _ ->
-                x.EvaluateAlways (fun () ->
+                x.EvaluateAlways caller (fun () ->
                     let old = Array.create 4 0
                     let mutable oldFbo = 0
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
@@ -493,8 +493,8 @@ module RenderTasks =
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not bind framebuffer"
 
-                    let c = Mod.force color
-                    let d = Mod.force depth
+                    let c = color.GetValue x
+                    let d = depth.GetValue x
                     GL.ClearColor(c.R, c.G, c.B, c.A)
                     GL.ClearDepth(d)
                     GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
@@ -517,8 +517,8 @@ module RenderTasks =
 
         interface IRenderTask with
             member x.Runtime = runtime |> Some
-            member x.Run(fbo) =
-                x.Run(fbo)
+            member x.Run(caller, fbo) =
+                x.Run(caller, fbo)
 
             member x.Dispose() =
                 x.Dispose()

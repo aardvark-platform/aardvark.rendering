@@ -9,24 +9,27 @@ type AdaptiveFunc<'a>(func : 'a -> 'a) =
     static let identity = AdaptiveFunc<'a>(id)
     static member Identity = identity
 
-    member x.Run(v : 'a) =
-        x.EvaluateIfNeeded v (fun () ->
+    member x.Run(caller : IAdaptiveObject, v : 'a) =
+        x.EvaluateIfNeeded caller v (fun () ->
             func v
         )
 
 module Mod =
     let withLast (f : 's -> 's -> 'a -> 'a) (state : IMod<'s>)  : AdaptiveFunc<'a> =
 
-        let oldState = ref <| state.GetValue()
-        let res = 
+        let res = ref Unchecked.defaultof<_>
+        let oldState = ref Unchecked.defaultof<_> 
+        res :=
             AdaptiveFunc<'a>(fun value ->
-                let s = state.GetValue()
+                let s = state.GetValue !res
                 let newA = f !oldState s value
                 oldState := s 
                 newA
             )
-        state.AddOutput res
-        res
+        oldState := state.GetValue(!res)
+
+        state.AddOutputNew !res
+        !res
 
     let inline step (f : 's -> 'sd -> 'a -> 'a) (state : IMod<'s>) : AdaptiveFunc<'a> =
         withLast (fun o n a -> f o (n - o) a) state
@@ -35,15 +38,16 @@ module Mod =
 
         let oldState = ref <| DateTime.Now
 
-        let res = 
+        let res = ref Unchecked.defaultof<_>
+        res :=
             AdaptiveFunc<'a>(fun value ->
-                let s = state.GetValue()
+                let s = state.GetValue !res
                 let newA = f !oldState s value
                 oldState := s 
                 newA
             )
-        state.AddOutput res
-        res       
+        state.AddOutputNew !res
+        !res       
 
     let inline stepTime (f : DateTime -> TimeSpan -> 'a -> 'a) (state : IMod<DateTime>) : AdaptiveFunc<'a> =
         withTime (fun o n a -> f o (n - o) a) state
@@ -55,7 +59,9 @@ module Mod =
                 
                 let result = 
                     c |> Mod.bind (fun f ->
-                        [initial :> IAdaptiveObject; f :> IAdaptiveObject] |> Mod.mapCustom (fun () -> f.Run (initial.GetValue()))
+                        [initial :> IAdaptiveObject; f :> IAdaptiveObject] |> Mod.mapCustom (fun s -> 
+                            f.Run(s,(initial.GetValue s))
+                        )
                     )
 
                 int result cs
@@ -65,7 +71,7 @@ module Mod =
 
     let integrate (initial : 'a) (time : IMod<DateTime>) (controllers : list<IMod<AdaptiveFunc<'a>>>) =
         let currentValue = ref initial
-        let current = Mod.custom (fun () -> !currentValue)
+        let current = Mod.custom (fun _ -> !currentValue)
         let isSubscribed = ref false
         //time.AddOutput current
         //time |> Mod.registerCallback (fun _ -> current.MarkOutdated()) |> ignore

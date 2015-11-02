@@ -137,7 +137,7 @@ module AStream =
 
     let fold (f : 's -> 'a -> 's) (seed : 's) (s : astream<'a>) =
         let mutable current = seed
-        let res = Mod.custom(fun () -> current)
+        let res = Mod.custom(fun s -> current)
 
         let subscription =
             s.obs.Subscribe(fun v ->
@@ -150,7 +150,7 @@ module AStream =
 
     let latest (s : astream<'a>) =
         let mutable current = None
-        let res = Mod.custom (fun () -> current)
+        let res = Mod.custom (fun _ -> current)
 
         let subscription = 
             s.obs.Subscribe (fun v ->

@@ -275,8 +275,8 @@ module RenderingTests =
         use task = runtime.CompileRender(sg)
         use clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
 
-        clear.Run(fbo) |> ignore
-        task.Run(fbo) |> ignore
+        clear.Run(null, fbo) |> ignore
+        task.Run(null, fbo) |> ignore
 
         let pi = color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
 

@@ -29,7 +29,7 @@ type PreparedRenderObject =
         member x.AttributeScope = x.AttributeScope
 
     interface IPreparedRenderObject with
-        member x.Update() = x.Update()
+        member x.Update(caller) = x.Update(caller)
         member x.Original = Some x.Original
 
     member x.Id = x.Original.Id
@@ -48,47 +48,47 @@ type PreparedRenderObject =
     member x.FillMode = x.Original.FillMode
     member x.StencilMode = x.Original.StencilMode
 
-    member x.Update() =
+    member x.Update(caller : IAdaptiveObject) =
         use token = x.Context.ResourceLock
 
         if x.Program.OutOfDate then
-            x.Program.UpdateCPU()
-            x.Program.UpdateGPU()
+            x.Program.UpdateCPU(caller)
+            x.Program.UpdateGPU(caller)
 
         for (_,ub) in x.UniformBuffers |> Map.toSeq do
             if ub.OutOfDate then
-                ub.UpdateCPU()
-                ub.UpdateGPU()
+                ub.UpdateCPU(caller)
+                ub.UpdateGPU(caller)
 
         for (_,ul) in x.Uniforms |> Map.toSeq do
             if ul.OutOfDate then
-                ul.UpdateCPU()
-                ul.UpdateGPU()
+                ul.UpdateCPU(caller)
+                ul.UpdateGPU(caller)
 
         for (_,(t,s)) in x.Textures |> Map.toSeq do
             if t.OutOfDate then
-                t.UpdateCPU()
-                t.UpdateGPU()
+                t.UpdateCPU(caller)
+                t.UpdateGPU(caller)
 
             if s.OutOfDate then
-                s.UpdateCPU()
-                s.UpdateGPU()
+                s.UpdateCPU(caller)
+                s.UpdateGPU(caller)
 
         for (_,(b,_)) in x.Buffers |> Map.toSeq do
             if b.OutOfDate then
-                b.UpdateCPU()
-                b.UpdateGPU()
+                b.UpdateCPU(caller)
+                b.UpdateGPU(caller)
 
         match x.IndexBuffer with
             | Some ib ->
                 if ib.OutOfDate then
-                    ib.UpdateCPU()
-                    ib.UpdateGPU()
+                    ib.UpdateCPU(caller)
+                    ib.UpdateGPU(caller)
             | _ -> ()
 
         if x.VertexArray.OutOfDate then
-            x.VertexArray.UpdateCPU()
-            x.VertexArray.UpdateGPU()
+            x.VertexArray.UpdateCPU(caller)
+            x.VertexArray.UpdateGPU(caller)
 
     member x.Dispose() =
         x.VertexArray.Dispose() 

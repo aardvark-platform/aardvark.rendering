@@ -9,7 +9,8 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
 
-type DebugProgram(manager : ResourceManager, 
+type DebugProgram(parent : IRenderTask,
+                  manager : ResourceManager, 
                   addInput : IAdaptiveObject -> unit, 
                   removeInput : IAdaptiveObject -> unit) =
 
@@ -31,8 +32,8 @@ type DebugProgram(manager : ResourceManager,
 
         for r in allResources do
             if r.OutOfDate then
-                r.UpdateCPU()
-                r.UpdateGPU()
+                r.UpdateCPU(parent)
+                r.UpdateGPU(parent)
 
         for rj in renderObjects do
             let prep, own =
@@ -52,7 +53,7 @@ type DebugProgram(manager : ResourceManager,
             for mi in prog.Instructions do
                 let instructions = 
                     match mi with
-                        | AdaptiveInstruction m -> Mod.force m
+                        | AdaptiveInstruction m -> m.GetValue(parent)
                         | FixedInstruction l -> l
                        
                 for i in instructions do

@@ -14,24 +14,24 @@ module RenderTask =
         inherit ConstantObject()
         interface IRenderTask with
             member x.Dispose() = ()
-            member x.Run(fbo) = RenderingResult(fbo, FrameStatistics.Zero)
+            member x.Run(caller, fbo) = RenderingResult(fbo, FrameStatistics.Zero)
             member x.Runtime = None
             member x.FrameId = 0UL
 
     type private SequentialRenderTask(f : RenderingResult -> RenderingResult, tasks : IRenderTask[]) as this =
         inherit AdaptiveObject()
 
-        do for t in tasks do t.AddOutput this
+        do for t in tasks do t.AddOutputNew this
 
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
         let mutable frameId = 0UL
 
         interface IRenderTask with
-            member x.Run(fbo) =
-                base.EvaluateAlways(fun () ->
+            member x.Run(caller, fbo) =
+                x.EvaluateAlways caller (fun () ->
                     let mutable stats = FrameStatistics.Zero
                     for t in tasks do
-                        let res = t.Run(fbo)
+                        let res = t.Run(x, fbo)
                         frameId <- max frameId t.FrameId
                         stats <- stats + res.Statistics
 
@@ -49,15 +49,15 @@ module RenderTask =
 
     type private ModRenderTask(input : IMod<IRenderTask>) as this =
         inherit AdaptiveObject()
-        do input.AddOutput this
+        do input.AddOutputNew this
         let mutable inner : Option<IRenderTask> = None
         let mutable frameId = 0UL
 
         interface IRenderTask with
-            member x.Run(fbo) =
-                base.EvaluateAlways(fun () ->
+            member x.Run(caller, fbo) =
+                x.EvaluateAlways caller (fun () ->
                     x.OutOfDate <- true
-                    let ni = input |> Mod.force
+                    let ni = input.GetValue x
 
                     match inner with
                         | Some oi when oi = ni -> ()
@@ -66,11 +66,11 @@ module RenderTask =
                                 | Some oi -> oi.RemoveOutput x
                                 | _ -> ()
 
-                            ni.AddOutput x
+                            ni.AddOutputNew x
 
                     inner <- Some ni
                     frameId <- ni.FrameId
-                    ni.Run fbo
+                    ni.Run(x, fbo)
                 )
 
             member x.Dispose() =
@@ -88,7 +88,7 @@ module RenderTask =
     type private AListRenderTask(tasks : alist<IRenderTask>) as this =
         inherit AdaptiveObject()
         let reader = tasks.GetReader()
-        do reader.AddOutput this
+        do reader.AddOutputNew this
 
         let mutable runtime = None
         let tasks = ReferenceCountingSet()
@@ -100,7 +100,7 @@ module RenderTask =
                 match t.Runtime with
                     | Some r -> runtime <- Some r
                     | None -> ()
-                t.AddOutput this
+                t.AddOutputNew this
 
         let remove (t : IRenderTask) =
             if tasks.Remove t then
@@ -113,7 +113,7 @@ module RenderTask =
             this.OutOfDate <- true
 
             // adjust the dependencies
-            for d in reader.GetDelta() do
+            for d in reader.GetDelta(this) do
                 match d with
                     | Add(_,t) -> add t
                     | Rem(_,t) -> remove t
@@ -121,14 +121,14 @@ module RenderTask =
             this.OutOfDate <- wasOutOfDate
 
         interface IRenderTask with
-            member x.Run(fbo) =
-                base.EvaluateAlways(fun () ->
+            member x.Run(caller, fbo) =
+                x.EvaluateAlways caller (fun () ->
                     processDeltas()
 
                     // run all tasks
                     let mutable stats = FrameStatistics.Zero
                     for (_,t) in reader.Content do
-                        let res = t.Run(fbo)
+                        let res = t.Run(x, fbo)
                         frameId <- max frameId t.FrameId
                         stats <- stats + res.Statistics
 
@@ -152,11 +152,11 @@ module RenderTask =
 
     type private CustomRenderTask(f : afun<IFramebuffer, RenderingResult>) as this =
         inherit AdaptiveObject()
-        do f.AddOutput this
+        do f.AddOutputNew this
         interface IRenderTask with
-            member x.Run(fbo) =
-                base.EvaluateAlways(fun () ->
-                    f.Evaluate(fbo)
+            member x.Run(caller, fbo) =
+                x.EvaluateAlways caller (fun () ->
+                    f.Evaluate (x,fbo)
                 )
 
             member x.Dispose() =
@@ -210,8 +210,8 @@ module RenderTask =
     let renderTo (target : IFramebuffer) (task : IRenderTask) =
         let runtime = task.Runtime.Value
         [task :> IAdaptiveObject] 
-            |> Mod.mapCustom(fun () ->
-                task.Run(target) |> ignore
+            |> Mod.mapCustom(fun s ->
+                task.Run(s, target) |> ignore
                 target
             )
 

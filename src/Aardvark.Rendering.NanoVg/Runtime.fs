@@ -41,6 +41,7 @@ module internal Interpreter =
 
     type internal NvgState =
         {
+            caller : IAdaptiveObject
             ctx : Context.NanoVgContextHandle
             transform : M33d
             scissor : Box2d
@@ -60,6 +61,7 @@ module internal Interpreter =
 
     let internal emptyState =
         {
+            caller = null
             ctx = null
             transform = M33d(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
             scissor = Box2d.Invalid
@@ -80,8 +82,8 @@ module internal Interpreter =
     module private Nvg =
         let setTransform (t : IMod<M33d>) = 
             { runState = fun s -> 
-                if t <> null && s.transform <> !!t then 
-                    let t = !!t
+                if t <> null && s.transform <> t.GetValue(s.caller) then 
+                    let t = t.GetValue(s.caller)
                     NanoVg.nvgResetTransform(s.ctx.Handle)
                     if not (t.IsIdentity(Constant.PositiveTinyValue)) then
                         NanoVg.nvgTransform(s.ctx.Handle, float32 t.M00, float32 t.M10, float32 t.M01, float32 t.M11, float32 t.M02, float32 t.M12)
@@ -99,8 +101,8 @@ module internal Interpreter =
             }
         let setScissor (v : IMod<Box2d>) = 
             { runState = fun s -> 
-                if v <> null && s.scissor <> !!v then 
-                    let v = !!v
+                if v <> null && s.scissor <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgResetScissor(s.ctx.Handle)
                     if not v.IsInfinite then
                         NanoVg.nvgScissor(s.ctx.Handle, float32 v.Min.X, float32 v.Min.Y, float32 v.SizeX, float32 v.SizeY)
@@ -111,8 +113,8 @@ module internal Interpreter =
 
         let setFillColor (v : IMod<C4f>) =
             { runState = fun s -> 
-                if v <> null && s.fillColor <> !!v then 
-                    let v = !!v
+                if v <> null && s.fillColor <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgFillColor(s.ctx.Handle, v)
                     (), { s with fillColor = v }
                 else
@@ -121,8 +123,8 @@ module internal Interpreter =
 
         let setStrokeWidth (v : IMod<float>) =
             { runState = fun s -> 
-                if v <> null && s.pathStrokeWidth <> !!v then 
-                    let v = !!v
+                if v <> null && s.pathStrokeWidth <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgStrokeWidth(s.ctx.Handle, float32 v)
                     (), { s with pathStrokeWidth = v }
                 else
@@ -131,8 +133,8 @@ module internal Interpreter =
 
         let setStrokeColor (v : IMod<C4f>) =
             { runState = fun s -> 
-                if v <> null && s.pathStrokeColor <> !!v then 
-                    let v = !!v
+                if v <> null && s.pathStrokeColor <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgStrokeColor(s.ctx.Handle, v)
                     (), { s with pathStrokeColor = v }
                 else
@@ -141,8 +143,8 @@ module internal Interpreter =
 
         let setLineCap (v : IMod<LineCap>) =
             { runState = fun s -> 
-                if v <> null && s.pathLineCap <> !!v then 
-                    let v = !!v
+                if v <> null && s.pathLineCap <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgLineCap(s.ctx.Handle, toNvgCap v)
                     (), { s with pathLineCap = v }
                 else
@@ -151,8 +153,8 @@ module internal Interpreter =
 
         let setLineJoin (v : IMod<LineJoin>) =
             { runState = fun s -> 
-                if v <> null && s.pathLineJoin <> !!v then 
-                    let v = !!v
+                if v <> null && s.pathLineJoin <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     match v with
                         | MiterJoin cap ->
                             NanoVg.nvgMiterLimit(s.ctx.Handle,float32 cap)
@@ -166,8 +168,8 @@ module internal Interpreter =
 
         let setWinding (v : IMod<Winding>) =
             { runState = fun s -> 
-                if v <> null && s.pathWinding <> !!v then 
-                    let v = !!v
+                if v <> null && s.pathWinding <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     let nvgWinding =
                         match v with
                             | Winding.CCW -> NvgWinding.CounterClockwise
@@ -199,8 +201,8 @@ module internal Interpreter =
 
         let setFont (v : IMod<Font>) =
             { runState = fun s -> 
-                if v <> null && s.font <> !!v then 
-                    let v = !!v
+                if v <> null && s.font <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     let id = s.ctx.GetFontId v
                     NanoVg.nvgFontFaceId(s.ctx.Handle, id)
                     //NanoVg.nvgFontFace(s.ctx.Handle, name)
@@ -211,8 +213,8 @@ module internal Interpreter =
 
         let setFontSize (v : IMod<float>) =
             { runState = fun s -> 
-                if v <> null && s.fontSize <> !!v then 
-                    let v = !!v
+                if v <> null && s.fontSize <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgFontSize(s.ctx.Handle, float32 v)
                     (), { s with fontSize = v }
                 else
@@ -221,8 +223,8 @@ module internal Interpreter =
 
         let setLetterSpacing (v : IMod<float>) =
             { runState = fun s -> 
-                if v <> null && s.fontLetterSpacing <> !!v then 
-                    let v = !!v
+                if v <> null && s.fontLetterSpacing <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgTextLetterSpacing(s.ctx.Handle, float32 v)
                     (), { s with fontLetterSpacing = v }
                 else
@@ -231,8 +233,8 @@ module internal Interpreter =
 
         let setLineHeight (v : IMod<float>) =
             { runState = fun s -> 
-                if v <> null && s.fontLineHeight <> !!v then 
-                    let v = !!v
+                if v <> null && s.fontLineHeight <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgTextLineHeight(s.ctx.Handle, float32 v)
                     (), { s with fontLineHeight = v }
                 else
@@ -241,8 +243,8 @@ module internal Interpreter =
 
         let setBlur (v : IMod<float>) =
             { runState = fun s -> 
-                if v <> null && s.fontBlur <> !!v then 
-                    let v = !!v
+                if v <> null && s.fontBlur <> v.GetValue(s.caller) then 
+                    let v = v.GetValue(s.caller)
                     NanoVg.nvgFontBlur(s.ctx.Handle, float32 v)
                     (), { s with fontBlur = v }
                 else
@@ -260,8 +262,8 @@ module internal Interpreter =
 
     let private runRenderObject (rj : NvgRenderObject) =
         state {
-            
-            if !!rj.isActive
+            let! state = getState
+            if rj.isActive.GetValue(state.caller)
             then
                 do! Nvg.setScissor rj.scissor
                 do! Nvg.setFillColor rj.fillColor
@@ -275,9 +277,9 @@ module internal Interpreter =
                         do! Nvg.setLineJoin p.lineJoin
                         do! Nvg.setWinding p.winding
 
-                        do! Nvg.drawPrimitive !!p.primitive
+                        do! Nvg.drawPrimitive (p.primitive.GetValue(state.caller))
 
-                        match !!p.mode with
+                        match p.mode.GetValue(state.caller) with
                             | FillPrimitive -> do! Nvg.fill
                             | StrokePrimitive -> do! Nvg.stroke
 
@@ -287,27 +289,27 @@ module internal Interpreter =
                         do! Nvg.setLetterSpacing t.letterSpacing
                         do! Nvg.setLineHeight t.lineHeight
                         do! Nvg.setBlur t.blur
-                        let trafo = !!rj.transform
+                        let trafo = rj.transform.GetValue(state.caller)
 
                         // important for clear text alignment (aa causing problems when using trafo)
                         let orientation = trafo.UpperLeftM22()
                         if orientation.IsIdentity(Constant.PositiveTinyValue) then
                             do! Nvg.resetTransform
                             do! Nvg.setFontSize t.size
-                            do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
+                            do! Nvg.drawText trafo.C2.XY (t.align.GetValue(state.caller)) (t.content.GetValue(state.caller))
                         elif orientation.M01.IsTiny() && orientation.M10.IsTiny() && orientation.M00.ApproximateEquals(orientation.M11, Constant.PositiveTinyValue) then
                             do! Nvg.resetTransform
-                            do! Nvg.setFontSize ~~(orientation.M11 * !!t.size)
-                            do! Nvg.drawText trafo.C2.XY !!t.align !!t.content 
+                            do! Nvg.setFontSize ~~(orientation.M11 * t.size.GetValue(state.caller))
+                            do! Nvg.drawText trafo.C2.XY (t.align.GetValue(state.caller)) (t.content.GetValue(state.caller)) 
                         else
                             do! Nvg.setTransform rj.transform
                             do! Nvg.setFontSize t.size
-                            do! Nvg.drawText V2d.Zero !!t.align !!t.content 
+                            do! Nvg.drawText V2d.Zero (t.align.GetValue(state.caller)) (t.content.GetValue(state.caller))
 
         }
 
-    let run (ctx : Context.NanoVgContextHandle) (s : seq<NvgRenderObject>) =
-        let mutable state = { emptyState with ctx = ctx }
+    let run (caller : IAdaptiveObject) (ctx : Context.NanoVgContextHandle) (s : seq<NvgRenderObject>) =
+        let mutable state = { emptyState with ctx = ctx; caller = caller }
 
         for rj in s do
             let ((), n) = runRenderObject(rj).runState state
@@ -319,13 +321,13 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     inherit AdaptiveObject()
     let r = l.GetReader()
     let inputs = ReferenceCountingSet<IAdaptiveObject>()
-    do r.AddOutput this
+    do r.AddOutputNew this
 
     let mutable frameId = 0UL
 
     let addInput (v : IAdaptiveObject) =
         if v <> null && inputs.Add v then
-            v.AddOutput this
+            v.AddOutputNew this
 
     let removeInput (v : IAdaptiveObject) =
         if v <> null && inputs.Remove v then
@@ -388,9 +390,9 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         inputs.Clear()
 
 
-    member x.Run(fbo : IFramebuffer) =
-        base.EvaluateAlways (fun () ->
-            for d in r.GetDelta() do
+    member x.Run(caller : IAdaptiveObject, fbo : IFramebuffer) =
+        x.EvaluateAlways caller (fun () ->
+            for d in r.GetDelta(x) do
                 match d with
                     | Add(_,rj) -> add rj
                     | Rem(_,rj) -> remove rj
@@ -416,7 +418,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
                 
                 NanoVg.nvgBeginFrame(current.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
              
-                r.Content |> Seq.map snd |> Interpreter.run current
+                r.Content |> Seq.map snd |> Interpreter.run x current
                 NanoVg.nvgEndFrame(current.Handle)
 
                 frameId <- frameId + 1UL
@@ -434,8 +436,8 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
 
     interface IRenderTask with
         member x.Runtime = runtime :> IRuntime |> Some
-        member x.Run(fbo) = 
-            x.Run(fbo)
+        member x.Run(caller, fbo) = 
+            x.Run(caller, fbo)
             RenderingResult(fbo, FrameStatistics.Zero)
 
         member x.Dispose() =

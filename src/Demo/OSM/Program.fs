@@ -99,7 +99,7 @@ module Textures =
                     return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.CreateTexture :> ITexture
                 }
 
-            run |> Async.StartAsTask |> Mod.async noTexture
+            run |> Async.StartAsTask |> Mod.async (NullTexture() :> ITexture)
         )
 
 [<AutoOpen>]
@@ -116,18 +116,20 @@ module Geometry =
             DefaultSemantic.DiffuseColorCoordinates, [|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array
         ]
 
-        Sg.ofIndexedGeometry q
+        Sg.ofIndexedGeometryInterleaved [DefaultSemantic.Positions; DefaultSemantic.DiffuseColorCoordinates]  q
 
 [<AutoOpen>]
 module Shader = 
     open FShade
 
     type Vertex = { [<Position>] pos : V4d
-                    [<TexCoord>] tc : V2d }
+                    [<TexCoord>] tc : V2d 
+                    [<Semantic("Hugo")>] h : V4d
+                  }
 
     let vertex (v : Vertex) =
         vertex {
-            return { v with pos = uniform.ModelTrafo * v.pos }
+            return { v with pos = (uniform.ModelTrafo * v.pos) }
         }
 
     let diffuseTex = 
@@ -141,7 +143,7 @@ module Shader =
     let fragment (v : Vertex) =
         fragment {
             let color = diffuseTex.Sample(v.tc)
-            return color
+            return color * v.h
         }
 
 [<EntryPoint; STAThread>]
@@ -324,7 +326,8 @@ let main argv =
     ) |> ignore
 
     let sg = sg |> Sg.fillMode mode
-
+                |> Sg.vertexBufferValue (Symbol.Create "Hugo") (Mod.constant V4f.IOOI)
+    //let sg = Sg.VertexAttributeApplicator(Symbol.Create "Hugo", BufferView(Mod.constant (NullBuffer(V4f.IOII) :> IBuffer), typeof<V4f>), sg) :> ISg
     // compile the rendertask and pass it to the window
 
     let engine = Mod.init BackendConfiguration.NativeOptimized

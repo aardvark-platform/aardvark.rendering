@@ -85,7 +85,7 @@ module Extensions =
 
             let res = ref Unchecked.defaultof<_>
             res :=
-                Mod.custom (fun () ->
+                Mod.custom (fun s ->
                     match !task with
                         | Some t ->
                             if t.IsCompleted then 

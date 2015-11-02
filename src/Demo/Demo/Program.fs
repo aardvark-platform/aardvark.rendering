@@ -432,7 +432,7 @@ open System.Threading
 
 let timePulled = new ManualResetEventSlim()
 let timeLock = obj()
-let time = Mod.custom(fun () -> DateTime.Now)
+let time = Mod.custom(fun _ -> DateTime.Now)
 //
 //
 //let t = 
@@ -563,7 +563,7 @@ let controlWSAD (view : ICameraView) (keyboard : IKeyboard) (time : IMod<DateTim
                     | None -> ()
         }
 
-    viewTrafoChanger.AddOutput(view.ViewTrafos.Mod)
+    viewTrafoChanger.AddOutputNew(view.ViewTrafos.Mod)
     let d = viewTrafoChanger |> Mod.unsafeRegisterCallbackKeepDisposable id
 
     { new IDisposable with

@@ -125,15 +125,15 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
     member x.MipMaps = mipMap
     member x.Texture = texture
 
-    member x.GetValue() =
-        x.EvaluateAlways (fun () -> texture :> ITexture)
+    member x.GetValue(caller) =
+        x.EvaluateAlways caller (fun () -> texture :> ITexture)
 
     interface IMod with
         member x.IsConstant = false
-        member x.GetValue() = x.GetValue() :> obj
+        member x.GetValue(caller) = x.GetValue(caller) :> obj
 
     interface IMod<ITexture> with
-        member x.GetValue() = x.GetValue()
+        member x.GetValue(caller) = x.GetValue(caller)
 
     interface IStreamingTexture with
         member x.Update(fmt, size, data) = x.Update(fmt, size, data)

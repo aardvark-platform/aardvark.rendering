@@ -10,8 +10,8 @@ open Aardvark.Base.Incremental
 
 type ChangeableFramebuffer(c : ChangeableResource<Framebuffer>) =
     let getHandle() =
-        c.UpdateCPU()
-        c.UpdateGPU()
+        c.UpdateCPU(null)
+        c.UpdateGPU(null)
         c.Resource.GetValue() :> IFramebuffer
 
     interface IFramebuffer with
@@ -22,8 +22,8 @@ type ChangeableFramebuffer(c : ChangeableResource<Framebuffer>) =
 
 type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
     let getHandle() =
-        c.UpdateCPU()
-        c.UpdateGPU()
+        c.UpdateCPU(null)
+        c.UpdateGPU(null)
         c.Resource.GetValue()
 
     interface IFramebufferTexture with
@@ -42,8 +42,8 @@ type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
 
 type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
     let getHandle() =
-        c.UpdateCPU()
-        c.UpdateGPU()
+        c.UpdateCPU(null)
+        c.UpdateGPU(null)
         c.Resource.GetValue()
 
     interface IFramebufferRenderbuffer with
@@ -54,15 +54,15 @@ type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
 
 type ResourceMod<'a, 'b>(res : ChangeableResource<'a>, f : 'a -> 'b) as this =
     inherit AdaptiveObject()
-    do res.AddOutput this
-       res.Resource.AddOutput this
+    do res.AddOutputNew this
+       res.Resource.AddOutputNew this
 
-    member x.GetValue() =
-        x.EvaluateAlways (fun () ->
+    member x.GetValue(caller : IAdaptiveObject) =
+        x.EvaluateAlways caller (fun () ->
             if res.OutOfDate then
-                res.UpdateCPU()
-                res.UpdateGPU()
-            let r = res.Resource.GetValue()
+                res.UpdateCPU(x)
+                res.UpdateGPU(x)
+            let r = res.Resource.GetValue(x)
             f r
         )
 
@@ -73,10 +73,10 @@ type ResourceMod<'a, 'b>(res : ChangeableResource<'a>, f : 'a -> 'b) as this =
 
     interface IMod with
         member x.IsConstant = false
-        member x.GetValue() = x.GetValue() :> obj
+        member x.GetValue(caller) = x.GetValue(caller) :> obj
 
     interface IMod<'b> with
-        member x.GetValue() = x.GetValue()
+        member x.GetValue(caller) = x.GetValue(caller)
 
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =

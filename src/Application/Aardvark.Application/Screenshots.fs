@@ -27,8 +27,8 @@ module Screenshot =
                 ]
             )
 
-        clear.Run(fbo) |> ignore
-        task.Run(fbo) |> ignore
+        clear.Run(null, fbo) |> ignore
+        task.Run(null, fbo) |> ignore
 
 
         use colorTexture = runtime.CreateTexture(~~size, ~~PixFormat.ByteRGBA, ~~1, ~~1)
