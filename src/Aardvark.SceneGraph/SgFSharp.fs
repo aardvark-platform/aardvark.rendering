@@ -115,6 +115,12 @@ module SgFSharp =
         let index'<'a when 'a : struct> (value : 'a[]) (sg : ISg) =
             Sg.VertexIndexApplicator(Mod.constant (value :> Array), sg) :> ISg
 
+        let vertexBuffer (s : Symbol) (view : BufferView) (sg : ISg) =
+            Sg.VertexAttributeApplicator(s, view, sg) :> ISg
+
+        let vertexBufferValue (s : Symbol) (value : IMod<V4f>) (sg : ISg) =
+            let view = BufferView(value |> Mod.map (fun v -> NullBuffer(v) :> IBuffer), typeof<V4f>)
+            Sg.VertexAttributeApplicator(s, view, sg) :> ISg
 
         let draw (mode : IndexedGeometryMode) =
             Sg.RenderNode(
@@ -159,6 +165,93 @@ module SgFSharp =
             else
                 sg
 
+        module private Interleaved = 
+            open System.Reflection
+
+            type Converter() =
+                static let accessors =
+                    Dict.ofList [
+                        typeof<float32>, (1, (fun (v : float32) -> [|v|]) :> obj)
+                        typeof<V2f>,     (2, (fun (v : V2f) -> [|v.X; v.Y|]) :> obj)
+                        typeof<V3f>,     (3, (fun (v : V3f) -> [|v.X; v.Y; v.Z|]) :> obj)
+                        typeof<V4f>,     (4, (fun (v : V4f) -> [|v.X; v.Y; v.Z; v.W|]) :> obj)
+                    ]
+
+                static member ToFloatArray (arr : 'a[]) : float32[] =
+                    match accessors.TryGetValue typeof<'a> with
+                        | (true, (_,accessor)) ->
+                            arr |> Array.collect (unbox accessor)
+                        | _ -> failwithf "unsupported attribute type: %A" typeof<'a>.FullName
+                            
+
+                static member GetDimension (t : Type) =
+                    match accessors.TryGetValue t with
+                        | (true, (d, arr)) -> d
+                        | _ -> failwithf "unsupported attribute type: %A" t.FullName
+
+            let toFloatArrayMeth = typeof<Converter>.GetMethod("ToFloatArray", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
+
+            let toFloatArray (arr : Array) =
+                let t = arr.GetType().GetElementType()
+                let mi = toFloatArrayMeth.MakeGenericMethod [|t|]
+                let arr = mi.Invoke(null, [|arr|]) |> unbox<float32[]>
+
+                Converter.GetDimension(t), arr
+
+
+        let ofIndexedGeometryInterleaved (attributes : list<Symbol>) (g : IndexedGeometry) =
+            let arrays =
+                attributes |> List.choose (fun att ->
+                    match g.IndexedAttributes.TryGetValue att with
+                        | (true, v) -> 
+                            let (dim, arr) = Interleaved.toFloatArray v
+                            Some (att, v.GetType().GetElementType(), dim, arr)
+                        | _ -> None
+                )
+
+            let count = arrays |> List.map (fun (_,_,dim,arr) -> arr.Length / dim) |> List.min
+            let vertexSize = arrays |> List.map (fun (_,_,d,_) -> d) |> List.sum
+
+            let views = SymbolDict()
+            let target = Array.zeroCreate (count * vertexSize)
+            let buffer = Mod.constant (ArrayBuffer target :> IBuffer)
+            let mutable current = 0
+            for vi in 0..count-1 do
+                for (sem, t, size, a) in arrays do
+                    let mutable start = size * vi
+                    for c in 0..size-1 do
+                        target.[current] <- a.[start]
+                        current <- current + 1
+                        start <- start + 1
+
+            let mutable offset = 0
+            for (sem, t, size, a) in arrays do
+                let v = BufferView(buffer, t, offset * sizeof<float32>, vertexSize * sizeof<float32>)
+                views.[sem] <- v
+                offset <- offset + size
+
+
+
+            let index, faceVertexCount =
+                if g.IsIndexed then
+                    g.IndexArray, g.IndexArray.Length
+                else
+                    null, count
+
+            let call = 
+                DrawCallInfo(
+                    FaceVertexCount = faceVertexCount,
+                    FirstIndex = 0,
+                    InstanceCount = 1,
+                    FirstInstance = 0,
+                    BaseVertex = 0
+                )
+
+            let sg = Sg.VertexAttributeApplicator(views, Sg.RenderNode(call,g.Mode)) :> ISg
+            if index <> null then
+                Sg.VertexIndexApplicator(Mod.constant index, sg) :> ISg
+            else
+                sg
 
         let instancedGeometry (trafos : IMod<Trafo3d[]>) (g : IndexedGeometry) =
             let vertexAttributes = 
