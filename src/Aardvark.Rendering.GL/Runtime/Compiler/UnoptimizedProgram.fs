@@ -73,7 +73,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
                     currentChanger.RemoveOutput !self
                     let resTime = recompile()
                     let _ = currentChanger.GetValue(s)
-                    currentChanger.AddOutputNew !self
+                    currentChanger.AddOutput !self
                     let newStats = frag.Statistics
                     transact (fun () ->
                         Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
@@ -83,7 +83,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
             )
 
         if precompiled.IsNone then 
-            rj.Program.AddOutputNew !self
+            rj.Program.AddOutput !self
         !self
 
     member x.Dispose() =

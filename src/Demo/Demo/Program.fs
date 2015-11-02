@@ -563,7 +563,7 @@ let controlWSAD (view : ICameraView) (keyboard : IKeyboard) (time : IMod<DateTim
                     | None -> ()
         }
 
-    viewTrafoChanger.AddOutputNew(view.ViewTrafos.Mod)
+    viewTrafoChanger.AddOutput(view.ViewTrafos.Mod)
     let d = viewTrafoChanger |> Mod.unsafeRegisterCallbackKeepDisposable id
 
     { new IDisposable with

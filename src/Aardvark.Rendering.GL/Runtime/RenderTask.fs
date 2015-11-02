@@ -120,8 +120,8 @@ module RenderTasks =
         let mutable currentEngine = engine.GetValue(this)
         let subscriptions = Dictionary()
         let reader = set.GetReader()
-        do reader.AddOutputNew this
-           engine.AddOutputNew this
+        do reader.AddOutput this
+           engine.AddOutput this
 
         let inputs = ReferenceCountingSet<IAdaptiveObject>()
         let mutable programs = Map.empty
@@ -136,7 +136,7 @@ module RenderTasks =
 
         let addInput m =
             if inputs.Add m then
-                transact (fun () -> m.AddOutputNew this)
+                transact (fun () -> m.AddOutput this)
 
         let removeInput m =
             if inputs.Remove m then
@@ -422,8 +422,8 @@ module RenderTasks =
 
     type ClearTask(runtime : IRuntime, color : IMod<C4f>, depth : IMod<float>, ctx : Context) as this =
         inherit AdaptiveObject()
-        do color.AddOutputNew this
-           depth.AddOutputNew this
+        do color.AddOutput this
+           depth.AddOutput this
 
         let mutable frameId = 0UL
 

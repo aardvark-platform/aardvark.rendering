@@ -321,13 +321,13 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     inherit AdaptiveObject()
     let r = l.GetReader()
     let inputs = ReferenceCountingSet<IAdaptiveObject>()
-    do r.AddOutputNew this
+    do r.AddOutput this
 
     let mutable frameId = 0UL
 
     let addInput (v : IAdaptiveObject) =
         if v <> null && inputs.Add v then
-            v.AddOutputNew this
+            v.AddOutput this
 
     let removeInput (v : IAdaptiveObject) =
         if v <> null && inputs.Remove v then

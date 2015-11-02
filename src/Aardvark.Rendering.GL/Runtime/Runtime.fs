@@ -54,8 +54,8 @@ type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
 
 type ResourceMod<'a, 'b>(res : ChangeableResource<'a>, f : 'a -> 'b) as this =
     inherit AdaptiveObject()
-    do res.AddOutputNew this
-       res.Resource.AddOutputNew this
+    do res.AddOutput this
+       res.Resource.AddOutput this
 
     member x.GetValue(caller : IAdaptiveObject) =
         x.EvaluateAlways caller (fun () ->

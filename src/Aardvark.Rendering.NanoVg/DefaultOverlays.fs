@@ -270,8 +270,8 @@ module DefaultOverlays =
         let mutable upToDateExec = 0
         let mutable frameId = 0UL
 
-        do real.AddOutputNew this
-           annotation.AddOutputNew this
+        do real.AddOutput this
+           annotation.AddOutput this
 
         interface IRenderTask with
             member x.Dispose() =

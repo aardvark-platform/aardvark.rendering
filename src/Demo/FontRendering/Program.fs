@@ -116,9 +116,15 @@ let main argv =
                     yield g |> Sg.trafo (Mod.constant trafo)
                             |> Sg.texture DefaultSemantic.DiffuseColorTexture tex
         ]
+        
+    let test = sgs |> ASet.map id
+    let r = test.GetReader()
+    r.GetDelta() |> List.length |> printfn "got %d deltas"
+
 
     let sg = 
-        Sg.set sgs
+        test
+            |> Sg.set
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
@@ -138,7 +144,15 @@ let main argv =
     ) |> ignore
 
 
+    win.Keyboard.KeyDown(Keys.G).Values.Subscribe(fun () ->
+        System.GC.AddMemoryPressure(100000000L)
+        Log.startTimed "GC"
+        System.GC.Collect()
+        System.GC.WaitForFullGCComplete() |> ignore
+        Log.stop()
+        System.GC.RemoveMemoryPressure(100000000L)
 
+    ) |> ignore
 
     win.RenderTask <- RenderTask.ofList [main]
     win.Run()

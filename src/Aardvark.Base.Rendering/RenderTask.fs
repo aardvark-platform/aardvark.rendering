@@ -21,7 +21,7 @@ module RenderTask =
     type private SequentialRenderTask(f : RenderingResult -> RenderingResult, tasks : IRenderTask[]) as this =
         inherit AdaptiveObject()
 
-        do for t in tasks do t.AddOutputNew this
+        do for t in tasks do t.AddOutput this
 
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
         let mutable frameId = 0UL
@@ -49,7 +49,7 @@ module RenderTask =
 
     type private ModRenderTask(input : IMod<IRenderTask>) as this =
         inherit AdaptiveObject()
-        do input.AddOutputNew this
+        do input.AddOutput this
         let mutable inner : Option<IRenderTask> = None
         let mutable frameId = 0UL
 
@@ -66,7 +66,7 @@ module RenderTask =
                                 | Some oi -> oi.RemoveOutput x
                                 | _ -> ()
 
-                            ni.AddOutputNew x
+                            ni.AddOutput x
 
                     inner <- Some ni
                     frameId <- ni.FrameId
@@ -88,7 +88,7 @@ module RenderTask =
     type private AListRenderTask(tasks : alist<IRenderTask>) as this =
         inherit AdaptiveObject()
         let reader = tasks.GetReader()
-        do reader.AddOutputNew this
+        do reader.AddOutput this
 
         let mutable runtime = None
         let tasks = ReferenceCountingSet()
@@ -100,7 +100,7 @@ module RenderTask =
                 match t.Runtime with
                     | Some r -> runtime <- Some r
                     | None -> ()
-                t.AddOutputNew this
+                t.AddOutput this
 
         let remove (t : IRenderTask) =
             if tasks.Remove t then
@@ -152,7 +152,7 @@ module RenderTask =
 
     type private CustomRenderTask(f : afun<IFramebuffer, RenderingResult>) as this =
         inherit AdaptiveObject()
-        do f.AddOutputNew this
+        do f.AddOutput this
         interface IRenderTask with
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->

@@ -65,7 +65,7 @@ type RenderControl() =
         ctrl <- Some c
         impl <- Some cr
         transact(fun () ->
-            cr.Time.AddOutputNew(time)
+            cr.Time.AddOutput(time)
             inner <- Some cr.Time
 
             Mod.change sizes V2i.OO

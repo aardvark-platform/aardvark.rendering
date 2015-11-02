@@ -41,7 +41,7 @@ type RenderControl() as this =
 
         transact(fun () ->
             inner <- Some cr.Time
-            cr.Time.AddOutputNew(time)
+            cr.Time.AddOutput(time)
         )
         ctrl <- Some c
         impl <- Some cr

@@ -35,7 +35,7 @@ module ResourceManager =
                                          desc : IAdaptiveObject -> ChangeableResourceDescription<'a>) as this =
         inherit AdaptiveObject()
         let desc = desc this
-        do desc.dependencies |> List.iter (fun a -> a.GetValue(this) |> ignore; a.AddOutputNew this)
+        do desc.dependencies |> List.iter (fun a -> a.GetValue(this) |> ignore; a.AddOutput this)
            this.OutOfDate <- false
 
         let mutable isDisposed = false

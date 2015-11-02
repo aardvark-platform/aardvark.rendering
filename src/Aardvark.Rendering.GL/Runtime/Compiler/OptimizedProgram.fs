@@ -94,7 +94,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
                         currentChanger.RemoveOutput !self
                         let resTime = recompile()
                         let _ = currentChanger.GetValue(s)
-                        currentChanger.AddOutputNew !self
+                        currentChanger.AddOutput !self
                         let newStats = match frag with | null -> FrameStatistics.Zero | frag -> frag.Statistics
                         transact (fun () ->
                             Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
@@ -102,7 +102,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
                         resTime
                     else FrameStatistics.Zero
                 )
-            rj.Program.AddOutputNew !self
+            rj.Program.AddOutput !self
             !self
         else Mod.init FrameStatistics.Zero :> IMod<_>
 
