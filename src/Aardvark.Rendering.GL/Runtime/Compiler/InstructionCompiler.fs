@@ -141,6 +141,13 @@ module Instructions =
                         | Some i -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) i.Handle
                         | None -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) 0
                 ]
+    
+    let bindVertexAttribValue (index : int) (value : IMod<Option<V4f>>) =
+        value |> Mod.map (fun v ->
+            match v with
+                | Some v -> [Instruction.VertexAttrib4f index v.X v.Y v.Z v.W]
+                | _ -> []
+        )
 
     let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<DrawCallInfo>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
         let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)

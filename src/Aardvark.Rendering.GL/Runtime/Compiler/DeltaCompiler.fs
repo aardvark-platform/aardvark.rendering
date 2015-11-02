@@ -136,6 +136,13 @@ module DeltaCompiler =
             if prev.VertexArray <> me.VertexArray then
                 yield Instructions.bindVertexArray me.VertexArray
 
+            // bind vertex attribute default values
+            for (id,v) in Map.toSeq me.VertexAttributeValues do
+                match Map.tryFind id prev.VertexAttributeValues with
+                    | Some ov when v = ov -> ()
+                    | _ -> 
+                        yield Instructions.bindVertexAttribValue id v
+
             // draw the thing
             // TODO: surface assumed to be constant here
             let prog = me.Program.Resource.GetValue()

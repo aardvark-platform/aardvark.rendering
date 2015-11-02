@@ -38,14 +38,18 @@ type ArrayBuffer(data : Array) =
             | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
             | _ -> false
 
-type NullBuffer() =
+type NullBuffer(value : V4f) =
     interface IBuffer
 
-    override x.GetHashCode() = 0
+    member x.Value = value
+
+    override x.GetHashCode() = value.GetHashCode()
     override x.Equals o =
         match o with
-            | :? NullBuffer -> true
+            | :? NullBuffer as o -> value = o.Value
             | _ -> false
+
+    new() = NullBuffer(V4f.Zero)
 
 type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
     interface IBuffer

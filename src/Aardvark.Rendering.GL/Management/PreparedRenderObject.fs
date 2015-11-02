@@ -21,7 +21,7 @@ type PreparedRenderObject =
         Buffers : Map<int, ChangeableResource<Buffer> * IMod<AttributeDescription>>
         IndexBuffer : Option<ChangeableResource<Buffer>>
         VertexArray : ChangeableResource<VertexArrayObject>
-
+        VertexAttributeValues : Map<int, IMod<Option<V4f>>>
     } 
 
     interface IRenderObject with
@@ -131,6 +131,7 @@ module ``Prepared render object extensions`` =
                 Buffers = Map.empty
                 IndexBuffer = None
                 VertexArray = Unchecked.defaultof<_>
+                VertexAttributeValues = Map.empty
             }
 
     type PreparedRenderObject with
@@ -226,7 +227,7 @@ type ResourceManagerExtensions private() =
                         | Some value ->
                             let dep = x.CreateBuffer(value.Buffer)
                             let view = createView AttributeFrequency.PerVertex value dep
-                            (v.attributeIndex, (dep, view))
+                            (v.attributeIndex, (dep, view, value.Buffer))
                         | _  -> 
                             match rj.InstanceAttributes with
                                 | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" v.semantic rj
@@ -236,7 +237,7 @@ type ResourceManagerExtensions private() =
                                         | Some value ->
                                             let dep = x.CreateBuffer(value.Buffer)
                                             let view = createView (AttributeFrequency.PerInstances 1) value dep
-                                            (v.attributeIndex, (dep, view))
+                                            (v.attributeIndex, (dep, view, value.Buffer))
                                         | _ -> 
                                             failwithf "could not get attribute %A" v.semantic
                    )
@@ -249,7 +250,19 @@ type ResourceManagerExtensions private() =
 
         // create the VertexArrayObject
         let vao =
-            x.CreateVertexArrayObject(buffers |> Map.toList |> List.map (fun (i,(_,a)) -> (i,a)), index)
+            x.CreateVertexArrayObject(buffers |> Map.toList |> List.map (fun (i,(_,a,_)) -> (i,a)), index)
+
+        let attributeValues =
+            buffers 
+                |> Map.map (fun k (_,_,v) ->
+                    v |> Mod.map (fun v ->
+                        match v with
+                            | :? NullBuffer as nb -> 
+                                Some nb.Value
+                            | _ -> 
+                                None
+                )
+            )
 
         // finally return the PreparedRenderObject
         {
@@ -261,7 +274,8 @@ type ResourceManagerExtensions private() =
             UniformBuffers = uniformBuffers
             Uniforms = uniforms
             Textures = textures
-            Buffers = buffers
+            Buffers = buffers |> Map.map (fun k (a,b,_) -> a,b)
             IndexBuffer = index
             VertexArray = vao
+            VertexAttributeValues = attributeValues
         }
