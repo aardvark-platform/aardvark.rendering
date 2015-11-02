@@ -11,6 +11,8 @@ open System.Runtime.CompilerServices
 
 open Aardvark.Base.Incremental
 
+#nowarn "9"
+#nowarn "51"
 
 [<AutoOpen>]
 module SgFSharp =
@@ -167,14 +169,37 @@ module SgFSharp =
 
         module private Interleaved = 
             open System.Reflection
+            open Microsoft.FSharp.NativeInterop
 
             type Converter() =
+                
+                static let toFloat32 (i : 'a) : float32 =
+                    let mutable i = i
+                    NativePtr.read (&&i |> NativePtr.toNativeInt |> NativePtr.ofNativeInt)
+
                 static let accessors =
                     Dict.ofList [
+                        typeof<int8>,    (1, (fun (v : int8)    -> [|toFloat32 (int32 v)|]) :> obj)
+                        typeof<uint8>,   (1, (fun (v : uint8)   -> [|toFloat32 (uint32 v)|]) :> obj)
+                        typeof<int16>,   (1, (fun (v : int16)   -> [|toFloat32 (int32 v)|]) :> obj)
+                        typeof<uint16>,  (1, (fun (v : uint16)  -> [|toFloat32 (uint32 v)|]) :> obj)
+                        typeof<int32>,   (1, (fun (v : int32)   -> [|toFloat32 v|]) :> obj)
+                        typeof<uint32>,  (1, (fun (v : uint32)  -> [|toFloat32 v|]) :> obj)
+
+                        typeof<float>,   (1, (fun (v : float) -> [|float32 v|]) :> obj)
+                        typeof<V2d>,     (2, (fun (v : V2d) -> [|float32 v.X; float32 v.Y|]) :> obj)
+                        typeof<V3d>,     (3, (fun (v : V3d) -> [|float32 v.X; float32 v.Y; float32 v.Z|]) :> obj)
+                        typeof<V4d>,     (4, (fun (v : V4d) -> [|float32 v.X; float32 v.Y; float32 v.Z; float32 v.W|]) :> obj)
+                        
                         typeof<float32>, (1, (fun (v : float32) -> [|v|]) :> obj)
                         typeof<V2f>,     (2, (fun (v : V2f) -> [|v.X; v.Y|]) :> obj)
                         typeof<V3f>,     (3, (fun (v : V3f) -> [|v.X; v.Y; v.Z|]) :> obj)
                         typeof<V4f>,     (4, (fun (v : V4f) -> [|v.X; v.Y; v.Z; v.W|]) :> obj)
+                        
+                        typeof<C3f>,     (3, (fun (c : C3f) -> [|c.R; c.G; c.B|]) :> obj)
+                        typeof<C4f>,     (4, (fun (c : C4f) -> [|c.R; c.G; c.B; c.A|]) :> obj)
+                        typeof<C3b>,     (3, (fun (v : C3b) -> let c = v.ToC3f() in [|c.R; c.G; c.B|]) :> obj)
+                        typeof<C4b>,     (4, (fun (v : C4b) -> let c = v.ToC4f() in [|c.R; c.G; c.B; c.A|]) :> obj)
                     ]
 
                 static member ToFloatArray (arr : 'a[]) : float32[] =
@@ -317,7 +342,31 @@ module SgFSharp =
 
             Sg.TrafoApplicator(Mod.map transformBox bb, this) :> ISg
 
+        let normalizeTo (box : Box3d) (this : ISg) =
+
+            let getBoxScale (fromBox : Box3d) (toBox : Box3d) : float =
+                let fromSize = fromBox.Size
+                let toSize = toBox.Size
+                let factor = toSize / fromSize
+
+                let mutable smallest = factor.X
+
+                if factor.Y < smallest then
+                    smallest <- factor.Y
+                if factor.Z < smallest then
+                    smallest <- factor.Z
+
+                smallest
+
+            let bb = this?GlobalBoundingBox() : IMod<Box3d>
+
+            let transformBox (sbox : Box3d) = Trafo3d.Translation(-sbox.Center) * Trafo3d.Scale(getBoxScale sbox box) * Trafo3d.Translation(box.Center)
+
+            Sg.TrafoApplicator(bb.GetValue() |> transformBox |> Mod.constant, this) :> ISg
+
         let normalizeAdaptive sg = sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
+        
+        let normalize sg = sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
 
         let loadAsync (sg : ISg) = Sg.AsyncLoadApplicator(Mod.constant sg) :> ISg
 
