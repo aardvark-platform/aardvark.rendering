@@ -6,7 +6,7 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>ebc7af0c-dfdc-49c0-9939-630eeab06c73</ProjectGuid>
-    <OutputType>Library</OutputType>
+    <OutputType>Exe</OutputType>
     <RootNamespace>Aardvark.Rendering.GL.Tests</RootNamespace>
     <AssemblyName>Aardvark.Rendering.GL.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
@@ -61,6 +61,7 @@
   -->
   <ItemGroup>
     <Compile Include="RenderingTests.fs" />
+    <Compile Include="Program.fs" />
     <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>

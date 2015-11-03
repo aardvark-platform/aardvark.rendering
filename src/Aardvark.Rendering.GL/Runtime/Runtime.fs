@@ -10,9 +10,12 @@ open Aardvark.Base.Incremental
 
 type ChangeableFramebuffer(c : ChangeableResource<Framebuffer>) =
     let getHandle() =
-        c.UpdateCPU(null)
-        c.UpdateGPU(null)
-        c.Resource.GetValue() :> IFramebuffer
+        lock c (fun () ->
+            if c.OutOfDate then
+                c.UpdateCPU(null)
+                c.UpdateGPU(null)
+            c.Resource.GetValue() :> IFramebuffer
+        )
 
     interface IFramebuffer with
         member x.Handle = getHandle().Handle
@@ -22,9 +25,12 @@ type ChangeableFramebuffer(c : ChangeableResource<Framebuffer>) =
 
 type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
     let getHandle() =
-        c.UpdateCPU(null)
-        c.UpdateGPU(null)
-        c.Resource.GetValue()
+        lock c (fun () ->
+            if c.OutOfDate then
+                c.UpdateCPU(null)
+                c.UpdateGPU(null)
+            c.Resource.GetValue()
+        )
 
     interface IFramebufferTexture with
         member x.Handle = getHandle().Handle :> obj
@@ -42,9 +48,12 @@ type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
 
 type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
     let getHandle() =
-        c.UpdateCPU(null)
-        c.UpdateGPU(null)
-        c.Resource.GetValue()
+        lock c (fun () ->
+            if c.OutOfDate then
+                c.UpdateCPU(null)
+                c.UpdateGPU(null)
+            c.Resource.GetValue()
+        )
 
     interface IFramebufferRenderbuffer with
         member x.Handle = getHandle().Handle :> obj

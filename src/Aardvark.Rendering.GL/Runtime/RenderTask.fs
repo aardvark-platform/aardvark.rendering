@@ -116,6 +116,7 @@ module RenderTasks =
 
     type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) as this =
         inherit AdaptiveObject()
+        static let RenderTaskRunProbe = Symbol.Create "[RenderTask] run"
 
         let mutable currentEngine = engine.GetValue(this)
         let subscriptions = Dictionary()
@@ -249,7 +250,53 @@ module RenderTasks =
                 for (_,o) in Map.toSeq old do
                     o.Dispose()
 
+        let dirtyLock = obj()
+        let mutable dirtyResources = HashSet<IChangeableResource>()
     
+        member private x.UpdateDirty() =
+            
+            let dirtyResoruces = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
+            if dirtyResoruces.Count > 0 then
+                let mutable count = 0
+
+                let mutable counts = Map.empty
+
+                let updateSw = System.Diagnostics.Stopwatch()
+                updateSw.Start()
+                System.Threading.Tasks.Parallel.ForEach(dirtyResoruces, fun (d : IChangeableResource) ->
+                    lock d (fun () ->
+                        if d.OutOfDate then
+                            let cnt = match Map.tryFind d.Kind counts with | Some v -> v | None -> 0.0
+                            counts <- Map.add d.Kind (cnt + 1.0) counts
+                            count <- count + 1
+
+                            d.UpdateCPU(x)
+                            //d.UpdateGPU(renderTask)
+                        else
+                            d.Outputs.Add x |> ignore
+                    )
+                ) |> ignore
+                updateSw.Stop()
+
+                Log.line "CPU update took: %.3fµs per resource" (1000.0 * updateSw.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
+
+                updateSw.Restart()
+                for d in dirtyResoruces do
+                    lock d (fun () ->
+                        if d.OutOfDate then
+        //                    let cnt = match Map.tryFind d.Kind counts with | Some v -> v | None -> 0.0
+        //                    counts <- Map.add d.Kind (cnt + 1.0) counts
+        //                    count <- count + 1
+        //
+        //                    d.UpdateCPU(renderTask)
+                            d.UpdateGPU(x)
+                    )
+                updateSw.Stop()
+                Log.line "GPU update took: %.3fµs per resource" (1000.0 * updateSw.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
+
+
+
+
 
         member private x.Add(pass : uint64, rj : IRenderObject) =
             additions <- additions + 1
@@ -264,6 +311,14 @@ module RenderTasks =
 
         member x.Runtime = runtime
         member x.Manager = manager
+
+        override x.InputChanged(o : IAdaptiveObject) =
+            match o with
+                | :? IChangeableResource as o ->
+                    lock dirtyLock (fun () ->
+                        dirtyResources.Add(o) |> ignore
+                    )
+                | _ -> ()
 
         member x.ProcessDeltas (deltas : list<Delta<IRenderObject>>) =
             let mutable additions = 0
@@ -328,73 +383,76 @@ module RenderTasks =
 
         member x.Run (caller : IAdaptiveObject, fbo : IFramebuffer) =
             x.EvaluateAlways caller (fun () ->
-                using ctx.ResourceLock (fun _ ->
+                Telemetry.timed RenderTaskRunProbe (fun () ->
+                    using ctx.ResourceLock (fun _ ->
+                        x.UpdateDirty()
+
+                        setExecutionEngine (engine.GetValue(x))
+
+                        let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
+                        if currentEngine.useDebugOutput 
+                        then
+                            match ContextHandle.Current with
+                             | Some v -> v.AttachDebugOutputIfNeeded()
+                             | None -> Report.Warn("No active context handle in RenderTask.Run")
+                            GL.Enable EnableCap.DebugOutput
+
+                        let old = Array.create 4 0
+                        let mutable oldFbo = 0
+                        OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
+                        OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+
+                        let handle = fbo.Handle |> unbox<int> 
+
+                        if ExecutionContext.framebuffersSupported then
+                            GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                            GL.Check "could not bind framebuffer"
+                        elif handle <> 0 then
+                            failwithf "cannot render to texture on this OpenGL driver"
+
+
+                        GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+                        GL.Check "could not set viewport"
                     
-                    setExecutionEngine (engine.GetValue(x))
+                        let additions, removals =
+                            if reader.OutOfDate then
+                                x.ProcessDeltas (reader.GetDelta(x))
+                            else
+                                0,0
 
-                    let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
-                    if currentEngine.useDebugOutput 
-                    then
-                        match ContextHandle.Current with
-                         | Some v -> v.AttachDebugOutputIfNeeded()
-                         | None -> Report.Warn("No active context handle in RenderTask.Run")
-                        GL.Enable EnableCap.DebugOutput
+                        renderPassChangeSet.Evaluate() |> ignore
 
-                    let old = Array.create 4 0
-                    let mutable oldFbo = 0
-                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+                        let mutable resourceCount = 0
+                        let mutable stats = FrameStatistics.Zero
+                        let contextHandle = ContextHandle.Current.Value
 
-                    let handle = fbo.Handle |> unbox<int> 
+                        //render
+                        for (KeyValue(_,p)) in programs do
+                            stats <- stats + p.Run(handle, contextHandle)
+                            resourceCount <- resourceCount + p.Resources.Entries.Count
 
-                    if ExecutionContext.framebuffersSupported then
-                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                        GL.Check "could not bind framebuffer"
-                    elif handle <> 0 then
-                        failwithf "cannot render to texture on this OpenGL driver"
-
-
-                    GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
-                    GL.Check "could not set viewport"
+                        if ExecutionContext.framebuffersSupported then
+                            GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+                            GL.Check "could not bind framebuffer"
+                        GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+                        GL.Check "could not set viewport"
                     
-                    let additions, removals =
-                        if reader.OutOfDate then
-                            x.ProcessDeltas (reader.GetDelta(x))
-                        else
-                            0,0
+                        if wasEnabled <> currentEngine.useDebugOutput 
+                        then
+                            if wasEnabled then GL.Enable EnableCap.DebugOutput
+                            else GL.Disable EnableCap.DebugOutput
 
-                    renderPassChangeSet.Evaluate() |> ignore
+                        let stats = 
+                            { stats with 
+                                AddedRenderObjects = float additions
+                                RemovedRenderObjects = float removals
+                                ResourceCount = float resourceCount 
+                            }
 
-                    let mutable resourceCount = 0
-                    let mutable stats = FrameStatistics.Zero
-                    let contextHandle = ContextHandle.Current.Value
+                        frameId <- frameId + 1UL
 
-                    //render
-                    for (KeyValue(_,p)) in programs do
-                        stats <- stats + p.Run(handle, contextHandle)
-                        resourceCount <- resourceCount + p.Resources.Entries.Count
-
-                    if ExecutionContext.framebuffersSupported then
-                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
-                        GL.Check "could not bind framebuffer"
-                    GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-                    GL.Check "could not set viewport"
-                    
-                    if wasEnabled <> currentEngine.useDebugOutput 
-                    then
-                        if wasEnabled then GL.Enable EnableCap.DebugOutput
-                        else GL.Disable EnableCap.DebugOutput
-
-                    let stats = 
-                        { stats with 
-                            AddedRenderObjects = float additions
-                            RemovedRenderObjects = float removals
-                            ResourceCount = float resourceCount 
-                        }
-
-                    frameId <- frameId + 1UL
-
-                    RenderingResult(fbo, stats)
+                        RenderingResult(fbo, stats)
+                    )
                 )
             )
 

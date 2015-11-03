@@ -34,6 +34,10 @@ module ResourceManager =
     type ChangeableResource<'a> internal(key : list<obj>, parent : ConcurrentDictionary<list<obj>, obj>, 
                                          desc : IAdaptiveObject -> ChangeableResourceDescription<'a>) as this =
         inherit AdaptiveObject()
+
+        static let updateCPUProbe = Symbol.Create "[Resource] update CPU"
+        static let updateGPUProbe = Symbol.Create "[Resource] update GPU"
+
         let desc = desc this
         do desc.dependencies |> List.iter (fun a -> a.GetValue(this) |> ignore; a.AddOutput this)
            this.OutOfDate <- false
@@ -44,13 +48,17 @@ module ResourceManager =
 
         //member x.Dependencies = desc.dependencies
         member x.UpdateCPU(caller : IAdaptiveObject) = 
-            desc.dependencies |> List.iter (fun a -> a.GetValue(x) |> ignore)
-            desc.updateCPU()
+            Telemetry.timed updateCPUProbe (fun () ->
+                desc.dependencies |> List.iter (fun a -> a.GetValue(x) |> ignore)
+                desc.updateCPU()
+            )
 
         member x.UpdateGPU(caller) = 
             x.EvaluateIfNeeded (caller) () (fun () ->
-                x.UpdateCPU(caller)
-                desc.updateGPU()
+                Telemetry.timed updateGPUProbe (fun () ->
+                    //x.UpdateCPU(caller)
+                    desc.updateGPU()
+                )
             )
 
         member x.Resource = desc.resource

@@ -337,6 +337,11 @@ module RenderingTests =
         use ctx = new Context(runtime)
         runtime.Context <- ctx
 
+        using ctx.ResourceLock (fun _ -> 
+            Log.line "vendor:   %s" runtime.Context.Driver.vendor
+            Log.line "renderer: %s" runtime.Context.Driver.renderer
+        )
+
         let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
         let task = runtime.CompileRender sg
 
@@ -358,6 +363,7 @@ module RenderingTests =
         let pi = color.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
         pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
 
+        Log.line "starting pure render test"
         let mutable iterations = 0
         let sw = Stopwatch()
         sw.Start()
@@ -369,7 +375,8 @@ module RenderingTests =
 
         let pureRenderTime = sw.Elapsed.TotalSeconds / float iterations
 
-
+        Telemetry.reset()
+        Log.line "starting update test"
         let mutable iterations = 0
         let sw = Stopwatch()
         sw.Start()
@@ -389,6 +396,7 @@ module RenderingTests =
         Log.line "rendering:    %.2ffps" (1.0 / pureRenderTime)
         Log.line "updates:      %.2ffps" (1.0 / updateTime)
 
-
+        let rep = Telemetry.resetAndGetReport()
+        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
 
         ()
