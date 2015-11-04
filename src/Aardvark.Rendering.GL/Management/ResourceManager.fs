@@ -15,8 +15,9 @@ module ResourceManager =
     exception ResourceManagerException of string
 
     type internal ChangeableResourceDescription<'a> = 
-        { dependencies : list<IMod>; 
-          updateCPU : unit -> unit; 
+        { trackChangedInputs : bool
+          dependencies : list<IMod>; 
+          updateCPU : list<IAdaptiveObject> -> unit; 
           updateGPU : unit -> unit; 
           destroy : unit -> unit; 
           resource : IMod<'a>;
@@ -44,13 +45,21 @@ module ResourceManager =
 
         let mutable isDisposed = false
         let mutable refCount = 1
-        
+        let mutable changedInputs = []
+
+        override x.InputChanged (i : IAdaptiveObject) =
+            if desc.trackChangedInputs then
+                Interlocked.Change(&changedInputs, fun l -> i::l) |> ignore
+                       
 
         //member x.Dependencies = desc.dependencies
         member x.UpdateCPU(caller : IAdaptiveObject) = 
             Telemetry.timed updateCPUProbe (fun () ->
+                let changed = 
+                    if desc.trackChangedInputs then Interlocked.Exchange(&changedInputs, [])
+                    else []
                 //desc.dependencies |> List.iter (fun a -> a.GetValue(x) |> ignore)
-                desc.updateCPU()
+                desc.updateCPU changed
             )
 
         member x.UpdateGPU(caller) = 
@@ -105,7 +114,7 @@ module ResourceManager =
             let created = ConcurrentDictionary<list<obj>, obj>()
 
             member x.GetOrAdd(key : list<obj>, create : IAdaptiveObject -> ChangeableResourceDescription<'a>) =
-
+                
                 let res = 
                     created.AddOrUpdate(key, 
                         (fun key -> 
@@ -444,8 +453,9 @@ module ResourceManager =
                 fun self ->
                     let current = data.GetValue(self)
                     let handle = bufferHandler.Create(ArrayBuffer(current))
-                    { dependencies = [data]
-                      updateCPU = fun () -> data.GetValue(self) |> ignore
+                    { trackChangedInputs = false
+                      dependencies = [data]
+                      updateCPU = fun _ -> data.GetValue(self) |> ignore
                       updateGPU = fun () -> bufferHandler.Update(handle, ArrayBuffer(data.GetValue(self)))
                       destroy = fun () -> bufferHandler.Delete(handle)
                       resource = handle
@@ -483,8 +493,9 @@ module ResourceManager =
                         handle := h
                         transact (fun () -> handleMod.Value <- h)
 
-                    { dependencies = [data]
-                      updateCPU = fun () -> data.GetValue(self) |> ignore
+                    { trackChangedInputs = false
+                      dependencies = [data]
+                      updateCPU = fun _ -> data.GetValue(self) |> ignore
                       updateGPU = fun () ->
                         match data.GetValue(self) with
                             | :? Buffer as t -> updateTo t
@@ -553,8 +564,9 @@ module ResourceManager =
                         handle := h
                         transact (fun () -> handleMod.Value <- h)
 
-                    { dependencies = [data]
-                      updateCPU = fun () -> data.GetValue(self) |> ignore
+                    { trackChangedInputs = false
+                      dependencies = [data]
+                      updateCPU = fun _ -> data.GetValue(self) |> ignore
                       updateGPU = fun () -> 
                         match data.GetValue(self) with
                             | :? Texture as t -> updateTo t
@@ -581,8 +593,9 @@ module ResourceManager =
                     let current = s.GetValue(self)
                     match current with
                      | :? Program as p -> 
-                        { dependencies = [s]
-                          updateCPU = id
+                        { trackChangedInputs = false
+                          dependencies = [s]
+                          updateCPU = ignore
                           updateGPU = id
                           destroy = id
                           resource = s |> Mod.map unbox
@@ -594,8 +607,9 @@ module ResourceManager =
                             | Success p ->
                                 let handle = Mod.init p
 
-                                { dependencies = [s]
-                                  updateCPU = fun () -> 
+                                { trackChangedInputs = false
+                                  dependencies = [s]
+                                  updateCPU = fun _ -> 
                                     match compile <| s.GetValue(self) with
                                         | Success p -> Mod.change handle p
                                         | Error e -> Log.warn "could not update surface: %A" e
@@ -631,37 +645,42 @@ module ResourceManager =
 
                     let b = ctx.CreateUniformBuffer(layout)
                     
-                    let writers = fieldValues |> List.map (fun (u,m) -> m, b.CompileSetter (Sym.ofString u.name) m)
+                    let writers = 
+                        fieldValues 
+                            |> List.map (fun (u,m) -> m :> IAdaptiveObject, b.CompileSetter (Sym.ofString u.name) m)
+                            |> List.toArray
   
                     
-//                    let dirty = System.Collections.Generic.List()
-//                    let subscriptions =
-//                        writers |> List.map (fun ((m,w) as value) ->
-//                            w(self)
-//                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add value))
-//                        )
-
+                    writers |> Array.iter (fun (_,w) -> w(self))
                     ctx.Upload(b)
 
-                    { dependencies = values
-                      updateCPU = fun () ->
-//                        let d =
-//                            lock dirty (fun () ->
-//                                let res = dirty |> Seq.toList
-//                                dirty.Clear()
-//                                res
-//                            )
-                            for (m,w) in writers do
-                                w(self);
+                    if writers.Length > 4 then
+                        let writers = Dictionary.ofArray writers
+                        { trackChangedInputs = true
+                          dependencies = values
+                          updateCPU = fun changed ->
+                            let mutable w = Unchecked.defaultof<_>
+                            for c in changed do
+                                if writers.TryGetValue(c, &w) then
+                                    w(self)
                             
 
-                      updateGPU = fun () -> ctx.Upload(b)
-                      destroy = fun () -> 
-//                        subscriptions |> List.iter (fun d -> d.Dispose())
-//                        dirty.Clear()
-                        ctx.Delete(b)
-                      resource = Mod.constant b
-                      kind = ResourceKind.UniformBuffer  }    
+                          updateGPU = fun () -> ctx.Upload(b)
+                          destroy = fun () -> 
+                            ctx.Delete(b)
+                          resource = Mod.constant b
+                          kind = ResourceKind.UniformBuffer  }    
+                    else
+                        let writers = writers |> Array.map snd
+                        { trackChangedInputs = false
+                          dependencies = values
+                          updateCPU = fun _ ->
+                            for w in writers do w(self)
+                          updateGPU = fun () -> ctx.Upload(b)
+                          destroy = fun () -> 
+                            ctx.Delete(b)
+                          resource = Mod.constant b
+                          kind = ResourceKind.UniformBuffer  }   
             )
 
         member x.CreateUniformLocation(scope : Ag.Scope, u : IUniformProvider, uniform : ActiveUniform) =
@@ -677,8 +696,9 @@ module ResourceManager =
                             
                             writer.GetValue(self)
 
-                            { dependencies = [v]
-                              updateCPU = fun () ->
+                            { trackChangedInputs = false
+                              dependencies = [v]
+                              updateCPU = fun _ ->
                                 writer.GetValue(self)
 
                               updateGPU = fun () -> ()
@@ -696,8 +716,9 @@ module ResourceManager =
                     let current = sam.GetValue(self)
                     let handle = ctx.CreateSampler(current)
 
-                    { dependencies = [sam]
-                      updateCPU = fun () -> sam.GetValue(self) |> ignore
+                    { trackChangedInputs = true
+                      dependencies = [sam]
+                      updateCPU = fun _ -> sam.GetValue(self) |> ignore
                       updateGPU = fun () -> ctx.Update(handle, sam.GetValue(self))
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle 
@@ -712,8 +733,9 @@ module ResourceManager =
                     let handle = ctx.CreateVertexArrayObject(index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
                     let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IMod)
 
-                    { dependencies = (index.Resource :> IMod)::attributes
-                      updateCPU = fun () -> ()
+                    { trackChangedInputs = true
+                      dependencies = (index.Resource :> IMod)::attributes
+                      updateCPU = fun _ -> ()
                       updateGPU = fun () -> ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle 
@@ -729,8 +751,9 @@ module ResourceManager =
                     let handle = ctx.CreateVertexArrayObject(bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
                     let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IMod)
 
-                    { dependencies = attributes
-                      updateCPU = fun () -> ()
+                    { trackChangedInputs = true
+                      dependencies = attributes
+                      updateCPU = fun _ -> ()
                       updateGPU = fun () -> ctx.Update(handle,bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle
@@ -752,8 +775,9 @@ module ResourceManager =
             let desc self =
                 let handle = ctx.CreateTexture2D(size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
                 
-                { dependencies = [size :> IMod; textureFormat :> IMod; samples :> IMod]
-                  updateCPU = fun () -> ()
+                { trackChangedInputs = true
+                  dependencies = [size :> IMod; textureFormat :> IMod; samples :> IMod]
+                  updateCPU = fun _ -> ()
                   updateGPU = fun () -> ctx.UpdateTexture2D(handle, size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
                   destroy = fun () -> ctx.Delete(handle)
                   resource = Mod.constant handle
@@ -766,8 +790,9 @@ module ResourceManager =
             
             let desc self =
                 let handle = ctx.CreateRenderbuffer(size.GetValue(self), format.GetValue(self), samples.GetValue(self))
-                { dependencies = [size :> IMod; format :> IMod; samples :> IMod]
-                  updateCPU = fun () -> ()
+                { trackChangedInputs = true
+                  dependencies = [size :> IMod; format :> IMod; samples :> IMod]
+                  updateCPU = fun _ -> ()
                   updateGPU = fun () -> ctx.Update(handle, size.GetValue(self), format.GetValue(self), samples.GetValue(self))
                   destroy = fun () -> ctx.Delete(handle)
                   resource = Mod.constant handle 
@@ -796,8 +821,9 @@ module ResourceManager =
                 let c,d = toInternal bindings
                 let handle = ctx.CreateFramebuffer(c, d)
 
-                { dependencies = bindings |> Seq.map (fun (_,v) -> v :> IMod) |> Seq.toList
-                  updateCPU = fun () -> ()
+                { trackChangedInputs = true
+                  dependencies = bindings |> Seq.map (fun (_,v) -> v :> IMod) |> Seq.toList
+                  updateCPU = fun _ -> ()
                   updateGPU = fun () -> 
                     let c,d = toInternal bindings
                     ctx.Update(handle, c, d)
