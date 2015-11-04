@@ -634,33 +634,31 @@ module ResourceManager =
                     let writers = fieldValues |> List.map (fun (u,m) -> m, b.CompileSetter (Sym.ofString u.name) m)
   
                     
-                    let dirty = System.Collections.Generic.List()
-                    let subscriptions =
-                        writers |> List.map (fun ((m,w) as value) ->
-                            w(self)
-                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add value))
-                        )
+//                    let dirty = System.Collections.Generic.List()
+//                    let subscriptions =
+//                        writers |> List.map (fun ((m,w) as value) ->
+//                            w(self)
+//                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add value))
+//                        )
 
                     ctx.Upload(b)
 
                     { dependencies = values
                       updateCPU = fun () ->
-                        let d =
-                            lock dirty (fun () ->
-                                let res = dirty |> Seq.toList
-                                dirty.Clear()
-                                res
-                            )
-
-                        if not <| List.isEmpty d then
-                            for (m,w) in d do
+//                        let d =
+//                            lock dirty (fun () ->
+//                                let res = dirty |> Seq.toList
+//                                dirty.Clear()
+//                                res
+//                            )
+                            for (m,w) in writers do
                                 w(self);
                             
 
                       updateGPU = fun () -> ctx.Upload(b)
                       destroy = fun () -> 
-                        subscriptions |> List.iter (fun d -> d.Dispose())
-                        dirty.Clear()
+//                        subscriptions |> List.iter (fun d -> d.Dispose())
+//                        dirty.Clear()
                         ctx.Delete(b)
                       resource = Mod.constant b
                       kind = ResourceKind.UniformBuffer  }    

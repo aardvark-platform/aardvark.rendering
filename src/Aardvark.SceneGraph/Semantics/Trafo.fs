@@ -85,10 +85,10 @@ module TrafoSemantics =
             let s = foldConstants stack
 
             match s with
-                | [] -> Mod.constant Trafo3d.Identity
+                | [] -> rootTrafo
                 | [a] -> a
                 | [a;b] -> a <*> b
-                | _ -> s |> List.fold (<*>) (Mod.constant Trafo3d.Identity)
+                | _ -> s |> List.fold (<*>) rootTrafo
 
 //        member x.ModelTrafo(e : Root<ISg>) = 
 //            e.Child?ModelTrafo <- rootTrafo
