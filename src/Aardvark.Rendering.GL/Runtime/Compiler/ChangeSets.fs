@@ -75,97 +75,19 @@ type ChangeSet(renderTask : IRenderTask, addInput : IAdaptiveObject -> unit, rem
             count, sw.Elapsed, resTime
         )
 
-type ResourceSet(renderTask : IRenderTask, addInput : IAdaptiveObject -> unit, removeInput : IAdaptiveObject -> unit) =
+type InputSet(o : IAdaptiveObject) =
     let l = obj()
-    let all = ReferenceCountingSet<IChangeableResource>()
-//    let set = HashSet<IChangeableResource>()
-//    let callbacks = Dictionary<IChangeableResource, IDisposable>()
-//    let sw = System.Diagnostics.Stopwatch()
-//
-//    let dirty (m : IChangeableResource) () =
-//        lock l (fun () -> 
-//            set.Add m |> ignore
-//        )
+    let inputs = ReferenceCountingSet<IAdaptiveObject>()
 
-    member x.Resources = all
-
-    member x.Listen(m : IChangeableResource) = 
-        lock m (fun () -> 
-            lock l (fun () ->
-                if all.Add m then
-                    
-                    addInput m
-                    //let cb = dirty m
-                    //callbacks.[m] <- m.AddMarkingCallback cb
-
-                    if m.OutOfDate then
-                        () //set.Add m |> ignore
-                    else
-                        m.Outputs.Add renderTask |> ignore
-            )
+    member x.Add(m : IAdaptiveObject) = 
+        lock l (fun () ->
+            if inputs.Add m then
+                m.Outputs.Add o |> ignore
         )
 
-    member x.Unlisten (m : IChangeableResource) = 
-        lock m (fun () ->
-            lock l (fun () ->
-                if all.Remove m then
-                    removeInput m
-                    //set.Remove m |> ignore
-//                    match callbacks.TryGetValue m with
-//                        | (true, d) -> 
-//                            d.Dispose()
-//                            callbacks.Remove m |> ignore
-//                        | _ -> ()
-            )
+    member x.Remove (m : IAdaptiveObject) = 
+        lock l (fun () ->
+            if inputs.Remove m then
+                m.Outputs.Remove o |> ignore
         )
-
-    member x.Update() = 0, Map.empty, TimeSpan.Zero
-//        let dirtyResoruces = 
-//            lock l (fun () ->
-//                let dirtySet = set |> Seq.toArray
-//                set.Clear()
-//                dirtySet
-//            )
-//        sw.Restart()
-//        let mutable count = 0
-//
-//        let mutable counts = Map.empty
-//
-//        let updateSw = System.Diagnostics.Stopwatch()
-//        updateSw.Start()
-//        System.Threading.Tasks.Parallel.ForEach(dirtyResoruces, fun (d : IChangeableResource) ->
-//            lock d (fun () ->
-//                if d.OutOfDate then
-//                    let cnt = match Map.tryFind d.Kind counts with | Some v -> v | None -> 0.0
-//                    counts <- Map.add d.Kind (cnt + 1.0) counts
-//                    count <- count + 1
-//
-//                    d.UpdateCPU(renderTask)
-//                    //d.UpdateGPU(renderTask)
-//                else
-//                    d.Outputs.Add renderTask |> ignore
-//            )
-//        ) |> ignore
-//        updateSw.Stop()
-//
-//        Log.line "update took: %.3fµs per resource" (1000.0 * updateSw.Elapsed.TotalMilliseconds / float dirtyResoruces.Length)
-//
-//        for d in dirtyResoruces do
-//            lock d (fun () ->
-//                if d.OutOfDate then
-////                    let cnt = match Map.tryFind d.Kind counts with | Some v -> v | None -> 0.0
-////                    counts <- Map.add d.Kind (cnt + 1.0) counts
-////                    count <- count + 1
-////
-////                    d.UpdateCPU(renderTask)
-//                    d.UpdateGPU(renderTask)
-//            )
-//
-//
-//        if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
-//        sw.Stop()
-//
-//        //printfn "GL: %fms vs .NET: %fms" glsw.Elapsed.TotalMilliseconds sw.Elapsed.TotalMilliseconds 
-//
-//        count,counts,sw.Elapsed
 

@@ -124,7 +124,6 @@ module RenderTasks =
         do reader.AddOutput this
            engine.AddOutput this
 
-        let inputs = ReferenceCountingSet<IAdaptiveObject>()
         let mutable programs = Map.empty
         let changer = Mod.init ()
 
@@ -134,14 +133,8 @@ module RenderTasks =
 
         let renderPassChangers = Dictionary<IRenderObject, IMod<unit> * ref<uint64>>()
         let renderPassChangeSet = MutableVolatileDirtySet<IMod<unit>, unit>(fun m -> m.GetValue this)
+        let inputSet = Compiler.InputSet(this)
 
-        let addInput m =
-            if inputs.Add m then
-                transact (fun () -> m.AddOutput this)
-
-        let removeInput m =
-            if inputs.Remove m then
-                transact (fun () -> m.RemoveOutput this)
 
         let tryGetProgramForPass (pass : uint64) =
             Map.tryFind pass programs
@@ -156,7 +149,7 @@ module RenderTasks =
                     new Compiler.SortedProgram<_>(this,
                         Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, 
                         (fun () -> newSorter scope),
-                        manager, addInput, removeInput
+                        manager, inputSet
                     ) :> IRenderProgram
                 | s ->
                     match engine.execution, engine.redundancy with
@@ -164,51 +157,51 @@ module RenderTasks =
                         | ExecutionEngine.Native, RedundancyRemoval.None ->
                             Log.line "using unoptimized native program"
                             new Compiler.UnoptimizedProgram<_>(this,
-                                engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
+                                engine, Compiler.FragmentHandlers.native, manager, inputSet
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Native, _ ->
                             Log.line "using optimized native program"
                             new Compiler.OptimizedProgram<_>(this,
-                                engine, Compiler.FragmentHandlers.native, manager, addInput, removeInput
+                                engine, Compiler.FragmentHandlers.native, manager, inputSet
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.None ->
                             Log.line "using unoptimized glvm program"
                             new Compiler.UnoptimizedProgram<_>(this,
-                                engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
+                                engine, Compiler.FragmentHandlers.glvm, manager, inputSet
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Runtime ->
                             Log.line "using runtime-optimized glvm program"
                             new Compiler.UnoptimizedProgram<_>(this,
-                                engine, Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager, addInput, removeInput
+                                engine, Compiler.FragmentHandlers.glvmRuntimeRedundancyChecks, manager, inputSet
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Static ->
                             Log.line "using optimized glvm program"
                             new Compiler.OptimizedProgram<_>(this,
-                                engine, Compiler.FragmentHandlers.glvm, manager, addInput, removeInput
+                                engine, Compiler.FragmentHandlers.glvm, manager, inputSet
                             ) :> IRenderProgram
 
 
                         | ExecutionEngine.Managed, RedundancyRemoval.None ->
                             Log.line "using unoptimized managed program"
                             new Compiler.UnoptimizedProgram<_>(this,
-                                engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+                                engine, Compiler.FragmentHandlers.managed, manager, inputSet
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Managed, _->
                             Log.line "using optimized managed program"
                             new Compiler.OptimizedProgram<_>(this,
-                                engine, Compiler.FragmentHandlers.managed, manager, addInput, removeInput
+                                engine, Compiler.FragmentHandlers.managed, manager, inputSet
                             ) :> IRenderProgram
 
                         | ExecutionEngine.Debug, _ ->
                             Log.warn "using debug program"
 
                             new Compiler.DebugProgram(this,
-                                manager, addInput, removeInput
+                                manager, inputSet
                             ) :> IRenderProgram
 
                         | _ ->
@@ -253,47 +246,54 @@ module RenderTasks =
         let dirtyLock = obj()
         let mutable dirtyResources = HashSet<IChangeableResource>()
     
+        let increment (k : ResourceKind) (m : Map<ResourceKind, float>) =
+            let cnt = match Map.tryFind k m with | Some v -> v | None -> 0.0
+            Map.add k (cnt + 1.0) m
+
+        let updateCPUTime = System.Diagnostics.Stopwatch()
+        let updateGPUTime = System.Diagnostics.Stopwatch()
+
         member private x.UpdateDirty() =
             
             let dirtyResoruces = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
             if dirtyResoruces.Count > 0 then
-                let mutable count = 0
 
-                let mutable counts = Map.empty
-
-                let updateSw = System.Diagnostics.Stopwatch()
-                updateSw.Start()
+                updateCPUTime.Restart()
                 System.Threading.Tasks.Parallel.ForEach(dirtyResoruces, fun (d : IChangeableResource) ->
                     lock d (fun () ->
                         if d.OutOfDate then
-                            let cnt = match Map.tryFind d.Kind counts with | Some v -> v | None -> 0.0
-                            counts <- Map.add d.Kind (cnt + 1.0) counts
-                            count <- count + 1
-
                             d.UpdateCPU(x)
-                            //d.UpdateGPU(renderTask)
+//                            System.Threading.Interlocked.Change(&counts, increment d.Kind) |> ignore
+//                            System.Threading.Interlocked.Increment(&count) |> ignore
                         else
                             d.Outputs.Add x |> ignore
                     )
                 ) |> ignore
-                updateSw.Stop()
+                updateCPUTime.Stop()
+                Log.line "CPU update took: %.3fµs per resource" (1000.0 * updateCPUTime.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
 
-                Log.line "CPU update took: %.3fµs per resource" (1000.0 * updateSw.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
 
-                updateSw.Restart()
+                let mutable count = 0
+                let mutable counts = Map.empty
+                updateGPUTime.Restart()
                 for d in dirtyResoruces do
                     lock d (fun () ->
                         if d.OutOfDate then
-        //                    let cnt = match Map.tryFind d.Kind counts with | Some v -> v | None -> 0.0
-        //                    counts <- Map.add d.Kind (cnt + 1.0) counts
-        //                    count <- count + 1
-        //
-        //                    d.UpdateCPU(renderTask)
+                            count <- count + 1
+                            counts <- increment d.Kind counts
+
                             d.UpdateGPU(x)
                     )
-                updateSw.Stop()
-                Log.line "GPU update took: %.3fµs per resource" (1000.0 * updateSw.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
 
+                if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
+
+                updateGPUTime.Stop()
+                Log.line "GPU update took: %.3fµs per resource" (1000.0 * updateGPUTime.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
+
+
+                count, counts, updateCPUTime.Elapsed + updateGPUTime.Elapsed
+            else
+                0, Map.empty, TimeSpan.Zero
 
 
 
@@ -385,7 +385,8 @@ module RenderTasks =
             x.EvaluateAlways caller (fun () ->
                 Telemetry.timed RenderTaskRunProbe (fun () ->
                     using ctx.ResourceLock (fun _ ->
-                        x.UpdateDirty()
+                        let resourceUpdates, resourceCounts, resourceUpdateTime = 
+                            x.UpdateDirty()
 
                         setExecutionEngine (engine.GetValue(x))
 
@@ -429,7 +430,7 @@ module RenderTasks =
                         //render
                         for (KeyValue(_,p)) in programs do
                             stats <- stats + p.Run(handle, contextHandle)
-                            resourceCount <- resourceCount + p.Resources.Entries.Count
+                            //resourceCount <- resourceCount + p.Resources.Entries.Count
 
                         if ExecutionContext.framebuffersSupported then
                             GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
@@ -444,6 +445,9 @@ module RenderTasks =
 
                         let stats = 
                             { stats with 
+                                ResourceUpdateCount = float resourceUpdates
+                                ResourceUpdateCounts = resourceCounts
+                                ResourceUpdateTime = resourceUpdateTime 
                                 AddedRenderObjects = float additions
                                 RemovedRenderObjects = float removals
                                 ResourceCount = float resourceCount 

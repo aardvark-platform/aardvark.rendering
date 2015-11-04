@@ -11,10 +11,9 @@ open Aardvark.Rendering.GL
 
 type DebugProgram(parent : IRenderTask,
                   manager : ResourceManager, 
-                  addInput : IAdaptiveObject -> unit, 
-                  removeInput : IAdaptiveObject -> unit) =
+                  inputSet : InputSet) =
 
-    do addInput AdaptiveObject.Time
+    do inputSet.Add AdaptiveObject.Time
 
     let mutable allResources = HashSet<IChangeableResource>()
     let mutable usedResources = HashSet<IChangeableResource>()
@@ -76,7 +75,7 @@ type DebugProgram(parent : IRenderTask,
 
     interface IRenderProgram with
         member x.Disassemble() = Seq.empty // TODO: disassemble debug program
-        member x.Resources = ReferenceCountingSet()
+        //member x.Resources = ReferenceCountingSet()
         member x.RenderObjects = renderObjects :> seq<_>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj

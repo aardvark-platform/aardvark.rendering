@@ -104,9 +104,6 @@ module ResourceManager =
     let outOfDate (c : IChangeableResource) =
         c.OutOfDate
 
-    let subscribeDirty (c : IChangeableResource) (set : System.Collections.Generic.HashSet<IChangeableResource>) (dirty : ref<int>) =
-        let f() = dirty := 1; lock set (fun () -> set.Add c |> ignore)
-        c.AddMarkingCallback(f)
 
     [<AutoOpen>]
     module private Caching =
