@@ -30,18 +30,6 @@ open Aardvark.Base.Incremental
 type UniformLocation(ctx : Context, size : int, uniformType : ActiveUniformType) =
     let data = Marshal.AllocHGlobal(size)
 
-    member x.CompileSetter (m : IMod) : IAdaptiveObject -> unit =
-        let t = m.GetType()
-
-        match t with
-            | ModOf(t) ->
-                let write = ValueConverter.compileSetter ValueConverter.ConversionTarget.ConvertForLocation [{path = ValuePath "value"; offset = 0; uniformType = uniformType; count = 1}] t
-
-                fun caller -> 
-                    write caller (m :> obj) data
-            | _ ->
-                failwith "unsupported mod-type"
-
     member x.Free() =
         Marshal.FreeHGlobal data
 

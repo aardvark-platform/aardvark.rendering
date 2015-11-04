@@ -14,6 +14,7 @@ open Aardvark.Rendering.GL
 namespace Aardvark.Rendering.GL
 #endif
 open System
+open System.Collections.Generic
 open System.Threading
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
@@ -25,13 +26,19 @@ open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open FSharp.Quotations.Evaluator
 open Aardvark.Base.Incremental
+open System.Reflection
+open Microsoft.FSharp.Reflection
+open Microsoft.FSharp.Quotations.Patterns
+
+#nowarn "9"
 
 type UniformPath =
     | ValuePath of string
     | IndexPath of UniformPath * int
     | FieldPath of UniformPath * string
 
-type UniformField = { path : UniformPath; offset : int; uniformType : ActiveUniformType; count : int } with
+type UniformField = 
+    { path : UniformPath; offset : int; uniformType : ActiveUniformType; count : int } with
     member x.UniformName =
         let rec name (p : UniformPath) =
             match p with
@@ -41,52 +48,49 @@ type UniformField = { path : UniformPath; offset : int; uniformType : ActiveUnif
         name x.path
 
 
-module private ValueConverter =
-    open System.Reflection
-    open Microsoft.FSharp.Reflection
-    open Microsoft.FSharp.Quotations.Patterns
 
-    type ConversionTarget =
-        | ConvertForBuffer
-        | ConvertForLocation
+type ConversionTarget =
+    | ConvertForBuffer
+    | ConvertForLocation
 
 
 
-    let conversions =
+module UniformConversion =
+
+    let private trafoToM44f(t : Trafo3d) =
+        M44f.op_Explicit (t.Forward)
+
+    let private compiledConversions =
         [
-            <@@ fun (b : bool)      -> if b then 1 else 0 @@>
+            ( fun (b : bool)      -> if b then 1 else 0 ) :> obj
+     
+            ( fun (t : Trafo3d)   -> trafoToM44f t ) :> obj
+            ( fun (t : M44d)      -> M44f.op_Explicit t ) :> obj
+            ( fun (v : M44d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, float32 v.M03, float32 v.M10, float32 v.M11, float32 v.M12, float32 v.M13, float32 v.M20, float32 v.M21, float32 v.M22, float32 v.M23) ) :> obj
 
-            // * -> M44f
-            <@@ fun (t : Trafo3d)   -> M44f.op_Explicit (Trafo.forward t) @@>
-            <@@ fun (t : M44d)      -> M44f.op_Explicit t @@>
-            <@@ fun (v : M44d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, float32 v.M03, float32 v.M10, float32 v.M11, float32 v.M12, float32 v.M13, float32 v.M20, float32 v.M21, float32 v.M22, float32 v.M23) @@>
+            ( fun (v : M33f)      -> M34f(v.M00, v.M01, v.M02, 0.0f, v.M10, v.M11, v.M12, 0.0f, v.M20, v.M21, v.M22, 0.0f) ) :> obj
+            ( fun (v : M33d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, 0.0f, float32 v.M10, float32 v.M11, float32 v.M12, 0.0f, float32 v.M20, float32 v.M21, float32 v.M22, 0.0f) ) :> obj
+ 
+            ( fun (v : V4d)       -> V4f.op_Explicit v ) :> obj
+            ( fun (v : V3d)       -> V3f.op_Explicit v ) :> obj
+            ( fun (v : V2d)       -> V2f.op_Explicit v ) :> obj
+            ( fun (v : float)     -> float32 v ) :> obj
 
-            <@@ fun (v : M33f)      -> M34f(v.M00, v.M01, v.M02, 0.0f, v.M10, v.M11, v.M12, 0.0f, v.M20, v.M21, v.M22, 0.0f) @@>
-            <@@ fun (v : M33d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, 0.0f, float32 v.M10, float32 v.M11, float32 v.M12, 0.0f, float32 v.M20, float32 v.M21, float32 v.M22, 0.0f) @@>
-
-            <@@ fun (v : V4d)       -> V4f.op_Explicit v @@>
-            <@@ fun (v : V3d)       -> V3f.op_Explicit v @@>
-            <@@ fun (v : V2d)       -> V2f.op_Explicit v @@>
-            <@@ fun (v : float)     -> float32 v @@>
-
-
-            <@@ fun (c : C4b)     -> V4f (C4f c) @@>
-            <@@ fun (c : C4us)    -> V4f (C4f c) @@>
-            <@@ fun (c : C4ui)    -> V4f (C4f c) @@>
-            <@@ fun (c : C4f)     -> V4f c @@>
-            <@@ fun (c : C4d)     -> V4f c @@>
-
-
-            <@@ fun (c : C3b)     -> V4f (C4f c) @@>
-            <@@ fun (c : C3us)    -> V4f (C4f c) @@>
-            <@@ fun (c : C3ui)    -> V4f (C4f c) @@>
-            <@@ fun (c : C3f)     -> V4f c @@>
-            <@@ fun (c : C3d)     -> V4f c @@>
+            ( fun (c : C4b)     -> V4f (C4f c) ) :> obj
+            ( fun (c : C4us)    -> V4f (C4f c) ) :> obj
+            ( fun (c : C4ui)    -> V4f (C4f c) ) :> obj
+            ( fun (c : C4f)     -> V4f c ) :> obj
+            ( fun (c : C4d)     -> V4f c ) :> obj
+  
+            ( fun (c : C3b)     -> V4f (C4f c) ) :> obj
+            ( fun (c : C3us)    -> V4f (C4f c) ) :> obj
+            ( fun (c : C3ui)    -> V4f (C4f c) ) :> obj
+            ( fun (c : C3f)     -> V4f c ) :> obj
+            ( fun (c : C3d)     -> V4f c ) :> obj
         ]
 
-
-    let uniformTypes =
-        [
+    let private uniformTypes =
+        Dict.ofList [
             ActiveUniformType.Bool,                 typeof<int>
             ActiveUniformType.BoolVec2 ,            typeof<V2i>
             ActiveUniformType.BoolVec3 ,            typeof<V3i>
@@ -110,272 +114,371 @@ module private ValueConverter =
             ActiveUniformType.UnsignedInt ,         typeof<uint32>
         ]
 
-    let locationUniformTypes =
-        [
-            ActiveUniformType.FloatMat3 ,           typeof<M33f>
+    let private locationUniformTypes =
+        Dict.union [
+            uniformTypes
+            Dict.ofList [
+                ActiveUniformType.FloatMat3 ,           typeof<M33f>
+            ]
         ]
 
-    module private Paths =
-        // struct A { int a; float b; }
-        // struct B { int c; A inner[2]; }
-        // uniform SomeBuffer {
-        //      B Values[2];
-        //      vec4 Test;
-        // }
+    type private ConversionMapping<'a>() =
+        let store = Dict<Type, Dict<Type, 'a>>()
 
-        // Values[0].c
-        // Values[0].A[0].a
-        // Values[0].A[0].b
-        // Values[0].A[1].a
-        // Values[0].A[1].b
-        // Values[1].c
-        // Values[1].A[0].a
-        // Values[1].A[0].b
-        // Values[1].A[1].a
-        // Values[1].A[1].b
-        // Test
+        member x.Add(input : Type, output : Type, e : 'a) =
+            let map = store.GetOrCreate(input, fun _ -> Dict())
+            map.[output] <- e
 
+        member x.TryGet(input : Type, output : Type, [<Out>] e : byref<'a>) =
+            match store.TryGetValue input with
+                | (true, m) ->
+                    m.TryGetValue(output, &e)
+                | _ ->
+                    false
 
-        let private createLeafTransformation (input : Expr) =
-            // TODO: compile proper conversions
-            input
+    let private createCompiledMap (l : list<obj>) =
+        let result = ConversionMapping()
 
-        let private getArrayMethod =
-            let t = Type.GetType("Microsoft.FSharp.Core.LanguagePrimitives+IntrinsicFunctions, FSharp.Core")
-            let mi = t.GetMethod("GetArray")
-            mi
+        for e in l do
+            let (i,o) = FSharpType.GetFunctionElements (e.GetType())
+            result.Add(i,o,e)
 
-        let private all = BindingFlags.NonPublic ||| BindingFlags.Instance ||| BindingFlags.Public
+        result
 
-        let rec createUniformPath (input : Expr) (path : UniformPath) =
-            match path with
-                | ValuePath _ -> input
-                | FieldPath(inner, name) ->
-                    let input = createUniformPath input inner
-                    let f = input.Type.GetMember(name, MemberTypes.Field ||| MemberTypes.Property, all)
-
-                    if f.Length = 1 then
-                        match f.[0] with
-                            | :? PropertyInfo as f ->
-                                let fieldValue = Expr.PropertyGet(input, f)
-                                fieldValue
-                            | :? FieldInfo as f ->
-                                let fieldValue = Expr.FieldGet(input, f)
-                                fieldValue
-                            | _ ->
-                                failwith ""
-                    else
-                        failwithf "could not get member: %A (%A)" name f
-
-                | IndexPath(inner, index) ->
-                    if input.Type.IsArray then
-                        let input = createUniformPath input inner
-
-                        let elementType = input.Type.GetElementType()
-
-                        let getArrayMethod = getArrayMethod.MakeGenericMethod [|elementType|]
-                        let element = Expr.Call(getArrayMethod, [input; Expr.Value(index)])
-                        printfn "element type: %A" element.Type.Name
-
-                        element
-                    else
-                        let input = createUniformPath input inner
-
-                        let p = input.Type.GetProperty("Item", all)
-                        if p <> null then
-                            let element = Expr.PropertyGet(input, p)
-                            element
-                        else
-                            failwith ""
-          
-        let compileUniformPath (path : UniformPath) : 'a -> 'b =
-            let input = Var("input", typeof<'a>)
-            let e = createUniformPath (Expr.Var input) path
-            let lambda = Expr.Lambda(input, createLeafTransformation e)
-            lambda.CompileUntyped() |> unbox<'a -> 'b>
-
-    module private Convert =
-        open System.Collections.Generic
-        open Microsoft.FSharp.Quotations.Patterns
+    let private compiledMapping = createCompiledMap compiledConversions
 
 
+    let getExpectedType (target : ConversionTarget) (t : ActiveUniformType) =
+        match target with
+            | ConvertForBuffer ->
+                match uniformTypes.TryGetValue t with
+                    | (true, t) -> t
+                    | _ -> failwithf "unsupported uniform type: %A" t
 
-        let bufferTypeMapping = Dict.ofList uniformTypes
-        let locationTypeMapping = 
-            Dict.union [bufferTypeMapping; Dict.ofList locationUniformTypes]
-
-        let getExpectedType (target : ConversionTarget) (t : ActiveUniformType) =
-            match target with
-                | ConvertForBuffer ->
-                    match bufferTypeMapping.TryGetValue t with
-                        | (true, t) -> t
-                        | _ -> failwithf "unsupported uniform type: %A" t
-
-                | ConvertForLocation ->
-                    match locationTypeMapping.TryGetValue t with
-                        | (true, t) -> t
-                        | _ -> failwithf "unsupported uniform type: %A" t
+            | ConvertForLocation ->
+                match locationUniformTypes.TryGetValue t with
+                    | (true, t) -> t
+                    | _ -> failwithf "unsupported uniform type: %A" t
         
-        type ConversionMapping() =
-            let store = Dict<Type, Dict<Type, Expr>>()
-
-            member x.Add(input : Type, output : Type, e : Expr) =
-                let map = store.GetOrCreate(input, fun _ -> Dict())
-                map.[output] <- e
-
-            member x.TryGet(input : Type, output : Type, [<Out>] e : byref<Expr>) =
-                match store.TryGetValue input with
-                    | (true, m) ->
-                        m.TryGetValue(output, &e)
-                    | _ ->
-                        false
-
-        let createMap (l : list<Expr>) =
-            let result = ConversionMapping()
-
-            for e in l do
-                let (i,o) = FSharpType.GetFunctionElements e.Type
-                result.Add(i,o,e)
-
-            result
-
-        let mapping = createMap conversions
-
-        let getConversion (target : ConversionTarget) (input : Expr) (field : UniformField) =
-            let inType = input.Type
-            let outType = getExpectedType target field.uniformType
-
-            if field.count > 1 then
-                failwith "arrays are currently not implemented"
-            else
-                match mapping.TryGet(inType, outType) with
-                    | (true, (Lambda(v, e))) ->
-                        Expr.Let(v, input, e)
-                    | _ ->
-                        if inType = outType then
-                            input
-                        else
-                            failwithf "unknown conversion from %A to %A" inType.FullName outType.FullName
-
-
-    let addintptr (a : nativeint) (b : int) =
-        a + nativeint b
-
-    open Microsoft.FSharp.NativeInterop
-
-    let private createSetter (target : ConversionTarget) (paths : list<UniformField>, inputType : Type) : Expr =
-        let input = Var("input", inputType)
-        let ptr = Var("ptr", typeof<nativeint>)
-
-        let writers =
-            let ptr = Expr.Var ptr
-            paths |> List.map (fun f ->
-                let offset = f.offset
-                let pathValue = Paths.createUniformPath (Expr.Var input) f.path
-                let resultValue = Convert.getConversion target pathValue f
-
-                let writeMeth = typeof<Marshal>.GetMethod("StructureToPtr", [| typeof<obj>; typeof<nativeint>;typeof<bool> |])
-                // TODO: use generic
-                
-                let pos = 
-                    if offset = 0 then ptr
-                    else <@@ addintptr (%%ptr : nativeint) offset @@>
-
-                // Marshal.StructureToPtr(resultValue :> obj, ptr + (nativeint offset), false)
-                Expr.Call(writeMeth, [Expr.Coerce(resultValue, typeof<obj>); pos; Expr.Value true])
-            )
-
-        let rec seq (e : list<Expr>) =
-            match e with
-                | [e] -> e
-                | e::es -> Expr.Sequential(e, seq es)
-                | [] -> Expr.Value(())
-
-        Expr.Lambda(input, Expr.Lambda(ptr, seq writers))
-
-    let rec private extractName (p : UniformPath) =
-        match p with
-            | ValuePath name -> name
-            | IndexPath(inner,_) -> extractName inner
-            | FieldPath(inner,_) -> extractName inner
-
-    let rec private extractModType (t : Type) =
-        if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<IMod<_>> then
-            Some (t, t.GetGenericArguments().[0])
-        elif t <> typeof<obj> && t <> null then
-            extractModType t.BaseType
+    let getConverter (inType : Type) (outType : Type) =
+        if outType.IsArray then
+            failwith "arrays are currently not implemented"
         else
-            None
-
-    let rec private getMethodInfoInternal (e : Expr) =
-        match e with
-            | Patterns.Call(_,mi,_) -> 
-                if mi.IsGenericMethod then mi.GetGenericMethodDefinition() |> Some
-                else mi |> Some
-
-            | ExprShape.ShapeCombination(_, args) -> 
-                args |> List.tryPick getMethodInfoInternal
-            | ExprShape.ShapeLambda(_,b) ->
-                getMethodInfoInternal b
-            | _ -> None
-
-    let getMethodInfo (e : Expr) =
-        (getMethodInfoInternal e).Value
-
-    let private unboxMeth = getMethodInfo <@ unbox<_> @>
-    let dict = ConcurrentDictionary<list<UniformField> * Type, (IAdaptiveObject -> obj -> nativeint -> unit)>()
-
-    let compileSetter (target : ConversionTarget) (paths : list<UniformField>) (t : Type) : IAdaptiveObject -> obj -> nativeint -> unit =
-        let create (paths, t) =
-            let mt = typedefof<IMod<_>>.MakeGenericType([|t|])
-            let ub = unboxMeth.MakeGenericMethod [|mt|]
-            let ex = createSetter target (paths, t)
-            let m = Var("mod", typeof<obj>)
-            let caller = Var("caller", typeof<IAdaptiveObject>)
-            let mi = mt.GetMethod("GetValue")
-            let getter = Expr.Call(Expr.Call(ub, [Expr.Var m]), mi, [Expr.Var(caller)])
-            let ptr = Var("ptr", typeof<nativeint>)
-
-            let ex = 
-                match ex with
-                    | Lambda(v, Lambda(ptr, b)) -> Expr.Lambda(m, Expr.Lambda(ptr, Expr.Let(v, getter, b)))
-                    | _ -> failwith "asdasd"
-
-            Expr.Lambda(caller, ex).CompileUntyped() |> unbox<IAdaptiveObject -> obj -> nativeint -> unit>
-
-        let key = (paths,t)
-
-        dict.GetOrAdd(key, Func<list<UniformField> * Type, IAdaptiveObject -> obj -> nativeint -> unit>(create))
+            match compiledMapping.TryGet(inType, outType) with
+                | (true, conv) ->
+                    conv
+                | _ ->
+                    failwithf "unknown conversion from %A to %A" inType.FullName outType.FullName
 
     let getTotalFieldSize (target : ConversionTarget) (f : UniformField) =
-        let t = Convert.getExpectedType target f.uniformType
+        let t = getExpectedType target f.uniformType
         Marshal.SizeOf(t) * f.count
 
+module UniformPaths =
+    // struct A { int a; float b; }
+    // struct B { int c; A inner[2]; }
+    // uniform SomeBuffer {
+    //      B Values[2];
+    //      vec4 Test;
+    // }
+
+    // Values[0].c
+    // Values[0].A[0].a
+    // Values[0].A[0].b
+    // Values[0].A[1].a
+    // Values[0].A[1].b
+    // Values[1].c
+    // Values[1].A[0].a
+    // Values[1].A[0].b
+    // Values[1].A[1].a
+    // Values[1].A[1].b
+    // Test
+
+
+    let private createLeafTransformation (outputType : Type) (input : Expr) =
+        if input.Type <> outputType then
+            let converter = UniformConversion.getConverter input.Type outputType
+            let f = Expr.Value(converter, converter.GetType())
+            Expr.Application(f, input)
+        else
+            input
+
+    let private getArrayMethod =
+        let t = Type.GetType("Microsoft.FSharp.Core.LanguagePrimitives+IntrinsicFunctions, FSharp.Core")
+        let mi = t.GetMethod("GetArray")
+        mi
+
+    let private all = BindingFlags.NonPublic ||| BindingFlags.Instance ||| BindingFlags.Public
+
+    let rec private createUniformPath (input : Expr) (path : UniformPath) =
+        match path with
+            | ValuePath _ -> input
+            | FieldPath(inner, name) ->
+                let input = createUniformPath input inner
+                let f = input.Type.GetMember(name, MemberTypes.Field ||| MemberTypes.Property, all)
+
+                if f.Length = 1 then
+                    match f.[0] with
+                        | :? PropertyInfo as f ->
+                            let fieldValue = Expr.PropertyGet(input, f)
+                            fieldValue
+                        | :? FieldInfo as f ->
+                            let fieldValue = Expr.FieldGet(input, f)
+                            fieldValue
+                        | mem ->
+                            failwithf "unexpected member-info: %A" mem
+                else
+                    failwithf "could not get member: %A (%A)" name f
+
+            | IndexPath(inner, index) ->
+                if input.Type.IsArray then
+                    let input = createUniformPath input inner
+
+                    let elementType = input.Type.GetElementType()
+
+                    let getArrayMethod = getArrayMethod.MakeGenericMethod [|elementType|]
+                    let element = Expr.Call(getArrayMethod, [input; Expr.Value(index)])
+                    printfn "element type: %A" element.Type.Name
+
+                    element
+                else
+                    let input = createUniformPath input inner
+
+                    let p = input.Type.GetProperty("Item", all)
+                    if p <> null then
+                        let element = Expr.PropertyGet(input, p)
+                        element
+                    else
+                        failwithf "input-type does not support indexing"
+          
+
+    let private cache = Dictionary<UniformPath * Type * Type, obj>()
+
+    let compileUniformPathUntyped (path : UniformPath) (inputType : Type) (outputType : Type) =
+        lock cache (fun () ->
+            let key = (path, inputType, outputType)
+            match cache.TryGetValue key with
+                | (true, f) -> f
+                | _ ->
+                    let result = 
+                        match path with
+                            | ValuePath _ -> 
+                                UniformConversion.getConverter inputType outputType
+                            | _ -> 
+                                let input = Var("input", inputType)
+                                let e = createUniformPath (Expr.Var input) path
+                                let lambda = Expr.Lambda(input, createLeafTransformation outputType e)
+                                lambda.CompileUntyped()
+                    cache.[key] <- result
+                    result
+        )
+
+    let compileUniformPath (path : UniformPath) : 'a -> 'b =
+        compileUniformPathUntyped path typeof<'a> typeof<'b> |> unbox<_>
+
+
+module UnmanagedWriters =
+    open Microsoft.FSharp.NativeInterop
+
+    type IWriter =
+        abstract member Write : IAdaptiveObject * nativeint -> unit
+
+    [<AbstractClass>]
+    type AbstractWriter() =
+        abstract member Write : IAdaptiveObject * nativeint -> unit
+
+        interface IWriter with
+            member x.Write(caller, ptr) = x.Write(caller, ptr)
+
+
+    type ViewWriter<'a, 'b when 'b : unmanaged>(source : IMod<'a>, fields : list<int * ('a -> 'b)>) =
+        inherit AbstractWriter()
+     
+        let fieldValues = source |> Mod.map (fun v -> fields |> List.map (fun (o,a) -> o, a v))
+
+        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
+            let fields = fieldValues.GetValue caller
+            for (offset, value) in fields do
+                let ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+                NativePtr.write ptr value
+
+    type SingleValueWriter<'a when 'a : unmanaged>(source : IMod<'a>, offset : int) =
+        inherit AbstractWriter()
+
+        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
+            let ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+            let v = source.GetValue caller
+            NativePtr.write ptr v
+
+    type ConversionArrayWriter<'a, 'b when 'b : unmanaged>(source : IMod<'a[]>, count : int, offset : int, stride : int, convert : 'a -> 'b) =
+        inherit AbstractWriter()
+
+        let stride = 
+            if stride = 0 then sizeof<'a>
+            else stride
+
+        let converted =
+            source |> Mod.map (Array.map convert)
+
+        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
+            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+            let v = converted.GetValue caller
+
+            let c = min count v.Length
+            for i in 0..c-1 do
+                NativePtr.write ptr v.[i]
+                ptr <- NativePtr.ofNativeInt (NativePtr.toNativeInt ptr + nativeint stride)
+
+            for i in c..count-1 do
+                NativePtr.write ptr Unchecked.defaultof<'b>
+
+    type ConversionWriter<'a, 'b when 'b : unmanaged>(source : IMod<'a>, offset : int, convert : 'a -> 'b) =
+        inherit AbstractWriter()
+
+        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
+            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+            let v = source.GetValue caller
+            let res = convert v
+            NativePtr.write ptr res
+
+    type NoConversionWriter<'a when 'a : unmanaged>(source : IMod<'a>, offset : int) =
+        inherit AbstractWriter()
+
+        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
+            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+            let v = source.GetValue caller
+            NativePtr.write ptr v
+
+    type ConversionSeqWriter<'s, 'a, 'b when 'b : unmanaged and 's :> seq<'a>>(source : IMod<'s>, count : int, offset : int, stride : int, convert : 'a -> 'b) =
+        inherit AbstractWriter()
+
+        let stride = 
+            if stride = 0 then sizeof<'a>
+            else stride
+
+        let converted =
+            source |> Mod.map (Seq.toArray >> Array.map convert)
+
+        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
+            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+            let v = converted.GetValue caller
+
+            let c = min count v.Length
+            for i in 0..c-1 do
+                NativePtr.write ptr v.[i]
+                ptr <- NativePtr.ofNativeInt (NativePtr.toNativeInt ptr + nativeint stride)
+
+            for i in c..count-1 do
+                NativePtr.write ptr Unchecked.defaultof<'b>
+
+    type MultiWriter(writers : list<IWriter>) =
+        inherit AbstractWriter()
+
+        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
+            for w in writers do w.Write(caller, ptr)
+
+    
+    
+
+    let private createTemplate (target : ConversionTarget) (fields : list<UniformField>) (inputTypes : Map<Symbol, Type>) =
+        fields 
+            |> Seq.groupBy(fun f -> f.UniformName) 
+            |> Seq.map (fun (n,g) -> Sym.ofString n, g |> Seq.toList) 
+            |> Seq.map (fun (name, fields) ->
+                let tMod = 
+                    match Map.tryFind name inputTypes with
+                        | Some tMod -> tMod
+                        | _ -> failwithf "could not determine input type for semantic: %A" name
+
+                match tMod with
+                    | ModOf tSource ->
+
+                        let creators = 
+                            fields |> List.map (fun f ->
+                                let tTarget = UniformConversion.getExpectedType target f.uniformType
+                                if f.count = 1 then
+                                        
+                                    if tSource <> tTarget then
+                                        let converter = UniformPaths.compileUniformPathUntyped f.path tSource tTarget
+
+                                        let tWriter = typedefof<ConversionWriter<int,int>>.MakeGenericType [|tSource; tTarget|]
+                                        let ctor = tWriter.GetConstructor [|tMod; typeof<int>; converter.GetType()|]
+
+                                        fun (m : IAdaptiveObject) ->
+                                            ctor.Invoke [|m; f.offset; converter|] |> unbox<IWriter>
+                                    else
+                                        let tWriter = typedefof<NoConversionWriter<int>>.MakeGenericType [|tSource |]
+                                        let ctor = tWriter.GetConstructor [|tMod; typeof<int>|]
+
+                                        fun (m : IAdaptiveObject) ->
+                                            ctor.Invoke [|m; f.offset|] |> unbox<IWriter>
+
+                                else
+                                    let tSeq = tSource.GetInterface("System.Collections.Generic.IEnumerable`1") 
+
+                                    if tSeq <> null then
+                                        let tSourceElement = tSeq.GetGenericArguments().[0]
+                                        let converter = UniformConversion.getConverter tSource tTarget
+
+                                        let ctor = 
+                                            if tSource.IsArray then
+                                                let tWriter = typedefof<ConversionArrayWriter<int,int>>.MakeGenericType [|tSourceElement; tTarget|]
+                                                tWriter.GetConstructor [|tMod; typeof<int>; typeof<int>; typeof<int>; converter.GetType()|]
+                                            else
+                                                let tWriter = typedefof<ConversionSeqWriter<list<int>,int,int>>.MakeGenericType [|tSource; tSourceElement; tTarget|]
+                                                tWriter.GetConstructor [|tMod; typeof<int>; typeof<int>; typeof<int>; converter.GetType()|]
+
+                                        fun (m : IAdaptiveObject) ->
+                                            ctor.Invoke [|m; f.count; f.offset; 0; converter|] |> unbox<IWriter>
+
+                                    else
+                                        failwithf "cannot write non-enumerable value to uniform-array: %A" f
+                            )
+
+                        let creator = 
+                            match creators with
+                                | [s] -> s
+                                | _ -> 
+                                    fun (m : IAdaptiveObject) ->
+                                        MultiWriter (creators |> List.map (fun c -> c m)) :> IWriter
+
+
+                        name, creator
+                    
+                    | _ ->
+                        failwithf "uniform input of unexpected type: %A" tMod
+               )
+            |> Seq.toList
+
+
+    let private templateCache = System.Collections.Generic.Dictionary<ConversionTarget * list<_> * Map<_,_>, list<Symbol * (IAdaptiveObject -> IWriter)>>()
+
+    let internal getTemplate (target : ConversionTarget) (fields : list<UniformField>) (inputTypes : Map<Symbol, Type>) =
+        let key = (target, fields, inputTypes)
+        lock templateCache (fun () ->
+            match templateCache.TryGetValue key with
+                | (true, template) -> template
+                | _ ->
+                    let template = createTemplate target fields inputTypes
+                    templateCache.[key] <- template
+                    template
+        )
+
+
+    let writers (buffer : bool) (fields : list<UniformField>) (inputs : Map<Symbol, IAdaptiveObject>) =
+        let inputTypes = inputs |> Map.map (fun _ m -> m.GetType())
+        let target = if buffer then ConversionTarget.ConvertForBuffer else ConversionTarget.ConvertForLocation
+        let creators = getTemplate target fields inputTypes
+
+        creators |> List.choose (fun (n,create) ->
+            match Map.tryFind n inputs with
+                | Some m -> Some (m, create m)
+                | None -> None
+        )
 
 type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<UniformField>) =
     let data = Marshal.AllocHGlobal(size)
     let mutable dirty = true
-
-    let paths = fields |> Seq.groupBy(fun f -> f.UniformName) |> Seq.map (fun (n,g) -> Sym.ofString n, g |> Seq.toList) |> SymDict.ofSeq 
-
-    member x.CompileSetter (name : Symbol) (m : IMod) : IAdaptiveObject -> unit =
-        let t = m.GetType()
-
-        match t with
-            | ModOf(t) ->
-                match paths.TryGetValue name with
-                    | (true, paths) ->
-                        let write = ValueConverter.compileSetter ValueConverter.ConversionTarget.ConvertForBuffer paths t
-
-                        fun (caller : IAdaptiveObject) -> 
-                            dirty <- true
-                            write caller (m :> obj) data
-                    
-
-                    | _ ->
-                        ignore
-            | _ ->
-                failwith "unsupported mod-type"
 
     member x.Free() = Marshal.FreeHGlobal data
     member x.Context = ctx
@@ -432,24 +535,3 @@ module UniformBufferExtensions =
                     GL.Check "could not unbind uniform buffer"
                 )
     
-
-    module ExecutionContext =
-        let bindUniformBuffer (index : int) (b : UniformBuffer) =
-            seq {
-                if ExecutionContext.uniformBuffersSupported then
-                    yield Instruction.BindBufferRange (int BufferTarget.UniformBuffer) index b.Handle 0n (nativeint b.Size)
-
-                else
-                    for field in b.Fields do
-                        // when uniform buffers are not supported the
-                        // offsets store the uniform's location 
-                        // TODO: ensure that this is done correctly 
-                        //       by the shader compiler.
-                        let location = field.offset
-                        let data = b.Data + (nativeint location)
-                        let size = ValueConverter.getTotalFieldSize ValueConverter.ConversionTarget.ConvertForBuffer field / sizeof<float32>
-                        
-                        // NOTE: OpenGl only supports uniforms having a
-                        //       multipe of sizeof<float32>.
-                        yield Instruction.Uniform1fv location size data
-            }

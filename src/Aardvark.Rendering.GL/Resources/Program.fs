@@ -260,6 +260,9 @@ module ProgramExtensions =
     let private activeUniformToField (u : ActiveUniform) =
         { UniformField.path = parsePath u.name; UniformField.offset = u.offset; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
 
+    type ActiveUniform with
+        member x.UniformField = activeUniformToField x
+
     let private getShaderType (stage : ShaderStage) =
         match stage with
             | ShaderStage.Vertex -> ShaderType.VertexShader

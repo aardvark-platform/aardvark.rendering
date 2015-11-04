@@ -16,7 +16,7 @@ module ResourceManager =
 
     type internal ChangeableResourceDescription<'a> = 
         { trackChangedInputs : bool
-          dependencies : list<IMod>; 
+          dependencies : seq<IAdaptiveObject>; 
           updateCPU : list<IAdaptiveObject> -> unit; 
           updateGPU : unit -> unit; 
           destroy : unit -> unit; 
@@ -40,8 +40,7 @@ module ResourceManager =
         static let updateGPUProbe = Symbol.Create "[Resource] update GPU"
 
         let desc = desc this
-        do desc.dependencies |> List.iter (fun a -> a.GetValue(this) |> ignore; a.AddOutput this)
-           this.OutOfDate <- false
+        do this.OutOfDate <- false
 
         let mutable isDisposed = false
         let mutable refCount = 1
@@ -51,14 +50,11 @@ module ResourceManager =
             if desc.trackChangedInputs then
                 Interlocked.Change(&changedInputs, fun l -> i::l) |> ignore
                        
-
-        //member x.Dependencies = desc.dependencies
         member x.UpdateCPU(caller : IAdaptiveObject) = 
             Telemetry.timed updateCPUProbe (fun () ->
                 let changed = 
                     if desc.trackChangedInputs then Interlocked.Exchange(&changedInputs, [])
                     else []
-                //desc.dependencies |> List.iter (fun a -> a.GetValue(x) |> ignore)
                 desc.updateCPU changed
             )
 
@@ -79,7 +75,7 @@ module ResourceManager =
             if parent = null then
                 isDisposed <- true
                 desc.destroy()
-                desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
+                desc.dependencies |> Seq.iter (fun a -> a.RemoveOutput this)
 
             elif not isDisposed then
                 let r = Interlocked.Decrement &refCount
@@ -87,13 +83,12 @@ module ResourceManager =
                     isDisposed <- true
                     parent.TryRemove key |> ignore
                     desc.destroy()
-                    desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
+                    desc.dependencies |> Seq.iter (fun a -> a.RemoveOutput this)
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
         interface IChangeableResource with
-            //member x.Dependencies = desc.dependencies
             member x.UpdateCPU(caller) = x.UpdateCPU(caller)
             member x.UpdateGPU(caller) = x.UpdateGPU(caller)
             member x.Resource = desc.resource :> obj
@@ -632,34 +627,36 @@ module ResourceManager =
                                 failwithf "could not find uniform: %A" f
 
             let fieldValues = layout.fields |> List.map (fun f -> f, getValue f)
-            semanticValues <- fieldValues |> List.map (fun (f,v) -> f.semantic, v)
-            let values = fieldValues |> List.map snd
-
-
             cache.[uniformBuffer].GetOrAdd(
-                (layout :> obj)::(values |> List.map (fun v -> v :> obj)),
+                (layout :> obj)::(fieldValues |> List.map (fun (_,v) -> v :> obj)),
                 fun self ->
-
-                    let b = ctx.CreateUniformBuffer(layout)
-                    
-                    let writers = 
+                    let inputs = 
                         fieldValues 
-                            |> List.map (fun (u,m) -> m :> IAdaptiveObject, b.CompileSetter (Sym.ofString u.name) m)
-                            |> List.toArray
-  
-                    
-                    writers |> Array.iter (fun (_,w) -> w(self))
+                            |> List.map (fun (f,m) -> Symbol.Create f.semantic, m :> IAdaptiveObject)
+                            |> Map.ofList
+
+
+                    let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
+                    let writers = UnmanagedWriters.writers true uniformFields inputs
+     
+
+                    let b = ctx.CreateUniformBuffer(layout.size, uniformFields)
+
+                    writers |> List.iter (fun (_,w) -> w.Write(self, b.Data))
                     ctx.Upload(b)
 
                     if writers.Length > 4 then
-                        let writers = Dictionary.ofArray writers
+                        let writers = writers |> Dictionary.ofList
                         { trackChangedInputs = true
-                          dependencies = values
+                          dependencies = writers |> Seq.cast
                           updateCPU = fun changed ->
                             let mutable w = Unchecked.defaultof<_>
                             for c in changed do
-                                if writers.TryGetValue(c, &w) then
-                                    w(self)
+                                match writers.TryGetValue c with
+                                    | (true,w) -> 
+                                        w.Write(self, b.Data)
+                                        b.Dirty <- true
+                                    | _ -> ()
                             
 
                           updateGPU = fun () -> ctx.Upload(b)
@@ -668,11 +665,12 @@ module ResourceManager =
                           resource = Mod.constant b
                           kind = ResourceKind.UniformBuffer  }    
                     else
-                        let writers = writers |> Array.map snd
+                        let writers = writers |> List.map snd |> List.toArray
                         { trackChangedInputs = false
-                          dependencies = values
+                          dependencies = writers |> Seq.cast
                           updateCPU = fun _ ->
-                            for w in writers do w(self)
+                            for w in writers do w.Write(self, b.Data)
+                            b.Dirty <- true
                           updateGPU = fun () -> ctx.Upload(b)
                           destroy = fun () -> 
                             ctx.Delete(b)
@@ -688,16 +686,16 @@ module ResourceManager =
                         fun self ->
                             let loc = ctx.CreateUniformLocation(uniform.uniformType.SizeInBytes, uniform.uniformType)
 
-                            let write = loc.CompileSetter(v)
-                            let writer = [v :> IAdaptiveObject] |> Mod.mapCustom (fun s -> write(s))
-                            
-                            writer.GetValue(self)
+                            let inputs = Map.ofList [Symbol.Create uniform.semantic, v :> IAdaptiveObject]
+                            let _,writer = UnmanagedWriters.writers false [uniform.UniformField] inputs |> List.head
+     
+
+                            writer.Write(v, loc.Data)
+
 
                             { trackChangedInputs = false
                               dependencies = [v]
-                              updateCPU = fun _ ->
-                                writer.GetValue(self)
-
+                              updateCPU = fun _ -> writer.Write(v, loc.Data)
                               updateGPU = fun () -> ()
                               destroy = fun () -> ()
                               resource = Mod.constant loc
@@ -728,10 +726,10 @@ module ResourceManager =
                 fun self ->
 
                     let handle = ctx.CreateVertexArrayObject(index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
-                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IMod)
+                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IAdaptiveObject)
 
                     { trackChangedInputs = true
-                      dependencies = (index.Resource :> IMod)::attributes
+                      dependencies = (index.Resource :> IAdaptiveObject)::attributes
                       updateCPU = fun _ -> ()
                       updateGPU = fun () -> ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
                       destroy = fun () -> ctx.Delete(handle)
@@ -746,7 +744,7 @@ module ResourceManager =
                 fun self ->
 
                     let handle = ctx.CreateVertexArrayObject(bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
-                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IMod)
+                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IAdaptiveObject)
 
                     { trackChangedInputs = true
                       dependencies = attributes
@@ -819,7 +817,7 @@ module ResourceManager =
                 let handle = ctx.CreateFramebuffer(c, d)
 
                 { trackChangedInputs = true
-                  dependencies = bindings |> Seq.map (fun (_,v) -> v :> IMod) |> Seq.toList
+                  dependencies = bindings |> Seq.map (fun (_,v) -> v :> IAdaptiveObject) 
                   updateCPU = fun _ -> ()
                   updateGPU = fun () -> 
                     let c,d = toInternal bindings
