@@ -44,13 +44,20 @@ module TrafoExtensions =
 
 module TrafoSemantics =
 
+    type TrafoMultiplyMod(l : IMod<Trafo3d>, r : IMod<Trafo3d>) =
+        inherit Mod.AbstractMod<Trafo3d>()
+
+        override x.Compute() =
+            l.GetValue x * r.GetValue x
+
+
     /// the root trafo for the entire Sg (used when no trafos are applied)
     let rootTrafo = Mod.constant Trafo3d.Identity
     let inline private (~%) (l : list<IMod<Trafo3d>>) = l
 
     [<Semantic>]
     type Trafos() =
-        let mulCache = Caching.BinaryOpCache (Mod.map2 (*))
+        let mulCache = Caching.BinaryOpCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
         let invCache = Caching.UnaryOpCache(Mod.map (fun (t : Trafo3d) -> t.Inverse))
 
         let (<*>) a b = 
