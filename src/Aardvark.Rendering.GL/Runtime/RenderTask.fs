@@ -274,13 +274,17 @@ module RenderTasks =
 
 
                 let mutable count = 0
-                let mutable counts = Map.empty
+                let counts = Dictionary<ResourceKind, ref<int>>()
+                let mutable cc = Unchecked.defaultof<_>
                 updateGPUTime.Restart()
                 for d in dirtyResoruces do
                     lock d (fun () ->
                         if d.OutOfDate then
                             count <- count + 1
-                            counts <- increment d.Kind counts
+                            if counts.TryGetValue(d.Kind, &cc) then
+                                cc := !cc + 1
+                            else
+                                counts.[d.Kind] <- ref 1
 
                             d.UpdateGPU(x)
                     )
@@ -291,6 +295,7 @@ module RenderTasks =
                 Log.line "GPU update took: %.3fµs per resource" (1000.0 * updateGPUTime.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
 
 
+                let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
                 count, counts, updateCPUTime.Elapsed + updateGPUTime.Elapsed
             else
                 0, Map.empty, TimeSpan.Zero
