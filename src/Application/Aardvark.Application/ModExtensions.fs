@@ -27,8 +27,10 @@ module Mod =
                 newA
             )
         oldState := state.GetValue(null)
-        state.Outputs.Add !res |> ignore
-        state.AddOutput !res
+        lock state (fun () ->
+            state.Outputs.Add !res |> ignore
+            state.AddOutput !res
+        )
 
         !res
 
@@ -47,8 +49,11 @@ module Mod =
                 oldState := s 
                 newA
             )
-        state.Outputs.Add !res |> ignore
-        state.AddOutput !res
+        lock state (fun () ->
+            state.Outputs.Add !res |> ignore
+            state.AddOutput !res
+        )
+
         !res       
 
     let inline stepTime (f : DateTime -> TimeSpan -> 'a -> 'a) (state : IMod<DateTime>) : AdaptiveFunc<'a> =

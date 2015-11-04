@@ -380,7 +380,7 @@ module RenderingTests =
         let mutable iterations = 0
         let sw = Stopwatch()
         sw.Start()
-        while sw.Elapsed.TotalSeconds < 10.0 || iterations < 20 do
+        while sw.Elapsed.TotalSeconds < 20.0 || iterations < 50 do
             transact(fun () -> Mod.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
             clear.Run fbo |> ignore
             task.Run fbo |> ignore

@@ -515,10 +515,7 @@ let timeTest() =
     rendering.Start()
     
     let d = move.AddMarkingCallback(fun () -> renderSem.Release() |> ignore)
-//
-//    let d = move |> Mod.registerCallback (fun t ->
-//        printfn "pull: %A" t
-//    )
+
     
     while true do
         Console.ReadLine() |> ignore
