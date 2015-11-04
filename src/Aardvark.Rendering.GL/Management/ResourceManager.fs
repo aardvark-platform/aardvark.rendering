@@ -49,7 +49,7 @@ module ResourceManager =
         //member x.Dependencies = desc.dependencies
         member x.UpdateCPU(caller : IAdaptiveObject) = 
             Telemetry.timed updateCPUProbe (fun () ->
-                desc.dependencies |> List.iter (fun a -> a.GetValue(x) |> ignore)
+                //desc.dependencies |> List.iter (fun a -> a.GetValue(x) |> ignore)
                 desc.updateCPU()
             )
 

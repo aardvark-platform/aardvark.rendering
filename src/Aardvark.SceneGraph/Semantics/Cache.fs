@@ -16,3 +16,39 @@ module internal Caching =
 
         member x.Invoke a = 
             table.GetValue(a, ConditionalWeakTable<'a,'b>.CreateValueCallback( fun a -> f a ))
+
+
+    type NAryOpCache<'a, 'b when 'a : not struct and 'b : not struct>(f : list<'a> -> 'b) =
+        let head = ConditionalWeakTable<'a, NAryOpCache<'a, 'b>>()
+        let mutable value = None
+
+        member private x.TryGetCache (l : list<'a>) =
+            match l with
+                | [] -> value
+                | h::t ->
+                    match head.TryGetValue h with
+                        | (true, n) -> n.TryGetCache t
+                        | _ -> None
+
+        member private x.Get (l : list<'a>) (n : unit -> 'b) =
+            match l with
+                | [] ->
+                    match value with
+                        | Some v -> v
+                        | None ->
+                            let v = n()
+                            value <- Some v
+                            v
+                | h::t ->
+                    match head.TryGetValue h with
+                        | (true, next) -> next.Get t n
+                        | _ -> 
+                            let next = NAryOpCache(f)
+                            head.Add(h,next)
+                            next.Get t n
+
+        member x.Invoke l =
+            x.Get l (fun () -> f l)                       
+
+
+

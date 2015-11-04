@@ -61,6 +61,8 @@ module TrafoSemantics =
         let inverse t = invCache.Invoke t
 
         
+
+
         member x.ModelTrafoStack(e : Root<ISg>) =
             e.Child?ModelTrafoStack <- %[]
 
@@ -81,13 +83,12 @@ module TrafoSemantics =
                         a::foldConstants rest
 
             let s = foldConstants stack
-            printfn "trafos: %A" (List.length s)
 
-            match foldConstants stack with
+            match s with
                 | [] -> Mod.constant Trafo3d.Identity
                 | [a] -> a
-                | [a;b] -> Mod.map2 (*) a b
-                | _ -> stack |> Mod.mapN (Seq.fold (*) Trafo3d.Identity)
+                | [a;b] -> a <*> b
+                | _ -> s |> List.fold (<*>) (Mod.constant Trafo3d.Identity)
 
 //        member x.ModelTrafo(e : Root<ISg>) = 
 //            e.Child?ModelTrafo <- rootTrafo
