@@ -16,6 +16,7 @@ type PreparedRenderObject =
         LastTextureSlot : int
         Program : ChangeableResource<Program>
         UniformBuffers : Map<int, ChangeableResource<UniformBuffer>>
+        UniformBufferViews : Map<int, ChangeableResource<ChangeableResource<UniformBufferPool> * UniformBufferView>>
         Uniforms : Map<int, ChangeableResource<UniformLocation>>
         Textures : Map<int, ChangeableResource<Texture> * ChangeableResource<Sampler>>
         Buffers : Map<int, ChangeableResource<Buffer> * IMod<AttributeDescription>>
@@ -126,6 +127,7 @@ module ``Prepared render object extensions`` =
                 LastTextureSlot = -1
                 Program = Unchecked.defaultof<_>
                 UniformBuffers = Map.empty
+                UniformBufferViews = Map.empty
                 Uniforms = Map.empty
                 Textures = Map.empty
                 Buffers = Map.empty
@@ -168,6 +170,19 @@ type ResourceManagerExtensions private() =
                     block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
                    )
                 |> Map.ofList
+
+
+        // create all UniformBuffers requested by the program
+        let uniformBufferViews = Map.empty
+//            prog.UniformBlocks 
+//                |> List.map (fun block ->
+//                    let mutable values = []
+//                    let pool = x.CreateUniformBufferPool(block)
+//
+//                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
+//                    block.index, x.CreateUniformBufferView(pool, rj.AttributeScope, prog, rj.Uniforms, &values)
+//                   )
+//                |> Map.ofList
 
         // partition all requested (top-level) uniforms into Textures and other
         let textureUniforms, otherUniforms = 
@@ -272,6 +287,7 @@ type ResourceManagerExtensions private() =
             LastTextureSlot = !lastTextureSlot
             Program = program
             UniformBuffers = uniformBuffers
+            UniformBufferViews = uniformBufferViews
             Uniforms = uniforms
             Textures = textures
             Buffers = buffers |> Map.map (fun k (a,b,_) -> a,b)

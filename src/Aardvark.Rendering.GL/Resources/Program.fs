@@ -258,7 +258,7 @@ module ProgramExtensions =
         Aardvark.Rendering.GL.ValuePath path
 
     let private activeUniformToField (u : ActiveUniform) =
-        { UniformField.path = parsePath u.name; UniformField.offset = u.offset; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
+        { UniformField.semantic = u.semantic; UniformField.path = parsePath u.name; UniformField.offset = u.offset; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
 
     type ActiveUniform with
         member x.UniformField = activeUniformToField x

@@ -99,6 +99,15 @@ module DeltaCompiler =
                     | _ -> 
                         yield Instructions.bindUniformBuffer id ub
 
+            for (id,ub) in Map.toSeq me.UniformBufferViews do
+                do! useResource ub
+                match Map.tryFind id prev.UniformBufferViews with
+                    | Some old when old = ub -> 
+                        // the same UniformBuffer has already been bound
+                        ()
+                    | _ -> 
+                        yield Instructions.bindUniformBufferView id ub
+
             // bind all textures/samplers (if needed)
             let latestSlot = ref prev.LastTextureSlot
             for (id,(tex,sam)) in Map.toSeq me.Textures do

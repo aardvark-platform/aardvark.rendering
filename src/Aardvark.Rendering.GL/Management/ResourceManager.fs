@@ -344,7 +344,7 @@ module ResourceManager =
         static let uniformBuffer = Sym.ofString "UniformBuffer"
         static let sampler = Sym.ofString "Sampler"
         static let vao = Sym.ofString "VertexArrayObject"
-
+        static let uniformBufferViews = Sym.ofString "UniformBufferView"
 
         let bufferHandler = 
             if shareBuffers then 
@@ -380,6 +380,8 @@ module ResourceManager =
             match original with
                 | null -> NamedResourceCache()
                 | o -> o.Cache
+
+        let uniformBufferPools = ResourceCache()
 
         let compile (s : ISurface) = SurfaceCompilers.compile ctx s
 
@@ -613,7 +615,68 @@ module ResourceManager =
                             | Error e ->
                                 failwith e
            )
-                
+          
+          
+        member x.CreateUniformBufferPool (layout : UniformBlock) =
+            uniformBufferPools.GetOrAdd(
+                [layout :> obj], 
+                fun self ->
+                    let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
+                    let pool = ctx.CreateUniformBufferPool(layout.size, uniformFields)
+
+                    { trackChangedInputs = false
+                      dependencies = []
+                      updateCPU = ignore
+                      updateGPU = fun () -> ctx.Upload(pool)
+                      destroy = fun () -> ctx.Delete(pool)
+                      resource = Mod.constant pool
+                      kind = ResourceKind.UniformBuffer  
+                    }   
+                )
+             
+        member x.CreateUniformBufferView (pool : ChangeableResource<UniformBufferPool>, scope : Ag.Scope, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
+            let getValue (f : UniformField) =
+                let sem = f.semantic |> Sym.ofString
+
+                match u.TryGetUniform (scope, sem) with
+                    | Some m -> m
+                    | _ ->
+                        match program.UniformGetters.TryGetValue sem with
+                            | (true, (:? IMod as m)) -> m
+                            | _ ->
+                                failwithf "could not find uniform: %A" f
+            
+            let poolHandle = pool.Resource.GetValue()
+            let fieldValues = poolHandle.Fields |> List.map (fun f -> f, getValue f)
+            cache.[uniformBufferViews].GetOrAdd(
+                (poolHandle :> obj)::(fieldValues |> List.map (fun (_,v) -> v :> obj)),
+                fun self ->
+                    let inputs = 
+                        fieldValues 
+                            |> List.map (fun (f,m) -> Symbol.Create f.semantic, m :> IAdaptiveObject)
+                            |> Map.ofList
+
+
+                    // TODO: writers could be created by the pool!!!!
+                    let writers = UnmanagedWriters.writers true poolHandle.Fields inputs
+     
+                    let view = poolHandle.AllocView()
+                    writers |> List.iter (fun (_,w) -> w.Write(self, view.Data))
+                    transact (fun () -> pool.MarkOutdated())
+
+                    let deps = fieldValues |> List.map snd
+                    let writers = writers |> List.map snd |> List.toArray
+                    { trackChangedInputs = false
+                      dependencies = deps |> Seq.cast
+                      updateCPU = fun _ -> 
+                        for w in writers do w.Write(self, view.Data)
+                        transact (fun () -> pool.MarkOutdated())
+                      updateGPU = fun () -> ()
+                      destroy = fun () -> view.Dispose()
+                      resource = Mod.constant (pool, view)
+                      kind = ResourceKind.UniformBuffer  }   
+            )
+
         member x.CreateUniformBuffer (scope : Ag.Scope, layout : UniformBlock, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
             let getValue (f : ActiveUniform) =
                 let sem = f.semantic |> Sym.ofString
@@ -645,10 +708,11 @@ module ResourceManager =
                     writers |> List.iter (fun (_,w) -> w.Write(self, b.Data))
                     ctx.Upload(b)
 
+                    let deps = fieldValues |> List.map snd
                     if writers.Length > 4 then
                         let writers = writers |> Dictionary.ofList
                         { trackChangedInputs = true
-                          dependencies = writers |> Seq.cast
+                          dependencies = deps |> Seq.cast
                           updateCPU = fun changed ->
                             let mutable w = Unchecked.defaultof<_>
                             for c in changed do
@@ -667,7 +731,7 @@ module ResourceManager =
                     else
                         let writers = writers |> List.map snd |> List.toArray
                         { trackChangedInputs = false
-                          dependencies = writers |> Seq.cast
+                          dependencies = deps |> Seq.cast
                           updateCPU = fun _ ->
                             for w in writers do w.Write(self, b.Data)
                             b.Dirty <- true

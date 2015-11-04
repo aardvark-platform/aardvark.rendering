@@ -95,7 +95,9 @@ module TrafoSemantics =
                 | [] -> rootTrafo
                 | [a] -> a
                 | [a;b] -> a <*> b
-                | _ -> s |> List.fold (<*>) rootTrafo
+                | _ -> 
+                    // TODO: add a better logic here
+                    s |> List.fold (<*>) rootTrafo
 
 //        member x.ModelTrafo(e : Root<ISg>) = 
 //            e.Child?ModelTrafo <- rootTrafo

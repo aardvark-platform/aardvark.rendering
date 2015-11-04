@@ -38,7 +38,7 @@ type UniformPath =
     | FieldPath of UniformPath * string
 
 type UniformField = 
-    { path : UniformPath; offset : int; uniformType : ActiveUniformType; count : int } with
+    { semantic : string; path : UniformPath; offset : int; uniformType : ActiveUniformType; count : int } with
     member x.UniformName =
         let rec name (p : UniformPath) =
             match p with
@@ -491,8 +491,76 @@ type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<Unifor
         and set d = dirty <- d
 
 
+type UniformBufferPool =
+    class
+        val mutable public Context : Context
+        val mutable public Handle : int
+        val mutable public Size : int
+        val mutable public Storage : MemoryManager
+        val mutable public Fields : list<UniformField>
+        val mutable public ElementSize : int
+
+        member x.AllocView() =
+            new UniformBufferView(x, x.Storage.Alloc(x.ElementSize))
+
+
+        new(ctx, handle, elementSize, elementFields) = { Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize }
+    end
+
+and UniformBufferView(pool : UniformBufferPool, ptr : managedptr) =
+    member internal x.Pointer = ptr
+
+    member x.Handle = pool.Handle
+    member x.Offset = ptr.Offset
+    member x.Size = ptr.Size
+    member x.Fields = pool.Fields
+    member x.Data = pool.Storage.Pointer + ptr.Offset
+    member x.Dispose() = ManagedPtr.free ptr
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+
+
+
 [<AutoOpen>]
 module UniformBufferExtensions =
+
+    type Context with
+        member x.CreateUniformBufferPool(size : int, fields : list<UniformField>) =
+            using x.ResourceLock (fun _ ->
+                let alignMask = GL.GetInteger(GetPName.UniformBufferOffsetAlignment) - 1 
+                printfn "align: %A" (alignMask + 1)
+                let size = size + alignMask &&& ~~~alignMask
+                let handle = GL.GenBuffer()
+                GL.Check "could not create uniform buffer"
+
+                UniformBufferPool(x, handle, size, fields)
+            )
+
+        member x.Upload(pool : UniformBufferPool) =
+            using x.ResourceLock (fun _ ->
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, pool.Handle)
+                GL.Check "could not bind uniform buffer pool"
+
+                if pool.Size = pool.Storage.Capacity then
+                    GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint pool.Size, pool.Storage.Pointer)
+                else
+                    pool.Size <- pool.Storage.Capacity
+                    GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint pool.Storage.Capacity, pool.Storage.Pointer, BufferUsageHint.DynamicDraw)              
+                GL.Check "could not upload uniform buffer pool"      
+
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                GL.Check "could not unbind uniform buffer pool"
+            )
+
+        member x.Delete(pool : UniformBufferPool) =
+            using x.ResourceLock (fun _ ->
+                pool.Storage.Dispose()
+                GL.DeleteBuffer(pool.Handle)
+                GL.Check "could not delete uniform buffer pool"
+                pool.Handle <- -1
+            )
 
     type Context with
         member x.CreateUniformBuffer(size : int, fields : list<UniformField>) =
