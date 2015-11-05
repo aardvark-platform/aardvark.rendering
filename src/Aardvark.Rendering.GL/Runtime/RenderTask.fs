@@ -244,6 +244,10 @@ module RenderTasks =
                     o.Dispose()
 
         let dirtyLock = obj()
+        let poolsReader = manager.AllUniformBufferPools.GetReader()
+        let mutable dirtyUniformPools = HashSet<UniformBufferPool>()
+        let mutable dirtyUniformViews = HashSet<ChangeableResource<UniformBufferView>>()
+
         let mutable dirtyResources = HashSet<IChangeableResource>()
     
         let increment (k : ResourceKind) (m : Map<ResourceKind, float>) =
@@ -253,30 +257,58 @@ module RenderTasks =
         let updateCPUTime = System.Diagnostics.Stopwatch()
         let updateGPUTime = System.Diagnostics.Stopwatch()
 
-        member private x.UpdateDirty() =
-            
-            let dirtyResoruces = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
-            if dirtyResoruces.Count > 0 then
 
+        member private x.UpdateDirtyUniformBufferViews() =
+            let dirtyBufferViews = System.Threading.Interlocked.Exchange(&dirtyUniformViews, HashSet())
+            let dirtyPools = System.Threading.Interlocked.Exchange(&dirtyUniformPools, HashSet())
+
+            if dirtyBufferViews.Count > 0 then
                 updateCPUTime.Restart()
-                System.Threading.Tasks.Parallel.ForEach(dirtyResoruces, fun (d : IChangeableResource) ->
+
+                System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
                     lock d (fun () ->
                         if d.OutOfDate then
                             d.UpdateCPU(x)
-//                            System.Threading.Interlocked.Change(&counts, increment d.Kind) |> ignore
-//                            System.Threading.Interlocked.Increment(&count) |> ignore
+                            d.UpdateGPU(x)
                         else
                             d.Outputs.Add x |> ignore
                     )
                 ) |> ignore
                 updateCPUTime.Stop()
-                Log.line "CPU update took: %.3fµs per resource" (1000.0 * updateCPUTime.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
+                Log.line "UBO update took: %.3fµs per resource" (1000.0 * updateCPUTime.Elapsed.TotalMilliseconds / float dirtyBufferViews.Count)
 
+            if dirtyPools.Count > 0 then
+                let newPools = poolsReader.GetDelta(x)
+                for p in newPools do
+                    match p with
+                        | Add p -> dirtyPools.Add p |> ignore
+                        | Rem p -> () // TODO: proper disposal
 
+                updateGPUTime.Restart()
+                for d in dirtyPools do
+                    ctx.Upload(d)
+
+                if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
+                updateGPUTime.Stop()
+                Log.line "GPU update took: %.3fµs per resource" (1000.0 * updateGPUTime.Elapsed.TotalMilliseconds / float dirtyBufferViews.Count)
+
+        member private x.UpdateDirty() =
+            x.UpdateDirtyUniformBufferViews()
+
+            let dirtyResoruces = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
+            if dirtyResoruces.Count > 0 then
+                System.Threading.Tasks.Parallel.ForEach(dirtyResoruces, fun (d : IChangeableResource) ->
+                    lock d (fun () ->
+                        if d.OutOfDate then
+                            d.UpdateCPU(x)
+                        else
+                            d.Outputs.Add x |> ignore
+                    )
+                ) |> ignore
+  
                 let mutable count = 0
                 let counts = Dictionary<ResourceKind, ref<int>>()
                 let mutable cc = Unchecked.defaultof<_>
-                updateGPUTime.Restart()
                 for d in dirtyResoruces do
                     lock d (fun () ->
                         if d.OutOfDate then
@@ -290,10 +322,6 @@ module RenderTasks =
                     )
 
                 if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
-
-                updateGPUTime.Stop()
-                Log.line "GPU update took: %.3fµs per resource" (1000.0 * updateGPUTime.Elapsed.TotalMilliseconds / float dirtyResoruces.Count)
-
 
                 let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
                 count, counts, updateCPUTime.Elapsed + updateGPUTime.Elapsed
@@ -319,6 +347,12 @@ module RenderTasks =
 
         override x.InputChanged(o : IAdaptiveObject) =
             match o with
+                | :? ChangeableResource<UniformBufferView> as o ->
+                    lock dirtyLock (fun () ->
+                        dirtyUniformViews.Add(o) |> ignore
+                        let pool = o.Resource.GetValue(x).Pool
+                        dirtyUniformPools.Add pool |> ignore
+                    )
                 | :? IChangeableResource as o ->
                     lock dirtyLock (fun () ->
                         dirtyResources.Add(o) |> ignore

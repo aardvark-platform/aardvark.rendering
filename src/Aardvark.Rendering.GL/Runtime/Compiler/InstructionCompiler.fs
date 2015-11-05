@@ -89,8 +89,8 @@ module Instructions =
             Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index r.Handle 0n (nativeint r.Size)
         )
 
-    let bindUniformBufferView (index : int) (u : ChangeableResource<ChangeableResource<UniformBufferPool> * UniformBufferView>) =   
-        u.Resource |> Mod.map (fun (_,r) -> 
+    let bindUniformBufferView (index : int) (u : ChangeableResource<UniformBufferView>) =   
+        u.Resource |> Mod.map (fun r -> 
             //ExecutionContext.bindUniformBuffer index r
             Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index r.Handle r.Offset (nativeint r.Size)
         )

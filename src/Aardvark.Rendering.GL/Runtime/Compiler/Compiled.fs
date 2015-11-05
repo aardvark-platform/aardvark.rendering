@@ -56,6 +56,11 @@ module ``Compiled Builder`` =
         member x.Yield(m : Instruction) =
             m |> MetaInstruction.single |> x.Yield
 
+        member x.Return(u : unit) =
+            { runCompile = fun s ->
+                s,()
+            }
+
         member x.Yield(m : ContextHandle -> Instruction) =
             { runCompile = fun s ->
                 let i = s.currentContext |> Mod.map m |> MetaInstruction.ofMod

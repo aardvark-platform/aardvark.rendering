@@ -16,7 +16,8 @@ type PreparedRenderObject =
         LastTextureSlot : int
         Program : ChangeableResource<Program>
         UniformBuffers : Map<int, ChangeableResource<UniformBuffer>>
-        UniformBufferViews : Map<int, ChangeableResource<ChangeableResource<UniformBufferPool> * UniformBufferView>>
+        UniformBufferPools : list<UniformBufferPool>
+        UniformBufferViews : Map<int, ChangeableResource<UniformBufferView>>
         Uniforms : Map<int, ChangeableResource<UniformLocation>>
         Textures : Map<int, ChangeableResource<Texture> * ChangeableResource<Sampler>>
         Buffers : Map<int, ChangeableResource<Buffer> * IMod<AttributeDescription>>
@@ -127,6 +128,7 @@ module ``Prepared render object extensions`` =
                 LastTextureSlot = -1
                 Program = Unchecked.defaultof<_>
                 UniformBuffers = Map.empty
+                UniformBufferPools = []
                 UniformBufferViews = Map.empty
                 Uniforms = Map.empty
                 Textures = Map.empty
@@ -162,27 +164,33 @@ type ResourceManagerExtensions private() =
         let prog = program.Resource.GetValue()
 
         // create all UniformBuffers requested by the program
-        let uniformBuffers =
-            prog.UniformBlocks 
-                |> List.map (fun block ->
-                    let mutable values = []
-                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
-                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
-                   )
-                |> Map.ofList
-
-
-        // create all UniformBuffers requested by the program
-        let uniformBufferViews = Map.empty
+        let uniformBuffers = Map.empty
 //            prog.UniformBlocks 
 //                |> List.map (fun block ->
 //                    let mutable values = []
-//                    let pool = x.CreateUniformBufferPool(block)
-//
 //                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
-//                    block.index, x.CreateUniformBufferView(pool, rj.AttributeScope, prog, rj.Uniforms, &values)
+//                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
 //                   )
 //                |> Map.ofList
+
+
+        let uniformBufferPoolsWithBlocks =
+            prog.UniformBlocks |> List.map (fun b -> b, x.CreateUniformBufferPool b)
+
+
+        let poolMap = Dictionary.ofList uniformBufferPoolsWithBlocks
+
+        // create all UniformBuffers requested by the program
+        let uniformBufferViews =
+            prog.UniformBlocks 
+                |> List.map (fun block ->
+                    let mutable values = []
+                    let pool = poolMap.[block]
+
+                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
+                    block.index, x.CreateUniformBufferView(pool, rj.AttributeScope, prog, rj.Uniforms, &values)
+                   )
+                |> Map.ofList
 
         // partition all requested (top-level) uniforms into Textures and other
         let textureUniforms, otherUniforms = 
@@ -287,6 +295,7 @@ type ResourceManagerExtensions private() =
             LastTextureSlot = !lastTextureSlot
             Program = program
             UniformBuffers = uniformBuffers
+            UniformBufferPools = uniformBufferPoolsWithBlocks |> List.map snd
             UniformBufferViews = uniformBufferViews
             Uniforms = uniforms
             Textures = textures

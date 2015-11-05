@@ -26,7 +26,7 @@ module ResourceManager =
     type IChangeableResource =
         inherit IDisposable
         inherit IAdaptiveObject
-        //abstract member Dependencies : list<IMod>
+        abstract member IncrementRefCount : unit -> unit
         abstract member UpdateCPU : IAdaptiveObject -> unit
         abstract member UpdateGPU : IAdaptiveObject -> unit
         abstract member Resource : obj
@@ -69,7 +69,7 @@ module ResourceManager =
         member x.Resource = desc.resource
         member x.Kind = desc.kind
 
-        member x.IncrementRefCount () = Interlocked.Increment &refCount
+        member x.IncrementRefCount () = Interlocked.Increment &refCount |> ignore
 
         member x.Dispose() =
             if parent = null then
@@ -79,7 +79,7 @@ module ResourceManager =
 
             elif not isDisposed then
                 let r = Interlocked.Decrement &refCount
-                if r = 0 then
+                if r = 1 then
                     isDisposed <- true
                     parent.TryRemove key |> ignore
                     desc.destroy()
@@ -89,6 +89,7 @@ module ResourceManager =
             member x.Dispose() = x.Dispose()
 
         interface IChangeableResource with
+            member x.IncrementRefCount() = x.IncrementRefCount()
             member x.UpdateCPU(caller) = x.UpdateCPU(caller)
             member x.UpdateGPU(caller) = x.UpdateGPU(caller)
             member x.Resource = desc.resource :> obj
@@ -324,6 +325,7 @@ module ResourceManager =
                 member x.Update(res, data) = update (res.GetValue(), data)
                 member x.Delete(res) = delete (res.GetValue())
 
+       
 
     [<AllowNullLiteral>]
     type ResourceManager(original : ResourceManager, ctx : Context, shareTextures : bool, shareBuffers : bool) =
@@ -381,7 +383,8 @@ module ResourceManager =
                 | null -> NamedResourceCache()
                 | o -> o.Cache
 
-        let uniformBufferPools = ResourceCache()
+        let uniformBufferPools = ConcurrentDictionary<_, UniformBufferPool>()
+        let allUniformBufferPools = CSet.empty
 
         let compile (s : ISurface) = SurfaceCompilers.compile ctx s
 
@@ -618,23 +621,23 @@ module ResourceManager =
           
           
         member x.CreateUniformBufferPool (layout : UniformBlock) =
-            uniformBufferPools.GetOrAdd(
-                [layout :> obj], 
-                fun self ->
+            let isNew = ref false
+            let res = 
+                uniformBufferPools.GetOrAdd(layout, fun (layout : UniformBlock) ->
+                    isNew := true
                     let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
-                    let pool = ctx.CreateUniformBufferPool(layout.size, uniformFields)
-
-                    { trackChangedInputs = false
-                      dependencies = []
-                      updateCPU = ignore
-                      updateGPU = fun () -> ctx.Upload(pool)
-                      destroy = fun () -> ctx.Delete(pool)
-                      resource = Mod.constant pool
-                      kind = ResourceKind.UniformBuffer  
-                    }   
+                    ctx.CreateUniformBufferPool(layout.size, uniformFields)
                 )
+
+            if !isNew then
+                transact (fun () -> allUniformBufferPools.Add res |> ignore)
+
+            res
+
+        member x.AllUniformBufferPools =
+            allUniformBufferPools :> aset<_>
              
-        member x.CreateUniformBufferView (pool : ChangeableResource<UniformBufferPool>, scope : Ag.Scope, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
+        member x.CreateUniformBufferView (pool : UniformBufferPool, scope : Ag.Scope, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
             let getValue (f : UniformField) =
                 let sem = f.semantic |> Sym.ofString
 
@@ -646,10 +649,10 @@ module ResourceManager =
                             | _ ->
                                 failwithf "could not find uniform: %A" f
             
-            let poolHandle = pool.Resource.GetValue()
-            let fieldValues = poolHandle.Fields |> List.map (fun f -> f, getValue f)
+    
+            let fieldValues = pool.Fields |> List.map (fun f -> f, getValue f)
             cache.[uniformBufferViews].GetOrAdd(
-                (poolHandle :> obj)::(fieldValues |> List.map (fun (_,v) -> v :> obj)),
+                (pool :> obj)::(fieldValues |> List.map (fun (_,v) -> v :> obj)),
                 fun self ->
                     let inputs = 
                         fieldValues 
@@ -658,22 +661,19 @@ module ResourceManager =
 
 
                     // TODO: writers could be created by the pool!!!!
-                    let writers = UnmanagedWriters.writers true poolHandle.Fields inputs
+                    let writers = UnmanagedWriters.writers true pool.Fields inputs
      
-                    let view = poolHandle.AllocView()
+                    let view = pool.AllocView()
                     writers |> List.iter (fun (_,w) -> w.Write(self, view.Data))
-                    transact (fun () -> pool.MarkOutdated())
 
                     let deps = fieldValues |> List.map snd
                     let writers = writers |> List.map snd |> List.toArray
                     { trackChangedInputs = false
                       dependencies = deps |> Seq.cast
-                      updateCPU = fun _ -> 
-                        for w in writers do w.Write(self, view.Data)
-                        transact (fun () -> pool.MarkOutdated())
+                      updateCPU = fun _ -> for w in writers do w.Write(self, view.Data)
                       updateGPU = fun () -> ()
                       destroy = fun () -> view.Dispose()
-                      resource = Mod.constant (pool, view)
+                      resource = Mod.constant view
                       kind = ResourceKind.UniformBuffer  }   
             )
 

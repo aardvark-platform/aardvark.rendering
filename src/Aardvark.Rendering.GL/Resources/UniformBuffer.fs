@@ -499,23 +499,46 @@ type UniformBufferPool =
         val mutable public Storage : MemoryManager
         val mutable public Fields : list<UniformField>
         val mutable public ElementSize : int
+        val mutable public ViewCount : int
+        val mutable public DirtyCount : int
 
         member x.AllocView() =
+            Interlocked.Increment &x.ViewCount |> ignore
             new UniformBufferView(x, x.Storage.Alloc(x.ElementSize))
 
+        member x.Free(view : UniformBufferView) =
+            Interlocked.Decrement &x.ViewCount |> ignore
+            ManagedPtr.free view.Pointer
 
-        new(ctx, handle, elementSize, elementFields) = { Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize }
+        member x.ConsumeDirtyCount() =
+            Interlocked.Exchange(&x.DirtyCount, 0)
+
+        member internal x.Updated(view : UniformBufferView) =
+            Interlocked.Increment &x.DirtyCount |> ignore
+
+        new(ctx, handle, elementSize, elementFields) = { Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize; ViewCount = 0; DirtyCount = 0 }
     end
 
 and UniformBufferView(pool : UniformBufferPool, ptr : managedptr) =
     member internal x.Pointer = ptr
 
+    member x.Pool = pool
     member x.Handle = pool.Handle
     member x.Offset = ptr.Offset
     member x.Size = ptr.Size
     member x.Fields = pool.Fields
     member x.Data = pool.Storage.Pointer + ptr.Offset
-    member x.Dispose() = ManagedPtr.free ptr
+
+    member x.Dispose() = 
+        pool.Free x
+
+    member x.WriteOperation(f : unit -> 'a) =
+        let res = 
+            ReaderWriterLock.read pool.Storage.PointerLock (fun () ->
+                f()
+            )
+        pool.Updated x
+        res
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -535,7 +558,7 @@ module UniformBufferExtensions =
                 let handle = GL.GenBuffer()
                 GL.Check "could not create uniform buffer"
 
-                UniformBufferPool(x, handle, size, fields)
+                new UniformBufferPool(x, handle, size, fields)
             )
 
         member x.Upload(pool : UniformBufferPool) =

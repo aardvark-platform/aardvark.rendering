@@ -44,12 +44,12 @@ module DeltaCompiler =
 
             | [] -> true
 
-    let useResource (r : ChangeableResource<'a>) : Compiled<unit> =
+    let useResource (r : IChangeableResource) : Compiled<unit> =
         { runCompile = 
             fun s -> 
                 if s.useResources then
                     r.IncrementRefCount () |> ignore
-                    { s with resources = (r :> _) :: s.resources }, ()
+                    { s with resources = r :: s.resources }, ()
                 else
                     s, ()
         }
