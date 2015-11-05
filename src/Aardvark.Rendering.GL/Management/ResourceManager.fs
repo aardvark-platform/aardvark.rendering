@@ -79,7 +79,7 @@ module ResourceManager =
 
             elif not isDisposed then
                 let r = Interlocked.Decrement &refCount
-                if r = 1 then
+                if r = 0 then
                     isDisposed <- true
                     parent.TryRemove key |> ignore
                     desc.destroy()
@@ -664,13 +664,18 @@ module ResourceManager =
                     let writers = UnmanagedWriters.writers true pool.Fields inputs
      
                     let view = pool.AllocView()
-                    writers |> List.iter (fun (_,w) -> w.Write(self, view.Data))
+                    view.WriteOperation (fun () -> 
+                        writers |> List.iter (fun (_,w) -> w.Write(self, view.Data))
+                    )
 
                     let deps = fieldValues |> List.map snd
                     let writers = writers |> List.map snd |> List.toArray
                     { trackChangedInputs = false
                       dependencies = deps |> Seq.cast
-                      updateCPU = fun _ -> for w in writers do w.Write(self, view.Data)
+                      updateCPU = fun _ -> 
+                        view.WriteOperation (fun () ->
+                            for w in writers do w.Write(self, view.Data)
+                        )
                       updateGPU = fun () -> ()
                       destroy = fun () -> view.Dispose()
                       resource = Mod.constant view

@@ -260,8 +260,6 @@ module RenderTasks =
 
         member private x.UpdateDirtyUniformBufferViews() =
             let dirtyBufferViews = System.Threading.Interlocked.Exchange(&dirtyUniformViews, HashSet())
-            let dirtyPools = System.Threading.Interlocked.Exchange(&dirtyUniformPools, HashSet())
-
             if dirtyBufferViews.Count > 0 then
                 updateCPUTime.Restart()
 
@@ -275,22 +273,28 @@ module RenderTasks =
                     )
                 ) |> ignore
                 updateCPUTime.Stop()
-                Log.line "UBO update took: %.3fµs per resource" (1000.0 * updateCPUTime.Elapsed.TotalMilliseconds / float dirtyBufferViews.Count)
+                Log.line "UBO update took %.3fµs per view" (1000.0 * updateCPUTime.Elapsed.TotalMilliseconds / float dirtyBufferViews.Count)
+
+            let dirtyPools = System.Threading.Interlocked.Exchange(&dirtyUniformPools, HashSet())
+            let newPools = poolsReader.GetDelta(x)
+            for p in newPools do
+                match p with
+                    | Add p -> 
+                        dirtyPools.Add p |> ignore
+                        let s = p.Changed.Values.Subscribe(fun () -> lock dirtyLock (fun () -> dirtyUniformPools.Add p |> ignore))
+                        //TODO: subscription should die with renderTask (and on remove)
+                        ()
+                    | Rem p -> () // TODO: proper disposal
 
             if dirtyPools.Count > 0 then
-                let newPools = poolsReader.GetDelta(x)
-                for p in newPools do
-                    match p with
-                        | Add p -> dirtyPools.Add p |> ignore
-                        | Rem p -> () // TODO: proper disposal
-
                 updateGPUTime.Restart()
                 for d in dirtyPools do
-                    ctx.Upload(d)
+                    d.Upload(x)
 
                 if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
                 updateGPUTime.Stop()
-                Log.line "GPU update took: %.3fµs per resource" (1000.0 * updateGPUTime.Elapsed.TotalMilliseconds / float dirtyBufferViews.Count)
+                if dirtyBufferViews.Count > 0 then
+                    Log.line "UBO-Pool update took %.3fµs per view" (1000.0 * updateGPUTime.Elapsed.TotalMilliseconds / float dirtyBufferViews.Count)
 
         member private x.UpdateDirty() =
             x.UpdateDirtyUniformBufferViews()
@@ -350,9 +354,8 @@ module RenderTasks =
                 | :? ChangeableResource<UniformBufferView> as o ->
                     lock dirtyLock (fun () ->
                         dirtyUniformViews.Add(o) |> ignore
-                        let pool = o.Resource.GetValue(x).Pool
-                        dirtyUniformPools.Add pool |> ignore
                     )
+
                 | :? IChangeableResource as o ->
                     lock dirtyLock (fun () ->
                         dirtyResources.Add(o) |> ignore
@@ -424,8 +427,6 @@ module RenderTasks =
             x.EvaluateAlways caller (fun () ->
                 Telemetry.timed RenderTaskRunProbe (fun () ->
                     using ctx.ResourceLock (fun _ ->
-                        let resourceUpdates, resourceCounts, resourceUpdateTime = 
-                            x.UpdateDirty()
 
                         setExecutionEngine (engine.GetValue(x))
 
@@ -461,6 +462,10 @@ module RenderTasks =
                                 0,0
 
                         renderPassChangeSet.Evaluate() |> ignore
+
+                        let resourceUpdates, resourceCounts, resourceUpdateTime = 
+                            x.UpdateDirty()
+
 
                         let mutable resourceCount = 0
                         let mutable stats = FrameStatistics.Zero

@@ -90,7 +90,7 @@ type FreeList<'k, 'v when 'k : comparison>() =
         sets.Clear()
 
 module ReaderWriterLock =
-    let read (l : ReaderWriterLockSlim) (f : unit -> 'a) =
+    let inline read (l : ReaderWriterLockSlim) (f : unit -> 'a) =
         if l.IsReadLockHeld || l.IsWriteLockHeld then
             f()
         else
@@ -101,7 +101,7 @@ module ReaderWriterLock =
                 if l.IsReadLockHeld then
                     l.ExitReadLock()
 
-    let write (l : ReaderWriterLockSlim) (f : unit -> 'a) =
+    let inline write (l : ReaderWriterLockSlim) (f : unit -> 'a) =
         if l.IsWriteLockHeld then
             f()
         else

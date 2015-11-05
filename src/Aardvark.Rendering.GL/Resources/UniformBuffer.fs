@@ -493,6 +493,7 @@ type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<Unifor
 
 type UniformBufferPool =
     class
+        val mutable public Changed : EventSource<unit>
         val mutable public Context : Context
         val mutable public Handle : int
         val mutable public Size : int
@@ -513,35 +514,57 @@ type UniformBufferPool =
         member x.ConsumeDirtyCount() =
             Interlocked.Exchange(&x.DirtyCount, 0)
 
-        member internal x.Updated(view : UniformBufferView) =
-            Interlocked.Increment &x.DirtyCount |> ignore
+        member x.Upload(caller : IAdaptiveObject) =
+            let dirty = x.ConsumeDirtyCount()
 
-        new(ctx, handle, elementSize, elementFields) = { Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize; ViewCount = 0; DirtyCount = 0 }
+            using x.Context.ResourceLock (fun _ ->
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
+                GL.Check "could not bind uniform buffer pool"
+
+                if x.Size = x.Storage.Capacity then
+                    GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint x.Size, x.Storage.Pointer)
+                else
+                    x.Size <- x.Storage.Capacity
+                    GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
+                GL.Check "could not upload uniform buffer pool"      
+
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                GL.Check "could not unbind uniform buffer pool"
+            )
+
+        member x.Updated(view : UniformBufferView) =
+            let c = Interlocked.Increment &x.DirtyCount
+            if c = 1 then x.Changed.Emit(())
+
+        new(ctx, handle, elementSize, elementFields) = { Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize; ViewCount = 0; DirtyCount = 0; Changed = EventSource () }
     end
 
-and UniformBufferView(pool : UniformBufferPool, ptr : managedptr) =
-    member internal x.Pointer = ptr
+and UniformBufferView =
+    class
+        val mutable public Pool : UniformBufferPool
+        val mutable internal Pointer : managedptr
 
-    member x.Pool = pool
-    member x.Handle = pool.Handle
-    member x.Offset = ptr.Offset
-    member x.Size = ptr.Size
-    member x.Fields = pool.Fields
-    member x.Data = pool.Storage.Pointer + ptr.Offset
+        member x.Handle = x.Pool.Handle
+        member x.Offset = x.Pointer.Offset
+        member x.Size = x.Pointer.Size
+        member x.Fields = x.Pool.Fields
+        member x.Data = x.Pool.Storage.Pointer + x.Pointer.Offset
 
-    member x.Dispose() = 
-        pool.Free x
+        member x.Dispose() = 
+            x.Pool.Free x
 
-    member x.WriteOperation(f : unit -> 'a) =
-        let res = 
-            ReaderWriterLock.read pool.Storage.PointerLock (fun () ->
-                f()
+        member inline x.WriteOperation(f : unit -> 'a) =
+            ReaderWriterLock.read x.Pool.Storage.PointerLock (fun () ->
+                let res = f()
+                x.Pool.Updated x
+                res
             )
-        pool.Updated x
-        res
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+        new(pool : UniformBufferPool, ptr : managedptr) = { Pool = pool; Pointer = ptr }
+    end
 
 
 
@@ -559,22 +582,6 @@ module UniformBufferExtensions =
                 GL.Check "could not create uniform buffer"
 
                 new UniformBufferPool(x, handle, size, fields)
-            )
-
-        member x.Upload(pool : UniformBufferPool) =
-            using x.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, pool.Handle)
-                GL.Check "could not bind uniform buffer pool"
-
-                if pool.Size = pool.Storage.Capacity then
-                    GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint pool.Size, pool.Storage.Pointer)
-                else
-                    pool.Size <- pool.Storage.Capacity
-                    GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint pool.Storage.Capacity, pool.Storage.Pointer, BufferUsageHint.DynamicDraw)              
-                GL.Check "could not upload uniform buffer pool"      
-
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                GL.Check "could not unbind uniform buffer pool"
             )
 
         member x.Delete(pool : UniformBufferPool) =
