@@ -438,7 +438,7 @@ module RenderTasks =
 
 
 
-                    executionTime.Start()
+                    executionTime.Restart()
 
 
                     let old = Array.create 4 0
