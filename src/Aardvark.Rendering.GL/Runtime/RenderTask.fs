@@ -130,11 +130,19 @@ module RenderTasks =
         let mutable additions = 0
         let mutable removals = 0
         let mutable frameId = 0UL
+        let mutable lastScope = None
+
+        let dirtyLock = obj()
+        let poolsReader = manager.AllUniformBufferPools.GetReader()
+        let mutable dirtyUniformPools = HashSet<UniformBufferPool>()
+        let mutable dirtyUniformViews = HashSet<ChangeableResource<UniformBufferView>>()
+        let mutable dirtyResources = HashSet<IChangeableResource>()
+    
+
 
         let renderPassChangers = Dictionary<IRenderObject, IMod<unit> * ref<uint64>>()
         let renderPassChangeSet = MutableVolatileDirtySet<IMod<unit>, unit>(fun m -> m.GetValue this)
         let inputSet = Compiler.InputSet(this)
-
 
         let tryGetProgramForPass (pass : uint64) =
             Map.tryFind pass programs
@@ -207,10 +215,6 @@ module RenderTasks =
                         | _ ->
                             failwith "unsupported configuration: %A" engine
 
-           
-
-        let mutable lastScope = None
-
         let getProgramForPass (pass : uint64) (scope : Ag.Scope) =
             match lastScope with | Some v -> () | None -> lastScope <- Some scope
             match Map.tryFind pass programs with
@@ -220,7 +224,6 @@ module RenderTasks =
 
                     programs <- Map.add pass program programs
                     program
-
 
         let setExecutionEngine (newEngine : BackendConfiguration) =
             if currentEngine <> newEngine then
@@ -243,111 +246,17 @@ module RenderTasks =
                 for (_,o) in Map.toSeq old do
                     o.Dispose()
 
-        let dirtyLock = obj()
-        let poolsReader = manager.AllUniformBufferPools.GetReader()
-        let mutable dirtyUniformPools = HashSet<UniformBufferPool>()
-        let mutable dirtyUniformViews = HashSet<ChangeableResource<UniformBufferView>>()
 
-        let mutable dirtyResources = HashSet<IChangeableResource>()
-    
-        let increment (k : ResourceKind) (m : Map<ResourceKind, float>) =
-            let cnt = match Map.tryFind k m with | Some v -> v | None -> 0.0
-            Map.add k (cnt + 1.0) m
+
 
         let updateCPUTime = System.Diagnostics.Stopwatch()
         let updateGPUTime = System.Diagnostics.Stopwatch()
-
-
-        member private x.UpdateDirtyUniformBufferViews() =
-            let dirtyBufferViews = System.Threading.Interlocked.Exchange(&dirtyUniformViews, HashSet())
-            if dirtyBufferViews.Count > 0 then
-                updateCPUTime.Restart()
-
-                System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
-                    lock d (fun () ->
-                        if d.OutOfDate then
-                            d.UpdateCPU(x)
-                            d.UpdateGPU(x)
-                        else
-                            d.Outputs.Add x |> ignore
-                    )
-                ) |> ignore
-                updateCPUTime.Stop()
-                Log.line "UBO update took %.3fµs per view" (1000.0 * updateCPUTime.Elapsed.TotalMilliseconds / float dirtyBufferViews.Count)
-
-            let dirtyPools = System.Threading.Interlocked.Exchange(&dirtyUniformPools, HashSet())
-            let newPools = poolsReader.GetDelta(x)
-            for p in newPools do
-                match p with
-                    | Add p -> 
-                        dirtyPools.Add p |> ignore
-                        let s = p.Changed.Values.Subscribe(fun () -> lock dirtyLock (fun () -> dirtyUniformPools.Add p |> ignore))
-                        //TODO: subscription should die with renderTask (and on remove)
-                        ()
-                    | Rem p -> () // TODO: proper disposal
-
-            if dirtyPools.Count > 0 then
-                updateGPUTime.Restart()
-                for d in dirtyPools do
-                    d.Upload(x)
-
-                if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
-                updateGPUTime.Stop()
-                if dirtyBufferViews.Count > 0 then
-                    Log.line "UBO-Pool update took %.3fµs per view" (1000.0 * updateGPUTime.Elapsed.TotalMilliseconds / float dirtyBufferViews.Count)
-
-        member private x.UpdateDirty() =
-            x.UpdateDirtyUniformBufferViews()
-
-            let dirtyResoruces = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
-            if dirtyResoruces.Count > 0 then
-                System.Threading.Tasks.Parallel.ForEach(dirtyResoruces, fun (d : IChangeableResource) ->
-                    lock d (fun () ->
-                        if d.OutOfDate then
-                            d.UpdateCPU(x)
-                        else
-                            d.Outputs.Add x |> ignore
-                    )
-                ) |> ignore
-  
-                let mutable count = 0
-                let counts = Dictionary<ResourceKind, ref<int>>()
-                let mutable cc = Unchecked.defaultof<_>
-                for d in dirtyResoruces do
-                    lock d (fun () ->
-                        if d.OutOfDate then
-                            count <- count + 1
-                            if counts.TryGetValue(d.Kind, &cc) then
-                                cc := !cc + 1
-                            else
-                                counts.[d.Kind] <- ref 1
-
-                            d.UpdateGPU(x)
-                    )
-
-                if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
-
-                let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
-                count, counts, updateCPUTime.Elapsed + updateGPUTime.Elapsed
-            else
-                0, Map.empty, TimeSpan.Zero
-
-
-
-
-        member private x.Add(pass : uint64, rj : IRenderObject) =
-            additions <- additions + 1
-            let program = getProgramForPass pass rj.AttributeScope
-            program.Add rj
-
-        member private x.Remove(pass : uint64, rj : IRenderObject) =
-            removals <- removals + 1
-            match tryGetProgramForPass pass with
-                | Some p -> p.Remove rj
-                | None -> ()
+        let executionTime = System.Diagnostics.Stopwatch()
 
         member x.Runtime = runtime
         member x.Manager = manager
+
+
 
         override x.InputChanged(o : IAdaptiveObject) =
             match o with
@@ -361,6 +270,101 @@ module RenderTasks =
                         dirtyResources.Add(o) |> ignore
                     )
                 | _ -> ()
+
+        member private x.UpdateDirtyUniformBufferViews() =
+            let dirtyBufferViews = System.Threading.Interlocked.Exchange(&dirtyUniformViews, HashSet())
+            let mutable viewUpdateCount = 0
+            updateCPUTime.Restart()
+                
+            if dirtyBufferViews.Count > 0 then
+                System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
+                    lock d (fun () ->
+                        if d.OutOfDate then
+                            d.UpdateCPU(x)
+                            d.UpdateGPU(x)
+                            System.Threading.Interlocked.Increment &viewUpdateCount |> ignore
+                        else
+                            d.Outputs.Add x |> ignore
+                    )
+                ) |> ignore
+
+            updateCPUTime.Stop()
+
+            let dirtyPools = System.Threading.Interlocked.Exchange(&dirtyUniformPools, HashSet())
+            let newPools = poolsReader.GetDelta(x)
+            for p in newPools do
+                match p with
+                    | Add p -> 
+                        dirtyPools.Add p |> ignore
+                        let s = p.Changed.Values.Subscribe(fun () -> lock dirtyLock (fun () -> dirtyUniformPools.Add p |> ignore))
+                        //TODO: subscription should die with renderTask (and on remove)
+                        ()
+                    | Rem p -> () // TODO: proper disposal
+
+            updateGPUTime.Restart()
+            if dirtyPools.Count > 0 then
+                for d in dirtyPools do
+                    d.Upload(x)
+
+                if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
+            updateGPUTime.Stop()
+ 
+            
+            let time = updateCPUTime.Elapsed + updateGPUTime.Elapsed
+
+
+            dirtyPools.Count, viewUpdateCount, time
+
+        member private x.UpdateDirty() =
+            let poolUpdateCount, viewUpdateCount, uniformUpdateTime = 
+                x.UpdateDirtyUniformBufferViews()
+
+            let mutable count = poolUpdateCount + viewUpdateCount
+            let counts = Dictionary<ResourceKind, ref<int>>()
+            counts.[ResourceKind.UniformBuffer] <- ref viewUpdateCount
+            counts.[ResourceKind.Buffer] <- ref poolUpdateCount
+
+            
+            let dirtyResources = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
+            if dirtyResources.Count > 0 then
+                System.Threading.Tasks.Parallel.ForEach(dirtyResources, fun (d : IChangeableResource) ->
+                    lock d (fun () ->
+                        if d.OutOfDate then
+                            d.UpdateCPU(x)
+                        else
+                            d.Outputs.Add x |> ignore
+                    )
+                ) |> ignore
+  
+                let mutable cc = Unchecked.defaultof<_>
+                for d in dirtyResources do
+                    lock d (fun () ->
+                        if d.OutOfDate then
+                            count <- count + 1
+                            if counts.TryGetValue(d.Kind, &cc) then
+                                cc := !cc + 1
+                            else
+                                counts.[d.Kind] <- ref 1
+
+                            d.UpdateGPU(x)
+                    )
+
+            if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
+            let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
+            count, counts, uniformUpdateTime + updateCPUTime.Elapsed + updateGPUTime.Elapsed
+
+
+
+        member private x.Add(pass : uint64, rj : IRenderObject) =
+            additions <- additions + 1
+            let program = getProgramForPass pass rj.AttributeScope
+            program.Add rj
+
+        member private x.Remove(pass : uint64, rj : IRenderObject) =
+            removals <- removals + 1
+            match tryGetProgramForPass pass with
+                | Some p -> p.Remove rj
+                | None -> ()
 
         member x.ProcessDeltas (deltas : list<Delta<IRenderObject>>) =
             let mutable additions = 0
@@ -381,24 +385,6 @@ module RenderTasks =
                             changed.GetValue(x)
                             renderPassChangers.Add(a, (changed, currentPass))
                             renderPassChangeSet.Add changed
-//
-//                            let s = a.RenderPass |> Mod.unsafeRegisterCallbackKeepDisposable (fun k ->
-//                                if !oldPass <> k  // phantom change here might lead to duplicate additions.
-//                                    then
-//                                        oldPass := k
-//                                        x.Add(k,a)
-//
-//                                        match subscriptions.TryGetValue a with
-//                                            | (true,(s,old)) ->
-//                                                x.Remove(old, a)
-//                                                subscriptions.[a] <- (s,k)
-//                                            | _ -> ()
-//                                    else 
-//                                        printfn "changed pass to old value (phantom)"
-//                            
-//                            )
-//                            let sortKey = a.RenderPass.GetValue(x)
-//                            subscriptions.[a] <- (s, sortKey)
                         else
                             x.Add(0UL, a)
 
@@ -423,84 +409,95 @@ module RenderTasks =
                         removals <- removals + 1
             (additions, removals)
 
+
+
+
+
         member x.Run (caller : IAdaptiveObject, fbo : IFramebuffer) =
             x.EvaluateAlways caller (fun () ->
-                Telemetry.timed RenderTaskRunProbe (fun () ->
-                    using ctx.ResourceLock (fun _ ->
+                using ctx.ResourceLock (fun _ ->
 
-                        setExecutionEngine (engine.GetValue(x))
-
-                        let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
-                        if currentEngine.useDebugOutput 
-                        then
-                            match ContextHandle.Current with
-                             | Some v -> v.AttachDebugOutputIfNeeded()
-                             | None -> Report.Warn("No active context handle in RenderTask.Run")
-                            GL.Enable EnableCap.DebugOutput
-
-                        let old = Array.create 4 0
-                        let mutable oldFbo = 0
-                        OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-                        OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
-
-                        let handle = fbo.Handle |> unbox<int> 
-
-                        if ExecutionContext.framebuffersSupported then
-                            GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                            GL.Check "could not bind framebuffer"
-                        elif handle <> 0 then
-                            failwithf "cannot render to texture on this OpenGL driver"
+                    let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
+                    if currentEngine.useDebugOutput then
+                        match ContextHandle.Current with
+                            | Some v -> v.AttachDebugOutputIfNeeded()
+                            | None -> Report.Warn("No active context handle in RenderTask.Run")
+                        GL.Enable EnableCap.DebugOutput
 
 
-                        GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
-                        GL.Check "could not set viewport"
+                    setExecutionEngine (engine.GetValue(x))
+
+                    let additions, removals =
+                        if reader.OutOfDate then x.ProcessDeltas (reader.GetDelta(x))
+                        else 0,0
+
+                    renderPassChangeSet.Evaluate() |> ignore
+
+                    let resourceUpdates, resourceCounts, resourceUpdateTime = 
+                        x.UpdateDirty()
+
+
+
+                    executionTime.Start()
+
+
+                    let old = Array.create 4 0
+                    let mutable oldFbo = 0
+                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
+                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+
+                    let handle = fbo.Handle |> unbox<int> 
+
+                    if ExecutionContext.framebuffersSupported then
+                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                        GL.Check "could not bind framebuffer"
+                    elif handle <> 0 then
+                        failwithf "cannot render to texture on this OpenGL driver"
+
+
+                    GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+                    GL.Check "could not set viewport"
                     
-                        let additions, removals =
-                            if reader.OutOfDate then
-                                x.ProcessDeltas (reader.GetDelta(x))
-                            else
-                                0,0
-
-                        renderPassChangeSet.Evaluate() |> ignore
-
-                        let resourceUpdates, resourceCounts, resourceUpdateTime = 
-                            x.UpdateDirty()
 
 
-                        let mutable resourceCount = 0
-                        let mutable stats = FrameStatistics.Zero
-                        let contextHandle = ContextHandle.Current.Value
+                    let mutable resourceCount = 0
+                    let mutable stats = FrameStatistics.Zero
+                    let contextHandle = ContextHandle.Current.Value
 
-                        //render
-                        for (KeyValue(_,p)) in programs do
-                            stats <- stats + p.Run(handle, contextHandle)
-                            //resourceCount <- resourceCount + p.Resources.Entries.Count
+                    //render
+                    for (KeyValue(_,p)) in programs do
+                        stats <- stats + p.Run(handle, contextHandle)
+                        //resourceCount <- resourceCount + p.Resources.Entries.Count
 
-                        if ExecutionContext.framebuffersSupported then
-                            GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
-                            GL.Check "could not bind framebuffer"
-                        GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-                        GL.Check "could not set viewport"
+
+                    if ExecutionContext.framebuffersSupported then
+                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+                        GL.Check "could not bind framebuffer"
+
+                    GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+                    GL.Check "could not set viewport"
                     
-                        if wasEnabled <> currentEngine.useDebugOutput 
-                        then
-                            if wasEnabled then GL.Enable EnableCap.DebugOutput
-                            else GL.Disable EnableCap.DebugOutput
+                    GL.Sync()
+                    executionTime.Stop()
 
-                        let stats = 
-                            { stats with 
-                                ResourceUpdateCount = float resourceUpdates
-                                ResourceUpdateCounts = resourceCounts
-                                ResourceUpdateTime = resourceUpdateTime 
-                                AddedRenderObjects = float additions
-                                RemovedRenderObjects = float removals
-                                ResourceCount = float resourceCount 
-                            }
+                    if wasEnabled <> currentEngine.useDebugOutput then
+                        if wasEnabled then GL.Enable EnableCap.DebugOutput
+                        else GL.Disable EnableCap.DebugOutput
 
-                        frameId <- frameId + 1UL
+                    let stats = 
+                        { stats with 
+                            ExecutionTime = executionTime.Elapsed
+                            ResourceUpdateCount = float resourceUpdates
+                            ResourceUpdateCounts = resourceCounts
+                            ResourceUpdateTime = resourceUpdateTime 
+                            AddedRenderObjects = float additions
+                            RemovedRenderObjects = float removals
+                            ResourceCount = float resourceCount 
+                        }
 
-                        RenderingResult(fbo, stats)
-                    )
+                    frameId <- frameId + 1UL
+
+                    RenderingResult(fbo, stats)
                 )
             )
 

@@ -501,7 +501,7 @@ type UniformBufferPool =
         val mutable public Fields : list<UniformField>
         val mutable public ElementSize : int
         val mutable public ViewCount : int
-        val mutable public DirtyCount : int
+        val mutable public DirtyViews : HashSet<UniformBufferView>
 
         member x.AllocView() =
             Interlocked.Increment &x.ViewCount |> ignore
@@ -511,32 +511,45 @@ type UniformBufferPool =
             Interlocked.Decrement &x.ViewCount |> ignore
             ManagedPtr.free view.Pointer
 
-        member x.ConsumeDirtyCount() =
-            Interlocked.Exchange(&x.DirtyCount, 0)
 
         member x.Upload(caller : IAdaptiveObject) =
-            let dirty = x.ConsumeDirtyCount()
+            let dirty = Interlocked.Exchange(&x.DirtyViews, HashSet())
 
             using x.Context.ResourceLock (fun _ ->
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
                 GL.Check "could not bind uniform buffer pool"
 
-                if x.Size = x.Storage.Capacity then
-                    GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint x.Size, x.Storage.Pointer)
-                else
-                    x.Size <- x.Storage.Capacity
-                    GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
-                GL.Check "could not upload uniform buffer pool"      
+                let sizeChanged = x.Size <> x.Storage.Capacity
+                let uploadAll = dirty.Count > x.ViewCount / 5
+
+                ReaderWriterLock.read x.Storage.PointerLock (fun () ->
+                    if uploadAll || sizeChanged then
+                        if sizeChanged then
+                            x.Size <- x.Storage.Capacity
+                            GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
+                        else
+                            GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint x.Size, x.Storage.Pointer)
+
+                        GL.Check "could not upload uniform buffer pool"      
+                    else
+                        for r in dirty do
+                            let offset = r.Pointer.Offset
+                            let size = nativeint r.Pointer.Size
+                            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, x.Storage.Pointer)
+                            GL.Check "could not upload uniform buffer pool"      
+                )
 
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
                 GL.Check "could not unbind uniform buffer pool"
             )
 
         member x.Updated(view : UniformBufferView) =
-            let c = Interlocked.Increment &x.DirtyCount
+            let c = lock x.Changed (fun () -> x.DirtyViews.Add view |> ignore; x.DirtyViews.Count)
             if c = 1 then x.Changed.Emit(())
 
-        new(ctx, handle, elementSize, elementFields) = { Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize; ViewCount = 0; DirtyCount = 0; Changed = EventSource () }
+
+
+        new(ctx, handle, elementSize, elementFields) = { Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize; ViewCount = 0; Changed = EventSource (); DirtyViews = HashSet() }
     end
 
 and UniformBufferView =

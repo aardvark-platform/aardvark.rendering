@@ -383,8 +383,15 @@ module ResourceManager =
                 | null -> NamedResourceCache()
                 | o -> o.Cache
 
-        let uniformBufferPools = ConcurrentDictionary<_, UniformBufferPool>()
-        let allUniformBufferPools = CSet.empty
+        let uniformBufferPools = 
+            match original with
+                | null -> ConcurrentDictionary<_, UniformBufferPool>()
+                | _ -> original.UniformBufferPools
+
+        let allUniformBufferPools = 
+            match original with
+                | null -> CSet.empty
+                | _ -> original.AllUniformBufferPools |> unbox<cset<_>>
 
         let compile (s : ISurface) = SurfaceCompilers.compile ctx s
 
@@ -432,6 +439,7 @@ module ResourceManager =
 //                    m.MarkingCallbacks.Remove !f |> ignore
 //            }
            
+        member private x.UniformBufferPools = uniformBufferPools
         member private x.BufferHandler = bufferHandler
         member private x.TextureHandler = textureHandler 
         member private x.Original = original
