@@ -211,7 +211,7 @@ module UniformPaths =
     let compileUniformPath (path : UniformPath) : 'a -> 'b =
         compileUniformPathUntyped path typeof<'a> typeof<'b> |> unbox<_>
 
-module UnmanagedWriters =
+module UnmanagedUniformWriters =
     open Microsoft.FSharp.NativeInterop
 
     type IWriter =
@@ -274,6 +274,7 @@ module UnmanagedWriters =
             let v = source.GetValue caller
             let res = convert v
             NativePtr.write ptr res
+
 
     type NoConversionWriter<'a when 'a : unmanaged>(source : IMod<'a>, offset : int) =
         inherit AbstractWriter()
@@ -384,7 +385,6 @@ module UnmanagedWriters =
                )
             |> Seq.toList
 
-
     let private templateCache = System.Collections.Generic.Dictionary<ConversionTarget * list<_> * Map<_,_>, list<Symbol * (IAdaptiveObject -> IWriter)>>()
 
     let internal getTemplate (target : ConversionTarget) (fields : list<UniformField>) (inputTypes : Map<Symbol, Type>) =
@@ -430,7 +430,7 @@ type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<Unifor
 
 type UniformBufferPool =
     class
-        val mutable public Changed : EventSource<unit>
+        val mutable public PoolId : int
         val mutable public Context : Context
         val mutable public Handle : int
         val mutable public Size : int
@@ -448,19 +448,17 @@ type UniformBufferPool =
             Interlocked.Decrement &x.ViewCount |> ignore
             ManagedPtr.free view.Pointer
 
-
-        member x.Upload(caller : IAdaptiveObject) =
-            let dirty = Interlocked.Exchange(&x.DirtyViews, HashSet())
-
+        member x.Upload(required : UniformBufferView[]) =
             using x.Context.ResourceLock (fun _ ->
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
                 GL.Check "could not bind uniform buffer pool"
 
                 let sizeChanged = x.Size <> x.Storage.Capacity
-                let uploadAll = dirty.Count > x.ViewCount / 5
+                let uploadAll = required.Length > x.ViewCount / 5
 
                 ReaderWriterLock.read x.Storage.PointerLock (fun () ->
                     if uploadAll || sizeChanged then
+                        lock x (fun () -> x.DirtyViews.Clear())
                         if sizeChanged then
                             x.Size <- x.Storage.Capacity
                             GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
@@ -469,7 +467,8 @@ type UniformBufferPool =
 
                         GL.Check "could not upload uniform buffer pool"      
                     else
-                        for r in dirty do
+                        lock x (fun () -> x.DirtyViews.ExceptWith required)
+                        for r in required do
                             let offset = r.Pointer.Offset
                             let size = nativeint r.Pointer.Size
                             GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, x.Storage.Pointer)
@@ -481,12 +480,10 @@ type UniformBufferPool =
             )
 
         member x.Updated(view : UniformBufferView) =
-            let c = lock x.Changed (fun () -> x.DirtyViews.Add view |> ignore; x.DirtyViews.Count)
-            if c = 1 then x.Changed.Emit(())
+            lock x (fun () -> x.DirtyViews.Add view |> ignore)
 
 
-
-        new(ctx, handle, elementSize, elementFields) = { Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize; ViewCount = 0; Changed = EventSource (); DirtyViews = HashSet() }
+        new(id, ctx, handle, elementSize, elementFields) = { PoolId = id; Context = ctx; Handle = handle; Size = 0; Storage = MemoryManager.createHGlobal(); Fields = elementFields; ElementSize = elementSize; ViewCount = 0; DirtyViews = HashSet() }
     end
 
 and UniformBufferView =
@@ -521,8 +518,53 @@ and UniformBufferView =
 
 [<AutoOpen>]
 module UniformBufferExtensions =
+    open System.Linq
+    open System.Collections.Generic
+    open System.Runtime.CompilerServices
+
+    type internal IdManager<'a>() =
+        let mutable size = 1
+        let free = SortedSet<int> [0]
+        let used = SortedSet<int> [-1]
+        let values = Dictionary<int, 'a>()
+
+        member x.Size = size
+
+        member x.Max = used.Max
+
+        member x.Get(id : int) =
+            values.[id]
+
+        member x.NewId(tag : 'a) =
+            if free.Count = 0 then
+                free.UnionWith [size .. 2*size - 1]
+                size <- 2*size
+                x.NewId(tag)
+            else
+                let v = free.Min
+                free.Remove(v) |> ignore
+                used.Add v |> ignore
+                values.[v] <- tag
+                v
+
+        member x.Free(id : int) =
+            used.Remove id |> ignore
+            free.Add id |> ignore
+            values.Remove id |> ignore
+
+    let private poolIdManagers = ConditionalWeakTable<Context, IdManager<UniformBufferPool>>()
+
+    let private getIdManager (ctx : Context) =
+        poolIdManagers.GetOrCreateValue(ctx)
 
     type Context with
+
+        member x.MaxUniformBufferPoolId = 
+            (getIdManager x).Max
+
+        member x.GetUniformBufferPool(id : int) =
+            (getIdManager x).Get id
+
         member x.CreateUniformBufferPool(size : int, fields : list<UniformField>) =
             using x.ResourceLock (fun _ ->
                 let alignMask = GL.GetInteger(GetPName.UniformBufferOffsetAlignment) - 1 
@@ -531,7 +573,9 @@ module UniformBufferExtensions =
                 let handle = GL.GenBuffer()
                 GL.Check "could not create uniform buffer"
 
-                new UniformBufferPool(x, handle, size, fields)
+                let pool = new UniformBufferPool(-1, x, handle, size, fields)
+                pool.PoolId <- (getIdManager x).NewId(pool)
+                pool
             )
 
         member x.Delete(pool : UniformBufferPool) =
@@ -540,6 +584,7 @@ module UniformBufferExtensions =
                 GL.DeleteBuffer(pool.Handle)
                 GL.Check "could not delete uniform buffer pool"
                 pool.Handle <- -1
+                (getIdManager x).Free(pool.PoolId)
             )
 
     type Context with

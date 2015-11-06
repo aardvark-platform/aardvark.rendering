@@ -14,7 +14,7 @@ module RenderTasks =
     open System.Collections.Generic
     open Aardvark.Rendering.GL
     open Aardvark.Rendering.GL.OpenGl.Enums
-
+    open System.Linq
 
 
 //
@@ -134,7 +134,7 @@ module RenderTasks =
 
         let dirtyLock = obj()
         let poolsReader = manager.AllUniformBufferPools.GetReader()
-        let mutable dirtyUniformPools = HashSet<UniformBufferPool>()
+        //let mutable dirtyUniformPools = HashSet() //Dictionary<UniformBufferPool, List<UniformBufferView>>()
         let mutable dirtyUniformViews = HashSet<ChangeableResource<UniformBufferView>>()
         let mutable dirtyResources = HashSet<IChangeableResource>()
     
@@ -276,12 +276,16 @@ module RenderTasks =
             let mutable viewUpdateCount = 0
             updateCPUTime.Restart()
                 
+            let dirtyPoolIds = Array.init (1 + ctx.MaxUniformBufferPoolId) (fun _ -> ref [])
             if dirtyBufferViews.Count > 0 then
                 System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
                     lock d (fun () ->
                         if d.OutOfDate then
                             d.UpdateCPU(x)
                             d.UpdateGPU(x)
+
+                            let view = d.Resource.GetValue()
+                            System.Threading.Interlocked.Change(dirtyPoolIds.[view.Pool.PoolId], fun l -> view::l) |> ignore
                             System.Threading.Interlocked.Increment &viewUpdateCount |> ignore
                         else
                             d.Outputs.Add x |> ignore
@@ -290,22 +294,17 @@ module RenderTasks =
 
             updateCPUTime.Stop()
 
-            let dirtyPools = System.Threading.Interlocked.Exchange(&dirtyUniformPools, HashSet())
-            let newPools = poolsReader.GetDelta(x)
-            for p in newPools do
-                match p with
-                    | Add p -> 
-                        dirtyPools.Add p |> ignore
-                        let s = p.Changed.Values.Subscribe(fun () -> lock dirtyLock (fun () -> dirtyUniformPools.Add p |> ignore))
-                        //TODO: subscription should die with renderTask (and on remove)
-                        ()
-                    | Rem p -> () // TODO: proper disposal
-
             updateGPUTime.Restart()
-            if dirtyPools.Count > 0 then
-                for d in dirtyPools do
-                    d.Upload(x)
+            let mutable dirtyPoolCount = 0
+            for id in 0..dirtyPoolIds.Length-1 do
+                let dirty = !dirtyPoolIds.[id] |> List.toArray
+                if dirty.Length > 0 then
+                    let pool = ctx.GetUniformBufferPool id
+                    pool.Upload dirty
+                    dirtyPoolCount <- dirtyPoolCount + 1
+                    ()
 
+            if dirtyPoolCount > 0 then
                 if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
             updateGPUTime.Stop()
  
@@ -313,7 +312,7 @@ module RenderTasks =
             let time = updateCPUTime.Elapsed + updateGPUTime.Elapsed
 
 
-            dirtyPools.Count, viewUpdateCount, time
+            dirtyPoolCount, viewUpdateCount, time
 
         member private x.UpdateDirty() =
             let poolUpdateCount, viewUpdateCount, uniformUpdateTime = 

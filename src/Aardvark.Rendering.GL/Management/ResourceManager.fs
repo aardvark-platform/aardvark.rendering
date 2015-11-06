@@ -669,7 +669,7 @@ module ResourceManager =
 
 
                     // TODO: writers could be created by the pool!!!!
-                    let writers = UnmanagedWriters.writers true pool.Fields inputs
+                    let writers = UnmanagedUniformWriters.writers true pool.Fields inputs
      
                     let view = pool.AllocView()
                     view.WriteOperation (fun () -> 
@@ -713,7 +713,7 @@ module ResourceManager =
 
 
                     let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
-                    let writers = UnmanagedWriters.writers true uniformFields inputs
+                    let writers = UnmanagedUniformWriters.writers true uniformFields inputs
      
 
                     let b = ctx.CreateUniformBuffer(layout.size, uniformFields)
@@ -764,7 +764,7 @@ module ResourceManager =
                             let loc = ctx.CreateUniformLocation(uniform.uniformType.SizeInBytes, uniform.uniformType)
 
                             let inputs = Map.ofList [Symbol.Create uniform.semantic, v :> IAdaptiveObject]
-                            let _,writer = UnmanagedWriters.writers false [uniform.UniformField] inputs |> List.head
+                            let _,writer = UnmanagedUniformWriters.writers false [uniform.UniformField] inputs |> List.head
      
 
                             writer.Write(v, loc.Data)
