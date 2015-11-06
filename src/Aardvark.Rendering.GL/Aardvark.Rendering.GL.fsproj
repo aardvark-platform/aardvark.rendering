@@ -58,6 +58,7 @@
     <Compile Include="Core\Interfaces.fs" />
     <Compile Include="Core\UnsharedObject.fs" />
     <Compile Include="Core\NativeMemoryManager.fs" />
+    <Compile Include="Core\PrimitiveValueConverter.fs" />
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\Instruction.fs" />
     <Compile Include="Instructions\CompileContext.fs" />

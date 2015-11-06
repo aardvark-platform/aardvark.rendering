@@ -2,6 +2,7 @@
 
 open System
 open System.Threading
+open System.Collections.Generic
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
@@ -80,21 +81,20 @@ module TextureExtensions =
                 | :? FileTexture as t -> Some(FileTexture(t.TextureParams, t.FileName))
                 | _ -> None
 
-//        let (|PixTextureCube|_|) (t : ITexture) =
-//            match t with
-//                | :? TextureCube2d as t -> Some(PixTextureCube(t.TexInfo, t.PixCubeFun.Invoke()))
-//                | _ -> None
-//
+        let (|PixTextureCube|_|) (t : ITexture) =
+            match t with
+                | :? PixTextureCube as t -> Some(PixTextureCube(t.TextureParams, t.PixImageCube))
+                | _ -> None
+
         let (|PixTexture2D|_|) (t : ITexture) =
             match t with
                 | :? PixTexture2d as t -> Some(t.TextureParams, t.PixImageMipMap)
                 | _ -> None
-//
-//        let (|PixTexture3D|_|) (t : ITexture) =
-//            match t with
-//                | :? Texture3d as t -> Some(PixTexture3D(t.TexInfo, t.PixMipMapFun.Invoke()))
-//                | _ -> None
-    open System.Collections.Generic
+
+        let (|PixTexture3D|_|) (t : ITexture) =
+            match t with
+                | :? PixTexture3d as t -> Some(PixTexture3D(t.TextureParams, t.PixVolume))
+                | _ -> None
 
     let private lookupTable (l : list<'a * 'b>) =
         let d = Dictionary()
@@ -110,7 +110,6 @@ module TextureExtensions =
             match d.TryGetValue key with
                 | (true, v) -> Some v
                 | _ -> None
-
 
     let internal toPixelType =
         lookupTable [
@@ -177,6 +176,7 @@ module TextureExtensions =
             match tryGet i with
                 | Some v -> v
                 | _ -> failwithf "cannot get SizedInternalFormat for: %A" i
+
 
     [<AutoOpen>]
     module private Uploads =
@@ -364,12 +364,13 @@ module TextureExtensions =
             t.Count <- 1
             t.Dimension <- TextureDimension.TextureCube
 
-        let uploadTexture3D (t : Texture) (mipMaps : bool) (data : PixVolume) =
+        let uploadTexture3D (t : Texture) (textureParams : TextureParams) (data : PixVolume) =
             let size = data.Size
             let expectedLevels = Fun.Min(size.X, size.Y, size.Z) |> Fun.Log2 |> Fun.Ceiling |> int //int(Fun.Ceiling(Fun.Log2(Fun.Min(size.X, size.Y))))
-            let generateMipMap = mipMaps
-            let internalFormat = unbox t.Format
-            let sizeChanged = size = t.Size3D
+            let generateMipMap = textureParams.wantMipMaps
+            let newFormat = TextureFormat.ofPixFormat data.PixFormat textureParams
+            let formatChanged = t.Format <> newFormat
+            let sizeChanged = size <> t.Size3D
 
             GL.BindTexture(TextureTarget.Texture3D, t.Handle)
             GL.Check "could not bind texture"
@@ -392,8 +393,8 @@ module TextureExtensions =
 
             // if the size did not change it is more efficient
             // to use glTexSubImage
-            if sizeChanged then
-                GL.TexImage3D(TextureTarget.Texture3D, 0, internalFormat, size.X, size.Y, size.Z, 0, pixelFormat, pixelType, gc.AddrOfPinnedObject())
+            if sizeChanged || formatChanged then
+                GL.TexImage3D(TextureTarget.Texture3D, 0, unbox newFormat, size.X, size.Y, size.Z, 0, pixelFormat, pixelType, gc.AddrOfPinnedObject())
             else
                 GL.TexSubImage3D(TextureTarget.Texture3D, 0, 0, 0, 0, size.X, size.Y, size.Z, pixelFormat, pixelType, gc.AddrOfPinnedObject())
             GL.Check "could not upload texture data"
@@ -416,7 +417,7 @@ module TextureExtensions =
             t.Multisamples <- 1
             t.Count <- 1
             t.Dimension <- TextureDimension.Texture3D
-            t.Format <- unbox internalFormat
+            t.Format <- unbox newFormat
 
         let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (format : PixFormat) =
             if level <> 0 then
@@ -608,9 +609,7 @@ module TextureExtensions =
                         t
 
                     | FileTexture(info, file) ->
-                        
                         let t = newTexture ()
-                        // TODO: maybe there's a better way for loading file-textures
                         if file = null then 
                             t
                         else
@@ -620,18 +619,20 @@ module TextureExtensions =
                             t
 
                     | PixTexture2D(wantMipMaps, data) -> 
-
-//                        if data.LevelCount > 0 then
-//                            t.ChannelType <- data.[0].PixFormat |> ChannelType.ofPixFormat
                         let t = newTexture ()
                         uploadTexture2D t wantMipMaps data |> ignore
                         t
-//
-//                    | PixTextureCube(info, data) -> 
-//                        uploadTextureCube t info data
-//
-//                    | PixTexture3D(info, image) ->
-//                        uploadTexture3D t info image
+
+                    | PixTextureCube(info, data) ->
+                        let t = newTexture () 
+                        uploadTextureCube t info data
+                        t
+
+                    | PixTexture3D(info, data) ->
+                        let t = newTexture ()
+                        uploadTexture3D t info data
+                        t
+
                     | :? NullTexture ->
                         Texture(x, 0, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), 1, TextureFormat.Rgba8)
 
@@ -651,12 +652,12 @@ module TextureExtensions =
 
                     | PixTexture2D(wantMipMaps, data) -> 
                         uploadTexture2D t wantMipMaps data |> ignore
-//
-//                    | PixTextureCube(info, data) -> 
-//                        uploadTextureCube t info data
-//
-//                    | PixTexture3D(info, image) ->
-//                        uploadTexture3D t info image
+
+                    | PixTextureCube(info, data) -> 
+                        uploadTextureCube t info data
+
+                    | PixTexture3D(info, image) ->
+                        uploadTexture3D t info image
 
                     | FileTexture(info, file) ->
                         let pi = PixImage.Create(file, PixLoadOptions.UseDevil)

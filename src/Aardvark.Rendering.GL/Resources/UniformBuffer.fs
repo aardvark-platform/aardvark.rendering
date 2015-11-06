@@ -27,8 +27,6 @@ open Microsoft.FSharp.Quotations
 open FSharp.Quotations.Evaluator
 open Aardvark.Base.Incremental
 open System.Reflection
-open Microsoft.FSharp.Reflection
-open Microsoft.FSharp.Quotations.Patterns
 
 #nowarn "9"
 
@@ -47,71 +45,44 @@ type UniformField =
                 | FieldPath(i,_) -> name i
         name x.path
 
-
-
 type ConversionTarget =
     | ConvertForBuffer
     | ConvertForLocation
 
-
-
-module UniformConversion =
-
-    let private trafoToM44f(t : Trafo3d) =
-        M44f.op_Explicit (t.Forward)
-
-    let private compiledConversions =
-        [
-            ( fun (b : bool)      -> if b then 1 else 0 ) :> obj
-     
-            ( fun (t : Trafo3d)   -> trafoToM44f t ) :> obj
-            ( fun (t : M44d)      -> M44f.op_Explicit t ) :> obj
-            ( fun (v : M44d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, float32 v.M03, float32 v.M10, float32 v.M11, float32 v.M12, float32 v.M13, float32 v.M20, float32 v.M21, float32 v.M22, float32 v.M23) ) :> obj
-
-            ( fun (v : M33f)      -> M34f(v.M00, v.M01, v.M02, 0.0f, v.M10, v.M11, v.M12, 0.0f, v.M20, v.M21, v.M22, 0.0f) ) :> obj
-            ( fun (v : M33d)      -> M34f(float32 v.M00, float32 v.M01, float32 v.M02, 0.0f, float32 v.M10, float32 v.M11, float32 v.M12, 0.0f, float32 v.M20, float32 v.M21, float32 v.M22, 0.0f) ) :> obj
- 
-            ( fun (v : V4d)       -> V4f.op_Explicit v ) :> obj
-            ( fun (v : V3d)       -> V3f.op_Explicit v ) :> obj
-            ( fun (v : V2d)       -> V2f.op_Explicit v ) :> obj
-            ( fun (v : float)     -> float32 v ) :> obj
-
-            ( fun (c : C4b)     -> V4f (C4f c) ) :> obj
-            ( fun (c : C4us)    -> V4f (C4f c) ) :> obj
-            ( fun (c : C4ui)    -> V4f (C4f c) ) :> obj
-            ( fun (c : C4f)     -> V4f c ) :> obj
-            ( fun (c : C4d)     -> V4f c ) :> obj
-  
-            ( fun (c : C3b)     -> V4f (C4f c) ) :> obj
-            ( fun (c : C3us)    -> V4f (C4f c) ) :> obj
-            ( fun (c : C3ui)    -> V4f (C4f c) ) :> obj
-            ( fun (c : C3f)     -> V4f c ) :> obj
-            ( fun (c : C3d)     -> V4f c ) :> obj
-        ]
+module UniformConverter =
 
     let private uniformTypes =
         Dict.ofList [
-            ActiveUniformType.Bool,                 typeof<int>
-            ActiveUniformType.BoolVec2 ,            typeof<V2i>
-            ActiveUniformType.BoolVec3 ,            typeof<V3i>
-            ActiveUniformType.BoolVec4 ,            typeof<V4i>
-            ActiveUniformType.Double ,              typeof<float>
-            ActiveUniformType.DoubleVec2 ,          typeof<V2d>
-            ActiveUniformType.DoubleVec3 ,          typeof<V3d>
-            ActiveUniformType.DoubleVec4 ,          typeof<V4d>
-            ActiveUniformType.Float ,               typeof<float32>
-            ActiveUniformType.FloatMat2 ,           typeof<M22f>
-            ActiveUniformType.FloatMat3 ,           typeof<M34f>
-            ActiveUniformType.FloatMat3x4 ,         typeof<M34f>
-            ActiveUniformType.FloatMat4 ,           typeof<M44f>
-            ActiveUniformType.FloatVec2 ,           typeof<V2f>
-            ActiveUniformType.FloatVec3 ,           typeof<V3f>
-            ActiveUniformType.FloatVec4 ,           typeof<V4f>
             ActiveUniformType.Int ,                 typeof<int>
             ActiveUniformType.IntVec2 ,             typeof<V2i>
             ActiveUniformType.IntVec3 ,             typeof<V3i>
             ActiveUniformType.IntVec4 ,             typeof<V4i>
+
             ActiveUniformType.UnsignedInt ,         typeof<uint32>
+            ActiveUniformType.UnsignedIntVec3 ,     typeof<C3ui>
+            ActiveUniformType.UnsignedIntVec4 ,     typeof<C4ui>
+
+            ActiveUniformType.Float ,               typeof<float32>
+            ActiveUniformType.FloatVec2 ,           typeof<V2f>
+            ActiveUniformType.FloatVec3 ,           typeof<V3f>
+            ActiveUniformType.FloatVec4 ,           typeof<V4f>
+            ActiveUniformType.FloatMat2 ,           typeof<M22f>
+            ActiveUniformType.FloatMat3 ,           typeof<M34f>
+            ActiveUniformType.FloatMat4 ,           typeof<M44f>
+            ActiveUniformType.FloatMat2x3 ,         typeof<M23f>
+            ActiveUniformType.FloatMat3x4 ,         typeof<M34f>
+
+            ActiveUniformType.Double ,              typeof<float>
+            ActiveUniformType.DoubleVec2 ,          typeof<V2d>
+            ActiveUniformType.DoubleVec3 ,          typeof<V3d>
+            ActiveUniformType.DoubleVec4 ,          typeof<V4d>
+            
+
+            ActiveUniformType.Bool,                 typeof<int>
+            ActiveUniformType.BoolVec2 ,            typeof<V2i>
+            ActiveUniformType.BoolVec3 ,            typeof<V3i>
+            ActiveUniformType.BoolVec4 ,            typeof<V4i>
+
         ]
 
     let private locationUniformTypes =
@@ -121,32 +92,6 @@ module UniformConversion =
                 ActiveUniformType.FloatMat3 ,           typeof<M33f>
             ]
         ]
-
-    type private ConversionMapping<'a>() =
-        let store = Dict<Type, Dict<Type, 'a>>()
-
-        member x.Add(input : Type, output : Type, e : 'a) =
-            let map = store.GetOrCreate(input, fun _ -> Dict())
-            map.[output] <- e
-
-        member x.TryGet(input : Type, output : Type, [<Out>] e : byref<'a>) =
-            match store.TryGetValue input with
-                | (true, m) ->
-                    m.TryGetValue(output, &e)
-                | _ ->
-                    false
-
-    let private createCompiledMap (l : list<obj>) =
-        let result = ConversionMapping()
-
-        for e in l do
-            let (i,o) = FSharpType.GetFunctionElements (e.GetType())
-            result.Add(i,o,e)
-
-        result
-
-    let private compiledMapping = createCompiledMap compiledConversions
-
 
     let getExpectedType (target : ConversionTarget) (t : ActiveUniformType) =
         match target with
@@ -159,16 +104,6 @@ module UniformConversion =
                 match locationUniformTypes.TryGetValue t with
                     | (true, t) -> t
                     | _ -> failwithf "unsupported uniform type: %A" t
-        
-    let getConverter (inType : Type) (outType : Type) =
-        if outType.IsArray then
-            failwith "arrays are currently not implemented"
-        else
-            match compiledMapping.TryGet(inType, outType) with
-                | (true, conv) ->
-                    conv
-                | _ ->
-                    failwithf "unknown conversion from %A to %A" inType.FullName outType.FullName
 
     let getTotalFieldSize (target : ConversionTarget) (f : UniformField) =
         let t = getExpectedType target f.uniformType
@@ -197,7 +132,7 @@ module UniformPaths =
 
     let private createLeafTransformation (outputType : Type) (input : Expr) =
         if input.Type <> outputType then
-            let converter = UniformConversion.getConverter input.Type outputType
+            let converter = PrimitiveValueConverter.getConverter input.Type outputType
             let f = Expr.Value(converter, converter.GetType())
             Expr.Application(f, input)
         else
@@ -263,7 +198,7 @@ module UniformPaths =
                     let result = 
                         match path with
                             | ValuePath _ -> 
-                                UniformConversion.getConverter inputType outputType
+                                PrimitiveValueConverter.getConverter inputType outputType
                             | _ -> 
                                 let input = Var("input", inputType)
                                 let e = createUniformPath (Expr.Var input) path
@@ -275,7 +210,6 @@ module UniformPaths =
 
     let compileUniformPath (path : UniformPath) : 'a -> 'b =
         compileUniformPathUntyped path typeof<'a> typeof<'b> |> unbox<_>
-
 
 module UnmanagedWriters =
     open Microsoft.FSharp.NativeInterop
@@ -395,7 +329,7 @@ module UnmanagedWriters =
 
                         let creators = 
                             fields |> List.map (fun f ->
-                                let tTarget = UniformConversion.getExpectedType target f.uniformType
+                                let tTarget = UniformConverter.getExpectedType target f.uniformType
                                 if f.count = 1 then
                                         
                                     if tSource <> tTarget then
@@ -418,7 +352,7 @@ module UnmanagedWriters =
 
                                     if tSeq <> null then
                                         let tSourceElement = tSeq.GetGenericArguments().[0]
-                                        let converter = UniformConversion.getConverter tSource tTarget
+                                        let converter = PrimitiveValueConverter.getConverter tSourceElement tTarget
 
                                         let ctor = 
                                             if tSource.IsArray then
@@ -476,6 +410,7 @@ module UnmanagedWriters =
                 | None -> None
         )
 
+
 type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<UniformField>) =
     let data = Marshal.AllocHGlobal(size)
     let mutable dirty = true
@@ -489,6 +424,8 @@ type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<Unifor
     member x.Dirty 
         with get() = dirty
         and set d = dirty <- d
+
+
 
 
 type UniformBufferPool =
