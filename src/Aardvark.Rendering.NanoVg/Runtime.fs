@@ -384,7 +384,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     member x.Dispose() =
         r.RemoveOutput x
         r.Dispose()
-        let all = inputs.Entries |> Seq.toArray
+        let all = inputs |> Seq.toArray
         for i in all do
             i.RemoveOutput x
         inputs.Clear()

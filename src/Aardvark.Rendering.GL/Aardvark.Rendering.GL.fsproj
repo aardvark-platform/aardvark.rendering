@@ -78,7 +78,6 @@
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\Statistics.fs" />
-    <Compile Include="Runtime\ReferenceCountingSet.fs" />
     <Compile Include="Runtime\IFragment.fs" />
     <Compile Include="Runtime\Sorting.fs" />
     <Compile Include="Runtime\Native\Memory.fs" />

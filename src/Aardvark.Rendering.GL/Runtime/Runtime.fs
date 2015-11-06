@@ -206,7 +206,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
         let man = ResourceManager(manager, ctx, shareTextures, shareBuffers)
-        new RenderTasks.RenderTask(x, ctx, man, engine, set)
+        new RenderTask(x, ctx, man, engine, set)
 
     member x.PrepareRenderObject(rj : IRenderObject) =
         match rj with
@@ -221,7 +221,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         x.CompileRenderInternal(Mod.constant engine, set) :> IRenderTask
 
     member x.CompileClear(color : IMod<C4f>, depth : IMod<float>) : IRenderTask =
-        new RenderTasks.ClearTask(x, color, depth, ctx) :> IRenderTask
+        new ClearTask(x, color, depth, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferRenderbuffer, ss : IFramebufferTexture, trafo : ImageTrafo) =
         using ctx.ResourceLock (fun _ ->
