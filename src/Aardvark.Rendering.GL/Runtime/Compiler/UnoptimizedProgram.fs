@@ -188,7 +188,6 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
          manager : ResourceManager, 
          inputSet : InputSet) =
     
-    let sw = System.Diagnostics.Stopwatch()
 
     let sorter = RenderObjectSorters.ofSorting config.sorting
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
@@ -296,12 +295,8 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         let instructionUpdates, instructionUpdateTime, createStats = 
             changeSet.Update() 
 
-        sw.Restart()
         // run everything
         run prolog.Fragment
-        if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
-
-        sw.Stop()
 
         let fragmentStats = Mod.force statistics
         let programStats = 
@@ -309,7 +304,6 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 Programs = 1.0 
                 InstructionUpdateCount = float instructionUpdates
                 InstructionUpdateTime = instructionUpdateTime - createStats.ResourceUpdateTime
-                ExecutionTime = sw.Elapsed
             }
 
         fragmentStats + programStats + createStats |> handler.AdjustStatistics

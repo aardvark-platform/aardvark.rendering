@@ -114,6 +114,29 @@ module RenderTasks =
                 let s = seq { for i in 0..keys.Count-1 do yield KeyValuePair(keys.[i], values.[i]) }
                 (s :> System.Collections.IEnumerable).GetEnumerator()
 
+    type RenderTaskInputSet(target : IRenderTask) =
+        inherit Compiler.InputSet(target)
+
+        let resources = ReferenceCountingSet<IChangeableResource>()
+
+        member x.Resources = resources
+
+        override x.Add(o : IAdaptiveObject) =
+            match o with
+                | :? IChangeableResource as r ->
+                    resources.Add r |> ignore
+                | _ -> ()
+
+            base.Add(o)
+            
+        override x.Remove(o : IAdaptiveObject) =
+            match o with
+                | :? IChangeableResource as r ->
+                    resources.Remove r |> ignore
+                | _ -> ()
+
+            base.Remove(o)
+
     type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) as this =
         inherit AdaptiveObject()
         static let RenderTaskRunProbe = Symbol.Create "[RenderTask] run"
@@ -133,8 +156,6 @@ module RenderTasks =
         let mutable lastScope = None
 
         let dirtyLock = obj()
-        let poolsReader = manager.AllUniformBufferPools.GetReader()
-        //let mutable dirtyUniformPools = HashSet() //Dictionary<UniformBufferPool, List<UniformBufferView>>()
         let mutable dirtyUniformViews = HashSet<ChangeableResource<UniformBufferView>>()
         let mutable dirtyResources = HashSet<IChangeableResource>()
     
@@ -142,7 +163,7 @@ module RenderTasks =
 
         let renderPassChangers = Dictionary<IRenderObject, IMod<unit> * ref<uint64>>()
         let renderPassChangeSet = MutableVolatileDirtySet<IMod<unit>, unit>(fun m -> m.GetValue this)
-        let inputSet = Compiler.InputSet(this)
+        let inputSet = RenderTaskInputSet(this)
 
         let tryGetProgramForPass (pass : uint64) =
             Map.tryFind pass programs
@@ -304,8 +325,7 @@ module RenderTasks =
                     dirtyPoolCount <- dirtyPoolCount + 1
                     ()
 
-            if dirtyPoolCount > 0 then
-                if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
+    
             updateGPUTime.Stop()
  
             
@@ -348,8 +368,11 @@ module RenderTasks =
                             d.UpdateGPU(x)
                     )
 
-            if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
             let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
+
+            if Config.SyncUploadsAndFrames && count > 0 then
+                OpenTK.Graphics.OpenGL4.GL.Sync()
+
             count, counts, uniformUpdateTime + updateCPUTime.Elapsed + updateGPUTime.Elapsed
 
 
@@ -424,22 +447,6 @@ module RenderTasks =
                         GL.Enable EnableCap.DebugOutput
 
 
-                    setExecutionEngine (engine.GetValue(x))
-
-                    let additions, removals =
-                        if reader.OutOfDate then x.ProcessDeltas (reader.GetDelta(x))
-                        else 0,0
-
-                    renderPassChangeSet.Evaluate() |> ignore
-
-                    let resourceUpdates, resourceCounts, resourceUpdateTime = 
-                        x.UpdateDirty()
-
-
-
-                    executionTime.Restart()
-
-
                     let old = Array.create 4 0
                     let mutable oldFbo = 0
                     OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
@@ -456,7 +463,22 @@ module RenderTasks =
 
                     GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not set viewport"
+     
+     
+
+                    setExecutionEngine (engine.GetValue(x))
+
+                    let additions, removals =
+                        if reader.OutOfDate then x.ProcessDeltas (reader.GetDelta(x))
+                        else 0,0
+
+                    renderPassChangeSet.Evaluate() |> ignore
+
+                    let resourceUpdates, resourceCounts, resourceUpdateTime = 
+                        x.UpdateDirty()
+
                     
+                    executionTime.Restart()
 
 
                     let mutable resourceCount = 0
@@ -469,6 +491,12 @@ module RenderTasks =
                         //resourceCount <- resourceCount + p.Resources.Entries.Count
 
 
+                    // TODO: remove if false (would however cause perf-results to be incomparable)
+                    if false then
+                        GL.Sync()
+
+                    executionTime.Stop()
+
                     if ExecutionContext.framebuffersSupported then
                         GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
                         GL.Check "could not bind framebuffer"
@@ -476,8 +504,7 @@ module RenderTasks =
                     GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                     GL.Check "could not set viewport"
                     
-                    GL.Sync()
-                    executionTime.Stop()
+                    
 
                     if wasEnabled <> currentEngine.useDebugOutput then
                         if wasEnabled then GL.Enable EnableCap.DebugOutput
@@ -491,7 +518,7 @@ module RenderTasks =
                             ResourceUpdateTime = resourceUpdateTime 
                             AddedRenderObjects = float additions
                             RemovedRenderObjects = float removals
-                            ResourceCount = float resourceCount 
+                            ResourceCount = float inputSet.Resources.Entries.Count 
                         }
 
                     frameId <- frameId + 1UL

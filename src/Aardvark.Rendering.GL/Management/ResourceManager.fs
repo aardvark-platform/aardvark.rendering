@@ -388,10 +388,6 @@ module ResourceManager =
                 | null -> ConcurrentDictionary<_, UniformBufferPool>()
                 | _ -> original.UniformBufferPools
 
-        let allUniformBufferPools = 
-            match original with
-                | null -> CSet.empty
-                | _ -> original.AllUniformBufferPools |> unbox<cset<_>>
 
         let compile (s : ISurface) = SurfaceCompilers.compile ctx s
 
@@ -629,21 +625,11 @@ module ResourceManager =
           
           
         member x.CreateUniformBufferPool (layout : UniformBlock) =
-            let isNew = ref false
-            let res = 
-                uniformBufferPools.GetOrAdd(layout, fun (layout : UniformBlock) ->
-                    isNew := true
-                    let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
-                    ctx.CreateUniformBufferPool(layout.size, uniformFields)
-                )
+            uniformBufferPools.GetOrAdd(layout, fun (layout : UniformBlock) ->
+                let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
+                ctx.CreateUniformBufferPool(layout.size, uniformFields)
+            )
 
-            if !isNew then
-                transact (fun () -> allUniformBufferPools.Add res |> ignore)
-
-            res
-
-        member x.AllUniformBufferPools =
-            allUniformBufferPools :> aset<_>
              
         member x.CreateUniformBufferView (pool : UniformBufferPool, scope : Ag.Scope, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
             let getValue (f : UniformField) =

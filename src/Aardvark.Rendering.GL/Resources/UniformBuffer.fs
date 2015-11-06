@@ -454,7 +454,7 @@ type UniformBufferPool =
                 GL.Check "could not bind uniform buffer pool"
 
                 let sizeChanged = x.Size <> x.Storage.Capacity
-                let uploadAll = required.Length > x.ViewCount / 5
+                let uploadAll = required.Length >= x.ViewCount / 4
 
                 ReaderWriterLock.read x.Storage.PointerLock (fun () ->
                     if uploadAll || sizeChanged then
@@ -521,6 +521,7 @@ module UniformBufferExtensions =
     open System.Linq
     open System.Collections.Generic
     open System.Runtime.CompilerServices
+    open System.Diagnostics
 
     type internal IdManager<'a>() =
         let mutable size = 1
@@ -554,9 +555,11 @@ module UniformBufferExtensions =
 
     let private poolIdManagers = ConditionalWeakTable<Context, IdManager<UniformBufferPool>>()
 
+
     let private getIdManager (ctx : Context) =
         poolIdManagers.GetOrCreateValue(ctx)
 
+  
     type Context with
 
         member x.MaxUniformBufferPoolId = 
@@ -568,7 +571,6 @@ module UniformBufferExtensions =
         member x.CreateUniformBufferPool(size : int, fields : list<UniformField>) =
             using x.ResourceLock (fun _ ->
                 let alignMask = GL.GetInteger(GetPName.UniformBufferOffsetAlignment) - 1 
-                printfn "align: %A" (alignMask + 1)
                 let size = size + alignMask &&& ~~~alignMask
                 let handle = GL.GenBuffer()
                 GL.Check "could not create uniform buffer"

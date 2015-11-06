@@ -205,7 +205,6 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     (parent : IRenderTask, config : BackendConfiguration, newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, inputSet : InputSet) =
     
     let sorter = RenderObjectSorters.ofSorting config.sorting
-    let sw = System.Diagnostics.Stopwatch()
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()
     let changeSet = ChangeSet(parent, inputSet.Add, inputSet.Remove)
@@ -316,12 +315,9 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         handler.Hint(RunProgram)
 
-        sw.Restart()
         // run everything
         run prolog.Fragment
-        if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
 
-        sw.Stop()
 
         let fragmentStats = Mod.force statistics
         let programStats = 
@@ -329,7 +325,6 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 Programs = 1.0 
                 InstructionUpdateCount = float instructionUpdates
                 InstructionUpdateTime = instructionUpdateTime - createStats.ResourceUpdateTime
-                ExecutionTime = sw.Elapsed
             }
 
         fragmentStats + programStats + createStats |> handler.AdjustStatistics

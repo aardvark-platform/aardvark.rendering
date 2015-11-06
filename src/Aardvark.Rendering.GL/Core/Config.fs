@@ -49,7 +49,7 @@ module Config =
     /// This flag improves timings for gpu uploads but also incurs a (possible) performance
     /// penality as well as incompatibiliy on some drivers.
     [<Literal>]
-    let SyncUploadsAndFrames = true
+    let SyncUploadsAndFrames = false
 
     /// <summary>
     /// The number of bits used for color values in default contexts

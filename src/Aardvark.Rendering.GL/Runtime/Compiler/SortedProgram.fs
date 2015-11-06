@@ -119,12 +119,10 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         // wait for the sorting
         let sortingTime = applySorting.Result
 
-        sw.Restart()
+
         // run everything
         run prolog.Fragment
-        if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
 
-        sw.Stop()
 
         let fragmentStats = Mod.force statistics
         let programStats = 
@@ -132,7 +130,6 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 Programs = 1.0 
                 InstructionUpdateCount = float instructionUpdates
                 InstructionUpdateTime = instructionUpdateTime - createStats.ResourceUpdateTime
-                ExecutionTime = sw.Elapsed
                 SortingTime = sortingTime
             }
 
