@@ -31,7 +31,7 @@ module Screenshot =
         task.Run(null, fbo) |> ignore
 
 
-        use colorTexture = runtime.CreateTexture(~~size, ~~PixFormat.ByteRGBA, ~~1, ~~1)
+        use colorTexture = runtime.CreateTexture(~~size, ~~TextureFormat.Rgba8, ~~1, ~~1)
         runtime.ResolveMultisamples(color, colorTexture, ImageTrafo.MirrorY)
 
         let images = colorTexture.Download(0)

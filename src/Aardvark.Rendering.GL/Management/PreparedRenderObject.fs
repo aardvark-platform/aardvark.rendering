@@ -55,42 +55,42 @@ type PreparedRenderObject =
 
         if x.Program.OutOfDate then
             x.Program.UpdateCPU(caller)
-            x.Program.UpdateGPU(caller)
+            x.Program.UpdateGPU(caller) |> ignore
 
         for (_,ub) in x.UniformBuffers |> Map.toSeq do
             if ub.OutOfDate then
                 ub.UpdateCPU(caller)
-                ub.UpdateGPU(caller)
+                ub.UpdateGPU(caller) |> ignore
 
         for (_,ul) in x.Uniforms |> Map.toSeq do
             if ul.OutOfDate then
                 ul.UpdateCPU(caller)
-                ul.UpdateGPU(caller)
+                ul.UpdateGPU(caller) |> ignore
 
         for (_,(t,s)) in x.Textures |> Map.toSeq do
             if t.OutOfDate then
                 t.UpdateCPU(caller)
-                t.UpdateGPU(caller)
+                t.UpdateGPU(caller) |> ignore
 
             if s.OutOfDate then
                 s.UpdateCPU(caller)
-                s.UpdateGPU(caller)
+                s.UpdateGPU(caller) |> ignore
 
         for (_,(b,_)) in x.Buffers |> Map.toSeq do
             if b.OutOfDate then
                 b.UpdateCPU(caller)
-                b.UpdateGPU(caller)
+                b.UpdateGPU(caller) |> ignore
 
         match x.IndexBuffer with
             | Some ib ->
                 if ib.OutOfDate then
                     ib.UpdateCPU(caller)
-                    ib.UpdateGPU(caller)
+                    ib.UpdateGPU(caller) |> ignore
             | _ -> ()
 
         if x.VertexArray.OutOfDate then
             x.VertexArray.UpdateCPU(caller)
-            x.VertexArray.UpdateGPU(caller)
+            x.VertexArray.UpdateGPU(caller) |> ignore
 
     member x.Dispose() =
         x.VertexArray.Dispose() 
@@ -164,28 +164,25 @@ type ResourceManagerExtensions private() =
         let prog = program.Resource.GetValue()
 
         // create all UniformBuffers requested by the program
-        let uniformBuffers = Map.empty
-//            prog.UniformBlocks 
-//                |> List.map (fun block ->
-//                    let mutable values = []
-//                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
-//                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
-//                   )
-//                |> Map.ofList
-
-
-        let uniformBufferPoolsWithBlocks =
-            prog.UniformBlocks |> List.map (fun b -> b, x.CreateUniformBufferPool b)
-
-
-        let poolMap = Dictionary.ofList uniformBufferPoolsWithBlocks
-
-        // create all UniformBuffers requested by the program
-        let uniformBufferViews =
+        let uniformBuffers = // Map.empty
             prog.UniformBlocks 
                 |> List.map (fun block ->
                     let mutable values = []
-                    let pool = poolMap.[block]
+                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
+                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
+                   )
+                |> Map.ofList
+
+
+        let uniformBufferPoolsWithBlocks =
+            [] //prog.UniformBlocks |> List.map (fun b -> b, x.CreateUniformBufferPool b)
+
+
+        // create all UniformBuffers requested by the program
+        let uniformBufferViews =
+            uniformBufferPoolsWithBlocks
+                |> List.map (fun (pool, block) ->
+                    let mutable values = []
 
                     // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
                     block.index, x.CreateUniformBufferView(pool, rj.AttributeScope, prog, rj.Uniforms, &values)

@@ -35,10 +35,8 @@ type RenderTaskInputSet(target : IRenderTask) =
 
 type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) as this =
     inherit AdaptiveObject()
-    static let RenderTaskRunProbe = Symbol.Create "[RenderTask] run"
 
     let mutable currentEngine = engine.GetValue(this)
-    let subscriptions = Dictionary()
     let reader = set.GetReader()
     do reader.AddOutput this
        engine.AddOutput this
@@ -54,7 +52,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
     let dirtyLock = obj()
     let mutable dirtyUniformViews = HashSet<ChangeableResource<UniformBufferView>>()
     let mutable dirtyResources = HashSet<IChangeableResource>()
-    
+    let mutable dirtyPoolIds = Array.empty
 
 
     let renderPassChangers = Dictionary<IRenderObject, IMod<unit> * ref<uint64>>()
@@ -193,13 +191,17 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
         let mutable viewUpdateCount = 0
         updateCPUTime.Restart()
                 
-        let dirtyPoolIds = Array.init (1 + ctx.MaxUniformBufferPoolId) (fun _ -> ref [])
+        
+        let totalPoolCount = 1 + ctx.MaxUniformBufferPoolId
+        if dirtyPoolIds.Length <> totalPoolCount then
+            dirtyPoolIds <- Array.init (1 + ctx.MaxUniformBufferPoolId) (fun _ -> ref [])
+
         if dirtyBufferViews.Count > 0 then
             System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
                 lock d (fun () ->
                     if d.OutOfDate then
                         d.UpdateCPU(x)
-                        d.UpdateGPU(x)
+                        d.UpdateGPU(x) |> ignore
 
                         let view = d.Resource.GetValue()
                         System.Threading.Interlocked.Change(dirtyPoolIds.[view.Pool.PoolId], fun l -> view::l) |> ignore
@@ -214,12 +216,15 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
         updateGPUTime.Restart()
         let mutable dirtyPoolCount = 0
         for id in 0..dirtyPoolIds.Length-1 do
-            let dirty = !dirtyPoolIds.[id] |> List.toArray
-            if dirty.Length > 0 then
-                let pool = ctx.GetUniformBufferPool id
-                pool.Upload dirty
-                dirtyPoolCount <- dirtyPoolCount + 1
-                ()
+            let r = dirtyPoolIds.[id]
+            match !r with
+                | [] -> 
+                    ()
+                | dirty ->
+                    r := []
+                    let pool = ctx.GetUniformBufferPool id
+                    pool.Upload (List.toArray dirty)
+                    dirtyPoolCount <- dirtyPoolCount + 1
 
     
         updateGPUTime.Stop()
@@ -231,6 +236,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
         dirtyPoolCount, viewUpdateCount, time
 
     member private x.UpdateDirty() =
+        let mutable stats = FrameStatistics.Zero
         let poolUpdateCount, viewUpdateCount, uniformUpdateTime = 
             x.UpdateDirtyUniformBufferViews()
 
@@ -261,7 +267,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
                         else
                             counts.[d.Kind] <- ref 1
 
-                        d.UpdateGPU(x)
+                        stats <- stats + d.UpdateGPU(x)
                 )
 
         let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
@@ -269,7 +275,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
         if Config.SyncUploadsAndFrames && count > 0 then
             OpenTK.Graphics.OpenGL4.GL.Sync()
 
-        count, counts, uniformUpdateTime + updateCPUTime.Elapsed + updateGPUTime.Elapsed
+        count, counts, uniformUpdateTime + updateCPUTime.Elapsed + updateGPUTime.Elapsed, stats
 
 
 
@@ -284,7 +290,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
             | Some p -> p.Remove rj
             | None -> ()
 
-    member x.ProcessDeltas (deltas : list<Delta<IRenderObject>>) =
+    member private x.ProcessDeltas (deltas : list<Delta<IRenderObject>>) =
         let mutable additions = 0
         let mutable removals = 0
         for d in deltas do
@@ -348,7 +354,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
                 OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
                 OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                let handle = fbo.Handle |> unbox<int> 
+                let handle = fbo.GetHandle null |> unbox<int> 
 
                 if ExecutionContext.framebuffersSupported then
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
@@ -365,12 +371,13 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
                 setExecutionEngine (engine.GetValue(x))
 
                 let additions, removals =
-                    if reader.OutOfDate then x.ProcessDeltas (reader.GetDelta(x))
-                    else 0,0
+                    match reader.GetDelta(x) with
+                        | [] -> 0,0
+                        | deltas -> x.ProcessDeltas deltas
 
                 renderPassChangeSet.Evaluate() |> ignore
 
-                let resourceUpdates, resourceCounts, resourceUpdateTime = 
+                let resourceUpdates, resourceCounts, resourceUpdateTime, updateStats = 
                     x.UpdateDirty()
 
                     
@@ -417,7 +424,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
 
                 frameId <- frameId + 1UL
 
-                RenderingResult(fbo, stats)
+                RenderingResult(fbo, updateStats + stats)
             )
         )
 
@@ -458,7 +465,7 @@ type ClearTask(runtime : IRuntime, color : IMod<C4f>, depth : IMod<float>, ctx :
                 OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
                 OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                let handle = fbo.Handle |> unbox<int>
+                let handle = fbo.GetHandle null |> unbox<int>
 
                 if ExecutionContext.framebuffersSupported then
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)

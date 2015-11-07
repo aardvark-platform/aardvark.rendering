@@ -9,56 +9,57 @@ open Aardvark.Base.Incremental
 
 
 type ChangeableFramebuffer(c : ChangeableResource<Framebuffer>) =
-    let getHandle() =
+    let getHandle(caller : IAdaptiveObject) =
         lock c (fun () ->
             if c.OutOfDate then
-                c.UpdateCPU(null)
-                c.UpdateGPU(null)
-            c.Resource.GetValue() :> IFramebuffer
+                c.UpdateCPU(caller)
+                c.UpdateGPU(caller) |> ignore
+            c.Resource.GetValue(caller) :> IFramebuffer
         )
 
     interface IFramebuffer with
-        member x.Handle = getHandle().Handle
-        member x.Size = getHandle().Size
-        member x.Attachments = getHandle().Attachments
+        member x.GetHandle caller = getHandle(caller).GetHandle(caller)
+        member x.Size = getHandle(null).Size
+        member x.Attachments = getHandle(null).Attachments
         member x.Dispose() = c.Dispose()
 
 type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
-    let getHandle() =
+    let getHandle(caller : IAdaptiveObject) =
         lock c (fun () ->
             if c.OutOfDate then
-                c.UpdateCPU(null)
-                c.UpdateGPU(null)
-            c.Resource.GetValue()
+                c.UpdateCPU(caller)
+                c.UpdateGPU(caller) |> ignore
+            c.Resource.GetValue(caller)
         )
 
     interface IFramebufferTexture with
-        member x.Handle = getHandle().Handle :> obj
-        member x.Samples = getHandle().Multisamples
-        member x.Dimension = getHandle().Dimension
-        member x.ArraySize = getHandle().Count
-        member x.MipMapLevels = getHandle().MipMapLevels
-        member x.GetSize level = getHandle().GetSize level
+        member x.GetBackendTexture caller = getHandle(caller) :> ITexture
+        member x.GetHandle caller = getHandle(caller).Handle :> obj
+        member x.Samples = getHandle(null).Multisamples
+        member x.Dimension = getHandle(null).Dimension
+        member x.ArraySize = getHandle(null).Count
+        member x.MipMapLevels = getHandle(null).MipMapLevels
+        member x.GetSize level = getHandle(null).GetSize level
         member x.Dispose() = c.Dispose()
-        member x.WantMipMaps = getHandle().MipMapLevels > 1
+        member x.WantMipMaps = getHandle(null).MipMapLevels > 1
         member x.Download(level) =
-            let handle = getHandle()
+            let handle = getHandle(null)
             let format = handle.Format |> TextureFormat.toDownloadFormat
             handle.Context.Download(handle, format, level)
 
 type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
-    let getHandle() =
+    let getHandle(caller : IAdaptiveObject) =
         lock c (fun () ->
             if c.OutOfDate then
-                c.UpdateCPU(null)
-                c.UpdateGPU(null)
-            c.Resource.GetValue()
+                c.UpdateCPU(caller)
+                c.UpdateGPU(caller) |> ignore
+            c.Resource.GetValue(caller)
         )
 
     interface IFramebufferRenderbuffer with
-        member x.Handle = getHandle().Handle :> obj
-        member x.Size = getHandle().Size
-        member x.Samples = getHandle().Samples
+        member x.Handle = getHandle(null).Handle :> obj
+        member x.Size = getHandle(null).Size
+        member x.Samples = getHandle(null).Samples
         member x.Dispose() = c.Dispose()
 
 type ResourceMod<'a, 'b>(res : ChangeableResource<'a>, f : 'a -> 'b) as this =
@@ -70,7 +71,7 @@ type ResourceMod<'a, 'b>(res : ChangeableResource<'a>, f : 'a -> 'b) as this =
         x.EvaluateAlways caller (fun () ->
             if res.OutOfDate then
                 res.UpdateCPU(x)
-                res.UpdateGPU(x)
+                res.UpdateGPU(x) |> ignore
             let r = res.Resource.GetValue(x)
             f r
         )
@@ -127,8 +128,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CompileRender (engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(engine,set)
         member x.CompileClear(color, depth) = x.CompileClear(color, depth)
         member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples)
-        member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
-        member x.CreateFramebuffer bindings = x.CreateFramebuffer bindings
+        member x.CreateRenderbuffer(size : IMod<V2i>, format, samples) = x.CreateRenderbuffer(size, format, samples)
+        member x.CreateFramebuffer (bindings : Map<Symbol, IMod<_>>) = x.CreateFramebuffer bindings
         
         member x.CreateSurface (s : ISurface) = x.CreateSurface s :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
@@ -171,8 +172,27 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | _ ->
                     failwithf "cannot dispose texture: %A" t
 
+        member x.DeleteRenderbuffer (b : IRenderbuffer) =
+            match b with
+                | :? Aardvark.Rendering.GL.Renderbuffer as b -> ctx.Delete b
+                | _ -> failwithf "unsupported renderbuffer-type: %A" b
+
+        member x.DeleteFramebuffer(f : IFramebuffer) =
+            match f with
+                | :? Aardvark.Rendering.GL.Framebuffer as b -> ctx.Delete b
+                | _ -> failwithf "unsupported framebuffer-type: %A" f
+
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
+
+        member x.CreateFramebuffer(bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
+            x.CreateFramebuffer bindings :> _
+
+        member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
+            x.CreateTexture(size, format, levels, samples, count) :> _
+
+        member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
+            x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
     member x.CreateTexture (t : ITexture) = ctx.CreateTexture t
     member x.CreateBuffer (b : IBuffer) : Aardvark.Rendering.GL.Buffer = failwith "not implemented"
@@ -228,7 +248,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             let mutable oldFbo = 0
             OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
 
-            match ms.Handle,ss.Handle with
+            match ms.Handle,ss.GetHandle null with
                 | (:? int as rb), (:? int as tex) ->
                         
                         
@@ -272,11 +292,37 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | _ -> failwith "not implemented"
         )
 
+
+    member x.CreateFramebuffer(bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
+
+        let depth = Map.tryFind DefaultSemantic.Depth bindings
+
+        let indexed =
+            bindings
+                |> Map.remove DefaultSemantic.Depth
+                |> Map.toList
+                |> List.sortBy (fun (s,_) -> 
+                    if s = DefaultSemantic.Colors then Int32.MinValue
+                    else s.GetHashCode()
+                   )
+                |> List.mapi (fun i (s,o) -> (i,s,o))
+
+        ctx.CreateFramebuffer(indexed, depth)
+
+    member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
+        match count with
+            | 1 -> ctx.CreateTexture2D(size, levels, format, samples)
+            | _ -> ctx.CreateTexture3D(V3i(size.X, size.Y, count), levels, format, samples)
+
+    member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
+        ctx.CreateRenderbuffer(size, format, samples)
+
+
     member x.CreateFramebuffer(bindings : Map<Symbol, IMod<IFramebufferOutput>>) =
         let fbo = manager.CreateFramebuffer(bindings |> Map.toList)
         new ChangeableFramebuffer(fbo) :> IFramebuffer
 
-    member x.CreateTexture(size : IMod<V2i>, format : IMod<PixFormat>, mipMaps : IMod<int>, samples : IMod<int>) =
+    member x.CreateTexture(size : IMod<V2i>, format : IMod<TextureFormat>, mipMaps : IMod<int>, samples : IMod<int>) =
         let tex = manager.CreateTexture(size, mipMaps, format, samples)
 
         new ChangeableFramebufferTexture(tex) :> IFramebufferTexture
@@ -292,7 +338,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
 
 
-                match ms.Handle,ss.Handle with
+                match ms.Handle,ss.GetHandle null with
                     | (:? int as rb), (:? int as tex) ->
                         
                         let size = ms.Size

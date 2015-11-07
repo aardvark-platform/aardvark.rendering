@@ -18,7 +18,7 @@ module ResourceManager =
         { trackChangedInputs : bool
           dependencies : seq<IAdaptiveObject>; 
           updateCPU : list<IAdaptiveObject> -> unit; 
-          updateGPU : unit -> unit; 
+          updateGPU : unit -> FrameStatistics; 
           destroy : unit -> unit; 
           resource : IMod<'a>;
           kind : ResourceKind }
@@ -28,7 +28,7 @@ module ResourceManager =
         inherit IAdaptiveObject
         abstract member IncrementRefCount : unit -> unit
         abstract member UpdateCPU : IAdaptiveObject -> unit
-        abstract member UpdateGPU : IAdaptiveObject -> unit
+        abstract member UpdateGPU : IAdaptiveObject -> FrameStatistics
         abstract member Resource : obj
         abstract member Kind : ResourceKind
         
@@ -59,7 +59,7 @@ module ResourceManager =
             )
 
         member x.UpdateGPU(caller) = 
-            x.EvaluateIfNeeded (caller) () (fun () ->
+            x.EvaluateIfNeeded (caller) FrameStatistics.Zero (fun () ->
                 Telemetry.timed updateGPUProbe (fun () ->
                     //x.UpdateCPU(caller)
                     desc.updateGPU()
@@ -457,7 +457,9 @@ module ResourceManager =
                     { trackChangedInputs = false
                       dependencies = [data]
                       updateCPU = fun _ -> data.GetValue(self) |> ignore
-                      updateGPU = fun () -> bufferHandler.Update(handle, ArrayBuffer(data.GetValue(self)))
+                      updateGPU = fun () -> 
+                        bufferHandler.Update(handle, ArrayBuffer(data.GetValue(self)))
+                        FrameStatistics.Zero
                       destroy = fun () -> bufferHandler.Delete(handle)
                       resource = handle
                       kind = ResourceKind.Buffer 
@@ -510,6 +512,7 @@ module ResourceManager =
 
                                 if handleMod.Value <> !handle then 
                                     transact (fun () -> handleMod.Value <- !handle)
+                        FrameStatistics.Zero
                       destroy = fun () -> if !created then bufferHandler.Delete(!handle)
                       resource = handleMod |> Mod.bind id
                       kind = ResourceKind.Buffer  }
@@ -544,47 +547,64 @@ module ResourceManager =
             cache.[pixTexture].GetOrAdd(
                 [data],
                 fun self ->
-                    let current = data.GetValue(self)
+                    match data with
+                        | :? RenderingResultMod as res ->
+                            let self = unbox<ChangeableResource<Texture>> self
+                            let handle = Mod.init (res.GetValue self |> unbox<Texture>)
+                            { trackChangedInputs = false
+                              dependencies = [data]
+                              updateCPU = fun _ -> ()
+                              updateGPU = fun () -> 
+                                let t = res.GetValue(self) |> unbox<Texture>
+                                transact (fun () -> Mod.change handle t)
 
-                    let created = ref false
-                    let handle = 
-                        match current with
-                            | :? Texture as t -> ref (Mod.constant t)
-                            | _ -> 
-                                created := true
-                                ref <| textureHandler.Create(current)
+                                res.LastStatistics
+                              destroy = fun () -> ()
+                              resource = handle
+                              kind = ResourceKind.Texture  }  
+                        | _ -> 
+                            let current = data.GetValue(self)
 
-                    let handleMod = Mod.init !handle
+                            let created = ref false
+                            let handle = 
+                                match current with
+                                    | :? Texture as t -> ref (Mod.constant t)
+                                    | _ -> 
+                                        created := true
+                                        ref <| textureHandler.Create(current)
 
-                    let updateTo (t : Texture) =
-                        if !created then
-                            textureHandler.Delete(!handle)
-                            created := false
+                            let handleMod = Mod.init !handle
 
-                        let h = Mod.constant t
-                        handle := h
-                        transact (fun () -> handleMod.Value <- h)
-
-                    { trackChangedInputs = false
-                      dependencies = [data]
-                      updateCPU = fun _ -> data.GetValue(self) |> ignore
-                      updateGPU = fun () -> 
-                        match data.GetValue(self) with
-                            | :? Texture as t -> updateTo t
-                            | :? NullTexture as t -> updateTo Texture.empty
-                            | _ -> 
+                            let updateTo (t : Texture) =
                                 if !created then
-                                    textureHandler.Update(!handle, data.GetValue(self))
-                                else
-                                    created := true
-                                    handle := textureHandler.Create(current)
+                                    textureHandler.Delete(!handle)
+                                    created := false
 
-                                if handleMod.Value <> !handle then 
-                                    transact (fun () -> handleMod.Value <- !handle)
+                                let h = Mod.constant t
+                                handle := h
+                                transact (fun () -> handleMod.Value <- h)
 
-                      destroy = fun () -> if !created then textureHandler.Delete(!handle)
-                      resource = handleMod |> Mod.bind id
-                      kind = ResourceKind.Texture  }            
+                            { trackChangedInputs = false
+                              dependencies = [data]
+                              updateCPU = fun _ -> data.GetValue(self) |> ignore
+                              updateGPU = fun () -> 
+                                match data.GetValue(self) with
+                                    | :? Texture as t -> updateTo t
+                                    | :? NullTexture as t -> updateTo Texture.empty
+                                    | _ -> 
+                                        if !created then
+                                            textureHandler.Update(!handle, data.GetValue(self))
+                                        else
+                                            created := true
+                                            handle := textureHandler.Create(current)
+
+                                        if handleMod.Value <> !handle then 
+                                            transact (fun () -> handleMod.Value <- !handle)
+                                FrameStatistics.Zero
+
+                              destroy = fun () -> if !created then textureHandler.Delete(!handle)
+                              resource = handleMod |> Mod.bind id
+                              kind = ResourceKind.Texture  }            
             )
 
         member x.CreateSurface (s : IMod<ISurface>) =
@@ -597,7 +617,7 @@ module ResourceManager =
                         { trackChangedInputs = false
                           dependencies = [s]
                           updateCPU = ignore
-                          updateGPU = id
+                          updateGPU = fun () -> FrameStatistics.Zero
                           destroy = id
                           resource = s |> Mod.map unbox
                           kind = ResourceKind.ShaderProgram  }    
@@ -615,7 +635,7 @@ module ResourceManager =
                                         | Success p -> Mod.change handle p
                                         | Error e -> Log.warn "could not update surface: %A" e
 
-                                  updateGPU = fun () -> ()
+                                  updateGPU = fun () -> FrameStatistics.Zero
                                   destroy = fun () -> ctx.Delete(p)
                                   resource = handle 
                                   kind = ResourceKind.ShaderProgram }         
@@ -670,7 +690,7 @@ module ResourceManager =
                         view.WriteOperation (fun () ->
                             for w in writers do w.Write(self, view.Data)
                         )
-                      updateGPU = fun () -> ()
+                      updateGPU = fun () -> FrameStatistics.Zero
                       destroy = fun () -> view.Dispose()
                       resource = Mod.constant view
                       kind = ResourceKind.UniformBuffer  }   
@@ -722,7 +742,10 @@ module ResourceManager =
                                     | _ -> ()
                             
 
-                          updateGPU = fun () -> ctx.Upload(b)
+                          updateGPU = fun () -> 
+                            ctx.Upload(b)
+                            FrameStatistics.Zero
+
                           destroy = fun () -> 
                             ctx.Delete(b)
                           resource = Mod.constant b
@@ -734,7 +757,9 @@ module ResourceManager =
                           updateCPU = fun _ ->
                             for w in writers do w.Write(self, b.Data)
                             b.Dirty <- true
-                          updateGPU = fun () -> ctx.Upload(b)
+                          updateGPU = fun () -> 
+                            ctx.Upload(b)
+                            FrameStatistics.Zero
                           destroy = fun () -> 
                             ctx.Delete(b)
                           resource = Mod.constant b
@@ -759,7 +784,7 @@ module ResourceManager =
                             { trackChangedInputs = false
                               dependencies = [v]
                               updateCPU = fun _ -> writer.Write(v, loc.Data)
-                              updateGPU = fun () -> ()
+                              updateGPU = fun () -> FrameStatistics.Zero
                               destroy = fun () -> ()
                               resource = Mod.constant loc
                               kind = ResourceKind.UniformBuffer  }    
@@ -777,7 +802,9 @@ module ResourceManager =
                     { trackChangedInputs = true
                       dependencies = [sam]
                       updateCPU = fun _ -> sam.GetValue(self) |> ignore
-                      updateGPU = fun () -> ctx.Update(handle, sam.GetValue(self))
+                      updateGPU = fun () -> 
+                        ctx.Update(handle, sam.GetValue(self))
+                        FrameStatistics.Zero
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle 
                       kind = ResourceKind.SamplerState }
@@ -794,7 +821,9 @@ module ResourceManager =
                     { trackChangedInputs = true
                       dependencies = (index.Resource :> IAdaptiveObject)::attributes
                       updateCPU = fun _ -> ()
-                      updateGPU = fun () -> ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
+                      updateGPU = fun () -> 
+                        ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
+                        FrameStatistics.Zero
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle 
                       kind = ResourceKind.VertexArrayObject
@@ -812,7 +841,10 @@ module ResourceManager =
                     { trackChangedInputs = true
                       dependencies = attributes
                       updateCPU = fun _ -> ()
-                      updateGPU = fun () -> ctx.Update(handle,bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
+                      updateGPU = fun () -> 
+                        ctx.Update(handle,bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
+                        FrameStatistics.Zero
+
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle
                       kind = ResourceKind.VertexArrayObject 
@@ -824,11 +856,9 @@ module ResourceManager =
                 | Some index -> x.CreateVertexArrayObject(bindings, index)
                 | None -> x.CreateVertexArrayObject(bindings)
 
-        member x.CreateTexture(size : IMod<V2i>, mipLevels : IMod<int>, format : IMod<PixFormat>, samples : IMod<int>) : ChangeableResource<Texture> =
+        member x.CreateTexture(size : IMod<V2i>, mipLevels : IMod<int>, format : IMod<TextureFormat>, samples : IMod<int>) : ChangeableResource<Texture> =
             
-            let textureFormat =
-                Mod.map2 (fun pf mips -> TextureFormat.ofPixFormat pf { TextureParams.empty with wantMipMaps = mips > 1 }) format mipLevels
-            
+            let textureFormat = format
             
             let desc self =
                 let handle = ctx.CreateTexture2D(size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
@@ -836,7 +866,9 @@ module ResourceManager =
                 { trackChangedInputs = true
                   dependencies = [size :> IMod; textureFormat :> IMod; samples :> IMod]
                   updateCPU = fun _ -> ()
-                  updateGPU = fun () -> ctx.UpdateTexture2D(handle, size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
+                  updateGPU = fun () -> 
+                    ctx.UpdateTexture2D(handle, size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
+                    FrameStatistics.Zero
                   destroy = fun () -> ctx.Delete(handle)
                   resource = Mod.constant handle
                   kind = ResourceKind.Texture
@@ -851,7 +883,9 @@ module ResourceManager =
                 { trackChangedInputs = true
                   dependencies = [size :> IMod; format :> IMod; samples :> IMod]
                   updateCPU = fun _ -> ()
-                  updateGPU = fun () -> ctx.Update(handle, size.GetValue(self), format.GetValue(self), samples.GetValue(self))
+                  updateGPU = fun () -> 
+                    ctx.Update(handle, size.GetValue(self), format.GetValue(self), samples.GetValue(self))
+                    FrameStatistics.Zero
                   destroy = fun () -> ctx.Delete(handle)
                   resource = Mod.constant handle 
                   kind = ResourceKind.Renderbuffer
@@ -885,6 +919,7 @@ module ResourceManager =
                   updateGPU = fun () -> 
                     let c,d = toInternal bindings
                     ctx.Update(handle, c, d)
+                    FrameStatistics.Zero
                   destroy = fun () -> ctx.Delete(handle)
                   resource = Mod.constant handle
                   kind = ResourceKind.Framebuffer 

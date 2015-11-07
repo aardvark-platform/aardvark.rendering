@@ -357,7 +357,10 @@ let main argv =
     ) |> ignore
 
     let main = app.Runtime.CompileRender(engine, sg.RenderObjects())// |> DefaultOverlays.withStatistics
-    w.RenderTask <- main
+
+
+    let cached = main
+    w.RenderTask <- cached |> DefaultOverlays.withStatistics//cached |> DefaultOverlays.withStatistics
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero

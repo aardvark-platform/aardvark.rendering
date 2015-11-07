@@ -106,7 +106,7 @@ let main argv =
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 
     let sgs = 
-        ASet.ofList [
+        Sg.group' [
             for x in -4..4 do
                 for y in -4..4 do
                     let trafo = Trafo3d.Translation(2.0 * float x - 0.5, 2.0 * float y - 0.5, 0.0)
@@ -117,19 +117,18 @@ let main argv =
                             |> Sg.texture DefaultSemantic.DiffuseColorTexture tex
         ]
         
-    let test = sgs |> ASet.map id
-    let r = test.GetReader()
-    r.GetDelta() |> List.length |> printfn "got %d deltas"
+//    let test = sgs |> ASet.map id
+//    let r = test.GetReader()
+//    r.GetDelta() |> List.length |> printfn "got %d deltas"
 
 
     let sg = 
-        test
-            |> Sg.set
+        sgs
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
 
-    let main = app.Runtime.CompileRender(BackendConfiguration.NativeOptimized, sg) |> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(BackendConfiguration.NativeOptimized, sg) // |> DefaultOverlays.withStatistics
 
     let r = Random()
     win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () ->

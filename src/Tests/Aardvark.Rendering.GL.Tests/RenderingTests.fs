@@ -252,7 +252,7 @@ module RenderingTests =
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
-        let color = runtime.CreateTexture(~~size, ~~PixFormat.ByteBGRA, ~~1, ~~1)
+        let color = runtime.CreateTexture(~~size, ~~TextureFormat.Rgba8, ~~1, ~~1)
         let depth = runtime.CreateRenderbuffer(~~size, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
 
 
@@ -345,7 +345,7 @@ module RenderingTests =
         let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
         let task = runtime.CompileRender sg
 
-        let color = runtime.CreateTexture(~~screen, ~~PixFormat.ByteBGRA, ~~1, ~~1)
+        let color = runtime.CreateTexture(~~screen, ~~TextureFormat.Rgba8, ~~1, ~~1)
         let depth = runtime.CreateRenderbuffer(~~screen, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
 
         let fbo = 

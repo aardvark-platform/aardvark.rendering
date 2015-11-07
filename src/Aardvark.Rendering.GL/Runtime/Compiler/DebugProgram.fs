@@ -32,7 +32,7 @@ type DebugProgram(parent : IRenderTask,
         for r in allResources do
             if r.OutOfDate then
                 r.UpdateCPU(parent)
-                r.UpdateGPU(parent)
+                stats <- stats + r.UpdateGPU(parent)
 
         for rj in renderObjects do
             let prep, own =

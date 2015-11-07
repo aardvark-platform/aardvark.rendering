@@ -150,13 +150,13 @@ module RenderTask =
 
             member x.FrameId = frameId
 
-    type private CustomRenderTask(f : afun<IFramebuffer, RenderingResult>) as this =
+    type private CustomRenderTask(f : afun<IRenderTask * IFramebuffer, RenderingResult>) as this =
         inherit AdaptiveObject()
         do f.AddOutput this
         interface IRenderTask with
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
-                    f.Evaluate (x,fbo)
+                    f.Evaluate (x,(x :> IRenderTask,fbo))
                 )
 
             member x.Dispose() =
@@ -170,10 +170,10 @@ module RenderTask =
 
     let empty = new EmptyRenderTask() :> IRenderTask
 
-    let ofAFun (f : afun<IFramebuffer, RenderingResult>) =
+    let ofAFun (f : afun<IRenderTask * IFramebuffer, RenderingResult>) =
         new CustomRenderTask(f) :> IRenderTask
 
-    let custom (f : IFramebuffer -> RenderingResult) =
+    let custom (f : IRenderTask * IFramebuffer -> RenderingResult) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
 
@@ -205,86 +205,176 @@ module RenderTask =
         t |> mapResult (fun r -> RenderingResult(r.Framebuffer, f r.Statistics))
 
 
-    // rendering to textures
 
-    let renderTo (target : IFramebuffer) (task : IRenderTask) =
-        let runtime = task.Runtime.Value
-        [task :> IAdaptiveObject] 
-            |> Mod.mapCustom(fun s ->
-                task.Run(s, target) |> ignore
-                target
-            )
+    let private createTexture (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) =
+        let mutable current = None
 
-    let renderToColorMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+        Mod.custom (fun self ->
+            let samples = samples.GetValue self
+            let size = size.GetValue self
+            let format = format.GetValue self
+
+            match current with
+                | Some (samples', size', format', c : IBackendTexture) -> 
+                    if samples = samples' && size = size' && format = format' then
+                        c
+                    else
+                        runtime.DeleteTexture c
+                        let n = runtime.CreateTexture(size, format, 1, samples, 1)
+                        current <- Some (samples, size, format, n)
+                        n
+                | None ->
+                    let n = runtime.CreateTexture(size, format, 1, samples, 1)
+                    current <- Some (samples, size, format, n)
+                    n
+        )
+
+    let private createRenderbuffer (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<RenderbufferFormat>) =
+        let mutable current = None
+
+        Mod.custom (fun self ->
+            let samples = samples.GetValue self
+            let size = size.GetValue self
+            let format = format.GetValue self
+
+            match current with
+                | Some (samples', size', format', c : IRenderbuffer) -> 
+                    if samples = samples' && size = size' && format = format' then
+                        c
+                    else
+                        runtime.DeleteRenderbuffer c
+                        let n = runtime.CreateRenderbuffer(size, format, samples)
+                        current <- Some (samples, size, format, n)
+                        n
+                | None ->
+                    let n = runtime.CreateRenderbuffer(size, format, samples)
+                    current <- Some (samples, size, format, n)
+                    n
+        )
+
+
+    let private createFramebuffer (runtime : IRuntime) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) =
+        
+        let mutable current = None
+
+        Mod.custom (fun self ->
+            let color = 
+                match color with
+                    | Some c -> Some (c.GetValue self)
+                    | None -> None
+
+            let depth =
+                match depth with
+                    | Some d -> Some (d.GetValue self)
+                    | None -> None
+
+            let create (color : Option<#IFramebufferOutput>) (depth : Option<#IFramebufferOutput>) =
+                match color, depth with
+                    | Some c, Some d -> 
+                        runtime.CreateFramebuffer(
+                            Map.ofList [
+                                DefaultSemantic.Colors, c :> IFramebufferOutput
+                                DefaultSemantic.Depth, d :> IFramebufferOutput
+                            ]
+                        )
+                    | Some c, None ->
+                        runtime.CreateFramebuffer(
+                            Map.ofList [
+                                DefaultSemantic.Colors, c :> IFramebufferOutput
+                            ]
+                        )
+                    | None, Some d ->
+                        runtime.CreateFramebuffer(
+                            Map.ofList [
+                                DefaultSemantic.Depth, d :> IFramebufferOutput
+                            ]
+                        ) 
+                    | None, None -> failwith "empty framebuffer"
+                            
+            match current with
+                | Some (c,d,f) ->
+                    if c = color && d = depth then
+                        f
+                    else
+                        runtime.DeleteFramebuffer f
+                        let n = create color depth
+                        current <- Some (color, depth, n)
+                        n
+                | None -> 
+                    let n = create color depth
+                    current <- Some (color, depth, n)
+                    n
+        )
+
+    let private defaultView (m : IMod<IBackendTexture>) =
+        m |> Mod.map (fun t ->
+            { backendTexture = t; level = 0; slice = 0 }
+        )
+
+
+    let private getResult (sem : Symbol) (t : RenderToFramebufferMod) =
+        RenderingResultMod(t, sem) :> IMod<_>
+
+    let renderTo (target : IMod<IFramebuffer>) (task : IRenderTask) : RenderToFramebufferMod =
+        RenderToFramebufferMod(task, target)
+
+    let renderToColorMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
 
         //use lock = runtime.ContextLock
-        let color = runtime.CreateTexture(size, format, samples, ~~1)
-        let depth = runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
+        let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
+        let depth = createRenderbuffer runtime samples size ~~RenderbufferFormat.Depth24Stencil8 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
         let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
 
-        let fbo = 
-            runtime.CreateFramebuffer(
-                Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; level = 0; slice = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
-                ]
-            )
-
+        let fbo = createFramebuffer runtime (Some <| defaultView color) (Some depth)
 
         new SequentialRenderTask([|clear; task|]) 
             |> renderTo fbo
-            |> Mod.map (fun _ -> color :> ITexture)
+            |> getResult DefaultSemantic.Colors
+
 
     let renderToDepthMS (samples : IMod<int>) (size : IMod<V2i>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
 
         //use lock = runtime.ContextLock
-        let depth = runtime.CreateTexture(size, ~~PixFormat.FloatGray, samples, ~~1)
+        let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32
         let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
 
-        let fbo = 
-            runtime.CreateFramebuffer(
-                Map.ofList [
-                    DefaultSemantic.Depth, ~~({ texture = depth; level = 0; slice = 0 } :> IFramebufferOutput)
-                ]
-            )
+        let fbo = createFramebuffer runtime None (Some <| defaultView depth)
 
 
+ 
         new SequentialRenderTask([|clear; task|]) 
             |> renderTo fbo
-            |> Mod.map (fun _ -> depth :> ITexture)
+            |> getResult DefaultSemantic.Depth
 
-    let renderToColorAndDepthMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+
+    let renderToColorAndDepthMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
 
         //use lock = runtime.ContextLock
-        let color = runtime.CreateTexture(size, format, samples, ~~1)
-        let depth = runtime.CreateTexture(size, ~~PixFormat.FloatGray, samples, ~~1)
+        let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
+        let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
         let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
 
-        let fbo = 
-            runtime.CreateFramebuffer(
-                Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; level = 0; slice = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~({ texture = depth; level = 0; slice = 0 } :> IFramebufferOutput)
-                ]
-            )
+        let fbo = createFramebuffer runtime (Some <| defaultView color) (Some <| defaultView depth)
 
-        let result = 
+        let renderResult = 
             new SequentialRenderTask([|clear; task|]) 
                 |> renderTo fbo
 
-        (Mod.map (fun _ -> color :> ITexture) result, Mod.map (fun _ -> depth :> ITexture) result)
+        let colorTexture = renderResult |> getResult DefaultSemantic.Colors
+        let depthTexture = renderResult |> getResult DefaultSemantic.Depth
 
+        colorTexture, depthTexture
 
-    let inline renderToColor (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+    let inline renderToColor (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         renderToColorMS ~~1 size format task
 
     let inline renderToDepth (size : IMod<V2i>) (task : IRenderTask) =
         renderToDepthMS ~~1 size task
 
-    let inline renderToColorAndDepth (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+    let inline renderToColorAndDepth (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         renderToColorAndDepthMS ~~1 size format task
 
 [<AutoOpen>]

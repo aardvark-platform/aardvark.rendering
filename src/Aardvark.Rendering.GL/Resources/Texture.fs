@@ -37,6 +37,9 @@ type Texture =
         interface IBackendTexture with
             member x.WantMipMaps = x.MipMapLevels > 1
             member x.Handle = x.Handle :> obj
+            member x.Size = x.Size.XY
+            member x.Format = x.Format
+            member x.Samples = x.Multisamples
 
         member x.GetSize (level : int)  =
             if level = 0 then x.Size2D
@@ -138,44 +141,43 @@ module TextureExtensions =
             Col.Format.NormalUV, PixelFormat.Rg
         ]
 
-    let private toSizedInternalFormat =
-        let tryGet = 
-            lookupTable [
-                TextureFormat.R16, SizedInternalFormat.R16
-                TextureFormat.R16f, SizedInternalFormat.R16f
-                TextureFormat.R16i, SizedInternalFormat.R16i
-                TextureFormat.R16ui, SizedInternalFormat.R16ui
-                TextureFormat.R32f, SizedInternalFormat.R32f
-                TextureFormat.R32i, SizedInternalFormat.R32i
-                TextureFormat.R32ui, SizedInternalFormat.R32ui
-                TextureFormat.R8, SizedInternalFormat.R8
-                TextureFormat.R8i, SizedInternalFormat.R8i
-                TextureFormat.R8ui, SizedInternalFormat.R8ui
-                TextureFormat.Rg16, SizedInternalFormat.Rg16
-                TextureFormat.Rg16i, SizedInternalFormat.Rg16i
-                TextureFormat.Rg16ui, SizedInternalFormat.Rg16ui
-                TextureFormat.Rg32f, SizedInternalFormat.Rg32f
-                TextureFormat.Rg32i, SizedInternalFormat.Rg32i
-                TextureFormat.Rg32ui, SizedInternalFormat.Rg32ui
-                TextureFormat.Rg8, SizedInternalFormat.Rg8
-                TextureFormat.Rg8i, SizedInternalFormat.Rg8i
-                TextureFormat.Rg8ui, SizedInternalFormat.Rg8ui
-                TextureFormat.Rgba16, SizedInternalFormat.Rgba16
-                TextureFormat.Rgba16f, SizedInternalFormat.Rgba16f
-                TextureFormat.Rgba16i, SizedInternalFormat.Rgba16i
-                TextureFormat.Rgba16ui, SizedInternalFormat.Rgba16ui
-                TextureFormat.Rgba32f, SizedInternalFormat.Rgba32f
-                TextureFormat.Rgba32i, SizedInternalFormat.Rgba32i
-                TextureFormat.Rgba32ui, SizedInternalFormat.Rgba32ui
-                TextureFormat.Rgba8, SizedInternalFormat.Rgba8
-                TextureFormat.Rgba8i, SizedInternalFormat.Rgba8i
-                TextureFormat.Rgba8ui, SizedInternalFormat.Rgba8ui
-            ]
+    let private tryGetSizedInternalFormat = 
+        lookupTable [
+            TextureFormat.R16, SizedInternalFormat.R16
+            TextureFormat.R16f, SizedInternalFormat.R16f
+            TextureFormat.R16i, SizedInternalFormat.R16i
+            TextureFormat.R16ui, SizedInternalFormat.R16ui
+            TextureFormat.R32f, SizedInternalFormat.R32f
+            TextureFormat.R32i, SizedInternalFormat.R32i
+            TextureFormat.R32ui, SizedInternalFormat.R32ui
+            TextureFormat.R8, SizedInternalFormat.R8
+            TextureFormat.R8i, SizedInternalFormat.R8i
+            TextureFormat.R8ui, SizedInternalFormat.R8ui
+            TextureFormat.Rg16, SizedInternalFormat.Rg16
+            TextureFormat.Rg16i, SizedInternalFormat.Rg16i
+            TextureFormat.Rg16ui, SizedInternalFormat.Rg16ui
+            TextureFormat.Rg32f, SizedInternalFormat.Rg32f
+            TextureFormat.Rg32i, SizedInternalFormat.Rg32i
+            TextureFormat.Rg32ui, SizedInternalFormat.Rg32ui
+            TextureFormat.Rg8, SizedInternalFormat.Rg8
+            TextureFormat.Rg8i, SizedInternalFormat.Rg8i
+            TextureFormat.Rg8ui, SizedInternalFormat.Rg8ui
+            TextureFormat.Rgba16, SizedInternalFormat.Rgba16
+            TextureFormat.Rgba16f, SizedInternalFormat.Rgba16f
+            TextureFormat.Rgba16i, SizedInternalFormat.Rgba16i
+            TextureFormat.Rgba16ui, SizedInternalFormat.Rgba16ui
+            TextureFormat.Rgba32f, SizedInternalFormat.Rgba32f
+            TextureFormat.Rgba32i, SizedInternalFormat.Rgba32i
+            TextureFormat.Rgba32ui, SizedInternalFormat.Rgba32ui
+            TextureFormat.Rgba8, SizedInternalFormat.Rgba8
+            TextureFormat.Rgba8i, SizedInternalFormat.Rgba8i
+            TextureFormat.Rgba8ui, SizedInternalFormat.Rgba8ui
+        ]
 
-        fun i ->
-            match tryGet i with
-                | Some v -> v
-                | _ -> failwithf "cannot get SizedInternalFormat for: %A" i
+    let private toSizedInternalFormat (fmt : TextureFormat) =
+        match tryGetSizedInternalFormat fmt with
+            | Some v -> v
+            | _ -> failwithf "cannot get SizedInternalFormat for: %A" fmt
 
 
     [<AutoOpen>]
@@ -507,10 +509,11 @@ module TextureExtensions =
                 GL.BindTexture(TextureTarget.Texture1D, tex.Handle)
                 GL.Check "could not bind texture"
 
-
-                let ifmt = toSizedInternalFormat t
-                GL.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, ifmt, size)
-
+                match tryGetSizedInternalFormat t with
+                    | Some ifmt -> 
+                        GL.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, ifmt, size)
+                    | _ ->
+                        GL.TexImage1D(TextureTarget.Texture1D, 0, unbox t, size, 0, PixelFormat.Red, PixelType.Byte, 0n)
 
                 GL.Check "could allocate texture"
 
@@ -528,12 +531,22 @@ module TextureExtensions =
                 GL.BindTexture(TextureTarget.Texture2D, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let ifmt = toSizedInternalFormat t
-                if samples = 1 then
-                    GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, ifmt, size.X, size.Y)
-                else
-                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, ifmt, size.X, size.Y, false)
+                match tryGetSizedInternalFormat t with
+                    | Some ifmt ->
+                        if samples = 1 then
+                            GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, ifmt, size.X, size.Y)
+                        else
+                            if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                            GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, ifmt, size.X, size.Y, false)
+                
+                    | None ->
+                        if samples = 1 then
+                            GL.TexImage2D(TextureTarget.Texture2D, 0, unbox t, size.X, size.Y, 0, PixelFormat.DepthComponent, PixelType.Byte, 0n)
+                        else
+                            GL.TexImage2DMultisample(TextureTargetMultisample.Texture2DMultisample, samples, unbox t, size.X, size.Y, false)
+                
+                        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.DepthTextureMode, int All.Intensity)
+         
                 GL.Check "could allocate texture"
 
                 GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, mipMapLevels)

@@ -1,6 +1,8 @@
 ﻿namespace Aardvark.Base
 
+
 open System
+open Aardvark.Base.Incremental
 
 type TextureDimension =
     | Texture1D = 1
@@ -15,7 +17,8 @@ type IFramebufferOutput =
 type IFramebufferTexture =
     inherit IDisposable
     inherit ITexture
-    abstract member Handle : obj
+    abstract member GetBackendTexture : IAdaptiveObject -> ITexture
+    abstract member GetHandle : IAdaptiveObject -> obj
     abstract member Samples : int
     abstract member Dimension : TextureDimension
     abstract member ArraySize : int
@@ -26,7 +29,7 @@ type IFramebufferTexture =
 type IFramebuffer =
     inherit IDisposable
     abstract member Size : V2i
-    abstract member Handle : obj
+    abstract member GetHandle : IAdaptiveObject -> obj
     abstract member Attachments : Map<Symbol, IFramebufferOutput>
 
 type TextureOutputView = { texture : IFramebufferTexture; level : int; slice : int } with
@@ -302,6 +305,10 @@ module TextureFormat =
             PixFormat.ByteRGB  ,  rgb
             PixFormat.ByteRGBA , rgba
             PixFormat.ByteRGBP , rgba
+
+            PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
+                 
+
         ]
         
     let toDownloadFormat =
@@ -318,3 +325,4 @@ type IFramebufferRenderbuffer =
     inherit IFramebufferOutput
     abstract member Handle : obj
     
+

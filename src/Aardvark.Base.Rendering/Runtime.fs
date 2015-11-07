@@ -18,6 +18,9 @@ type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
 
 type IBackendTexture =
     inherit ITexture
+    abstract member Samples : int
+    abstract member Size : V2i
+    abstract member Format : TextureFormat
     abstract member Handle : obj
 
 type IBackendBuffer =
@@ -28,6 +31,19 @@ type IBackendSurface =
     inherit ISurface
     abstract member Handle : obj
 
+type BackendTextureOutputView = { backendTexture : IBackendTexture; level : int; slice : int } with
+    interface IFramebufferOutput with
+        member x.Samples = x.backendTexture.Samples
+        member x.Size = x.backendTexture.Size
+
+
+
+
+
+type IRenderbuffer =
+    inherit IFramebufferOutput
+    abstract member Format : RenderbufferFormat
+    abstract member Handle : obj
 
 type IPreparedRenderObject =
     inherit IRenderObject
@@ -47,8 +63,10 @@ type IRuntime =
     abstract member PrepareRenderObject : IRenderObject -> IPreparedRenderObject
     
     abstract member DeleteTexture : IBackendTexture -> unit
+    abstract member DeleteRenderbuffer : IRenderbuffer -> unit
     abstract member DeleteBuffer : IBackendBuffer -> unit
     abstract member DeleteSurface : IBackendSurface -> unit
+    abstract member DeleteFramebuffer : IFramebuffer -> unit
 
     abstract member CreateTexture : IMod<ITexture> -> IMod<ITexture>
     abstract member CreateBuffer : IMod<IBuffer> -> IMod<IBuffer>
@@ -63,8 +81,18 @@ type IRuntime =
     abstract member CompileRender : BackendConfiguration * aset<IRenderObject> -> IRenderTask
 
 
-    abstract member CreateTexture : size : IMod<V2i> * format : IMod<PixFormat> * samples : IMod<int> * count : IMod<int> -> IFramebufferTexture
+
+    abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
+    abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
+    abstract member CreateFramebuffer : attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
+
+    [<Obsolete("use non-adaptive overload instead")>]
+    abstract member CreateTexture : size : IMod<V2i> * format : IMod<TextureFormat> * samples : IMod<int> * count : IMod<int> -> IFramebufferTexture
+    
+    [<Obsolete("use non-adaptive overload instead")>]
     abstract member CreateRenderbuffer : size : IMod<V2i> * format : IMod<RenderbufferFormat> * samples : IMod<int> -> IFramebufferRenderbuffer
+    
+    [<Obsolete("use non-adaptive overload instead")>]
     abstract member CreateFramebuffer : attachments : Map<Symbol, IMod<IFramebufferOutput>> -> IFramebuffer
 
     abstract member ResolveMultisamples : ms : IFramebufferRenderbuffer * ss : IFramebufferTexture * trafo : ImageTrafo -> unit
@@ -109,6 +137,50 @@ type IGeneratedSurface =
     inherit ISurface
 
     abstract member Generate : IRuntime -> BackendSurface
+
+
+type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<IFramebuffer>) =
+    inherit Mod.AbstractMod<RenderingResult>()
+
+    member x.Task = task
+    member x.Framebuffer = fbo
+
+    override x.Inputs =
+        seq {
+            yield task :> _
+            yield fbo :> _
+        }
+
+    override x.Compute() =
+        let handle = fbo.GetValue x
+        task.Run(x, handle)
+
+type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
+    inherit Mod.AbstractMod<ITexture>()
+    let mutable lastStats = FrameStatistics.Zero
+
+    member x.LastStatistics = lastStats
+    member x.Task = res.Task
+    member x.Framebuffer = res.Framebuffer
+    member x.Semantic = semantic
+    member x.Inner = res
+
+    override x.Inputs = Seq.singleton (res :> _)
+
+    override x.Compute() =
+        let res = res.GetValue x
+        lastStats <- res.Statistics
+        match Map.tryFind semantic res.Framebuffer.Attachments with
+            | Some o ->
+                match o with
+                    | :? BackendTextureOutputView as o ->
+                        o.backendTexture :> ITexture
+                    | _ ->
+                        failwithf "unexpected output: %A" o
+            | None ->
+                failwithf "could not get output: %A" semantic
+
+
 
 
 [<AutoOpen>]

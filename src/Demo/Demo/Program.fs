@@ -596,7 +596,7 @@ let testGpuThroughput () =
     let size = ~~V2i(10000,5000)
     let color = runtime.CreateRenderbuffer(size,Mod.constant RenderbufferFormat.R8, ~~1)
     let outputView = color :> IFramebufferOutput
-    let color = runtime.CreateTexture(size,~~PixFormat.ByteBGRA,~~1,~~1)
+    let color = runtime.CreateTexture(size,~~TextureFormat.Rgba8,~~1,~~1)
     let outputView = { texture = color; level = 0; slice = 0 } :> IFramebufferOutput
 
     let fbo = runtime.CreateFramebuffer([(DefaultSemantic.Colors,~~outputView)] |> Map.ofList)
@@ -664,7 +664,7 @@ let main args =
     
     //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
-    let modelPath =  @"E:\Development\VulkanSharp\bin\Release\Sponza_bunt\sponza_cm.obj"
+    let modelPath =  @"E:\Development\WorkDirectory\Sponza bunt\sponza_cm.obj"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
@@ -808,7 +808,7 @@ let main args =
 //       task.Run fbo |> ignore
 //    )   
  
-    let engine = Mod.init BackendConfiguration.UnmanagedOptimized
+    let engine = Mod.init BackendConfiguration.NativeOptimized
     let engines = 
         ref [
             BackendConfiguration.UnmanagedOptimized
@@ -839,6 +839,8 @@ let main args =
 
 
     let task = app.Runtime.CompileRender(engine.GetValue(), sg)
+
+    let task = RenderTask.cache task
 
     ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
 
