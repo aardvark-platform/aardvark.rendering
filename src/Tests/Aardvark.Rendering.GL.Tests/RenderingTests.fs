@@ -10,6 +10,7 @@ open Aardvark.SceneGraph
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Application
 open System.Diagnostics
+open Aardvark.SceneGraph.Semantics
 
 module Vector =
 
@@ -395,6 +396,98 @@ module RenderingTests =
         Log.line "total:        %.2ffps" (1.0 / updateAndRenderTime)
         Log.line "rendering:    %.2ffps" (1.0 / pureRenderTime)
         Log.line "updates:      %.2ffps" (1.0 / updateTime)
+
+        let rep = Telemetry.resetAndGetReport()
+        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
+
+        ()
+
+    [<Test>]
+    let ``[GL] compile performance``() =
+        let leaf = quad |> Sg.ofIndexedGeometry
+        let screen = V2i(2048, 2048)
+
+        let grid (size : V2i) (inner : ISg) =
+            Sg.group' [
+                for x in -size.X/2..size.X/2 do
+                    for y in -size.Y/2..size.Y/2 do
+                        yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
+            ]
+
+
+        let rec buildGrid (depth : int) =
+            if depth <= 0 then 
+                leaf |> Sg.trafo (~~Trafo3d.Scale(0.5))  
+            else 
+                depth - 1 
+                    |> buildGrid 
+                    |> grid (5 * V2i.II)
+                    |> Sg.trafo (~~Trafo3d.Scale(0.125))
+
+
+        let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
+        let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
+
+        let rootTrafo = Mod.init Trafo3d.Identity
+
+        let sg =
+            buildGrid 3
+                |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
+                |> Sg.trafo rootTrafo
+                |> Sg.viewTrafo ~~(cam |> CameraView.viewTrafo)
+                |> Sg.projTrafo ~~(frustum |> Frustum.toTrafo)
+
+        use runtime = new Runtime()
+        use ctx = new Context(runtime)
+        runtime.Context <- ctx
+
+        using ctx.ResourceLock (fun _ -> 
+            Log.line "vendor:   %s" runtime.Context.Driver.vendor
+            Log.line "renderer: %s" runtime.Context.Driver.renderer
+        )
+
+        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let renderJobs = sg.RenderObjects()
+        let task = runtime.CompileRender renderJobs
+        let task2 = runtime.CompileRender renderJobs
+
+        let color = runtime.CreateTexture(~~screen, ~~TextureFormat.Rgba8, ~~1, ~~1)
+        let depth = runtime.CreateRenderbuffer(~~screen, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
+
+        let fbo = 
+            runtime.CreateFramebuffer(
+                Map.ofList [
+                    DefaultSemantic.Colors, ~~({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                ]
+            )
+
+        clear.Run fbo |> ignore
+        let stats = task.Run fbo
+        task2.Run fbo |> ignore
+        Log.line "%.0f objects" stats.Statistics.DrawCallCount
+
+        let pi = color.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
+        pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
+
+
+
+        Telemetry.reset()
+        Log.line "starting update test"
+        let mutable iterations = 0
+        let sw = Stopwatch()
+        sw.Start()
+        while sw.Elapsed.TotalSeconds < 20.0 do
+            let t = runtime.CompileRender renderJobs
+            clear.Run fbo |> ignore
+            t.Run fbo |> ignore
+            iterations <- iterations + 1
+            t.Dispose()
+        sw.Stop()
+
+        let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
+            
+        Log.line "total:        %.2ffps" (1.0 / updateAndRenderTime)
 
         let rep = Telemetry.resetAndGetReport()
         Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
