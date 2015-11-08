@@ -449,26 +449,29 @@ module RenderingTests =
         let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
         let renderJobs = sg.RenderObjects()
         let task = runtime.CompileRender renderJobs
-        let task2 = runtime.CompileRender renderJobs
+        //let task2 = runtime.CompileRender renderJobs
 
-        let color = runtime.CreateTexture(~~screen, ~~TextureFormat.Rgba8, ~~1, ~~1)
-        let depth = runtime.CreateRenderbuffer(~~screen, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
+        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
 
         let fbo = 
             runtime.CreateFramebuffer(
                 Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                    DefaultSemantic.Colors, ({ backendTexture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
 
         clear.Run fbo |> ignore
+        OpenTK.Graphics.OpenGL4.GL.Sync()
         let stats = task.Run fbo
-        task2.Run fbo |> ignore
+        OpenTK.Graphics.OpenGL4.GL.Sync()
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
-
-        let pi = color.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
+        let pi = ctx.Download((color |> unbox<Texture>), PixFormat.ByteRGBA, 0).[0] //.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
         pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+        //task2.Run fbo |> ignore
+        //OpenTK.Graphics.OpenGL4.GL.Sync()
 
 
 

@@ -201,6 +201,171 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
     new(precompiled : 'f, ctx : CompileContext<'f>) = new OptimizedRenderObjectFragment<'f>(Some precompiled, PreparedRenderObject.Empty, ctx)
 
 
+open System.Runtime.InteropServices
+
+[<AllowNullLiteral>]
+type private Linked<'a> =
+    class
+        val mutable public Prev : Linked<'a>
+        val mutable public Next : Linked<'a>
+        val mutable public Value : 'a
+
+        new(v) = { Prev = null; Next = null; Value = v }
+        new(v, p, n) = { Prev = p; Next = n; Value = v }
+    end
+
+type private StateBucket<'k, 'v>() =
+    let set = Dict<'k, Linked<'k * 'v>>()
+    let mutable first = null
+    let mutable last = null
+
+    member x.Count = set.Count
+    member x.Last = last
+    member x.First = first
+
+    member x.Set(key : 'k, value : 'v) =
+        set.[key].Value <- (key, value)
+
+    member x.TryGetValue(key : 'k, [<Out>] value : byref<Linked<'k * 'v>>) =
+        set.TryGetValue(key, &value)
+
+    member x.Contains (v : 'k) =
+        set.ContainsKey v
+
+    member x.Add (k : 'k, v : 'v) =
+        let mutable isNew = false
+        let node = 
+            set.GetOrCreate(k, fun k ->
+                let l = Linked((k,v), last, null)
+                isNew <- true
+                l
+            )
+
+        if isNew then
+            if not (isNull last) then last.Next <- node
+            last <- node
+            true
+        else
+            false
+
+    member x.Remove(v : 'k) =
+        match set.TryRemove v with
+            | (true, node) ->
+                
+                if isNull node.Prev then first <- node.Next
+                else node.Prev.Next <- node.Next
+
+                if isNull node.Next then last <- node.Prev
+                else node.Next.Prev <- node.Prev
+
+                true
+            | _ ->
+                false
+        
+
+type private StateTrie<'k, 'v>(cmp : IComparer<'k>) =
+    let set = SortedSetExt<'k * StateBucket<'k, 'v>>({ new IComparer<'k * StateBucket<'k, 'v>> with member x.Compare((l,_),(r,_)) = cmp.Compare(l,r) })
+
+    member x.Clear() =
+        set.Clear()
+
+    member x.AlterWithNeighbours (ro : 'k, f : Option<'k * 'v> -> Option<'v> -> Option<'k * 'v> -> Option<'v>) =
+        let key = (ro, Unchecked.defaultof<_>)
+        let mutable lower = Optional<'k * StateBucket<'k, 'v>>.None
+        let mutable upper = Optional<'k * StateBucket<'k, 'v>>.None
+        let mutable self = Optional<'k * StateBucket<'k, 'v>>.None
+        set.FindNeighbours(key, &lower, &self, &upper)
+
+        let left =
+            if lower.HasValue then 
+                let (k,b) = lower.Value
+                Some b.Last.Value
+            else
+                None
+
+        let right =
+            if upper.HasValue then
+                let (k,b) = upper.Value
+                Some b.First.Value
+            else
+                None
+
+
+        if self.HasValue then
+            let (_, self) = self.Value
+            
+            match self.TryGetValue ro with
+                | (true, node) ->
+
+                    let left =
+                        if isNull node.Prev then left
+                        else Some node.Prev.Value
+                    
+                    let right =
+                        if isNull node.Next then right
+                        else Some node.Next.Value
+
+                    let r = f left (Some (snd node.Value)) right
+                    match r with
+                        | Some r ->
+                            node.Value <- (ro, r)
+                            Some r
+                        | None ->
+                            self.Remove ro |> ignore
+                            if self.Count = 0 then 
+                                set.Remove(ro, self) |> ignore
+                            
+                            None
+                           
+                | _ ->
+                    let left =
+                        if self.Count = 0 then left
+                        else Some self.Last.Value
+                    
+                    let r = f left None right
+                    match r with
+                        | Some r ->
+                            self.Add(ro, r) |> ignore
+                            Some r
+                        | None ->
+                            self.Remove ro |> ignore
+                            if self.Count = 0 then 
+                                set.Remove(ro, self) |> ignore
+                            
+                            None    
+        else
+
+            let r = f left None right
+            match r with
+                | Some r ->
+                    let self = StateBucket<'k, 'v>()
+                    self.Add(ro, r) |> ignore
+                    set.Add(ro, self) |> ignore
+                    Some r
+                | None ->
+                    None
+
+    member x.Remove(ro : 'k) =
+        let k = (ro, Unchecked.defaultof<_>)
+        let v = set.GetViewBetween(k,k)
+
+        if v.Count = 0 then
+            false
+        else
+            let (_,self) = v |> Seq.head
+
+            if self.Remove ro then
+                if self.Count = 0 then
+                    set.Remove(ro, self) |> ignore
+
+                true
+            else
+                false
+
+
+
+
+
 type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     (parent : IRenderTask, config : BackendConfiguration, newHandler : unit -> IFragmentHandler<'f>, manager : ResourceManager, inputSet : InputSet) =
     
@@ -213,6 +378,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; inputSet = inputSet }
 
     let sortedFragments = SortedDictionaryExt<IRenderObject, OptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
+    //let sortedFragments = StateTrie<IRenderObject, OptimizedRenderObjectFragment<'f>>({ new IComparer<IRenderObject> with member x.Compare(l,r) = sorter.Compare(l,r) })
     let fragments = Dict<IRenderObject, OptimizedRenderObjectFragment<'f>>()
     let preparedRenderObjects = Dict<RenderObject,PreparedRenderObject>()
 
@@ -250,6 +416,23 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         // create a new RenderObjectFragment and link it
         let fragment = 
+//            sortedFragments.AlterWithNeighbours(rj, fun l s r ->
+//                match s with
+//                    | Some f ->
+//                        failwithf "duplicated renderobject: %A" f.RenderObject
+//                    | None ->
+//                        let l = match l with | Some (_,l) -> l | None -> prolog
+//                        let r = match r with | Some (_,r) -> r | None -> epilog
+//
+//                        let f = new OptimizedRenderObjectFragment<'f>(prep, ctx)
+//                        f.Prev <- l
+//                        l.Next <- f
+//
+//                        f.Next <- r
+//                        r.Prev <- f
+//
+//                        Some f
+//            )
             sortedFragments |> SortedDictionary.setWithNeighbours rj (fun l s r -> 
                 match s with
                     | Some f ->
@@ -268,6 +451,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                         f
             ) 
 
+        //let fragment = fragment.Value
         fragments.[rj] <- fragment
         
         handler.Hint(AddRenderObject 1)
@@ -287,7 +471,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         match fragments.TryRemove rj with
             | (true, f) ->
                 
-                sortedFragments |> SortedDictionary.remove rj |> ignore
+                sortedFragments.Remove rj |> ignore // |> SortedDictionary.remove rj |> ignore
 
                 // detach the fragment
                 f.Prev.Next <- f.Next

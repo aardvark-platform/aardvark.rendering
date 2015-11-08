@@ -835,14 +835,23 @@ let main args =
         ()
     ) |> ignore
 
-    let sg = sg |> Sg.loadAsync
+    //let sg = sg |> Sg.loadAsync
 
 
     let task = app.Runtime.CompileRender(engine.GetValue(), sg)
 
     let task = RenderTask.cache task
 
-    ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
+    let second =
+        quadSg
+            |> Sg.trafo (Mod.constant (Trafo3d.Translation(0.0,0.0,0.25)))
+            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect]
+            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
+            |> Sg.projTrafo proj.ProjectionTrafos.Mod
+
+    let secTask = app.Runtime.CompileRender second
+
+    ctrl.RenderTask <- RenderTask.ofList [task; secTask] |> DefaultOverlays.withStatistics
 
 
 //    w.Run()
