@@ -476,18 +476,21 @@ module RenderingTests =
         Log.line "starting update test"
         let mutable iterations = 0
         let sw = Stopwatch()
+        let disp = System.Collections.Generic.List()
         sw.Start()
         while sw.Elapsed.TotalSeconds < 20.0 do
             let t = runtime.CompileRender renderJobs
             clear.Run fbo |> ignore
             t.Run fbo |> ignore
             iterations <- iterations + 1
-            t.Dispose()
+            disp.Add t
         sw.Stop()
 
+        for t in disp do
+            t.Dispose()
         let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
             
-        Log.line "total:        %.2ffps" (1.0 / updateAndRenderTime)
+        Log.line "compile + render: %.2fs" (updateAndRenderTime)
 
         let rep = Telemetry.resetAndGetReport()
         Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
