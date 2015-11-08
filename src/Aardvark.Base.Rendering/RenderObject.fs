@@ -84,6 +84,9 @@ type RenderObject =
           Uniforms = null
         }
 
+    static member Clone(org : RenderObject) =
+        { org with Id = RenderObjectIds.newId() }
+
     override x.GetHashCode() = x.Id
     override x.Equals o =
         match o with

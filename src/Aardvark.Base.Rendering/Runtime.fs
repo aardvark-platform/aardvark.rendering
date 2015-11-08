@@ -168,18 +168,24 @@ type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
     override x.Inputs = Seq.singleton (res :> _)
 
     override x.Compute() =
-        let res = res.GetValue x
-        lastStats <- res.Statistics
-        match Map.tryFind semantic res.Framebuffer.Attachments with
-            | Some o ->
-                match o with
-                    | :? BackendTextureOutputView as o ->
-                        o.backendTexture :> ITexture
-                    | _ ->
-                        failwithf "unexpected output: %A" o
-            | None ->
-                failwithf "could not get output: %A" semantic
-
+        lock res (fun () ->
+            let wasOutDated = res.OutOfDate
+            let res = res.GetValue x
+            if wasOutDated then
+                lastStats <- res.Statistics
+            else
+                lastStats <- FrameStatistics.Zero
+                    
+            match Map.tryFind semantic res.Framebuffer.Attachments with
+                | Some o ->
+                    match o with
+                        | :? BackendTextureOutputView as o ->
+                            o.backendTexture :> ITexture
+                        | _ ->
+                            failwithf "unexpected output: %A" o
+                | None ->
+                    failwithf "could not get output: %A" semantic
+        )
 
 
 
