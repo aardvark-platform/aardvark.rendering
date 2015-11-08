@@ -207,17 +207,12 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
 
         if dirtyBufferViews.Count > 0 then
             System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
-                lock d (fun () ->
-                    if d.OutOfDate then
-                        d.UpdateCPU(x)
-                        d.UpdateGPU(x) |> ignore
+                d.UpdateCPU(x)
+                d.UpdateGPU(x) |> ignore
 
-                        let view = d.Resource.GetValue()
-                        System.Threading.Interlocked.Change(dirtyPoolIds.[view.Pool.PoolId], fun l -> view::l) |> ignore
-                        System.Threading.Interlocked.Increment &viewUpdateCount |> ignore
-                    else
-                        d.Outputs.Add x |> ignore
-                )
+                let view = d.Resource.GetValue()
+                System.Threading.Interlocked.Change(dirtyPoolIds.[view.Pool.PoolId], fun l -> view::l) |> ignore
+                System.Threading.Interlocked.Increment &viewUpdateCount |> ignore
             ) |> ignore
 
         updateCPUTime.Stop()
@@ -384,16 +379,18 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
 
                 renderPassChangeSet.Evaluate() |> ignore
 
+                let mutable stats = FrameStatistics.Zero
+                let contextHandle = ContextHandle.Current.Value
+                for (KeyValue(_,p)) in programs do
+                    stats <- stats + p.Update(handle, contextHandle)
+   
+
                 let resourceUpdates, resourceCounts, resourceUpdateTime, updateStats = 
                     x.UpdateDirty()
 
                     
                 executionTime.Restart()
 
-
-                let mutable resourceCount = 0
-                let mutable stats = FrameStatistics.Zero
-                let contextHandle = ContextHandle.Current.Value
 
                 //render
                 for (KeyValue(_,p)) in programs do

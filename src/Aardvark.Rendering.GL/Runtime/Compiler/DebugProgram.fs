@@ -80,6 +80,7 @@ type DebugProgram(parent : IRenderTask,
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Dispose() = x.Dispose()
+        member x.Update(fbo,ctx) = FrameStatistics.Zero
         member x.Run(fbo,ctx) = x.Run(fbo, ctx)
 
 

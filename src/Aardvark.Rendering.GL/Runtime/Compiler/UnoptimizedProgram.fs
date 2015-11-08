@@ -286,7 +286,7 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             | _ ->
                 failwithf "cannot remove unknown renderobject: %A" rj
 
-    member x.Run(fbo : int, ctx : ContextHandle) =
+    member x.Update(fbo : int, ctx : ContextHandle) =
         // change the current context if necessary
         if ctx <> currentContext.UnsafeCache then
             transact (fun () -> Mod.change currentContext ctx)
@@ -295,8 +295,6 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         let instructionUpdates, instructionUpdateTime, createStats = 
             changeSet.Update() 
 
-        // run everything
-        run prolog.Fragment
 
         let fragmentStats = Mod.force statistics
         let programStats = 
@@ -307,6 +305,12 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             }
 
         fragmentStats + programStats + createStats |> handler.AdjustStatistics
+
+    member x.Run(fbo : int, ctx : ContextHandle) =
+
+        // run everything
+        run prolog.Fragment
+        FrameStatistics.Zero
 
     member x.Disassemble() =
         let mutable fragment = prolog.Next
@@ -331,5 +335,6 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
+        member x.Update (fbo, ctx) = x.Update(fbo, ctx)
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
 

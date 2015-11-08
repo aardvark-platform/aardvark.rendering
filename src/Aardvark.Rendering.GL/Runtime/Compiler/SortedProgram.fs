@@ -85,10 +85,48 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             | _ ->
                 failwithf "cannot remove unknown renderobject: %A" rj
 
-    member x.Run(fbo : int, ctx : ContextHandle) =
+    member x.Update(fbo : int, ctx : ContextHandle) =
         // change the current context if necessary
         if ctx <> currentContext.UnsafeCache then
             transact (fun () -> Mod.change currentContext ctx)
+
+        let applySorting =
+            async {
+                sw.Restart()
+                let sorted = sortedRenderObjects |> Mod.force
+
+                let prev = ref prolog
+                for rj in sorted do
+                    match fragments.TryGetValue rj with
+                        | (true, f) ->
+                            prev.Value.Next <- f
+                            f.Prev <- !prev
+                            prev := f
+                        | _ ->
+                            Log.warn "sorter returned unknown renderobject"
+
+                prev.Value.Next <- epilog
+                epilog.Prev <- !prev
+                sw.Stop()
+                return sw.Elapsed
+            } |> Async.StartAsTask
+
+
+
+        let instructionUpdates, instructionUpdateTime, createStats = 
+            changeSet.Update() 
+
+        let fragmentStats = Mod.force statistics
+        let programStats = 
+            { FrameStatistics.Zero with 
+                Programs = 1.0 
+                InstructionUpdateCount = float instructionUpdates
+                InstructionUpdateTime = instructionUpdateTime - createStats.ResourceUpdateTime
+            }
+
+        fragmentStats + programStats + createStats |> handler.AdjustStatistics
+
+    member x.Run(fbo : int, ctx : ContextHandle) =
 
         let applySorting =
             async {
@@ -124,16 +162,10 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         run prolog.Fragment
 
 
-        let fragmentStats = Mod.force statistics
-        let programStats = 
-            { FrameStatistics.Zero with 
-                Programs = 1.0 
-                InstructionUpdateCount = float instructionUpdates
-                InstructionUpdateTime = instructionUpdateTime - createStats.ResourceUpdateTime
-                SortingTime = sortingTime
-            }
 
-        fragmentStats + programStats + createStats |> handler.AdjustStatistics
+        { FrameStatistics.Zero with 
+            SortingTime = sortingTime
+        }
 
     member x.Disassemble() =
         let mutable fragment = prolog.Next
@@ -157,5 +189,6 @@ type SortedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
         member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
+        member x.Update (fbo, ctx) = x.Update(fbo, ctx)
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
 

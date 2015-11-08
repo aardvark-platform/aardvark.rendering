@@ -3,5 +3,5 @@
 [<EntryPoint>]
 let main args =
     Aardvark.Base.Ag.initialize()
-    RenderingTests.``[GL] compile performance``()
+    RenderingTests.``[GL] nested trafos``()
     0
