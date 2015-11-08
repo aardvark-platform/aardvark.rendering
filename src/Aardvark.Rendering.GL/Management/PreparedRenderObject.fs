@@ -62,6 +62,10 @@ type PreparedRenderObject =
                 ub.UpdateCPU(caller)
                 ub.UpdateGPU(caller) |> ignore
 
+        for (_,ub) in x.UniformBufferViews |> Map.toSeq do
+            if ub.OutOfDate then
+                ub.UpdateCPU(caller)
+                ub.UpdateGPU(caller) |> ignore
         for (_,ul) in x.Uniforms |> Map.toSeq do
             if ul.OutOfDate then
                 ul.UpdateCPU(caller)
@@ -164,24 +168,24 @@ type ResourceManagerExtensions private() =
         let prog = program.Resource.GetValue()
 
         // create all UniformBuffers requested by the program
-        let uniformBuffers = // Map.empty
-            prog.UniformBlocks 
-                |> List.map (fun block ->
-                    let mutable values = []
-                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
-                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
-                   )
-                |> Map.ofList
+        let uniformBuffers =  Map.empty
+//            prog.UniformBlocks 
+//                |> List.map (fun block ->
+//                    let mutable values = []
+//                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
+//                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
+//                   )
+//                |> Map.ofList
 
 
         let uniformBufferPoolsWithBlocks =
-            [] //prog.UniformBlocks |> List.map (fun b -> b, x.CreateUniformBufferPool b)
+            prog.UniformBlocks |> List.map (fun b -> b, x.CreateUniformBufferPool b)
 
 
         // create all UniformBuffers requested by the program
         let uniformBufferViews =
             uniformBufferPoolsWithBlocks
-                |> List.map (fun (pool, block) ->
+                |> List.map (fun (block, pool) ->
                     let mutable values = []
 
                     // TODO: maybe don't ignore values (are buffers actually equal when using identical values)

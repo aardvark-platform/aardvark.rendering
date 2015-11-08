@@ -681,6 +681,7 @@ module ResourceManager =
                     view.WriteOperation (fun () -> 
                         writers |> List.iter (fun (_,w) -> w.Write(self, view.Data))
                     )
+                    pool.Upload [| view |]
 
                     let deps = fieldValues |> List.map snd
                     let writers = writers |> List.map snd |> List.toArray

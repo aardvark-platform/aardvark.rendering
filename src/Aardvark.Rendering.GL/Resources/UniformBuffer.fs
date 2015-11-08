@@ -449,35 +449,40 @@ type UniformBufferPool =
             ManagedPtr.free view.Pointer
 
         member x.Upload(required : UniformBufferView[]) =
-            using x.Context.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
-                GL.Check "could not bind uniform buffer pool"
+            let anyDirty = lock x (fun () -> x.DirtyViews.Count > 0)
+            if anyDirty then
+                using x.Context.ResourceLock (fun _ ->
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
+                    GL.Check "could not bind uniform buffer pool"
 
-                let sizeChanged = x.Size <> x.Storage.Capacity
-                let uploadAll = required.Length >= x.ViewCount / 4
+                    let sizeChanged = x.Size <> x.Storage.Capacity
+                    let uploadAll = isNull required || required.Length = 0 || required.Length >= x.ViewCount / 4
+ 
+                    ReaderWriterLock.read x.Storage.PointerLock (fun () ->
+                        if uploadAll || sizeChanged then
+                            lock x (fun () -> x.DirtyViews.Clear())
+                            if sizeChanged then
+                                x.Size <- x.Storage.Capacity
+                                GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
+                            else
+                                GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint x.Size, x.Storage.Pointer)
 
-                ReaderWriterLock.read x.Storage.PointerLock (fun () ->
-                    if uploadAll || sizeChanged then
-                        lock x (fun () -> x.DirtyViews.Clear())
-                        if sizeChanged then
-                            x.Size <- x.Storage.Capacity
-                            GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
-                        else
-                            GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint x.Size, x.Storage.Pointer)
-
-                        GL.Check "could not upload uniform buffer pool"      
-                    else
-                        lock x (fun () -> x.DirtyViews.ExceptWith required)
-                        for r in required do
-                            let offset = r.Pointer.Offset
-                            let size = nativeint r.Pointer.Size
-                            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, x.Storage.Pointer)
                             GL.Check "could not upload uniform buffer pool"      
+                        else
+                            lock x (fun () -> x.DirtyViews.ExceptWith required)
+                            for r in required do
+                                let offset = r.Pointer.Offset
+                                let size = nativeint r.Pointer.Size
+                                GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, x.Storage.Pointer)
+                                GL.Check "could not upload uniform buffer pool"      
+                    )
+
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                    GL.Check "could not unbind uniform buffer pool"
                 )
 
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                GL.Check "could not unbind uniform buffer pool"
-            )
+        member inline x.UploadAll() =
+            x.Upload(null)
 
         member x.Updated(view : UniformBufferView) =
             lock x (fun () -> x.DirtyViews.Add view |> ignore)
@@ -529,29 +534,35 @@ module UniformBufferExtensions =
         let used = SortedSet<int> [-1]
         let values = Dictionary<int, 'a>()
 
-        member x.Size = size
+        member x.Size = lock x (fun () -> size)
 
-        member x.Max = used.Max
+        member x.Max = lock x (fun () -> used.Max)
 
         member x.Get(id : int) =
-            values.[id]
+            lock x (fun () ->
+                values.[id]
+            )
 
         member x.NewId(tag : 'a) =
-            if free.Count = 0 then
-                free.UnionWith [size .. 2*size - 1]
-                size <- 2*size
-                x.NewId(tag)
-            else
-                let v = free.Min
-                free.Remove(v) |> ignore
-                used.Add v |> ignore
-                values.[v] <- tag
-                v
+            lock x (fun () ->
+                if free.Count = 0 then
+                    free.UnionWith [size .. 2*size - 1]
+                    size <- 2*size
+                    x.NewId(tag)
+                else
+                    let v = free.Min
+                    free.Remove(v) |> ignore
+                    used.Add v |> ignore
+                    values.[v] <- tag
+                    v
+            )
 
         member x.Free(id : int) =
-            used.Remove id |> ignore
-            free.Add id |> ignore
-            values.Remove id |> ignore
+            lock x (fun () ->
+                used.Remove id |> ignore
+                free.Add id |> ignore
+                values.Remove id |> ignore
+            )
 
     let private poolIdManagers = ConditionalWeakTable<Context, IdManager<UniformBufferPool>>()
 
@@ -566,7 +577,8 @@ module UniformBufferExtensions =
             (getIdManager x).Max
 
         member x.GetUniformBufferPool(id : int) =
-            (getIdManager x).Get id
+            let m = getIdManager x
+            m.Get id
 
         member x.CreateUniformBufferPool(size : int, fields : list<UniformField>) =
             using x.ResourceLock (fun _ ->

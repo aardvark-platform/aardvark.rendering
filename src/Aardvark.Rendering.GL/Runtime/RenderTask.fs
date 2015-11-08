@@ -13,12 +13,18 @@ open System.Linq
 type RenderTaskInputSet(target : IRenderTask) =
     inherit Compiler.InputSet(target)
 
+    let allPools = ReferenceCountingSet<UniformBufferPool>()
     let resources = ReferenceCountingSet<IChangeableResource>()
 
+    member x.AllPools = allPools
     member x.Resources = resources
 
     override x.Add(o : IAdaptiveObject) =
         match o with
+            | :? ChangeableResource<UniformBufferView> as r ->
+                if resources.Add r then
+                    allPools.Add (r.Resource.GetValue().Pool) |> ignore
+                    target.InputChanged r
             | :? IChangeableResource as r ->
                 resources.Add r |> ignore
             | _ -> ()
@@ -27,6 +33,9 @@ type RenderTaskInputSet(target : IRenderTask) =
             
     override x.Remove(o : IAdaptiveObject) =
         match o with
+            | :? ChangeableResource<UniformBufferView> as r ->
+                if resources.Remove r then
+                    allPools.Remove (r.Resource.GetValue().Pool) |> ignore
             | :? IChangeableResource as r ->
                 resources.Remove r |> ignore
             | _ -> ()
@@ -167,7 +176,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
     let updateCPUTime = System.Diagnostics.Stopwatch()
     let updateGPUTime = System.Diagnostics.Stopwatch()
     let executionTime = System.Diagnostics.Stopwatch()
-
+    
     member x.Runtime = runtime
     member x.Manager = manager
 
@@ -214,19 +223,17 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
         updateCPUTime.Stop()
 
         updateGPUTime.Restart()
+
         let mutable dirtyPoolCount = 0
-        for id in 0..dirtyPoolIds.Length-1 do
-            let r = dirtyPoolIds.[id]
+        for pool in inputSet.AllPools do
+            let r = dirtyPoolIds.[pool.PoolId]
             match !r with
-                | [] -> 
-                    ()
+                | [] -> ()
                 | dirty ->
-                    r := []
-                    let pool = ctx.GetUniformBufferPool id
                     pool.Upload (List.toArray dirty)
                     dirtyPoolCount <- dirtyPoolCount + 1
+                    r := []
 
-    
         updateGPUTime.Stop()
  
             
