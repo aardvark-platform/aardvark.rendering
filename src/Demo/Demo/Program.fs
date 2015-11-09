@@ -643,8 +643,8 @@ let testGpuThroughput () =
         then
             cnt <- 0
             printfn "elapsed for 1000 frames: %A [ms]" sw.Elapsed.TotalMilliseconds
-            let pi = PixImage<byte>(Col.Format.RGBA, size)
-            runtime.Download(color, 0, 0, pi)
+
+            let pi = runtime.Download(color, PixFormat.ByteBGRA)
             //pi.SaveAsImage(@"C:\Aardwork\blub.jpg")
             sw.Restart()
             //System.Environment.Exit 0

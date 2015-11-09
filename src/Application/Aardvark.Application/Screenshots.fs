@@ -34,9 +34,7 @@ module Screenshot =
         let colorTexture = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
         runtime.ResolveMultisamples(color, colorTexture, ImageTrafo.MirrorY)
 
-        let pi = PixImage<byte>(Col.Format.RGBA, colorTexture.Size)
-        let images = runtime.Download(colorTexture, 0, 0, pi)
-        pi
+        runtime.Download(colorTexture, PixFormat.ByteBGRA)
 
     let takeMS (samples : int) (target : IRenderTarget) =
         async {

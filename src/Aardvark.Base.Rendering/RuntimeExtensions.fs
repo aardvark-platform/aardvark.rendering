@@ -21,3 +21,37 @@ type RuntimeExtensions private() =
     [<Extension>]
     static member CompileClear(this : IRuntime, depth : IMod<float>) =
         this.CompileClear(Mod.constant None, depth |> Mod.map Some)
+
+    [<Extension>]
+    static member Download(this : IRuntime, texture : IBackendTexture, level : int, slice : int, format : PixFormat) =
+        let pi = PixImage.Create(format, int64 texture.Size.X, int64 texture.Size.Y)
+        this.Download(texture, level, slice, pi)
+        pi
+
+    [<Extension>]
+    static member Download(this : IRuntime, texture : IBackendTexture, level : int, format : PixFormat) =
+        let pi = PixImage.Create(format, int64 texture.Size.X, int64 texture.Size.Y)
+        this.Download(texture, level, 0, pi)
+        pi
+
+    [<Extension>]
+    static member Download(this : IRuntime, texture : IBackendTexture, format : PixFormat) =
+        let pi = PixImage.Create(format, int64 texture.Size.X, int64 texture.Size.Y)
+        this.Download(texture, 0, 0, pi)
+        pi
+
+    [<Extension>]
+    static member Download(this : IRuntime, texture : IBackendTexture, level : int, slice : int) =
+        let pixFormat = TextureFormat.toDownloadFormat texture.Format
+        RuntimeExtensions.Download(this, texture, level, slice, pixFormat)
+
+
+    [<Extension>]
+    static member Download(this : IRuntime, texture : IBackendTexture, level : int) =
+        let pixFormat = TextureFormat.toDownloadFormat texture.Format
+        RuntimeExtensions.Download(this, texture, level, 0, pixFormat)
+
+    [<Extension>]
+    static member Download(this : IRuntime, texture : IBackendTexture) =
+        let pixFormat = TextureFormat.toDownloadFormat texture.Format
+        RuntimeExtensions.Download(this, texture, 0, 0, pixFormat)

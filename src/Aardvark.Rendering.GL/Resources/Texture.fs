@@ -36,8 +36,11 @@ type Texture =
 
         interface IBackendTexture with
             member x.WantMipMaps = x.MipMapLevels > 1
+            member x.Dimension = x.Dimension
+            member x.MipMapLevels = x.MipMapLevels
             member x.Handle = x.Handle :> obj
-            member x.Size = x.Size.XY
+            member x.Size = x.Size
+            member x.Count = x.Count
             member x.Format = x.Format
             member x.Samples = x.Multisamples
 

@@ -10,15 +10,6 @@ type TextureDimension =
     | TextureCube = 3
     | Texture3D = 4
 
-type IFramebufferOutput =
-    abstract member Samples : int
-    abstract member Size : V2i
-
-type IFramebuffer =
-    inherit IDisposable
-    abstract member Size : V2i
-    abstract member GetHandle : IAdaptiveObject -> obj
-    abstract member Attachments : Map<Symbol, IFramebufferOutput>
 
 
 type RenderbufferFormat =
@@ -249,7 +240,7 @@ type TextureFormat =
 module TextureFormat =
     open System.Collections.Generic
 
-    let lookupTable (l : list<'a * 'b>) =
+    let private lookupTable (l : list<'a * 'b>) =
         let d = Dictionary()
         for (k,v) in l do
 
@@ -302,4 +293,37 @@ module TextureFormat =
             TextureFormat.CompressedRgba, PixFormat.ByteRGBA
 
         ]
+
+
+
+
+type IFramebufferOutput =
+    abstract member Samples : int
+    abstract member Size : V2i
+
+type IBackendTexture =
+    inherit ITexture
+    abstract member Dimension : TextureDimension
+    abstract member Format : TextureFormat
+    abstract member Samples : int
+    abstract member Count : int
+    abstract member MipMapLevels : int
+    abstract member Size : V3i
+    abstract member Handle : obj
+
+type IRenderbuffer =
+    inherit IFramebufferOutput
+    abstract member Format : RenderbufferFormat
+    abstract member Handle : obj
+
+type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice : int } with
+    interface IFramebufferOutput with
+        member x.Samples = x.texture.Samples
+        member x.Size = x.texture.Size.XY
+
+type IFramebuffer =
+    inherit IDisposable
+    abstract member Size : V2i
+    abstract member GetHandle : IAdaptiveObject -> obj
+    abstract member Attachments : Map<Symbol, IFramebufferOutput>
 

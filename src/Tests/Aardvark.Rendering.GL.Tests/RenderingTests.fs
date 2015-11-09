@@ -362,8 +362,7 @@ module RenderingTests =
         let stats = task.Run fbo
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
 
-        let pi = PixImage<byte>(Col.Format.RGBA, screen)
-        runtime.Download(color, 0, 0, pi)
+        let pi = runtime.Download(color, PixFormat.ByteRGBA)
         pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
 
         Log.line "starting pure render test"
@@ -469,8 +468,7 @@ module RenderingTests =
         let stats = task.Run fbo
         OpenTK.Graphics.OpenGL4.GL.Sync()
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
-        let pi = PixImage<byte>(Col.Format.RGBA, screen)
-        runtime.Download(color, 0, 0, pi)
+        let pi = runtime.Download(color, PixFormat.ByteRGBA)
 
         OpenTK.Graphics.OpenGL4.GL.Sync()
         //task2.Run fbo |> ignore

@@ -17,13 +17,6 @@ type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
     member x.Statistics = stats
 
 
-type IBackendTexture =
-    inherit ITexture
-    abstract member Samples : int
-    abstract member Size : V2i
-    abstract member Format : TextureFormat
-    abstract member Handle : obj
-
 type IBackendBuffer =
     inherit IBuffer
     abstract member Handle : obj
@@ -32,19 +25,6 @@ type IBackendSurface =
     inherit ISurface
     abstract member Handle : obj
 
-type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice : int } with
-    interface IFramebufferOutput with
-        member x.Samples = x.texture.Samples
-        member x.Size = x.texture.Size
-
-
-
-
-
-type IRenderbuffer =
-    inherit IFramebufferOutput
-    abstract member Format : RenderbufferFormat
-    abstract member Handle : obj
 
 type IPreparedRenderObject =
     inherit IRenderObject
