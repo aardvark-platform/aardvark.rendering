@@ -426,11 +426,8 @@ module TextureExtensions =
             t.Format <- unbox newFormat
 
         let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage) =
-            if level <> 0 then
-                failwith "downloads of mipmap-levels currently not implemented"
-
             let format =  image.PixFormat
-            let levelSize = t.Size2D
+            //let levelSize = t.Size2D
 
             GL.BindTexture(target, t.Handle)
             GL.Check "could not bind texture"

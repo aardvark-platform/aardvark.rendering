@@ -10,6 +10,9 @@ open System.Runtime.CompilerServices
 [<AbstractClass; Sealed; Extension>]
 type RuntimeExtensions private() =
     
+    static let levelSize (level : int) (s : V2i) =
+        V2i(max 1 (s.X / (1 <<< level)), max 1 (s.Y / (1 <<< level)))
+
     [<Extension>]
     static member CompileClear(this : IRuntime, color : IMod<C4f>, depth : IMod<float>) =
         this.CompileClear(color |> Mod.map Some, depth |> Mod.map Some)
@@ -24,13 +27,15 @@ type RuntimeExtensions private() =
 
     [<Extension>]
     static member Download(this : IRuntime, texture : IBackendTexture, level : int, slice : int, format : PixFormat) =
-        let pi = PixImage.Create(format, int64 texture.Size.X, int64 texture.Size.Y)
+        let size = texture.Size.XY |> levelSize level
+        let pi = PixImage.Create(format, int64 size.X, int64 size.Y)
         this.Download(texture, level, slice, pi)
         pi
 
     [<Extension>]
     static member Download(this : IRuntime, texture : IBackendTexture, level : int, format : PixFormat) =
-        let pi = PixImage.Create(format, int64 texture.Size.X, int64 texture.Size.Y)
+        let size = texture.Size.XY |> levelSize level
+        let pi = PixImage.Create(format, int64 size.X, int64 size.Y)
         this.Download(texture, level, 0, pi)
         pi
 

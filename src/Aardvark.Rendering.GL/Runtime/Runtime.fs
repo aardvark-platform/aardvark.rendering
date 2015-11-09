@@ -202,25 +202,21 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.GenerateMipMaps(t : IBackendTexture) =
         match t with
             | :? Texture as t ->
-                
-                let target = ExecutionContext.getTextureTarget t
-                using ctx.ResourceLock (fun _ ->
-                    GL.BindTexture(target, t.Handle)
-                    GL.Check "could not bind texture"
+                if t.MipMapLevels > 1 then
+                    let target = ExecutionContext.getTextureTarget t
+                    using ctx.ResourceLock (fun _ ->
+                        GL.BindTexture(target, t.Handle)
+                        GL.Check "could not bind texture"
 
 
-                    GL.GenerateMipmap(unbox (int target))
-                    GL.Check "could not generate mipMaps"
+                        GL.GenerateMipmap(unbox (int target))
+                        GL.Check "could not generate mipMaps"
 
-                    let mutable maxLevel = 0
-                    GL.GetTexParameter(target, GetTextureParameter.TextureMaxLevel, &maxLevel)
-                    GL.Check "could not get mipMap count"
-
-                    t.MipMapLevels <- maxLevel + 1
-
-                    GL.BindTexture(target, 0)
-                    GL.Check "could not unbind texture"
-                )
+                        GL.BindTexture(target, 0)
+                        GL.Check "could not unbind texture"
+                    )
+                else
+                    failwith "[GL] cannot generate mipMaps for non-mipmapped texture"
 
             | _ ->
                 failwithf "[GL] unsupported texture: %A" t

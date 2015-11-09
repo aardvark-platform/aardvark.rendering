@@ -347,7 +347,7 @@ module RenderingTests =
         let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
         let task = runtime.CompileRender sg
 
-        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
+        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 2, 1, 1)
         let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
 
         let fbo = 
@@ -362,8 +362,16 @@ module RenderingTests =
         let stats = task.Run fbo
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
 
+
+        runtime.GenerateMipMaps(color)
+
+
         let pi = runtime.Download(color, PixFormat.ByteRGBA)
         pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
+
+        let level1 = runtime.Download(color, 1, PixFormat.ByteRGBA)
+        level1.SaveAsImage @"C:\Users\schorsch\Desktop\level1.png"
+
 
         Log.line "starting pure render test"
         let mutable iterations = 0
