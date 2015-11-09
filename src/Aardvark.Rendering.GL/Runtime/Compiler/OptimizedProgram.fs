@@ -242,7 +242,8 @@ type private StateBucket<'k, 'v>() =
             )
 
         if isNew then
-            if not (isNull last) then last.Next <- node
+            if isNull last then first <- node
+            else last.Next <- node
             last <- node
             true
         else
