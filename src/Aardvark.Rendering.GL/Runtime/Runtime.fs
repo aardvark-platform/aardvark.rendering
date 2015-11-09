@@ -43,11 +43,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
   
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
+        member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock
         member x.CompileRender (engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(engine,set)
         member x.CompileClear(color, depth) = x.CompileClear(color, depth)
       
-        member x.CreateSurface (s : ISurface) = x.CreateSurface s :> IBackendSurface
+        member x.PrepareSurface (s : ISurface) = x.PrepareSurface s :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
                 | :? Program as p -> x.DeleteSurface p
@@ -55,13 +56,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.PrepareRenderObject(rj : IRenderObject) = x.PrepareRenderObject rj :> _
 
-        member x.CreateTexture (t : ITexture) = x.CreateTexture t :> IBackendTexture
+        member x.PrepareTexture (t : ITexture) = x.PrepareTexture t :> IBackendTexture
         member x.DeleteTexture (t : IBackendTexture) =
             match t with
                 | :? Texture as t -> x.DeleteTexture t
                 | _ -> failwithf "unsupported texture-type: %A" t
 
-        member x.CreateBuffer (b : IBuffer) = x.CreateBuffer b :> IBackendBuffer
+        member x.PrepareBuffer (b : IBuffer) = x.PrepareBuffer b :> IBackendBuffer
         member x.DeleteBuffer (b : IBackendBuffer) = 
             match b with
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
@@ -90,9 +91,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
-    member x.CreateTexture (t : ITexture) = ctx.CreateTexture t
-    member x.CreateBuffer (b : IBuffer) : Aardvark.Rendering.GL.Buffer = failwith "not implemented"
-    member x.CreateSurface (s : ISurface) = 
+    member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
+    member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
+    member x.PrepareSurface (s : ISurface) = 
         match SurfaceCompilers.compile ctx s with
             | Success prog -> prog
             | Error e -> failwith e
@@ -197,6 +198,32 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.BindFramebuffer(FramebufferTarget.Framebuffer,oldFbo)
 
         )
+
+    member x.GenerateMipMaps(t : IBackendTexture) =
+        match t with
+            | :? Texture as t ->
+                
+                let target = ExecutionContext.getTextureTarget t
+                using ctx.ResourceLock (fun _ ->
+                    GL.BindTexture(target, t.Handle)
+                    GL.Check "could not bind texture"
+
+
+                    GL.GenerateMipmap(unbox (int target))
+                    GL.Check "could not generate mipMaps"
+
+                    let mutable maxLevel = 0
+                    GL.GetTexParameter(target, GetTextureParameter.TextureMaxLevel, &maxLevel)
+                    GL.Check "could not get mipMap count"
+
+                    t.MipMapLevels <- maxLevel + 1
+
+                    GL.BindTexture(target, 0)
+                    GL.Check "could not unbind texture"
+                )
+
+            | _ ->
+                failwithf "[GL] unsupported texture: %A" t
 
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
         ctx.Download(unbox<Texture> t, level, slice, target)

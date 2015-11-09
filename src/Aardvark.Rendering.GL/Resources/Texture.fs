@@ -706,7 +706,7 @@ module TextureExtensions =
             
     module ExecutionContext =
 
-        let private getTextureTarget (texture : Texture) =
+        let internal getTextureTarget (texture : Texture) =
             match texture.Dimension, texture.IsArray, texture.IsMultisampled with
 
                 | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"

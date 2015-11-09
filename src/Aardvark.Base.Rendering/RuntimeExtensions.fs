@@ -55,3 +55,18 @@ type RuntimeExtensions private() =
     static member Download(this : IRuntime, texture : IBackendTexture) =
         let pixFormat = TextureFormat.toDownloadFormat texture.Format
         RuntimeExtensions.Download(this, texture, 0, 0, pixFormat)
+
+[<AbstractClass; Sealed; Extension>]
+type IBackendTextureExtensions private() =
+    
+    [<Extension>]
+    static member GetOutputView(this : IBackendTexture, level : int, slice : int) =
+        { texture = this; level = level; slice = slice } :> IFramebufferOutput
+
+    [<Extension>]
+    static member GetOutputView(this : IBackendTexture, level : int) =
+        { texture = this; level = level; slice = 0 } :> IFramebufferOutput
+
+    [<Extension>]
+    static member GetOutputView(this : IBackendTexture) =
+        { texture = this; level = 0; slice = 0 } :> IFramebufferOutput
