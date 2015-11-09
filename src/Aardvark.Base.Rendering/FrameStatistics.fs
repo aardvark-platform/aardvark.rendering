@@ -28,6 +28,21 @@ module Map =
             result <- Map.add k (fuse left right) result
         result
 
+type ITimeProbe =
+    abstract member Value : TimeSpan
+
+type private AddTimeProbe(l : ITimeProbe, r : ITimeProbe) =
+    interface ITimeProbe with
+        member x.Value = l.Value + r.Value
+
+type private SubTimeProbe(l : ITimeProbe, r : ITimeProbe) =
+    interface ITimeProbe with
+        member x.Value = l.Value - r.Value
+
+type private DivTimeProbe(l : ITimeProbe, r : float) =
+    interface ITimeProbe with
+        member x.Value = TimeSpan.FromTicks(int64 (float l.Value.Ticks / r))
+
 type FrameStatistics =
     {
         Programs : float

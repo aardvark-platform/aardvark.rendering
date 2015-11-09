@@ -240,7 +240,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CompileRender(engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(Mod.constant engine, set) :> IRenderTask
 
-    member x.CompileClear(color : IMod<C4f>, depth : IMod<float>) : IRenderTask =
+    member x.CompileClear(color : IMod<Option<C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         new ClearTask(x, color, depth, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferRenderbuffer, ss : IFramebufferTexture, trafo : ImageTrafo) =

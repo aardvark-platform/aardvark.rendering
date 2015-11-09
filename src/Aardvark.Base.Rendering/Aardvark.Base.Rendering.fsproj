@@ -67,6 +67,7 @@
     <Compile Include="Framebuffers.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="Runtime.fs" />
+    <Compile Include="RuntimeExtensions.fs" />
     <Compile Include="RenderTask.fs" />
   </ItemGroup>
   <ItemGroup>

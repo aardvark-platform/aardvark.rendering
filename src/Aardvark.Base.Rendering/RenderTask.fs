@@ -338,7 +338,9 @@ module RenderTask =
 
         //use lock = runtime.ContextLock
         let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let clear = runtime.CompileClear(~~(C4f(0.0f,0.0f,0.0f,0.0f)), ~~1.0)
+
+        
 
         let fbo = createFramebuffer runtime None (Some <| defaultView depth)
 

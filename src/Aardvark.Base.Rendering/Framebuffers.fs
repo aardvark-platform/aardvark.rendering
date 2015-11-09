@@ -14,6 +14,7 @@ type IFramebufferOutput =
     abstract member Samples : int
     abstract member Size : V2i
 
+[<Obsolete("use IBackendTexture instead")>]
 type IFramebufferTexture =
     inherit IDisposable
     inherit ITexture
@@ -320,6 +321,7 @@ module TextureFormat =
 
         ]
 
+[<Obsolete("use IRenderbuffer instead")>]
 type IFramebufferRenderbuffer =
     inherit IDisposable
     inherit IFramebufferOutput
