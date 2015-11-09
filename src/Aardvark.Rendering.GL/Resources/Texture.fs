@@ -214,6 +214,7 @@ module TextureExtensions =
 
             result
 
+
         let private uploadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (textureParams : TextureParams) (data : PixImageMipMap) =
             if data.LevelCount <= 0 then
                 failwith "cannot upload texture having 0 levels"
@@ -421,12 +422,12 @@ module TextureExtensions =
             t.Dimension <- TextureDimension.Texture3D
             t.Format <- unbox newFormat
 
-        let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (format : PixFormat) =
+        let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage) =
             if level <> 0 then
                 failwith "downloads of mipmap-levels currently not implemented"
 
+            let format =  image.PixFormat
             let levelSize = t.Size2D
-            let image = PixImage.Create(format, int64 levelSize.X, int64 levelSize.Y)
 
             GL.BindTexture(target, t.Handle)
             GL.Check "could not bind texture"
@@ -443,20 +444,14 @@ module TextureExtensions =
             GL.Check "could not download image"
 
             gc.Free()
+            
 
-            image
+        let downloadTexture2D (t : Texture) (level : int) (image : PixImage) =
+            downloadTexture2DInternal TextureTarget.Texture2D true t level image
 
-        let downloadTexture2D (t : Texture) (level : int) (format : PixFormat) =
-            [|downloadTexture2DInternal TextureTarget.Texture2D true t level format|]
-
-        let downloadTextureCube (t : Texture) (level : int) (format : PixFormat) =
-            let images =
-                cubeSides |> Array.map (fun (side, target) ->
-                                let image = downloadTexture2DInternal target false t level format
-                                image
-                             ) 
-
-            images
+        let downloadTextureCube (t : Texture) (level : int) (side : CubeSide) (image : PixImage) =
+            let target = cubeSides.[int side] |> snd
+            downloadTexture2DInternal target false t level image
 
     type Context with
         member x.CreateTexture1D(size : int, mipMapLevels : int, t : TextureFormat) =
@@ -687,14 +682,14 @@ module TextureExtensions =
                         failwith "unsupported texture data"
             )
 
-        member x.Download(t : Texture, format : PixFormat, level : int) =
+        member x.Download(t : Texture, level : int, slice : int, target : PixImage) =
             using x.ResourceLock (fun _ ->
                 match t.Dimension with
                     | TextureDimension.Texture2D -> 
-                        downloadTexture2D t level format
+                        downloadTexture2D t level target
 
                     | TextureDimension.TextureCube ->
-                        downloadTextureCube t level format
+                        downloadTextureCube t level (unbox slice) target
 
                     | _ ->  
                         failwithf "cannot download textures of kind: %A" t.Dimension
@@ -762,4 +757,8 @@ module Texture =
         tex.Context.Upload(tex, data)
 
     let read (format : PixFormat) (level : int) (tex : Texture) : PixImage[] =
-        tex.Context.Download(tex, format, level)
+        let size = V2i(max 1 (tex.Size.X / (1 <<< level)), max 1 (tex.Size.Y / (1 <<< level)))
+
+        let pi = PixImage.Create(format, int64 size.Y, int64 size.Y)
+        tex.Context.Download(tex, level, 0, pi)
+        [|pi|]

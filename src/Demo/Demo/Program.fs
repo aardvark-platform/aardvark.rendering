@@ -593,13 +593,13 @@ let testGpuThroughput () =
     use app = new OpenGlApplication()
     let runtime = app.Runtime
 
-    let size = ~~V2i(10000,5000)
-    let color = runtime.CreateRenderbuffer(size,Mod.constant RenderbufferFormat.R8, ~~1)
+    let size = V2i(10000,5000)
+    let color = runtime.CreateRenderbuffer(size,RenderbufferFormat.R8, 1)
     let outputView = color :> IFramebufferOutput
-    let color = runtime.CreateTexture(size,~~TextureFormat.Rgba8,~~1,~~1)
+    let color = runtime.CreateTexture(size,TextureFormat.Rgba8,1,1,1)
     let outputView = { texture = color; level = 0; slice = 0 } :> IFramebufferOutput
 
-    let fbo = runtime.CreateFramebuffer([(DefaultSemantic.Colors,~~outputView)] |> Map.ofList)
+    let fbo = runtime.CreateFramebuffer([(DefaultSemantic.Colors,outputView)] |> Map.ofList)
 
     let sizex,sizey = 250,200
     let geometry = 
@@ -643,7 +643,8 @@ let testGpuThroughput () =
         then
             cnt <- 0
             printfn "elapsed for 1000 frames: %A [ms]" sw.Elapsed.TotalMilliseconds
-            let pi = color.Download(0).[0]
+            let pi = PixImage<byte>(Col.Format.RGBA, size)
+            runtime.Download(color, 0, 0, pi)
             //pi.SaveAsImage(@"C:\Aardwork\blub.jpg")
             sw.Restart()
             //System.Environment.Exit 0

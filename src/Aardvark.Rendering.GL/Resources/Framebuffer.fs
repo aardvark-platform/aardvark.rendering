@@ -75,9 +75,6 @@ module FramebufferExtensions =
 
         let attach (o : IFramebufferOutput) (attachment) =
             match o with
-                | :? Aardvark.Base.IFramebufferRenderbuffer as o ->
-                    GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle :?> int)
-                    GL.Check "could not attach renderbuffer"
 
                 | :? Renderbuffer as o ->
                     GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle)
@@ -85,7 +82,7 @@ module FramebufferExtensions =
 
 
                 | :? BackendTextureOutputView as r ->
-                    let { backendTexture = o; level = level; slice = slice } = r
+                    let { texture = o; level = level; slice = slice } = r
                     let o = unbox<Texture> o
 
                     match o.Dimension with
@@ -103,23 +100,7 @@ module FramebufferExtensions =
                                 GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, TextureTarget.Texture2D, o.Handle, level)
                             GL.Check "could not attach texture"
 
-                | :? TextureOutputView as r ->
-                    let { texture = o; level = level; slice = slice } = r
-
-                    match o.Dimension with
-                        | TextureDimension.TextureCube ->
-                            let (_,target) = TextureExtensions.cubeSides.[slice]
-                            if o.ArraySize > 1 then
-                                failwith "cubemaparray currently not implemented"
-                            else
-                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.GetHandle null :?> int, level)
-                            GL.Check "could not attach texture"
-                        | _ ->
-                            if o.ArraySize > 1 then
-                                GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.GetHandle null :?> int, level, slice)
-                            else
-                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, TextureTarget.Texture2D, o.GetHandle null :?> int, level)
-                            GL.Check "could not attach texture"
+        
                 | _ ->
                     failwith "unsupported view"
 

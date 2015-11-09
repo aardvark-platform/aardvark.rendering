@@ -253,15 +253,15 @@ module RenderingTests =
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
-        let color = runtime.CreateTexture(~~size, ~~TextureFormat.Rgba8, ~~1, ~~1)
-        let depth = runtime.CreateRenderbuffer(~~size, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
+        let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
 
         let fbo = 
             runtime.CreateFramebuffer(
                 Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
 
@@ -279,7 +279,8 @@ module RenderingTests =
         clear.Run(null, fbo) |> ignore
         task.Run(null, fbo) |> ignore
 
-        let pi = color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
+        let pi = PixImage<byte>(Col.Format.BGRA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
+        runtime.Download(color, 0, 0, pi)
 
         let cmp = PixImage<byte>(Col.Format.BGRA, size)
         cmp.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
@@ -346,14 +347,14 @@ module RenderingTests =
         let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
         let task = runtime.CompileRender sg
 
-        let color = runtime.CreateTexture(~~screen, ~~TextureFormat.Rgba8, ~~1, ~~1)
-        let depth = runtime.CreateRenderbuffer(~~screen, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
+        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
 
         let fbo = 
             runtime.CreateFramebuffer(
                 Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
 
@@ -361,7 +362,8 @@ module RenderingTests =
         let stats = task.Run fbo
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
 
-        let pi = color.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
+        let pi = PixImage<byte>(Col.Format.RGBA, screen)
+        runtime.Download(color, 0, 0, pi)
         pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
 
         Log.line "starting pure render test"
@@ -457,7 +459,7 @@ module RenderingTests =
         let fbo = 
             runtime.CreateFramebuffer(
                 Map.ofList [
-                    DefaultSemantic.Colors, ({ backendTexture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
@@ -467,8 +469,9 @@ module RenderingTests =
         let stats = task.Run fbo
         OpenTK.Graphics.OpenGL4.GL.Sync()
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
-        let pi = ctx.Download((color |> unbox<Texture>), PixFormat.ByteRGBA, 0).[0] //.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
-        pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
+        let pi = PixImage<byte>(Col.Format.RGBA, screen)
+        runtime.Download(color, 0, 0, pi)
+
         OpenTK.Graphics.OpenGL4.GL.Sync()
         //task2.Run fbo |> ignore
         //OpenTK.Graphics.OpenGL4.GL.Sync()

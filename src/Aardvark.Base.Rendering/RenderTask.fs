@@ -308,7 +308,7 @@ module RenderTask =
 
     let private defaultView (m : IMod<IBackendTexture>) =
         m |> Mod.map (fun t ->
-            { backendTexture = t; level = 0; slice = 0 }
+            { texture = t; level = 0; slice = 0 }
         )
 
 

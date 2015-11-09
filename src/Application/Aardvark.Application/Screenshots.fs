@@ -15,15 +15,15 @@ module Screenshot =
         let runtime = task.Runtime.Value
 
         //use lock = runtime.ContextLock
-        use color = runtime.CreateRenderbuffer(~~size, ~~RenderbufferFormat.Rgba8, ~~samples)
-        use depth = runtime.CreateRenderbuffer(~~size, ~~RenderbufferFormat.DepthComponent32, ~~samples)
+        let color = runtime.CreateRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
+        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.DepthComponent32, samples)
         use clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
 
         use fbo = 
             runtime.CreateFramebuffer(
                 Map.ofList [
-                    DefaultSemantic.Colors, ~~(color :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                    DefaultSemantic.Colors, (color :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
 
@@ -31,11 +31,12 @@ module Screenshot =
         task.Run(null, fbo) |> ignore
 
 
-        use colorTexture = runtime.CreateTexture(~~size, ~~TextureFormat.Rgba8, ~~1, ~~1)
+        let colorTexture = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
         runtime.ResolveMultisamples(color, colorTexture, ImageTrafo.MirrorY)
 
-        let images = colorTexture.Download(0)
-        images.[0] 
+        let pi = PixImage<byte>(Col.Format.RGBA, colorTexture.Size)
+        let images = runtime.Download(colorTexture, 0, 0, pi)
+        pi
 
     let takeMS (samples : int) (target : IRenderTarget) =
         async {

@@ -14,29 +14,11 @@ type IFramebufferOutput =
     abstract member Samples : int
     abstract member Size : V2i
 
-[<Obsolete("use IBackendTexture instead")>]
-type IFramebufferTexture =
-    inherit IDisposable
-    inherit ITexture
-    abstract member GetBackendTexture : IAdaptiveObject -> ITexture
-    abstract member GetHandle : IAdaptiveObject -> obj
-    abstract member Samples : int
-    abstract member Dimension : TextureDimension
-    abstract member ArraySize : int
-    abstract member MipMapLevels : int
-    abstract member GetSize : level : int -> V2i
-    abstract member Download : level : int -> PixImage[]
-
 type IFramebuffer =
     inherit IDisposable
     abstract member Size : V2i
     abstract member GetHandle : IAdaptiveObject -> obj
     abstract member Attachments : Map<Symbol, IFramebufferOutput>
-
-type TextureOutputView = { texture : IFramebufferTexture; level : int; slice : int } with
-    interface IFramebufferOutput with
-        member x.Samples = x.texture.Samples
-        member x.Size = x.texture.GetSize x.level
 
 
 type RenderbufferFormat =
@@ -320,11 +302,4 @@ module TextureFormat =
             TextureFormat.CompressedRgba, PixFormat.ByteRGBA
 
         ]
-
-[<Obsolete("use IRenderbuffer instead")>]
-type IFramebufferRenderbuffer =
-    inherit IDisposable
-    inherit IFramebufferOutput
-    abstract member Handle : obj
-    
 

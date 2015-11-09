@@ -5,88 +5,8 @@ open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics
+open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
-
-
-type ChangeableFramebuffer(c : ChangeableResource<Framebuffer>) =
-    let getHandle(caller : IAdaptiveObject) =
-        lock c (fun () ->
-            if c.OutOfDate then
-                c.UpdateCPU(caller)
-                c.UpdateGPU(caller) |> ignore
-            c.Resource.GetValue(caller) :> IFramebuffer
-        )
-
-    interface IFramebuffer with
-        member x.GetHandle caller = getHandle(caller).GetHandle(caller)
-        member x.Size = getHandle(null).Size
-        member x.Attachments = getHandle(null).Attachments
-        member x.Dispose() = c.Dispose()
-
-type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
-    let getHandle(caller : IAdaptiveObject) =
-        lock c (fun () ->
-            if c.OutOfDate then
-                c.UpdateCPU(caller)
-                c.UpdateGPU(caller) |> ignore
-            c.Resource.GetValue(caller)
-        )
-
-    interface IFramebufferTexture with
-        member x.GetBackendTexture caller = getHandle(caller) :> ITexture
-        member x.GetHandle caller = getHandle(caller).Handle :> obj
-        member x.Samples = getHandle(null).Multisamples
-        member x.Dimension = getHandle(null).Dimension
-        member x.ArraySize = getHandle(null).Count
-        member x.MipMapLevels = getHandle(null).MipMapLevels
-        member x.GetSize level = getHandle(null).GetSize level
-        member x.Dispose() = c.Dispose()
-        member x.WantMipMaps = getHandle(null).MipMapLevels > 1
-        member x.Download(level) =
-            let handle = getHandle(null)
-            let format = handle.Format |> TextureFormat.toDownloadFormat
-            handle.Context.Download(handle, format, level)
-
-type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
-    let getHandle(caller : IAdaptiveObject) =
-        lock c (fun () ->
-            if c.OutOfDate then
-                c.UpdateCPU(caller)
-                c.UpdateGPU(caller) |> ignore
-            c.Resource.GetValue(caller)
-        )
-
-    interface IFramebufferRenderbuffer with
-        member x.Handle = getHandle(null).Handle :> obj
-        member x.Size = getHandle(null).Size
-        member x.Samples = getHandle(null).Samples
-        member x.Dispose() = c.Dispose()
-
-type ResourceMod<'a, 'b>(res : ChangeableResource<'a>, f : 'a -> 'b) as this =
-    inherit AdaptiveObject()
-    do res.AddOutput this
-       res.Resource.AddOutput this
-
-    member x.GetValue(caller : IAdaptiveObject) =
-        x.EvaluateAlways caller (fun () ->
-            if res.OutOfDate then
-                res.UpdateCPU(x)
-                res.UpdateGPU(x) |> ignore
-            let r = res.Resource.GetValue(x)
-            f r
-        )
-
-    member x.Dispose() =
-        res.RemoveOutput this
-        res.Resource.RemoveOutput this
-        res.Dispose()
-
-    interface IMod with
-        member x.IsConstant = false
-        member x.GetValue(caller) = x.GetValue(caller) :> obj
-
-    interface IMod<'b> with
-        member x.GetValue(caller) = x.GetValue(caller)
 
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
@@ -95,9 +15,6 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     let mutable ctx = ctx
     let mutable manager = if ctx <> null then ResourceManager(ctx, shareTextures, shareBuffers) else null
-
-    let resourceMod (f : 'a -> 'b) (a : ChangeableResource<'a>) =
-        ResourceMod(a, f) :> IMod<_>
 
     new(ctx) = new Runtime(ctx, false, false)
 
@@ -123,14 +40,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
+  
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.ContextLock = ctx.ResourceLock
         member x.CompileRender (engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(engine,set)
         member x.CompileClear(color, depth) = x.CompileClear(color, depth)
-        member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples)
-        member x.CreateRenderbuffer(size : IMod<V2i>, format, samples) = x.CreateRenderbuffer(size, format, samples)
-        member x.CreateFramebuffer (bindings : Map<Symbol, IMod<_>>) = x.CreateFramebuffer bindings
-        
+      
         member x.CreateSurface (s : ISurface) = x.CreateSurface s :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
@@ -151,26 +67,6 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
                 | _ -> failwithf "unsupported buffer-type: %A" b
 
-
-        member x.CreateBuffer (b : IMod<IBuffer>) : IMod<IBuffer>=
-            manager.CreateBuffer(b) |> resourceMod (fun b -> b :> IBuffer)
-
-        member x.CreateTexture (b : IMod<ITexture>) : IMod<ITexture>=
-            manager.CreateTexture(b) |> resourceMod (fun b -> b :> ITexture)
-
-        member x.DeleteBuffer (b : IMod<IBuffer>) =
-            match b with
-                | :? ResourceMod<Buffer, IBuffer> as r ->
-                    r.Dispose()
-                | _ ->
-                    failwithf "cannot dispose buffer: %A" b
-
-        member x.DeleteTexture (t : IMod<ITexture>) =
-            match t with
-                | :? ResourceMod<Texture, ITexture> as r ->
-                    r.Dispose()
-                | _ ->
-                    failwithf "cannot dispose texture: %A" t
 
         member x.DeleteRenderbuffer (b : IRenderbuffer) =
             match b with
@@ -243,54 +139,67 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CompileClear(color : IMod<Option<C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         new ClearTask(x, color, depth, ctx) :> IRenderTask
 
-    member x.ResolveMultisamples(ms : IFramebufferRenderbuffer, ss : IFramebufferTexture, trafo : ImageTrafo) =
+    member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
         using ctx.ResourceLock (fun _ ->
             let mutable oldFbo = 0
             OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
 
-            match ms.Handle,ss.GetHandle null with
-                | (:? int as rb), (:? int as tex) ->
-                        
-                        
-                    let size = ms.Size
-                    let readFbo = OpenGL.GL.GenFramebuffer()
-                    let drawFbo = OpenGL.GL.GenFramebuffer()
+            let tex = ss |> unbox<Texture>
+            let size = ms.Size
+            let readFbo = OpenGL.GL.GenFramebuffer()
+            let drawFbo = OpenGL.GL.GenFramebuffer()
 
-                        
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
-                    OpenGL.GL.FramebufferRenderbuffer(OpenGL.FramebufferTarget.ReadFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, OpenGL.RenderbufferTarget.Renderbuffer, rb)
+            OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
+            match ms with
+                | :? BackendTextureOutputView as ms ->
+                    let tex = ms.texture |> unbox<Texture>
+                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, tex.Handle, ms.level)
+                    
+                | :? Renderbuffer as ms ->
+                    GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
 
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.DrawFramebuffer,drawFbo)
-                    OpenGL.GL.FramebufferTexture(OpenGL.FramebufferTarget.DrawFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, tex, 0)
+                | _ ->
+                    failwithf "[GL] cannot resolve %A" ms
 
-                    let mutable src = Box2i(0, 0, size.X, size.Y)
-                    let mutable dst = Box2i(0, 0, size.X, size.Y)
+ 
+            let size = ms.Size
+            let readFbo = OpenGL.GL.GenFramebuffer()
+            let drawFbo = OpenGL.GL.GenFramebuffer()
 
-                    match trafo with
-                        | ImageTrafo.Rot0 -> ()
-                        | ImageTrafo.MirrorY -> 
-                            dst.Min.Y <- dst.Max.Y - 1
-                            dst.Max.Y <- -1
-                        | ImageTrafo.MirrorX ->
-                            dst.Min.X <- dst.Max.X - 1
-                            dst.Max.X <- -1
-                        | _ -> failwith "unsupported image trafo"
+              
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
+            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, 0)
+
+            let mutable src = Box2i(0, 0, size.X, size.Y)
+            let mutable dst = Box2i(0, 0, size.X, size.Y)
+
+            match trafo with
+                | ImageTrafo.Rot0 -> ()
+                | ImageTrafo.MirrorY -> 
+                    dst.Min.Y <- dst.Max.Y - 1
+                    dst.Max.Y <- -1
+                | ImageTrafo.MirrorX ->
+                    dst.Min.X <- dst.Max.X - 1
+                    dst.Max.X <- -1
+                | _ -> failwith "unsupported image trafo"
                     
 
-                    OpenGL.GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, OpenGL.ClearBufferMask.ColorBufferBit, OpenGL.BlitFramebufferFilter.Nearest)
+            GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
 
-                    OpenGL.GL.FramebufferRenderbuffer(OpenGL.FramebufferTarget.ReadFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, OpenGL.RenderbufferTarget.Renderbuffer, 0)
-                    OpenGL.GL.FramebufferTexture(OpenGL.FramebufferTarget.DrawFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, 0, 0)
+            GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, 0)
+            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, 0, 0)
 
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer, 0)
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.DrawFramebuffer, 0)
-                    OpenGL.GL.DeleteFramebuffer readFbo
-                    OpenGL.GL.DeleteFramebuffer drawFbo
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+            GL.DeleteFramebuffer readFbo
+            GL.DeleteFramebuffer drawFbo
 
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.Framebuffer,oldFbo)
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer,oldFbo)
 
-                | _ -> failwith "not implemented"
         )
+
+    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
+        ctx.Download(unbox<Texture> t, level, slice, target)
 
 
     member x.CreateFramebuffer(bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
@@ -316,61 +225,5 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
         ctx.CreateRenderbuffer(size, format, samples)
-
-
-    member x.CreateFramebuffer(bindings : Map<Symbol, IMod<IFramebufferOutput>>) =
-        let fbo = manager.CreateFramebuffer(bindings |> Map.toList)
-        new ChangeableFramebuffer(fbo) :> IFramebuffer
-
-    member x.CreateTexture(size : IMod<V2i>, format : IMod<TextureFormat>, mipMaps : IMod<int>, samples : IMod<int>) =
-        let tex = manager.CreateTexture(size, mipMaps, format, samples)
-
-        new ChangeableFramebufferTexture(tex) :> IFramebufferTexture
-
-    member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<RenderbufferFormat>, samples : IMod<int>) =
-        let rb = manager.CreateRenderbuffer(size, format, samples)
-
-        new ChangeableRenderbuffer(rb) :> IFramebufferRenderbuffer
-
-    member x.ResolveMultisamples(ms : IFramebufferRenderbuffer, srcRegion : Box2i, ss : IFramebufferTexture, targetRegion : Box2i) =
-            using ctx.ResourceLock (fun _ ->
-                let mutable oldFbo = 0
-                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
-
-
-                match ms.Handle,ss.GetHandle null with
-                    | (:? int as rb), (:? int as tex) ->
-                        
-                        let size = ms.Size
-                        let readFbo = OpenGL.GL.GenFramebuffer()
-                        let drawFbo = OpenGL.GL.GenFramebuffer()
-
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
-                        OpenGL.GL.FramebufferRenderbuffer(OpenGL.FramebufferTarget.ReadFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, OpenGL.RenderbufferTarget.Renderbuffer, rb)
-
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.DrawFramebuffer,drawFbo)
-                        OpenGL.GL.FramebufferTexture(OpenGL.FramebufferTarget.DrawFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, tex, 0)
-
-                        let src = srcRegion
-                        let dst = targetRegion
-
-                        if srcRegion.Size = targetRegion.Size then
-                            OpenGL.GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, OpenGL.ClearBufferMask.ColorBufferBit, OpenGL.BlitFramebufferFilter.Nearest)
-                        else
-                            OpenGL.GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, OpenGL.ClearBufferMask.ColorBufferBit, OpenGL.BlitFramebufferFilter.Linear)
-
-                        OpenGL.GL.FramebufferRenderbuffer(OpenGL.FramebufferTarget.ReadFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, OpenGL.RenderbufferTarget.Renderbuffer, 0)
-                        OpenGL.GL.FramebufferTexture(OpenGL.FramebufferTarget.DrawFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, 0, 0)
-
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer, 0)
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.DrawFramebuffer, 0)
-                        OpenGL.GL.DeleteFramebuffer readFbo
-                        OpenGL.GL.DeleteFramebuffer drawFbo
-
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.Framebuffer,oldFbo)
-
-                    | _ -> failwith "not implemented"
-            )
-
 
     new() = new Runtime(null)

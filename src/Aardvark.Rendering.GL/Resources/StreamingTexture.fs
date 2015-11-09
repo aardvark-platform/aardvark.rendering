@@ -225,7 +225,7 @@ module StreamingTexture =
 
     let delete (t : StreamingTexture) =
         t.Context.Delete t
-
-    let read (format : PixFormat) (level : int) (tex : StreamingTexture) : PixImage =
-        let arr = tex.Context.Download(tex.Texture, format, level)
-        arr.[0]
+//
+//    let read (format : PixFormat) (level : int) (tex : StreamingTexture) : PixImage =
+//        let arr = tex.Context.Download(tex.Texture, format, level)
+//        arr.[0]

@@ -32,10 +32,10 @@ type IBackendSurface =
     inherit ISurface
     abstract member Handle : obj
 
-type BackendTextureOutputView = { backendTexture : IBackendTexture; level : int; slice : int } with
+type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice : int } with
     interface IFramebufferOutput with
-        member x.Samples = x.backendTexture.Samples
-        member x.Size = x.backendTexture.Size
+        member x.Samples = x.texture.Samples
+        member x.Size = x.texture.Size
 
 
 
@@ -86,35 +86,9 @@ type IRuntime =
     abstract member CompileClear : clearColor : IMod<Option<C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
     abstract member CompileRender : BackendConfiguration * aset<IRenderObject> -> IRenderTask
     
-//    abstract member ResolveMultisamples : ms : IRenderbuffer * ss : ITexture * trafo : ImageTrafo -> unit
-//    abstract member CopyTexture : source : ITexture * target : ITexture * trafo : ImageTrafo -> unit
 
-
-
-    [<Obsolete("use non-adaptive overload instead")>]
-    abstract member CreateTexture : IMod<ITexture> -> IMod<ITexture>
-
-    [<Obsolete("use non-adaptive overload instead")>]
-    abstract member CreateBuffer : IMod<IBuffer> -> IMod<IBuffer>
-
-    [<Obsolete("use non-adaptive overload instead")>]
-    abstract member DeleteTexture : IMod<ITexture> -> unit
-
-    [<Obsolete("use non-adaptive overload instead")>]
-    abstract member DeleteBuffer : IMod<IBuffer> -> unit
-
-
-    [<Obsolete("use non-adaptive overload instead")>]
-    abstract member CreateTexture : size : IMod<V2i> * format : IMod<TextureFormat> * samples : IMod<int> * count : IMod<int> -> IFramebufferTexture
-    
-    [<Obsolete("use non-adaptive overload instead")>]
-    abstract member CreateRenderbuffer : size : IMod<V2i> * format : IMod<RenderbufferFormat> * samples : IMod<int> -> IFramebufferRenderbuffer
-    
-    [<Obsolete("use non-adaptive overload instead")>]
-    abstract member CreateFramebuffer : attachments : Map<Symbol, IMod<IFramebufferOutput>> -> IFramebuffer
-
-    [<Obsolete("use non-adaptive overload instead")>]
-    abstract member ResolveMultisamples : ms : IFramebufferRenderbuffer * ss : IFramebufferTexture * trafo : ImageTrafo -> unit
+    abstract member ResolveMultisamples : IFramebufferOutput * IBackendTexture * ImageTrafo -> unit
+    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
 
 and IRenderTask =
     inherit IDisposable
@@ -197,7 +171,7 @@ type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
                 | Some o ->
                     match o with
                         | :? BackendTextureOutputView as o ->
-                            o.backendTexture :> ITexture
+                            o.texture :> ITexture
                         | _ ->
                             failwithf "unexpected output: %A" o
                 | None ->
