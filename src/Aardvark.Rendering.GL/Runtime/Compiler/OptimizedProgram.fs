@@ -377,8 +377,8 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; inputSet = inputSet }
 
-    let sortedFragments = SortedDictionaryExt<IRenderObject, OptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
-    //let sortedFragments = StateTrie<IRenderObject, OptimizedRenderObjectFragment<'f>>({ new IComparer<IRenderObject> with member x.Compare(l,r) = sorter.Compare(l,r) })
+    //let sortedFragments = SortedDictionaryExt<IRenderObject, OptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
+    let sortedFragments = StateTrie<IRenderObject, OptimizedRenderObjectFragment<'f>>({ new IComparer<IRenderObject> with member x.Compare(l,r) = sorter.Compare(l,r) })
     let fragments = Dict<IRenderObject, OptimizedRenderObjectFragment<'f>>()
     let preparedRenderObjects = Dict<RenderObject,PreparedRenderObject>()
 
@@ -416,24 +416,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
         // create a new RenderObjectFragment and link it
         let fragment = 
-//            sortedFragments.AlterWithNeighbours(rj, fun l s r ->
-//                match s with
-//                    | Some f ->
-//                        failwithf "duplicated renderobject: %A" f.RenderObject
-//                    | None ->
-//                        let l = match l with | Some (_,l) -> l | None -> prolog
-//                        let r = match r with | Some (_,r) -> r | None -> epilog
-//
-//                        let f = new OptimizedRenderObjectFragment<'f>(prep, ctx)
-//                        f.Prev <- l
-//                        l.Next <- f
-//
-//                        f.Next <- r
-//                        r.Prev <- f
-//
-//                        Some f
-//            )
-            sortedFragments |> SortedDictionary.setWithNeighbours rj (fun l s r -> 
+            sortedFragments.AlterWithNeighbours(rj, fun l s r ->
                 match s with
                     | Some f ->
                         failwithf "duplicated renderobject: %A" f.RenderObject
@@ -448,10 +431,27 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                         f.Next <- r
                         r.Prev <- f
 
-                        f
-            ) 
+                        Some f
+            )
+//            sortedFragments |> SortedDictionary.setWithNeighbours rj (fun l s r -> 
+//                match s with
+//                    | Some f ->
+//                        failwithf "duplicated renderobject: %A" f.RenderObject
+//                    | None ->
+//                        let l = match l with | Some (_,l) -> l | None -> prolog
+//                        let r = match r with | Some (_,r) -> r | None -> epilog
+//
+//                        let f = new OptimizedRenderObjectFragment<'f>(prep, ctx)
+//                        f.Prev <- l
+//                        l.Next <- f
+//
+//                        f.Next <- r
+//                        r.Prev <- f
+//
+//                        f
+//            ) 
 
-        //let fragment = fragment.Value
+        let fragment = fragment.Value
         fragments.[rj] <- fragment
         
         handler.Hint(AddRenderObject 1)

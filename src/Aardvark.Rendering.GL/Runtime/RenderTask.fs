@@ -177,6 +177,14 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
     let updateGPUTime = System.Diagnostics.Stopwatch()
     let executionTime = System.Diagnostics.Stopwatch()
     
+    let addIfNotZero (key : 'a) (cnt : int) (m : Map<'a, float>) =
+        if cnt <> 0 then
+            match Map.tryFind key m with
+                | Some v -> Map.add key (v + float cnt) m
+                | None -> Map.add key (float cnt) m
+        else
+            m
+
     member x.Runtime = runtime
     member x.Manager = manager
 
@@ -237,15 +245,15 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
 
         dirtyPoolCount, viewUpdateCount, time
 
-    member private x.UpdateDirty() =
+    member private x.UpdateDirtyResources() =
         let mutable stats = FrameStatistics.Zero
-        let poolUpdateCount, viewUpdateCount, uniformUpdateTime = 
-            x.UpdateDirtyUniformBufferViews()
+//        let poolUpdateCount, viewUpdateCount, uniformUpdateTime = 
+//            x.UpdateDirtyUniformBufferViews()
 
-        let mutable count = poolUpdateCount + viewUpdateCount
+        let mutable count = 0 //poolUpdateCount + viewUpdateCount
         let counts = Dictionary<ResourceKind, ref<int>>()
-        counts.[ResourceKind.UniformBuffer] <- ref viewUpdateCount
-        counts.[ResourceKind.Buffer] <- ref poolUpdateCount
+//        counts.[ResourceKind.UniformBuffer] <- ref viewUpdateCount
+//        counts.[ResourceKind.Buffer] <- ref poolUpdateCount
 
             
         let dirtyResources = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
@@ -277,7 +285,7 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
         if Config.SyncUploadsAndFrames && count > 0 then
             OpenTK.Graphics.OpenGL4.GL.Sync()
 
-        count, counts, uniformUpdateTime + updateCPUTime.Elapsed + updateGPUTime.Elapsed, stats
+        count, counts, updateCPUTime.Elapsed + updateGPUTime.Elapsed, stats
 
 
 
@@ -379,16 +387,20 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
 
                 renderPassChangeSet.Evaluate() |> ignore
 
+                
+                let resourceUpdates, resourceCounts, resourceUpdateTime, updateStats = 
+                    x.UpdateDirtyResources()
+
                 let mutable stats = FrameStatistics.Zero
                 let contextHandle = ContextHandle.Current.Value
                 for (KeyValue(_,p)) in programs do
                     stats <- stats + p.Update(handle, contextHandle)
    
 
-                let resourceUpdates, resourceCounts, resourceUpdateTime, updateStats = 
-                    x.UpdateDirty()
+                let poolUpdates, viewUpdates, uniformUpdateTime = 
+                    x.UpdateDirtyUniformBufferViews()
 
-                    
+  
                 executionTime.Restart()
 
 
@@ -415,12 +427,18 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
                     if wasEnabled then GL.Enable EnableCap.DebugOutput
                     else GL.Disable EnableCap.DebugOutput
 
+                let resourceCounts =
+                    resourceCounts
+                        |> addIfNotZero ResourceKind.UniformBufferView viewUpdates
+                        |> addIfNotZero ResourceKind.UniformBuffer poolUpdates
+
+
                 let stats = 
                     { stats with 
                         ExecutionTime = executionTime.Elapsed
-                        ResourceUpdateCount = float resourceUpdates
+                        ResourceUpdateCount = float (resourceUpdates + viewUpdates + poolUpdates)
                         ResourceUpdateCounts = resourceCounts
-                        ResourceUpdateTime = resourceUpdateTime 
+                        ResourceUpdateTime = (resourceUpdateTime + uniformUpdateTime)
                         AddedRenderObjects = float additions
                         RemovedRenderObjects = float removals
                         ResourceCount = float inputSet.Resources.Count 

@@ -176,6 +176,7 @@ module DefaultOverlays =
          | ResourceKind.ShaderProgram -> "P"
          | ResourceKind.UniformLocation -> "UL"
          | ResourceKind.UniformBuffer -> "U"
+         | ResourceKind.UniformBufferView -> "UV"
          | ResourceKind.VertexArrayObject -> "V"
          | _ -> "?"
          
