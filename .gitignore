@@ -18,3 +18,4 @@ bin/Debug
 src/GLVM/*.so
 /sources.lock
 /bin/Aardvark.Fake.dll
+~$*
