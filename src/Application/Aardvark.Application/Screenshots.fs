@@ -45,7 +45,7 @@ module Screenshot =
 
     let take (target : IRenderTarget) =
         async {
-            let img = renderToImage (Mod.force target.Samples) (Mod.force target.Sizes) target.RenderTask
+            let img = renderToImage target.Samples (Mod.force target.Sizes) target.RenderTask
             return img
         }
 
@@ -59,7 +59,7 @@ type RenderTargetExtensions private() =
 
     [<Extension>]
     static member Capture(this : IRenderTarget) =
-        RenderTargetExtensions.Capture(this, Mod.force this.Samples)
+        RenderTargetExtensions.Capture(this, this.Samples)
 
     [<Extension>]
     static member CaptureAsync(this : IRenderTarget, samples : int) =
@@ -69,4 +69,4 @@ type RenderTargetExtensions private() =
 
     [<Extension>]
     static member CaptureAsync(this : IRenderTarget) =
-        RenderTargetExtensions.CaptureAsync(this, Mod.force this.Samples)
+        RenderTargetExtensions.CaptureAsync(this, this.Samples)

@@ -112,10 +112,12 @@ type RenderControl() as this =
                 | Some i -> i.RenderTask <- t
                 | None -> ()
 
+    member x.FramebufferSignature = impl.Value.FramebufferSignature
     member x.Runtime = impl.Value.Runtime
     member x.Time = time
 
     interface IRenderControl with
+        member x.FramebufferSignature = impl.Value.FramebufferSignature
         member x.Runtime = impl.Value.Runtime
         member x.Time = time
         member x.Sizes = x.Sizes

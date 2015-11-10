@@ -307,8 +307,10 @@ module Sg =
 
         member x.ASet = content
 
-    type AsyncLoadApplicator(child : IMod<ISg>) =
+    type AsyncLoadApplicator(fboSignature : IFramebufferSignature, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
+
+        member x.FramebufferSignature = fboSignature
 
     type Environment (runtime : IRuntime, viewTrafo : IMod<Trafo3d>, projTrafo : IMod<Trafo3d>, viewSize : IMod<V2i>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)

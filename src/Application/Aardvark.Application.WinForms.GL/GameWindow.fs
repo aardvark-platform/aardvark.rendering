@@ -331,6 +331,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
     )
     let ctx = runtime.Context
 
+
     let mutable loaded = false
     let statistics = EventSource<FrameStatistics>(FrameStatistics.Zero)
 
@@ -348,6 +349,26 @@ type GameWindow(runtime : Runtime, samples : int) as this =
     let keyboard = new GameWindowIO.Keyboard()
 
     let startupTime = System.Diagnostics.Stopwatch()
+
+
+    
+    let depthStencilSignature =
+        match Config.DepthBits, Config.StencilBits with
+            | 0, 0 -> None
+            | 16, 0 -> Some { format = RenderbufferFormat.DepthComponent16; samples = samples }
+            | 24, 0 -> Some { format = RenderbufferFormat.DepthComponent24; samples = samples }
+            | 32, 0 -> Some { format = RenderbufferFormat.DepthComponent32; samples = samples }
+            | 24, 8 -> Some { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
+            | 32, 8 -> Some { format = RenderbufferFormat.Depth32fStencil8; samples = samples }
+            | _ -> failwith "invalid depth-stencil mode"
+
+    let fboSignature =
+        FramebufferSignature(
+            Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
+            depthStencilSignature
+        )
+
+
 
     do mouse.SetControl this
        keyboard.SetControl this
@@ -427,6 +448,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
    
     member x.Mouse = mouse :> IMouse
     member x.Keyboard = keyboard :> IKeyboard     
+    member x.FramebufferSignature = fboSignature :> IFramebufferSignature
 
     member x.Run()  =
         startupTime.Start()
@@ -434,13 +456,14 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 
 
     interface IRenderTarget with
+        member x.FramebufferSignature = fboSignature :> IFramebufferSignature
         member x.Runtime = runtime :> IRuntime
         member x.Time = time
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
         member x.Sizes = sizes :> IMod<_>
-        member x.Samples = Mod.constant samples
+        member x.Samples = samples
 
     interface IRenderControl with
         member x.Mouse = mouse :> IMouse

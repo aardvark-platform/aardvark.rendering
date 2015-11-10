@@ -135,7 +135,7 @@ module RenderTask =
                         RenderObjects.create color depth :> IRenderObject
                     ]
 
-                let composeTask = runtime.CompileRender(compose)
+                let composeTask = runtime.CompileRender(t.FramebufferSignature, compose)
 
 
                 RenderTask.ofList [
@@ -169,7 +169,7 @@ module RenderTask =
                         }:> IRenderObject
                     ]
 
-                let composeTask = runtime.CompileRender(compose)
+                let composeTask = runtime.CompileRender(t.FramebufferSignature, compose)
 
 
                 RenderTask.ofList [

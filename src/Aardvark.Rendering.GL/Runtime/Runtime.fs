@@ -8,16 +8,14 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 
-type FramebufferSignature(colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
+type FramebufferSignature(colors : Map<int, Symbol * AttachmentSignature>, depthStencil : Option<AttachmentSignature>) =
    
     member x.ColorAttachments = colors
-    member x.DepthAttachment = depth
-    member x.StencilAttachment = stencil 
+    member x.DepthStencilAttachment = depthStencil
 
     interface IFramebufferSignature with
         member x.ColorAttachments = colors
-        member x.DepthAttachment = depth
-        member x.StencilAttachment = stencil
+        member x.DepthStencilAttachment = depthStencil
 
 
 
@@ -115,16 +113,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
 
-        let depth =
+        let depthStencil =
             Map.tryFind DefaultSemantic.Depth attachments
-
-        let stencil =
-            Map.tryFind DefaultSemantic.Stencil attachments
 
         let indexedColors =
             attachments
                 |> Map.remove DefaultSemantic.Depth
-                |> Map.remove DefaultSemantic.Stencil
                 |> Map.toList
                 |> List.sortWith (fun (a,_) (b,_) -> 
                     if a = DefaultSemantic.Colors then Int32.MinValue
@@ -134,7 +128,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 |> List.mapi (fun i t -> (i, t))
                 |> Map.ofList
 
-        FramebufferSignature(indexedColors, depth, stencil)
+        FramebufferSignature(indexedColors, depthStencil)
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)

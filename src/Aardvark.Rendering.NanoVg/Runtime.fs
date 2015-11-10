@@ -435,6 +435,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         )
 
     interface IRenderTask with
+        member x.FramebufferSignature = null
         member x.Runtime = runtime :> IRuntime |> Some
         member x.Run(caller, fbo) = 
             x.Run(caller, fbo)

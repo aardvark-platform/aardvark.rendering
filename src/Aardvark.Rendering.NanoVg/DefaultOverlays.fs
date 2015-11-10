@@ -275,6 +275,7 @@ module DefaultOverlays =
            annotation.AddOutput this
 
         interface IRenderTask with
+            member x.FramebufferSignature = null
             member x.Dispose() =
                 real.RemoveOutput x
                 annotation.RemoveOutput x

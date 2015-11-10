@@ -21,7 +21,7 @@ type AsyncLoadSemantics() =
                     Mod.async (
                         async { 
                             //printfn "preparing render object..."
-                            let ro = runtime.PrepareRenderObject ro 
+                            let ro = runtime.PrepareRenderObject(app.FramebufferSignature, ro)
                             //printfn "prepared render object"
                             return ro
                         } 

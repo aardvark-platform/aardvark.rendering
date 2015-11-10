@@ -24,7 +24,8 @@ type SimpleRenderWindow() =
     member x.RenderTask
         with get() = ctrl.RenderTask
         and set t = ctrl.RenderTask <- t
-
+        
+    member x.FramebufferSignature = ctrl.FramebufferSignature
     member x.Runtime = ctrl.Runtime
     member x.Sizes = ctrl.Sizes
     member x.Samples = ctrl.Samples
@@ -36,6 +37,7 @@ type SimpleRenderWindow() =
         app.Run(x) |> ignore
 
     interface IRenderWindow with
+        member x.FramebufferSignature = ctrl.FramebufferSignature
         member x.Runtime = ctrl.Runtime
         member x.Time = ctrl.Time
         member x.RenderTask
