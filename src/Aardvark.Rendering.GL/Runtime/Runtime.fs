@@ -8,15 +8,16 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 
-type FramebufferSignature(colors : Map<int, Symbol * AttachmentSignature>, depthStencil : Option<AttachmentSignature>) =
+type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, depthStencil : Option<AttachmentSignature>) =
    
+    member x.Runtime = runtime
     member x.ColorAttachments = colors
     member x.DepthStencilAttachment = depthStencil
 
     interface IFramebufferSignature with
+        member x.Runtime = runtime
         member x.ColorAttachments = colors
         member x.DepthStencilAttachment = depthStencil
-
 
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
@@ -128,7 +129,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 |> List.mapi (fun i t -> (i, t))
                 |> Map.ofList
 
-        FramebufferSignature(indexedColors, depthStencil)
+        FramebufferSignature(x, indexedColors, depthStencil)
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)

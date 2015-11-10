@@ -471,10 +471,19 @@ module RenderingTests =
             Log.line "renderer: %s" runtime.Context.Driver.renderer
         )
 
+        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
+
         let signature =
             runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
+                DefaultSemantic.Depth, depth.Format
+            ]
+
+        let fbo = 
+            signature.CreateFramebuffer [
+                DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                DefaultSemantic.Depth, (depth :> IFramebufferOutput)
             ]
 
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
@@ -482,17 +491,7 @@ module RenderingTests =
         let task = runtime.CompileRender(signature, renderJobs)
         //let task2 = runtime.CompileRender renderJobs
 
-        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
-        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
 
-        let fbo = 
-            runtime.CreateFramebuffer(
-                signature,
-                Map.ofList [
-                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
-                ]
-            )
 
         clear.Run fbo |> ignore
         OpenTK.Graphics.OpenGL4.GL.Sync()

@@ -12,9 +12,6 @@ type IStreamingTexture =
     abstract member Update : format : PixFormat * size : V2i * data : nativeint -> unit
     abstract member ReadPixel : pos : V2i -> C4b
 
-type RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
-    member x.Framebuffer = f
-    member x.Statistics = stats
 
 
 type IBackendBuffer =
@@ -77,6 +74,24 @@ and IRenderTask =
     abstract member Runtime : Option<IRuntime>
     abstract member Run : IAdaptiveObject * IFramebuffer -> RenderingResult
     abstract member FrameId : uint64
+
+and [<AllowNullLiteral>] IFramebufferSignature =
+    abstract member Runtime : IRuntime
+    abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
+    abstract member DepthStencilAttachment : Option<AttachmentSignature>
+
+
+
+and IFramebuffer =
+    inherit IDisposable
+    abstract member Signature : IFramebufferSignature
+    abstract member Size : V2i
+    abstract member GetHandle : IAdaptiveObject -> obj
+    abstract member Attachments : Map<Symbol, IFramebufferOutput>
+
+and RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
+    member x.Framebuffer = f
+    member x.Statistics = stats
 
 [<Extension>]
 type RenderTaskRunExtensions() =

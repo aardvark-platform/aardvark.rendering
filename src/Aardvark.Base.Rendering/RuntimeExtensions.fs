@@ -82,6 +82,27 @@ type RuntimeExtensions private() =
     static member CreateFramebufferSignature(this : IRuntime, l : Map<Symbol, AttachmentSignature>) =
         this.CreateFramebufferSignature(SymDict.ofMap l)
 
+
+
+    [<Extension>]
+    static member CreateFramebufferSignature(this : IRuntime, samples : int, l : seq<Symbol * RenderbufferFormat>) =
+        this.CreateFramebufferSignature(
+            l |> Seq.map (fun (s,f) -> s, { format = f; samples = samples }) |> SymDict.ofSeq
+        )
+
+    [<Extension>]
+    static member CreateFramebufferSignature(this : IRuntime, l : seq<Symbol * RenderbufferFormat>) =
+        this.CreateFramebufferSignature(
+            l |> Seq.map (fun (s,f) -> s, { format = f; samples = 1 }) |> SymDict.ofSeq
+        )
+
+    [<Extension>]
+    static member CreateFramebuffer(this : IRuntime, signature : IFramebufferSignature, attachments : seq<Symbol * IFramebufferOutput>) =
+        this.CreateFramebuffer(
+            signature,
+            Map.ofSeq attachments
+        )
+
 [<AbstractClass; Sealed; Extension>]
 type IBackendTextureExtensions private() =
     
@@ -96,3 +117,14 @@ type IBackendTextureExtensions private() =
     [<Extension>]
     static member GetOutputView(this : IBackendTexture) =
         { texture = this; level = 0; slice = 0 } :> IFramebufferOutput
+
+
+[<AbstractClass; Sealed; Extension>]
+type IFramebufferSignatureExtensions private() =
+    [<Extension>]
+    static member CreateFramebuffer (this : IFramebufferSignature, attachments : Map<Symbol, IFramebufferOutput>) =
+        this.Runtime.CreateFramebuffer(this, attachments)
+    
+    [<Extension>]
+    static member CreateFramebuffer (this : IFramebufferSignature, attachments : seq<Symbol * IFramebufferOutput>) =
+        this.Runtime.CreateFramebuffer(this, attachments)

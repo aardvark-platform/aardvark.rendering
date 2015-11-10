@@ -352,17 +352,4 @@ type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice 
 
 type AttachmentSignature = { format : RenderbufferFormat; samples : int }
 
-[<AllowNullLiteral>]
-type IFramebufferSignature =
-    abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
-    abstract member DepthStencilAttachment : Option<AttachmentSignature>
-
-
-
-type IFramebuffer =
-    inherit IDisposable
-    abstract member Signature : IFramebufferSignature
-    abstract member Size : V2i
-    abstract member GetHandle : IAdaptiveObject -> obj
-    abstract member Attachments : Map<Symbol, IFramebufferOutput>
 
