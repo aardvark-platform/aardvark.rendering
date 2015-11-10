@@ -114,7 +114,7 @@ type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>
 type IGeneratedSurface =
     inherit ISurface
 
-    abstract member Generate : IRuntime -> BackendSurface
+    abstract member Generate : IRuntime * IFramebufferSignature -> BackendSurface
 
 
 type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<IFramebuffer>) =

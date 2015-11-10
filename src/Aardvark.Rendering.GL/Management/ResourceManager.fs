@@ -154,13 +154,13 @@ module ResourceManager =
         open System
         open System.Collections.Generic
 
-        let compilers = Dictionary<Type,Context -> ISurface -> Error<Program>>()
+        let compilers = Dictionary<Type,Context -> IFramebufferSignature -> ISurface -> Error<Program>>()
 
-        let registerShaderCompiler (compiler : Context -> 'a -> Error<Program>) =
-            compilers.Add ( typeof<'a>, fun ctx s -> compiler ctx (unbox<'a> s) )
+        let registerShaderCompiler (compiler : Context -> IFramebufferSignature -> 'a -> Error<Program>) =
+            compilers.Add ( typeof<'a>, fun ctx signature s -> compiler ctx signature (unbox<'a> s) )
 
-        let compileBackendSurface (ctx : Context) (b : BackendSurface) =
-            match ctx.TryCompileProgram b.Code with
+        let compileBackendSurface (ctx : Context) (signature : IFramebufferSignature) (b : BackendSurface) =
+            match ctx.TryCompileProgram(signature, b.Code) with
                 | Success s ->
                     let remapSemantic (sem : string) =
                         match b.SemanticMap.TryGetValue (Sym.ofString sem) with
@@ -188,14 +188,14 @@ module ResourceManager =
 
         do registerShaderCompiler compileBackendSurface
 
-        do registerShaderCompiler (fun (ctx : Context) (g : IGeneratedSurface) -> 
-            let b = g.Generate ctx.Runtime
-            compileBackendSurface ctx b
+        do registerShaderCompiler (fun (ctx : Context) (signature : IFramebufferSignature) (g : IGeneratedSurface) -> 
+            let b = g.Generate(ctx.Runtime, signature)
+            compileBackendSurface ctx signature b
            )
 
-        let compile (ctx : Context) (s : ISurface) =   
+        let compile (ctx : Context) (signature : IFramebufferSignature) (s : ISurface) =   
             match compilers |> Seq.tryPick (fun ( KeyValue(k,v) ) -> 
-                if k.IsAssignableFrom (s.GetType()) then Some <| v ctx s
+                if k.IsAssignableFrom (s.GetType()) then Some <| v ctx signature s
                 else None) with
              | Some k -> k
              | None -> Error "Unknown surface type. "
@@ -329,14 +329,6 @@ module ResourceManager =
 
     [<AllowNullLiteral>]
     type ResourceManager(original : ResourceManager, ctx : Context, shareTextures : bool, shareBuffers : bool) =
-        static let semanticIndices = ConcurrentDictionary<Symbol, int>()
-        static let mutable currentId = -1
-
-        static let getSemanticIndex (sem : Symbol) =
-            semanticIndices.GetOrAdd(sem, fun s ->
-                let id = Interlocked.Increment(&currentId)
-                id
-            )
 
         // some identifiers for caches
         static let arrayBuffer = Sym.ofString "ArrayBuffer"
@@ -389,7 +381,7 @@ module ResourceManager =
                 | _ -> original.UniformBufferPools
 
 
-        let compile (s : ISurface) = SurfaceCompilers.compile ctx s
+        let compile (signature : IFramebufferSignature) (s : ISurface) = SurfaceCompilers.compile ctx signature s
 
 //        let volatileSubscribtion (m : IMod) (cb : (unit -> unit) -> unit) : IDisposable =
 //            let f = ref Unchecked.defaultof<_>
@@ -607,9 +599,9 @@ module ResourceManager =
                               kind = ResourceKind.Texture  }            
             )
 
-        member x.CreateSurface (s : IMod<ISurface>) =
+        member x.CreateSurface (signature : IFramebufferSignature, s : IMod<ISurface>) =
            cache.[program].GetOrAdd(
-                [s],
+                [signature; s],
                 fun self ->
                     let current = s.GetValue(self)
                     match current with
@@ -622,7 +614,7 @@ module ResourceManager =
                           resource = s |> Mod.map unbox
                           kind = ResourceKind.ShaderProgram  }    
                      | _ ->
-                        let compileResult = compile current
+                        let compileResult = compile signature current
 
                         match compileResult with
                             | Success p ->
@@ -631,7 +623,7 @@ module ResourceManager =
                                 { trackChangedInputs = false
                                   dependencies = [s]
                                   updateCPU = fun _ -> 
-                                    match compile <| s.GetValue(self) with
+                                    match compile signature <| s.GetValue(self) with
                                         | Success p -> Mod.change handle p
                                         | Error e -> Log.warn "could not update surface: %A" e
 
@@ -857,75 +849,6 @@ module ResourceManager =
                 | Some index -> x.CreateVertexArrayObject(bindings, index)
                 | None -> x.CreateVertexArrayObject(bindings)
 
-        member x.CreateTexture(size : IMod<V2i>, mipLevels : IMod<int>, format : IMod<TextureFormat>, samples : IMod<int>) : ChangeableResource<Texture> =
-            
-            let textureFormat = format
-            
-            let desc self =
-                let handle = ctx.CreateTexture2D(size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
-                
-                { trackChangedInputs = true
-                  dependencies = [size :> IMod; textureFormat :> IMod; samples :> IMod]
-                  updateCPU = fun _ -> ()
-                  updateGPU = fun () -> 
-                    ctx.UpdateTexture2D(handle, size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
-                    FrameStatistics.Zero
-                  destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle
-                  kind = ResourceKind.Texture
-                }
 
-            new ChangeableResource<Texture>(desc)
-
-        member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<RenderbufferFormat>, samples : IMod<int>) : ChangeableResource<Renderbuffer> =
-            
-            let desc self =
-                let handle = ctx.CreateRenderbuffer(size.GetValue(self), format.GetValue(self), samples.GetValue(self))
-                { trackChangedInputs = true
-                  dependencies = [size :> IMod; format :> IMod; samples :> IMod]
-                  updateCPU = fun _ -> ()
-                  updateGPU = fun () -> 
-                    ctx.Update(handle, size.GetValue(self), format.GetValue(self), samples.GetValue(self))
-                    FrameStatistics.Zero
-                  destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle 
-                  kind = ResourceKind.Renderbuffer
-                }
-
-            new ChangeableResource<Renderbuffer>(desc)
-
-        member x.CreateFramebuffer(bindings : list<Symbol * IMod<IFramebufferOutput>>) : ChangeableResource<Aardvark.Rendering.GL.Framebuffer> =
-            let dict = SymDict.ofList bindings
-
-            let desc self =
-                let toInternal (bindings : list<Symbol * IMod<IFramebufferOutput>>) =
-                
-                    let depth =
-                        match dict.TryGetValue DefaultSemantic.Depth with
-                            | (true, d) ->
-                                Some <| d.GetValue(self)
-                            | _ ->
-                                None
-
-                    let colors = bindings |> List.filter (fun (s,b) -> s <> DefaultSemantic.Depth) |> List.map (fun (s,o) -> getSemanticIndex s, s, (o.GetValue(self)))
-
-                    colors,depth
-
-                let c,d = toInternal bindings
-                let handle = ctx.CreateFramebuffer(c, d)
-
-                { trackChangedInputs = true
-                  dependencies = bindings |> Seq.map (fun (_,v) -> v :> IAdaptiveObject) 
-                  updateCPU = fun _ -> ()
-                  updateGPU = fun () -> 
-                    let c,d = toInternal bindings
-                    ctx.Update(handle, c, d)
-                    FrameStatistics.Zero
-                  destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle
-                  kind = ResourceKind.Framebuffer 
-                }
-
-            new ChangeableResource<Aardvark.Rendering.GL.Framebuffer>(desc)
 
         new(ctx, shareTextures, shareBuffers) = ResourceManager(null, ctx, shareTextures, shareBuffers)

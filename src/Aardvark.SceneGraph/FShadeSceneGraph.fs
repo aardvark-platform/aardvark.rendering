@@ -179,11 +179,11 @@ module FShadeSceneGraph =
         let vulkan =
             {
                 languageVersion = Version(1,4)
-                enabledExtensions = Set.ofList ["GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack"]
+                enabledExtensions = Set.ofList [ "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack"; "GL_KHR_vulkan_GLSL" ]
                 createUniformBuffers = true
                 createGlobalUniforms = false
                 createBindings = true
-                createDescriptorSets = false
+                createDescriptorSets = true
                 createInputLocations = true
                 createRowMajorMatrices = true
                 createPerStageUniforms = true
@@ -211,7 +211,7 @@ module FShadeSceneGraph =
         member x.Effect = effect
 
         interface IGeneratedSurface with
-            member x.Generate (r : IRuntime) =
+            member x.Generate (r : IRuntime, signature : IFramebufferSignature) =
                 match cache with
                     | Some c -> c
                     | None ->

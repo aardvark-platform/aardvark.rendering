@@ -164,7 +164,7 @@ type ResourceManagerExtensions private() =
         use token = x.Context.ResourceLock
 
         // create a program and get its handle (ISSUE: assumed to be constant here)
-        let program = x.CreateSurface(rj.Surface)
+        let program = x.CreateSurface(fboSignature, rj.Surface)
         let prog = program.Resource.GetValue()
 
         // create all UniformBuffers requested by the program
