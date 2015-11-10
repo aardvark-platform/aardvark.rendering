@@ -14,16 +14,16 @@ type RuntimeExtensions private() =
         V2i(max 1 (s.X / (1 <<< level)), max 1 (s.Y / (1 <<< level)))
 
     [<Extension>]
-    static member CompileClear(this : IRuntime, color : IMod<C4f>, depth : IMod<float>) =
-        this.CompileClear(color |> Mod.map Some, depth |> Mod.map Some)
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, color : IMod<C4f>, depth : IMod<float>) =
+        this.CompileClear(signature, color |> Mod.map Some, depth |> Mod.map Some)
 
     [<Extension>]
-    static member CompileClear(this : IRuntime, color : IMod<C4f>) =
-        this.CompileClear(color |> Mod.map Some, Mod.constant None)
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, color : IMod<C4f>) =
+        this.CompileClear(signature, color |> Mod.map Some, Mod.constant None)
 
     [<Extension>]
-    static member CompileClear(this : IRuntime, depth : IMod<float>) =
-        this.CompileClear(Mod.constant None, depth |> Mod.map Some)
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, depth : IMod<float>) =
+        this.CompileClear(signature, Mod.constant None, depth |> Mod.map Some)
 
     [<Extension>]
     static member Download(this : IRuntime, texture : IBackendTexture, level : int, slice : int, format : PixFormat) =
@@ -60,6 +60,15 @@ type RuntimeExtensions private() =
     static member Download(this : IRuntime, texture : IBackendTexture) =
         let pixFormat = TextureFormat.toDownloadFormat texture.Format
         RuntimeExtensions.Download(this, texture, 0, 0, pixFormat)
+
+
+    [<Extension>]
+    static member Upload(this : IRuntime, texture : IBackendTexture, level : int, source : PixImage) =
+        this.Upload(texture, level, 0, source)
+
+    [<Extension>]
+    static member Upload(this : IRuntime, texture : IBackendTexture, source : PixImage) =
+        this.Upload(texture, 0, 0, source)
 
 [<AbstractClass; Sealed; Extension>]
 type IBackendTextureExtensions private() =

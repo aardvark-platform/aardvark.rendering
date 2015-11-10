@@ -13,6 +13,7 @@ module RenderTask =
     type private EmptyRenderTask() =
         inherit ConstantObject()
         interface IRenderTask with
+            member x.FramebufferSignature = null
             member x.Dispose() = ()
             member x.Run(caller, fbo) = RenderingResult(fbo, FrameStatistics.Zero)
             member x.Runtime = None
@@ -23,10 +24,20 @@ module RenderTask =
 
         do for t in tasks do t.AddOutput this
 
+        let signature =
+            lazy (
+                let signatures = tasks |> Array.map (fun t -> t.FramebufferSignature) |> Array.filter (not << isNull)
+
+                if signatures.Length = 0 then null
+                elif signatures.Length = 1 then signatures.[0]
+                else failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A" signatures
+            )
+
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
         let mutable frameId = 0UL
 
         interface IRenderTask with
+            member x.FramebufferSignature = signature.Value
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
                     let mutable stats = FrameStatistics.Zero
@@ -54,6 +65,10 @@ module RenderTask =
         let mutable frameId = 0UL
 
         interface IRenderTask with
+            member x.FramebufferSignature = 
+                let v = input.GetValue x
+                v.FramebufferSignature
+
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
                     x.OutOfDate <- true
@@ -90,6 +105,7 @@ module RenderTask =
         let reader = tasks.GetReader()
         do reader.AddOutput this
 
+        let mutable signature = null
         let mutable runtime = None
         let tasks = ReferenceCountingSet()
 
@@ -100,6 +116,16 @@ module RenderTask =
                 match t.Runtime with
                     | Some r -> runtime <- Some r
                     | None -> ()
+
+                let innerSig = t.FramebufferSignature
+                
+                if isNull innerSig then
+                    ()
+                elif isNull signature then
+                    signature <- innerSig
+                elif innerSig <> signature then
+                    failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A vs. %A" signature innerSig
+                    
                 t.AddOutput this
 
         let remove (t : IRenderTask) =
@@ -121,6 +147,10 @@ module RenderTask =
             this.OutOfDate <- wasOutOfDate
 
         interface IRenderTask with
+            member x.FramebufferSignature =
+                lock this (fun () -> processDeltas())
+                signature
+
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
                     processDeltas()
@@ -145,7 +175,7 @@ module RenderTask =
                 tasks.Clear()
                 
             member x.Runtime =
-                processDeltas()
+                lock this (fun () -> processDeltas())
                 runtime
 
             member x.FrameId = frameId
@@ -154,6 +184,7 @@ module RenderTask =
         inherit AdaptiveObject()
         do f.AddOutput this
         interface IRenderTask with
+            member x.FramebufferSignature = null
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
                     f.Evaluate (x,(x :> IRenderTask,fbo))
@@ -253,7 +284,7 @@ module RenderTask =
         )
 
 
-    let private createFramebuffer (runtime : IRuntime) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) =
+    let private createFramebuffer (runtime : IRuntime) (signature : IFramebufferSignature) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) =
         
         let mutable current = None
 
@@ -272,6 +303,7 @@ module RenderTask =
                 match color, depth with
                     | Some c, Some d -> 
                         runtime.CreateFramebuffer(
+                            signature,
                             Map.ofList [
                                 DefaultSemantic.Colors, c :> IFramebufferOutput
                                 DefaultSemantic.Depth, d :> IFramebufferOutput
@@ -279,12 +311,14 @@ module RenderTask =
                         )
                     | Some c, None ->
                         runtime.CreateFramebuffer(
+                            signature,
                             Map.ofList [
                                 DefaultSemantic.Colors, c :> IFramebufferOutput
                             ]
                         )
                     | None, Some d ->
                         runtime.CreateFramebuffer(
+                            signature,
                             Map.ofList [
                                 DefaultSemantic.Depth, d :> IFramebufferOutput
                             ]
@@ -320,13 +354,14 @@ module RenderTask =
 
     let renderToColorMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
+        let signature = task.FramebufferSignature
 
         //use lock = runtime.ContextLock
         let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
         let depth = createRenderbuffer runtime samples size ~~RenderbufferFormat.Depth24Stencil8 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-        let fbo = createFramebuffer runtime (Some <| defaultView color) (Some depth)
+        let fbo = createFramebuffer runtime signature (Some <| defaultView color) (Some depth)
 
         new SequentialRenderTask([|clear; task|]) 
             |> renderTo fbo
@@ -335,14 +370,15 @@ module RenderTask =
 
     let renderToDepthMS (samples : IMod<int>) (size : IMod<V2i>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
+        let signature = task.FramebufferSignature
 
         //use lock = runtime.ContextLock
         let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32
-        let clear = runtime.CompileClear(~~(C4f(0.0f,0.0f,0.0f,0.0f)), ~~1.0)
+        let clear = runtime.CompileClear(signature, ~~None, ~~(Some 1.0))
 
         
 
-        let fbo = createFramebuffer runtime None (Some <| defaultView depth)
+        let fbo = createFramebuffer runtime signature None (Some <| defaultView depth)
 
 
  
@@ -353,13 +389,14 @@ module RenderTask =
 
     let renderToColorAndDepthMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
+        let signature = task.FramebufferSignature
 
         //use lock = runtime.ContextLock
         let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
         let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-        let fbo = createFramebuffer runtime (Some <| defaultView color) (Some <| defaultView depth)
+        let fbo = createFramebuffer runtime signature (Some <| defaultView color) (Some <| defaultView depth)
 
         let renderResult = 
             new SequentialRenderTask([|clear; task|]) 

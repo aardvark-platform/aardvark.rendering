@@ -186,6 +186,28 @@ module TextureExtensions =
     [<AutoOpen>]
     module private Uploads =
 
+        let getTextureTarget (texture : Texture) =
+            match texture.Dimension, texture.IsArray, texture.IsMultisampled with
+
+                | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"
+                | TextureDimension.Texture1D,      true,    _        -> TextureTarget.Texture1DArray
+                | TextureDimension.Texture1D,      false,   _        -> TextureTarget.Texture1D
+                                                   
+                | TextureDimension.Texture2D,      false,   false    -> TextureTarget.Texture2D
+                | TextureDimension.Texture2D,      true,    false    -> TextureTarget.Texture2DArray
+                | TextureDimension.Texture2D,      false,   true     -> TextureTarget.Texture2DMultisample
+                | TextureDimension.Texture2D,      true,    true     -> TextureTarget.Texture2DMultisampleArray
+                                                   
+                | TextureDimension.Texture3D,      false,   false    -> TextureTarget.Texture3D
+                | TextureDimension.Texture3D,      _,       _        -> failwith "Texture3D cannot be multisampled or an array"
+                                                  
+                | TextureDimension.TextureCube,   false,    false    -> TextureTarget.TextureCubeMap
+                | TextureDimension.TextureCube,   true,     false    -> TextureTarget.TextureCubeMapArray
+                | TextureDimension.TextureCube,   _,        true     -> failwith "TextureCube cannot be multisampled"
+
+                | _ -> failwithf "unknown texture dimension: %A" texture.Dimension
+
+
         let private withAlignedPixImageContent (packAlign : int) (img : PixImage) (f : nativeint -> 'a) : 'a =
             let image = img.ToCanonicalDenseLayout()
 
@@ -218,7 +240,7 @@ module TextureExtensions =
             result
 
 
-        let private uploadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (textureParams : TextureParams) (data : PixImageMipMap) =
+        let private uploadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (startLevel : int) (textureParams : TextureParams) (data : PixImageMipMap) =
             if data.LevelCount <= 0 then
                 failwith "cannot upload texture having 0 levels"
 
@@ -238,7 +260,7 @@ module TextureExtensions =
             GL.Check "could not bind texture"
 
             for l in 0..uploadLevels-1 do
-                let level = data.[0]
+                let level = data.[l]
                 //let level = level.ToPixImage(Col.Format.RGBA)
 
                 // determine the input format and covert the image
@@ -260,9 +282,9 @@ module TextureExtensions =
 
                 withAlignedPixImageContent packAlign image (fun ptr ->
                     if sizeChanged || formatChanged then
-                        GL.TexImage2D(target, l, internalFormat, image.Size.X, image.Size.Y, 0, pixelFormat, pixelType, ptr)
+                        GL.TexImage2D(target, startLevel + l, internalFormat, image.Size.X, image.Size.Y, 0, pixelFormat, pixelType, ptr)
                     else
-                        GL.TexSubImage2D(target, l, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, ptr)
+                        GL.TexSubImage2D(target, startLevel + l, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, ptr)
                     GL.Check (sprintf "could not upload texture data for level %d" l)
                 )
 
@@ -338,7 +360,7 @@ module TextureExtensions =
             t.Format <- unbox internalFormat
 
         let uploadTexture2D (t : Texture) (textureParams : TextureParams) (data : PixImageMipMap) =
-            uploadTexture2DInternal TextureTarget.Texture2D true t textureParams data |> ignore
+            uploadTexture2DInternal TextureTarget.Texture2D true t 0 textureParams data |> ignore
 
         let uploadTextureCube (t : Texture) (textureParams : TextureParams) (data : PixImageCube) =
             for (s,_) in cubeSides do
@@ -350,7 +372,7 @@ module TextureExtensions =
 
             for (side, target) in cubeSides do
                 let data = data.[side]
-                let generate = uploadTexture2DInternal target false t textureParams data
+                let generate = uploadTexture2DInternal target false t 0 textureParams data
 
                 if generate && textureParams.wantMipMaps then
                     generateMipMaps <- true
@@ -427,6 +449,7 @@ module TextureExtensions =
 
         let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage) =
             let format =  image.PixFormat
+            
             //let levelSize = t.Size2D
 
             GL.BindTexture(target, t.Handle)
@@ -444,7 +467,28 @@ module TextureExtensions =
             GL.Check "could not download image"
 
             gc.Free()
-            
+          
+        let uploadTexture2DLevelInternal (target : TextureTarget) (t : Texture) (level : int) (image : PixImage) =
+            // determine the input format and covert the image
+            // to a supported format if necessary.
+            let pixelType, pixelFormat, image =
+                match toPixelType image.PixFormat.Type, toPixelFormat image.Format with
+                    | Some t, Some f -> (t,f, image)
+                    | _ ->
+                        failwith "conversion not implemented"
+
+            // since OpenGL cannot upload image-regions we
+            // need to ensure that the image has a canonical layout. 
+            // TODO: Check id this is no "real" copy when already canonical
+            let image = image.ToCanonicalDenseLayout()
+
+            let lineSize = image.Size.X * image.PixFormat.ChannelCount * image.PixFormat.Type.GLSize
+            let packAlign = t.Context.PackAlignment
+
+            withAlignedPixImageContent packAlign image (fun ptr ->
+                GL.TexSubImage2D(target, level, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, ptr)
+                GL.Check (sprintf "could not upload texture data for level %d" level)
+            )
 
         let downloadTexture2D (t : Texture) (level : int) (image : PixImage) =
             downloadTexture2DInternal TextureTarget.Texture2D true t level image
@@ -452,6 +496,7 @@ module TextureExtensions =
         let downloadTextureCube (t : Texture) (level : int) (side : CubeSide) (image : PixImage) =
             let target = cubeSides.[int side] |> snd
             downloadTexture2DInternal target false t level image
+
 
     type Context with
         member x.CreateTexture1D(size : int, mipMapLevels : int, t : TextureFormat) =
@@ -694,6 +739,20 @@ module TextureExtensions =
                     | _ ->  
                         failwithf "cannot download textures of kind: %A" t.Dimension
             )
+
+        member x.Upload(t : Texture, level : int, slice : int, source : PixImage) =
+            using x.ResourceLock (fun _ ->
+                match t.Dimension with
+                    | TextureDimension.Texture2D -> 
+                        let target = getTextureTarget t
+                        uploadTexture2DLevelInternal target t level source
+
+                    | TextureDimension.TextureCube ->
+                        let target = snd cubeSides.[slice]
+                        uploadTexture2DLevelInternal target t level source
+                    | _ ->  
+                        failwithf "cannot download textures of kind: %A" t.Dimension
+            )
             
         member x.Delete(t : Texture) =
             using x.ResourceLock (fun _ ->
@@ -703,26 +762,7 @@ module TextureExtensions =
             
     module ExecutionContext =
 
-        let internal getTextureTarget (texture : Texture) =
-            match texture.Dimension, texture.IsArray, texture.IsMultisampled with
-
-                | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"
-                | TextureDimension.Texture1D,      true,    _        -> TextureTarget.Texture1DArray
-                | TextureDimension.Texture1D,      false,   _        -> TextureTarget.Texture1D
-                                                   
-                | TextureDimension.Texture2D,      false,   false    -> TextureTarget.Texture2D
-                | TextureDimension.Texture2D,      true,    false    -> TextureTarget.Texture2DArray
-                | TextureDimension.Texture2D,      false,   true     -> TextureTarget.Texture2DMultisample
-                | TextureDimension.Texture2D,      true,    true     -> TextureTarget.Texture2DMultisampleArray
-                                                   
-                | TextureDimension.Texture3D,      false,   false    -> TextureTarget.Texture3D
-                | TextureDimension.Texture3D,      _,       _        -> failwith "Texture3D cannot be multisampled or an array"
-                                                  
-                | TextureDimension.TextureCube,   false,    false    -> TextureTarget.TextureCubeMap
-                | TextureDimension.TextureCube,   true,     false    -> TextureTarget.TextureCubeMapArray
-                | TextureDimension.TextureCube,   _,        true     -> failwith "TextureCube cannot be multisampled"
-
-                | _ -> failwithf "unknown texture dimension: %A" texture.Dimension
+        let internal getTextureTarget (texture : Texture) = Uploads.getTextureTarget texture
 
         let bindTexture (unit : int) (texture : Texture) =
             seq {

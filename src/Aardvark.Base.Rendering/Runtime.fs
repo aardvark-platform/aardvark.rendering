@@ -33,14 +33,24 @@ type IPreparedRenderObject =
     abstract member Update : IAdaptiveObject -> unit
     abstract member Original : Option<RenderObject>
 
+type AttachmentSignature = { format : RenderbufferFormat; samples : int }
+
+[<AllowNullLiteral>]
+type IFramebufferSignature =
+    abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
+    abstract member DepthAttachment : Option<AttachmentSignature>
+    abstract member StencilAttachment : Option<AttachmentSignature>
 
 type IRuntime =
     abstract member ContextLock : IDisposable
 
-    
+    abstract member CreateFramebufferSignature : attachments : SymbolDict<RenderbufferFormat> -> IFramebufferSignature
+    abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
+
+
     abstract member PrepareBuffer : IBuffer -> IBackendBuffer
     abstract member PrepareTexture : ITexture -> IBackendTexture
-    abstract member PrepareSurface : ISurface -> IBackendSurface
+    abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
     abstract member PrepareRenderObject : IRenderObject -> IPreparedRenderObject
 
 
@@ -53,22 +63,24 @@ type IRuntime =
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
     abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
-    abstract member CreateFramebuffer : attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
+    abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
 
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit
     abstract member DeleteFramebuffer : IFramebuffer -> unit
 
-    abstract member CompileClear : clearColor : IMod<Option<C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
-    abstract member CompileRender : BackendConfiguration * aset<IRenderObject> -> IRenderTask
+    abstract member CompileClear : fboSignature : IFramebufferSignature * clearColor : IMod<Option<C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
+    abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
     
     abstract member GenerateMipMaps : IBackendTexture -> unit
     abstract member ResolveMultisamples : IFramebufferOutput * IBackendTexture * ImageTrafo -> unit
+    abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
     abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
 
 and IRenderTask =
     inherit IDisposable
     inherit IAdaptiveObject
+    abstract member FramebufferSignature : IFramebufferSignature
     abstract member Runtime : Option<IRuntime>
     abstract member Run : IAdaptiveObject * IFramebuffer -> RenderingResult
     abstract member FrameId : uint64

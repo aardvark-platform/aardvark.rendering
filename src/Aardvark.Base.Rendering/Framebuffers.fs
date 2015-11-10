@@ -236,6 +236,17 @@ type TextureFormat =
     | Three = 3
     | Four = 4
 
+[<AutoOpen>]
+module private ConversionHelpers =
+    let inline internal convertEnum< ^a, ^b when ^a : (static member op_Explicit : ^a -> int)> (fmt : ^a) : ^b =
+        let v = int fmt
+        if Enum.IsDefined(typeof< ^b >, v) then
+            unbox< ^b > v
+        else
+            failwithf "cannot convert %s %A to %s" typeof< ^a >.Name fmt typeof< ^b >.Name
+
+  
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TextureFormat =
     open System.Collections.Generic
@@ -254,6 +265,13 @@ module TextureFormat =
             match d.TryGetValue key with
                 | (true, v) -> v
                 | _ -> failwithf "unsupported %A: %A" typeof<'a> key
+
+    let toRenderbufferFormat (fmt : TextureFormat) =
+        convertEnum<_, RenderbufferFormat> fmt
+
+    let ofRenderbufferFormat (fmt : RenderbufferFormat) =
+        convertEnum<_, TextureFormat> fmt
+
 
 
     let ofPixFormat = 
@@ -294,10 +312,20 @@ module TextureFormat =
 
         ]
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module RenderbufferFormat =
+    let toTextureFormat (fmt : RenderbufferFormat) =
+        convertEnum<_, TextureFormat> fmt
+
+    let ofTextureFormat (fmt : TextureFormat) =
+        convertEnum<_, RenderbufferFormat> fmt
 
 
 
+        
+ 
 type IFramebufferOutput =
+    abstract member Format : RenderbufferFormat
     abstract member Samples : int
     abstract member Size : V2i
 
@@ -313,11 +341,11 @@ type IBackendTexture =
 
 type IRenderbuffer =
     inherit IFramebufferOutput
-    abstract member Format : RenderbufferFormat
     abstract member Handle : obj
 
 type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice : int } with
     interface IFramebufferOutput with
+        member x.Format = TextureFormat.toRenderbufferFormat x.texture.Format
         member x.Samples = x.texture.Samples
         member x.Size = x.texture.Size.XY
 

@@ -8,6 +8,18 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 
+type FramebufferSignature(samples : int, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
+   
+    member x.ColorAttachments = colors
+    member x.DepthAttachment = depth
+    member x.StencilAttachment = stencil 
+
+    interface IFramebufferSignature with
+        member x.ColorAttachments = colors
+        member x.DepthAttachment = depth
+        member x.StencilAttachment = stencil
+
+
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
@@ -41,6 +53,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     interface IRuntime with
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
+        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
   
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
@@ -224,6 +237,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
         ctx.Download(unbox<Texture> t, level, slice, target)
 
+    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
+        ctx.Download(unbox<Texture> t, level, slice, source)
 
     member x.CreateFramebuffer(bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
 
