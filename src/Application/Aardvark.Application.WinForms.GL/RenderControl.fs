@@ -38,15 +38,6 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     let mutable task : Option<IRenderTask> = None
     let mutable taskSubscription : IDisposable = null
 
-    let mutable contextHandle : ContextHandle = null 
-    let defaultFramebuffer = new Framebuffer(ctx, (fun _ -> 0), ignore, [], None)
-
-    let avgFrameTime = RunningMean(10)
-    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
-    let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
-    let mutable needsRedraw = false
-    let mutable first = true
-    
     let depthStencilSignature =
         match Config.DepthBits, Config.StencilBits with
             | 0, 0 -> None
@@ -62,6 +53,17 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
             depthStencilSignature
         )
+
+    let mutable contextHandle : ContextHandle = null 
+    let defaultFramebuffer = new Framebuffer(ctx, fboSignature, (fun _ -> 0), ignore, [], None)
+
+    let avgFrameTime = RunningMean(10)
+    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
+    let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
+    let mutable needsRedraw = false
+    let mutable first = true
+    
+
 
 
     interface IControl with

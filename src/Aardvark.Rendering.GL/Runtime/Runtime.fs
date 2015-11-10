@@ -289,20 +289,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | None ->
                     None
 
-//
-//        let depth = Map.tryFind DefaultSemantic.Depth bindings
-//
-//        let indexed =
-//            bindings
-//                |> Map.remove DefaultSemantic.Depth
-//                |> Map.toList
-//                |> List.sortBy (fun (s,_) -> 
-//                    if s = DefaultSemantic.Colors then Int32.MinValue
-//                    else s.GetHashCode()
-//                   )
-//                |> List.mapi (fun i (s,o) -> (i,s,o))
-
-        ctx.CreateFramebuffer(colors, depth)
+        ctx.CreateFramebuffer(signature, colors, depth)
 
     member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
         match count with

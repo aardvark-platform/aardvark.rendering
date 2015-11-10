@@ -45,7 +45,6 @@
   <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="ApplicationSetup.fs" />
     <Compile Include="AssimpExporter.fs" />
     <Compile Include="Program.fs">
     </Compile>

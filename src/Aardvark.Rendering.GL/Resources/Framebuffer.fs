@@ -11,7 +11,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 
-type Framebuffer(ctx : Context, create : Aardvark.Rendering.GL.ContextHandle -> int, destroy : int -> unit, 
+type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aardvark.Rendering.GL.ContextHandle -> int, destroy : int -> unit, 
                  bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
     inherit UnsharedObject(ctx, create, destroy)
 
@@ -50,6 +50,7 @@ type Framebuffer(ctx : Context, create : Aardvark.Rendering.GL.ContextHandle -> 
         outputBySem <- List.append bindings depth |> Map.ofList
 
     interface IFramebuffer with
+        member x.Signature = signature
         member x.Size = x.Size
         member x.GetHandle caller = x.Handle :> obj
         member x.Attachments = outputBySem
@@ -135,10 +136,10 @@ module FramebufferExtensions =
 
     type Context with
 
-        member x.CreateFramebuffer (bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
+        member x.CreateFramebuffer (signature : IFramebufferSignature, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
             let init = init bindings depth
 
-            new Framebuffer(x, init, destroy, bindings, depth)
+            new Framebuffer(x, signature, init, destroy, bindings, depth)
 
         member x.Delete(f : Framebuffer) =
             f.DestroyHandles()

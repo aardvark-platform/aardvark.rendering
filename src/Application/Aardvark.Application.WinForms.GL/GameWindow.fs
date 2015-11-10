@@ -337,21 +337,6 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 
     let mutable task : Option<IRenderTask> = None
 
-    let mutable contextHandle : ContextHandle = null 
-    let defaultFramebuffer = new Framebuffer(ctx, (fun _ -> 0), ignore, [], None)
-
-    let avgFrameTime = RunningMean(10)
-    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
-    let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
-    let mutable first = true
-
-    let mouse = new GameWindowIO.Mouse()
-    let keyboard = new GameWindowIO.Keyboard()
-
-    let startupTime = System.Diagnostics.Stopwatch()
-
-
-    
     let depthStencilSignature =
         match Config.DepthBits, Config.StencilBits with
             | 0, 0 -> None
@@ -369,6 +354,23 @@ type GameWindow(runtime : Runtime, samples : int) as this =
         )
 
 
+
+
+    let mutable contextHandle : ContextHandle = null 
+    let defaultFramebuffer = new Framebuffer(ctx, fboSignature, (fun _ -> 0), ignore, [], None)
+
+    let avgFrameTime = RunningMean(10)
+    let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
+    let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
+    let mutable first = true
+
+    let mouse = new GameWindowIO.Mouse()
+    let keyboard = new GameWindowIO.Keyboard()
+
+    let startupTime = System.Diagnostics.Stopwatch()
+
+
+    
 
     do mouse.SetControl this
        keyboard.SetControl this

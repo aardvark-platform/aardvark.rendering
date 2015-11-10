@@ -33,12 +33,6 @@ type IPreparedRenderObject =
     abstract member Update : IAdaptiveObject -> unit
     abstract member Original : Option<RenderObject>
 
-type AttachmentSignature = { format : RenderbufferFormat; samples : int }
-
-[<AllowNullLiteral>]
-type IFramebufferSignature =
-    abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
-    abstract member DepthStencilAttachment : Option<AttachmentSignature>
 
 type IRuntime =
     abstract member ContextLock : IDisposable
