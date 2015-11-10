@@ -149,6 +149,13 @@ module PrimitiveValueConverter =
             ( fun (b : decimal)        -> float b ) :> obj
         ]
 
+    let private booleanConversions =
+        [
+            ( fun (b : bool)        -> if b then 1 else 0 ) :> obj
+            ( fun (b : bool)        -> if b then 1.0f else 0.0f ) :> obj
+            ( fun (b : bool)        -> if b then 1.0  else 0.0 ) :> obj
+        ]
+
 
     let private vector2Conversions =
         [
@@ -875,6 +882,7 @@ module PrimitiveValueConverter =
     let private allConversions =
         List.concat [
             integralConversions
+            booleanConversions
             fractionalConversions
 
             vector2Conversions
