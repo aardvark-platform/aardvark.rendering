@@ -101,7 +101,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
 
         member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
-            x.CreateFramebuffer bindings :> _
+            x.CreateFramebuffer(signature, bindings) :> _
 
         member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
             x.CreateTexture(size, format, levels, samples, count) :> _
@@ -266,21 +266,43 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
         ctx.Download(unbox<Texture> t, level, slice, source)
 
-    member x.CreateFramebuffer(bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
+    member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
 
-        let depth = Map.tryFind DefaultSemantic.Depth bindings
-
-        let indexed =
-            bindings
-                |> Map.remove DefaultSemantic.Depth
+        let colors =
+            signature.ColorAttachments
                 |> Map.toList
-                |> List.sortBy (fun (s,_) -> 
-                    if s = DefaultSemantic.Colors then Int32.MinValue
-                    else s.GetHashCode()
+                |> List.map (fun (i,(s,desc)) ->
+                    let b = bindings.[s]
+                    if b.Format <> desc.format || b.Samples <> desc.samples then
+                        failwithf "incompatible ColorAttachment: expected (%A, %A) but got: (%A, %A)" desc.format desc.samples b.Format b.Samples
+                    (i, s, bindings.[s])
                    )
-                |> List.mapi (fun i (s,o) -> (i,s,o))
 
-        ctx.CreateFramebuffer(indexed, depth)
+        let depth =
+            match signature.DepthStencilAttachment with
+                | Some desc ->
+                    let b = bindings.[DefaultSemantic.Depth]
+                    if b.Format <> desc.format || b.Samples <> desc.samples then
+                        failwithf "incompatible DepthAttachment: expected (%A, %A) but got: (%A, %A)" desc.format desc.samples b.Format b.Samples
+
+                    Some b
+                | None ->
+                    None
+
+//
+//        let depth = Map.tryFind DefaultSemantic.Depth bindings
+//
+//        let indexed =
+//            bindings
+//                |> Map.remove DefaultSemantic.Depth
+//                |> Map.toList
+//                |> List.sortBy (fun (s,_) -> 
+//                    if s = DefaultSemantic.Colors then Int32.MinValue
+//                    else s.GetHashCode()
+//                   )
+//                |> List.mapi (fun i (s,o) -> (i,s,o))
+
+        ctx.CreateFramebuffer(colors, depth)
 
     member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
         match count with

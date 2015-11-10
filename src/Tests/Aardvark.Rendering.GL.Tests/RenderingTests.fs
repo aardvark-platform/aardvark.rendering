@@ -236,7 +236,9 @@ module RenderingTests =
                     DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
                 ]
         )
-
+      
+      
+     
 
     [<Test>]
     let ``[GL] simple render to texture``() =
@@ -257,8 +259,15 @@ module RenderingTests =
         let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
 
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
         let fbo = 
             runtime.CreateFramebuffer(
+                signature, 
                 Map.ofList [
                     DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
@@ -273,8 +282,8 @@ module RenderingTests =
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
 
         
-        use task = runtime.CompileRender(sg)
-        use clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        use task = runtime.CompileRender(signature, sg)
+        use clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
         clear.Run(null, fbo) |> ignore
         task.Run(null, fbo) |> ignore
@@ -344,14 +353,21 @@ module RenderingTests =
             Log.line "renderer: %s" runtime.Context.Driver.renderer
         )
 
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
-        let task = runtime.CompileRender sg
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+        let task = runtime.CompileRender(signature, sg)
 
         let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 2, 1, 1)
         let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
 
         let fbo = 
             runtime.CreateFramebuffer(
+                signature,
                 Map.ofList [
                     DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
@@ -455,9 +471,15 @@ module RenderingTests =
             Log.line "renderer: %s" runtime.Context.Driver.renderer
         )
 
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
         let renderJobs = sg.RenderObjects()
-        let task = runtime.CompileRender renderJobs
+        let task = runtime.CompileRender(signature, renderJobs)
         //let task2 = runtime.CompileRender renderJobs
 
         let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
@@ -465,6 +487,7 @@ module RenderingTests =
 
         let fbo = 
             runtime.CreateFramebuffer(
+                signature,
                 Map.ofList [
                     DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
@@ -491,7 +514,7 @@ module RenderingTests =
         let disp = System.Collections.Generic.List()
         sw.Start()
         while sw.Elapsed.TotalSeconds < 20.0 do
-            let t = runtime.CompileRender renderJobs
+            let t = runtime.CompileRender(signature,renderJobs)
             clear.Run fbo |> ignore
             t.Run fbo |> ignore
             iterations <- iterations + 1

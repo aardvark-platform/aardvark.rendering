@@ -12,7 +12,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
+type OpenGlRenderControl(runtime : Runtime, samples : int) =
     inherit GLControl(
         Graphics.GraphicsMode(
             OpenTK.Graphics.ColorFormat(Config.BitsPerPixel), 
@@ -48,7 +48,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
     let mutable first = true
     
     let depthStencilSignature =
-        match this.GraphicsMode.Depth, this.GraphicsMode.Stencil with
+        match Config.DepthBits, Config.StencilBits with
             | 0, 0 -> None
             | 16, 0 -> Some { format = RenderbufferFormat.DepthComponent16; samples = samples }
             | 24, 0 -> Some { format = RenderbufferFormat.DepthComponent24; samples = samples }

@@ -367,7 +367,7 @@ let main argv =
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect; DefaultSurfaces.simpleLighting |> toEffect ]
             |> Sg.uniform "ViewportSize" win.Sizes
 
-    let main = app.Runtime.CompileRender(BackendConfiguration.NativeOptimized, sg) |> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, sg) |> DefaultOverlays.withStatistics
 
     win.Keyboard.KeyDown(Keys.H).Values.Subscribe(fun _ ->
         transact (fun () ->

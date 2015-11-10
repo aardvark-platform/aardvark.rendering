@@ -91,7 +91,7 @@ let main argv =
 
     let e = FShade.SequentialComposition.compose [toEffect Shader.trafo; toEffect Shader.white]
     let s = FShadeSurface(e) :> ISurface
-    let compiled = app.Runtime.PrepareSurface s :> ISurface
+    let compiled = app.Runtime.PrepareSurface(win.FramebufferSignature, s) :> ISurface
 
     let sg =
         geometry 
@@ -128,7 +128,7 @@ let main argv =
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
 
-    let main = app.Runtime.CompileRender(BackendConfiguration.NativeOptimized, sg) // |> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, sg) // |> DefaultOverlays.withStatistics
 
     let r = Random()
     win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () ->

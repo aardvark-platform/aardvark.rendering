@@ -356,7 +356,7 @@ let main argv =
         ()
     ) |> ignore
 
-    let main = app.Runtime.CompileRender(engine, sg.RenderObjects())// |> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(w.FramebufferSignature, engine, sg.RenderObjects())// |> DefaultOverlays.withStatistics
 
 
     let cached = main

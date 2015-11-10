@@ -594,12 +594,18 @@ let testGpuThroughput () =
     let runtime = app.Runtime
 
     let size = V2i(10000,5000)
+    
+    let signature = 
+        runtime.CreateFramebufferSignature [
+            DefaultSemantic.Colors, { format =RenderbufferFormat.Rgba8; samples = 1 }
+        ]
+    
     let color = runtime.CreateRenderbuffer(size,RenderbufferFormat.R8, 1)
     let outputView = color :> IFramebufferOutput
     let color = runtime.CreateTexture(size,TextureFormat.Rgba8,1,1,1)
     let outputView = { texture = color; level = 0; slice = 0 } :> IFramebufferOutput
 
-    let fbo = runtime.CreateFramebuffer([(DefaultSemantic.Colors,outputView)] |> Map.ofList)
+    let fbo = runtime.CreateFramebuffer(signature, [(DefaultSemantic.Colors,outputView)] |> Map.ofList)
 
     let sizex,sizey = 250,200
     let geometry = 
@@ -624,8 +630,8 @@ let testGpuThroughput () =
                 |> Sg.cullMode ~~CullMode.Clockwise
                 |> Sg.blendMode ~~BlendMode.None
                     
-    let task = runtime.CompileRender(sg)
-    let clear = runtime.CompileClear(~~C4f.Black,~~1.0)
+    let task = runtime.CompileRender(signature, sg)
+    let clear = runtime.CompileClear(signature, ~~C4f.Black,~~1.0)
     
     use token = runtime.Context.ResourceLock
     let sw = System.Diagnostics.Stopwatch()
@@ -839,7 +845,7 @@ let main args =
     //let sg = sg |> Sg.loadAsync
 
 
-    let task = app.Runtime.CompileRender(engine.GetValue(), sg)
+    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, engine.GetValue(), sg)
 
     let task = RenderTask.cache task
 
@@ -850,7 +856,7 @@ let main args =
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
 
-    let secTask = app.Runtime.CompileRender second
+    let secTask = app.Runtime.CompileRender(ctrl.FramebufferSignature, second)
 
     ctrl.RenderTask <- RenderTask.ofList [task; secTask] |> DefaultOverlays.withStatistics
 
