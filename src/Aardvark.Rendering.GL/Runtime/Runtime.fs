@@ -8,7 +8,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 
-type FramebufferSignature(samples : int, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
+type FramebufferSignature(colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
    
     member x.ColorAttachments = colors
     member x.DepthAttachment = depth
@@ -52,22 +52,29 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+
+        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
+            x.CreateFramebufferSignature(attachments) :> IFramebufferSignature
+
+        member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
+            ()
+
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
         member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
   
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock
-        member x.CompileRender (engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(engine,set)
-        member x.CompileClear(color, depth) = x.CompileClear(color, depth)
+        member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
+        member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
       
-        member x.PrepareSurface (s : ISurface) = x.PrepareSurface s :> IBackendSurface
+        member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
                 | :? Program as p -> x.DeleteSurface p
                 | _ -> failwithf "unsupported program-type: %A" s
 
-        member x.PrepareRenderObject(rj : IRenderObject) = x.PrepareRenderObject rj :> _
+        member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj) :> _
 
         member x.PrepareTexture (t : ITexture) = x.PrepareTexture t :> IBackendTexture
         member x.DeleteTexture (t : IBackendTexture) =
@@ -95,7 +102,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
 
-        member x.CreateFramebuffer(bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
+        member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
             x.CreateFramebuffer bindings :> _
 
         member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
@@ -104,9 +111,34 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
+
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
+        let attachments = Map.ofSeq (SymDict.toSeq attachments)
+
+        let depth =
+            Map.tryFind DefaultSemantic.Depth attachments
+
+        let stencil =
+            Map.tryFind DefaultSemantic.Stencil attachments
+
+        let indexedColors =
+            attachments
+                |> Map.remove DefaultSemantic.Depth
+                |> Map.remove DefaultSemantic.Stencil
+                |> Map.toList
+                |> List.sortWith (fun (a,_) (b,_) -> 
+                    if a = DefaultSemantic.Colors then Int32.MinValue
+                    elif b = DefaultSemantic.Colors then Int32.MaxValue
+                    else String.Compare(a.ToString(), b.ToString())
+                   )
+                |> List.mapi (fun i t -> (i, t))
+                |> Map.ofList
+
+        FramebufferSignature(indexedColors, depth, stencil)
+
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
-    member x.PrepareSurface (s : ISurface) = 
+    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) = 
         match SurfaceCompilers.compile ctx s with
             | Success prog -> prog
             | Error e -> failwith e
@@ -130,28 +162,28 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             | _ ->
                 failwithf "unsupported streaming texture: %A" t
 
-    member private x.CompileRenderInternal (engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) =
+    member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) =
         let eng = engine.GetValue()
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
         let man = ResourceManager(manager, ctx, shareTextures, shareBuffers)
-        new RenderTask(x, ctx, man, engine, set)
+        new RenderTask(x, fboSignature, ctx, man, engine, set)
 
-    member x.PrepareRenderObject(rj : IRenderObject) =
+    member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         match rj with
-             | :? RenderObject as rj -> manager.Prepare rj
+             | :? RenderObject as rj -> manager.Prepare(fboSignature, rj)
              | :? PreparedRenderObject -> failwith "tried to prepare prepared render object"
              | _ -> failwith "unknown render object type"
 
-    member x.CompileRender(engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(engine, set) :> IRenderTask
+    member x.CompileRender(fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
+        x.CompileRenderInternal(fboSignature, engine, set) :> IRenderTask
 
-    member x.CompileRender(engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(Mod.constant engine, set) :> IRenderTask
+    member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
+        x.CompileRenderInternal(fboSignature, Mod.constant engine, set) :> IRenderTask
 
-    member x.CompileClear(color : IMod<Option<C4f>>, depth : IMod<Option<float>>) : IRenderTask =
-        new ClearTask(x, color, depth, ctx) :> IRenderTask
+    member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Option<C4f>>, depth : IMod<Option<float>>) : IRenderTask =
+        new ClearTask(x, fboSignature, color, depth, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
         using ctx.ResourceLock (fun _ ->

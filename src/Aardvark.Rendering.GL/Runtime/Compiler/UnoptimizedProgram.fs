@@ -225,10 +225,13 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     member x.Add (rj : IRenderObject) =
         let prep = 
             match rj with
-              | :? PreparedRenderObject as p -> p
-              | :? RenderObject as rj -> 
-                    preparedRenderObjects.GetOrCreate(rj,fun rj -> manager.Prepare rj)
-              | _ -> failwith "unsupported IRenderObject"
+                | :? PreparedRenderObject as p -> 
+                    if p.FramebufferSignature <> parent.FramebufferSignature then
+                        failwithf "cannot add RenderObject with incompatible FramebufferSignature: %A" p.FramebufferSignature
+                    p
+                | :? RenderObject as rj -> 
+                    preparedRenderObjects.GetOrCreate(rj,fun rj -> manager.Prepare(parent.FramebufferSignature, rj))
+                | _ -> failwith "unsupported IRenderObject"
 
         sorter.Add rj
         // create a new RenderObjectFragment and link it

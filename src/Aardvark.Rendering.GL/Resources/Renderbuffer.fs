@@ -24,11 +24,11 @@ type Renderbuffer =
             member x.Handle = x.Handle
 
         interface IFramebufferOutput with
+            member x.Format = x.Format
             member x.Size = x.Size
             member x.Samples = x.Samples
 
         interface IRenderbuffer with
-            member x.Format = x.Format
             member x.Handle = x.Handle :> obj
 
         new (ctx : Context, handle : int, size : V2i, format : RenderbufferFormat, samples : int) =

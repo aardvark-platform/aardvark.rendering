@@ -27,5 +27,6 @@ module DefaultSemantic =
 
     // Various
     let Depth = Sym.ofString "Depth"
+    let Stencil = Sym.ofString "Stencil"
     let ImageOutput = Sym.ofString "ImageOutput"
     let InstanceTrafo = Sym.ofString "ZZZInstanceTrafo"

@@ -44,14 +44,14 @@ type IFramebufferSignature =
 type IRuntime =
     abstract member ContextLock : IDisposable
 
-    abstract member CreateFramebufferSignature : attachments : SymbolDict<RenderbufferFormat> -> IFramebufferSignature
+    abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> -> IFramebufferSignature
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
 
     abstract member PrepareBuffer : IBuffer -> IBackendBuffer
     abstract member PrepareTexture : ITexture -> IBackendTexture
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface
-    abstract member PrepareRenderObject : IRenderObject -> IPreparedRenderObject
+    abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
 
     abstract member DeleteBuffer : IBackendBuffer -> unit

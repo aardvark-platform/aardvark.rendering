@@ -12,7 +12,7 @@ type PreparedRenderObject =
     {
         Context : Context
         Original : RenderObject
-
+        FramebufferSignature : IFramebufferSignature
         LastTextureSlot : int
         Program : ChangeableResource<Program>
         UniformBuffers : Map<int, ChangeableResource<UniformBuffer>>
@@ -128,7 +128,7 @@ module ``Prepared render object extensions`` =
     let private empty = {
                 Context = Unchecked.defaultof<_>
                 Original = RenderObject.Empty
-
+                FramebufferSignature = null
                 LastTextureSlot = -1
                 Program = Unchecked.defaultof<_>
                 UniformBuffers = Map.empty
@@ -159,7 +159,7 @@ type ResourceManagerExtensions private() =
         ))
 
     [<Extension>]
-    static member Prepare (x : ResourceManager, rj : RenderObject) : PreparedRenderObject =
+    static member Prepare (x : ResourceManager, fboSignature : IFramebufferSignature, rj : RenderObject) : PreparedRenderObject =
         // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
 
@@ -292,7 +292,7 @@ type ResourceManagerExtensions private() =
         {
             Context = x.Context
             Original = rj
-
+            FramebufferSignature = fboSignature
             LastTextureSlot = !lastTextureSlot
             Program = program
             UniformBuffers = uniformBuffers

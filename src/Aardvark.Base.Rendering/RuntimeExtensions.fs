@@ -70,6 +70,18 @@ type RuntimeExtensions private() =
     static member Upload(this : IRuntime, texture : IBackendTexture, source : PixImage) =
         this.Upload(texture, 0, 0, source)
 
+    [<Extension>]
+    static member CreateFramebufferSignature(this : IRuntime, l : seq<Symbol * AttachmentSignature>) =
+        this.CreateFramebufferSignature(SymDict.ofSeq l)
+
+    [<Extension>]
+    static member CreateFramebufferSignature(this : IRuntime, l : list<Symbol * AttachmentSignature>) =
+        this.CreateFramebufferSignature(SymDict.ofList l)
+
+    [<Extension>]
+    static member CreateFramebufferSignature(this : IRuntime, l : Map<Symbol, AttachmentSignature>) =
+        this.CreateFramebufferSignature(SymDict.ofMap l)
+
 [<AbstractClass; Sealed; Extension>]
 type IBackendTextureExtensions private() =
     

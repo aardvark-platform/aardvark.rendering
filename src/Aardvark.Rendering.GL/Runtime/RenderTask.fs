@@ -42,7 +42,7 @@ type RenderTaskInputSet(target : IRenderTask) =
 
         base.Remove(o)
 
-type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) as this =
+type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : Context, manager : ResourceManager, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) as this =
     inherit AdaptiveObject()
 
     let mutable currentEngine = engine.GetValue(this)
@@ -461,18 +461,21 @@ type RenderTask(runtime : IRuntime, ctx : Context, manager : ResourceManager, en
         reader.Dispose()
 
     interface IRenderTask with
+        
         member x.Run(caller, fbo) =
             x.Run(caller, fbo)
 
         member x.Dispose() =
             x.Dispose()
 
+        member x.FramebufferSignature = fboSignature
+
         member x.Runtime = runtime |> Some
 
         member x.FrameId = frameId
 
 
-type ClearTask(runtime : IRuntime, color : IMod<Option<C4f>>, depth : IMod<Option<float>>, ctx : Context) =
+type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<Option<C4f>>, depth : IMod<Option<float>>, ctx : Context) =
     inherit AdaptiveObject()
 
 
@@ -533,6 +536,7 @@ type ClearTask(runtime : IRuntime, color : IMod<Option<C4f>>, depth : IMod<Optio
         depth.RemoveOutput x
 
     interface IRenderTask with
+        member x.FramebufferSignature = fboSignature
         member x.Runtime = runtime |> Some
         member x.Run(caller, fbo) =
             x.Run(caller, fbo)

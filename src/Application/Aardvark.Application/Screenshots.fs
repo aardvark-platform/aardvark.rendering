@@ -17,10 +17,11 @@ module Screenshot =
         //use lock = runtime.ContextLock
         let color = runtime.CreateRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
         let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.DepthComponent32, samples)
-        use clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        use clear = runtime.CompileClear(task.FramebufferSignature, ~~C4f.Black, ~~1.0)
 
         use fbo = 
             runtime.CreateFramebuffer(
+                task.FramebufferSignature,
                 Map.ofList [
                     DefaultSemantic.Colors, (color :> IFramebufferOutput)
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)

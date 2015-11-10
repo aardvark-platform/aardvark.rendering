@@ -37,8 +37,11 @@ type DebugProgram(parent : IRenderTask,
         for rj in renderObjects do
             let prep, own =
                 match rj with
-                    | :? PreparedRenderObject as p -> p, false
-                    | :? RenderObject as rj -> (manager.Prepare rj, true)
+                    | :? PreparedRenderObject as p ->
+                        if p.FramebufferSignature <> parent.FramebufferSignature then
+                            failwithf "cannot add RenderObject with incompatible FramebufferSignature: %A" p.FramebufferSignature
+                        p, false
+                    | :? RenderObject as rj -> (manager.Prepare(parent.FramebufferSignature, rj), true)
                     | _ -> failwith "unsupported RenderObject type"
 
             let prog, _ = DeltaCompiler.compileFull manager ctxMod prep
