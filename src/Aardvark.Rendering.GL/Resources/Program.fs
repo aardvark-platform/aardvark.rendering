@@ -403,11 +403,11 @@ module ProgramExtensions =
                                 |> Map.toList
                                 |> List.map (fun (location, (semantic, signature)) ->
                                     let name = semantic.ToString()
-                                    let suffixes = [""; "Out"; "Frag"; "Pixel"; "Fragment"]
+                                    let suffixes = ["{0}"; "{0}Out"; "{0}Frag"; "Pixel{0}"; "{0}Pixel"; "{0}Fragment"]
                             
                                     let outputNameAndIndex = 
                                         suffixes |> List.tryPick (fun s ->
-                                            let outputName = name + s
+                                            let outputName = String.Format(s, name)
                                             let index = GL.GetFragDataIndex(handle, outputName)
                                             GL.Check "could not get FragDataIndex"
                                             if index >= 0 then Some (outputName, index)
