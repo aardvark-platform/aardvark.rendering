@@ -274,7 +274,7 @@ let main argv =
         win.Mouse.Click.Values 
             |> AStream.ofObservable 
             |> AStream.filter (fun b -> b = MouseButtons.Left)
-            |> AStream.map (fun _ -> Mod.force win.Mouse.Position)
+            |> AStream.map (fun _ -> Mod.force win.Mouse.Position)  
 
     let active = win.Keyboard.IsDown(Keys.X)
 

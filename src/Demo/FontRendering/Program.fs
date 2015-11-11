@@ -107,7 +107,7 @@ let main argv =
 
     let sgs = 
         Sg.group' [
-            for x in -4..4 do
+            for x in -4..4 do 
                 for y in -4..4 do
                     let trafo = Trafo3d.Translation(2.0 * float x - 0.5, 2.0 * float y - 0.5, 0.0)
 

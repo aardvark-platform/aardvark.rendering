@@ -59,7 +59,7 @@ type IRuntime =
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit
     abstract member DeleteFramebuffer : IFramebuffer -> unit
 
-    abstract member CompileClear : fboSignature : IFramebufferSignature * clearColor : IMod<Option<C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
+    abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : IMod<Map<Symbol, C4f>> * clearDepth : IMod<Option<double>> -> IRenderTask
     abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
     
     abstract member GenerateMipMaps : IBackendTexture -> unit

@@ -251,7 +251,7 @@ module private ConversionHelpers =
 module TextureFormat =
     open System.Collections.Generic
 
-    let private lookupTable (l : list<'a * 'b>) =
+    let internal lookupTable (l : list<'a * 'b>) =
         let d = Dictionary()
         for (k,v) in l do
 
@@ -314,6 +314,82 @@ module TextureFormat =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderbufferFormat =
+    
+    let toColFormat =
+        TextureFormat.lookupTable [
+            RenderbufferFormat.DepthComponent, Col.Format.Gray
+            RenderbufferFormat.R3G3B2, Col.Format.RGB
+            RenderbufferFormat.Rgb4, Col.Format.RGB
+            RenderbufferFormat.Rgb5, Col.Format.RGB
+            RenderbufferFormat.Rgb8, Col.Format.RGB
+            RenderbufferFormat.Rgb10, Col.Format.RGB
+            RenderbufferFormat.Rgb12, Col.Format.RGB
+            RenderbufferFormat.Rgb16, Col.Format.RGB
+            RenderbufferFormat.Rgba2, Col.Format.RGBA
+            RenderbufferFormat.Rgba4, Col.Format.RGBA
+            RenderbufferFormat.Rgba8, Col.Format.RGBA
+            RenderbufferFormat.Rgb10A2, Col.Format.RGBA
+            RenderbufferFormat.Rgba12, Col.Format.RGBA
+            RenderbufferFormat.Rgba16, Col.Format.RGBA
+            RenderbufferFormat.DepthComponent16, Col.Format.Gray
+            RenderbufferFormat.DepthComponent24, Col.Format.Gray
+            RenderbufferFormat.DepthComponent32, Col.Format.Gray
+            RenderbufferFormat.R8, Col.Format.Gray
+            RenderbufferFormat.R16, Col.Format.Gray
+            RenderbufferFormat.Rg8, Col.Format.NormalUV
+            RenderbufferFormat.Rg16, Col.Format.NormalUV
+            RenderbufferFormat.R16f, Col.Format.Gray
+            RenderbufferFormat.R32f, Col.Format.Gray
+            RenderbufferFormat.Rg16f, Col.Format.NormalUV
+            RenderbufferFormat.Rg32f, Col.Format.NormalUV
+            RenderbufferFormat.R8i, Col.Format.Gray
+            RenderbufferFormat.R8ui, Col.Format.Gray
+            RenderbufferFormat.R16i, Col.Format.Gray
+            RenderbufferFormat.R16ui, Col.Format.Gray
+            RenderbufferFormat.R32i, Col.Format.Gray
+            RenderbufferFormat.R32ui, Col.Format.Gray
+            RenderbufferFormat.Rg8i, Col.Format.NormalUV
+            RenderbufferFormat.Rg8ui, Col.Format.NormalUV
+            RenderbufferFormat.Rg16i, Col.Format.NormalUV
+            RenderbufferFormat.Rg16ui, Col.Format.NormalUV
+            RenderbufferFormat.Rg32i, Col.Format.NormalUV
+            RenderbufferFormat.Rg32ui, Col.Format.NormalUV
+            RenderbufferFormat.DepthStencil, Col.Format.Gray
+            RenderbufferFormat.Rgba32f, Col.Format.RGBA
+            RenderbufferFormat.Rgb32f, Col.Format.RGB
+            RenderbufferFormat.Rgba16f, Col.Format.RGBA
+            RenderbufferFormat.Rgb16f, Col.Format.RGB
+            RenderbufferFormat.Depth24Stencil8, Col.Format.Gray
+            RenderbufferFormat.R11fG11fB10f, Col.Format.RGB
+            RenderbufferFormat.Rgb9E5, Col.Format.RGB
+            RenderbufferFormat.Srgb8, Col.Format.RGB
+            RenderbufferFormat.Srgb8Alpha8, Col.Format.RGBA
+            RenderbufferFormat.DepthComponent32f, Col.Format.Gray
+            RenderbufferFormat.Depth32fStencil8, Col.Format.Gray
+//            RenderbufferFormat.StencilIndex1Ext, 36166
+//            RenderbufferFormat.StencilIndex1, 36166
+//            RenderbufferFormat.StencilIndex4Ext, 36167
+//            RenderbufferFormat.StencilIndex4, 36167
+//            RenderbufferFormat.StencilIndex8, 36168
+//            RenderbufferFormat.StencilIndex8Ext, 36168
+//            RenderbufferFormat.StencilIndex16Ext, 36169
+//            RenderbufferFormat.StencilIndex16, 36169
+            RenderbufferFormat.Rgba32ui, Col.Format.RGBA
+            RenderbufferFormat.Rgb32ui, Col.Format.RGB
+            RenderbufferFormat.Rgba16ui, Col.Format.RGBA
+            RenderbufferFormat.Rgb16ui, Col.Format.RGB
+            RenderbufferFormat.Rgba8ui, Col.Format.RGBA
+            RenderbufferFormat.Rgb8ui, Col.Format.RGB
+            RenderbufferFormat.Rgba32i, Col.Format.RGBA
+            RenderbufferFormat.Rgb32i, Col.Format.RGB
+            RenderbufferFormat.Rgba16i, Col.Format.RGBA
+            RenderbufferFormat.Rgb16i, Col.Format.RGB
+            RenderbufferFormat.Rgba8i, Col.Format.RGBA
+            RenderbufferFormat.Rgb8i, Col.Format.RGB
+            RenderbufferFormat.Rgb10A2ui, Col.Format.RGBA
+
+        ]
+    
     let toTextureFormat (fmt : RenderbufferFormat) =
         convertEnum<_, TextureFormat> fmt
 

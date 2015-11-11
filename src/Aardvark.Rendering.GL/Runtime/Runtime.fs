@@ -177,8 +177,15 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, Mod.constant engine, set) :> IRenderTask
 
-    member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Option<C4f>>, depth : IMod<Option<float>>) : IRenderTask =
-        new ClearTask(x, fboSignature, color, depth, ctx) :> IRenderTask
+    member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
+        let clearValues =
+            color |> Mod.map (fun clearColors ->
+                fboSignature.ColorAttachments
+                    |> Map.toList
+                    |> List.map (fun (_,(s,_)) -> Map.tryFind s clearColors)
+            )
+        
+        new ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
         using ctx.ResourceLock (fun _ ->

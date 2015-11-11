@@ -307,6 +307,67 @@ module RenderingTests =
 
         ()
 
+    [<Test>]
+    let ``[GL] simple render to multiple texture``() =
+
+        use runtime = new Runtime()
+        use ctx = new Context(runtime)
+        runtime.Context <- ctx
+
+        let size = V2i(1024,768)
+        let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
+        let normals = runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+
+
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Normals, { format = RenderbufferFormat.Rgba32f; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+        let fbo = 
+            runtime.CreateFramebuffer(
+                signature, 
+                Map.ofList [
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Normals, ({ texture = normals; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                ]
+            )
+
+
+        
+        let sg =
+            quad 
+                |> Sg.ofIndexedGeometry
+                |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
+
+        
+        use task = runtime.CompileRender(signature, sg)
+        use clear = 
+            runtime.CompileClear(
+                signature, 
+                ~~[DefaultSemantic.Colors, C4f.Black; DefaultSemantic.Normals, C4f.Red], 
+                ~~1.0
+            )
+
+        clear.Run(null, fbo) |> ignore
+        task.Run(null, fbo) |> ignore
+
+        let pi = PixImage<byte>(Col.Format.BGRA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
+        runtime.Download(color, 0, 0, pi)
+
+        let npi = PixImage<float32>(Col.Format.RGBA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
+        runtime.Download(normals, 0, 0, npi)
+
+
+        pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
+        PixImage<float32>(npi.Volume.Map(fun f -> f)).ToPixImage<byte>(Col.Format.RGB).SaveAsImage @"C:\Users\schorsch\Desktop\testNormals.png"
+
+
+        ()
 
     [<Test>]
     let ``[GL] nested trafos``() =

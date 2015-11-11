@@ -368,6 +368,8 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
 
                 if ExecutionContext.framebuffersSupported then
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                    let drawBuffers = Array.init fbo.Attachments.Count (fun i -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
+                    GL.DrawBuffers(drawBuffers.Length, drawBuffers)
                     GL.Check "could not bind framebuffer"
                 elif handle <> 0 then
                     failwithf "cannot render to texture on this OpenGL driver"
@@ -475,7 +477,7 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
         member x.FrameId = frameId
 
 
-type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<Option<C4f>>, depth : IMod<Option<float>>, ctx : Context) =
+type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
     inherit AdaptiveObject()
 
 
@@ -485,47 +487,66 @@ type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color :
         using ctx.ResourceLock (fun _ ->
             x.EvaluateAlways caller (fun () ->
 
-                let mutable mask = ClearBufferMask.None
-                match color.GetValue x with
-                    | Some c -> 
+                let old = Array.create 4 0
+                let mutable oldFbo = 0
+                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
+                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+
+                let handle = fbo.GetHandle null |> unbox<int>
+
+                if ExecutionContext.framebuffersSupported then
+                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                    GL.Check "could not bind framebuffer"
+                elif handle <> 0 then
+                    failwithf "cannot render to texture on this OpenGL driver"
+
+                GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+                GL.Check "could not bind framebuffer"
+
+                let depthValue = depth.GetValue x
+                let colorValues = color.GetValue x
+
+                match colorValues, depthValue with
+                    | [Some c], Some depth ->
                         GL.ClearColor(c.R, c.G, c.B, c.A)
-                        mask <- mask ||| ClearBufferMask.ColorBufferBit
-                    | None -> ()
+                        GL.ClearDepth(depth)
+                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
+                        
+                    | [Some c], None ->
+                        GL.ClearColor(c.R, c.G, c.B, c.A)
+                        GL.Clear(ClearBufferMask.ColorBufferBit)
+
+                    | l, Some depth when List.forall Option.isNone l ->
+                        GL.ClearDepth(depth)
+                        GL.Clear(ClearBufferMask.DepthBufferBit)
+                    | l, d ->
+                            
+                        let mutable i = 0
+                        for c in l do
+                            match c with
+                                | Some c ->
+                                    GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
+                                    GL.ClearColor(c.R, c.G, c.B, c.A)
+                                    GL.Clear(ClearBufferMask.ColorBufferBit)
+                                | None ->
+                                    ()
+                            i <- i + 1
+
+                        match d with
+                            | Some depth -> 
+                                GL.ClearDepth(depth)
+                                GL.Clear(ClearBufferMask.DepthBufferBit)
+                            | None ->
+                                ()
 
 
-                match depth.GetValue x with
-                    | Some d -> 
-                        GL.ClearDepth(d)
-                        mask <- mask ||| ClearBufferMask.DepthBufferBit
-                    | _ -> ()
+                if ExecutionContext.framebuffersSupported then
+                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
 
+                GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+                GL.Check "could not bind framebuffer"
 
-                if mask <> ClearBufferMask.None then
-                    let old = Array.create 4 0
-                    let mutable oldFbo = 0
-                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
-
-                    let handle = fbo.GetHandle null |> unbox<int>
-
-                    if ExecutionContext.framebuffersSupported then
-                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                        GL.Check "could not bind framebuffer"
-                    elif handle <> 0 then
-                        failwithf "cannot render to texture on this OpenGL driver"
-
-                    GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
-                    GL.Check "could not bind framebuffer"
-
-                    GL.Clear(mask)
-
-                    if ExecutionContext.framebuffersSupported then
-                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
-
-                    GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-                    GL.Check "could not bind framebuffer"
-
-                    frameId <- frameId + 1UL
+                frameId <- frameId + 1UL
 
                 RenderingResult(fbo, FrameStatistics.Zero)
             )

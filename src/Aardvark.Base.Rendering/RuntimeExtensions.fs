@@ -13,17 +13,28 @@ type RuntimeExtensions private() =
     static let levelSize (level : int) (s : V2i) =
         V2i(max 1 (s.X / (1 <<< level)), max 1 (s.Y / (1 <<< level)))
 
+
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : IMod<seq<Symbol * C4f>>, depth : IMod<float>) =
+        this.CompileClear(signature, colors |> Mod.map Map.ofSeq, depth |> Mod.map Some)
+
+
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : IMod<list<Symbol * C4f>>, depth : IMod<float>) =
+        this.CompileClear(signature, colors |> Mod.map Map.ofList, depth |> Mod.map Some)
+
+
     [<Extension>]
     static member CompileClear(this : IRuntime, signature : IFramebufferSignature, color : IMod<C4f>, depth : IMod<float>) =
-        this.CompileClear(signature, color |> Mod.map Some, depth |> Mod.map Some)
+        this.CompileClear(signature, color |> Mod.map (fun c -> Map.ofList [DefaultSemantic.Colors, c]), depth |> Mod.map Some)
 
     [<Extension>]
     static member CompileClear(this : IRuntime, signature : IFramebufferSignature, color : IMod<C4f>) =
-        this.CompileClear(signature, color |> Mod.map Some, Mod.constant None)
+        this.CompileClear(signature, color |> Mod.map (fun c -> Map.ofList [DefaultSemantic.Colors, c]), Mod.constant None)
 
     [<Extension>]
     static member CompileClear(this : IRuntime, signature : IFramebufferSignature, depth : IMod<float>) =
-        this.CompileClear(signature, Mod.constant None, depth |> Mod.map Some)
+        this.CompileClear(signature, Mod.constant Map.empty, depth |> Mod.map Some)
 
     [<Extension>]
     static member Download(this : IRuntime, texture : IBackendTexture, level : int, slice : int, format : PixFormat) =
@@ -128,3 +139,4 @@ type IFramebufferSignatureExtensions private() =
     [<Extension>]
     static member CreateFramebuffer (this : IFramebufferSignature, attachments : seq<Symbol * IFramebufferOutput>) =
         this.Runtime.CreateFramebuffer(this, attachments)
+

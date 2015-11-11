@@ -374,7 +374,7 @@ module RenderTask =
 
         //use lock = runtime.ContextLock
         let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32
-        let clear = runtime.CompileClear(signature, ~~None, ~~(Some 1.0))
+        let clear = runtime.CompileClear(signature, ~~Map.empty, ~~(Some 1.0))
 
         
 
