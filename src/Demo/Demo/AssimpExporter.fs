@@ -3,7 +3,6 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Ag
-open Aardvark.Base.AgHelpers
 open Aardvark.Rendering.GL
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.CSharp

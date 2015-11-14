@@ -210,7 +210,6 @@ type RuntimeExtensions private() =
 
 module Semantics =
     open Aardvark.Base.Ag
-    open Aardvark.Base.AgHelpers
     open Microsoft.FSharp.NativeInterop
 
     

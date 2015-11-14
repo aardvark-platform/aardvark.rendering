@@ -418,7 +418,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
                 
                 NanoVg.nvgBeginFrame(current.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
              
-                r.Content |> Seq.map snd |> Interpreter.run x current
+                r.Content.All |> Seq.map snd |> Interpreter.run x current
                 NanoVg.nvgEndFrame(current.Handle)
 
                 frameId <- frameId + 1UL

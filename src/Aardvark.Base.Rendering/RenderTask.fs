@@ -157,7 +157,9 @@ module RenderTask =
 
                     // run all tasks
                     let mutable stats = FrameStatistics.Zero
-                    for (_,t) in reader.Content do
+
+                    // TODO: order may be invalid
+                    for (_,t) in reader.Content.All do
                         let res = t.Run(x, fbo)
                         frameId <- max frameId t.FrameId
                         stats <- stats + res.Statistics

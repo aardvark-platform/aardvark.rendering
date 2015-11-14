@@ -284,13 +284,11 @@ module FShadeSceneGraph =
     let inline toEffect a = toEffect a
 
     module Sg =
-        let private constantSurfaceCache = MemoCache(false)
-
         let effect (s : #seq<FShadeEffect>) (sg : ISg) =
             let e = FShade.SequentialComposition.compose s
-            let s = constantSurfaceCache.Memoized1 (fun e -> Mod.constant (FShadeSurface(e) :> ISurface)) e
+            let s = Mod.constant (FShadeSurface(e) :> ISurface)
             Sg.SurfaceApplicator(s, sg) :> ISg
 
         let effect' (e : IMod<FShadeEffect>) (sg : ISg) =
-            let s = constantSurfaceCache.Memoized1 (fun e -> e |> Mod.map (fun e -> (FShadeSurface(e) :> ISurface))) e
+            let s = e |> Mod.map (fun e -> (FShadeSurface(e) :> ISurface))
             Sg.SurfaceApplicator(s, sg) :> ISg

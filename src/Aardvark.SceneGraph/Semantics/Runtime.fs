@@ -3,7 +3,6 @@
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Ag
-open Aardvark.Base.AgHelpers
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
 open Aardvark.SceneGraph.Internal
