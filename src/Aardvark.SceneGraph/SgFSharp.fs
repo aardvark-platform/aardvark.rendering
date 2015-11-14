@@ -316,7 +316,7 @@ module SgFSharp =
 
             Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
 
-        let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(Mod.constant pass, sg)
+        let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(pass, sg) :> ISg
 
         let normalizeToAdaptive (box : Box3d) (this : ISg) =
 

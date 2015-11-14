@@ -63,9 +63,6 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
     let mutable dirtyResources = HashSet<IChangeableResource>()
     let mutable dirtyPoolIds = Array.empty
 
-
-    let renderPassChangers = Dictionary<IRenderObject, IMod<unit> * ref<uint64>>()
-    let renderPassChangeSet = MutableVolatileDirtySet<IMod<unit>, unit>(fun m -> m.GetValue this)
     let inputSet = RenderTaskInputSet(this)
 
     let tryGetProgramForPass (pass : uint64) =
@@ -306,40 +303,10 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
         for d in deltas do
             match d with
                 | Add a ->
-                    if a.RenderPass <> null then 
-                        let currentPass = ref System.UInt64.MaxValue
-                        let changed =
-                            a.RenderPass |> Mod.map (fun p ->
-                                let old = !currentPass
-                                if old <> p then
-                                    currentPass := p
-                                    x.Add(p,a)
-                                    x.Remove(old, a)
-                            )
-                        changed.GetValue(x)
-                        renderPassChangers.Add(a, (changed, currentPass))
-                        renderPassChangeSet.Add changed
-                    else
-                        x.Add(0UL, a)
-
+                    x.Add(a.RenderPass, a)
                     additions <- additions + 1
                 | Rem a ->    
-                    if a.RenderPass <> null then
-                        match renderPassChangers.TryGetValue a with
-                            | (true, (changer, current)) ->
-                                x.Remove(!current, a)
-                                renderPassChangeSet.Remove changer
-                                renderPassChangers.Remove a |> ignore
-                            | _ -> 
-                                ()
-//                            match subscriptions.TryGetValue a with
-//                                | (true,(d,k)) ->
-//                                    x.Remove(k, a)
-//                                    d.Dispose()
-//                                    subscriptions.Remove a |> ignore
-//                                | _ -> ()
-                    else
-                        x.Remove(0UL, a)
+                    x.Remove(a.RenderPass, a)
                     removals <- removals + 1
         (additions, removals)
 
@@ -387,9 +354,6 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
                         | [] -> 0,0
                         | deltas -> x.ProcessDeltas deltas
 
-                renderPassChangeSet.Evaluate() |> ignore
-
-                
                 let resourceUpdates, resourceCounts, resourceUpdateTime, updateStats = 
                     x.UpdateDirtyResources()
 

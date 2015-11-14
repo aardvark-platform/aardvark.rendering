@@ -27,7 +27,7 @@ module private RenderObjectIds =
     let newId() = Interlocked.Increment &currentId
 
 type IRenderObject =
-    abstract member RenderPass : IMod<uint64>
+    abstract member RenderPass : uint64
     abstract member AttributeScope : Ag.Scope
 
 [<CustomEquality>]
@@ -38,7 +38,7 @@ type RenderObject =
         mutable AttributeScope : Ag.Scope
                 
         mutable IsActive : IMod<bool>
-        mutable RenderPass : IMod<uint64>
+        mutable RenderPass : uint64
                 
         mutable DrawCallInfo : IMod<DrawCallInfo>
         mutable Mode : IMod<IndexedGeometryMode>
@@ -69,7 +69,7 @@ type RenderObject =
         { Id = RenderObjectIds.newId()
           AttributeScope = Ag.emptyScope
           IsActive = null
-          RenderPass = null
+          RenderPass = 0UL
           DrawCallInfo = null
           Mode = null
           Surface = null
@@ -119,7 +119,7 @@ module RenderObjectExtensions =
         { Id = -1
           AttributeScope = Ag.emptyScope
           IsActive = null
-          RenderPass = null
+          RenderPass = 0UL
           DrawCallInfo = null
           Mode = null
           Surface = null

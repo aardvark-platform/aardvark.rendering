@@ -75,14 +75,12 @@ module Sg =
         new(on : IEvent<bool>, child : IMod<ISg>) = OnOffNode(Mod.fromEvent on, child)
         new(on : IEvent<bool>, child : ISg) = OnOffNode(Mod.fromEvent on, Mod.constant child)
 
-    type PassApplicator(pass : IMod<uint64>, child : IMod<ISg>) =
+    type PassApplicator(pass : uint64, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Pass = pass
 
-        new(pass : IMod<uint64>, child : ISg) = PassApplicator(pass, Mod.constant child)
-        new(pass : IEvent<uint64>, child : IMod<ISg>) = PassApplicator(Mod.fromEvent pass, child)
-        new(pass : IEvent<uint64>, child : ISg) = PassApplicator(Mod.fromEvent pass, Mod.constant child)
+        new(pass : uint64, child : ISg) = PassApplicator(pass, Mod.constant child)
 
     type UniformApplicator(uniformHolder : IUniformProvider, child : IMod<ISg>) =
         inherit AbstractApplicator(child)

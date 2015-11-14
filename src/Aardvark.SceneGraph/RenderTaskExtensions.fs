@@ -99,7 +99,7 @@ module RenderTask =
             { RenderObject.Create() with
                 AttributeScope = Ag.emptyScope
                 IsActive = Mod.constant true
-                RenderPass = null
+                RenderPass = 0UL
                 DrawCallInfo = Mod.constant (DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6))
                 Mode = Mod.constant IndexedGeometryMode.TriangleList
                 Surface = Shaders.fs |> toEffect |> toFShadeSurface |> Mod.constant
