@@ -302,6 +302,9 @@ type OptimizedNativeRenderTask(objects : aset<IRenderObject>, manager : Resource
 
 
     override x.Run(fbo) =
+        if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
+            transact (fun () -> Mod.change currentContext ctx.CurrentContextHandle.Value)
+
         program.Update x |> ignore
 
         x.UpdateDirtyResources() |> ignore
