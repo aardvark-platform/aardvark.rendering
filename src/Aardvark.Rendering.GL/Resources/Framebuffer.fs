@@ -49,6 +49,8 @@ type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aard
         let depth = match depth with | Some d -> [DefaultSemantic.Depth, d] | _ -> []
         outputBySem <- List.append bindings depth |> Map.ofList
 
+    member x.Attachments = outputBySem
+
     interface IFramebuffer with
         member x.Signature = signature
         member x.Size = x.Size
