@@ -350,11 +350,11 @@ module Fragments =
             block.Read(0, x.Size)
 
         member x.Append(calls : seq<nativeint * obj[]>) =
-            let data = ASM.assembleCalls 0 calls
+            let data = Assembler.compileCalls 0 calls
             x.Append data
 
         member x.Update(id : int, calls : seq<nativeint * obj[]>) =
-            let data = ASM.assembleCalls 0 calls
+            let data = Assembler.compileCalls 0 calls
             x.Update(id, data)
 
         member x.FullBinaryCode =
