@@ -101,7 +101,7 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
         member x.FrameId = frameId
 
 [<AbstractClass>]
-type OptimizedRenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) as this =
+type AdaptiveProgramRenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) as this =
     inherit AbstractRenderTask(
         manager.Context,
         fboSignature, 
@@ -160,7 +160,23 @@ type OptimizedRenderTask(objects : aset<IRenderObject>, manager : ResourceManage
     // TODO: find a way to destroy sortKeys appropriately without using ConditionalWeakTable
     let preparedObjects = objects |> ASet.mapUse prepareRenderObject |> ASet.map (fun prep -> createSortKey prep, prep)
 
-    let program = lazy ( this.CreateProgram preparedObjects)
+    let mutable hasProgram = false
+    let mutable program = Unchecked.defaultof<_> // ( this.CreateProgram preparedObjects)
+
+    let executionTime = System.Diagnostics.Stopwatch()
+
+    member x.SetHandler (handler : unit -> FragmentHandler<unit, PreparedRenderObject, Instruction, 'a>) =
+//        let handlerWithStats () =
+//            let baseHandler = handler()
+//            {
+//                baseHandler with
+//                    compileDelta = fun l r ->
+//                        let code = baseHandler.compileDelta l r
+//                        code
+//            }
+        
+        hasProgram <- true
+        program <- preparedObjects |> AdaptiveProgram.custom Comparer.Default handler
 
     member x.CurrentContext =
         currentContext :> IMod<_>
@@ -180,8 +196,10 @@ type OptimizedRenderTask(objects : aset<IRenderObject>, manager : ResourceManage
     member x.RemoveStats (f : FrameStatistics) = 
         frameStatistics <- frameStatistics - f
 
-    abstract member CreateProgram : objects : aset<list<uint64> * PreparedRenderObject> -> IAdaptiveProgram<unit>
-
+    abstract member Init : unit -> unit
+    default x.Init() = ()
+    abstract member AdjustStatistics : FrameStatistics -> FrameStatistics
+    default x.AdjustStatistics a = a
 
     override x.InputChanged(o : IAdaptiveObject) =
         match o with
@@ -235,8 +253,15 @@ type OptimizedRenderTask(objects : aset<IRenderObject>, manager : ResourceManage
             
         let time = updateCPUTime.Elapsed + updateGPUTime.Elapsed
 
-
-        dirtyPoolCount, viewUpdateCount, time
+        { FrameStatistics.Zero with 
+            ResourceUpdateCount = float (dirtyPoolCount + viewUpdateCount)
+            ResourceUpdateTime = time
+            ResourceUpdateCounts = 
+                Map.ofList [
+                    ResourceKind.UniformBufferView, float viewUpdateCount
+                    ResourceKind.UniformBuffer, float dirtyPoolCount
+            ]
+        }
 
     member private x.UpdateDirtyResources() =
         let mutable stats = FrameStatistics.Zero
@@ -273,34 +298,59 @@ type OptimizedRenderTask(objects : aset<IRenderObject>, manager : ResourceManage
         if Config.SyncUploadsAndFrames && count > 0 then
             OpenTK.Graphics.OpenGL4.GL.Sync()
 
-        count, counts, updateCPUTime.Elapsed + updateGPUTime.Elapsed, stats
+        { stats with
+            ResourceUpdateCount = stats.ResourceUpdateCount + float count
+            ResourceUpdateCounts = counts
+            ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
+        }
 
 
 
     override x.Run(fbo) =
+        if not hasProgram then 
+            x.Init()
+            hasProgram <- true
+
         if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
             transact (fun () -> Mod.change currentContext ctx.CurrentContextHandle.Value)
 
-        x.UpdateDirtyResources() |> ignore
-
-        let prog = program.Value
-
-        prog.Update x |> ignore
-
-        x.UpdateDirtyUniformBufferViews() |> ignore
-
-
-
-        prog.Run()
-
         let one = oneTimeStatistics
         oneTimeStatistics <- FrameStatistics.Zero
-        oneTimeStatistics + frameStatistics
+        let mutable stats = oneTimeStatistics + frameStatistics
+
+        stats <- stats + x.UpdateDirtyResources()
+
+        if hasProgram then
+            let programUpdateStats = program.Update x
+            stats <- { 
+                stats with 
+                    AddedRenderObjects = float programUpdateStats.AddedFragmentCount
+                    RemovedRenderObjects = float programUpdateStats.RemovedFragmentCount
+                    InstructionUpdateCount = 0.0 // TODO!!
+                    InstructionUpdateTime = 
+                        programUpdateStats.DeltaProcessTime +
+                        programUpdateStats.WriteTime +
+                        programUpdateStats.CompileTime
+            }
+
+        stats <- stats + x.UpdateDirtyUniformBufferViews()
+
+        executionTime.Restart()
+        if hasProgram then
+            program.Run()
+        GL.Sync()
+        executionTime.Stop()
+
+
+
+        x.AdjustStatistics { 
+            stats with 
+                ResourceCount = float inputSet.Resources.Count 
+                ExecutionTime = executionTime.Elapsed
+        }
 
     override x.Dispose() =
-        if program.IsValueCreated then
-            program.Value.Dispose()
-        ()
+        program.Dispose()
 
 
 module private GLFragmentHandlers =
@@ -320,7 +370,7 @@ module private GLFragmentHandlers =
         FragmentHandler.wrapSimple instructionToCall compile inner
 
 
-    let private glvmBase (mode : VMMode) (compileDelta : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
+    let private glvmBase (mode : VMMode) (vmStats : ref<VMStats>) (compileDelta : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
         GLVM.vmInit()
 
         let prolog = GLVM.vmCreate()
@@ -354,8 +404,7 @@ module private GLFragmentHandlers =
             compileDelta = compileDelta
             startDefragmentation = fun _ _ _ -> Task.FromResult TimeSpan.Zero
             run = fun() -> 
-                let mutable stats = VMStats()
-                GLVM.vmRun(prolog, mode, &stats)
+                GLVM.vmRun(prolog, mode, &vmStats.contents)
             memorySize = fun () -> 0L
             alloc = fun code -> 
                 let ptr = GLVM.vmCreate()
@@ -374,14 +423,14 @@ module private GLFragmentHandlers =
             dispose = fun () -> GLVM.vmDelete prolog; GLVM.vmDelete epilog
         }
 
-    let glvmOptimized (compile : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
-        glvmBase VMMode.None compile ()
+    let glvmOptimized (vmStats : ref<VMStats>) (compile : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
+        glvmBase VMMode.None vmStats compile ()
 
-    let glvmRuntime (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>)() =
-        { glvmBase VMMode.RuntimeRedundancyChecks (fun _ v -> compile v) () with compileNeedsPrev = false }
+    let glvmRuntime (vmStats : ref<VMStats>) (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
+        { glvmBase VMMode.RuntimeRedundancyChecks vmStats (fun _ v -> compile v) () with compileNeedsPrev = false }
 
-    let glvmUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>)() =
-        { glvmBase VMMode.None (fun _ v -> compile v) () with compileNeedsPrev = false }
+    let glvmUnoptimized (vmStats : ref<VMStats>) (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
+        { glvmBase VMMode.None vmStats (fun _ v -> compile v) () with compileNeedsPrev = false }
 
     [<AllowNullLiteral>]
     type ManagedFragment =
@@ -435,17 +484,15 @@ module private GLFragmentHandlers =
 
 
 type NewRenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) =
-    inherit OptimizedRenderTask(
+    inherit AdaptiveProgramRenderTask(
         objects,
         manager,
         fboSignature, 
         config
     )
 
-    let instructionToCall (i : Instruction) : NativeCall =
-        let compiled = ExecutionContext.compile i
-        compiled.functionPointer, compiled.args
- 
+    let vmStats = ref <| VMStats()
+
     let compileDelta (this : NewRenderTask) (left : Option<PreparedRenderObject>) (right : PreparedRenderObject) =
         
         let code, createStats =
@@ -499,45 +546,50 @@ type NewRenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fbo
     let compile (this : NewRenderTask) (right : PreparedRenderObject) =
         compileDelta this None right
 
-    override x.CreateProgram(preparedObjects) =
+    override x.Init() =
         match config.execution, config.redundancy with
             | ExecutionEngine.Native, RedundancyRemoval.Static ->
                 Log.line "using optimized native program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.nativeOptimized (compileDelta x))
+                x.SetHandler(GLFragmentHandlers.nativeOptimized (compileDelta x))
 
             | ExecutionEngine.Native, RedundancyRemoval.None ->
                 Log.line "using unoptimized native program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.nativeUnoptimized (compile x))
+                x.SetHandler(GLFragmentHandlers.nativeUnoptimized (compile x))
 
             | ExecutionEngine.Native, RedundancyRemoval.Runtime ->
                 Log.line "using unoptimized native program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.nativeUnoptimized (compile x))
+                x.SetHandler(GLFragmentHandlers.nativeUnoptimized (compile x))
 
 
             | ExecutionEngine.Unmanaged, RedundancyRemoval.Static ->
                 Log.line "using optimized GLVM program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.glvmOptimized (compileDelta x))
+                x.SetHandler(GLFragmentHandlers.glvmOptimized vmStats (compileDelta x))
 
             | ExecutionEngine.Unmanaged, RedundancyRemoval.None ->
                 Log.line "using unoptimized GLVM program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.glvmUnoptimized (compile x))
+                x.SetHandler(GLFragmentHandlers.glvmUnoptimized vmStats (compile x))
 
             | ExecutionEngine.Unmanaged, RedundancyRemoval.Runtime ->
                 Log.line "using runtime-optimized GLVM program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.glvmRuntime (compile x))
+                x.SetHandler(GLFragmentHandlers.glvmRuntime vmStats (compile x))
 
 
             | ExecutionEngine.Managed, RedundancyRemoval.Static ->
                 Log.line "using optimized managed program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.managedOptimized (compileDelta x))
+                x.SetHandler(GLFragmentHandlers.managedOptimized (compileDelta x))
 
             | ExecutionEngine.Managed, RedundancyRemoval.None ->
                 Log.line "using unoptimized managed program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.managedUnoptimized (compile x))
+                x.SetHandler(GLFragmentHandlers.managedUnoptimized (compile x))
 
             | ExecutionEngine.Managed, RedundancyRemoval.Runtime ->
                 Log.line "using unoptimized managed program"
-                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.managedUnoptimized (compile x))
+                x.SetHandler(GLFragmentHandlers.managedUnoptimized (compile x))
 
             | _ ->
                 failwithf "unknown backend configuration: %A/%A" config.execution config.redundancy
+
+    override x.AdjustStatistics(stats) =
+        { stats with
+            ActiveInstructionCount = stats.ActiveInstructionCount - float vmStats.Value.RemovedInstructions
+        }
