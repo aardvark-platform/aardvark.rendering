@@ -844,7 +844,7 @@ let main args =
     //let sg = sg |> Sg.loadAsync
 
 
-    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, engine.GetValue(), sg)
+    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, BackendConfiguration.UnmanagedRuntime, sg)
 
     let task = RenderTask.cache task
 

@@ -4,6 +4,7 @@ open System
 open System.Threading
 open System.Collections.Generic
 open Aardvark.Base
+open Aardvark.Base.Runtime
 open Aardvark.Base.Incremental
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL.Compiler
@@ -99,8 +100,8 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
         member x.Run(caller, fbo) = x.Run(caller, fbo)
         member x.FrameId = frameId
 
-
-type OptimizedNativeRenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) as this =
+[<AbstractClass>]
+type OptimizedRenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) as this =
     inherit AbstractRenderTask(
         manager.Context,
         fboSignature, 
@@ -108,13 +109,14 @@ type OptimizedNativeRenderTask(objects : aset<IRenderObject>, manager : Resource
     )
 
     let ctx = manager.Context
+    let prepared = Dictionary<IRenderObject, PreparedRenderObject>()
 
     let prepareRenderObject (ro : IRenderObject) =
         match ro with
             | :? RenderObject as r ->
                 manager.Prepare(fboSignature, r)
+
             | :? PreparedRenderObject as prep ->
-                // TODO: increase refCount for all resources
                 prep
             | _ ->
                 failwithf "[RenderTask] unsupported IRenderObject: %A" ro
@@ -132,54 +134,7 @@ type OptimizedNativeRenderTask(objects : aset<IRenderObject>, manager : Resource
     let executionTime = System.Diagnostics.Stopwatch()
 
     let mutable frameStatistics = FrameStatistics.Zero
-
-
-    let instructionToCall (i : Instruction) : NativeCall =
-        let compiled = ExecutionContext.compile i
-        compiled.functionPointer, compiled.args
-
-    let compileDelta (left : Option<PreparedRenderObject>) (right : PreparedRenderObject) =
-        
-        let code, stats =
-            match left with
-                | Some left -> Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileDelta manager currentContext left right
-                | None -> Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileFull manager currentContext right
-
-        for r in code.Resources do
-            inputSet.Add r
-
-        let mutable stats = stats
-
-        let calls =
-            code.Instructions
-                |> List.map (fun i ->
-                    match i with
-                        | FixedInstruction i -> 
-                            stats <- stats + List.sumBy InstructionStatistics.toStats i
-                            Mod.constant (i |> List.map instructionToCall)
-
-                        | AdaptiveInstruction i -> 
-                            let mutable oldStats = FrameStatistics.Zero
-                            i |> Mod.map (fun i -> 
-                                let newStats = List.sumBy InstructionStatistics.toStats i
-                                stats <- stats - oldStats + newStats
-                                oldStats <- newStats
-                                i |> List.map instructionToCall
-                            )
-                )
-
-        frameStatistics <- frameStatistics + stats
-
-        { new Aardvark.Base.Runtime.AdaptiveCode(calls) with
-            override x.Dispose() =
-                base.Dispose()
-                for r in code.Resources do
-                    inputSet.Remove r
-                    r.Dispose()
-
-                frameStatistics <- frameStatistics - stats
-
-        }
+    let mutable oneTimeStatistics = FrameStatistics.Zero
 
     let mutable currentId = 0L
     let idCache = ConditionalWeakTable<IMod, ref<uint64>>()
@@ -205,7 +160,28 @@ type OptimizedNativeRenderTask(objects : aset<IRenderObject>, manager : Resource
     // TODO: find a way to destroy sortKeys appropriately without using ConditionalWeakTable
     let preparedObjects = objects |> ASet.mapUse prepareRenderObject |> ASet.map (fun prep -> createSortKey prep, prep)
 
-    let program = Runtime.AdaptiveProgram.differential 6 Comparer.Default compileDelta (AMap.ofASet preparedObjects)
+    let program = lazy ( this.CreateProgram preparedObjects)
+
+    member x.CurrentContext =
+        currentContext :> IMod<_>
+
+    member x.AddInput(i : IAdaptiveObject) =
+        inputSet.Add i
+
+    member x.RemoveInput(i : IAdaptiveObject) =
+        inputSet.Remove i
+
+    member x.AddOneTimeStats (f : FrameStatistics) =
+        oneTimeStatistics <- oneTimeStatistics + f
+
+    member x.AddStats (f : FrameStatistics) =
+        frameStatistics <- frameStatistics + f
+
+    member x.RemoveStats (f : FrameStatistics) = 
+        frameStatistics <- frameStatistics - f
+
+    abstract member CreateProgram : objects : aset<list<uint64> * PreparedRenderObject> -> IAdaptiveProgram<unit>
+
 
     override x.InputChanged(o : IAdaptiveObject) =
         match o with
@@ -307,17 +283,260 @@ type OptimizedNativeRenderTask(objects : aset<IRenderObject>, manager : Resource
 
         x.UpdateDirtyResources() |> ignore
 
-        program.Update x |> ignore
+        let prog = program.Value
+
+        prog.Update x |> ignore
 
         x.UpdateDirtyUniformBufferViews() |> ignore
 
 
 
-        program.Run()
+        prog.Run()
 
-
-        frameStatistics
+        let one = oneTimeStatistics
+        oneTimeStatistics <- FrameStatistics.Zero
+        oneTimeStatistics + frameStatistics
 
     override x.Dispose() =
-        program.Dispose()
+        if program.IsValueCreated then
+            program.Value.Dispose()
         ()
+
+
+module private GLFragmentHandlers =
+    open System.Threading.Tasks
+
+    let instructionToCall (i : Instruction) : NativeCall =
+        let compiled = ExecutionContext.compile i
+        compiled.functionPointer, compiled.args
+ 
+
+    let nativeOptimized (compileDelta : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) =
+        let inner = FragmentHandler.native 6
+        FragmentHandler.warpDifferential instructionToCall compileDelta inner
+
+    let nativeUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) =
+        let inner = FragmentHandler.native 6
+        FragmentHandler.wrapSimple instructionToCall compile inner
+
+
+    let private glvmBase (mode : VMMode) (compileDelta : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
+        GLVM.vmInit()
+
+        let prolog = GLVM.vmCreate()
+        let epilog = GLVM.vmCreate()
+
+        let getArgs (o : Instruction) =
+            o.Arguments |> Array.map (fun arg ->
+                match arg with
+                    | :? int as i -> nativeint i
+                    | :? nativeint as i -> i
+                    | :? float32 as f -> BitConverter.ToInt32(BitConverter.GetBytes(f), 0) |> nativeint
+                    | _ -> failwith "invalid argument"
+            )
+
+        let appendToBlock (frag : FragmentPtr) (id : int) (instructions : seq<Instruction>) =
+            for i in instructions do
+                match getArgs i with
+                    | [| a |] -> GLVM.vmAppend1(frag, id, i.Operation, a)
+                    | [| a; b |] -> GLVM.vmAppend2(frag, id, i.Operation, a, b)
+                    | [| a; b; c |] -> GLVM.vmAppend3(frag, id, i.Operation, a, b, c)
+                    | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, i.Operation, a, b, c, d)
+                    | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
+                    | _ -> failwithf "invalid instruction: %A" i
+
+        let mutable stats = Unchecked.defaultof<_>
+        {
+            compileNeedsPrev = true
+            nativeCallCount = ref 0
+            jumpDistance = ref 0
+            prolog = prolog
+            epilog = epilog
+            compileDelta = compileDelta
+            startDefragmentation = fun _ _ _ -> Task.FromResult TimeSpan.Zero
+            run = fun() -> GLVM.vmRun(prolog, mode, &stats)
+            memorySize = fun () -> 0L
+            alloc = fun code -> 
+                let ptr = GLVM.vmCreate()
+                let id = GLVM.vmNewBlock ptr
+                appendToBlock ptr id code
+                ptr
+            free = GLVM.vmDelete
+            write = fun ptr code ->
+                GLVM.vmClear ptr
+                let id = GLVM.vmNewBlock ptr
+                appendToBlock ptr id code
+                false
+
+            writeNext = fun prev next -> GLVM.vmLink(prev, next); 0
+            isNext = fun prev frag -> GLVM.vmGetNext prev = frag
+            dispose = fun () -> ()
+        }
+
+    let glvmOptimized (compile : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
+        glvmBase VMMode.None compile ()
+
+    let glvmRuntime (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>)() =
+        { glvmBase VMMode.RuntimeRedundancyChecks (fun _ v -> compile v) () with compileNeedsPrev = false }
+
+    let glvmUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>)() =
+        { glvmBase VMMode.None (fun _ v -> compile v) () with compileNeedsPrev = false }
+
+    [<AllowNullLiteral>]
+    type ManagedFragment =
+        class
+            val mutable public Next : ManagedFragment
+            val mutable public Instructions : Instruction[]
+
+            new(next, instructions) = { Next = next; Instructions = instructions }
+            new(instructions) = { Next = null; Instructions = instructions }
+        end
+
+    let managedOptimized (compileDelta : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
+        let prolog = ManagedFragment [||]
+        let epilog = ManagedFragment [||]
+
+        let run (f : ManagedFragment) =
+            let rec all (f : ManagedFragment) =
+                if isNull f then 
+                    Seq.empty
+                else
+                    seq {
+                        yield f.Instructions
+                        yield! all f.Next
+                    }
+
+            let all = all f
+            for part in all do
+                for i in part do
+                    ExecutionContext.debug i
+
+        {
+            compileNeedsPrev = true
+            nativeCallCount = ref 0
+            jumpDistance = ref 0
+            prolog = prolog
+            epilog = epilog
+            compileDelta = compileDelta
+            startDefragmentation = fun _ _ _ -> Task.FromResult TimeSpan.Zero
+            run = fun () -> run prolog
+            memorySize = fun () -> 0L
+            alloc = fun code -> ManagedFragment(code)
+            free = ignore
+            write = fun ptr code -> ptr.Instructions <- code; false
+            writeNext = fun prev next -> prev.Next <- next; 0
+            isNext = fun prev frag -> prev.Next = frag
+            dispose = fun () -> ()
+        }  
+
+    let managedUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
+        { managedOptimized (fun _ v -> compile v) () with compileNeedsPrev = false }
+
+
+type NewRenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) =
+    inherit OptimizedRenderTask(
+        objects,
+        manager,
+        fboSignature, 
+        config
+    )
+
+    let instructionToCall (i : Instruction) : NativeCall =
+        let compiled = ExecutionContext.compile i
+        compiled.functionPointer, compiled.args
+ 
+    let compileDelta (this : NewRenderTask) (left : Option<PreparedRenderObject>) (right : PreparedRenderObject) =
+        
+        let code, createStats =
+            match left with
+                | Some left -> Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileDelta manager this.CurrentContext left right
+                | None -> Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileFull manager this.CurrentContext right
+
+        for r in code.Resources do
+            this.AddInput r
+
+        this.AddOneTimeStats createStats
+
+        let mutable stats = FrameStatistics.Zero
+
+        let calls =
+            code.Instructions
+                |> List.map (fun i ->
+                    match i with
+                        | FixedInstruction i -> 
+                            let dStats = List.sumBy InstructionStatistics.toStats i
+                            stats <- stats + dStats
+                            this.AddStats dStats
+
+                            Mod.constant i
+
+                        | AdaptiveInstruction i -> 
+                            let mutable oldStats = FrameStatistics.Zero
+                            i |> Mod.map (fun i -> 
+                                let newStats = List.sumBy InstructionStatistics.toStats i
+                                let dStats = newStats - oldStats
+                                stats <- stats + newStats - oldStats
+                                this.AddStats dStats
+
+                                oldStats <- newStats
+                                i
+                            )
+                )
+
+
+        { new Aardvark.Base.Runtime.IAdaptiveCode<Instruction> with
+            member x.Content = calls
+            member x.Dispose() =
+                for r in code.Resources do
+                    this.RemoveInput r
+                    r.Dispose()
+
+                this.RemoveStats stats
+
+        }
+
+    let compile (this : NewRenderTask) (right : PreparedRenderObject) =
+        compileDelta this None right
+
+    override x.CreateProgram(preparedObjects) =
+        match config.execution, config.redundancy with
+            | ExecutionEngine.Native, RedundancyRemoval.Static ->
+                Log.line "using optimized native program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.nativeOptimized (compileDelta x))
+
+            | ExecutionEngine.Native, RedundancyRemoval.None ->
+                Log.line "using unoptimized native program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.nativeUnoptimized (compile x))
+
+            | ExecutionEngine.Native, RedundancyRemoval.Runtime ->
+                Log.line "using unoptimized native program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.nativeUnoptimized (compile x))
+
+
+            | ExecutionEngine.Unmanaged, RedundancyRemoval.Static ->
+                Log.line "using optimized GLVM program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.glvmOptimized (compileDelta x))
+
+            | ExecutionEngine.Unmanaged, RedundancyRemoval.None ->
+                Log.line "using unoptimized GLVM program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.glvmUnoptimized (compile x))
+
+            | ExecutionEngine.Unmanaged, RedundancyRemoval.Runtime ->
+                Log.line "using runtime-optimized GLVM program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.glvmRuntime (compile x))
+
+
+            | ExecutionEngine.Managed, RedundancyRemoval.Static ->
+                Log.line "using optimized managed program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.managedOptimized (compileDelta x))
+
+            | ExecutionEngine.Managed, RedundancyRemoval.None ->
+                Log.line "using unoptimized managed program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.managedUnoptimized (compile x))
+
+            | ExecutionEngine.Managed, RedundancyRemoval.Runtime ->
+                Log.line "using unoptimized managed program"
+                preparedObjects |> AdaptiveProgram.custom Comparer.Default (GLFragmentHandlers.managedUnoptimized (compile x))
+
+            | _ ->
+                failwithf "unknown backend configuration: %A/%A" config.execution config.redundancy

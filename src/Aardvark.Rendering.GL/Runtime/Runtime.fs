@@ -163,7 +163,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
         let man = ResourceManager(manager, ctx, shareTextures, shareBuffers)
-        new RenderTask(x, fboSignature, ctx, man, engine, set)
+        //new RenderTask(x, fboSignature, ctx, man, engine, set)
+        new NewRenderTask(set, man, fboSignature, engine.GetValue(null))
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         match rj with
