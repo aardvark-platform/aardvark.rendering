@@ -14,7 +14,7 @@ State::State()
 	currentCullFace = -1;
 	currentSampler = std::unordered_map<int, intptr_t>();
 	currentTexture = std::unordered_map<GLenum, std::unordered_map<int, intptr_t>>();
-	currentBuffer = std::unordered_map<int, intptr_t>();
+	currentBuffer = std::unordered_map<int, std::tuple<intptr_t, intptr_t, intptr_t>>();
 	modes = std::unordered_map<intptr_t, bool>();
 	patchParameters = std::unordered_map<intptr_t, intptr_t>();
 
@@ -153,14 +153,14 @@ bool State::ShouldSetSampler(int index, intptr_t sampler)
 	}
 }
 
-bool State::ShouldSetBuffer(GLenum target, int index, intptr_t buffer)
+bool State::ShouldSetBuffer(GLenum target, int index, intptr_t buffer, intptr_t offset, intptr_t size)
 {
 	auto res = currentBuffer.find(index);
 	if (res != currentBuffer.end())
 	{
-		if (res->second != buffer)
+		if (std::get<0>(res->second) != buffer || std::get<1>(res->second) != offset || std::get<2>(res->second) != size)
 		{
-			currentBuffer[index] = buffer;
+			currentBuffer[index] = std::make_tuple(buffer, offset, size);
 			return true;
 		}
 		else
@@ -171,7 +171,7 @@ bool State::ShouldSetBuffer(GLenum target, int index, intptr_t buffer)
 	}
 	else
 	{
-		currentBuffer[index] = buffer;
+		currentBuffer[index] = std::make_tuple(buffer, offset, size);
 		return true;
 	}
 }
