@@ -62,7 +62,14 @@ module TrafoSemantics =
         let (<*>) a b = 
             if a = rootTrafo then b
             elif b = rootTrafo then a
-            else mulCache.Invoke a b
+            else
+                if System.Object.ReferenceEquals(a,null) then 
+                    Log.warn "mul null"
+                    System.Diagnostics.Debugger.Break()
+                if System.Object.ReferenceEquals(b,null) then 
+                    Log.warn "mul null"
+                    System.Diagnostics.Debugger.Break()  
+                mulCache.Invoke a b
 
         let inverse t = invCache.Invoke t
 

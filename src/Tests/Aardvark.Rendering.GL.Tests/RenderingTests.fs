@@ -11,6 +11,7 @@ open Aardvark.Base.Incremental.Operators
 open Aardvark.Application
 open System.Diagnostics
 open Aardvark.SceneGraph.Semantics
+open Aardvark.Application.WinForms
 
 module Vector =
 
@@ -560,7 +561,7 @@ module RenderingTests =
         OpenTK.Graphics.OpenGL4.GL.Sync()
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
         let pi = runtime.Download(color, PixFormat.ByteRGBA)
-
+        pi.SaveAsImage(@"C:\Aardwork\gugu.png")
         OpenTK.Graphics.OpenGL4.GL.Sync()
         //task2.Run fbo |> ignore
         //OpenTK.Graphics.OpenGL4.GL.Sync()
@@ -597,25 +598,25 @@ module RenderingTests =
         let leaf = quad |> Sg.ofIndexedGeometry
         let screen = V2i(2048, 2048)
 
-        let grid (size : V2i) (inner : ISg) =
+        let grid (cnt : int) (inner : ISg) =
             [
-                for x in -size.X/2..size.X/2 do
-                    for y in -size.Y/2..size.Y/2 do
-                        yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
+                for x in 0 .. cnt do
+                   yield inner |> Sg.trafo (~~Trafo3d.Translation(float <| x % cnt, float <| x / cnt, 0.0))
             ]
 
-        let possibleObjects = grid (V2i(10,10)) leaf
+
+        let mutable candidates = grid 10 leaf 
 
 
         let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
         let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
 
+        let g = Sg.group []//candidates
         let rootTrafo = Mod.init Trafo3d.Identity
 
-        let group = Sg.group possibleObjects |> Sg.trafo (~~Trafo3d.Scale(0.125))
-
         let sg =
-            group
+            g
+                |> Sg.trafo (~~Trafo3d.Scale(0.05))
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
                 |> Sg.trafo rootTrafo
                 |> Sg.viewTrafo ~~(cam |> CameraView.viewTrafo)
@@ -654,12 +655,23 @@ module RenderingTests =
                 DefaultSemantic.Depth, (depth :> IFramebufferOutput)
             ]
         
-        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+        let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
         let renderJobs = sg.RenderObjects()
-        let task = runtime.CompileRender(signature, renderJobs)
+        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), renderJobs)
         //let task2 = runtime.CompileRender renderJobs
 
+        let t = System.Threading.Tasks.Task.Factory.StartNew(fun () ->
+            while List.isEmpty candidates |> not do
+                match candidates with
+                 | x::xs -> 
+                    candidates <- xs
+                    g.Add x |> ignore
+                    System.Threading.Thread.Sleep 10
+                    printfn "to go: %d" (List.length candidates)
+                 | _ -> ()
 
+            renderJobs |> ASet.toList |> List.length |> printfn "got %d render objs"
+        , System.Threading.Tasks.TaskCreationOptions.LongRunning) 
 
         clear.Run fbo |> ignore
         OpenTK.Graphics.OpenGL4.GL.Sync()
@@ -667,10 +679,10 @@ module RenderingTests =
         OpenTK.Graphics.OpenGL4.GL.Sync()
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
         let pi = runtime.Download(color, PixFormat.ByteRGBA)
-
+        pi.SaveAsImage(@"C:\Aardwork\urdar.png")
         OpenTK.Graphics.OpenGL4.GL.Sync()
 
-        if useWindow then app.Value |> snd |> (fun s -> s.RenderTask <- task; s.Run())
+        if useWindow then app.Value |> snd |> (fun s -> s.RenderTask <- RenderTask.ofList [clear; task]; s.Run())
         else
             Telemetry.reset()
             Log.line "starting update test"
@@ -679,7 +691,8 @@ module RenderingTests =
             let disp = System.Collections.Generic.List()
             sw.Start()
             while sw.Elapsed.TotalSeconds < 5.0 do
-                task.Run(fbo) |> ignore
+                clear.Run fbo |> ignore
+                task.Run fbo |> ignore
             sw.Stop()
 
         ()
