@@ -80,6 +80,7 @@ and [<AllowNullLiteral>] IFramebufferSignature =
     abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
     abstract member DepthStencilAttachment : Option<AttachmentSignature>
 
+    abstract member IsAssignableFrom : other : IFramebufferSignature -> bool
 
 
 and IFramebuffer =

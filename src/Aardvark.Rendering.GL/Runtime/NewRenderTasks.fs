@@ -64,6 +64,9 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
         GL.Check "could not set viewport"
 
     member x.Run(caller : IAdaptiveObject, fbo : IFramebuffer) =
+        if not <| fboSignature.IsAssignableFrom fbo.Signature then
+            failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
+
         x.EvaluateAlways caller (fun () ->
             use token = ctx.ResourceLock 
             let fbo =

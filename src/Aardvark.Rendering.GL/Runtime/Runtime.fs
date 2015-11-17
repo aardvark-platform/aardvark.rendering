@@ -10,15 +10,50 @@ open Aardvark.Base.Incremental
 
 type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, depthStencil : Option<AttachmentSignature>) =
    
+    let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
+        let myCol = RenderbufferFormat.toColFormat mine.format
+        let otherCol = RenderbufferFormat.toColFormat other.format
+        
+        myCol = otherCol
+
+    let colorsAssignableFrom (mine : Map<int, Symbol * AttachmentSignature>) (other : Map<int, Symbol * AttachmentSignature>) =
+        mine |> Map.forall (fun id (sem, signature) ->
+            match Map.tryFind id other with
+                | Some (otherSem, otherSig) when sem = otherSem ->
+                    signatureAssignableFrom signature otherSig
+                | None -> true
+                | _ -> false
+        )
+
+    let depthAssignableFrom (mine : Option<AttachmentSignature>) (other : Option<AttachmentSignature>) =
+        match mine, other with
+            | Some mine, Some other -> signatureAssignableFrom mine other
+            | _ -> true
+
     member x.Runtime = runtime
     member x.ColorAttachments = colors
     member x.DepthStencilAttachment = depthStencil
+
+    member x.IsAssignableFrom (other : IFramebufferSignature) =
+        if x.Equals other then 
+            true
+        else
+            match other with
+                | :? FramebufferSignature as other ->
+                    runtime = other.Runtime &&
+                    colorsAssignableFrom colors other.ColorAttachments &&
+                    depthAssignableFrom depthStencil other.DepthStencilAttachment
+                | _ ->
+                    false
+
+    override x.ToString() =
+        sprintf "{ ColorAttachments = %A; DepthStencilAttachment = %A }" colors depthStencil
 
     interface IFramebufferSignature with
         member x.Runtime = runtime
         member x.ColorAttachments = colors
         member x.DepthStencilAttachment = depthStencil
-
+        member x.IsAssignableFrom other = x.IsAssignableFrom other
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
