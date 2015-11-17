@@ -345,7 +345,6 @@ module private GLFragmentHandlers =
                     | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
                     | _ -> failwithf "invalid instruction: %A" i
 
-        let mutable stats = Unchecked.defaultof<_>
         {
             compileNeedsPrev = true
             nativeCallCount = ref 0
@@ -354,7 +353,9 @@ module private GLFragmentHandlers =
             epilog = epilog
             compileDelta = compileDelta
             startDefragmentation = fun _ _ _ -> Task.FromResult TimeSpan.Zero
-            run = fun() -> GLVM.vmRun(prolog, mode, &stats)
+            run = fun() -> 
+                let mutable stats = VMStats()
+                GLVM.vmRun(prolog, mode, &stats)
             memorySize = fun () -> 0L
             alloc = fun code -> 
                 let ptr = GLVM.vmCreate()
@@ -370,7 +371,7 @@ module private GLFragmentHandlers =
 
             writeNext = fun prev next -> GLVM.vmLink(prev, next); 0
             isNext = fun prev frag -> GLVM.vmGetNext prev = frag
-            dispose = fun () -> ()
+            dispose = fun () -> GLVM.vmDelete prolog; GLVM.vmDelete epilog
         }
 
     let glvmOptimized (compile : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
