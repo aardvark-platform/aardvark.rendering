@@ -314,9 +314,8 @@ type AdaptiveProgramRenderTask(objects : aset<IRenderObject>, manager : Resource
         if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
             transact (fun () -> Mod.change currentContext ctx.CurrentContextHandle.Value)
 
-        let one = oneTimeStatistics
+        let mutable stats = oneTimeStatistics
         oneTimeStatistics <- FrameStatistics.Zero
-        let mutable stats = oneTimeStatistics + frameStatistics
 
         stats <- stats + x.UpdateDirtyResources()
 
@@ -341,7 +340,7 @@ type AdaptiveProgramRenderTask(objects : aset<IRenderObject>, manager : Resource
         GL.Sync()
         executionTime.Stop()
 
-
+        stats <- stats + frameStatistics
 
         x.AdjustStatistics { 
             stats with 
