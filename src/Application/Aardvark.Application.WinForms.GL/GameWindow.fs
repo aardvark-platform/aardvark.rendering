@@ -358,7 +358,13 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 
 
     let mutable contextHandle : ContextHandle = null 
-    let defaultFramebuffer = new Framebuffer(ctx, fboSignature, (fun _ -> 0), ignore, [], None)
+    let defaultFramebuffer = 
+        new Framebuffer(
+            ctx, fboSignature, 
+            (fun _ -> 0), 
+            ignore, 
+            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples) :> IFramebufferOutput], None
+        )
 
     let avgFrameTime = RunningMean(10)
     let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
