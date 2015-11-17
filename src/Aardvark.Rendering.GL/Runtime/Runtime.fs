@@ -198,8 +198,16 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
         let man = ResourceManager(manager, ctx, shareTextures, shareBuffers)
-        //new RenderTask(x, fboSignature, ctx, man, engine, set)
-        new NewRenderTask(set, man, fboSignature, engine.GetValue(null))
+
+        match eng.sorting with
+            | Grouping _ -> 
+                new GroupedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
+
+            | Dynamic _ -> 
+                new SortedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
+
+            | Static _ -> 
+                failwith "[GL] static sorting not implemented"
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         match rj with
@@ -208,10 +216,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
              | _ -> failwith "unknown render object type"
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(fboSignature, engine, set) :> IRenderTask
+        x.CompileRenderInternal(fboSignature, engine, set)
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(fboSignature, Mod.constant engine, set) :> IRenderTask
+        x.CompileRenderInternal(fboSignature, Mod.constant engine, set)
 
     member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let clearValues =
