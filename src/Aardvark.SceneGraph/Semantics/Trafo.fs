@@ -3,7 +3,6 @@
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Ag
-open Aardvark.Base.AgHelpers
 open Aardvark.SceneGraph
 
 open Aardvark.SceneGraph.Internal
@@ -13,7 +12,8 @@ module TrafoExtensions =
 
     let inline private trafo v : IMod<Trafo3d> = v 
     type ISg with
-        member x.ModelTrafo             = x?ModelTrafo              |> trafo
+        member x.ModelTrafoStack : list<IMod<Trafo3d>> = x?ModelTrafoStack         
+        member x.ModelTrafo             = x?ModelTrafo()            |> trafo
         member x.ViewTrafo              = x?ViewTrafo               |> trafo
         member x.ProjTrafo              = x?ProjTrafo               |> trafo
         member x.ModelTrafoInv          = x?ModelTrafoInv()         |> trafo
@@ -27,7 +27,7 @@ module TrafoExtensions =
         member x.ModelViewProjTrafoInv  = x?ModelViewProjTrafoInv() |> trafo
              
     module Semantic =
-        let modelTrafo            (s : ISg) : IMod<Trafo3d> = s?ModelTrafo
+        let modelTrafo            (s : ISg) : IMod<Trafo3d> = s?ModelTrafo()
         let viewTrafo             (s : ISg) : IMod<Trafo3d> = s?ViewTrafo
         let projTrafo             (s : ISg) : IMod<Trafo3d> = s?ProjTrafo
         let modelTrafoInv         (s : ISg) : IMod<Trafo3d> = s?ModelTrafoInv()
@@ -43,12 +43,20 @@ module TrafoExtensions =
 
 module TrafoSemantics =
 
+    type TrafoMultiplyMod(l : IMod<Trafo3d>, r : IMod<Trafo3d>) =
+        inherit Mod.AbstractMod<Trafo3d>()
+
+        override x.Compute() =
+            l.GetValue x * r.GetValue x
+
+
     /// the root trafo for the entire Sg (used when no trafos are applied)
     let rootTrafo = Mod.constant Trafo3d.Identity
-  
+    let inline private (~%) (l : list<IMod<Trafo3d>>) = l
+
     [<Semantic>]
     type Trafos() =
-        let mulCache = Caching.BinaryOpCache (Mod.map2 (*))
+        let mulCache = Caching.BinaryOpCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
         let invCache = Caching.UnaryOpCache(Mod.map (fun (t : Trafo3d) -> t.Inverse))
 
         let (<*>) a b = 
@@ -58,11 +66,43 @@ module TrafoSemantics =
 
         let inverse t = invCache.Invoke t
 
-        member x.ModelTrafo(e : Root<ISg>) = 
-            e.Child?ModelTrafo <- rootTrafo
+        
 
-        member x.ModelTrafo(t : Sg.TrafoApplicator) =
-            t.Child?ModelTrafo <- t.Trafo <*> t.ModelTrafo
+
+        member x.ModelTrafoStack(e : Root<ISg>) =
+            e.Child?ModelTrafoStack <- %[]
+
+        member x.ModelTrafoStack(t : Sg.TrafoApplicator) =
+            t.Child?ModelTrafoStack <- t.Trafo::t.ModelTrafoStack
+
+
+        member x.ModelTrafo(e : ISg) =
+            let stack = e.ModelTrafoStack
+
+            let rec foldConstants (l : list<IMod<Trafo3d>>) =
+                match l with
+                    | [] -> []
+                    | a::b::rest when a.IsConstant && b.IsConstant ->
+                        let n = (Mod.constant (a.GetValue() * b.GetValue()))::rest
+                        foldConstants n
+                    | a::rest ->
+                        a::foldConstants rest
+
+            let s = foldConstants stack
+
+            match s with
+                | [] -> rootTrafo
+                | [a] -> a
+                | [a;b] -> a <*> b
+                | _ -> 
+                    // TODO: add a better logic here
+                    s |> List.fold (<*>) rootTrafo
+
+//        member x.ModelTrafo(e : Root<ISg>) = 
+//            e.Child?ModelTrafo <- rootTrafo
+//
+//        member x.ModelTrafo(t : Sg.TrafoApplicator) =
+//            t.Child?ModelTrafo <- t.Trafo <*> t.ModelTrafo
 
 
 

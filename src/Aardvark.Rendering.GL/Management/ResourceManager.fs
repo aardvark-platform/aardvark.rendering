@@ -15,9 +15,10 @@ module ResourceManager =
     exception ResourceManagerException of string
 
     type internal ChangeableResourceDescription<'a> = 
-        { dependencies : list<IMod>; 
-          updateCPU : unit -> unit; 
-          updateGPU : unit -> unit; 
+        { trackChangedInputs : bool
+          dependencies : seq<IAdaptiveObject>; 
+          updateCPU : list<IAdaptiveObject> -> unit; 
+          updateGPU : unit -> FrameStatistics; 
           destroy : unit -> unit; 
           resource : IMod<'a>;
           kind : ResourceKind }
@@ -25,44 +26,56 @@ module ResourceManager =
     type IChangeableResource =
         inherit IDisposable
         inherit IAdaptiveObject
-        //abstract member Dependencies : list<IMod>
+        abstract member IncrementRefCount : unit -> unit
         abstract member UpdateCPU : IAdaptiveObject -> unit
-        abstract member UpdateGPU : IAdaptiveObject -> unit
+        abstract member UpdateGPU : IAdaptiveObject -> FrameStatistics
         abstract member Resource : obj
         abstract member Kind : ResourceKind
         
     type ChangeableResource<'a> internal(key : list<obj>, parent : ConcurrentDictionary<list<obj>, obj>, 
                                          desc : IAdaptiveObject -> ChangeableResourceDescription<'a>) as this =
         inherit AdaptiveObject()
+
+        static let updateCPUProbe = Symbol.Create "[Resource] update CPU"
+        static let updateGPUProbe = Symbol.Create "[Resource] update GPU"
+
         let desc = desc this
-        do desc.dependencies |> List.iter (fun a -> a.GetValue(this) |> ignore; a.AddOutputNew this)
-           this.OutOfDate <- false
+        do this.OutOfDate <- false
 
         let mutable isDisposed = false
         let mutable refCount = 1
-        
+        let mutable changedInputs = []
 
-        //member x.Dependencies = desc.dependencies
+        override x.InputChanged (i : IAdaptiveObject) =
+            if desc.trackChangedInputs then
+                Interlocked.Change(&changedInputs, fun l -> i::l) |> ignore
+                       
         member x.UpdateCPU(caller : IAdaptiveObject) = 
-            desc.dependencies |> List.iter (fun a -> a.GetValue(x) |> ignore)
-            desc.updateCPU()
+            Telemetry.timed updateCPUProbe (fun () ->
+                let changed = 
+                    if desc.trackChangedInputs then Interlocked.Exchange(&changedInputs, [])
+                    else []
+                desc.updateCPU changed
+            )
 
         member x.UpdateGPU(caller) = 
-            x.EvaluateIfNeeded (caller) () (fun () ->
-                x.UpdateCPU(caller)
-                desc.updateGPU()
+            x.EvaluateIfNeeded (caller) FrameStatistics.Zero (fun () ->
+                Telemetry.timed updateGPUProbe (fun () ->
+                    //x.UpdateCPU(caller)
+                    desc.updateGPU()
+                )
             )
 
         member x.Resource = desc.resource
         member x.Kind = desc.kind
 
-        member x.IncrementRefCount () = Interlocked.Increment &refCount
+        member x.IncrementRefCount () = Interlocked.Increment &refCount |> ignore
 
         member x.Dispose() =
             if parent = null then
                 isDisposed <- true
                 desc.destroy()
-                desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
+                desc.dependencies |> Seq.iter (fun a -> a.RemoveOutput this)
 
             elif not isDisposed then
                 let r = Interlocked.Decrement &refCount
@@ -70,13 +83,13 @@ module ResourceManager =
                     isDisposed <- true
                     parent.TryRemove key |> ignore
                     desc.destroy()
-                    desc.dependencies |> List.iter (fun a -> a.RemoveOutput this)
+                    desc.dependencies |> Seq.iter (fun a -> a.RemoveOutput this)
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
         interface IChangeableResource with
-            //member x.Dependencies = desc.dependencies
+            member x.IncrementRefCount() = x.IncrementRefCount()
             member x.UpdateCPU(caller) = x.UpdateCPU(caller)
             member x.UpdateGPU(caller) = x.UpdateGPU(caller)
             member x.Resource = desc.resource :> obj
@@ -87,9 +100,6 @@ module ResourceManager =
     let outOfDate (c : IChangeableResource) =
         c.OutOfDate
 
-    let subscribeDirty (c : IChangeableResource) (set : System.Collections.Generic.HashSet<IChangeableResource>) (dirty : ref<int>) =
-        let f() = dirty := 1; lock set (fun () -> set.Add c |> ignore)
-        c.AddMarkingCallback(f)
 
     [<AutoOpen>]
     module private Caching =
@@ -97,7 +107,7 @@ module ResourceManager =
             let created = ConcurrentDictionary<list<obj>, obj>()
 
             member x.GetOrAdd(key : list<obj>, create : IAdaptiveObject -> ChangeableResourceDescription<'a>) =
-
+                
                 let res = 
                     created.AddOrUpdate(key, 
                         (fun key -> 
@@ -144,13 +154,13 @@ module ResourceManager =
         open System
         open System.Collections.Generic
 
-        let compilers = Dictionary<Type,Context -> ISurface -> Error<Program>>()
+        let compilers = Dictionary<Type,Context -> IFramebufferSignature -> ISurface -> Error<Program>>()
 
-        let registerShaderCompiler (compiler : Context -> 'a -> Error<Program>) =
-            compilers.Add ( typeof<'a>, fun ctx s -> compiler ctx (unbox<'a> s) )
+        let registerShaderCompiler (compiler : Context -> IFramebufferSignature -> 'a -> Error<Program>) =
+            compilers.Add ( typeof<'a>, fun ctx signature s -> compiler ctx signature (unbox<'a> s) )
 
-        let compileBackendSurface (ctx : Context) (b : BackendSurface) =
-            match ctx.TryCompileProgram b.Code with
+        let compileBackendSurface (ctx : Context) (signature : IFramebufferSignature) (b : BackendSurface) =
+            match ctx.TryCompileProgram(signature, b.Code) with
                 | Success s ->
                     let remapSemantic (sem : string) =
                         match b.SemanticMap.TryGetValue (Sym.ofString sem) with
@@ -178,14 +188,14 @@ module ResourceManager =
 
         do registerShaderCompiler compileBackendSurface
 
-        do registerShaderCompiler (fun (ctx : Context) (g : IGeneratedSurface) -> 
-            let b = g.Generate ctx.Runtime
-            compileBackendSurface ctx b
+        do registerShaderCompiler (fun (ctx : Context) (signature : IFramebufferSignature) (g : IGeneratedSurface) -> 
+            let b = g.Generate(ctx.Runtime, signature)
+            compileBackendSurface ctx signature b
            )
 
-        let compile (ctx : Context) (s : ISurface) =   
+        let compile (ctx : Context) (signature : IFramebufferSignature) (s : ISurface) =   
             match compilers |> Seq.tryPick (fun ( KeyValue(k,v) ) -> 
-                if k.IsAssignableFrom (s.GetType()) then Some <| v ctx s
+                if k.IsAssignableFrom (s.GetType()) then Some <| v ctx signature s
                 else None) with
              | Some k -> k
              | None -> Error "Unknown surface type. "
@@ -315,17 +325,10 @@ module ResourceManager =
                 member x.Update(res, data) = update (res.GetValue(), data)
                 member x.Delete(res) = delete (res.GetValue())
 
+       
 
     [<AllowNullLiteral>]
     type ResourceManager(original : ResourceManager, ctx : Context, shareTextures : bool, shareBuffers : bool) =
-        static let semanticIndices = ConcurrentDictionary<Symbol, int>()
-        static let mutable currentId = -1
-
-        static let getSemanticIndex (sem : Symbol) =
-            semanticIndices.GetOrAdd(sem, fun s ->
-                let id = Interlocked.Increment(&currentId)
-                id
-            )
 
         // some identifiers for caches
         static let arrayBuffer = Sym.ofString "ArrayBuffer"
@@ -335,7 +338,7 @@ module ResourceManager =
         static let uniformBuffer = Sym.ofString "UniformBuffer"
         static let sampler = Sym.ofString "Sampler"
         static let vao = Sym.ofString "VertexArrayObject"
-
+        static let uniformBufferViews = Sym.ofString "UniformBufferView"
 
         let bufferHandler = 
             if shareBuffers then 
@@ -372,7 +375,13 @@ module ResourceManager =
                 | null -> NamedResourceCache()
                 | o -> o.Cache
 
-        let compile (s : ISurface) = SurfaceCompilers.compile ctx s
+        let uniformBufferPools = 
+            match original with
+                | null -> ConcurrentDictionary<_, UniformBufferPool>()
+                | _ -> original.UniformBufferPools
+
+
+        let compile (signature : IFramebufferSignature) (s : ISurface) = SurfaceCompilers.compile ctx signature s
 
 //        let volatileSubscribtion (m : IMod) (cb : (unit -> unit) -> unit) : IDisposable =
 //            let f = ref Unchecked.defaultof<_>
@@ -418,6 +427,7 @@ module ResourceManager =
 //                    m.MarkingCallbacks.Remove !f |> ignore
 //            }
            
+        member private x.UniformBufferPools = uniformBufferPools
         member private x.BufferHandler = bufferHandler
         member private x.TextureHandler = textureHandler 
         member private x.Original = original
@@ -436,9 +446,12 @@ module ResourceManager =
                 fun self ->
                     let current = data.GetValue(self)
                     let handle = bufferHandler.Create(ArrayBuffer(current))
-                    { dependencies = [data]
-                      updateCPU = fun () -> data.GetValue(self) |> ignore
-                      updateGPU = fun () -> bufferHandler.Update(handle, ArrayBuffer(data.GetValue(self)))
+                    { trackChangedInputs = false
+                      dependencies = [data]
+                      updateCPU = fun _ -> data.GetValue(self) |> ignore
+                      updateGPU = fun () -> 
+                        bufferHandler.Update(handle, ArrayBuffer(data.GetValue(self)))
+                        FrameStatistics.Zero
                       destroy = fun () -> bufferHandler.Delete(handle)
                       resource = handle
                       kind = ResourceKind.Buffer 
@@ -475,8 +488,9 @@ module ResourceManager =
                         handle := h
                         transact (fun () -> handleMod.Value <- h)
 
-                    { dependencies = [data]
-                      updateCPU = fun () -> data.GetValue(self) |> ignore
+                    { trackChangedInputs = false
+                      dependencies = [data]
+                      updateCPU = fun _ -> data.GetValue(self) |> ignore
                       updateGPU = fun () ->
                         match data.GetValue(self) with
                             | :? Buffer as t -> updateTo t
@@ -490,6 +504,7 @@ module ResourceManager =
 
                                 if handleMod.Value <> !handle then 
                                     transact (fun () -> handleMod.Value <- !handle)
+                        FrameStatistics.Zero
                       destroy = fun () -> if !created then bufferHandler.Delete(!handle)
                       resource = handleMod |> Mod.bind id
                       kind = ResourceKind.Buffer  }
@@ -524,82 +539,156 @@ module ResourceManager =
             cache.[pixTexture].GetOrAdd(
                 [data],
                 fun self ->
-                    let current = data.GetValue(self)
+                    match data with
+                        | :? RenderingResultMod as res ->
+                            let self = unbox<ChangeableResource<Texture>> self
+                            let handle = Mod.init (res.GetValue self |> unbox<Texture>)
+                            { trackChangedInputs = false
+                              dependencies = [data]
+                              updateCPU = fun _ -> ()
+                              updateGPU = fun () -> 
+                                let t = res.GetValue(self) |> unbox<Texture>
+                                transact (fun () -> Mod.change handle t)
 
-                    let created = ref false
-                    let handle = 
-                        match current with
-                            | :? Texture as t -> ref (Mod.constant t)
-                            | _ -> 
-                                created := true
-                                ref <| textureHandler.Create(current)
+                                res.LastStatistics
+                              destroy = fun () -> ()
+                              resource = handle
+                              kind = ResourceKind.Texture  }  
+                        | _ -> 
+                            let current = data.GetValue(self)
 
-                    let handleMod = Mod.init !handle
+                            let created = ref false
+                            let handle = 
+                                match current with
+                                    | :? Texture as t -> ref (Mod.constant t)
+                                    | _ -> 
+                                        created := true
+                                        ref <| textureHandler.Create(current)
 
-                    let updateTo (t : Texture) =
-                        if !created then
-                            textureHandler.Delete(!handle)
-                            created := false
+                            let handleMod = Mod.init !handle
 
-                        let h = Mod.constant t
-                        handle := h
-                        transact (fun () -> handleMod.Value <- h)
-
-                    { dependencies = [data]
-                      updateCPU = fun () -> data.GetValue(self) |> ignore
-                      updateGPU = fun () -> 
-                        match data.GetValue(self) with
-                            | :? Texture as t -> updateTo t
-                            | :? NullTexture as t -> updateTo Texture.empty
-                            | _ -> 
+                            let updateTo (t : Texture) =
                                 if !created then
-                                    textureHandler.Update(!handle, data.GetValue(self))
-                                else
-                                    created := true
-                                    handle := textureHandler.Create(current)
+                                    textureHandler.Delete(!handle)
+                                    created := false
 
-                                if handleMod.Value <> !handle then 
-                                    transact (fun () -> handleMod.Value <- !handle)
+                                let h = Mod.constant t
+                                handle := h
+                                transact (fun () -> handleMod.Value <- h)
 
-                      destroy = fun () -> if !created then textureHandler.Delete(!handle)
-                      resource = handleMod |> Mod.bind id
-                      kind = ResourceKind.Texture  }            
+                            { trackChangedInputs = false
+                              dependencies = [data]
+                              updateCPU = fun _ -> data.GetValue(self) |> ignore
+                              updateGPU = fun () -> 
+                                match data.GetValue(self) with
+                                    | :? Texture as t -> updateTo t
+                                    | :? NullTexture as t -> updateTo Texture.empty
+                                    | _ -> 
+                                        if !created then
+                                            textureHandler.Update(!handle, data.GetValue(self))
+                                        else
+                                            created := true
+                                            handle := textureHandler.Create(current)
+
+                                        if handleMod.Value <> !handle then 
+                                            transact (fun () -> handleMod.Value <- !handle)
+                                FrameStatistics.Zero
+
+                              destroy = fun () -> if !created then textureHandler.Delete(!handle)
+                              resource = handleMod |> Mod.bind id
+                              kind = ResourceKind.Texture  }            
             )
 
-        member x.CreateSurface (s : IMod<ISurface>) =
+        member x.CreateSurface (signature : IFramebufferSignature, s : IMod<ISurface>) =
            cache.[program].GetOrAdd(
-                [s],
+                [signature; s],
                 fun self ->
                     let current = s.GetValue(self)
                     match current with
                      | :? Program as p -> 
-                        { dependencies = [s]
-                          updateCPU = id
-                          updateGPU = id
+                        { trackChangedInputs = false
+                          dependencies = [s]
+                          updateCPU = ignore
+                          updateGPU = fun () -> FrameStatistics.Zero
                           destroy = id
                           resource = s |> Mod.map unbox
                           kind = ResourceKind.ShaderProgram  }    
                      | _ ->
-                        let compileResult = compile current
+                        let compileResult = compile signature current
 
                         match compileResult with
                             | Success p ->
                                 let handle = Mod.init p
 
-                                { dependencies = [s]
-                                  updateCPU = fun () -> 
-                                    match compile <| s.GetValue(self) with
+                                { trackChangedInputs = false
+                                  dependencies = [s]
+                                  updateCPU = fun _ -> 
+                                    match compile signature <| s.GetValue(self) with
                                         | Success p -> Mod.change handle p
                                         | Error e -> Log.warn "could not update surface: %A" e
 
-                                  updateGPU = fun () -> ()
+                                  updateGPU = fun () -> FrameStatistics.Zero
                                   destroy = fun () -> ctx.Delete(p)
                                   resource = handle 
                                   kind = ResourceKind.ShaderProgram }         
                             | Error e ->
                                 failwith e
            )
-                
+          
+          
+        member x.CreateUniformBufferPool (layout : UniformBlock) =
+            uniformBufferPools.GetOrAdd(layout, fun (layout : UniformBlock) ->
+                let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
+                ctx.CreateUniformBufferPool(layout.size, uniformFields)
+            )
+
+             
+        member x.CreateUniformBufferView (pool : UniformBufferPool, scope : Ag.Scope, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
+            let getValue (f : UniformField) =
+                let sem = f.semantic |> Sym.ofString
+
+                match u.TryGetUniform (scope, sem) with
+                    | Some m -> m
+                    | _ ->
+                        match program.UniformGetters.TryGetValue sem with
+                            | (true, (:? IMod as m)) -> m
+                            | _ ->
+                                failwithf "could not find uniform: %A" f
+            
+    
+            let fieldValues = pool.Fields |> List.map (fun f -> f, getValue f)
+            cache.[uniformBufferViews].GetOrAdd(
+                (pool :> obj)::(fieldValues |> List.map (fun (_,v) -> v :> obj)),
+                fun self ->
+                    let inputs = 
+                        fieldValues 
+                            |> List.map (fun (f,m) -> Symbol.Create f.semantic, m :> IAdaptiveObject)
+                            |> Map.ofList
+
+
+                    // TODO: writers could be created by the pool!!!!
+                    let writers = UnmanagedUniformWriters.writers true pool.Fields inputs
+     
+                    let view = pool.AllocView()
+//                    view.WriteOperation (fun () -> 
+//                        writers |> List.iter (fun (_,w) -> w.Write(self, view.Data))
+//                    )
+                    //pool.Upload [| view |]
+
+                    let deps = fieldValues |> List.map snd
+                    let writers = writers |> List.map snd |> List.toArray
+                    { trackChangedInputs = false
+                      dependencies = deps |> Seq.cast
+                      updateCPU = fun _ -> 
+                        view.WriteOperation (fun () ->
+                            for w in writers do w.Write(self, view.Data)
+                        )
+                      updateGPU = fun () -> FrameStatistics.Zero
+                      destroy = fun () -> view.Dispose()
+                      resource = Mod.constant view
+                      kind = ResourceKind.UniformBuffer  }   
+            )
+
         member x.CreateUniformBuffer (scope : Ag.Scope, layout : UniformBlock, program : Program, u : IUniformProvider, semanticValues : byref<list<string * IMod>>) =
             let getValue (f : ActiveUniform) =
                 let sem = f.semantic |> Sym.ofString
@@ -613,49 +702,61 @@ module ResourceManager =
                                 failwithf "could not find uniform: %A" f
 
             let fieldValues = layout.fields |> List.map (fun f -> f, getValue f)
-            semanticValues <- fieldValues |> List.map (fun (f,v) -> f.semantic, v)
-            let values = fieldValues |> List.map snd
-
-
             cache.[uniformBuffer].GetOrAdd(
-                (layout :> obj)::(values |> List.map (fun v -> v :> obj)),
+                (layout :> obj)::(fieldValues |> List.map (fun (_,v) -> v :> obj)),
                 fun self ->
+                    let inputs = 
+                        fieldValues 
+                            |> List.map (fun (f,m) -> Symbol.Create f.semantic, m :> IAdaptiveObject)
+                            |> Map.ofList
 
-                    let b = ctx.CreateUniformBuffer(layout)
-                    
-                    let writers = fieldValues |> List.map (fun (u,m) -> m, b.CompileSetter (Sym.ofString u.name) m)
-  
-                    
-                    let dirty = System.Collections.Generic.List()
-                    let subscriptions =
-                        writers |> List.map (fun ((m,w) as value) ->
-                            w(self)
-                            m.AddMarkingCallback (fun s -> lock dirty (fun () -> dirty.Add value))
-                        )
 
+                    let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
+                    let writers = UnmanagedUniformWriters.writers true uniformFields inputs
+     
+
+                    let b = ctx.CreateUniformBuffer(layout.size, uniformFields)
+
+                    writers |> List.iter (fun (_,w) -> w.Write(self, b.Data))
                     ctx.Upload(b)
 
-                    { dependencies = values
-                      updateCPU = fun () ->
-                        let d =
-                            lock dirty (fun () ->
-                                let res = dirty |> Seq.toList
-                                dirty.Clear()
-                                res
-                            )
-
-                        if not <| List.isEmpty d then
-                            for (m,w) in d do
-                                w(self);
+                    let deps = fieldValues |> List.map snd
+                    if writers.Length > 4 then
+                        let writers = writers |> Dictionary.ofList
+                        { trackChangedInputs = true
+                          dependencies = deps |> Seq.cast
+                          updateCPU = fun changed ->
+                            let mutable w = Unchecked.defaultof<_>
+                            for c in changed do
+                                match writers.TryGetValue c with
+                                    | (true,w) -> 
+                                        w.Write(self, b.Data)
+                                        b.Dirty <- true
+                                    | _ -> ()
                             
 
-                      updateGPU = fun () -> ctx.Upload(b)
-                      destroy = fun () -> 
-                        subscriptions |> List.iter (fun d -> d.Dispose())
-                        dirty.Clear()
-                        ctx.Delete(b)
-                      resource = Mod.constant b
-                      kind = ResourceKind.UniformBuffer  }    
+                          updateGPU = fun () -> 
+                            ctx.Upload(b)
+                            FrameStatistics.Zero
+
+                          destroy = fun () -> 
+                            ctx.Delete(b)
+                          resource = Mod.constant b
+                          kind = ResourceKind.UniformBuffer  }    
+                    else
+                        let writers = writers |> List.map snd |> List.toArray
+                        { trackChangedInputs = false
+                          dependencies = deps |> Seq.cast
+                          updateCPU = fun _ ->
+                            for w in writers do w.Write(self, b.Data)
+                            b.Dirty <- true
+                          updateGPU = fun () -> 
+                            ctx.Upload(b)
+                            FrameStatistics.Zero
+                          destroy = fun () -> 
+                            ctx.Delete(b)
+                          resource = Mod.constant b
+                          kind = ResourceKind.UniformBuffer  }   
             )
 
         member x.CreateUniformLocation(scope : Ag.Scope, u : IUniformProvider, uniform : ActiveUniform) =
@@ -666,16 +767,17 @@ module ResourceManager =
                         fun self ->
                             let loc = ctx.CreateUniformLocation(uniform.uniformType.SizeInBytes, uniform.uniformType)
 
-                            let write = loc.CompileSetter(v)
-                            let writer = [v :> IAdaptiveObject] |> Mod.mapCustom (fun s -> write(s))
-                            
-                            writer.GetValue(self)
+                            let inputs = Map.ofList [Symbol.Create uniform.semantic, v :> IAdaptiveObject]
+                            let _,writer = UnmanagedUniformWriters.writers false [uniform.UniformField] inputs |> List.head
+     
 
-                            { dependencies = [v]
-                              updateCPU = fun () ->
-                                writer.GetValue(self)
+                            writer.Write(v, loc.Data)
 
-                              updateGPU = fun () -> ()
+
+                            { trackChangedInputs = false
+                              dependencies = [v]
+                              updateCPU = fun _ -> writer.Write(v, loc.Data)
+                              updateGPU = fun () -> FrameStatistics.Zero
                               destroy = fun () -> ()
                               resource = Mod.constant loc
                               kind = ResourceKind.UniformBuffer  }    
@@ -690,9 +792,12 @@ module ResourceManager =
                     let current = sam.GetValue(self)
                     let handle = ctx.CreateSampler(current)
 
-                    { dependencies = [sam]
-                      updateCPU = fun () -> sam.GetValue(self) |> ignore
-                      updateGPU = fun () -> ctx.Update(handle, sam.GetValue(self))
+                    { trackChangedInputs = true
+                      dependencies = [sam]
+                      updateCPU = fun _ -> sam.GetValue(self) |> ignore
+                      updateGPU = fun () -> 
+                        ctx.Update(handle, sam.GetValue(self))
+                        FrameStatistics.Zero
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle 
                       kind = ResourceKind.SamplerState }
@@ -704,11 +809,14 @@ module ResourceManager =
                 fun self ->
 
                     let handle = ctx.CreateVertexArrayObject(index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
-                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IMod)
+                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IAdaptiveObject)
 
-                    { dependencies = (index.Resource :> IMod)::attributes
-                      updateCPU = fun () -> ()
-                      updateGPU = fun () -> ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
+                    { trackChangedInputs = true
+                      dependencies = (index.Resource :> IAdaptiveObject)::attributes
+                      updateCPU = fun _ -> ()
+                      updateGPU = fun () -> 
+                        ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
+                        FrameStatistics.Zero
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle 
                       kind = ResourceKind.VertexArrayObject
@@ -721,11 +829,15 @@ module ResourceManager =
                 fun self ->
 
                     let handle = ctx.CreateVertexArrayObject(bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
-                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IMod)
+                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IAdaptiveObject)
 
-                    { dependencies = attributes
-                      updateCPU = fun () -> ()
-                      updateGPU = fun () -> ctx.Update(handle,bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
+                    { trackChangedInputs = true
+                      dependencies = attributes
+                      updateCPU = fun _ -> ()
+                      updateGPU = fun () -> 
+                        ctx.Update(handle,bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
+                        FrameStatistics.Zero
+
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle
                       kind = ResourceKind.VertexArrayObject 
@@ -737,69 +849,6 @@ module ResourceManager =
                 | Some index -> x.CreateVertexArrayObject(bindings, index)
                 | None -> x.CreateVertexArrayObject(bindings)
 
-        member x.CreateTexture(size : IMod<V2i>, mipLevels : IMod<int>, format : IMod<PixFormat>, samples : IMod<int>) : ChangeableResource<Texture> =
-            
-            let textureFormat =
-                Mod.map2 (fun pf mips -> TextureFormat.ofPixFormat pf { TextureParams.empty with wantMipMaps = mips > 1 }) format mipLevels
-            
-            
-            let desc self =
-                let handle = ctx.CreateTexture2D(size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
-                
-                { dependencies = [size :> IMod; textureFormat :> IMod; samples :> IMod]
-                  updateCPU = fun () -> ()
-                  updateGPU = fun () -> ctx.UpdateTexture2D(handle, size.GetValue(self), mipLevels.GetValue(self), textureFormat.GetValue(self), samples.GetValue(self))
-                  destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle
-                  kind = ResourceKind.Texture
-                }
 
-            new ChangeableResource<Texture>(desc)
-
-        member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<RenderbufferFormat>, samples : IMod<int>) : ChangeableResource<Renderbuffer> =
-            
-            let desc self =
-                let handle = ctx.CreateRenderbuffer(size.GetValue(self), format.GetValue(self), samples.GetValue(self))
-                { dependencies = [size :> IMod; format :> IMod; samples :> IMod]
-                  updateCPU = fun () -> ()
-                  updateGPU = fun () -> ctx.Update(handle, size.GetValue(self), format.GetValue(self), samples.GetValue(self))
-                  destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle 
-                  kind = ResourceKind.Renderbuffer
-                }
-
-            new ChangeableResource<Renderbuffer>(desc)
-
-        member x.CreateFramebuffer(bindings : list<Symbol * IMod<IFramebufferOutput>>) : ChangeableResource<Aardvark.Rendering.GL.Framebuffer> =
-            let dict = SymDict.ofList bindings
-
-            let desc self =
-                let toInternal (bindings : list<Symbol * IMod<IFramebufferOutput>>) =
-                
-                    let depth =
-                        match dict.TryGetValue DefaultSemantic.Depth with
-                            | (true, d) ->
-                                Some <| d.GetValue(self)
-                            | _ ->
-                                None
-
-                    let colors = bindings |> List.filter (fun (s,b) -> s <> DefaultSemantic.Depth) |> List.map (fun (s,o) -> getSemanticIndex s, s, (o.GetValue(self)))
-
-                    colors,depth
-
-                let c,d = toInternal bindings
-                let handle = ctx.CreateFramebuffer(c, d)
-
-                { dependencies = bindings |> Seq.map (fun (_,v) -> v :> IMod) |> Seq.toList
-                  updateCPU = fun () -> ()
-                  updateGPU = fun () -> 
-                    let c,d = toInternal bindings
-                    ctx.Update(handle, c, d)
-                  destroy = fun () -> ctx.Delete(handle)
-                  resource = Mod.constant handle
-                  kind = ResourceKind.Framebuffer 
-                }
-
-            new ChangeableResource<Aardvark.Rendering.GL.Framebuffer>(desc)
 
         new(ctx, shareTextures, shareBuffers) = ResourceManager(null, ctx, shareTextures, shareBuffers)

@@ -11,6 +11,10 @@ open Aardvark.Application
 
 type OpenGlApplication() =
     do OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
+       try 
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException)
+       with e -> Report.Warn("Could not set SetUnhandledExceptionMode.")
+
     let runtime = new Runtime()
     let ctx = new Context(runtime)
     do runtime.Context <- ctx

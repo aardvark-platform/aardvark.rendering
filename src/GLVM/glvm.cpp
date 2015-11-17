@@ -367,13 +367,13 @@ Statistics runRedundancyChecks(Fragment* frag)
 					}
 					break;
 				case BindBufferBase:
-					if (state.ShouldSetBuffer((GLenum)arg0, (int)i->Arg1, i->Arg2))
+					if (state.ShouldSetBuffer((GLenum)arg0, (int)i->Arg1, i->Arg2, 0, 0))
 					{
 						glBindBufferBase((GLenum)arg0, (GLuint)i->Arg1, (GLuint)i->Arg2);
 					}
 					break;
 				case BindBufferRange:
-					if (state.ShouldSetBuffer((GLenum)arg0, (int)i->Arg1, i->Arg2))
+					if (state.ShouldSetBuffer((GLenum)arg0, (int)i->Arg1, i->Arg2, i->Arg3, i->Arg4))
 					{
 						glBindBufferRange((GLenum)arg0, (GLuint)i->Arg1, (GLuint)i->Arg2, (GLuint)i->Arg3, (GLsizeiptr)i->Arg4);
 					}

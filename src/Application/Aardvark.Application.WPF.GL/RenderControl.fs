@@ -31,9 +31,11 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
     member x.Samples = ctrl.Samples
     member x.Context = ctrl.Context
     member x.WindowInfo = ctrl.WindowInfo
+    member x.FramebufferSignature = ctrl.FramebufferSignature
 
     member x.Time = ctrl.Time
     interface IRenderTarget with
+        member x.FramebufferSignature = ctrl.FramebufferSignature
         member x.Samples = ctrl.Samples
         member x.Runtime = runtime :> IRuntime
         member x.Time = ctrl.Time

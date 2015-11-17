@@ -1,7 +1,6 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Ag
-open Aardvark.Base.AgHelpers
 open Aardvark.Rendering.GL
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.CSharp
@@ -515,10 +514,7 @@ let timeTest() =
     rendering.Start()
     
     let d = move.AddMarkingCallback(fun () -> renderSem.Release() |> ignore)
-//
-//    let d = move |> Mod.registerCallback (fun t ->
-//        printfn "pull: %A" t
-//    )
+
     
     while true do
         Console.ReadLine() |> ignore
@@ -563,7 +559,7 @@ let controlWSAD (view : ICameraView) (keyboard : IKeyboard) (time : IMod<DateTim
                     | None -> ()
         }
 
-    viewTrafoChanger.AddOutputNew(view.ViewTrafos.Mod)
+    viewTrafoChanger.AddOutput(view.ViewTrafos.Mod)
     let d = viewTrafoChanger |> Mod.unsafeRegisterCallbackKeepDisposable id
 
     { new IDisposable with
@@ -596,13 +592,19 @@ let testGpuThroughput () =
     use app = new OpenGlApplication()
     let runtime = app.Runtime
 
-    let size = ~~V2i(10000,5000)
-    let color = runtime.CreateRenderbuffer(size,Mod.constant RenderbufferFormat.R8, ~~1)
+    let size = V2i(10000,5000)
+    
+    let signature = 
+        runtime.CreateFramebufferSignature [
+            DefaultSemantic.Colors, { format =RenderbufferFormat.Rgba8; samples = 1 }
+        ]
+    
+    let color = runtime.CreateRenderbuffer(size,RenderbufferFormat.R8, 1)
     let outputView = color :> IFramebufferOutput
-    let color = runtime.CreateTexture(size,~~PixFormat.ByteBGRA,~~1,~~1)
+    let color = runtime.CreateTexture(size,TextureFormat.Rgba8,1,1,1)
     let outputView = { texture = color; level = 0; slice = 0 } :> IFramebufferOutput
 
-    let fbo = runtime.CreateFramebuffer([(DefaultSemantic.Colors,~~outputView)] |> Map.ofList)
+    let fbo = runtime.CreateFramebuffer(signature, [(DefaultSemantic.Colors,outputView)] |> Map.ofList)
 
     let sizex,sizey = 250,200
     let geometry = 
@@ -627,8 +629,8 @@ let testGpuThroughput () =
                 |> Sg.cullMode ~~CullMode.Clockwise
                 |> Sg.blendMode ~~BlendMode.None
                     
-    let task = runtime.CompileRender(sg)
-    let clear = runtime.CompileClear(~~C4f.Black,~~1.0)
+    let task = runtime.CompileRender(signature, sg)
+    let clear = runtime.CompileClear(signature, ~~C4f.Black,~~1.0)
     
     use token = runtime.Context.ResourceLock
     let sw = System.Diagnostics.Stopwatch()
@@ -646,7 +648,8 @@ let testGpuThroughput () =
         then
             cnt <- 0
             printfn "elapsed for 1000 frames: %A [ms]" sw.Elapsed.TotalMilliseconds
-            let pi = color.Download(0).[0]
+
+            let pi = runtime.Download(color, PixFormat.ByteBGRA)
             //pi.SaveAsImage(@"C:\Aardwork\blub.jpg")
             sw.Restart()
             //System.Environment.Exit 0
@@ -667,7 +670,7 @@ let main args =
     
     //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
-    let modelPath =  @"E:\Development\VulkanSharp\bin\Release\Sponza_bunt\sponza_cm.obj"
+    let modelPath =  @"E:\Development\WorkDirectory\Sponza bunt\sponza_cm.obj"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
@@ -811,7 +814,7 @@ let main args =
 //       task.Run fbo |> ignore
 //    )   
  
-    let engine = Mod.init BackendConfiguration.UnmanagedOptimized
+    let engine = Mod.init BackendConfiguration.NativeOptimized
     let engines = 
         ref [
             BackendConfiguration.UnmanagedOptimized
@@ -838,12 +841,23 @@ let main args =
         ()
     ) |> ignore
 
-    let sg = sg |> Sg.loadAsync
+    //let sg = sg |> Sg.loadAsync
 
 
-    let task = app.Runtime.CompileRender(engine.GetValue(), sg)
+    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, BackendConfiguration.UnmanagedRuntime, sg)
 
-    ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
+    let task = RenderTask.cache task
+
+    let second =
+        quadSg
+            |> Sg.trafo (Mod.constant (Trafo3d.Translation(0.0,0.0,0.25)))
+            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect]
+            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
+            |> Sg.projTrafo proj.ProjectionTrafos.Mod
+
+    let secTask = app.Runtime.CompileRender(ctrl.FramebufferSignature, second)
+
+    ctrl.RenderTask <- RenderTask.ofList [task; secTask] |> DefaultOverlays.withStatistics
 
 
 //    w.Run()

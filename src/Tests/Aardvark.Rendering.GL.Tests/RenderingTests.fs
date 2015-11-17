@@ -10,6 +10,7 @@ open Aardvark.SceneGraph
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Application
 open System.Diagnostics
+open Aardvark.SceneGraph.Semantics
 
 module Vector =
 
@@ -235,7 +236,9 @@ module RenderingTests =
                     DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
                 ]
         )
-
+      
+      
+     
 
     [<Test>]
     let ``[GL] simple render to texture``() =
@@ -252,15 +255,22 @@ module RenderingTests =
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
-        let color = runtime.CreateTexture(~~size, ~~PixFormat.ByteBGRA, ~~1, ~~1)
-        let depth = runtime.CreateRenderbuffer(~~size, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
+        let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
+
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
 
         let fbo = 
             runtime.CreateFramebuffer(
+                signature, 
                 Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
 
@@ -272,13 +282,14 @@ module RenderingTests =
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
 
         
-        use task = runtime.CompileRender(sg)
-        use clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        use task = runtime.CompileRender(signature, sg)
+        use clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
         clear.Run(null, fbo) |> ignore
         task.Run(null, fbo) |> ignore
 
-        let pi = color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
+        let pi = PixImage<byte>(Col.Format.BGRA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
+        runtime.Download(color, 0, 0, pi)
 
         let cmp = PixImage<byte>(Col.Format.BGRA, size)
         cmp.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
@@ -296,6 +307,67 @@ module RenderingTests =
 
         ()
 
+    [<Test>]
+    let ``[GL] simple render to multiple texture``() =
+
+        use runtime = new Runtime()
+        use ctx = new Context(runtime)
+        runtime.Context <- ctx
+
+        let size = V2i(1024,768)
+        let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
+        let normals = runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+
+
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Normals, { format = RenderbufferFormat.Rgba32f; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+        let fbo = 
+            runtime.CreateFramebuffer(
+                signature, 
+                Map.ofList [
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Normals, ({ texture = normals; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                ]
+            )
+
+
+        
+        let sg =
+            quad 
+                |> Sg.ofIndexedGeometry
+                |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
+
+        
+        use task = runtime.CompileRender(signature, sg)
+        use clear = 
+            runtime.CompileClear(
+                signature, 
+                ~~[DefaultSemantic.Colors, C4f.Black; DefaultSemantic.Normals, C4f.Red], 
+                ~~1.0
+            )
+
+        clear.Run(null, fbo) |> ignore
+        task.Run(null, fbo) |> ignore
+
+        let pi = PixImage<byte>(Col.Format.BGRA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
+        runtime.Download(color, 0, 0, pi)
+
+        let npi = PixImage<float32>(Col.Format.RGBA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
+        runtime.Download(normals, 0, 0, npi)
+
+
+        pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
+        PixImage<float32>(npi.Volume.Map(fun f -> f)).ToPixImage<byte>(Col.Format.RGB).SaveAsImage @"C:\Users\schorsch\Desktop\testNormals.png"
+
+
+        ()
 
     [<Test>]
     let ``[GL] nested trafos``() =
@@ -337,17 +409,29 @@ module RenderingTests =
         use ctx = new Context(runtime)
         runtime.Context <- ctx
 
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
-        let task = runtime.CompileRender sg
+        using ctx.ResourceLock (fun _ -> 
+            Log.line "vendor:   %s" runtime.Context.Driver.vendor
+            Log.line "renderer: %s" runtime.Context.Driver.renderer
+        )
 
-        let color = runtime.CreateTexture(~~screen, ~~PixFormat.ByteBGRA, ~~1, ~~1)
-        let depth = runtime.CreateRenderbuffer(~~screen, ~~RenderbufferFormat.Depth24Stencil8, ~~1)
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+        let task = runtime.CompileRender(signature, sg)
+
+        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 2, 1, 1)
+        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
 
         let fbo = 
             runtime.CreateFramebuffer(
+                signature,
                 Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
 
@@ -355,9 +439,18 @@ module RenderingTests =
         let stats = task.Run fbo
         Log.line "%.0f objects" stats.Statistics.DrawCallCount
 
-        let pi = color.Download(0).[0] //ctx.Download(color, PixFormat.ByteBGRA, 0).[0]
+
+        runtime.GenerateMipMaps(color)
+
+
+        let pi = runtime.Download(color, PixFormat.ByteRGBA)
         pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
 
+        let level1 = runtime.Download(color, 1, PixFormat.ByteRGBA)
+        level1.SaveAsImage @"C:\Users\schorsch\Desktop\level1.png"
+
+
+        Log.line "starting pure render test"
         let mutable iterations = 0
         let sw = Stopwatch()
         sw.Start()
@@ -369,11 +462,12 @@ module RenderingTests =
 
         let pureRenderTime = sw.Elapsed.TotalSeconds / float iterations
 
-
+        Telemetry.reset()
+        Log.line "starting update test"
         let mutable iterations = 0
         let sw = Stopwatch()
         sw.Start()
-        while sw.Elapsed.TotalSeconds < 10.0 do
+        while sw.Elapsed.TotalSeconds < 20.0 || iterations < 50 do
             transact(fun () -> Mod.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
             clear.Run fbo |> ignore
             task.Run fbo |> ignore
@@ -389,6 +483,111 @@ module RenderingTests =
         Log.line "rendering:    %.2ffps" (1.0 / pureRenderTime)
         Log.line "updates:      %.2ffps" (1.0 / updateTime)
 
+        let rep = Telemetry.resetAndGetReport()
+        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
 
+        ()
+
+    [<Test>]
+    let ``[GL] compile performance``() =
+        let leaf = quad |> Sg.ofIndexedGeometry
+        let screen = V2i(2048, 2048)
+
+        let grid (size : V2i) (inner : ISg) =
+            Sg.group' [
+                for x in -size.X/2..size.X/2 do
+                    for y in -size.Y/2..size.Y/2 do
+                        yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
+            ]
+
+
+        let rec buildGrid (depth : int) =
+            if depth <= 0 then 
+                leaf |> Sg.trafo (~~Trafo3d.Scale(0.5))  
+            else 
+                depth - 1 
+                    |> buildGrid 
+                    |> grid (5 * V2i.II)
+                    |> Sg.trafo (~~Trafo3d.Scale(0.125))
+
+
+        let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
+        let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
+
+        let rootTrafo = Mod.init Trafo3d.Identity
+
+        let sg =
+            buildGrid 3
+                |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
+                |> Sg.trafo rootTrafo
+                |> Sg.viewTrafo ~~(cam |> CameraView.viewTrafo)
+                |> Sg.projTrafo ~~(frustum |> Frustum.toTrafo)
+
+        use runtime = new Runtime()
+        use ctx = new Context(runtime)
+        runtime.Context <- ctx
+
+        using ctx.ResourceLock (fun _ -> 
+            Log.line "vendor:   %s" runtime.Context.Driver.vendor
+            Log.line "renderer: %s" runtime.Context.Driver.renderer
+        )
+
+        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
+
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
+                DefaultSemantic.Depth, depth.Format
+            ]
+
+        let fbo = 
+            signature.CreateFramebuffer [
+                DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+            ]
+
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+        let renderJobs = sg.RenderObjects()
+        let task = runtime.CompileRender(signature, renderJobs)
+        //let task2 = runtime.CompileRender renderJobs
+
+
+
+        clear.Run fbo |> ignore
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+        let stats = task.Run fbo
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+        Log.line "%.0f objects" stats.Statistics.DrawCallCount
+        let pi = runtime.Download(color, PixFormat.ByteRGBA)
+
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+        //task2.Run fbo |> ignore
+        //OpenTK.Graphics.OpenGL4.GL.Sync()
+
+
+
+        Telemetry.reset()
+        Log.line "starting update test"
+        let mutable iterations = 0
+        let sw = Stopwatch()
+        let disp = System.Collections.Generic.List()
+        sw.Start()
+        while sw.Elapsed.TotalSeconds < 20.0 do
+            let t = runtime.CompileRender(signature,renderJobs)
+            clear.Run fbo |> ignore
+            t.Run fbo |> ignore
+            iterations <- iterations + 1
+            disp.Add t
+        sw.Stop()
+
+        for t in disp do
+            t.Dispose()
+        let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
+            
+        Log.line "compile + render: %.2fs" (updateAndRenderTime)
+
+        let rep = Telemetry.resetAndGetReport()
+        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
 
         ()

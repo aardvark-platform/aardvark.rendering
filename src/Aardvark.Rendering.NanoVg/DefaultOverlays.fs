@@ -176,6 +176,7 @@ module DefaultOverlays =
          | ResourceKind.ShaderProgram -> "P"
          | ResourceKind.UniformLocation -> "UL"
          | ResourceKind.UniformBuffer -> "U"
+         | ResourceKind.UniformBufferView -> "UV"
          | ResourceKind.VertexArrayObject -> "V"
          | _ -> "?"
          
@@ -270,10 +271,11 @@ module DefaultOverlays =
         let mutable upToDateExec = 0
         let mutable frameId = 0UL
 
-        do real.AddOutputNew this
-           annotation.AddOutputNew this
+        do real.AddOutput this
+           annotation.AddOutput this
 
         interface IRenderTask with
+            member x.FramebufferSignature = null
             member x.Dispose() =
                 real.RemoveOutput x
                 annotation.RemoveOutput x

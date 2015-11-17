@@ -64,7 +64,7 @@ module Textures =
                 C4b.Gray
         ) |> ignore
 
-        app.Runtime.CreateTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true)) :> ITexture
+        app.Runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true)) :> ITexture
 
     let getTileTexure (coord : V2i) (zoom : string)=
         init()
@@ -96,7 +96,7 @@ module Textures =
             let run =
                 async {
                     let! img = source.GetTileAsync info
-                    return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.CreateTexture :> ITexture
+                    return PixTexture2d(PixImageMipMap [|img|], false) |> app.Runtime.PrepareTexture :> ITexture
                 }
 
             run |> Async.StartAsTask |> Mod.async (NullTexture() :> ITexture)
@@ -356,8 +356,11 @@ let main argv =
         ()
     ) |> ignore
 
-    let main = app.Runtime.CompileRender(engine, sg.RenderObjects())// |> DefaultOverlays.withStatistics
-    w.RenderTask <- main
+    let main = app.Runtime.CompileRender(w.FramebufferSignature, engine, sg.RenderObjects())// |> DefaultOverlays.withStatistics
+
+
+    let cached = main
+    w.RenderTask <- cached |> DefaultOverlays.withStatistics//cached |> DefaultOverlays.withStatistics
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero

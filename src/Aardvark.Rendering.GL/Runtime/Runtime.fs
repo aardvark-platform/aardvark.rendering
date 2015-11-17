@@ -5,79 +5,55 @@ open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics
+open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 
+type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, depthStencil : Option<AttachmentSignature>) =
+   
+    let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
+        let myCol = RenderbufferFormat.toColFormat mine.format
+        let otherCol = RenderbufferFormat.toColFormat other.format
+        
+        myCol = otherCol
 
-type ChangeableFramebuffer(c : ChangeableResource<Framebuffer>) =
-    let getHandle() =
-        c.UpdateCPU(null)
-        c.UpdateGPU(null)
-        c.Resource.GetValue() :> IFramebuffer
-
-    interface IFramebuffer with
-        member x.Handle = getHandle().Handle
-        member x.Size = getHandle().Size
-        member x.Attachments = getHandle().Attachments
-        member x.Dispose() = c.Dispose()
-
-type ChangeableFramebufferTexture(c : ChangeableResource<Texture>) =
-    let getHandle() =
-        c.UpdateCPU(null)
-        c.UpdateGPU(null)
-        c.Resource.GetValue()
-
-    interface IFramebufferTexture with
-        member x.Handle = getHandle().Handle :> obj
-        member x.Samples = getHandle().Multisamples
-        member x.Dimension = getHandle().Dimension
-        member x.ArraySize = getHandle().Count
-        member x.MipMapLevels = getHandle().MipMapLevels
-        member x.GetSize level = getHandle().GetSize level
-        member x.Dispose() = c.Dispose()
-        member x.WantMipMaps = getHandle().MipMapLevels > 1
-        member x.Download(level) =
-            let handle = getHandle()
-            let format = handle.Format |> TextureFormat.toDownloadFormat
-            handle.Context.Download(handle, format, level)
-
-type ChangeableRenderbuffer(c : ChangeableResource<Renderbuffer>) =
-    let getHandle() =
-        c.UpdateCPU(null)
-        c.UpdateGPU(null)
-        c.Resource.GetValue()
-
-    interface IFramebufferRenderbuffer with
-        member x.Handle = getHandle().Handle :> obj
-        member x.Size = getHandle().Size
-        member x.Samples = getHandle().Samples
-        member x.Dispose() = c.Dispose()
-
-type ResourceMod<'a, 'b>(res : ChangeableResource<'a>, f : 'a -> 'b) as this =
-    inherit AdaptiveObject()
-    do res.AddOutputNew this
-       res.Resource.AddOutputNew this
-
-    member x.GetValue(caller : IAdaptiveObject) =
-        x.EvaluateAlways caller (fun () ->
-            if res.OutOfDate then
-                res.UpdateCPU(x)
-                res.UpdateGPU(x)
-            let r = res.Resource.GetValue(x)
-            f r
+    let colorsAssignableFrom (mine : Map<int, Symbol * AttachmentSignature>) (other : Map<int, Symbol * AttachmentSignature>) =
+        mine |> Map.forall (fun id (sem, signature) ->
+            match Map.tryFind id other with
+                | Some (otherSem, otherSig) when sem = otherSem ->
+                    signatureAssignableFrom signature otherSig
+                | None -> true
+                | _ -> false
         )
 
-    member x.Dispose() =
-        res.RemoveOutput this
-        res.Resource.RemoveOutput this
-        res.Dispose()
+    let depthAssignableFrom (mine : Option<AttachmentSignature>) (other : Option<AttachmentSignature>) =
+        match mine, other with
+            | Some mine, Some other -> signatureAssignableFrom mine other
+            | _ -> true
 
-    interface IMod with
-        member x.IsConstant = false
-        member x.GetValue(caller) = x.GetValue(caller) :> obj
+    member x.Runtime = runtime
+    member x.ColorAttachments = colors
+    member x.DepthStencilAttachment = depthStencil
 
-    interface IMod<'b> with
-        member x.GetValue(caller) = x.GetValue(caller)
+    member x.IsAssignableFrom (other : IFramebufferSignature) =
+        if x.Equals other then 
+            true
+        else
+            match other with
+                | :? FramebufferSignature as other ->
+                    runtime = other.Runtime &&
+                    colorsAssignableFrom colors other.ColorAttachments &&
+                    depthAssignableFrom depthStencil other.DepthStencilAttachment
+                | _ ->
+                    false
 
+    override x.ToString() =
+        sprintf "{ ColorAttachments = %A; DepthStencilAttachment = %A }" colors depthStencil
+
+    interface IFramebufferSignature with
+        member x.Runtime = runtime
+        member x.ColorAttachments = colors
+        member x.DepthStencilAttachment = depthStencil
+        member x.IsAssignableFrom other = x.IsAssignableFrom other
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
@@ -85,9 +61,6 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     let mutable ctx = ctx
     let mutable manager = if ctx <> null then ResourceManager(ctx, shareTextures, shareBuffers) else null
-
-    let resourceMod (f : 'a -> 'b) (a : ChangeableResource<'a>) =
-        ResourceMod(a, f) :> IMod<_>
 
     new(ctx) = new Runtime(ctx, false, false)
 
@@ -113,62 +86,90 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+
+        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
+            x.CreateFramebufferSignature(attachments) :> IFramebufferSignature
+
+        member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
+            ()
+
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
+        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
+  
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
+        member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock
-        member x.CompileRender (engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(engine,set)
-        member x.CompileClear(color, depth) = x.CompileClear(color, depth)
-        member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples)
-        member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
-        member x.CreateFramebuffer bindings = x.CreateFramebuffer bindings
-        
-        member x.CreateSurface (s : ISurface) = x.CreateSurface s :> IBackendSurface
+        member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
+        member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
+      
+        member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
                 | :? Program as p -> x.DeleteSurface p
                 | _ -> failwithf "unsupported program-type: %A" s
 
-        member x.PrepareRenderObject(rj : IRenderObject) = x.PrepareRenderObject rj :> _
+        member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj) :> _
 
-        member x.CreateTexture (t : ITexture) = x.CreateTexture t :> IBackendTexture
+        member x.PrepareTexture (t : ITexture) = x.PrepareTexture t :> IBackendTexture
         member x.DeleteTexture (t : IBackendTexture) =
             match t with
                 | :? Texture as t -> x.DeleteTexture t
                 | _ -> failwithf "unsupported texture-type: %A" t
 
-        member x.CreateBuffer (b : IBuffer) = x.CreateBuffer b :> IBackendBuffer
+        member x.PrepareBuffer (b : IBuffer) = x.PrepareBuffer b :> IBackendBuffer
         member x.DeleteBuffer (b : IBackendBuffer) = 
             match b with
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
                 | _ -> failwithf "unsupported buffer-type: %A" b
 
 
-        member x.CreateBuffer (b : IMod<IBuffer>) : IMod<IBuffer>=
-            manager.CreateBuffer(b) |> resourceMod (fun b -> b :> IBuffer)
-
-        member x.CreateTexture (b : IMod<ITexture>) : IMod<ITexture>=
-            manager.CreateTexture(b) |> resourceMod (fun b -> b :> ITexture)
-
-        member x.DeleteBuffer (b : IMod<IBuffer>) =
+        member x.DeleteRenderbuffer (b : IRenderbuffer) =
             match b with
-                | :? ResourceMod<Buffer, IBuffer> as r ->
-                    r.Dispose()
-                | _ ->
-                    failwithf "cannot dispose buffer: %A" b
+                | :? Aardvark.Rendering.GL.Renderbuffer as b -> ctx.Delete b
+                | _ -> failwithf "unsupported renderbuffer-type: %A" b
 
-        member x.DeleteTexture (t : IMod<ITexture>) =
-            match t with
-                | :? ResourceMod<Texture, ITexture> as r ->
-                    r.Dispose()
-                | _ ->
-                    failwithf "cannot dispose texture: %A" t
+        member x.DeleteFramebuffer(f : IFramebuffer) =
+            match f with
+                | :? Aardvark.Rendering.GL.Framebuffer as b -> ctx.Delete b
+                | _ -> failwithf "unsupported framebuffer-type: %A" f
 
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
 
-    member x.CreateTexture (t : ITexture) = ctx.CreateTexture t
-    member x.CreateBuffer (b : IBuffer) : Aardvark.Rendering.GL.Buffer = failwith "not implemented"
-    member x.CreateSurface (s : ISurface) = 
-        match SurfaceCompilers.compile ctx s with
+        member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
+            x.CreateFramebuffer(signature, bindings) :> _
+
+        member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
+            x.CreateTexture(size, format, levels, samples, count) :> _
+
+        member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
+            x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
+
+
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
+        let attachments = Map.ofSeq (SymDict.toSeq attachments)
+
+        let depthStencil =
+            Map.tryFind DefaultSemantic.Depth attachments
+
+        let indexedColors =
+            attachments
+                |> Map.remove DefaultSemantic.Depth
+                |> Map.toList
+                |> List.sortWith (fun (a,_) (b,_) -> 
+                    if a = DefaultSemantic.Colors then Int32.MinValue
+                    elif b = DefaultSemantic.Colors then Int32.MaxValue
+                    else String.Compare(a.ToString(), b.ToString())
+                   )
+                |> List.mapi (fun i t -> (i, t))
+                |> Map.ofList
+
+        FramebufferSignature(x, indexedColors, depthStencil)
+
+    member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
+    member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
+    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) = 
+        match SurfaceCompilers.compile ctx signature s with
             | Success prog -> prog
             | Error e -> failwith e
 
@@ -191,131 +192,163 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             | _ ->
                 failwithf "unsupported streaming texture: %A" t
 
-    member private x.CompileRenderInternal (engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) =
+    member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) =
         let eng = engine.GetValue()
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
         let man = ResourceManager(manager, ctx, shareTextures, shareBuffers)
-        new RenderTasks.RenderTask(x, ctx, man, engine, set)
 
-    member x.PrepareRenderObject(rj : IRenderObject) =
+        match eng.sorting with
+            | Grouping _ -> 
+                new GroupedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
+
+            | Dynamic _ -> 
+                new SortedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
+
+            | Static _ -> 
+                failwith "[GL] static sorting not implemented"
+
+    member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         match rj with
-             | :? RenderObject as rj -> manager.Prepare rj
+             | :? RenderObject as rj -> manager.Prepare(fboSignature, rj)
              | :? PreparedRenderObject -> failwith "tried to prepare prepared render object"
              | _ -> failwith "unknown render object type"
 
-    member x.CompileRender(engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(engine, set) :> IRenderTask
+    member x.CompileRender(fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
+        x.CompileRenderInternal(fboSignature, engine, set)
 
-    member x.CompileRender(engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(Mod.constant engine, set) :> IRenderTask
+    member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
+        x.CompileRenderInternal(fboSignature, Mod.constant engine, set)
 
-    member x.CompileClear(color : IMod<C4f>, depth : IMod<float>) : IRenderTask =
-        new RenderTasks.ClearTask(x, color, depth, ctx) :> IRenderTask
+    member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
+        let clearValues =
+            color |> Mod.map (fun clearColors ->
+                fboSignature.ColorAttachments
+                    |> Map.toList
+                    |> List.map (fun (_,(s,_)) -> Map.tryFind s clearColors)
+            )
+        
+        new ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
 
-    member x.ResolveMultisamples(ms : IFramebufferRenderbuffer, ss : IFramebufferTexture, trafo : ImageTrafo) =
+    member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
         using ctx.ResourceLock (fun _ ->
             let mutable oldFbo = 0
             OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
 
-            match ms.Handle,ss.Handle with
-                | (:? int as rb), (:? int as tex) ->
-                        
-                        
-                    let size = ms.Size
-                    let readFbo = OpenGL.GL.GenFramebuffer()
-                    let drawFbo = OpenGL.GL.GenFramebuffer()
+            let tex = ss |> unbox<Texture>
+            let size = ms.Size
+            let readFbo = OpenGL.GL.GenFramebuffer()
+            let drawFbo = OpenGL.GL.GenFramebuffer()
 
-                        
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
-                    OpenGL.GL.FramebufferRenderbuffer(OpenGL.FramebufferTarget.ReadFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, OpenGL.RenderbufferTarget.Renderbuffer, rb)
+            OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
+            match ms with
+                | :? BackendTextureOutputView as ms ->
+                    let tex = ms.texture |> unbox<Texture>
+                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, tex.Handle, ms.level)
+                    
+                | :? Renderbuffer as ms ->
+                    GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, ms.Handle)
 
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.DrawFramebuffer,drawFbo)
-                    OpenGL.GL.FramebufferTexture(OpenGL.FramebufferTarget.DrawFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, tex, 0)
+                | _ ->
+                    failwithf "[GL] cannot resolve %A" ms
 
-                    let mutable src = Box2i(0, 0, size.X, size.Y)
-                    let mutable dst = Box2i(0, 0, size.X, size.Y)
+ 
+            let size = ms.Size
+            let readFbo = OpenGL.GL.GenFramebuffer()
+            let drawFbo = OpenGL.GL.GenFramebuffer()
 
-                    match trafo with
-                        | ImageTrafo.Rot0 -> ()
-                        | ImageTrafo.MirrorY -> 
-                            dst.Min.Y <- dst.Max.Y - 1
-                            dst.Max.Y <- -1
-                        | ImageTrafo.MirrorX ->
-                            dst.Min.X <- dst.Max.X - 1
-                            dst.Max.X <- -1
-                        | _ -> failwith "unsupported image trafo"
+              
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
+            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, 0)
+
+            let mutable src = Box2i(0, 0, size.X, size.Y)
+            let mutable dst = Box2i(0, 0, size.X, size.Y)
+
+            match trafo with
+                | ImageTrafo.Rot0 -> ()
+                | ImageTrafo.MirrorY -> 
+                    dst.Min.Y <- dst.Max.Y - 1
+                    dst.Max.Y <- -1
+                | ImageTrafo.MirrorX ->
+                    dst.Min.X <- dst.Max.X - 1
+                    dst.Max.X <- -1
+                | _ -> failwith "unsupported image trafo"
                     
 
-                    OpenGL.GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, OpenGL.ClearBufferMask.ColorBufferBit, OpenGL.BlitFramebufferFilter.Nearest)
+            GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
 
-                    OpenGL.GL.FramebufferRenderbuffer(OpenGL.FramebufferTarget.ReadFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, OpenGL.RenderbufferTarget.Renderbuffer, 0)
-                    OpenGL.GL.FramebufferTexture(OpenGL.FramebufferTarget.DrawFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, 0, 0)
+            GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, 0)
+            GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, 0, 0)
 
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer, 0)
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.DrawFramebuffer, 0)
-                    OpenGL.GL.DeleteFramebuffer readFbo
-                    OpenGL.GL.DeleteFramebuffer drawFbo
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+            GL.DeleteFramebuffer readFbo
+            GL.DeleteFramebuffer drawFbo
 
-                    OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.Framebuffer,oldFbo)
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer,oldFbo)
 
-                | _ -> failwith "not implemented"
         )
 
-    member x.CreateFramebuffer(bindings : Map<Symbol, IMod<IFramebufferOutput>>) =
-        let fbo = manager.CreateFramebuffer(bindings |> Map.toList)
-        new ChangeableFramebuffer(fbo) :> IFramebuffer
-
-    member x.CreateTexture(size : IMod<V2i>, format : IMod<PixFormat>, mipMaps : IMod<int>, samples : IMod<int>) =
-        let tex = manager.CreateTexture(size, mipMaps, format, samples)
-
-        new ChangeableFramebufferTexture(tex) :> IFramebufferTexture
-
-    member x.CreateRenderbuffer(size : IMod<V2i>, format : IMod<RenderbufferFormat>, samples : IMod<int>) =
-        let rb = manager.CreateRenderbuffer(size, format, samples)
-
-        new ChangeableRenderbuffer(rb) :> IFramebufferRenderbuffer
-
-    member x.ResolveMultisamples(ms : IFramebufferRenderbuffer, srcRegion : Box2i, ss : IFramebufferTexture, targetRegion : Box2i) =
-            using ctx.ResourceLock (fun _ ->
-                let mutable oldFbo = 0
-                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo);
+    member x.GenerateMipMaps(t : IBackendTexture) =
+        match t with
+            | :? Texture as t ->
+                if t.MipMapLevels > 1 then
+                    let target = ExecutionContext.getTextureTarget t
+                    using ctx.ResourceLock (fun _ ->
+                        GL.BindTexture(target, t.Handle)
+                        GL.Check "could not bind texture"
 
 
-                match ms.Handle,ss.Handle with
-                    | (:? int as rb), (:? int as tex) ->
-                        
-                        let size = ms.Size
-                        let readFbo = OpenGL.GL.GenFramebuffer()
-                        let drawFbo = OpenGL.GL.GenFramebuffer()
+                        GL.GenerateMipmap(unbox (int target))
+                        GL.Check "could not generate mipMaps"
 
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer,readFbo)
-                        OpenGL.GL.FramebufferRenderbuffer(OpenGL.FramebufferTarget.ReadFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, OpenGL.RenderbufferTarget.Renderbuffer, rb)
+                        GL.BindTexture(target, 0)
+                        GL.Check "could not unbind texture"
+                    )
+                else
+                    failwith "[GL] cannot generate mipMaps for non-mipmapped texture"
 
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.DrawFramebuffer,drawFbo)
-                        OpenGL.GL.FramebufferTexture(OpenGL.FramebufferTarget.DrawFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, tex, 0)
+            | _ ->
+                failwithf "[GL] unsupported texture: %A" t
 
-                        let src = srcRegion
-                        let dst = targetRegion
+    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
+        ctx.Download(unbox<Texture> t, level, slice, target)
 
-                        if srcRegion.Size = targetRegion.Size then
-                            OpenGL.GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, OpenGL.ClearBufferMask.ColorBufferBit, OpenGL.BlitFramebufferFilter.Nearest)
-                        else
-                            OpenGL.GL.BlitFramebuffer(src.Min.X, src.Min.Y, src.Max.X, src.Max.Y, dst.Min.X, dst.Min.Y, dst.Max.X, dst.Max.Y, OpenGL.ClearBufferMask.ColorBufferBit, OpenGL.BlitFramebufferFilter.Linear)
+    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
+        ctx.Download(unbox<Texture> t, level, slice, source)
 
-                        OpenGL.GL.FramebufferRenderbuffer(OpenGL.FramebufferTarget.ReadFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, OpenGL.RenderbufferTarget.Renderbuffer, 0)
-                        OpenGL.GL.FramebufferTexture(OpenGL.FramebufferTarget.DrawFramebuffer, OpenGL.FramebufferAttachment.ColorAttachment0, 0, 0)
+    member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
 
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.ReadFramebuffer, 0)
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.DrawFramebuffer, 0)
-                        OpenGL.GL.DeleteFramebuffer readFbo
-                        OpenGL.GL.DeleteFramebuffer drawFbo
+        let colors =
+            signature.ColorAttachments
+                |> Map.toList
+                |> List.map (fun (i,(s,desc)) ->
+                    let b = bindings.[s]
+                    if b.Format <> desc.format || b.Samples <> desc.samples then
+                        failwithf "incompatible ColorAttachment: expected (%A, %A) but got: (%A, %A)" desc.format desc.samples b.Format b.Samples
+                    (i, s, bindings.[s])
+                   )
 
-                        OpenGL.GL.BindFramebuffer(OpenGL.FramebufferTarget.Framebuffer,oldFbo)
+        let depth =
+            match signature.DepthStencilAttachment with
+                | Some desc ->
+                    let b = bindings.[DefaultSemantic.Depth]
+                    if b.Format <> desc.format || b.Samples <> desc.samples then
+                        failwithf "incompatible DepthAttachment: expected (%A, %A) but got: (%A, %A)" desc.format desc.samples b.Format b.Samples
 
-                    | _ -> failwith "not implemented"
-            )
+                    Some b
+                | None ->
+                    None
 
+        ctx.CreateFramebuffer(signature, colors, depth)
+
+    member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
+        match count with
+            | 1 -> ctx.CreateTexture2D(size, levels, format, samples)
+            | _ -> ctx.CreateTexture3D(V3i(size.X, size.Y, count), levels, format, samples)
+
+    member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
+        ctx.CreateRenderbuffer(size, format, samples)
 
     new() = new Runtime(null)

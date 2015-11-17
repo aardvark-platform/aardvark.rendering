@@ -27,7 +27,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
         Config.MinorVersion, 
         Config.ContextFlags, 
         VSync = false
-    )
+    ) 
     static let messageLoop = MessageLoop()
     static do messageLoop.Start()
 
@@ -38,8 +38,31 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     let mutable task : Option<IRenderTask> = None
     let mutable taskSubscription : IDisposable = null
 
+    let depthStencilSignature =
+        match Config.DepthBits, Config.StencilBits with
+            | 0, 0 -> None
+            | 16, 0 -> Some { format = RenderbufferFormat.DepthComponent16; samples = samples }
+            | 24, 0 -> Some { format = RenderbufferFormat.DepthComponent24; samples = samples }
+            | 32, 0 -> Some { format = RenderbufferFormat.DepthComponent32; samples = samples }
+            | 24, 8 -> Some { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
+            | 32, 8 -> Some { format = RenderbufferFormat.Depth32fStencil8; samples = samples }
+            | _ -> failwith "invalid depth-stencil mode"
+
+    let fboSignature =
+        FramebufferSignature(
+            runtime,
+            Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
+            depthStencilSignature
+        )
+
     let mutable contextHandle : ContextHandle = null 
-    let defaultFramebuffer = new Framebuffer(ctx, (fun _ -> 0), ignore, [], None)
+    let defaultFramebuffer = 
+        new Framebuffer(
+            ctx, fboSignature, 
+            (fun _ -> 0), 
+            ignore, 
+            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples) :> IFramebufferOutput], None
+        )
 
     let avgFrameTime = RunningMean(10)
     let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
@@ -47,6 +70,8 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     let mutable needsRedraw = false
     let mutable first = true
     
+
+
 
     interface IControl with
         member x.IsInvalid = needsRedraw
@@ -80,7 +105,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
             taskSubscription <- t.AddMarkingCallback x.ForceRedraw
 
     member x.Sizes = sizes :> IMod<_>
-    member x.Samples = Mod.constant samples
+    member x.Samples = samples
 
     override x.OnHandleCreated(e) =
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
@@ -155,15 +180,17 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
 //        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
 
     member x.Time = time
+    member x.FramebufferSignature = fboSignature :> IFramebufferSignature
 
     interface IRenderTarget with
+        member x.FramebufferSignature = fboSignature :> IFramebufferSignature
         member x.Runtime = runtime :> IRuntime
         member x.Time = time
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
         member x.Sizes = sizes :> IMod<_>
-        member x.Samples = Mod.constant samples
+        member x.Samples = samples
 
     new(runtime : Runtime) = new OpenGlRenderControl(runtime, 1)
 

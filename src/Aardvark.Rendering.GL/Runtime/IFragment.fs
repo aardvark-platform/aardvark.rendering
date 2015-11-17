@@ -33,8 +33,9 @@ type IRenderProgram =
     abstract member Add : IRenderObject -> unit
     abstract member Remove : IRenderObject -> unit
 
-    abstract member Resources : ReferenceCountingSet<IChangeableResource>
+    //abstract member Resources : ReferenceCountingSet<IChangeableResource>
 
+    abstract member Update : int * ContextHandle -> FrameStatistics
     abstract member Run : int * ContextHandle -> FrameStatistics
 
 

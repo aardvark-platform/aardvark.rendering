@@ -143,10 +143,10 @@ module FShadeSceneGraph =
         let uniforms = SymDict.empty
         let samplerStates = SymDict.empty
 
-        let glslConfigCache = ConcurrentDict<_,_>(Dict())
+        static let glslConfigCache = ConcurrentDict<_,_>(Dict())
 
 
-        let glsl410 = 
+        static let glsl410 = 
             {
                 languageVersion = Version(4,1)
                 enabledExtensions = Set.empty
@@ -161,7 +161,7 @@ module FShadeSceneGraph =
                 depthRange = Range1d(-1.0,1.0)
             }
 
-        let glsl120 = 
+        static let glsl120 = 
             {
                 languageVersion = Version(1,2)
                 enabledExtensions = Set.empty
@@ -176,14 +176,14 @@ module FShadeSceneGraph =
                 depthRange = Range1d(-1.0,1.0)
             }
 
-        let vulkan =
+        static let vulkan =
             {
                 languageVersion = Version(1,4)
-                enabledExtensions = Set.ofList ["GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack"]
+                enabledExtensions = Set.ofList [ "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack"; "GL_KHR_vulkan_GLSL" ]
                 createUniformBuffers = true
                 createGlobalUniforms = false
                 createBindings = true
-                createDescriptorSets = false
+                createDescriptorSets = true
                 createInputLocations = true
                 createRowMajorMatrices = true
                 createPerStageUniforms = true
@@ -191,7 +191,7 @@ module FShadeSceneGraph =
                 depthRange = Range1d(0.0,1.0)
             }
 
-        let tryGetGlslConfig (r : IRuntime) =
+        static let tryGetGlslConfig (r : IRuntime) =
             glslConfigCache.GetOrCreate(r, Func<_,_>(fun r ->
                 let t = r.GetType()
                 let n = t.FullName.ToLower()
@@ -208,10 +208,31 @@ module FShadeSceneGraph =
                     None
             ))
 
+        static let formatToExpectedType (format : RenderbufferFormat) : Type =
+            let cf = RenderbufferFormat.toColFormat format
+
+            match cf with
+                | Col.Format.Gray -> typeof<float>
+                | Col.Format.NormalUV -> typeof<V2d>
+                | Col.Format.RGB -> typeof<V3d>
+                | Col.Format.RGBA -> typeof<V4d>
+                | _ -> failwithf "unsupported Col.Format: %A" cf
+
+        static let defaultSemanticTypes =
+            Dict.ofList [   
+                DefaultSemantic.Colors, typeof<V4d>
+                DefaultSemantic.Depth, typeof<float>
+                DefaultSemantic.Normals, typeof<V3d>
+                DefaultSemantic.DiffuseColorUTangents, typeof<V3d>
+                DefaultSemantic.DiffuseColorVTangents, typeof<V3d>
+                DefaultSemantic.DiffuseColorCoordinates, typeof<V2d>
+                DefaultSemantic.Positions, typeof<V4d>
+            ]
+
         member x.Effect = effect
 
         interface IGeneratedSurface with
-            member x.Generate (r : IRuntime) =
+            member x.Generate (r : IRuntime, signature : IFramebufferSignature) =
                 match cache with
                     | Some c -> c
                     | None ->
@@ -221,7 +242,16 @@ module FShadeSceneGraph =
                                 let compileEffect =
                                     GLSL.compileEffect glslConfig
 
-                                match effect |> compileEffect with
+                                let needed =
+                                    signature.ColorAttachments 
+                                        |> Map.toList
+                                        |> List.map (fun (_,(s,f)) ->
+                                            match defaultSemanticTypes.TryGetValue s with
+                                                | (true, t) -> s.ToString(), t
+                                                | _ -> s.ToString(), formatToExpectedType f.format
+                                           )
+                                        |> Map.ofList
+                                match effect |> compileEffect needed with
                                     | Success(map, code) ->
                                         let semanticMap = SymDict.empty
 
@@ -254,13 +284,11 @@ module FShadeSceneGraph =
     let inline toEffect a = toEffect a
 
     module Sg =
-        let private constantSurfaceCache = MemoCache(false)
-
         let effect (s : #seq<FShadeEffect>) (sg : ISg) =
             let e = FShade.SequentialComposition.compose s
-            let s = constantSurfaceCache.Memoized1 (fun e -> Mod.constant (FShadeSurface(e) :> ISurface)) e
+            let s = Mod.constant (FShadeSurface(e) :> ISurface)
             Sg.SurfaceApplicator(s, sg) :> ISg
 
         let effect' (e : IMod<FShadeEffect>) (sg : ISg) =
-            let s = constantSurfaceCache.Memoized1 (fun e -> e |> Mod.map (fun e -> (FShadeSurface(e) :> ISurface))) e
+            let s = e |> Mod.map (fun e -> (FShadeSurface(e) :> ISurface))
             Sg.SurfaceApplicator(s, sg) :> ISg

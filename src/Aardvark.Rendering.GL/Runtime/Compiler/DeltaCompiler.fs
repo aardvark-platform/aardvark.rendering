@@ -44,12 +44,12 @@ module DeltaCompiler =
 
             | [] -> true
 
-    let useResource (r : ChangeableResource<'a>) : Compiled<unit> =
+    let useResource (r : IChangeableResource) : Compiled<unit> =
         { runCompile = 
             fun s -> 
                 if s.useResources then
                     r.IncrementRefCount () |> ignore
-                    { s with resources = (r :> _) :: s.resources }, ()
+                    { s with resources = r :: s.resources }, ()
                 else
                     s, ()
         }
@@ -98,6 +98,15 @@ module DeltaCompiler =
                         ()
                     | _ -> 
                         yield Instructions.bindUniformBuffer id ub
+
+            for (id,ub) in Map.toSeq me.UniformBufferViews do
+                do! useResource ub
+                match Map.tryFind id prev.UniformBufferViews with
+                    | Some old when old = ub -> 
+                        // the same UniformBuffer has already been bound
+                        ()
+                    | _ -> 
+                        yield Instructions.bindUniformBufferView id ub
 
             // bind all textures/samplers (if needed)
             let latestSlot = ref prev.LastTextureSlot

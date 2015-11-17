@@ -37,7 +37,7 @@ private:
 	std::unordered_map<intptr_t, intptr_t> patchParameters;
 	std::unordered_map<int, intptr_t> currentSampler;
 	std::unordered_map<GLenum, std::unordered_map<int, intptr_t>> currentTexture;
-	std::unordered_map<int, intptr_t> currentBuffer;
+	std::unordered_map<int, std::tuple<intptr_t, intptr_t, intptr_t>> currentBuffer;
 	std::unordered_map<intptr_t, bool> modes;
 	
 
@@ -53,7 +53,7 @@ public:
 	bool ShouldSetActiveTexture(intptr_t unit);
 	bool ShouldSetSampler(int index, intptr_t sampler);
 	bool ShouldSetTexture(GLenum target, intptr_t sampler);
-	bool ShouldSetBuffer(GLenum target, int index, intptr_t buffer);
+	bool ShouldSetBuffer(GLenum target, int index, intptr_t buffer, intptr_t offset, intptr_t size);
 	bool ShouldEnable(intptr_t flag);
 	bool ShouldDisable(intptr_t flag);
 	bool ShouldSetDepthFunc(intptr_t func);

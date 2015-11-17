@@ -12,10 +12,12 @@ type PreparedRenderObject =
     {
         Context : Context
         Original : RenderObject
-
+        FramebufferSignature : IFramebufferSignature
         LastTextureSlot : int
         Program : ChangeableResource<Program>
         UniformBuffers : Map<int, ChangeableResource<UniformBuffer>>
+        UniformBufferPools : list<UniformBufferPool>
+        UniformBufferViews : Map<int, ChangeableResource<UniformBufferView>>
         Uniforms : Map<int, ChangeableResource<UniformLocation>>
         Textures : Map<int, ChangeableResource<Texture> * ChangeableResource<Sampler>>
         Buffers : Map<int, ChangeableResource<Buffer> * IMod<AttributeDescription>>
@@ -53,42 +55,46 @@ type PreparedRenderObject =
 
         if x.Program.OutOfDate then
             x.Program.UpdateCPU(caller)
-            x.Program.UpdateGPU(caller)
+            x.Program.UpdateGPU(caller) |> ignore
 
         for (_,ub) in x.UniformBuffers |> Map.toSeq do
             if ub.OutOfDate then
                 ub.UpdateCPU(caller)
-                ub.UpdateGPU(caller)
+                ub.UpdateGPU(caller) |> ignore
 
+        for (_,ub) in x.UniformBufferViews |> Map.toSeq do
+            if ub.OutOfDate then
+                ub.UpdateCPU(caller)
+                ub.UpdateGPU(caller) |> ignore
         for (_,ul) in x.Uniforms |> Map.toSeq do
             if ul.OutOfDate then
                 ul.UpdateCPU(caller)
-                ul.UpdateGPU(caller)
+                ul.UpdateGPU(caller) |> ignore
 
         for (_,(t,s)) in x.Textures |> Map.toSeq do
             if t.OutOfDate then
                 t.UpdateCPU(caller)
-                t.UpdateGPU(caller)
+                t.UpdateGPU(caller) |> ignore
 
             if s.OutOfDate then
                 s.UpdateCPU(caller)
-                s.UpdateGPU(caller)
+                s.UpdateGPU(caller) |> ignore
 
         for (_,(b,_)) in x.Buffers |> Map.toSeq do
             if b.OutOfDate then
                 b.UpdateCPU(caller)
-                b.UpdateGPU(caller)
+                b.UpdateGPU(caller) |> ignore
 
         match x.IndexBuffer with
             | Some ib ->
                 if ib.OutOfDate then
                     ib.UpdateCPU(caller)
-                    ib.UpdateGPU(caller)
+                    ib.UpdateGPU(caller) |> ignore
             | _ -> ()
 
         if x.VertexArray.OutOfDate then
             x.VertexArray.UpdateCPU(caller)
-            x.VertexArray.UpdateGPU(caller)
+            x.VertexArray.UpdateGPU(caller) |> ignore
 
     member x.Dispose() =
         x.VertexArray.Dispose() 
@@ -122,10 +128,12 @@ module ``Prepared render object extensions`` =
     let private empty = {
                 Context = Unchecked.defaultof<_>
                 Original = RenderObject.Empty
-
+                FramebufferSignature = null
                 LastTextureSlot = -1
                 Program = Unchecked.defaultof<_>
                 UniformBuffers = Map.empty
+                UniformBufferPools = []
+                UniformBufferViews = Map.empty
                 Uniforms = Map.empty
                 Textures = Map.empty
                 Buffers = Map.empty
@@ -151,21 +159,37 @@ type ResourceManagerExtensions private() =
         ))
 
     [<Extension>]
-    static member Prepare (x : ResourceManager, rj : RenderObject) : PreparedRenderObject =
+    static member Prepare (x : ResourceManager, fboSignature : IFramebufferSignature, rj : RenderObject) : PreparedRenderObject =
         // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
 
         // create a program and get its handle (ISSUE: assumed to be constant here)
-        let program = x.CreateSurface(rj.Surface)
+        let program = x.CreateSurface(fboSignature, rj.Surface)
         let prog = program.Resource.GetValue()
 
         // create all UniformBuffers requested by the program
-        let uniformBuffers =
-            prog.UniformBlocks 
-                |> List.map (fun block ->
+        let uniformBuffers =  Map.empty
+//            prog.UniformBlocks 
+//                |> List.map (fun block ->
+//                    let mutable values = []
+//                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
+//                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
+//                   )
+//                |> Map.ofList
+
+
+        let uniformBufferPoolsWithBlocks =
+            prog.UniformBlocks |> List.map (fun b -> b, x.CreateUniformBufferPool b)
+
+
+        // create all UniformBuffers requested by the program
+        let uniformBufferViews =
+            uniformBufferPoolsWithBlocks
+                |> List.map (fun (block, pool) ->
                     let mutable values = []
+
                     // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
-                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
+                    block.index, x.CreateUniformBufferView(pool, rj.AttributeScope, prog, rj.Uniforms, &values)
                    )
                 |> Map.ofList
 
@@ -268,10 +292,12 @@ type ResourceManagerExtensions private() =
         {
             Context = x.Context
             Original = rj
-
+            FramebufferSignature = fboSignature
             LastTextureSlot = !lastTextureSlot
             Program = program
             UniformBuffers = uniformBuffers
+            UniformBufferPools = uniformBufferPoolsWithBlocks |> List.map snd
+            UniformBufferViews = uniformBufferViews
             Uniforms = uniforms
             Textures = textures
             Buffers = buffers |> Map.map (fun k (a,b,_) -> a,b)

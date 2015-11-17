@@ -57,6 +57,7 @@
     <Compile Include="Core\Context.fs" />
     <Compile Include="Core\Interfaces.fs" />
     <Compile Include="Core\UnsharedObject.fs" />
+    <Compile Include="Core\PrimitiveValueConverter.fs" />
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\Instruction.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
@@ -76,7 +77,6 @@
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\Statistics.fs" />
-    <Compile Include="Runtime\ReferenceCountingSet.fs" />
     <Compile Include="Runtime\IFragment.fs" />
     <Compile Include="Runtime\Sorting.fs" />
     <Compile Include="Runtime\Native\Memory.fs" />
@@ -97,6 +97,7 @@
     <Compile Include="Runtime\Compiler\SortedProgram.fs" />
     <Compile Include="Runtime\Compiler\DebugProgram.fs" />
     <Compile Include="Runtime\RenderTask.fs" />
+    <Compile Include="Runtime\NewRenderTasks.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
@@ -168,6 +169,17 @@
       <ItemGroup>
         <Reference Include="Aardvark.Base.Incremental">
           <HintPath>..\..\packages\Aardvark.Base.Incremental\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="($(TargetFrameworkIdentifier) == '.NETFramework' And ($(TargetFrameworkVersion) == 'v4.5' Or $(TargetFrameworkVersion) == 'v4.5.1' Or $(TargetFrameworkVersion) == 'v4.5.2' Or $(TargetFrameworkVersion) == 'v4.5.3' Or $(TargetFrameworkVersion) == 'v4.6')) Or ($(TargetFrameworkIdentifier) == 'MonoAndroid') Or ($(TargetFrameworkIdentifier) == 'MonoTouch')">
+      <ItemGroup>
+        <Reference Include="Aardvark.Base.Runtime">
+          <HintPath>..\..\packages\Aardvark.Base.Runtime\lib\net45\Aardvark.Base.Runtime.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>

@@ -65,7 +65,7 @@ type RenderControl() =
         ctrl <- Some c
         impl <- Some cr
         transact(fun () ->
-            cr.Time.AddOutputNew(time)
+            cr.Time.AddOutput(time)
             inner <- Some cr.Time
 
             Mod.change sizes V2i.OO
@@ -80,6 +80,7 @@ type RenderControl() =
         and set v = x.SetControl x v (v |> unbox<IRenderTarget>)
 
     member x.Runtime = runtime
+    member x.FramebufferSignature = impl.Value.FramebufferSignature
     member x.Sizes = actualSize 
     member x.Samples = impl.Value.Samples
 
@@ -96,6 +97,7 @@ type RenderControl() =
 
     member x.Time = time
     interface IRenderControl with
+        member x.FramebufferSignature = x.FramebufferSignature
         member x.Runtime = x.Runtime
         member x.Sizes = x.Sizes
         member x.Samples = impl.Value.Samples

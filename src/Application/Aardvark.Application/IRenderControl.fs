@@ -17,7 +17,8 @@ type TimeMod() =
 type IRenderTarget =
     abstract member Runtime : IRuntime
     abstract member Sizes : IMod<V2i>
-    abstract member Samples : IMod<int>
+    abstract member Samples : int
+    abstract member FramebufferSignature : IFramebufferSignature
     abstract member RenderTask : IRenderTask with get, set
     abstract member Time : IMod<DateTime>
 
@@ -31,3 +32,6 @@ type IRenderWindow =
     inherit IRenderControl
     
     abstract member Run : unit -> unit
+
+
+            

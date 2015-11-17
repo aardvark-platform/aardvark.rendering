@@ -11,7 +11,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 
-type Framebuffer(ctx : Context, create : Aardvark.Rendering.GL.ContextHandle -> int, destroy : int -> unit, 
+type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aardvark.Rendering.GL.ContextHandle -> int, destroy : int -> unit, 
                  bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
     inherit UnsharedObject(ctx, create, destroy)
 
@@ -49,9 +49,12 @@ type Framebuffer(ctx : Context, create : Aardvark.Rendering.GL.ContextHandle -> 
         let depth = match depth with | Some d -> [DefaultSemantic.Depth, d] | _ -> []
         outputBySem <- List.append bindings depth |> Map.ofList
 
+    member x.Attachments = outputBySem
+
     interface IFramebuffer with
+        member x.Signature = signature
         member x.Size = x.Size
-        member x.Handle = x.Handle :> obj
+        member x.GetHandle caller = x.Handle :> obj
         member x.Attachments = outputBySem
         member x.Dispose() = base.DestroyHandles()
 
@@ -75,27 +78,32 @@ module FramebufferExtensions =
 
         let attach (o : IFramebufferOutput) (attachment) =
             match o with
-                | :? Aardvark.Base.IFramebufferRenderbuffer as o ->
-                    GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle :?> int)
+
+                | :? Renderbuffer as o ->
+                    GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle)
                     GL.Check "could not attach renderbuffer"
 
-                | :? TextureOutputView as r ->
+
+                | :? BackendTextureOutputView as r ->
                     let { texture = o; level = level; slice = slice } = r
+                    let o = unbox<Texture> o
 
                     match o.Dimension with
                         | TextureDimension.TextureCube ->
                             let (_,target) = TextureExtensions.cubeSides.[slice]
-                            if o.ArraySize > 1 then
+                            if o.Count > 1 then
                                 failwith "cubemaparray currently not implemented"
                             else
-                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle :?> int, level)
+                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
                             GL.Check "could not attach texture"
                         | _ ->
-                            if o.ArraySize > 1 then
-                                GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle :?> int, level, slice)
+                            if o.Count > 1 then
+                                GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, slice)
                             else
-                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, TextureTarget.Texture2D, o.Handle :?> int, level)
+                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, TextureTarget.Texture2D, o.Handle, level)
                             GL.Check "could not attach texture"
+
+        
                 | _ ->
                     failwith "unsupported view"
 
@@ -130,10 +138,10 @@ module FramebufferExtensions =
 
     type Context with
 
-        member x.CreateFramebuffer (bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
+        member x.CreateFramebuffer (signature : IFramebufferSignature, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
             let init = init bindings depth
 
-            new Framebuffer(x, init, destroy, bindings, depth)
+            new Framebuffer(x, signature, init, destroy, bindings, depth)
 
         member x.Delete(f : Framebuffer) =
             f.DestroyHandles()

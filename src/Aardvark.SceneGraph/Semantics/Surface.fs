@@ -5,7 +5,6 @@ open System
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Ag
-open Aardvark.Base.AgHelpers
 open Aardvark.SceneGraph
 
 [<AutoOpen>]

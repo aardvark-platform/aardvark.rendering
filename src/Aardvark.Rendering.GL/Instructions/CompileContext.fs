@@ -52,7 +52,7 @@ module ExecutionContext =
     /// <summary>
     /// determines whether the current OpenGL implementation supports synchronization via glFence
     /// </summary>
-    let syncSupported = OpenGl.getProcAddress "glFence" <> 0n
+    let syncSupported = OpenGl.getProcAddress "glFenceSync" <> 0n
 
 
     /// <summary>
@@ -239,4 +239,3 @@ module GLExtensionsPossiblyNotWorkingEverywhere =
                     | WaitSyncStatus.WaitFailed ->
                         Log.warn "[GL] wait failed"
                     | _ -> ()
-

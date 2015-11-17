@@ -8,12 +8,13 @@ type ResourceKind =
     | VertexArrayObject = 2
     | Texture = 3
     | UniformBuffer = 4
-    | UniformLocation = 5
-    | SamplerState = 6
-    | ShaderProgram = 7
-    | Renderbuffer = 8
-    | Framebuffer = 9
-    | StreamingTexture = 10
+    | UniformBufferView = 5
+    | UniformLocation = 6
+    | SamplerState = 7
+    | ShaderProgram = 8
+    | Renderbuffer = 9
+    | Framebuffer = 10
+    | StreamingTexture = 11
 
 
 module Map =
@@ -26,6 +27,21 @@ module Map =
                     | None -> zero
             result <- Map.add k (fuse left right) result
         result
+
+type ITimeProbe =
+    abstract member Value : TimeSpan
+
+type private AddTimeProbe(l : ITimeProbe, r : ITimeProbe) =
+    interface ITimeProbe with
+        member x.Value = l.Value + r.Value
+
+type private SubTimeProbe(l : ITimeProbe, r : ITimeProbe) =
+    interface ITimeProbe with
+        member x.Value = l.Value - r.Value
+
+type private DivTimeProbe(l : ITimeProbe, r : float) =
+    interface ITimeProbe with
+        member x.Value = TimeSpan.FromTicks(int64 (float l.Value.Ticks / r))
 
 type FrameStatistics =
     {

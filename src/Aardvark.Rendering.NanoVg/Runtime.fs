@@ -321,13 +321,13 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     inherit AdaptiveObject()
     let r = l.GetReader()
     let inputs = ReferenceCountingSet<IAdaptiveObject>()
-    do r.AddOutputNew this
+    do r.AddOutput this
 
     let mutable frameId = 0UL
 
     let addInput (v : IAdaptiveObject) =
         if v <> null && inputs.Add v then
-            v.AddOutputNew this
+            v.AddOutput this
 
     let removeInput (v : IAdaptiveObject) =
         if v <> null && inputs.Remove v then
@@ -384,7 +384,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     member x.Dispose() =
         r.RemoveOutput x
         r.Dispose()
-        let all = inputs.Entries |> Seq.toArray
+        let all = inputs |> Seq.toArray
         for i in all do
             i.RemoveOutput x
         inputs.Clear()
@@ -409,8 +409,8 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
 
                 //let ctx = Context.current()
 
-                if oldFbo <> (fbo.Handle :?> int) then
-                    OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, fbo.Handle :?> int)
+                if oldFbo <> (fbo.GetHandle null :?> int) then
+                    OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, fbo.GetHandle null :?> int)
                 OpenTK.Graphics.OpenGL4.GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
 
                 OpenTK.Graphics.OpenGL.GL.PushAttrib(OpenTK.Graphics.OpenGL.AttribMask.AllAttribBits)
@@ -418,14 +418,14 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
                 
                 NanoVg.nvgBeginFrame(current.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
              
-                r.Content |> Seq.map snd |> Interpreter.run x current
+                r.Content.All |> Seq.map snd |> Interpreter.run x current
                 NanoVg.nvgEndFrame(current.Handle)
 
                 frameId <- frameId + 1UL
 
                 OpenTK.Graphics.OpenGL.GL.PopAttrib()
 
-                if oldFbo <> (fbo.Handle :?> int) then
+                if oldFbo <> (fbo.GetHandle null :?> int) then
                     OpenTK.Graphics.OpenGL4.GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
                 OpenTK.Graphics.OpenGL4.GL.Viewport(old.[0], old.[1], old.[2], old.[3])
 
@@ -435,6 +435,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         )
 
     interface IRenderTask with
+        member x.FramebufferSignature = null
         member x.Runtime = runtime :> IRuntime |> Some
         member x.Run(caller, fbo) = 
             x.Run(caller, fbo)

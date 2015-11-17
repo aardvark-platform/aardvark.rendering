@@ -22,24 +22,19 @@ type BufferUsage = Static | Dynamic
 /// </summary>
 type Buffer =
     class
-        interface IBackendBuffer with
-            member x.Handle = x.Handle :> obj
-
         val mutable public Handle : int
         val mutable public Context : Context
         val mutable public SizeInBytes : nativeint
             
         member x.Validate() =
-
             using x.Context.ResourceLock (fun _ ->
                 validate {
-                    GL.BindBuffer(BufferTarget.ArrayBuffer, x.Handle)
                     do! requires (GL.IsBuffer x.Handle) "not a buffer object"
 
-                    let r = ref 0L
-                    GL.GetBufferParameter(BufferTarget.ArrayBuffer, BufferParameterName.BufferSize, &r.contents)
-                    do! eq !r (int64 x.SizeInBytes) "invalid buffer size"
-
+                    GL.BindBuffer(BufferTarget.ArrayBuffer, x.Handle)
+                    let mutable r = 0L
+                    GL.GetBufferParameter(BufferTarget.ArrayBuffer, BufferParameterName.BufferSize, &r)
+                    do! eq r (int64 x.SizeInBytes) "invalid buffer size"
                     GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
 
                 }
@@ -48,6 +43,10 @@ type Buffer =
         interface IResource with
             member x.Context = x.Context
             member x.Handle = x.Handle
+
+        interface IBackendBuffer with
+            member x.Handle = x.Handle :> obj
+
 
         new(ctx : Context, size : nativeint, handle : int) = { Context = ctx; SizeInBytes = size; Handle = handle}
     end

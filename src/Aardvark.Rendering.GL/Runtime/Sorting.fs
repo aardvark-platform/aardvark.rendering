@@ -73,14 +73,14 @@ module RenderObjectSorters =
             let ro = rj |> toRj
 
             rjCache.GetOrCreate(rj, fun _ ->
-                (projections |> List.map (fun f -> invokeId (f ro))) @ [ro.Id]
+                (projections |> List.map (fun f -> invokeId (f ro))) //@ [ro.Id]
             )
 
         let revoke (rj : IRenderObject) =
             let ro = rj |> toRj
 
             rjCache.Remove rj |> ignore
-            (projections |> List.map (fun f -> revokeId (f ro))) @ [ro.Id]
+            (projections |> List.map (fun f -> revokeId (f ro))) //@ [ro.Id]
 
         let lookup (rj : IRenderObject) = rjCache.[rj]
 

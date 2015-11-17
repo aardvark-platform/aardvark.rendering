@@ -258,7 +258,10 @@ module ProgramExtensions =
         Aardvark.Rendering.GL.ValuePath path
 
     let private activeUniformToField (u : ActiveUniform) =
-        { UniformField.path = parsePath u.name; UniformField.offset = u.offset; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
+        { UniformField.semantic = u.semantic; UniformField.path = parsePath u.name; UniformField.offset = u.offset; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
+
+    type ActiveUniform with
+        member x.UniformField = activeUniformToField x
 
     let private getShaderType (stage : ShaderStage) =
         match stage with
@@ -289,6 +292,8 @@ module ProgramExtensions =
         if !replaced then newCode
         else def + newCode
 
+
+    let private outputSuffixes = [""; "Out"; "Frag"; "Pixel"; "Fragment"]
 
     type Aardvark.Rendering.GL.Context with
 
@@ -347,7 +352,7 @@ module ProgramExtensions =
 
             )
 
-        member x.TryCompileProgram(code : string) =
+        member x.TryCompileProgram(fboSignature : IFramebufferSignature, code : string) =
             let vs = code.Contains "void VS("
             let tcs = code.Contains "void TCS("
             let tev = code.Contains "void TEV"
@@ -391,31 +396,77 @@ module ProgramExtensions =
                     let log = GL.GetProgramInfoLog(handle)
                     GL.Check "could not get program log"
 
+
                     if status = 1 then
-                        GL.UseProgram(handle)
-                        GL.Check "could not bind program"
+                        let outputs =
+                            fboSignature.ColorAttachments 
+                                |> Map.toList
+                                |> List.map (fun (location, (semantic, signature)) ->
+                                    let name = semantic.ToString()
+                                    let suffixes = ["{0}"; "{0}Out"; "{0}Frag"; "Pixel{0}"; "{0}Pixel"; "{0}Fragment"]
+                            
+                                    let outputNameAndIndex = 
+                                        suffixes |> List.tryPick (fun s ->
+                                            let outputName = String.Format(s, name)
+                                            let index = GL.GetFragDataIndex(handle, outputName)
+                                            GL.Check "could not get FragDataIndex"
+                                            if index >= 0 then Some (outputName, index)
+                                            else None
+                                        )
 
-                        let supported = 
-                            shaders |> List.tryPick (fun s -> s.SupportedModes)
+                            
 
-                        let result = {
-                            Context = x
-                            Code = code
-                            Handle = handle
-                            Shaders = shaders
-                            UniformBlocks = ProgramReflector.getActiveUniformBlocks handle
-                            Uniforms = ProgramReflector.getActiveUniforms handle
-                            UniformGetters = SymDict.empty
-                            SamplerStates = SymDict.empty
-                            Inputs = ProgramReflector.getActiveInputs handle
-                            Outputs = [] //ProgramReflector.getActiveOutputs handle
-                            SupportedModes = supported
-                        }
+                                    match outputNameAndIndex with
+                                        | Some (outputName, index) ->
+                                            GL.BindFragDataLocation(handle, location, semantic.ToString())
+                                            GL.Check "could not bind FragData location"
 
-                        GL.UseProgram(0)
-                        GL.Check "could not unbind program"
+                                            { attributeIndex = location; size = 1; name = outputName; semantic = semantic.ToString(); attributeType = ActiveAttribType.FloatVec4 }
+                                        | None ->
+                                            failwithf "could not get desired program-output: %A" semantic
+                                )
 
-                        Success result
+                        // after modifying the frag-locations the program needs to be linked again
+                        GL.LinkProgram(handle)
+                        GL.Check "could not link program"
+
+                        let status = GL.GetProgram(handle, GetProgramParameterName.LinkStatus)
+                        let log = GL.GetProgramInfoLog(handle)
+                        GL.Check "could not get program log"
+
+                        if status = 1 then
+
+                            GL.UseProgram(handle)
+                            GL.Check "could not bind program"
+
+                            let supported = 
+                                shaders |> List.tryPick (fun s -> s.SupportedModes)
+
+
+                            let result = {
+                                Context = x
+                                Code = code
+                                Handle = handle
+                                Shaders = shaders
+                                UniformBlocks = ProgramReflector.getActiveUniformBlocks handle
+                                Uniforms = ProgramReflector.getActiveUniforms handle
+                                UniformGetters = SymDict.empty
+                                SamplerStates = SymDict.empty
+                                Inputs = ProgramReflector.getActiveInputs handle
+                                Outputs = outputs
+                                SupportedModes = supported
+                            }
+
+                            GL.UseProgram(0)
+                            GL.Check "could not unbind program"
+
+                            Success result
+                        else
+                            let log =
+                                if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
+                                else log
+
+                            Error log
 
                     else
                         let log =
@@ -428,8 +479,8 @@ module ProgramExtensions =
                     Error err
             )
 
-        member x.CompileProgram(code : string) =
-            match x.TryCompileProgram code with
+        member x.CompileProgram(fboSignature : IFramebufferSignature, code : string) =
+            match x.TryCompileProgram(fboSignature, code) with
                 | Success p -> p
                 | Error e ->
                     failwithf "Shader compiler returned errors: %s" e

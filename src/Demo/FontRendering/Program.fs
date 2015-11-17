@@ -91,7 +91,7 @@ let main argv =
 
     let e = FShade.SequentialComposition.compose [toEffect Shader.trafo; toEffect Shader.white]
     let s = FShadeSurface(e) :> ISurface
-    let compiled = app.Runtime.CreateSurface s :> ISurface
+    let compiled = app.Runtime.PrepareSurface(win.FramebufferSignature, s) :> ISurface
 
     let sg =
         geometry 
@@ -106,8 +106,8 @@ let main argv =
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 
     let sgs = 
-        ASet.ofList [
-            for x in -4..4 do
+        Sg.group' [
+            for x in -4..4 do 
                 for y in -4..4 do
                     let trafo = Trafo3d.Translation(2.0 * float x - 0.5, 2.0 * float y - 0.5, 0.0)
 
@@ -116,14 +116,19 @@ let main argv =
                     yield g |> Sg.trafo (Mod.constant trafo)
                             |> Sg.texture DefaultSemantic.DiffuseColorTexture tex
         ]
+        
+//    let test = sgs |> ASet.map id
+//    let r = test.GetReader()
+//    r.GetDelta() |> List.length |> printfn "got %d deltas"
+
 
     let sg = 
-        Sg.set sgs
+        sgs
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
 
-    let main = app.Runtime.CompileRender(BackendConfiguration.NativeOptimized, sg) |> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.UnmanagedRuntime, sg) // |> DefaultOverlays.withStatistics
 
     let r = Random()
     win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () ->
@@ -138,7 +143,15 @@ let main argv =
     ) |> ignore
 
 
+    win.Keyboard.KeyDown(Keys.G).Values.Subscribe(fun () ->
+        System.GC.AddMemoryPressure(100000000L)
+        Log.startTimed "GC"
+        System.GC.Collect()
+        System.GC.WaitForFullGCComplete() |> ignore
+        Log.stop()
+        System.GC.RemoveMemoryPressure(100000000L)
 
+    ) |> ignore
 
     win.RenderTask <- RenderTask.ofList [main]
     win.Run()

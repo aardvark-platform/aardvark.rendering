@@ -36,7 +36,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
                     | Some old ->
                         for r in old.Resources do
                             r.Dispose()
-                            ctx.resourceSet.Unlisten r
+                            ctx.inputSet.Remove r
                         currentProgram <- None
                     | None ->
                         ()
@@ -56,7 +56,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
 
                 // listen to changes
                 for r in prog.Resources do
-                    ctx.resourceSet.Listen r
+                    ctx.inputSet.Add r
 
                 // store everything
                 currentChanger <- changer
@@ -73,7 +73,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
                     currentChanger.RemoveOutput !self
                     let resTime = recompile()
                     let _ = currentChanger.GetValue(s)
-                    currentChanger.AddOutputNew !self
+                    currentChanger.AddOutput !self
                     let newStats = frag.Statistics
                     transact (fun () ->
                         Mod.change ctx.statistics (ctx.statistics.Value + newStats - oldStats)
@@ -83,7 +83,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
             )
 
         if precompiled.IsNone then 
-            rj.Program.AddOutputNew !self
+            rj.Program.AddOutput !self
         !self
 
     member x.Dispose() =
@@ -112,7 +112,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
         match currentProgram with
             | Some prog ->
                 for r in prog.Resources do
-                    ctx.resourceSet.Unlisten r
+                    ctx.inputSet.Remove r
                     r.Dispose()
 
                 currentProgram <- None
@@ -186,19 +186,16 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
          config : BackendConfiguration,
          newHandler : unit -> IFragmentHandler<'f>, 
          manager : ResourceManager, 
-         addInput : IAdaptiveObject -> unit, 
-         removeInput : IAdaptiveObject -> unit) =
+         inputSet : InputSet) =
     
-    let sw = System.Diagnostics.Stopwatch()
 
     let sorter = RenderObjectSorters.ofSorting config.sorting
     let currentContext = Mod.init (match ContextHandle.Current with | Some ctx -> ctx | None -> null)
     let handler = newHandler()
-    let changeSet = ChangeSet(parent, addInput, removeInput)
-    let resourceSet = ResourceSet(parent, addInput, removeInput)
+    let changeSet = ChangeSet(parent, inputSet.Add, inputSet.Remove)
     let statistics = Mod.init FrameStatistics.Zero
 
-    let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; resourceSet = resourceSet }
+    let ctx = { statistics = statistics; handler = handler; manager = manager; currentContext = currentContext; inputSet = inputSet }
 
     let sortedFragments = SortedDictionaryExt<IRenderObject, UnoptimizedRenderObjectFragment<'f>>(curry sorter.Compare)
     let fragments = Dict<IRenderObject, UnoptimizedRenderObjectFragment<'f>>()
@@ -228,10 +225,13 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
     member x.Add (rj : IRenderObject) =
         let prep = 
             match rj with
-              | :? PreparedRenderObject as p -> p
-              | :? RenderObject as rj -> 
-                    preparedRenderObjects.GetOrCreate(rj,fun rj -> manager.Prepare rj)
-              | _ -> failwith "unsupported IRenderObject"
+                | :? PreparedRenderObject as p -> 
+                    if p.FramebufferSignature <> parent.FramebufferSignature then
+                        failwithf "cannot add RenderObject with incompatible FramebufferSignature: %A" p.FramebufferSignature
+                    p
+                | :? RenderObject as rj -> 
+                    preparedRenderObjects.GetOrCreate(rj,fun rj -> manager.Prepare(parent.FramebufferSignature, rj))
+                | _ -> failwith "unsupported IRenderObject"
 
         sorter.Add rj
         // create a new RenderObjectFragment and link it
@@ -289,24 +289,15 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
             | _ ->
                 failwithf "cannot remove unknown renderobject: %A" rj
 
-    member x.Run(fbo : int, ctx : ContextHandle) =
+    member x.Update(fbo : int, ctx : ContextHandle) =
         // change the current context if necessary
         if ctx <> currentContext.UnsafeCache then
             transact (fun () -> Mod.change currentContext ctx)
 
-        // update resources and instructions
-        let resourceUpdates, resourceUpdateCounts, resourceUpdateTime = 
-            resourceSet.Update()
 
         let instructionUpdates, instructionUpdateTime, createStats = 
             changeSet.Update() 
 
-        sw.Restart()
-        // run everything
-        run prolog.Fragment
-        if Config.SyncUploadsAndFrames then OpenTK.Graphics.OpenGL4.GL.Sync()
-
-        sw.Stop()
 
         let fragmentStats = Mod.force statistics
         let programStats = 
@@ -314,13 +305,15 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
                 Programs = 1.0 
                 InstructionUpdateCount = float instructionUpdates
                 InstructionUpdateTime = instructionUpdateTime - createStats.ResourceUpdateTime
-                ResourceUpdateCount = float resourceUpdates
-                ResourceUpdateCounts = resourceUpdateCounts
-                ResourceUpdateTime = resourceUpdateTime 
-                ExecutionTime = sw.Elapsed
             }
 
         fragmentStats + programStats + createStats |> handler.AdjustStatistics
+
+    member x.Run(fbo : int, ctx : ContextHandle) =
+
+        // run everything
+        run prolog.Fragment
+        FrameStatistics.Zero
 
     member x.Disassemble() =
         let mutable fragment = prolog.Next
@@ -341,9 +334,10 @@ type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     interface IRenderProgram with
         member x.Disassemble() = x.Disassemble()
-        member x.Resources = resourceSet.Resources
+        //member x.Resources = resourceSet.Resources
         member x.RenderObjects = fragments.Keys
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
+        member x.Update (fbo, ctx) = x.Update(fbo, ctx)
         member x.Run (fbo, ctx) = x.Run(fbo, ctx)
 

@@ -4,6 +4,9 @@ open System
 open System.Runtime.InteropServices
 open Aardvark.Base
 
+type private MemoryManager = Aardvark.Rendering.GL.Memory.MemoryManager
+type private Block = Aardvark.Rendering.GL.Memory.Block
+
 
 [<AutoOpen>]
 module Fragments =
@@ -347,11 +350,11 @@ module Fragments =
             block.Read(0, x.Size)
 
         member x.Append(calls : seq<nativeint * obj[]>) =
-            let data = Amd64.compileCallArray padding calls
+            let data = Assembler.compileCalls 0 calls
             x.Append data
 
         member x.Update(id : int, calls : seq<nativeint * obj[]>) =
-            let data = Amd64.compileCallArray padding calls
+            let data = Assembler.compileCalls 0 calls
             x.Update(id, data)
 
         member x.FullBinaryCode =
@@ -365,8 +368,7 @@ module Fragments =
                 data
             )
 
-        member x.FullInstructions =
-            Amd64.Disasm.decompile x.FullBinaryCode
+        member x.FullInstructions = []
 
         member x.FullCode =
             x.FullInstructions |> Seq.map (sprintf "%A") |> String.concat "\r\n"
@@ -422,7 +424,7 @@ module Fragments =
                         let size = startOffsets.[i+1] - offset
 
                         let data = block.Read(offset, size)
-                        let cmp = Amd64.compileCall 0 calls.[index]
+                        let cmp = ASM.assembleCalls 0 [calls.[index]]
                         let check = Array.forall2 (=) data cmp 
                         success <- check
                         index <- index + 1
@@ -449,7 +451,7 @@ module Fragments =
                         //no calls are left (the stream may go on)
                         true
                 else
-                    printfn "ERROR: invalid call found in %s:\r\n%s" block.AsString (block.Read(0, block.Size) |> Amd64.Disasm.decompile |> Seq.map (sprintf "%A") |> String.concat "\r\n")
+                    printfn "ERROR: invalid call found in %s:\r\n%A" block.AsString (block.Read(0, block.Size))
                     false
             
         member x.Validate() = 

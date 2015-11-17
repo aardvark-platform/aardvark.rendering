@@ -11,10 +11,9 @@ open Aardvark.Rendering.GL
 
 type DebugProgram(parent : IRenderTask,
                   manager : ResourceManager, 
-                  addInput : IAdaptiveObject -> unit, 
-                  removeInput : IAdaptiveObject -> unit) =
+                  inputSet : InputSet) =
 
-    do addInput AdaptiveObject.Time
+    do inputSet.Add AdaptiveObject.Time
 
     let mutable allResources = HashSet<IChangeableResource>()
     let mutable usedResources = HashSet<IChangeableResource>()
@@ -33,13 +32,16 @@ type DebugProgram(parent : IRenderTask,
         for r in allResources do
             if r.OutOfDate then
                 r.UpdateCPU(parent)
-                r.UpdateGPU(parent)
+                stats <- stats + r.UpdateGPU(parent)
 
         for rj in renderObjects do
             let prep, own =
                 match rj with
-                    | :? PreparedRenderObject as p -> p, false
-                    | :? RenderObject as rj -> (manager.Prepare rj, true)
+                    | :? PreparedRenderObject as p ->
+                        if p.FramebufferSignature <> parent.FramebufferSignature then
+                            failwithf "cannot add RenderObject with incompatible FramebufferSignature: %A" p.FramebufferSignature
+                        p, false
+                    | :? RenderObject as rj -> (manager.Prepare(parent.FramebufferSignature, rj), true)
                     | _ -> failwith "unsupported RenderObject type"
 
             let prog, _ = DeltaCompiler.compileFull manager ctxMod prep
@@ -76,11 +78,12 @@ type DebugProgram(parent : IRenderTask,
 
     interface IRenderProgram with
         member x.Disassemble() = Seq.empty // TODO: disassemble debug program
-        member x.Resources = ReferenceCountingSet()
+        //member x.Resources = ReferenceCountingSet()
         member x.RenderObjects = renderObjects :> seq<_>
         member x.Add rj = x.Add rj
         member x.Remove rj = x.Remove rj
         member x.Dispose() = x.Dispose()
+        member x.Update(fbo,ctx) = FrameStatistics.Zero
         member x.Run(fbo,ctx) = x.Run(fbo, ctx)
 
 

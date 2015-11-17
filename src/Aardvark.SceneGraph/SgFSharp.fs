@@ -316,7 +316,7 @@ module SgFSharp =
 
             Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
 
-        let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(Mod.constant pass, sg)
+        let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(pass, sg) :> ISg
 
         let normalizeToAdaptive (box : Box3d) (this : ISg) =
 
@@ -368,7 +368,7 @@ module SgFSharp =
         
         let normalize sg = sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
 
-        let loadAsync (sg : ISg) = Sg.AsyncLoadApplicator(Mod.constant sg) :> ISg
+        let loadAsync (fboSignature : IFramebufferSignature) (sg : ISg) = Sg.AsyncLoadApplicator(fboSignature, Mod.constant sg) :> ISg
 
 
     type IndexedGeometry with

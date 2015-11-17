@@ -13,6 +13,7 @@ module RenderTask =
     type private EmptyRenderTask() =
         inherit ConstantObject()
         interface IRenderTask with
+            member x.FramebufferSignature = null
             member x.Dispose() = ()
             member x.Run(caller, fbo) = RenderingResult(fbo, FrameStatistics.Zero)
             member x.Runtime = None
@@ -21,12 +22,22 @@ module RenderTask =
     type private SequentialRenderTask(f : RenderingResult -> RenderingResult, tasks : IRenderTask[]) as this =
         inherit AdaptiveObject()
 
-        do for t in tasks do t.AddOutputNew this
+        do for t in tasks do t.AddOutput this
+
+        let signature =
+            lazy (
+                let signatures = tasks |> Array.map (fun t -> t.FramebufferSignature) |> Array.filter (not << isNull)
+
+                if signatures.Length = 0 then null
+                elif signatures.Length = 1 then signatures.[0]
+                else failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A" signatures
+            )
 
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
         let mutable frameId = 0UL
 
         interface IRenderTask with
+            member x.FramebufferSignature = signature.Value
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
                     let mutable stats = FrameStatistics.Zero
@@ -49,11 +60,15 @@ module RenderTask =
 
     type private ModRenderTask(input : IMod<IRenderTask>) as this =
         inherit AdaptiveObject()
-        do input.AddOutputNew this
+        do input.AddOutput this
         let mutable inner : Option<IRenderTask> = None
         let mutable frameId = 0UL
 
         interface IRenderTask with
+            member x.FramebufferSignature = 
+                let v = input.GetValue x
+                v.FramebufferSignature
+
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
                     x.OutOfDate <- true
@@ -66,7 +81,7 @@ module RenderTask =
                                 | Some oi -> oi.RemoveOutput x
                                 | _ -> ()
 
-                            ni.AddOutputNew x
+                            ni.AddOutput x
 
                     inner <- Some ni
                     frameId <- ni.FrameId
@@ -88,8 +103,9 @@ module RenderTask =
     type private AListRenderTask(tasks : alist<IRenderTask>) as this =
         inherit AdaptiveObject()
         let reader = tasks.GetReader()
-        do reader.AddOutputNew this
+        do reader.AddOutput this
 
+        let mutable signature = null
         let mutable runtime = None
         let tasks = ReferenceCountingSet()
 
@@ -100,7 +116,17 @@ module RenderTask =
                 match t.Runtime with
                     | Some r -> runtime <- Some r
                     | None -> ()
-                t.AddOutputNew this
+
+                let innerSig = t.FramebufferSignature
+                
+                if isNull innerSig then
+                    ()
+                elif isNull signature then
+                    signature <- innerSig
+                elif innerSig <> signature then
+                    failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A vs. %A" signature innerSig
+                    
+                t.AddOutput this
 
         let remove (t : IRenderTask) =
             if tasks.Remove t then
@@ -121,13 +147,19 @@ module RenderTask =
             this.OutOfDate <- wasOutOfDate
 
         interface IRenderTask with
+            member x.FramebufferSignature =
+                lock this (fun () -> processDeltas())
+                signature
+
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
                     processDeltas()
 
                     // run all tasks
                     let mutable stats = FrameStatistics.Zero
-                    for (_,t) in reader.Content do
+
+                    // TODO: order may be invalid
+                    for (_,t) in reader.Content.All do
                         let res = t.Run(x, fbo)
                         frameId <- max frameId t.FrameId
                         stats <- stats + res.Statistics
@@ -145,18 +177,19 @@ module RenderTask =
                 tasks.Clear()
                 
             member x.Runtime =
-                processDeltas()
+                lock this (fun () -> processDeltas())
                 runtime
 
             member x.FrameId = frameId
 
-    type private CustomRenderTask(f : afun<IFramebuffer, RenderingResult>) as this =
+    type private CustomRenderTask(f : afun<IRenderTask * IFramebuffer, RenderingResult>) as this =
         inherit AdaptiveObject()
-        do f.AddOutputNew this
+        do f.AddOutput this
         interface IRenderTask with
+            member x.FramebufferSignature = null
             member x.Run(caller, fbo) =
                 x.EvaluateAlways caller (fun () ->
-                    f.Evaluate (x,fbo)
+                    f.Evaluate (x,(x :> IRenderTask,fbo))
                 )
 
             member x.Dispose() =
@@ -170,10 +203,10 @@ module RenderTask =
 
     let empty = new EmptyRenderTask() :> IRenderTask
 
-    let ofAFun (f : afun<IFramebuffer, RenderingResult>) =
+    let ofAFun (f : afun<IRenderTask * IFramebuffer, RenderingResult>) =
         new CustomRenderTask(f) :> IRenderTask
 
-    let custom (f : IFramebuffer -> RenderingResult) =
+    let custom (f : IRenderTask * IFramebuffer -> RenderingResult) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
 
@@ -205,86 +238,184 @@ module RenderTask =
         t |> mapResult (fun r -> RenderingResult(r.Framebuffer, f r.Statistics))
 
 
-    // rendering to textures
 
-    let renderTo (target : IFramebuffer) (task : IRenderTask) =
-        let runtime = task.Runtime.Value
-        [task :> IAdaptiveObject] 
-            |> Mod.mapCustom(fun s ->
-                task.Run(s, target) |> ignore
-                target
-            )
+    let private createTexture (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) =
+        let mutable current = None
 
-    let renderToColorMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+        Mod.custom (fun self ->
+            let samples = samples.GetValue self
+            let size = size.GetValue self
+            let format = format.GetValue self
+
+            match current with
+                | Some (samples', size', format', c : IBackendTexture) -> 
+                    if samples = samples' && size = size' && format = format' then
+                        c
+                    else
+                        runtime.DeleteTexture c
+                        let n = runtime.CreateTexture(size, format, 1, samples, 1)
+                        current <- Some (samples, size, format, n)
+                        n
+                | None ->
+                    let n = runtime.CreateTexture(size, format, 1, samples, 1)
+                    current <- Some (samples, size, format, n)
+                    n
+        )
+
+    let private createRenderbuffer (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<RenderbufferFormat>) =
+        let mutable current = None
+
+        Mod.custom (fun self ->
+            let samples = samples.GetValue self
+            let size = size.GetValue self
+            let format = format.GetValue self
+
+            match current with
+                | Some (samples', size', format', c : IRenderbuffer) -> 
+                    if samples = samples' && size = size' && format = format' then
+                        c
+                    else
+                        runtime.DeleteRenderbuffer c
+                        let n = runtime.CreateRenderbuffer(size, format, samples)
+                        current <- Some (samples, size, format, n)
+                        n
+                | None ->
+                    let n = runtime.CreateRenderbuffer(size, format, samples)
+                    current <- Some (samples, size, format, n)
+                    n
+        )
+
+
+    let private createFramebuffer (runtime : IRuntime) (signature : IFramebufferSignature) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) =
+        
+        let mutable current = None
+
+        Mod.custom (fun self ->
+            let color = 
+                match color with
+                    | Some c -> Some (c.GetValue self)
+                    | None -> None
+
+            let depth =
+                match depth with
+                    | Some d -> Some (d.GetValue self)
+                    | None -> None
+
+            let create (color : Option<#IFramebufferOutput>) (depth : Option<#IFramebufferOutput>) =
+                match color, depth with
+                    | Some c, Some d -> 
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Colors, c :> IFramebufferOutput
+                                DefaultSemantic.Depth, d :> IFramebufferOutput
+                            ]
+                        )
+                    | Some c, None ->
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Colors, c :> IFramebufferOutput
+                            ]
+                        )
+                    | None, Some d ->
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Depth, d :> IFramebufferOutput
+                            ]
+                        ) 
+                    | None, None -> failwith "empty framebuffer"
+                            
+            match current with
+                | Some (c,d,f) ->
+                    if c = color && d = depth then
+                        f
+                    else
+                        runtime.DeleteFramebuffer f
+                        let n = create color depth
+                        current <- Some (color, depth, n)
+                        n
+                | None -> 
+                    let n = create color depth
+                    current <- Some (color, depth, n)
+                    n
+        )
+
+    let private defaultView (m : IMod<IBackendTexture>) =
+        m |> Mod.map (fun t ->
+            { texture = t; level = 0; slice = 0 }
+        )
+
+
+    let private getResult (sem : Symbol) (t : RenderToFramebufferMod) =
+        RenderingResultMod(t, sem) :> IMod<_>
+
+    let renderTo (target : IMod<IFramebuffer>) (task : IRenderTask) : RenderToFramebufferMod =
+        RenderToFramebufferMod(task, target)
+
+    let renderToColorMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
+        let signature = task.FramebufferSignature
 
         //use lock = runtime.ContextLock
-        let color = runtime.CreateTexture(size, format, samples, ~~1)
-        let depth = runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
+        let depth = createRenderbuffer runtime samples size ~~RenderbufferFormat.Depth24Stencil8 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-        let fbo = 
-            runtime.CreateFramebuffer(
-                Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; level = 0; slice = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~(depth :> IFramebufferOutput)
-                ]
-            )
-
+        let fbo = createFramebuffer runtime signature (Some <| defaultView color) (Some depth)
 
         new SequentialRenderTask([|clear; task|]) 
             |> renderTo fbo
-            |> Mod.map (fun _ -> color :> ITexture)
+            |> getResult DefaultSemantic.Colors
+
 
     let renderToDepthMS (samples : IMod<int>) (size : IMod<V2i>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
+        let signature = task.FramebufferSignature
 
         //use lock = runtime.ContextLock
-        let depth = runtime.CreateTexture(size, ~~PixFormat.FloatGray, samples, ~~1)
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32
+        let clear = runtime.CompileClear(signature, ~~Map.empty, ~~(Some 1.0))
 
-        let fbo = 
-            runtime.CreateFramebuffer(
-                Map.ofList [
-                    DefaultSemantic.Depth, ~~({ texture = depth; level = 0; slice = 0 } :> IFramebufferOutput)
-                ]
-            )
+        
+
+        let fbo = createFramebuffer runtime signature None (Some <| defaultView depth)
 
 
+ 
         new SequentialRenderTask([|clear; task|]) 
             |> renderTo fbo
-            |> Mod.map (fun _ -> depth :> ITexture)
+            |> getResult DefaultSemantic.Depth
 
-    let renderToColorAndDepthMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+
+    let renderToColorAndDepthMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
+        let signature = task.FramebufferSignature
 
         //use lock = runtime.ContextLock
-        let color = runtime.CreateTexture(size, format, samples, ~~1)
-        let depth = runtime.CreateTexture(size, ~~PixFormat.FloatGray, samples, ~~1)
-        let clear = runtime.CompileClear(~~C4f.Black, ~~1.0)
+        let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
+        let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-        let fbo = 
-            runtime.CreateFramebuffer(
-                Map.ofList [
-                    DefaultSemantic.Colors, ~~({ texture = color; level = 0; slice = 0 } :> IFramebufferOutput)
-                    DefaultSemantic.Depth, ~~({ texture = depth; level = 0; slice = 0 } :> IFramebufferOutput)
-                ]
-            )
+        let fbo = createFramebuffer runtime signature (Some <| defaultView color) (Some <| defaultView depth)
 
-        let result = 
+        let renderResult = 
             new SequentialRenderTask([|clear; task|]) 
                 |> renderTo fbo
 
-        (Mod.map (fun _ -> color :> ITexture) result, Mod.map (fun _ -> depth :> ITexture) result)
+        let colorTexture = renderResult |> getResult DefaultSemantic.Colors
+        let depthTexture = renderResult |> getResult DefaultSemantic.Depth
 
+        colorTexture, depthTexture
 
-    let inline renderToColor (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+    let inline renderToColor (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         renderToColorMS ~~1 size format task
 
     let inline renderToDepth (size : IMod<V2i>) (task : IRenderTask) =
         renderToDepthMS ~~1 size task
 
-    let inline renderToColorAndDepth (size : IMod<V2i>) (format : IMod<PixFormat>) (task : IRenderTask) =
+    let inline renderToColorAndDepth (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
         renderToColorAndDepthMS ~~1 size format task
 
 [<AutoOpen>]
