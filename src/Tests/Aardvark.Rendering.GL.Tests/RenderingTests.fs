@@ -591,3 +591,95 @@ module RenderingTests =
         Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
 
         ()
+
+    [<Test>]
+    let ``[GL] concurrent group change``() =
+        let leaf = quad |> Sg.ofIndexedGeometry
+        let screen = V2i(2048, 2048)
+
+        let grid (size : V2i) (inner : ISg) =
+            [
+                for x in -size.X/2..size.X/2 do
+                    for y in -size.Y/2..size.Y/2 do
+                        yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
+            ]
+
+        let possibleObjects = grid (V2i(10,10)) leaf
+
+
+        let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
+        let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
+
+        let rootTrafo = Mod.init Trafo3d.Identity
+
+        let group = Sg.group possibleObjects |> Sg.trafo (~~Trafo3d.Scale(0.125))
+
+        let sg =
+            group
+                |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
+                |> Sg.trafo rootTrafo
+                |> Sg.viewTrafo ~~(cam |> CameraView.viewTrafo)
+                |> Sg.projTrafo ~~(frustum |> Frustum.toTrafo)
+
+        let useWindow = true
+        let runtime, app =
+            if useWindow then
+                let app = new Aardvark.Application.WinForms.OpenGlApplication()
+                let win = app.CreateGameWindow()
+                
+                app.Runtime, Some (app, win)
+            else
+                let runtime = new Runtime()
+                let ctx = new Context(runtime)
+                using ctx.ResourceLock (fun _ -> 
+                    Log.line "vendor:   %s" runtime.Context.Driver.vendor
+                    Log.line "renderer: %s" runtime.Context.Driver.renderer
+                )
+                runtime.Context <- ctx
+                runtime, None
+
+
+        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
+
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
+                DefaultSemantic.Depth, depth.Format
+            ]
+
+        let fbo = 
+            signature.CreateFramebuffer [
+                DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+            ]
+        
+        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+        let renderJobs = sg.RenderObjects()
+        let task = runtime.CompileRender(signature, renderJobs)
+        //let task2 = runtime.CompileRender renderJobs
+
+
+
+        clear.Run fbo |> ignore
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+        let stats = task.Run fbo
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+        Log.line "%.0f objects" stats.Statistics.DrawCallCount
+        let pi = runtime.Download(color, PixFormat.ByteRGBA)
+
+        OpenTK.Graphics.OpenGL4.GL.Sync()
+
+        if useWindow then app.Value |> snd |> (fun s -> s.RenderTask <- task; s.Run())
+        else
+            Telemetry.reset()
+            Log.line "starting update test"
+            let mutable iterations = 0
+            let sw = Stopwatch()
+            let disp = System.Collections.Generic.List()
+            sw.Start()
+            while sw.Elapsed.TotalSeconds < 5.0 do
+                task.Run(fbo) |> ignore
+            sw.Stop()
+
+        ()
