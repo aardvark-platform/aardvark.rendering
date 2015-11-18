@@ -68,11 +68,15 @@ type Program =
             x.Outputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
 
         member x.Uniforms =
-            let bu = x.UniformBlocks |> List.collect (fun b -> b.fields)
-            let uu = x.Uniforms 
-            bu @ uu |> List.map (fun u -> 
-                let t = UniformConverter.getExpectedType ConversionTarget.ConvertForBuffer u.uniformType
-                u.semantic, t
+            let bu = x.UniformBlocks |> List.collect (fun b -> b.fields |> List.map (fun f -> ConversionTarget.ConvertForBuffer, f))
+            let uu = x.Uniforms |> List.map (fun f -> ConversionTarget.ConvertForLocation, f)
+            bu @ uu |> List.map (fun (target, u) -> 
+                match u.uniformType with
+                    | SamplerType ->
+                        u.semantic, typeof<ITexture>
+                    | _ ->
+                        let t = UniformConverter.getExpectedType target u.uniformType
+                        u.semantic, t
             )
 
     member x.InterfaceBlock =
