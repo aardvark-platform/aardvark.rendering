@@ -21,7 +21,11 @@ type IBackendBuffer =
 type IBackendSurface =
     inherit ISurface
     abstract member Handle : obj
-
+    abstract member UniformGetters : SymbolDict<obj>
+    abstract member SamplerStates : SymbolDict<SamplerStateDescription>
+    abstract member Inputs : list<string * Type>
+    abstract member Outputs : list<string * Type>
+    abstract member Uniforms : list<string * Type>
 
 type IPreparedRenderObject =
     inherit IRenderObject

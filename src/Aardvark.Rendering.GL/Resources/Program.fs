@@ -58,6 +58,22 @@ type Program =
 
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
+        member x.UniformGetters = x.UniformGetters
+        member x.SamplerStates = x.SamplerStates
+
+        member x.Inputs = 
+            x.Inputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+
+        member x.Outputs = 
+            x.Outputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+
+        member x.Uniforms =
+            let bu = x.UniformBlocks |> List.collect (fun b -> b.fields)
+            let uu = x.Uniforms 
+            bu @ uu |> List.map (fun u -> 
+                let t = UniformConverter.getExpectedType ConversionTarget.ConvertForBuffer u.uniformType
+                u.semantic, t
+            )
 
     member x.InterfaceBlock =
         let uniformBlocks = 

@@ -70,6 +70,7 @@
     <Compile Include="FShadeSceneGraph.fs" />
     <Compile Include="DefaultSurfaces.fs" />
     <Compile Include="RenderTaskExtensions.fs" />
+    <Compile Include="RuntimeExtensions.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

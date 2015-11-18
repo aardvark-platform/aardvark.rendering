@@ -109,6 +109,45 @@ module UniformConverter =
         let t = getExpectedType target f.uniformType
         Marshal.SizeOf(t) * f.count
 
+
+module AttributeType =
+    let private attribTypes =
+        Dict.ofList [
+            ActiveAttribType.Double, typeof<float>
+            ActiveAttribType.DoubleMat2, typeof<M22d>
+            ActiveAttribType.DoubleMat2x3, typeof<M23d>
+            ActiveAttribType.DoubleMat3, typeof<M33d>
+            ActiveAttribType.DoubleMat3x4, typeof<M34d>
+            ActiveAttribType.DoubleMat4, typeof<M44d>
+            ActiveAttribType.DoubleVec2, typeof<V2d>
+            ActiveAttribType.DoubleVec3, typeof<V3d>
+            ActiveAttribType.DoubleVec4, typeof<V4d>
+
+            ActiveAttribType.Float, typeof<float32>
+            ActiveAttribType.FloatMat2, typeof<M22f>
+            ActiveAttribType.FloatMat2x3, typeof<M23f>
+            ActiveAttribType.FloatMat3, typeof<M33f>
+            ActiveAttribType.FloatMat3x4, typeof<M34f>
+            ActiveAttribType.FloatMat4, typeof<M44f>
+            ActiveAttribType.FloatVec2, typeof<V2f>
+            ActiveAttribType.FloatVec3, typeof<V3f>
+            ActiveAttribType.FloatVec4, typeof<V4f>
+
+            ActiveAttribType.Int, typeof<int>
+            ActiveAttribType.IntVec2, typeof<V2i>
+            ActiveAttribType.IntVec3, typeof<V3i>
+            ActiveAttribType.IntVec4, typeof<V4i>
+
+            ActiveAttribType.UnsignedInt, typeof<uint32>
+            ActiveAttribType.UnsignedIntVec3, typeof<C3ui>
+            ActiveAttribType.UnsignedIntVec4, typeof<C4ui>
+        ]
+
+    let getExpectedType (t : ActiveAttribType) =
+        match attribTypes.TryGetValue t with
+            | (true, t) -> t
+            | _ ->   failwithf "[GL] could not get expected type for attrib-type: %A" t
+
 module UniformPaths =
     // struct A { int a; float b; }
     // struct B { int c; A inner[2]; }
