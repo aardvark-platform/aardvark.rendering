@@ -69,8 +69,8 @@
     <Compile Include="SgCSharp.fs" />
     <Compile Include="FShadeSceneGraph.fs" />
     <Compile Include="DefaultSurfaces.fs" />
-    <Compile Include="RenderTaskExtensions.fs" />
     <Compile Include="RuntimeExtensions.fs" />
+    <Compile Include="RenderTaskExtensions.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

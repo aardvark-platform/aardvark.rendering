@@ -39,6 +39,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{80F74456
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.GL.Tests", "Tests\Aardvark.Rendering.GL.Tests\Aardvark.Rendering.GL.Tests.fsproj", "{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Examples", "Demo\Examples\Examples.fsproj", "{6C943F93-9A9A-4A57-9A75-A235A3443C22}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -105,6 +107,10 @@ Global
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C943F93-9A9A-4A57-9A75-A235A3443C22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C943F93-9A9A-4A57-9A75-A235A3443C22}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C943F93-9A9A-4A57-9A75-A235A3443C22}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C943F93-9A9A-4A57-9A75-A235A3443C22}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -121,5 +127,6 @@ Global
 		{275853BC-F5A5-485D-8F15-CBAB95735399} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{573E033A-71D3-4171-8464-27ADCAC4B2DC} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
+		{6C943F93-9A9A-4A57-9A75-A235A3443C22} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 	EndGlobalSection
 EndGlobal
