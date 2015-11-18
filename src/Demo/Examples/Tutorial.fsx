@@ -35,7 +35,7 @@ let quadSg =
 let sg =
     quadSg |> Sg.effect [
             DefaultSurfaces.trafo |> toEffect
-            DefaultSurfaces.constantColor C4f.Gray |> toEffect
+            DefaultSurfaces.constantColor C4f.Red |> toEffect
             ]
         |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
         |> Sg.projTrafo (perspective |> Mod.map Frustum.toTrafo      )
