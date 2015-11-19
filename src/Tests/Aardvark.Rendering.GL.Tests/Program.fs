@@ -3,5 +3,5 @@
 [<EntryPoint>]
 let main args =
     Aardvark.Base.Ag.initialize()
-    RenderingTests.``[GL] simple render to multiple texture``()
+    RenderingTests.``[GL] concurrent group change``()
     0

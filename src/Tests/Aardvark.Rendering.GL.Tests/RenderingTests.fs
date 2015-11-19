@@ -598,29 +598,26 @@ module RenderingTests =
         let leaf = quad |> Sg.ofIndexedGeometry
         let screen = V2i(2048, 2048)
 
-        let grid (cnt : int) (inner : ISg) =
+        let cnt = 1000
+        let s = int (ceil (sqrt (float cnt) / 2.0))
+
+        let grid (inner : ISg) =
             [
-                for x in 0 .. cnt do
-                   yield inner |> Sg.trafo (~~Trafo3d.Translation(float <| x % cnt, float <| x / cnt, 0.0))
+                for x in -s .. s do
+                    for y in -s .. s do
+                        yield inner |> Sg.trafo (~~Trafo3d.Translation(float x, float y, 0.0))
             ]
 
-
-        let mutable candidates = grid 1000 leaf 
-
-
-        let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
-        let frustum = Frustum.perspective 60.0 0.1 1000.0 (float screen.X / float screen.Y)
+        let mutable candidates = (grid leaf).RandomOrder() |> Seq.toList
 
         let g = Sg.group []//candidates
-        let rootTrafo = Mod.init Trafo3d.Identity
 
         let sg =
             g
-                |> Sg.trafo (~~Trafo3d.Scale(0.05))
+                |> Sg.trafo (~~Trafo3d.Scale(0.5 / float s))
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
-                |> Sg.trafo rootTrafo
-                |> Sg.viewTrafo ~~(cam |> CameraView.viewTrafo)
-                |> Sg.projTrafo ~~(frustum |> Frustum.toTrafo)
+                |> Sg.viewTrafo ~~(Trafo3d.Identity)
+                |> Sg.projTrafo ~~(Trafo3d.Identity)
 
         let useWindow = true
         let runtime, app =
@@ -639,59 +636,69 @@ module RenderingTests =
                 runtime.Context <- ctx
                 runtime, None
 
-
-        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
-        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
-
-        let signature =
-            runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
-                DefaultSemantic.Depth, depth.Format
-            ]
-
-        let fbo = 
-            signature.CreateFramebuffer [
-                DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-                DefaultSemantic.Depth, (depth :> IFramebufferOutput)
-            ]
-        
-        let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
         let renderJobs = sg.RenderObjects()
-        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), renderJobs)
-        //let task2 = runtime.CompileRender renderJobs
+        let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
+        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.UnmanagedOptimized, renderJobs)
+
+
+        for i in 0..cnt/2 do
+            match candidates with
+                | x::xs -> 
+                    candidates <- xs
+                    g.Add x |> ignore
+                | _ -> printfn "out of candiates"
+
+     
         let r = System.Random()
         let t = System.Threading.Tasks.Task.Factory.StartNew(fun () ->
             while true do
+                System.Threading.Thread.Sleep 10
                 printfn "c %A" g.Count
-                if r.NextDouble() < 0.7 then
+                if g.Count > 0 && r.NextDouble() > 0.5 then
+                    let a = g |> Seq.toArray |> (flip Array.get) (r.Next(0,g.Count))
+                    g.Remove(a) |> ignore
+                    candidates <- a::candidates
+                else
                     if List.isEmpty candidates |> not then
                         match candidates with
                             | x::xs -> 
-                            candidates <- xs
-                            g.Add x |> ignore
-                            System.Threading.Thread.Sleep 10
-                            printfn "to go: %d" (List.length candidates)
+                                candidates <- xs
+                                g.Add x |> ignore
                             | _ -> printfn "out of candiates"
-                else
-                    let a = g |> Seq.toArray |> (flip Array.get) (r.Next(0,g.Count))
-                    if g.Count > 0 then
-                        g.Remove(a) |> ignore
-                    else printfn "out of remove"
 
             renderJobs |> ASet.toList |> List.length |> printfn "got %d render objs"
         , System.Threading.Tasks.TaskCreationOptions.LongRunning) 
 
-        clear.Run fbo |> ignore
-        OpenTK.Graphics.OpenGL4.GL.Sync()
-        let stats = task.Run fbo
-        OpenTK.Graphics.OpenGL4.GL.Sync()
-        Log.line "%.0f objects" stats.Statistics.DrawCallCount
-        let pi = runtime.Download(color, PixFormat.ByteRGBA)
-        pi.SaveAsImage(@"C:\Aardwork\urdar.png")
-        OpenTK.Graphics.OpenGL4.GL.Sync()
 
         if useWindow then app.Value |> snd |> (fun s -> s.RenderTask <- RenderTask.ofList [clear; task]; s.Run())
         else
+
+
+
+            let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
+            let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
+
+            let signature =
+                runtime.CreateFramebufferSignature [
+                    DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
+                    DefaultSemantic.Depth, depth.Format
+                ]
+
+            let fbo = 
+                signature.CreateFramebuffer [
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                ]
+        
+
+            clear.Run fbo |> ignore
+            OpenTK.Graphics.OpenGL4.GL.Sync()
+            let stats = task.Run fbo
+            OpenTK.Graphics.OpenGL4.GL.Sync()
+            Log.line "%.0f objects" stats.Statistics.DrawCallCount
+            let pi = runtime.Download(color, PixFormat.ByteRGBA)
+            pi.SaveAsImage(@"C:\Aardwork\urdar.png")
+            OpenTK.Graphics.OpenGL4.GL.Sync()
             Telemetry.reset()
             Log.line "starting update test"
             let mutable iterations = 0

@@ -60,6 +60,7 @@
   </Target>
   -->
   <ItemGroup>
+    <Compile Include="ShaderTests.fs" />
     <Compile Include="RenderingTests.fs" />
     <Compile Include="Program.fs" />
     <Content Include="App.config" />
