@@ -605,7 +605,7 @@ module RenderingTests =
             ]
 
 
-        let mutable candidates = grid 10 leaf 
+        let mutable candidates = grid 1000 leaf 
 
 
         let cam = CameraView.lookAt (0.5 * V3d.OOI) V3d.Zero V3d.OIO
@@ -659,16 +659,24 @@ module RenderingTests =
         let renderJobs = sg.RenderObjects()
         let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), renderJobs)
         //let task2 = runtime.CompileRender renderJobs
-
+        let r = System.Random()
         let t = System.Threading.Tasks.Task.Factory.StartNew(fun () ->
-            while List.isEmpty candidates |> not do
-                match candidates with
-                 | x::xs -> 
-                    candidates <- xs
-                    g.Add x |> ignore
-                    System.Threading.Thread.Sleep 10
-                    printfn "to go: %d" (List.length candidates)
-                 | _ -> ()
+            while true do
+                printfn "c %A" g.Count
+                if r.NextDouble() < 0.7 then
+                    if List.isEmpty candidates |> not then
+                        match candidates with
+                            | x::xs -> 
+                            candidates <- xs
+                            g.Add x |> ignore
+                            System.Threading.Thread.Sleep 10
+                            printfn "to go: %d" (List.length candidates)
+                            | _ -> printfn "out of candiates"
+                else
+                    let a = g |> Seq.toArray |> (flip Array.get) (r.Next(0,g.Count))
+                    if g.Count > 0 then
+                        g.Remove(a) |> ignore
+                    else printfn "out of remove"
 
             renderJobs |> ASet.toList |> List.length |> printfn "got %d render objs"
         , System.Threading.Tasks.TaskCreationOptions.LongRunning) 
