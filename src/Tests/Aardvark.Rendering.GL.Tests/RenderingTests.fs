@@ -636,10 +636,30 @@ module RenderingTests =
                 runtime.Context <- ctx
                 runtime, None
 
+
+        let win = app.Value |> snd
+
+
         let renderJobs = sg.RenderObjects()
         let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
-        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.UnmanagedOptimized, renderJobs)
+        let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.NativeOptimized, renderJobs)
 
+        win.Keyboard.KeyDown(Keys.P).Values.Subscribe(fun _ ->
+            lock task (fun () ->
+                let task = task |> unbox<Aardvark.Rendering.GL.GroupedRenderTask.RenderTask>
+                let code = task.Program.Disassemble() |> unbox<Instruction[][]>
+
+                let mutable fragment = 0
+                for part in code do
+                    Log.start "fragment %d" fragment
+                    for i in part do
+                        Log.line "%A" i
+                    Log.stop()
+                    fragment <- fragment + 1
+                printfn "press Enter to continue"
+                Console.ReadLine() |> ignore
+            )
+        ) |> ignore
 
         for i in 0..cnt/2 do
             match candidates with

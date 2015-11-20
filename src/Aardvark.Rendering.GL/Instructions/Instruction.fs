@@ -68,7 +68,7 @@ type InstructionCode =
 /// Note that the primary constructor is private and instructions can only
 /// be created using the static creator-functions.
 /// </summary>
-type Instruction private(code : InstructionCode, args : obj[]) =
+type Instruction internal(code : InstructionCode, args : obj[]) =
 
     // auxillary functions for converting fractional values
     // to their integer-represenations for uniformity of the underlying
