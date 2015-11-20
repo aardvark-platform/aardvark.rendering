@@ -326,11 +326,11 @@ module GroupedRenderTask =
 
         let nativeOptimized (compileDelta : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) =
             let inner = FragmentHandler.native 6
-            FragmentHandler.warpDifferential instructionToCall compileDelta inner
+            FragmentHandler.warpDifferential instructionToCall ExecutionContext.callToInstruction compileDelta inner
 
         let nativeUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) =
             let inner = FragmentHandler.native 6
-            FragmentHandler.wrapSimple instructionToCall compile inner
+            FragmentHandler.wrapSimple instructionToCall ExecutionContext.callToInstruction compile inner
 
 
         let private glvmBase (mode : VMMode) (vmStats : ref<VMStats>) (compileDelta : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
@@ -384,6 +384,7 @@ module GroupedRenderTask =
                 writeNext = fun prev next -> GLVM.vmLink(prev, next); 0
                 isNext = fun prev frag -> GLVM.vmGetNext prev = frag
                 dispose = fun () -> GLVM.vmDelete prolog; GLVM.vmDelete epilog
+                disassemble = fun f -> []
             }
 
         let glvmOptimized (vmStats : ref<VMStats>) (compile : Option<PreparedRenderObject> -> PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
@@ -440,6 +441,7 @@ module GroupedRenderTask =
                 writeNext = fun prev next -> prev.Next <- next; 0
                 isNext = fun prev frag -> prev.Next = frag
                 dispose = fun () -> ()
+                disassemble = fun f -> f.Instructions |> Array.toList
             }  
 
         let managedUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
@@ -498,6 +500,7 @@ module GroupedRenderTask =
         let setHandler (handler : unit -> FragmentHandler<unit, PreparedRenderObject, Instruction, 'a>) =
             hasProgram <- true
             program <- preparedObjects |> AdaptiveProgram.custom Comparer.Default handler
+            program.AutoDefragmentation <- false
 
         let init(x : AbstractRenderTaskWithResources) =
             match config.execution, config.redundancy with
@@ -542,6 +545,7 @@ module GroupedRenderTask =
                 | _ ->
                     failwithf "unknown backend configuration: %A/%A" config.execution config.redundancy
 
+        member x.Program = program
 
         override x.Run(fbo) =
             if not hasProgram then 
@@ -572,6 +576,7 @@ module GroupedRenderTask =
             executionTime.Stop()
 
             stats <- stats + x.GetStats()
+
 
             { stats with 
                 ExecutionTime = executionTime.Elapsed 

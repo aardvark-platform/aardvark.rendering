@@ -131,6 +131,67 @@ module ExecutionContext =
 
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 
+
+    let private instructionCtors =
+        Dict.ofList [
+            OpenGl.Pointers.BindVertexArray, fun args -> Instruction(InstructionCode.BindVertexArray, args)
+            OpenGl.Pointers.BindProgram, fun args -> Instruction(InstructionCode.BindProgram, args)
+            OpenGl.Pointers.ActiveTexture, fun args -> Instruction(InstructionCode.ActiveTexture, args)
+            OpenGl.Pointers.BindSampler, fun args -> Instruction(InstructionCode.BindSampler, args)
+            OpenGl.Pointers.BindTexture, fun args -> Instruction(InstructionCode.BindTexture, args)
+            OpenGl.Pointers.BindBuffer, fun args -> Instruction(InstructionCode.BindBuffer, args)
+            OpenGl.Pointers.BindBufferBase, fun args -> Instruction(InstructionCode.BindBufferBase, args)
+            OpenGl.Pointers.BindBufferRange, fun args -> Instruction(InstructionCode.BindBufferRange, args)
+            OpenGl.Pointers.BindFramebuffer, fun args -> Instruction(InstructionCode.BindFramebuffer, args)
+            OpenGl.Pointers.Viewport, fun args -> Instruction(InstructionCode.Viewport, args)
+            OpenGl.Pointers.Enable, fun args -> Instruction(InstructionCode.Enable, args)
+            OpenGl.Pointers.Disable, fun args -> Instruction(InstructionCode.Disable, args)
+            OpenGl.Pointers.DepthFunc, fun args -> Instruction(InstructionCode.DepthFunc, args)
+            OpenGl.Pointers.CullFace, fun args -> Instruction(InstructionCode.CullFace, args)
+            OpenGl.Pointers.BlendFuncSeparate, fun args -> Instruction(InstructionCode.BlendFuncSeparate, args)
+            OpenGl.Pointers.BlendEquationSeparate, fun args -> Instruction(InstructionCode.BlendEquationSeparate, args)
+            OpenGl.Pointers.BlendColor, fun args -> Instruction(InstructionCode.BlendColor, args)
+            OpenGl.Pointers.PolygonMode, fun args -> Instruction(InstructionCode.PolygonMode, args)
+            OpenGl.Pointers.StencilFuncSeparate, fun args -> Instruction(InstructionCode.StencilFuncSeparate, args)
+            OpenGl.Pointers.StencilOpSeparate, fun args -> Instruction(InstructionCode.StencilOpSeparate, args)
+            OpenGl.Pointers.PatchParameter, fun args -> Instruction(InstructionCode.PatchParameter, args)
+            OpenGl.Pointers.DrawElements, fun args -> Instruction(InstructionCode.DrawElements, args)
+            OpenGl.Pointers.DrawArrays, fun args -> Instruction(InstructionCode.DrawArrays, args)
+            OpenGl.Pointers.DrawElementsInstanced, fun args -> Instruction(InstructionCode.DrawElementsInstanced, args)
+            OpenGl.Pointers.DrawArraysInstanced, fun args -> Instruction(InstructionCode.DrawArraysInstanced, args)
+            OpenGl.Pointers.Clear, fun args -> Instruction(InstructionCode.Clear, args)
+            OpenGl.Pointers.BindImageTexture, fun args -> Instruction(InstructionCode.BindImageTexture, args)
+            OpenGl.Pointers.ClearColor, fun args -> Instruction(InstructionCode.ClearColor, args)
+            OpenGl.Pointers.ClearDepth, fun args -> Instruction(InstructionCode.ClearDepth, args)
+            OpenGl.Pointers.GetError, fun args -> Instruction(InstructionCode.GetError, args)
+            OpenGl.Pointers.VertexAttribPointer, fun args -> Instruction(InstructionCode.VertexAttribPointer, args)
+
+            OpenGl.Pointers.Uniform1fv, fun args -> Instruction(InstructionCode.Uniform1fv, args)
+            OpenGl.Pointers.Uniform1iv, fun args -> Instruction(InstructionCode.Uniform1iv, args)
+            OpenGl.Pointers.Uniform2fv, fun args -> Instruction(InstructionCode.Uniform2fv, args)
+            OpenGl.Pointers.Uniform2iv, fun args -> Instruction(InstructionCode.Uniform2iv, args)
+            OpenGl.Pointers.Uniform3fv, fun args -> Instruction(InstructionCode.Uniform3fv, args)
+            OpenGl.Pointers.Uniform3iv, fun args -> Instruction(InstructionCode.Uniform3iv, args)
+            OpenGl.Pointers.Uniform4fv, fun args -> Instruction(InstructionCode.Uniform4fv, args)
+            OpenGl.Pointers.Uniform4iv, fun args -> Instruction(InstructionCode.Uniform4iv, args)
+            OpenGl.Pointers.UniformMatrix2fv, fun args -> Instruction(InstructionCode.UniformMatrix2fv, args)
+            OpenGl.Pointers.UniformMatrix3fv, fun args -> Instruction(InstructionCode.UniformMatrix3fv, args)
+            OpenGl.Pointers.UniformMatrix4fv, fun args -> Instruction(InstructionCode.UniformMatrix4fv, args)
+            OpenGl.Pointers.EnableVertexAttribArray, fun args -> Instruction(InstructionCode.EnableVertexAttribArray, args)
+            OpenGl.Pointers.TexParameteri, fun args -> Instruction(InstructionCode.TexParameteri, args)
+            OpenGl.Pointers.TexParameterf, fun args -> Instruction(InstructionCode.TexParameterf, args)
+
+            OpenGl.Pointers.VertexAttrib1f, fun args -> Instruction(InstructionCode.VertexAttrib1f, args)
+            OpenGl.Pointers.VertexAttrib2f, fun args -> Instruction(InstructionCode.VertexAttrib2f, args)
+            OpenGl.Pointers.VertexAttrib3f, fun args -> Instruction(InstructionCode.VertexAttrib3f, args)
+            OpenGl.Pointers.VertexAttrib4f, fun args -> Instruction(InstructionCode.VertexAttrib4f, args)
+        ]
+
+    let callToInstruction (ptr : nativeint, args : obj[]) =
+        match instructionCtors.TryGetValue ptr with
+            | (true, ctor) -> ctor args
+            | _ -> failwithf "could not get instruction-code for pointer: %A" ptr
+ 
     /// <summary>
     /// translates an instruction to a compiled-instruction by
     /// resolving the needed native function.

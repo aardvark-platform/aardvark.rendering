@@ -158,6 +158,10 @@ type ResourceManagerExtensions private() =
             )
         ))
 
+    static let useOwnBufferForBlock (b : UniformBlock) =
+        // TODO: find appropriate heuristic
+        false
+
     [<Extension>]
     static member Prepare (x : ResourceManager, fboSignature : IFramebufferSignature, rj : RenderObject) : PreparedRenderObject =
         // use a context token to avoid making context current/uncurrent repeatedly
@@ -168,18 +172,21 @@ type ResourceManagerExtensions private() =
         let prog = program.Resource.GetValue()
 
         // create all UniformBuffers requested by the program
-        let uniformBuffers =  Map.empty
-//            prog.UniformBlocks 
-//                |> List.map (fun block ->
-//                    let mutable values = []
-//                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
-//                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
-//                   )
-//                |> Map.ofList
+        let uniformBuffers =
+            prog.UniformBlocks 
+                |> List.filter useOwnBufferForBlock
+                |> List.map (fun block ->
+                    let mutable values = []
+                    // TODO: maybe don't ignore values (are buffers actually equal when using identical values)
+                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms, &values)
+                   )
+                |> Map.ofList
 
 
         let uniformBufferPoolsWithBlocks =
-            prog.UniformBlocks |> List.map (fun b -> b, x.CreateUniformBufferPool b)
+            prog.UniformBlocks 
+                |> List.filter (not << useOwnBufferForBlock)
+                |> List.map (fun b -> b, x.CreateUniformBufferPool b)
 
 
         // create all UniformBuffers requested by the program
