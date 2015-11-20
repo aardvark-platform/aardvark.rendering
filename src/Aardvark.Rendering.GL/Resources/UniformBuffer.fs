@@ -512,7 +512,7 @@ type UniformBufferPool =
                         for r in required do
                             let offset = r.Pointer.Offset
                             let size = nativeint r.Pointer.Size
-                            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, x.Storage.Pointer)
+                            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, x.Storage.Pointer + offset)
                             GL.Check "could not upload uniform buffer pool"      
                 )
 
