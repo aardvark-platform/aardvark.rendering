@@ -24,6 +24,7 @@ type PreparedRenderObject =
         IndexBuffer : Option<ChangeableResource<Buffer>>
         VertexArray : ChangeableResource<VertexArrayObject>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
+        DisposeAllViews : IDisposable
     } 
 
     interface IRenderObject with
@@ -104,6 +105,7 @@ type PreparedRenderObject =
         x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
         x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
         x.Program.Dispose() 
+        x.DisposeAllViews.Dispose()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -125,6 +127,7 @@ type PreparedRenderObject =
 
 [<AutoOpen>]
 module ``Prepared render object extensions`` =
+    let private noDisposable = { new IDisposable with member x.Dispose() = () }
     let private empty = {
                 Context = Unchecked.defaultof<_>
                 Original = RenderObject.Empty
@@ -140,6 +143,7 @@ module ``Prepared render object extensions`` =
                 IndexBuffer = None
                 VertexArray = Unchecked.defaultof<_>
                 VertexAttributeValues = Map.empty
+                DisposeAllViews = noDisposable
             }
 
     type PreparedRenderObject with
@@ -152,11 +156,13 @@ type ResourceManagerExtensions private() =
     static let viewCache = System.Collections.Concurrent.ConcurrentDictionary<BufferView * ChangeableResource<Aardvark.Rendering.GL.Buffer>, IMod<AttributeDescription>>()
 
     static let createView (frequency : AttributeFrequency) (m : BufferView) (b : ChangeableResource<Aardvark.Rendering.GL.Buffer>) =
-        viewCache.GetOrAdd(((m,b)), (fun (m,b) ->
+        let v = viewCache.GetOrAdd(((m,b)), (fun (m,b) ->
             b.Resource |> Mod.map (fun b ->
                 { Type = m.ElementType; Frequency = frequency; Normalized = false; Stride = m.Stride; Offset = m.Offset; Buffer = b }
             )
         ))
+        v, { new IDisposable with
+                member x.Dispose() = viewCache.TryRemove((m,b)) |> ignore }
 
     static let useOwnBufferForBlock (b : UniformBlock) =
         // TODO: find appropriate heuristic
@@ -170,6 +176,8 @@ type ResourceManagerExtensions private() =
         // create a program and get its handle (ISSUE: assumed to be constant here)
         let program = x.CreateSurface(fboSignature, rj.Surface)
         let prog = program.Resource.GetValue()
+
+        let createdViews = System.Collections.Generic.List()
 
         // create all UniformBuffers requested by the program
         let uniformBuffers =
@@ -257,7 +265,8 @@ type ResourceManagerExtensions private() =
                     match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                         | Some value ->
                             let dep = x.CreateBuffer(value.Buffer)
-                            let view = createView AttributeFrequency.PerVertex value dep
+                            let view,d = createView AttributeFrequency.PerVertex value dep
+                            createdViews.Add d
                             (v.attributeIndex, (dep, view, value.Buffer))
                         | _  -> 
                             match rj.InstanceAttributes with
@@ -267,7 +276,8 @@ type ResourceManagerExtensions private() =
                                     match rj.InstanceAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                                         | Some value ->
                                             let dep = x.CreateBuffer(value.Buffer)
-                                            let view = createView (AttributeFrequency.PerInstances 1) value dep
+                                            let view,d = createView (AttributeFrequency.PerInstances 1) value dep
+                                            createdViews.Add d
                                             (v.attributeIndex, (dep, view, value.Buffer))
                                         | _ -> 
                                             failwithf "could not get attribute %A" v.semantic
@@ -295,6 +305,9 @@ type ResourceManagerExtensions private() =
                 )
             )
 
+        let disposeAllViews =
+            { new IDisposable with member x.Dispose() = createdViews |> Seq.iter (fun d -> d.Dispose()) }
+
         // finally return the PreparedRenderObject
         {
             Context = x.Context
@@ -311,4 +324,5 @@ type ResourceManagerExtensions private() =
             IndexBuffer = index
             VertexArray = vao
             VertexAttributeValues = attributeValues
+            DisposeAllViews = disposeAllViews
         }
