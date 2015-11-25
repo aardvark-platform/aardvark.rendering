@@ -115,6 +115,7 @@ module Error =
             let arr : uint32[] = null
             let severity = DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
             GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
+            GL.Check "SetupDebugOutput"
 
     type GLTimer private() =
         let counter = GL.GenQuery()

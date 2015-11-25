@@ -44,9 +44,11 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
 
         if ExecutionContext.framebuffersSupported then
             GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-            let drawBuffers = Array.init fbo.Attachments.Count (fun i -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
-            GL.DrawBuffers(drawBuffers.Length, drawBuffers)
             GL.Check "could not bind framebuffer"
+            let drawBuffers = Array.init fbo.Attachments.Count (fun i -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
+            if handle <> 0 then
+                GL.DrawBuffers(drawBuffers.Length, drawBuffers)
+                GL.Check "DrawBuffers errored"
         elif handle <> 0 then
             failwithf "cannot render to texture on this OpenGL driver"
 
@@ -81,6 +83,7 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
                 match fbo with
                     | :? Framebuffer as fbo -> fbo
                     | _ -> failwithf "unsupported framebuffer: %A" fbo
+
 
             let debugState = pushDebugOutput()
             let fboState = pushFbo fbo
