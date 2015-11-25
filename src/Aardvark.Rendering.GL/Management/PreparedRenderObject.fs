@@ -22,9 +22,9 @@ type PreparedRenderObject =
         Textures : Map<int, ChangeableResource<Texture> * ChangeableResource<Sampler>>
         Buffers : Map<int, ChangeableResource<Buffer> * IMod<AttributeDescription>>
         IndexBuffer : Option<ChangeableResource<Buffer>>
-        VertexArray : ChangeableResource<VertexArrayObject>
+        mutable VertexArray : ChangeableResource<VertexArrayObject>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
-        DisposeAllViews : IDisposable
+        mutable DisposeAllViews : IDisposable
     } 
 
     interface IRenderObject with
@@ -106,6 +106,8 @@ type PreparedRenderObject =
         x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
         x.Program.Dispose() 
         x.DisposeAllViews.Dispose()
+        x.DisposeAllViews <- Unchecked.defaultof<_>
+        x.VertexArray <- Unchecked.defaultof<_>
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
