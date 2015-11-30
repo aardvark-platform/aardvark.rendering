@@ -20,11 +20,11 @@ type PreparedRenderObject =
         UniformBufferViews : Map<int, ChangeableResource<UniformBufferView>>
         Uniforms : Map<int, ChangeableResource<UniformLocation>>
         Textures : Map<int, ChangeableResource<Texture> * ChangeableResource<Sampler>>
-        Buffers : Map<int, ChangeableResource<Buffer> * IMod<AttributeDescription>>
+        Buffers : list<int * BufferView * AttributeFrequency * ChangeableResource<Buffer>>
         IndexBuffer : Option<ChangeableResource<Buffer>>
         mutable VertexArray : ChangeableResource<VertexArrayObject>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
-        mutable DisposeAllViews : IDisposable
+        mutable IsDisposed : bool
     } 
 
     interface IRenderObject with
@@ -81,7 +81,7 @@ type PreparedRenderObject =
                 s.UpdateCPU(caller)
                 s.UpdateGPU(caller) |> ignore
 
-        for (_,(b,_)) in x.Buffers |> Map.toSeq do
+        for (_,_,_,b) in x.Buffers  do
             if b.OutOfDate then
                 b.UpdateCPU(caller)
                 b.UpdateGPU(caller) |> ignore
@@ -98,16 +98,16 @@ type PreparedRenderObject =
             x.VertexArray.UpdateGPU(caller) |> ignore
 
     member x.Dispose() =
-        x.VertexArray.Dispose() 
-        x.Buffers |> Map.iter (fun _ (b,_) -> b.Dispose())
-        x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
-        x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
-        x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
-        x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-        x.Program.Dispose() 
-        x.DisposeAllViews.Dispose()
-        x.DisposeAllViews <- Unchecked.defaultof<_>
-        x.VertexArray <- Unchecked.defaultof<_>
+        if not x.IsDisposed then
+            x.IsDisposed <- true
+            x.VertexArray.Dispose() 
+            x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
+            x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
+            x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
+            x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
+            x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
+            x.Program.Dispose() 
+            x.VertexArray <- Unchecked.defaultof<_>
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -129,7 +129,7 @@ type PreparedRenderObject =
 
 [<AutoOpen>]
 module ``Prepared render object extensions`` =
-    let private noDisposable = { new IDisposable with member x.Dispose() = () }
+
     let private empty = {
                 Context = Unchecked.defaultof<_>
                 Original = RenderObject.Empty
@@ -141,11 +141,11 @@ module ``Prepared render object extensions`` =
                 UniformBufferViews = Map.empty
                 Uniforms = Map.empty
                 Textures = Map.empty
-                Buffers = Map.empty
+                Buffers = []
                 IndexBuffer = None
                 VertexArray = Unchecked.defaultof<_>
                 VertexAttributeValues = Map.empty
-                DisposeAllViews = noDisposable
+                IsDisposed = false
             }
 
     type PreparedRenderObject with
@@ -155,17 +155,6 @@ module ``Prepared render object extensions`` =
 [<Extension; AbstractClass; Sealed>]
 type ResourceManagerExtensions private() =
   
-    static let viewCache = System.Collections.Concurrent.ConcurrentDictionary<BufferView * ChangeableResource<Aardvark.Rendering.GL.Buffer>, IMod<AttributeDescription>>()
-
-    static let createView (frequency : AttributeFrequency) (m : BufferView) (b : ChangeableResource<Aardvark.Rendering.GL.Buffer>) =
-        let v = viewCache.GetOrAdd(((m,b)), (fun (m,b) ->
-            b.Resource |> Mod.map (fun b ->
-                { Type = m.ElementType; Frequency = frequency; Normalized = false; Stride = m.Stride; Offset = m.Offset; Buffer = b }
-            )
-        ))
-        v, { new IDisposable with
-                member x.Dispose() = viewCache.TryRemove((m,b)) |> ignore }
-
     static let useOwnBufferForBlock (b : UniformBlock) =
         // TODO: find appropriate heuristic
         false
@@ -267,9 +256,7 @@ type ResourceManagerExtensions private() =
                     match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                         | Some value ->
                             let dep = x.CreateBuffer(value.Buffer)
-                            let view,d = createView AttributeFrequency.PerVertex value dep
-                            createdViews.Add d
-                            (v.attributeIndex, (dep, view, value.Buffer))
+                            v.attributeIndex, value, AttributeFrequency.PerVertex, dep
                         | _  -> 
                             match rj.InstanceAttributes with
                                 | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" v.semantic rj
@@ -278,13 +265,10 @@ type ResourceManagerExtensions private() =
                                     match rj.InstanceAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                                         | Some value ->
                                             let dep = x.CreateBuffer(value.Buffer)
-                                            let view,d = createView (AttributeFrequency.PerInstances 1) value dep
-                                            createdViews.Add d
-                                            (v.attributeIndex, (dep, view, value.Buffer))
+                                            v.attributeIndex, value, (AttributeFrequency.PerInstances 1), dep
                                         | _ -> 
                                             failwithf "could not get attribute %A" v.semantic
                    )
-                |> Map.ofList
 
         // create the index buffer (if present)
         let index =
@@ -293,22 +277,19 @@ type ResourceManagerExtensions private() =
 
         // create the VertexArrayObject
         let vao =
-            x.CreateVertexArrayObject(buffers |> Map.toList |> List.map (fun (i,(_,a,_)) -> (i,a)), index)
+            x.CreateVertexArrayObject(buffers, index)
 
         let attributeValues =
             buffers 
-                |> Map.map (fun k (_,_,v) ->
-                    v |> Mod.map (fun v ->
+                |> List.map (fun (i,v,_,_) ->
+                    i, v.Buffer |> Mod.map (fun v ->
                         match v with
                             | :? NullBuffer as nb -> 
                                 Some nb.Value
                             | _ -> 
                                 None
-                )
-            )
-
-        let disposeAllViews =
-            { new IDisposable with member x.Dispose() = createdViews |> Seq.iter (fun d -> d.Dispose()) }
+                    )
+                ) |> Map.ofList
 
         // finally return the PreparedRenderObject
         {
@@ -322,9 +303,9 @@ type ResourceManagerExtensions private() =
             UniformBufferViews = uniformBufferViews
             Uniforms = uniforms
             Textures = textures
-            Buffers = buffers |> Map.map (fun k (a,b,_) -> a,b)
+            Buffers = buffers
             IndexBuffer = index
             VertexArray = vao
             VertexAttributeValues = attributeValues
-            DisposeAllViews = disposeAllViews
+            IsDisposed = false
         }

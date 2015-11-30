@@ -339,6 +339,7 @@ module ResourceManager =
         static let sampler = Sym.ofString "Sampler"
         static let vao = Sym.ofString "VertexArrayObject"
         static let uniformBufferViews = Sym.ofString "UniformBufferView"
+        static let bufferViews = Sym.ofString "BufferView"
 
         let bufferHandler = 
             if shareBuffers then 
@@ -457,6 +458,7 @@ module ResourceManager =
                       kind = ResourceKind.Buffer 
                     } 
             )
+
 
         /// <summary>
         /// creates a buffer from a mod-array simply updating its
@@ -803,52 +805,46 @@ module ResourceManager =
                       kind = ResourceKind.SamplerState }
             )
 
-        member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>, index : ChangeableResource<Buffer>) =
+        member x.CreateVertexArrayObject (bindings : list<int * BufferView * AttributeFrequency * ChangeableResource<Buffer>>, index : Option<ChangeableResource<Buffer>>) =
             cache.[vao].GetOrAdd(
                 [bindings; index], 
                 fun self ->
 
-                    let handle = ctx.CreateVertexArrayObject(index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
-                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IAdaptiveObject)
+                    let createView (index, view:BufferView, frequency, buffer:ChangeableResource<Buffer>) =
+                         { Type = view.ElementType; Frequency = frequency; Normalized = false; 
+                            Stride = view.Stride; Offset = view.Offset; Buffer = buffer.Resource.GetValue self }
+
+                    let handle = 
+                        match index with 
+                         | Some index -> ctx.CreateVertexArrayObject(index.Resource.GetValue(self), bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
+                         | None -> ctx.CreateVertexArrayObject(bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
+                    
+                    let attributes = bindings |> List.map (fun (_,_,_,b) -> b :> IAdaptiveObject)
+                    let dependencies = 
+                        match index with
+                         | Some index -> (index.Resource :> IAdaptiveObject)::attributes
+                         | None -> attributes
 
                     { trackChangedInputs = true
-                      dependencies = (index.Resource :> IAdaptiveObject)::attributes
+                      dependencies = dependencies
                       updateCPU = fun _ -> ()
                       updateGPU = fun () -> 
-                        ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
-                        FrameStatistics.Zero
+                         match index with 
+                          | Some index -> ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
+                          | None -> ctx.Update(handle, bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
+                    
+                         FrameStatistics.Zero
                       destroy = fun () -> ctx.Delete(handle)
                       resource = Mod.constant handle 
                       kind = ResourceKind.VertexArrayObject
                     }
             )
 
-        member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>) =
-            cache.[vao].GetOrAdd(
-                [bindings], 
-                fun self ->
+        member x.CreateVertexArrayObject (bindings :  list<int * BufferView * AttributeFrequency * ChangeableResource<Buffer>>)  =
+            x.CreateVertexArrayObject(bindings, None)
 
-                    let handle = ctx.CreateVertexArrayObject(bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
-                    let attributes = bindings |> List.map snd |> List.map (fun b -> b :> IAdaptiveObject)
-
-                    { trackChangedInputs = true
-                      dependencies = attributes
-                      updateCPU = fun _ -> ()
-                      updateGPU = fun () -> 
-                        ctx.Update(handle,bindings |> List.map (fun (i,r) -> i, r.GetValue(self)))
-                        FrameStatistics.Zero
-
-                      destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.constant handle
-                      kind = ResourceKind.VertexArrayObject 
-                    }
-            )
-
-        member x.CreateVertexArrayObject (bindings : list<int * IMod<AttributeDescription>>, index : Option<ChangeableResource<Buffer>>) =
-            match index with
-                | Some index -> x.CreateVertexArrayObject(bindings, index)
-                | None -> x.CreateVertexArrayObject(bindings)
-
+        member x.CreateVertexArrayObject (bindings: list<int * BufferView * AttributeFrequency * ChangeableResource<Buffer>>, index : ChangeableResource<Buffer>)  =
+            x.CreateVertexArrayObject(bindings, Some index)
 
 
         new(ctx, shareTextures, shareBuffers) = ResourceManager(null, ctx, shareTextures, shareBuffers)

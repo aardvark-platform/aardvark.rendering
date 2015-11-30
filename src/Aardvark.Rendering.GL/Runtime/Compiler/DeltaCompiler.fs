@@ -138,7 +138,7 @@ module DeltaCompiler =
                         // TODO: UniformLocations cannot change structurally atm.
                         yield ExecutionContext.bindUniformLocation id (u.Resource.GetValue())
 
-            do! me.Buffers |> Map.toSeq |> Seq.map (fun (_,(b,_)) -> b) |> useResources
+            do! me.Buffers |> List.map (fun (_,_,_,b) -> b) |> useResources
             do! useResource me.VertexArray
 
             // bind the VAO (if needed)

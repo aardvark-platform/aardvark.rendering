@@ -316,70 +316,74 @@ module internal Interpreter =
             state <- n
         ()
 
-type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRenderObject>) as this =
+
+type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRenderObject>)  =
     
     inherit AdaptiveObject()
     let r = l.GetReader()
     let inputs = ReferenceCountingSet<IAdaptiveObject>()
-    do r.AddOutput this
 
     let mutable frameId = 0UL
 
-    let addInput (v : IAdaptiveObject) =
-        if v <> null && inputs.Add v then
-            v.AddOutput this
-
-    let removeInput (v : IAdaptiveObject) =
-        if v <> null && inputs.Remove v then
-            v.RemoveOutput this
-
-    let add (rj : NvgRenderObject) =
-        addInput rj.transform
-        addInput rj.scissor
-        addInput rj.fillColor
-        addInput rj.isActive
-
-        match rj.command with
-            | Left p ->
-                addInput p.lineCap
-                addInput p.lineJoin
-                addInput p.mode
-                addInput p.primitive
-                addInput p.strokeColor
-                addInput p.strokeWidth
-                addInput p.winding
-            | Right t ->
-                addInput t.align
-                addInput t.blur
-                addInput t.content
-                addInput t.font
-                addInput t.letterSpacing
-                addInput t.lineHeight
-                addInput t.size
-
-    let remove (rj : NvgRenderObject) =
-        removeInput rj.transform
-        removeInput rj.scissor
-        removeInput rj.fillColor
-        removeInput rj.isActive
-
-        match rj.command with
-            | Left p ->
-                removeInput p.lineCap
-                removeInput p.lineJoin
-                removeInput p.mode
-                removeInput p.primitive
-                removeInput p.strokeColor
-                removeInput p.strokeWidth
-                removeInput p.winding
-            | Right t ->
-                removeInput t.align
-                removeInput t.blur
-                removeInput t.content
-                removeInput t.font
-                removeInput t.letterSpacing
-                removeInput t.lineHeight
-                removeInput t.size
+//    let addInput (v : IAdaptiveObject) =
+//        lock this (fun () -> 
+//            if v <> null && inputs.Add v then
+//                v.Outputs.Add this |> ignore
+//        )
+//
+//    let removeInput (v : IAdaptiveObject) =
+//        lock this (fun () -> 
+//            if v <> null && inputs.Remove v then
+//                v.Outputs.Remove this |> ignore
+//        )
+//
+//    let add (rj : NvgRenderObject) =
+//        addInput rj.transform
+//        addInput rj.scissor
+//        addInput rj.fillColor
+//        addInput rj.isActive
+//
+//        match rj.command with
+//            | Left p ->
+//                addInput p.lineCap
+//                addInput p.lineJoin
+//                addInput p.mode
+//                addInput p.primitive
+//                addInput p.strokeColor
+//                addInput p.strokeWidth
+//                addInput p.winding
+//            | Right t ->
+//                addInput t.align
+//                addInput t.blur
+//                addInput t.content
+//                addInput t.font
+//                addInput t.letterSpacing
+//                addInput t.lineHeight
+//                addInput t.size
+//
+//    let remove (rj : NvgRenderObject) =
+//        removeInput rj.transform
+//        removeInput rj.scissor
+//        removeInput rj.fillColor
+//        removeInput rj.isActive
+//
+//        match rj.command with
+//            | Left p ->
+//                removeInput p.lineCap
+//                removeInput p.lineJoin
+//                removeInput p.mode
+//                removeInput p.primitive
+//                removeInput p.strokeColor
+//                removeInput p.strokeWidth
+//                removeInput p.winding
+//            | Right t ->
+//                removeInput t.align
+//                removeInput t.blur
+//                removeInput t.content
+//                removeInput t.font
+//                removeInput t.letterSpacing
+//                removeInput t.lineHeight
+//                removeInput t.size
 
     member x.Dispose() =
         r.RemoveOutput x
@@ -392,10 +396,11 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
 
     member x.Run(caller : IAdaptiveObject, fbo : IFramebuffer) =
         x.EvaluateAlways caller (fun () ->
-            for d in r.GetDelta(x) do
-                match d with
-                    | Add(_,rj) -> add rj
-                    | Rem(_,rj) -> remove rj
+            r.Update x
+//            for d in r.GetDelta(x) do
+//                match d with
+//                    | Add(_,rj) -> add rj
+//                    | Rem(_,rj) -> remove rj
 
             ctx.Use (fun current -> 
 
@@ -418,7 +423,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
                 
                 NanoVg.nvgBeginFrame(current.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
              
-                r.Content.All |> Seq.map snd |> Interpreter.run x current
+                r.Content.All |> Seq.sortBy fst |> Seq.map snd |> Interpreter.run x current
                 NanoVg.nvgEndFrame(current.Handle)
 
                 frameId <- frameId + 1UL

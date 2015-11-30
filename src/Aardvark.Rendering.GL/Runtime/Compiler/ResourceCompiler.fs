@@ -41,28 +41,19 @@ module Resources =
     let createSampler sampler =
         createAndAddResource (fun m -> m.CreateSampler sampler)
 
-    let private viewCache = System.Collections.Concurrent.ConcurrentDictionary<BufferView * ChangeableResource<Aardvark.Rendering.GL.Buffer>, IMod<AttributeDescription>>()
-
-    let private createView (frequency : AttributeFrequency) (m : BufferView) (b : ChangeableResource<Aardvark.Rendering.GL.Buffer>) =
-        viewCache.GetOrAdd(((m,b)), (fun (m,b) ->
-            b.Resource |> Mod.map (fun b ->
-                { Type = m.ElementType; Frequency = frequency; Normalized = false; Stride = m.Stride; Offset = m.Offset; Buffer = b }
-            )
-        ))
-
     let createVertexArrayObject (program : Program) (rj : RenderObject) =
         { runCompile = fun s -> 
             let manager = s.manager
             s.resourceCreateTime.Start()
 
             let buffers = System.Collections.Generic.List<IChangeableResource>()
-            let bindings = System.Collections.Generic.Dictionary()
+            let bindings = System.Collections.Generic.List()
             for v in program.Inputs do
                 match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                     | Some value ->
                         let dep = manager.CreateBuffer(value.Buffer)
                         buffers.Add dep
-                        bindings.[v.attributeIndex] <- createView AttributeFrequency.PerVertex value dep
+                        bindings.Add(v.attributeIndex, value, AttributeFrequency.PerVertex, dep)
                     | _  -> 
                         match rj.InstanceAttributes with
                             | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" v.semantic rj
@@ -72,7 +63,7 @@ module Resources =
                                     | Some value ->
                                         let dep = manager.CreateBuffer(value.Buffer)
                                         buffers.Add dep
-                                        bindings.[v.attributeIndex] <- createView (AttributeFrequency.PerInstances 1) value dep
+                                        bindings.Add(v.attributeIndex, value, (AttributeFrequency.PerInstances 1), dep)
                                     | _ -> failwithf "could not get attribute %A" v.semantic
 
             //create the index-buffer if desired
@@ -83,7 +74,7 @@ module Resources =
                 index := Some dep
 
 
-            let bindings = bindings |> Seq.map (fun (KeyValue(k,v)) -> k,v) |> Seq.toList
+            let bindings = bindings |> Seq.toList
             //create a vertex-array-object
             let vao = manager.CreateVertexArrayObject(bindings, !index)
 
