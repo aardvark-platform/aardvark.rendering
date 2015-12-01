@@ -43,6 +43,7 @@ module Shader =
 type CameraMode =
     | Orbit
     | Fly
+    | Rotate
 
 [<EntryPoint>]
 let main argv = 
@@ -80,28 +81,65 @@ let main argv =
     let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
 
     let mode = Mod.init Fly
+    let controllerActive = Mod.init true
 
-    let controller = 
-        CameraController.chainM <| adaptive {
-            let! mode = mode
-            return [
-                match mode with
-                 | Fly -> 
-                    yield CameraController.controlLook win.Mouse
-                    yield CameraController.controlWSAD win.Keyboard 1.2
+    let flyTo = Mod.init Box3d.Invalid
+
+    let controller (loc : IMod<V3d>) (dir : ModRef<V3d>) = 
+        adaptive {
+            let! active = controllerActive
+
+            let! currentDir = dir
+            if currentDir.Length > 0.5 then
+                return [CameraControllers.flyTo loc dir]
+            else
+
+                // if the controller is active determine the implementation
+                // based on mode
+                if active then
+                
+                    let! mode = mode
+
+
+
+                    return [
                     
-                 | Orbit ->
-                    yield CameraController.controlOrbit win.Mouse V3d.Zero
-                    //yield CameraController.controlOrbitScroll win.Mouse V3d.Zero 0.1 0.004
+                        // scroll and zoom 
+                        yield CameraControllers.controlScroll win.Mouse 0.1 0.004
+                        yield CameraControllers.controlZoom win.Mouse 0.05
 
-                yield CameraController.controlScroll win.Mouse 0.1 0.004
-                yield CameraController.controlPan win.Mouse 0.05
-                yield CameraController.controlZoom win.Mouse 0.05
-            ]
-        } |> AFun.bind id
+                    
+                        match mode with
+                            | Fly ->
+                                // fly controller special handlers
+                                yield CameraControllers.controlLook win.Mouse
+                                yield CameraControllers.controlWSAD win.Keyboard 5.0
+                                yield CameraControllers.controlPan win.Mouse 0.05
+
+                            | Orbit ->
+                                // special orbit controller
+                                yield CameraControllers.controlOrbit win.Mouse V3d.Zero
+
+                            | Rotate ->
+                            
+    //                            // rotate is just a regular orbit-controller
+    //                            // with a simple animation rotating around the Z-Axis
+                                yield CameraControllers.controlOrbit win.Mouse V3d.Zero
+                                yield CameraControllers.controlAnimation V3d.Zero V3d.OOI
+
+                    ]
+                else
+                    // if the controller is inactive simply return an empty-list
+                    // of controller functions
+                    return []
+
+        } |> AFun.chainM
+
+    let resetPos = Mod.init (6.0 * V3d.III)
+    let resetDir = Mod.init V3d.Zero // (-V3d.III.Normalized)
 
     //let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
-    let cam = cam |> AFun.integrate controller
+    let cam = cam |> AFun.integrate (controller resetPos resetDir)
 
     win.Mouse.Click.Values.Subscribe(printfn "click %A") |> ignore
     win.Mouse.DoubleClick.Values.Subscribe(printfn "double click %A") |> ignore
@@ -118,7 +156,7 @@ let main argv =
             |> Sg.surface (Mod.constant compiled)
 
     let g = Sg.ofIndexedGeometry geometry
-    let tex = FileTexture(@"C:\Aardwork\Lenna2.png", true) :> ITexture
+    let tex = FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\Server\pattern.jpg", true) :> ITexture
 
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 
@@ -166,6 +204,16 @@ let main argv =
     win.Keyboard.KeyDown(Keys.O).Values.Subscribe(fun () ->
         transact (fun () -> Mod.change mode Orbit)
     ) |> ignore
+
+    win.Keyboard.KeyDown(Keys.R).Values.Subscribe(fun () ->
+        transact (fun () -> Mod.change resetDir (-V3d.III.Normalized))
+    ) |> ignore
+
+
+    win.Keyboard.KeyDown(Keys.Space).Values.Subscribe(fun () ->
+        transact (fun () -> Mod.change controllerActive (not controllerActive.Value))
+    ) |> ignore
+
 
     win.Keyboard.KeyDown(Keys.G).Values.Subscribe(fun () ->
         System.GC.AddMemoryPressure(100000000L)

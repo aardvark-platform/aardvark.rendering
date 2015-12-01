@@ -147,10 +147,21 @@ module CameraControllers =
     let controlOrbit (m : IMouse) (center : V3d) =
         controller {
             let position = m.Position |> Mod.map (fun p -> p.NormalizedPosition)
+            
+            let centerCam (cam : CameraView) =
+                let d = Vec.dot cam.Forward (Vec.normalize (center - cam.Location))
+                if d < 0.9999 then
+                    CameraView.LookAt(cam.Location, center, cam.Sky)
+                else
+                    cam
+            
             let! d = m.IsDown MouseButtons.Left
+
+
 
             if d then
                 let! dp = differentiate position
+
                 if dp <> V2d.Zero then
                     return fun (cam : CameraView) ->
                         let dir = cam.Location - center
@@ -163,11 +174,78 @@ module CameraControllers =
 
                         let st = sin theta
                         let newDir = V3d ( r * st * (cos phi), 
-                                           r * st * (sin phi), 
-                                           r * cos theta 
-                                         )
+                                            r * st * (sin phi), 
+                                            r * cos theta 
+                                            )
 
                         CameraView.LookAt(center + newDir, center, V3d.OOI)
+                else 
+                    return centerCam
+            else
+                return centerCam
+
+        }
+
+    let controlAnimation (center : V3d) (axis : V3d) =
+        controller {
+            let centerCam (cam : CameraView) =
+                let d = Vec.dot cam.Forward (Vec.normalize (center - cam.Location))
+                if d < 0.9999 then
+                    CameraView.LookAt(cam.Location, center, cam.Sky)
+                else
+                    cam
+
+            let! dp = differentiate Mod.time
+
+            if dp > TimeSpan.Zero then
+                return fun (cam : CameraView) ->
+                    let dir = cam.Location - center
+
+                    let r = dir.Length
+
+                    let m = M44d.Rotation(axis, 0.9 * dp.TotalSeconds)
+                    let newDir = m.TransformDir(dir)
+
+                    CameraView.LookAt(center + newDir, center, V3d.OOI)
+            else 
+                return centerCam
+
+        }
+
+
+    let flyTo (location : IMod<V3d>) (direction : ModRef<V3d>) = 
+        controller {
+            let! loc = location
+            let! dir = direction
+
+            if dir.LengthSquared > 0.5 then
+                let totalTime = 2.0
+
+                let mutable move = V3d.Zero
+                let mutable axis = V3d.Zero
+                let mutable deltaAngle = 0.0
+                let mutable accTime = 0.0
+                let! dt = differentiate Mod.time
+
+                return fun (cam : CameraView) ->
+                    if accTime = 0.0 then
+                        move <- loc - cam.Location
+                        let a = Vec.cross cam.Forward dir
+                        axis <- Vec.normalize a
+                        deltaAngle <- Fun.Acos(Vec.dot cam.Forward dir)
+
+
+                    if deltaAngle > 0.001 && accTime < totalTime then
+                        let totalDistance = loc 
+                        let rt = dt.TotalSeconds / totalTime
+
+                        accTime <- accTime + dt.TotalSeconds
+                        cam.WithLocation(cam.Location + move * rt).WithForward(M44d.Rotation(axis, deltaAngle * rt).TransformDir cam.Forward)
+
+                    else
+                        transact (fun () -> Mod.change direction V3d.Zero)
+                        cam
+
 
         }
 
