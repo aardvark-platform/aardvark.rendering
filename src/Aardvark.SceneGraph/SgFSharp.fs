@@ -139,6 +139,9 @@ module SgFSharp =
                 mode
             ) :> ISg
 
+        let render (mode : IndexedGeometryMode) (call : DrawCallInfo) =
+            Sg.RenderNode(call,mode)
+
         let ofIndexedGeometry (g : IndexedGeometry) =
             let attributes = 
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
