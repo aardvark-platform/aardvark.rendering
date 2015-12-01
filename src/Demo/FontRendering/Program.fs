@@ -39,6 +39,11 @@ module Shader =
             return V4d.IIII
         }
 
+
+type CameraMode =
+    | Orbit
+    | Fly
+
 [<EntryPoint>]
 let main argv = 
     use app = new OpenGlApplication()
@@ -73,18 +78,30 @@ let main argv =
     let trafos = trafos |> Mod.constant
 
     let cam = CameraView.lookAt (V3d.III * 6.0) V3d.Zero V3d.OOI
-    let controller = 
-        AFun.chain [
-            CameraController.controlLook win.Mouse
-            CameraController.controlWSAD win.Keyboard 1.2
-            CameraController.controlPan win.Mouse 0.05
-            CameraController.controlZoom win.Mouse 0.05
-            CameraController.controlScroll win.Mouse 0.1 0.004
-//            CameraController.controlOrbit win.Mouse V3d.Zero
-//            CameraController.controlOrbitScroll win.Mouse V3d.Zero 0.1 0.004
-        ]
 
-    let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
+    let mode = Mod.init Fly
+
+    let controller = 
+        CameraController.chainM <| adaptive {
+            let! mode = mode
+            return [
+                match mode with
+                 | Fly -> 
+                    yield CameraController.controlLook win.Mouse
+                    yield CameraController.controlWSAD win.Keyboard 1.2
+                    
+                 | Orbit ->
+                    yield CameraController.controlOrbit win.Mouse V3d.Zero
+                    //yield CameraController.controlOrbitScroll win.Mouse V3d.Zero 0.1 0.004
+
+                yield CameraController.controlScroll win.Mouse 0.1 0.004
+                yield CameraController.controlPan win.Mouse 0.05
+                yield CameraController.controlZoom win.Mouse 0.05
+            ]
+        } |> AFun.bind id
+
+    //let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
+    let cam = cam |> AFun.integrate controller
 
     win.Mouse.Click.Values.Subscribe(printfn "click %A") |> ignore
     win.Mouse.DoubleClick.Values.Subscribe(printfn "double click %A") |> ignore
@@ -101,7 +118,7 @@ let main argv =
             |> Sg.surface (Mod.constant compiled)
 
     let g = Sg.ofIndexedGeometry geometry
-    let tex = FileTexture(@"E:\Development\WorkDirectory\DataSVN\pattern.jpg", true) :> ITexture
+    let tex = FileTexture(@"C:\Aardwork\Lenna2.png", true) :> ITexture
 
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 
@@ -142,6 +159,13 @@ let main argv =
 
     ) |> ignore
 
+    win.Keyboard.KeyDown(Keys.I).Values.Subscribe(fun () ->
+        transact (fun () -> Mod.change mode Fly)
+    ) |> ignore
+
+    win.Keyboard.KeyDown(Keys.O).Values.Subscribe(fun () ->
+        transact (fun () -> Mod.change mode Orbit)
+    ) |> ignore
 
     win.Keyboard.KeyDown(Keys.G).Values.Subscribe(fun () ->
         System.GC.AddMemoryPressure(100000000L)

@@ -7,7 +7,7 @@ open Aardvark.Base.Incremental.Operators
 open Aardvark.Application
 
 
-module CameraController =
+module CameraControllers =
 
     /// rotates the CameraView around its origin using the left mouse-button.
     let controlLook (m : IMouse) =
@@ -144,61 +144,34 @@ module CameraController =
                     cam.WithLocation(cam.Location + step)
         }
 
+    let controlOrbit (m : IMouse) (center : V3d) =
+        controller {
+            let position = m.Position |> Mod.map (fun p -> p.NormalizedPosition)
+            let! d = m.IsDown MouseButtons.Left
 
-//
-//    let controlOrbit (m : IMouse) (center : V3d) =
-//        controller {
-//            let position = m.Position |> Mod.map (fun p -> p.NormalizedPosition)
-//            let! d = m.IsDown MouseButtons.Left
-//
-//            if d then
-//                let! dp = differentiate position
-//                if dp <> V2d.Zero then
-//                    return fun (cam : CameraView) ->
-//                        let dir = cam.Location - center
-//
-//                        let r = dir.Length
-//                        let theta = acos (dir.Z / r) + dp.Y * Constant.Pi
-//                        let phi = atan2 dir.Y dir.X + dp.X * Constant.PiTimesTwo
-//
-//                        let theta = theta |> clamp 0.001 (Constant.Pi - 0.001)
-//
-//                        let st = sin theta
-//                        let newDir = V3d ( r * st * (cos phi), 
-//                                           r * st * (sin phi), 
-//                                           r * cos theta 
-//                                         )
-//
-//                        CameraView.LookAt(center + newDir, center, V3d.OOI)
-//
-//        }
-//
-//    let controlOrbitScroll (m : IMouse) (center : V3d) (speed : float) (decay : float) =
-//        controller {
-//            let currentSpeed = ref 0.0
-//            let last = ref None
-//            let! s = differentiate m.TotalScroll
-//            currentSpeed := !currentSpeed + s
-//
-//            return fun (cam : CameraView) ->
-//                if abs !currentSpeed < 0.5 then
-//                    currentSpeed := 0.0
-//                    last := None
-//                    cam
-//                else
-//                    let n = DateTime.Now
-//                    let o = match !last with | Some last -> last | None -> n
-//                    last := Some n
-//
-//                    let dt = n - o
-//                    let v = !currentSpeed * pow decay dt.TotalSeconds
-//                    currentSpeed := v
-//
-//                    let dir = cam.Location - center
-//                    let r = dir |> Vec.length
-//                    let newR = max 1.0 (r - speed * v * dt.TotalSeconds)
-//
-//
-//                    cam.WithLocation(center + dir * (newR / r))
-//        }
-//
+            if d then
+                let! dp = differentiate position
+                if dp <> V2d.Zero then
+                    return fun (cam : CameraView) ->
+                        let dir = cam.Location - center
+
+                        let r = dir.Length
+                        let theta = acos (dir.Z / r) + dp.Y * Constant.Pi
+                        let phi = atan2 dir.Y dir.X + dp.X * Constant.PiTimesTwo
+
+                        let theta = theta |> clamp 0.001 (Constant.Pi - 0.001)
+
+                        let st = sin theta
+                        let newDir = V3d ( r * st * (cos phi), 
+                                           r * st * (sin phi), 
+                                           r * cos theta 
+                                         )
+
+                        CameraView.LookAt(center + newDir, center, V3d.OOI)
+
+        }
+
+
+module DefaultCameraController =
+
+    let controlWSAD (k : IKeyboard) = CameraControllers.controlWSAD k 1.2
