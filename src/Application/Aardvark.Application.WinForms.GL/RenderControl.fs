@@ -141,8 +141,9 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                         GL.ClearDepth(1.0)
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
 
-                        
-                        let res = t.Run(null, defaultFramebuffer)
+                        let res = EvaluationUtilities.evaluateTopLevel(fun () ->
+                            t.Run(null, defaultFramebuffer)
+                        )
                         
                         statistics.Emit res.Statistics
                         
