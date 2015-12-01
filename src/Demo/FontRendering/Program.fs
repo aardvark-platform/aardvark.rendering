@@ -85,6 +85,9 @@ let main argv =
 
     let flyTo = Mod.init Box3d.Invalid
 
+    let chainM (l : IMod<list<afun<'a, 'a>>>) =
+        l |> Mod.map AFun.chain |> AFun.bind id
+
     let controller (loc : IMod<V3d>) (dir : ModRef<V3d>) = 
         adaptive {
             let! active = controllerActive
@@ -133,7 +136,7 @@ let main argv =
                     // of controller functions
                     return []
 
-        } |> AFun.chainM
+        } |> chainM
 
     let resetPos = Mod.init (6.0 * V3d.III)
     let resetDir = Mod.init V3d.Zero // (-V3d.III.Normalized)
