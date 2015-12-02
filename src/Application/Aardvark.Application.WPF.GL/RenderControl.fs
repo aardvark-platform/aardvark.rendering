@@ -24,14 +24,14 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
         let aw = t.GetAwaiter()
         aw.GetResult()
 
-    do ctrl.DisableThreadStealing <- 
-        { new StopStealing with
-            member x.StopStealing () = 
-                yieldApp ()
-                let stop = Dispatcher.CurrentDispatcher.DisableProcessing() 
-                { new IDisposable with member x.Dispose() = stop.Dispose(); yieldApp () } 
-        }
-    do ctrl.AutoInvalidate <- false
+//    do ctrl.DisableThreadStealing <- 
+//        { new StopStealing with
+//            member x.StopStealing () = 
+//                yieldApp ()
+//                let stop = Dispatcher.CurrentDispatcher.DisableProcessing() 
+//                { new IDisposable with member x.Dispose() = stop.Dispose(); yieldApp () } 
+//        }
+//    do ctrl.AutoInvalidate <- false
 
     do this.Child <- ctrl
        this.Loaded.Add(fun e -> this.Focusable <- false)
