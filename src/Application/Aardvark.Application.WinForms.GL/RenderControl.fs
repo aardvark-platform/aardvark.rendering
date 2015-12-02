@@ -70,7 +70,18 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     let mutable needsRedraw = false
     let mutable first = true
     
+    let mutable autoInvalidate = true
+    let mutable threadStealing : StopStealing = 
+        { new StopStealing with member x.StopStealing () = { new IDisposable with member x.Dispose() = () } }
 
+    member x.DisableThreadStealing  
+        with get () = threadStealing 
+        and set v = threadStealing <- v
+
+    // automatically invalidates after OnPaint if renderTask is out of date again
+    member x.AutoInvalidate 
+        with get () = autoInvalidate
+        and set v = autoInvalidate <- v
 
 
     interface IControl with
@@ -125,11 +136,13 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
-            
+          
 
             match task with
                 | Some t ->
                     using (ctx.RenderingLock contextHandle) (fun _ ->
+
+                        let stopDispatcherProcessing = threadStealing.StopStealing()
                         needsRedraw <- false
                         let sw = System.Diagnostics.Stopwatch()
                         sw.Start()
@@ -161,9 +174,14 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
 
                         transact (fun () -> time.MarkOutdated())
 
+                        stopDispatcherProcessing.Dispose()
                         if t.OutOfDate then
-                            needsRedraw <- true
-                            x.Invalidate()
+//                            let sleepTime = max 0.0 (10.0 - sw.Elapsed.TotalMilliseconds)
+//                            let t = System.Threading.Tasks.Task.Delay (int sleepTime)
+//                            t.Wait()
+                            needsRedraw <- true                    
+                            if autoInvalidate then x.Invalidate()
+                            ()
                         else
                             needsRedraw <- false
 

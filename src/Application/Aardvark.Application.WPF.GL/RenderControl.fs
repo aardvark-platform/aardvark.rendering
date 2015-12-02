@@ -11,12 +11,27 @@ open System.Windows
 open System.Windows.Controls
 open System.Windows.Forms.Integration
 open Aardvark.Application
+open System.Windows.Threading
 
 type private WinFormsControl = Aardvark.Application.WinForms.OpenGlRenderControl
 
 type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
     inherit WindowsFormsHost()
     let ctrl = new WinFormsControl(runtime, samples)
+    
+    let yieldApp () = 
+        let t = Dispatcher.Yield(DispatcherPriority.ApplicationIdle)
+        let aw = t.GetAwaiter()
+        aw.GetResult()
+
+    do ctrl.DisableThreadStealing <- 
+        { new StopStealing with
+            member x.StopStealing () = 
+                yieldApp ()
+                let stop = Dispatcher.CurrentDispatcher.DisableProcessing() 
+                { new IDisposable with member x.Dispose() = stop.Dispose(); yieldApp () } 
+        }
+    do ctrl.AutoInvalidate <- false
 
     do this.Child <- ctrl
        this.Loaded.Add(fun e -> this.Focusable <- false)

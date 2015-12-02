@@ -134,6 +134,12 @@ module Test =
     let a (m : IMessageLoop) =
         m.Invoke (fun () -> ())
 
+[<AutoOpen>]
+module ClassicalUIThreadStealing =
+    
+    type StopStealing =
+        abstract member StopStealing : unit -> IDisposable
+
 //[<AutoOpen>]
 //module private TimeRangeConstants =
 //    let printThreshold = 0.5
