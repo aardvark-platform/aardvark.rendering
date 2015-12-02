@@ -97,13 +97,25 @@ module CameraView =
     let viewTrafo (c : CameraView) =
         c.ViewTrafo
 
-    let location (c : CameraView) = c.Location
-    let forward  (c : CameraView) = c.Forward
-    let right    (c : CameraView) = c.Right
-    let up       (c : CameraView) = c.Up
-    let backward (c : CameraView) = c.Backward
-    let left     (c : CameraView) = c.Left
-    let down     (c : CameraView) = c.Down
+
+    let tryGetCenterOn (p : Plane3d) (c : CameraView) =
+        let r = Ray3d(c.Location, c.Forward)
+
+        let mutable t = Double.PositiveInfinity
+        if r.Intersects(p, &t) && t >= 0.0 then
+            Some (r.GetPointOnRay t)
+        else
+            None
+
+
+
+    let inline location (c : CameraView) = c.Location
+    let inline forward  (c : CameraView) = c.Forward
+    let inline right    (c : CameraView) = c.Right
+    let inline up       (c : CameraView) = c.Up
+    let inline backward (c : CameraView) = c.Backward
+    let inline left     (c : CameraView) = c.Left
+    let inline down     (c : CameraView) = c.Down
 
 
 type Frustum = { left   : float
@@ -119,7 +131,7 @@ module Frustum =
         let d = tan (0.5 * Conversion.RadiansFromDegrees horizontalFieldOfViewInDegrees) * near
         { left = -d; right = +d; bottom = -d / aspect; top = +d / aspect; near = near; far = far}
 
-    let toTrafo { left = l; right = r; top = t; bottom = b; near = n; far = f} : Trafo3d = 
+    let projTrafo { left = l; right = r; top = t; bottom = b; near = n; far = f} : Trafo3d = 
         Trafo3d(
             M44d(
                 (2.0 * n) / (r - l),                     0.0,     (r + l) / (r - l),                     0.0,
@@ -136,22 +148,82 @@ module Frustum =
                 )
         )
 
+
+    [<Obsolete("use projTrafo instead")>]
+    let toTrafo f : Trafo3d = projTrafo f
+
     let horizontalFieldOfViewInDegrees { left = l; right = r; near = near } = 
         let l,r = atan2 l near, atan2 r near
         Conversion.DegreesFromRadians(-l + r)
 
-    let near   (f : Frustum) = f.near
-    let far    (f : Frustum) = f.far
-    let left   (f : Frustum) = f.left
-    let right  (f : Frustum) = f.right
-    let bottom (f : Frustum) = f.bottom
-    let top    (f : Frustum) = f.top
+    let inline near   (f : Frustum) = f.near
+    let inline far    (f : Frustum) = f.far
+    let inline left   (f : Frustum) = f.left
+    let inline right  (f : Frustum) = f.right
+    let inline bottom (f : Frustum) = f.bottom
+    let inline top    (f : Frustum) = f.top
 
     let aspect { left = l; right = r; top = t; bottom = b } = (r - l) / (t - b)
     let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  = 
         let factor = 1.0 - (newAspect / aspect f)
         { f with right = factor * l + r; left  = factor * r + l }
 
+    [<Obsolete("use pickRayDirection instead")>]
     let unproject { near = n } (xyOnPlane : V2d) = Ray3d(V3d.Zero, V3d(xyOnPlane, -n))
         
     
+    let pickRayDirection (pp : PixelPosition) (f : Frustum) =
+        let n = pp.NormalizedPosition
+        let ndc = V3d(2.0 * n.X - 1.0, 1.0 - 2.0 * n.Y, 0.0)
+        let trafo = toTrafo f
+        let dir = trafo.Backward.TransformPosProj ndc |> Vec.normalize
+        dir
+
+
+type Camera =
+    {
+        cameraView : CameraView
+        frustum : Frustum
+    }
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Camera =
+    
+    let create (view : CameraView) (f : Frustum) =
+        { cameraView = view; frustum = f }
+
+    let pickRay (cam : Camera) (pp : PixelPosition) =
+        let dir = cam.frustum |> Frustum.pickRayDirection pp
+        let worldDir = cam.cameraView.ViewTrafo.Backward.TransformDir dir
+        Ray3d(cam.cameraView.Location, Vec.normalize worldDir)
+
+    let tryGetPickPointOnPlane (cam : Camera) (plane : Plane3d) (pp : PixelPosition) =
+        let r = pickRay cam pp
+
+        let mutable t = Double.PositiveInfinity
+        if r.Intersects(plane, &t) && t >= 0.0 then
+            Some (r.GetPointOnRay t)
+        else
+            None
+
+
+    let inline viewTrafo (cam : Camera) = cam.cameraView |> CameraView.viewTrafo
+
+    let inline projTrafo (cam : Camera) = cam.frustum |> Frustum.projTrafo
+
+
+    let inline cameraView (cam : Camera) = cam.cameraView
+    let inline frustum (cam : Camera) = cam.frustum
+
+
+
+    let inline location (cam : Camera) = cam.cameraView |> CameraView.location
+    let inline forward  (cam : Camera) = cam.cameraView |> CameraView.forward
+    let inline up       (cam : Camera) = cam.cameraView |> CameraView.up
+    let inline right    (cam : Camera) = cam.cameraView |> CameraView.right
+    let inline backward (cam : Camera) = cam.cameraView |> CameraView.backward
+    let inline down     (cam : Camera) = cam.cameraView |> CameraView.down
+    let inline left     (cam : Camera) = cam.cameraView |> CameraView.left
+    let inline near     (cam : Camera) = cam.frustum.near
+    let inline far      (cam : Camera) = cam.frustum.far
