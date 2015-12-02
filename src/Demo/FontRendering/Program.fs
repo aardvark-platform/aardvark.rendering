@@ -88,58 +88,56 @@ let main argv =
     let chainM (l : IMod<list<afun<'a, 'a>>>) =
         l |> Mod.map AFun.chain |> AFun.bind id
 
-    let controller (loc : IMod<V3d>) (dir : ModRef<V3d>) = 
+    let controller (loc : IMod<V3d>) (target : IMod<DateTime * V3d>) = 
         adaptive {
             let! active = controllerActive
 
-            let! currentDir = dir
-            if currentDir.Length > 0.5 then
-                return [CameraControllers.flyTo loc dir]
-            else
 
-                // if the controller is active determine the implementation
-                // based on mode
-                if active then
+            // if the controller is active determine the implementation
+            // based on mode
+            if active then
                 
-                    let! mode = mode
+                let! mode = mode
 
 
 
-                    return [
+                return [
                     
-                        // scroll and zoom 
-                        yield CameraControllers.controlScroll win.Mouse 0.1 0.004
-                        yield CameraControllers.controlZoom win.Mouse 0.05
+
+                    yield CameraControllers.fly target
+                    // scroll and zoom 
+                    yield CameraControllers.controlScroll win.Mouse 0.1 0.004
+                    yield CameraControllers.controlZoom win.Mouse 0.05
 
                     
-                        match mode with
-                            | Fly ->
-                                // fly controller special handlers
-                                yield CameraControllers.controlLook win.Mouse
-                                yield CameraControllers.controlWSAD win.Keyboard 5.0
-                                yield CameraControllers.controlPan win.Mouse 0.05
+                    match mode with
+                        | Fly ->
+                            // fly controller special handlers
+                            yield CameraControllers.controlLook win.Mouse
+                            yield CameraControllers.controlWSAD win.Keyboard 5.0
+                            yield CameraControllers.controlPan win.Mouse 0.05
 
-                            | Orbit ->
-                                // special orbit controller
-                                yield CameraControllers.controlOrbit win.Mouse V3d.Zero
+                        | Orbit ->
+                            // special orbit controller
+                            yield CameraControllers.controlOrbit win.Mouse V3d.Zero
 
-                            | Rotate ->
+                        | Rotate ->
                             
-    //                            // rotate is just a regular orbit-controller
-    //                            // with a simple animation rotating around the Z-Axis
-                                yield CameraControllers.controlOrbit win.Mouse V3d.Zero
-                                yield CameraControllers.controlAnimation V3d.Zero V3d.OOI
+//                            // rotate is just a regular orbit-controller
+//                            // with a simple animation rotating around the Z-Axis
+                            yield CameraControllers.controlOrbit win.Mouse V3d.Zero
+                            yield CameraControllers.controlAnimation V3d.Zero V3d.OOI
 
-                    ]
-                else
-                    // if the controller is inactive simply return an empty-list
-                    // of controller functions
-                    return []
+                ]
+            else
+                // if the controller is inactive simply return an empty-list
+                // of controller functions
+                return []
 
         } |> chainM
 
     let resetPos = Mod.init (6.0 * V3d.III)
-    let resetDir = Mod.init V3d.Zero // (-V3d.III.Normalized)
+    let resetDir = Mod.init (DateTime.MaxValue, V3d.Zero)
 
     //let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
     let cam = cam |> AFun.integrate (controller resetPos resetDir)
@@ -159,7 +157,7 @@ let main argv =
             |> Sg.surface (Mod.constant compiled)
 
     let g = Sg.ofIndexedGeometry geometry
-    let tex = FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\Server\pattern.jpg", true) :> ITexture
+    let tex = FileTexture(@"E:\Development\WorkDirectory\DataSVN\pattern.jpg", true) :> ITexture
 
     let textures = System.Collections.Generic.List<ModRef<ITexture>>()
 
@@ -195,7 +193,7 @@ let main argv =
         textures.RemoveAt index
 
         transact (fun () ->
-            Mod.change t (FileTexture(@"C:\Users\Schorsch\Development\WorkDirectory\Server\sand_color.jpg", true) :> ITexture)
+            Mod.change t (FileTexture(@"E:\Development\WorkDirectory\DataSVN\sand_color.jpg", true) :> ITexture)
         )
 
     ) |> ignore
@@ -209,7 +207,7 @@ let main argv =
     ) |> ignore
 
     win.Keyboard.KeyDown(Keys.R).Values.Subscribe(fun () ->
-        transact (fun () -> Mod.change resetDir (-V3d.III.Normalized))
+        transact (fun () -> Mod.change resetDir (DateTime.Now + TimeSpan.FromSeconds 1.0, V3d.III * 12.0))
     ) |> ignore
 
 

@@ -102,7 +102,7 @@ let main argv =
             |> Sg.loadAsync win.FramebufferSignature
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo (perspective |> Mod.map Frustum.toTrafo)
+            |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo)
 
     let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.UnmanagedOptimized, sg)
 

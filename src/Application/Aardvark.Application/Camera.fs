@@ -175,7 +175,7 @@ module Frustum =
     let pickRayDirection (pp : PixelPosition) (f : Frustum) =
         let n = pp.NormalizedPosition
         let ndc = V3d(2.0 * n.X - 1.0, 1.0 - 2.0 * n.Y, 0.0)
-        let trafo = toTrafo f
+        let trafo = projTrafo f
         let dir = trafo.Backward.TransformPosProj ndc |> Vec.normalize
         dir
 

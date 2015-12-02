@@ -404,7 +404,7 @@ module RenderingTests =
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
                 |> Sg.trafo rootTrafo
                 |> Sg.viewTrafo ~~(cam |> CameraView.viewTrafo)
-                |> Sg.projTrafo ~~(frustum |> Frustum.toTrafo)
+                |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
         use ctx = new Context(runtime)
@@ -522,7 +522,7 @@ module RenderingTests =
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
                 |> Sg.trafo rootTrafo
                 |> Sg.viewTrafo ~~(cam |> CameraView.viewTrafo)
-                |> Sg.projTrafo ~~(frustum |> Frustum.toTrafo)
+                |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
         use ctx = new Context(runtime)

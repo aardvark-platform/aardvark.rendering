@@ -252,7 +252,7 @@ let main argv =
 
     Aardvark.Init()
 
-    let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y) |> Frustum.toTrafo) //CameraProjectionPerspective(60.0, 0.1, 1000.0, float win.Width / float win.Height)
+    let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y) |> Frustum.projTrafo) //CameraProjectionPerspective(60.0, 0.1, 1000.0, float win.Width / float win.Height)
 
     let geometry = 
         IndexedGeometry(

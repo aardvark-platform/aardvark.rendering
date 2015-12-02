@@ -250,6 +250,24 @@ module CameraControllers =
         }
 
 
+    let fly (target : IMod<DateTime * V3d>)  =
+        controller {
+            let! (_when, _where) = target
+
+            if _when > DateTime.Now then
+                let! dt = differentiate Mod.time
+
+                return fun (cam : CameraView) ->
+                    let off = _where - cam.Location
+
+                    let remainingTime = (_when - DateTime.Now).TotalSeconds
+                    let stepTime = min dt.TotalMilliseconds remainingTime
+
+                    cam.WithLocation(cam.Location + off * (stepTime / remainingTime)) 
+
+
+        }
+
 module DefaultCameraController =
 
     let controlWSAD (k : IKeyboard) = CameraControllers.controlWSAD k 1.2

@@ -44,7 +44,7 @@ module HelloWorld =
                     DefaultSurfaces.constantColor C4f.White |> toEffect
                   ]
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
-               |> Sg.projTrafo (perspective |> Mod.map Frustum.toTrafo      )
+               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
