@@ -134,6 +134,9 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
     let mutable frameStatistics = FrameStatistics.Zero
     let mutable oneTimeStatistics = FrameStatistics.Zero
 
+    let taskScheduler = new CustomTaskScheduler(Environment.ProcessorCount)
+    let threadOpts = System.Threading.Tasks.ParallelOptions(TaskScheduler = taskScheduler)
+
     member x.Manager = manager
 
     member x.AddInput(i : IAdaptiveObject) =
@@ -175,7 +178,7 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
             dirtyPoolIds <- Array.init (1 + ctx.MaxUniformBufferPoolId) (fun _ -> ref [])
 
         if dirtyBufferViews.Count > 0 then
-            System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
+            System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, threadOpts,fun (d : ChangeableResource<UniformBufferView>) ->
                 d.UpdateCPU(x)
                 d.UpdateGPU(x) |> ignore
 
