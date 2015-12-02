@@ -33,7 +33,7 @@ type IMouse =
     abstract member Enter : IEvent<PixelPosition>
     abstract member Leave : IEvent<PixelPosition> 
 
-type EventMouse() =
+type EventMouse(autoGenerateClickEvents : bool) =
     let position = Mod.init <| PixelPosition()
     let buttons = ConcurrentDictionary<MouseButtons, ModRef<bool>>()
     let scroll = Mod.init 0.0
@@ -80,11 +80,12 @@ type EventMouse() =
                 let dt = DateTime.Now - t
                 let dp = pos.Position - p.Position
                     
-                if dt.TotalMilliseconds < float SystemInformation.DoubleClickTime && abs dp.X <= SystemInformation.DoubleClickSize.Width && abs dp.Y < SystemInformation.DoubleClickSize.Height then
-                    if c < 2 then clickEvent.Emit(b)
-                    else doubleClickEvent.Emit(b)
-                else
-                    ()
+                if autoGenerateClickEvents then
+                    if dt.TotalMilliseconds < float SystemInformation.DoubleClickTime && abs dp.X <= SystemInformation.DoubleClickSize.Width && abs dp.Y < SystemInformation.DoubleClickSize.Height then
+                        if c < 2 then clickEvent.Emit(b)
+                        else doubleClickEvent.Emit(b)
+                    else
+                        ()
             | _ ->
                 ()
         upEvent.Emit(b)
@@ -99,12 +100,11 @@ type EventMouse() =
         transact (fun () -> Mod.change m false; setPos pos)
         handleUp pos b
 
-    [<Obsolete>]
+
     member x.Click(pos : PixelPosition, b : MouseButtons) =
         transact (fun () -> setPos pos)
         clickEvent.Emit b
 
-    [<Obsolete>]
     member x.DoubleClick(pos : PixelPosition, b : MouseButtons) =
         transact (fun () -> setPos pos)
         doubleClickEvent.Emit b

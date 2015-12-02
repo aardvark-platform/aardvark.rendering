@@ -176,7 +176,7 @@ module GameWindowIO =
 
 
     type Mouse() as this =
-        inherit EventMouse()
+        inherit EventMouse(true)
         let mutable ctrl : Option<GameWindow> = None
         let mutable lastPos = PixelPosition(0,0,0,0)
 

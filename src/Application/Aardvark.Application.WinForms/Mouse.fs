@@ -97,7 +97,7 @@ type private WinFormsButtons = System.Windows.Forms.MouseButtons
 //
 
 type Mouse() as this =
-    inherit EventMouse()
+    inherit EventMouse(false)
     let mutable ctrl : Option<Control> = None
     let mutable lastPos = PixelPosition(0,0,0,0)
 
@@ -145,6 +145,8 @@ type Mouse() as this =
     let onMouseWheelHandler = MouseEventHandler(fun s e -> this.Scroll (%%e, (float e.Delta)))
     let onMouseEnter = EventHandler(fun s e -> this.Enter (mousePos()))
     let onMouseLeave = EventHandler(fun s e -> this.Leave (mousePos()))
+    let onMouseClickHandler = MouseEventHandler(fun s e -> this.Click(%%e, %e.Button))
+    let onMouseDoubleClickHandler = MouseEventHandler(fun s e -> this.DoubleClick(%%e, %e.Button))
 
     let addHandlers() =
         match ctrl with
@@ -155,6 +157,8 @@ type Mouse() as this =
                 ctrl.MouseWheel.AddHandler onMouseWheelHandler
                 ctrl.MouseEnter.AddHandler onMouseEnter
                 ctrl.MouseLeave.AddHandler onMouseLeave
+                ctrl.MouseClick.AddHandler onMouseClickHandler
+                ctrl.MouseDoubleClick.AddHandler onMouseDoubleClickHandler
             | _ ->()
 
     let removeHandlers() =
@@ -166,6 +170,8 @@ type Mouse() as this =
                 ctrl.MouseWheel.RemoveHandler onMouseWheelHandler
                 ctrl.MouseEnter.RemoveHandler onMouseEnter
                 ctrl.MouseLeave.RemoveHandler onMouseLeave
+                ctrl.MouseClick.RemoveHandler onMouseClickHandler
+                ctrl.MouseDoubleClick.RemoveHandler onMouseDoubleClickHandler
             | None -> ()
 
     member x.SetControl(c : Control) =
