@@ -127,7 +127,7 @@ module RenderTask =
                     ()
                 elif isNull signature then
                     signature <- innerSig
-                elif innerSig <> signature then
+                elif not (signature.IsAssignableFrom innerSig) then
                     failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A vs. %A" signature innerSig
                     
                 t.AddOutput this
