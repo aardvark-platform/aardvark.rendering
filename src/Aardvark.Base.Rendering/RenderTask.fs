@@ -30,7 +30,11 @@ module RenderTask =
 
                 if signatures.Length = 0 then null
                 elif signatures.Length = 1 then signatures.[0]
-                else failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A" signatures
+                else 
+                    let s0 = signatures.[0]
+                    let all = signatures |> Array.forall (fun s -> s0.IsAssignableFrom s0)
+                    if all then s0
+                    else failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A" signatures
             )
 
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)

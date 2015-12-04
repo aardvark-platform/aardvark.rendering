@@ -14,10 +14,19 @@ module Screenshot =
     let renderToImage (samples : int) (size : V2i) (task : IRenderTask) =
         let runtime = task.Runtime.Value
 
+        let signature = task.FramebufferSignature
+
+        let (_,color) = signature.ColorAttachments |> Map.find 0
+
+        let depth = 
+            match signature.DepthStencilAttachment with
+                | Some depth -> depth.format
+                | None -> RenderbufferFormat.DepthComponent32
+
         //use lock = runtime.ContextLock
-        let color = runtime.CreateRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
-        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.DepthComponent32, samples)
-        use clear = runtime.CompileClear(task.FramebufferSignature, ~~C4f.Black, ~~1.0)
+        let color = runtime.CreateRenderbuffer(size, color.format, samples)
+        let depth = runtime.CreateRenderbuffer(size, depth, samples)
+        use clear = runtime.CompileClear(task.FramebufferSignature, ~~C4f(0.0f,0.0f,0.0f,0.0f), ~~1.0)
 
         use fbo = 
             runtime.CreateFramebuffer(
