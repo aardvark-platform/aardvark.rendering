@@ -11,8 +11,19 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 
+[<AutoOpen>]
+module private VaoMemoryUsage =
+    let addPhysicalVao (ctx:Context) =
+        Interlocked.Increment(&ctx.MemoryUsage.PhysicalVertexArrayObjectCount) |> ignore
+    let removePhysicalVao (ctx:Context) =
+        Interlocked.Decrement(&ctx.MemoryUsage.PhysicalVertexArrayObjectCount) |> ignore
+    let addVirtualVao (ctx:Context) =
+        Interlocked.Increment(&ctx.MemoryUsage.VirtualVertexArrayObjectCount) |> ignore
+    let removeVirtualVao (ctx:Context) =
+        Interlocked.Decrement(&ctx.MemoryUsage.VirtualVertexArrayObjectCount) |> ignore
+
 type VertexArrayObject(context : Context, bindings : list<int * AttributeDescription>, index : Option<Buffer>, create : int -> unit) =
-    inherit UnsharedObject(context, (fun _ -> let h = GL.GenVertexArray() in create h; h), (fun h -> GL.DeleteVertexArray h))
+    inherit UnsharedObject(context, (fun _ -> let h = GL.GenVertexArray() in addPhysicalVao context; create h; h), (fun h -> removePhysicalVao context; GL.DeleteVertexArray h))
         
     member x.Bindings = bindings
     member x.Index = index
@@ -90,12 +101,15 @@ module VertexArrayObjectExtensions =
 
     type Context with
         member x.CreateVertexArrayObject(index : Buffer, attributes : list<int * AttributeDescription>) =
+            addVirtualVao x
             VertexArrayObject(x, attributes, Some index, init (Some index) attributes)
 
         member x.CreateVertexArrayObject(attributes : list<int * AttributeDescription>) =
+            addVirtualVao x
             VertexArrayObject(x, attributes, None, init None attributes)
 
         member x.Delete(vao : VertexArrayObject) =
+            removeVirtualVao x
             vao.DestroyHandles()
 
         member x.Update(vao : VertexArrayObject, index : Buffer, attributes : list<int * AttributeDescription>) =

@@ -36,6 +36,31 @@ type private ContextToken(obtain : ContextToken -> ContextHandle, release : Cont
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+
+type MemoryUsage() =
+    class
+        [<DefaultValue>] val mutable public TextureCount : int
+        [<DefaultValue>] val mutable public TextureMemory : int64
+
+        [<DefaultValue>] val mutable public BufferCount : int
+        [<DefaultValue>] val mutable public BufferMemory : int64
+
+        [<DefaultValue>] val mutable public UniformBufferCount : int
+        [<DefaultValue>] val mutable public UniformBufferMemory : int64
+
+        [<DefaultValue>] val mutable public UniformPoolCount : int
+        [<DefaultValue>] val mutable public UniformPoolMemory : int64
+
+        [<DefaultValue>] val mutable public PhysicalVertexArrayObjectCount : int
+        [<DefaultValue>] val mutable public VirtualVertexArrayObjectCount : int
+        [<DefaultValue>] val mutable public ShaderProgramCount : int
+        [<DefaultValue>] val mutable public SamplerStateCount : int
+        [<DefaultValue>] val mutable public PhysicalFramebufferCount : int
+        [<DefaultValue>] val mutable public VirtualFramebufferCount : int
+        [<DefaultValue>] val mutable public RenderBufferCount : int
+        [<DefaultValue>] val mutable public RenderBufferMemory : int64
+    end
+
 /// <summary>
 /// Context is the core datastructure for managing implicit state
 /// of the OpenGL implementation. 
@@ -52,6 +77,8 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
     let resourceContexts = ContextHandle.createContexts resourceContextCount
     let resourceContextCount = resourceContexts.Length
 
+    let memoryUsage = MemoryUsage()
+
     let bag = ConcurrentBag(resourceContexts)
     let bagCount = new SemaphoreSlim(resourceContextCount)
     let renderingContexts = ConcurrentDictionary<ContextHandle, SemaphoreSlim>()
@@ -61,6 +88,8 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
     let mutable driverInfo = None
 
     let mutable packAlignment = None
+
+    member x.MemoryUsage = memoryUsage
 
     member x.CurrentContextHandle
         with get() =  currentToken.Value.Value.Handle

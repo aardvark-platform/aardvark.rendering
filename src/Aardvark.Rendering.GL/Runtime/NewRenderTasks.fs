@@ -307,7 +307,13 @@ module private RenderTaskUtilities =
 
         { new Aardvark.Base.Runtime.IAdaptiveCode<Instruction> with
             member x.Content = calls
-            member x.Dispose() =
+            member x.Dispose() =    
+                for i in code.Instructions do
+                    match i with 
+                     | AdaptiveInstruction(xs) -> 
+                        for i in xs.Inputs do
+                          i.RemoveOutput xs
+                     | _ -> ()
                 for r in code.Resources do
                     this.RemoveInput r
                     r.Dispose()

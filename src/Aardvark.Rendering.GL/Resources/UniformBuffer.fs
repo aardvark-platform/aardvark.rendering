@@ -30,6 +30,17 @@ open System.Reflection
 
 #nowarn "9"
 
+[<AutoOpen>]
+module BufferMemoryUsage =
+
+    let private addUniformBuffer (ctx:Context) size =
+        Interlocked.Increment(&ctx.MemoryUsage.UniformBufferCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.UniformBufferMemory,size)
+
+    let private removeUniformBuffer (ctx:Context) size =
+        Interlocked.Decrement(&ctx.MemoryUsage.UniformBufferCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.UniformBufferMemory,-size)
+
 type UniformPath =
     | ValuePath of string
     | IndexPath of UniformPath * int

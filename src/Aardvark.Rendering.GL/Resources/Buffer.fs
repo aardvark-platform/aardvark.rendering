@@ -56,6 +56,14 @@ type Buffer =
 [<AutoOpen>]
 module BufferExtensions =
 
+    let private addBuffer (ctx:Context) size =
+        Interlocked.Increment(&ctx.MemoryUsage.BufferCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,size) |> ignore
+
+    let private removeBuffer (ctx:Context) size =
+        Interlocked.Decrement(&ctx.MemoryUsage.BufferCount)  |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,-size) |> ignore
+
     /// <summary>
     /// helper function translating our self-defined BufferUsage
     /// to OpenTK's BufferUsageHints
@@ -77,7 +85,9 @@ module BufferExtensions =
         /// </summary>
         member x.CreateBuffer(size : int, usage : BufferUsage) =
             assert(size >= 0)
-
+            
+            addBuffer x (int64 size)
+            
             let handle = 
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
@@ -116,6 +126,9 @@ module BufferExtensions =
 
 
         member x.CreateBuffer(data : nativeint, sizeInBytes : int, usage : BufferUsage) =
+            
+            addBuffer x (int64 sizeInBytes)
+            
             let handle = 
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
@@ -143,13 +156,13 @@ module BufferExtensions =
         /// <summary>
         /// deletes the given buffer causing its memory to be freed
         /// </summary>
-        member x.Delete(buffer : Buffer) =
+        member x.Delete(buffer : Buffer) =            
             using x.ResourceLock (fun _ ->
                 let handle = Interlocked.Exchange(&buffer.Handle, -1)
                 if handle <> -1 then
+                    removeBuffer x (int64 buffer.SizeInBytes)
                     GL.DeleteBuffer buffer.Handle
                     GL.Check "failed to delete buffer"
-
             )
 
         member x.CreateBuffer(data : IBuffer) =
@@ -338,6 +351,8 @@ module BufferExtensions =
                 GL.Check "failed to bind buffer"
 
                 if buffer.SizeInBytes <> nativeSize then
+                    removeBuffer x (int64 buffer.SizeInBytes)
+                    addBuffer x (int64 nativeSize)
                     GL.BufferData(BufferTarget.ArrayBuffer, nativeSize, src, BufferUsageHint.DynamicDraw)
                     GL.Check "failed to set buffer data"
                 else
