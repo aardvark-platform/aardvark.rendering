@@ -42,6 +42,9 @@ type MemoryUsage() =
         [<DefaultValue>] val mutable public TextureCount : int
         [<DefaultValue>] val mutable public TextureMemory : int64
 
+        [<DefaultValue>] val mutable public RenderBufferCount : int
+        [<DefaultValue>] val mutable public RenderBufferMemory : int64
+
         [<DefaultValue>] val mutable public BufferCount : int
         [<DefaultValue>] val mutable public BufferMemory : int64
 
@@ -56,12 +59,81 @@ type MemoryUsage() =
 
         [<DefaultValue>] val mutable public PhysicalVertexArrayObjectCount : int
         [<DefaultValue>] val mutable public VirtualVertexArrayObjectCount : int
-        [<DefaultValue>] val mutable public ShaderProgramCount : int
-        [<DefaultValue>] val mutable public SamplerCount : int
         [<DefaultValue>] val mutable public PhysicalFramebufferCount : int
         [<DefaultValue>] val mutable public VirtualFramebufferCount : int
-        [<DefaultValue>] val mutable public RenderBufferCount : int
-        [<DefaultValue>] val mutable public RenderBufferMemory : int64
+
+        [<DefaultValue>] val mutable public ShaderProgramCount : int
+        [<DefaultValue>] val mutable public SamplerCount : int
+
+
+        static member private MemoryString(m : int64) =
+            if m > (1L <<< 30) then
+                float m / float (1 <<< 30) |> sprintf "%.3fGB"
+            elif m > (1L <<< 20) then
+                float m / float (1 <<< 20) |> sprintf "%.2fMB"
+            elif m > (1L <<< 10) then
+                float m / float (1 <<< 10) |> sprintf "%.2fkB"
+            else
+                m |> sprintf "%db"
+                
+        override x.ToString() =
+            let mutable anyNonZero = false
+            let b = System.Text.StringBuilder()
+
+            b.Append("MemoryUsage {\r\n") |> ignore
+            if x.TextureCount <> 0 then
+                b.AppendFormat("    TextureCount        = {0}\r\n", x.TextureCount) |> ignore
+                b.AppendFormat("    TextureMemory       = {0}\r\n", MemoryUsage.MemoryString x.TextureMemory) |> ignore
+                anyNonZero <- true
+
+            if x.RenderBufferCount <> 0 then
+                b.AppendFormat("    RenderBufferCount   = {0}\r\n", x.RenderBufferCount) |> ignore
+                b.AppendFormat("    RenderBufferMemory  = {0}\r\n", MemoryUsage.MemoryString x.RenderBufferMemory) |> ignore
+                anyNonZero <- true
+
+            if x.BufferCount <> 0 then
+                b.AppendFormat("    BufferCount         = {0}\r\n", x.BufferCount) |> ignore
+                b.AppendFormat("    BufferMemory        = {0}\r\n", MemoryUsage.MemoryString x.BufferMemory) |> ignore
+                anyNonZero <- true
+
+            if x.UniformBufferCount <> 0 then
+                b.AppendFormat("    UniformBufferCount  = {0}\r\n", x.UniformBufferCount) |> ignore
+                b.AppendFormat("    UniformBufferMemory = {0}\r\n", MemoryUsage.MemoryString x.UniformBufferMemory) |> ignore
+                anyNonZero <- true
+
+            if x.UniformPoolCount <> 0 then
+                b.AppendFormat("    UniformPoolCount    = {0}\r\n", x.UniformPoolCount) |> ignore
+                b.AppendFormat("    UniformPoolMemory   = {0}\r\n", MemoryUsage.MemoryString x.UniformPoolMemory) |> ignore
+                anyNonZero <- true
+
+            if x.UniformBufferViewCount <> 0 then
+                b.AppendFormat("    UniformViewCount    = {0}\r\n", x.UniformBufferViewCount) |> ignore
+                b.AppendFormat("    UniformViewMemory   = {0}\r\n", MemoryUsage.MemoryString x.UniformBufferViewMemory) |> ignore
+                anyNonZero <- true
+
+            if x.VirtualVertexArrayObjectCount <> 0 || x.PhysicalVertexArrayObjectCount <> 0 then
+                b.AppendFormat("    VertexArrayObjects  = {0} ({1})\r\n", x.VirtualVertexArrayObjectCount, x.PhysicalVertexArrayObjectCount) |> ignore
+                anyNonZero <- true
+
+            if x.VirtualFramebufferCount <> 0 || x.PhysicalFramebufferCount <> 0 then
+                b.AppendFormat("    Framebuffers        = {0} ({1})\r\n", x.VirtualFramebufferCount, x.PhysicalFramebufferCount) |> ignore
+                anyNonZero <- true
+
+            if x.ShaderProgramCount <> 0 then
+                b.AppendFormat("    ShaderPrograms      = {0}\r\n", x.ShaderProgramCount) |> ignore
+                anyNonZero <- true
+
+            if x.SamplerCount <> 0 then
+                b.AppendFormat("    Samplers            = {0}\r\n", x.SamplerCount) |> ignore
+                anyNonZero <- true
+
+            b.Append "}" |> ignore
+
+
+            if anyNonZero then
+                b.ToString()
+            else
+                "MemoryUsage { Empty }"
     end
 
 /// <summary>
