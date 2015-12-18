@@ -510,15 +510,46 @@ type UniformBufferPool =
         val mutable public ViewCount : int
         val mutable public DirtyViews : HashSet<UniformBufferView>
 
+        member private x.Free() =
+            if x.Handle > 0 then
+                removeUniformPool x.Context (int64 x.Size)
+
+                using x.Context.ResourceLock (fun _ ->
+                    GL.DeleteBuffer(x.Handle)
+                )
+                x.Handle <- 0
+                x.Size <- 0
+                x.Storage.Dispose()
+                x.Storage <- Unchecked.defaultof<_>
+                x.DirtyViews.Clear()
+
+        member private x.Recreate() =
+            if x.Handle = 0 then
+                addUniformPool x.Context 0L
+                using x.Context.ResourceLock (fun _ ->
+                    x.Handle <- GL.GenBuffer()
+                )
+                x.Storage <- MemoryManager.createHGlobal()
+
         member x.AllocView() =
             addUniformBufferView x.Context (int64 x.ElementSize)
-            Interlocked.Increment &x.ViewCount |> ignore
+            let newCount = Interlocked.Increment &x.ViewCount
+
+            if newCount = 1 then
+                x.Recreate()
+
             new UniformBufferView(x, x.Storage.Alloc(x.ElementSize))
 
         member x.Free(view : UniformBufferView) =
             removeUniformBufferView x.Context (int64 x.ElementSize)
-            Interlocked.Decrement &x.ViewCount |> ignore
+            let newCount = Interlocked.Decrement &x.ViewCount
             ManagedPtr.free view.Pointer
+
+            if newCount = 0 then
+                x.Free()
+
+
+
 
         member x.Upload(required : UniformBufferView[]) =
             using x.Context.ResourceLock (fun _ ->
@@ -656,7 +687,7 @@ module UniformBufferExtensions =
                 let handle = GL.GenBuffer()
                 GL.Check "could not create uniform buffer"
 
-                addUniformPool x (int64 size)
+                addUniformPool x 0L
 
                 let pool = new UniformBufferPool(-1, x, handle, size, fields)
                 pool.PoolId <- (getIdManager x).NewId(pool)

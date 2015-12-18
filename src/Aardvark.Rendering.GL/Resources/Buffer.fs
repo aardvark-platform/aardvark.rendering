@@ -353,6 +353,7 @@ module BufferExtensions =
                 if buffer.SizeInBytes <> nativeSize then
                     removeBuffer x (int64 buffer.SizeInBytes)
                     addBuffer x (int64 nativeSize)
+                    buffer.SizeInBytes <- nativeSize
                     GL.BufferData(BufferTarget.ArrayBuffer, nativeSize, src, BufferUsageHint.DynamicDraw)
                     GL.Check "failed to set buffer data"
                 else

@@ -106,6 +106,7 @@ type PreparedRenderObject =
             x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
             x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
             x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
+            x.UniformBufferViews |> Map.iter (fun _ uv -> uv.Dispose())
             x.Program.Dispose() 
             x.VertexArray <- Unchecked.defaultof<_>
 

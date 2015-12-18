@@ -229,14 +229,14 @@ module RenderbufferStorage =
             RenderbufferStorage.Srgb8Alpha8, 32
             RenderbufferStorage.DepthComponent32f, 32
             RenderbufferStorage.Depth32fStencil8, 40
-            RenderbufferStorage.StencilIndex1, 8
-            RenderbufferStorage.StencilIndex1Ext, 8
+            RenderbufferStorage.StencilIndex1, 1
+            //RenderbufferStorage.StencilIndex1Ext, 1
             RenderbufferStorage.StencilIndex4, 4
-            RenderbufferStorage.StencilIndex4Ext, 4
+            //RenderbufferStorage.StencilIndex4Ext, 4
             RenderbufferStorage.StencilIndex8, 8
-            RenderbufferStorage.StencilIndex8Ext, 8
+            //RenderbufferStorage.StencilIndex8Ext, 8
             RenderbufferStorage.StencilIndex16, 16
-            RenderbufferStorage.StencilIndex16Ext, 16
+            //RenderbufferStorage.StencilIndex16Ext, 16
             RenderbufferStorage.Rgba32ui, 128
             RenderbufferStorage.Rgb32ui, 96
             RenderbufferStorage.Rgba16ui, 64
