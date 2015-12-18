@@ -161,7 +161,7 @@ module BufferExtensions =
                 let handle = Interlocked.Exchange(&buffer.Handle, -1)
                 if handle <> -1 then
                     removeBuffer x (int64 buffer.SizeInBytes)
-                    GL.DeleteBuffer buffer.Handle
+                    GL.DeleteBuffer handle
                     GL.Check "failed to delete buffer"
             )
 

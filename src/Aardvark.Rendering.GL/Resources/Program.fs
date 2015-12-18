@@ -460,6 +460,11 @@ module ProgramExtensions =
                         GL.LinkProgram(handle)
                         GL.Check "could not link program"
 
+                        for s in shaders do
+                            GL.DeleteShader(s.Handle)
+                            s.Handle <- -1
+                            GL.Check "could not delete shader"
+
                         let status = GL.GetProgram(handle, GetProgramParameterName.LinkStatus)
                         let log = GL.GetProgramInfoLog(handle)
                         GL.Check "could not get program log"

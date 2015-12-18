@@ -731,3 +731,124 @@ module RenderingTests =
             sw.Stop()
 
         ()
+
+
+    module RenderObjects =
+        let emptyUniforms =
+            { new IUniformProvider with
+                member x.TryGetUniform(scope, name) = None
+                member x.Dispose() = ()
+            }
+
+        let uniformProvider (color : IMod<ITexture>) (depth : IMod<ITexture>) =
+            { new IUniformProvider with
+                member x.TryGetUniform(scope : Ag.Scope, semantic : Symbol) =
+                    if semantic = DefaultSemantic.ColorTexture then Some (color :> IMod)
+                    elif semantic = DefaultSemantic.DepthTexture then Some (depth :> IMod)
+                    else None
+
+                member x.Dispose() =
+                    ()
+            }
+
+
+        let emptyAttributes =
+            { new IAttributeProvider with
+                member x.All = Seq.empty
+                member x.TryGetAttribute name = None
+                member x.Dispose() = ()
+            }
+
+        let attributeProvider =
+            let positions =  ArrayBuffer ([|V3f(-1.0f, -1.0f, 1.0f); V3f(1.0f, -1.0f, 1.0f); V3f(1.0f, 1.0f, 1.0f); V3f(-1.0f, 1.0f, 1.0f)|] :> Array)
+            let texCoords = ArrayBuffer ([|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array)
+
+            let pView = BufferView(Mod.constant (positions :> IBuffer), typeof<V3f>)
+            let tcView = BufferView(Mod.constant (texCoords :> IBuffer), typeof<V2f>)
+
+            { new IAttributeProvider with
+                member x.All = 
+                    Seq.ofList [
+                        DefaultSemantic.Positions, pView
+                        DefaultSemantic.DiffuseColorCoordinates, tcView
+                    ]
+                member x.TryGetAttribute(name : Symbol) = 
+                    if name = DefaultSemantic.Positions then Some pView
+                    elif name = DefaultSemantic.DiffuseColorCoordinates then Some tcView
+                    else None
+                member x.Dispose() = ()
+            }
+
+        let baseObject =
+            { RenderObject.Create() with
+                AttributeScope = Ag.emptyScope
+                IsActive = Mod.constant true
+                RenderPass = 0UL
+                DrawCallInfo = Mod.constant (DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6))
+                Mode = Mod.constant IndexedGeometryMode.TriangleList
+                Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> toFShadeSurface |> Mod.constant
+                DepthTest = Mod.constant Aardvark.Base.Rendering.DepthTestMode.LessOrEqual
+                CullMode = Mod.constant Aardvark.Base.Rendering.CullMode.None
+                BlendMode = Mod.constant Aardvark.Base.Rendering.BlendMode.Blend
+                FillMode = Mod.constant Aardvark.Base.Rendering.FillMode.Fill
+                StencilMode = Mod.constant Aardvark.Base.Rendering.StencilMode.Disabled
+                Indices = Mod.constant ([|0;1;2; 0;2;3|] :> Array)
+                InstanceAttributes = emptyAttributes
+                VertexAttributes = attributeProvider
+                Uniforms = emptyUniforms
+            }
+
+    [<Test>]
+    let ``[GL] memory leak test``() =
+
+        let useWindow = false
+        let runtime, app =
+            if useWindow then
+                let app = new Aardvark.Application.WinForms.OpenGlApplication()
+                let win = app.CreateGameWindow()
+                
+                app.Runtime, Some (app, win)
+            else
+                let app = new Aardvark.Application.WinForms.OpenGlApplication()
+                let runtime = new Runtime()
+                let ctx = new Context(runtime)
+                runtime.Context <- ctx
+                runtime, None
+
+
+        let ro = RenderObjects.baseObject
+
+        let screen = V2i(1024,1024)
+
+
+        if useWindow then
+             let clear = runtime.CompileClear(app.Value |> snd |> (fun s -> s.FramebufferSignature), ~~C4f.Black, ~~1.0)
+             let task = runtime.CompileRender(app.Value |> snd |> (fun s -> s.FramebufferSignature), BackendConfiguration.NativeOptimized, ASet.empty)
+
+             app.Value |> snd |> (fun s -> s.RenderTask <- RenderTask.ofList [clear; task]; s.Run())
+        else
+            let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
+            let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
+
+            let signature =
+                runtime.CreateFramebufferSignature [
+                    DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
+                    DefaultSemantic.Depth, depth.Format
+                ]
+
+            let fbo = 
+                signature.CreateFramebuffer [
+                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                ]
+
+            let mutable po = Unchecked.defaultof<PreparedRenderObject>
+        
+            while true do
+                using runtime.Context.ResourceLock (fun _ -> 
+                    let rj = RenderObject.Create
+                    if po <> Unchecked.defaultof<_> then po.Dispose()
+                    po <- runtime.PrepareRenderObject(signature, ro)
+                    printfn "GL memory: %A" runtime.Context.MemoryUsage
+                )
+        ()

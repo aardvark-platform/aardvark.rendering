@@ -22,8 +22,12 @@ module private VaoMemoryUsage =
     let removeVirtualVao (ctx:Context) =
         Interlocked.Decrement(&ctx.MemoryUsage.VirtualVertexArrayObjectCount) |> ignore
 
+
 type VertexArrayObject(context : Context, bindings : list<int * AttributeDescription>, index : Option<Buffer>, create : int -> unit) =
-    inherit UnsharedObject(context, (fun _ -> let h = GL.GenVertexArray() in addPhysicalVao context; create h; h), (fun h -> removePhysicalVao context; GL.DeleteVertexArray h))
+    inherit UnsharedObject(context, (fun _ -> let h = GL.GenVertexArray()
+                                              addPhysicalVao context; create h; h), 
+                                    (fun h -> removePhysicalVao context; 
+                                              GL.DeleteVertexArray h))
         
     member x.Bindings = bindings
     member x.Index = index
@@ -115,6 +119,7 @@ module VertexArrayObjectExtensions =
         member x.Update(vao : VertexArrayObject, index : Buffer, attributes : list<int * AttributeDescription>) =
             let newInitFun h =
                 let h = GL.GenVertexArray()
+                addPhysicalVao vao.Context
                 init (Some index) attributes h
                 h
 
@@ -123,6 +128,7 @@ module VertexArrayObjectExtensions =
         member x.Update(vao : VertexArrayObject, attributes : list<int * AttributeDescription>) =
             let newInitFun h =
                 let h = GL.GenVertexArray()
+                addPhysicalVao vao.Context
                 init None attributes h
                 h
 
