@@ -61,7 +61,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
             ctx, fboSignature, 
             (fun _ -> 0), 
             ignore, 
-            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples) :> IFramebufferOutput], None
+            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
         )
 
     let avgFrameTime = RunningMean(10)

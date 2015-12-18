@@ -13,6 +13,13 @@ open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq
 
+[<AutoOpen>]
+module private SamplerCounters =
+    let addSampler (ctx : Context) =
+        Interlocked.Increment(&ctx.MemoryUsage.SamplerCount) |> ignore
+
+    let removeSampler (ctx : Context) =
+        Interlocked.Decrement(&ctx.MemoryUsage.SamplerCount) |> ignore
 
 type Sampler =
     class
@@ -130,18 +137,18 @@ module SamplerExtensions =
     type Context with
 
         member x.CreateSampler(description : SamplerStateDescription) =
-            using x.ResourceLock (fun _ ->
-                if ExecutionContext.samplersSupported then
+            if ExecutionContext.samplersSupported then
+                addSampler x
+                using x.ResourceLock (fun _ ->
                     let handle = GL.GenSampler()
                     GL.Check "could not create sampler"
 
                     setSamplerParameters handle description
 
                     Sampler(x, handle, description)
-                else
-                    Sampler(x, -1, description)
-
-            )
+                )
+            else
+                Sampler(x, -1, description)
 
         member x.Update(s : Sampler, description : SamplerStateDescription) =
             if ExecutionContext.samplersSupported then
@@ -151,6 +158,7 @@ module SamplerExtensions =
 
         member x.Delete(s : Sampler) =
             if ExecutionContext.samplersSupported then
+                removeSampler x
                 using x.ResourceLock (fun _ ->
                     GL.DeleteSampler(s.Handle)
                     GL.Check "could not delete sampler"

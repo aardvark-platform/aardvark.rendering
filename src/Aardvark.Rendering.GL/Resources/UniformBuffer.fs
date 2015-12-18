@@ -30,16 +30,36 @@ open System.Reflection
 
 #nowarn "9"
 
+
 [<AutoOpen>]
-module BufferMemoryUsage =
+module private BufferMemoryUsage =
 
-    let private addUniformBuffer (ctx:Context) size =
+    let addUniformBuffer (ctx:Context) size =
         Interlocked.Increment(&ctx.MemoryUsage.UniformBufferCount) |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.UniformBufferMemory,size)
+        Interlocked.Add(&ctx.MemoryUsage.UniformBufferMemory,size) |> ignore
 
-    let private removeUniformBuffer (ctx:Context) size =
+    let removeUniformBuffer (ctx:Context) size =
         Interlocked.Decrement(&ctx.MemoryUsage.UniformBufferCount) |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.UniformBufferMemory,-size)
+        Interlocked.Add(&ctx.MemoryUsage.UniformBufferMemory,-size) |> ignore
+
+    let addUniformPool (ctx:Context) size =
+        Interlocked.Increment(&ctx.MemoryUsage.UniformPoolCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.UniformPoolMemory,size) |> ignore
+
+    let removeUniformPool (ctx:Context) size =
+        Interlocked.Decrement(&ctx.MemoryUsage.UniformPoolCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.UniformPoolMemory,-size) |> ignore
+
+    let updateUniformPool (ctx:Context) oldSize newSize =
+        Interlocked.Add(&ctx.MemoryUsage.UniformPoolMemory,newSize-oldSize) |> ignore
+
+    let addUniformBufferView (ctx:Context) size =
+        Interlocked.Increment(&ctx.MemoryUsage.UniformBufferViewCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.UniformBufferViewMemory,size) |> ignore
+
+    let removeUniformBufferView (ctx:Context) size =
+        Interlocked.Decrement(&ctx.MemoryUsage.UniformBufferViewCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.UniformBufferViewMemory,-size) |> ignore
 
 type UniformPath =
     | ValuePath of string
@@ -491,16 +511,16 @@ type UniformBufferPool =
         val mutable public DirtyViews : HashSet<UniformBufferView>
 
         member x.AllocView() =
+            addUniformBufferView x.Context (int64 x.ElementSize)
             Interlocked.Increment &x.ViewCount |> ignore
             new UniformBufferView(x, x.Storage.Alloc(x.ElementSize))
 
         member x.Free(view : UniformBufferView) =
+            removeUniformBufferView x.Context (int64 x.ElementSize)
             Interlocked.Decrement &x.ViewCount |> ignore
             ManagedPtr.free view.Pointer
 
         member x.Upload(required : UniformBufferView[]) =
-//            let anyDirty = lock x (fun () -> x.DirtyViews.Count > 0)
-//            if anyDirty then
             using x.Context.ResourceLock (fun _ ->
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
                 GL.Check "could not bind uniform buffer pool"
@@ -512,6 +532,7 @@ type UniformBufferPool =
                     if uploadAll || sizeChanged then
                         lock x (fun () -> x.DirtyViews.Clear())
                         if sizeChanged then
+                            updateUniformPool x.Context (int64 x.Size) (int64 x.Storage.Capacity)
                             x.Size <- x.Storage.Capacity
                             GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
                         else
@@ -567,8 +588,6 @@ and UniformBufferView =
 
         new(pool : UniformBufferPool, ptr : managedptr) = { Pool = pool; Pointer = ptr }
     end
-
-
 
 
 [<AutoOpen>]
@@ -637,6 +656,8 @@ module UniformBufferExtensions =
                 let handle = GL.GenBuffer()
                 GL.Check "could not create uniform buffer"
 
+                addUniformPool x (int64 size)
+
                 let pool = new UniformBufferPool(-1, x, handle, size, fields)
                 pool.PoolId <- (getIdManager x).NewId(pool)
                 pool
@@ -645,6 +666,8 @@ module UniformBufferExtensions =
         member x.Delete(pool : UniformBufferPool) =
             using x.ResourceLock (fun _ ->
                 pool.Storage.Dispose()
+
+                removeUniformPool x (int64 pool.Size)
                 GL.DeleteBuffer(pool.Handle)
                 GL.Check "could not delete uniform buffer pool"
                 pool.Handle <- -1
@@ -667,6 +690,7 @@ module UniformBufferExtensions =
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
                 GL.Check "could not unbind uniform buffer"
 
+                addUniformBuffer x (int64 size)
                 UniformBuffer(x, handle, size, fields)
             )
 
@@ -675,6 +699,7 @@ module UniformBufferExtensions =
                 GL.DeleteBuffer(b.Handle)
                 GL.Check "could not delete uniform buffer"
 
+                removeUniformBuffer x (int64 b.Size)
                 b.Free()
             )
 

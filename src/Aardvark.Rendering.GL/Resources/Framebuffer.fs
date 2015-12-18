@@ -11,9 +11,20 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 
+[<AutoOpen>]
+module private FramebufferMemoryUsage =
+    let addPhysicalFbo (ctx:Context) =
+        Interlocked.Increment(&ctx.MemoryUsage.PhysicalFramebufferCount) |> ignore
+    let removePhysicalFbo (ctx:Context) =
+        Interlocked.Decrement(&ctx.MemoryUsage.PhysicalFramebufferCount) |> ignore
+    let addVirtualFbo (ctx:Context) =
+        Interlocked.Increment(&ctx.MemoryUsage.VirtualFramebufferCount) |> ignore
+    let removeVirtualFbo (ctx:Context) =
+        Interlocked.Decrement(&ctx.MemoryUsage.VirtualFramebufferCount) |> ignore
+
 type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aardvark.Rendering.GL.ContextHandle -> int, destroy : int -> unit, 
                  bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
-    inherit UnsharedObject(ctx, create, destroy)
+    inherit UnsharedObject(ctx, (fun h -> addPhysicalFbo ctx; create h), (fun h -> removePhysicalFbo ctx; destroy h))
 
     let mutable bindings = bindings
     let mutable depth = depth
@@ -140,10 +151,11 @@ module FramebufferExtensions =
 
         member x.CreateFramebuffer (signature : IFramebufferSignature, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
             let init = init bindings depth
-
+            addVirtualFbo x
             new Framebuffer(x, signature, init, destroy, bindings, depth)
 
         member x.Delete(f : Framebuffer) =
+            removeVirtualFbo x
             f.DestroyHandles()
 
         member x.Update (f : Framebuffer, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =

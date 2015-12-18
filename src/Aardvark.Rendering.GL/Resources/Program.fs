@@ -15,6 +15,15 @@ open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 
 
+[<AutoOpen>]
+module private ShaderProgramCounters =
+    let addProgram (ctx : Context) =
+        Interlocked.Increment(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
+
+    let removeProgram (ctx : Context) =
+        Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
+
+
 type ActiveUniform = { index : int; location : int; name : string; semantic : string; samplerState : Option<string>; size : int; uniformType : ActiveUniformType; offset : int; isRowMajor : bool } with
     member x.Interface =
 
@@ -402,6 +411,7 @@ module ProgramExtensions =
                 if List.isEmpty errors then
                     let shaders = results |> List.choose (function (_,Success r) -> Some r | _ -> None)
 
+                    addProgram x
                     let handle = GL.CreateProgram()
                     GL.Check "could not create program"
 
@@ -507,6 +517,7 @@ module ProgramExtensions =
 
         member x.Delete(p : Program) =
             using x.ResourceLock (fun _ ->
+                removeProgram x
                 GL.DeleteProgram(p.Handle)
                 GL.Check "could not delete program"
             )

@@ -173,3 +173,81 @@ module InternalFormat =
             PixelInternalFormat.Three, 3
             PixelInternalFormat.Four, 4
         ]
+
+module RenderbufferStorage =
+    open System.Collections.Generic
+    open OpenTK.Graphics.OpenGL4
+
+    let getSizeInBits = 
+        InternalFormat.lookupTable [
+            RenderbufferStorage.DepthComponent, 32
+            RenderbufferStorage.R3G3B2, 8
+            RenderbufferStorage.Rgb4, 12
+            RenderbufferStorage.Rgb5, 15
+            RenderbufferStorage.Rgb8, 24
+            RenderbufferStorage.Rgb10, 30
+            RenderbufferStorage.Rgb12, 36
+            RenderbufferStorage.Rgb16, 48
+            RenderbufferStorage.Rgba2, 8
+            RenderbufferStorage.Rgba4, 16
+            RenderbufferStorage.Rgba8, 32
+            RenderbufferStorage.Rgb10A2, 32
+            RenderbufferStorage.Rgba12, 48
+            RenderbufferStorage.Rgba16, 64
+            RenderbufferStorage.DepthComponent16, 16
+            RenderbufferStorage.DepthComponent24, 24
+            RenderbufferStorage.DepthComponent32, 32
+            RenderbufferStorage.R8, 8
+            RenderbufferStorage.R16, 16
+            RenderbufferStorage.Rg8, 16
+            RenderbufferStorage.Rg16, 32
+            RenderbufferStorage.R16f, 16
+            RenderbufferStorage.R32f, 32
+            RenderbufferStorage.Rg16f, 32
+            RenderbufferStorage.Rg32f, 64
+            RenderbufferStorage.R8i, 8
+            RenderbufferStorage.R8ui, 8
+            RenderbufferStorage.R16i, 16
+            RenderbufferStorage.R16ui, 16
+            RenderbufferStorage.R32i, 32
+            RenderbufferStorage.R32ui, 32
+            RenderbufferStorage.Rg8i, 16
+            RenderbufferStorage.Rg8ui, 16
+            RenderbufferStorage.Rg16i, 32
+            RenderbufferStorage.Rg16ui, 32
+            RenderbufferStorage.Rg32i, 64
+            RenderbufferStorage.Rg32ui, 64
+            RenderbufferStorage.DepthStencil, 32
+            RenderbufferStorage.Rgba32f, 128
+            RenderbufferStorage.Rgb32f, 96
+            RenderbufferStorage.Rgba16f, 64
+            RenderbufferStorage.Rgb16f, 48
+            RenderbufferStorage.Depth24Stencil8, 32
+            RenderbufferStorage.R11fG11fB10f, 32
+            RenderbufferStorage.Rgb9E5, 32
+            RenderbufferStorage.Srgb8, 24
+            RenderbufferStorage.Srgb8Alpha8, 32
+            RenderbufferStorage.DepthComponent32f, 32
+            RenderbufferStorage.Depth32fStencil8, 40
+            RenderbufferStorage.StencilIndex1, 8
+            RenderbufferStorage.StencilIndex1Ext, 8
+            RenderbufferStorage.StencilIndex4, 4
+            RenderbufferStorage.StencilIndex4Ext, 4
+            RenderbufferStorage.StencilIndex8, 8
+            RenderbufferStorage.StencilIndex8Ext, 8
+            RenderbufferStorage.StencilIndex16, 16
+            RenderbufferStorage.StencilIndex16Ext, 16
+            RenderbufferStorage.Rgba32ui, 128
+            RenderbufferStorage.Rgb32ui, 96
+            RenderbufferStorage.Rgba16ui, 64
+            RenderbufferStorage.Rgb16ui, 48
+            RenderbufferStorage.Rgba8ui, 32
+            RenderbufferStorage.Rgb8ui, 24
+            RenderbufferStorage.Rgba32i, 128
+            RenderbufferStorage.Rgb32i, 96
+            RenderbufferStorage.Rgba16i, 64
+            RenderbufferStorage.Rgb16i, 48
+            RenderbufferStorage.Rgba8i, 32
+            RenderbufferStorage.Rgb8i, 24
+            RenderbufferStorage.Rgb10A2ui, 32
+        ]

@@ -18,6 +18,7 @@ type Renderbuffer =
         val mutable public Size : V2i
         val mutable public Format : RenderbufferFormat
         val mutable public Samples : int
+        val mutable public SizeInBytes : int64
 
         interface IResource with
             member x.Context = x.Context
@@ -31,13 +32,26 @@ type Renderbuffer =
         interface IRenderbuffer with
             member x.Handle = x.Handle :> obj
 
-        new (ctx : Context, handle : int, size : V2i, format : RenderbufferFormat, samples : int) =
-            { Context = ctx; Handle = handle; Size = size; Format = format; Samples = samples }
+        new (ctx : Context, handle : int, size : V2i, format : RenderbufferFormat, samples : int, sizeInBytes : int64) =
+            { Context = ctx; Handle = handle; Size = size; Format = format; Samples = samples; SizeInBytes = sizeInBytes }
     end
 
 
 [<AutoOpen>]
 module RenderbufferExtensions =
+
+
+    let private addRenderbuffer (ctx:Context) size =
+        Interlocked.Increment(&ctx.MemoryUsage.RenderBufferCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,size) |> ignore
+
+    let private removeRenderbuffer(ctx:Context) size =
+        Interlocked.Decrement(&ctx.MemoryUsage.RenderBufferCount)  |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,-size) |> ignore
+
+    let private resizeRenderbuffer(ctx:Context) oldSize newSize =
+        Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,newSize - oldSize) |> ignore
+
 
     let private lookup (name : string) (l : list<'a * 'b>) =
         let d = Dict.empty
@@ -122,66 +136,6 @@ module RenderbufferExtensions =
             RenderbufferFormat.Rgb10A2ui, RenderbufferStorage.Rgb10A2ui
         ]
 
-//    let toRenderbufferFormat (t : ChannelType) : RenderbufferFormat =
-//        match t with
-//        | R8 -> RenderbufferFormat.R8
-//        | R16 -> RenderbufferFormat.R16
-//        | R16_SNORM -> 0x8F98 |> unbox<RenderbufferFormat>
-//        | RG8 -> RenderbufferFormat.Rg8
-//        | RG16 -> RenderbufferFormat.Rg16
-//        | RG16_SNORM -> 0x8F99 |> unbox<RenderbufferFormat>
-//        | R3_G3_B2 -> RenderbufferFormat.R3G3B2
-//        | RGB4 -> RenderbufferFormat.Rgb4
-//        | RGB5 -> RenderbufferFormat.Rgb5
-//        | RGB8 -> RenderbufferFormat.Rgb8
-//        | RGB10 -> RenderbufferFormat.Rgb10
-//        | RGB12 -> RenderbufferFormat.Rgb12
-//        | RGB16_SNORM -> 0x8F9A |> unbox<RenderbufferFormat> //RenderbufferFormat.Rgb16Snorm
-//        | RGBA2 -> RenderbufferFormat.Rgba2
-//        | RGBA4 -> RenderbufferFormat.Rgba4
-//        | RGBA8 -> RenderbufferFormat.Rgba8
-//        | RGB10_A2 -> RenderbufferFormat.Rgb10A2
-//        | RGB10_A2UI -> RenderbufferFormat.Rgb10A2ui
-//        | RGBA12 -> RenderbufferFormat.Rgba12
-//        | RGBA16 -> RenderbufferFormat.Rgba16
-//        | SRGB8 -> RenderbufferFormat.Srgb8
-//        | SRGB8_ALPHA8 -> RenderbufferFormat.Srgb8Alpha8
-//        | R16F -> RenderbufferFormat.R16f
-//        | RG16F -> RenderbufferFormat.Rg16f
-//        | RGB16F -> RenderbufferFormat.Rgb16f
-//        | RGBA16F -> RenderbufferFormat.Rgba16f
-//        | R32F -> RenderbufferFormat.R32f
-//        | RG32F -> RenderbufferFormat.Rg32f
-//        | RGB32F -> RenderbufferFormat.Rgb32f
-//        | RGBA32F -> RenderbufferFormat.Rgba32f
-//        | R11F_G11F_B10F -> RenderbufferFormat.R11fG11fB10f
-//        | RGB9_E5 -> RenderbufferFormat.Rgb9E5
-//        | R8I -> RenderbufferFormat.R8i
-//        | R8UI -> RenderbufferFormat.R8ui
-//        | R16I -> RenderbufferFormat.R16i
-//        | R16UI -> RenderbufferFormat.R16ui
-//        | R32I -> RenderbufferFormat.R32i
-//        | R32UI -> RenderbufferFormat.R32ui
-//        | RG8I -> RenderbufferFormat.Rg8i
-//        | RG8UI -> RenderbufferFormat.Rg8ui
-//        | RG16I -> RenderbufferFormat.Rg16i
-//        | RG16UI -> RenderbufferFormat.Rg16ui
-//        | RG32I -> RenderbufferFormat.Rg32i
-//        | RG32UI -> RenderbufferFormat.Rg32ui
-//        | RGB8I -> RenderbufferFormat.Rgb8i
-//        | RGB8UI -> RenderbufferFormat.Rgb8ui
-//        | RGB16I -> RenderbufferFormat.Rgb16i
-//        | RGB16UI -> RenderbufferFormat.Rgb16ui
-//        | RGB32I -> RenderbufferFormat.Rgb32i
-//        | RGB32UI -> RenderbufferFormat.Rgb32ui
-//        | RGBA8I -> RenderbufferFormat.Rgba8i
-//        | RGBA8UI -> RenderbufferFormat.Rgba8ui
-//        | RGBA16I -> RenderbufferFormat.Rgba16i
-//        | RGBA16UI -> RenderbufferFormat.Rgba16ui
-//        | RGBA32I -> RenderbufferFormat.Rgba32i
-//        | RGBA32UI -> RenderbufferFormat.Rgba32ui
-//        | _ -> failwith "unknown internal format"
-//
 
 
     let private updateRenderbuffer (handle : int) (size : V2i) (format : RenderbufferStorage) (samples : int) =
@@ -207,9 +161,12 @@ module RenderbufferExtensions =
                 let handle = GL.GenRenderbuffer()
                 GL.Check "could not create renderbuffer"
 
-                updateRenderbuffer handle size (storageFormat format) samples
+                let storageFormat = storageFormat format
+                updateRenderbuffer handle size storageFormat samples
                 
-                Renderbuffer(x, handle, size, format, samples)
+                let sizeInBytes = (int64 size.X * int64 size.Y * int64 (RenderbufferStorage.getSizeInBits storageFormat)) / 8L
+                addRenderbuffer x sizeInBytes
+                Renderbuffer(x, handle, size, format, samples, sizeInBytes)
             )
 
 //        member x.CreateRenderbuffer (size : V2i, format : ChannelType, ?samples : int) =
@@ -224,18 +181,21 @@ module RenderbufferExtensions =
                 using x.ResourceLock (fun _ ->
                     GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, r.Handle)
                     GL.Check "could not bind renderbuffer"
-
+                    let storageFormat = storageFormat format
                     match samples with
                         | 1 ->
-                            GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, storageFormat format, size.X, size.Y)
+                            GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, storageFormat, size.X, size.Y)
                         | sam ->
-                            GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, sam, storageFormat format, size.X, size.Y)
+                            GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, sam, storageFormat, size.X, size.Y)
                     GL.Check "could not set renderbuffer storage"
 
                     GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
                     GL.Check "could not unbind renderbuffer"
 
+                    let sizeInBytes = (int64 size.X * int64 size.Y * int64 (RenderbufferStorage.getSizeInBits storageFormat)) / 8L 
 
+                    resizeRenderbuffer x r.SizeInBytes sizeInBytes
+                    r.SizeInBytes <- sizeInBytes
                     r.Size <- size
                     r.Format <- format
                     r.Samples <- samples
@@ -244,5 +204,6 @@ module RenderbufferExtensions =
         member x.Delete(r : Renderbuffer) =
             using x.ResourceLock (fun _ ->
                 GL.DeleteRenderbuffer(r.Handle)
+                removeRenderbuffer x r.SizeInBytes
                 GL.Check "could not delete renderbuffer"
             )

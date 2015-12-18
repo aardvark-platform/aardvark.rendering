@@ -51,10 +51,13 @@ type MemoryUsage() =
         [<DefaultValue>] val mutable public UniformPoolCount : int
         [<DefaultValue>] val mutable public UniformPoolMemory : int64
 
+        [<DefaultValue>] val mutable public UniformBufferViewCount : int
+        [<DefaultValue>] val mutable public UniformBufferViewMemory : int64
+
         [<DefaultValue>] val mutable public PhysicalVertexArrayObjectCount : int
         [<DefaultValue>] val mutable public VirtualVertexArrayObjectCount : int
         [<DefaultValue>] val mutable public ShaderProgramCount : int
-        [<DefaultValue>] val mutable public SamplerStateCount : int
+        [<DefaultValue>] val mutable public SamplerCount : int
         [<DefaultValue>] val mutable public PhysicalFramebufferCount : int
         [<DefaultValue>] val mutable public VirtualFramebufferCount : int
         [<DefaultValue>] val mutable public RenderBufferCount : int
