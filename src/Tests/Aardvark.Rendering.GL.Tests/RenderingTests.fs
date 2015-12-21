@@ -256,6 +256,7 @@ module RenderingTests =
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
+        
         let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
         let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
@@ -288,6 +289,7 @@ module RenderingTests =
 
         clear.Run(null, fbo) |> ignore
         task.Run(null, fbo) |> ignore
+        
 
         let pi = PixImage<byte>(Col.Format.BGRA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
         runtime.Download(color, 0, 0, pi)

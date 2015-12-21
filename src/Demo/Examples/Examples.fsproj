@@ -52,7 +52,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="FsiSetup.fsx" />
+    <None Include="RenderingSetup.fsx" />
     <None Include="Tutorial.fsx" />
+    <None Include="Render2Texture.fsx" />
     <Compile Include="HelloWorld.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
