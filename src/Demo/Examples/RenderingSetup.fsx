@@ -12,7 +12,7 @@ open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open Aardvark.Application.WinForms
 
-let setSg, win = runInteractive ()
+let setSg, win, mainTask = runInteractive ()
 let mkViewTrafo location center = 
     let view =  CameraView.LookAt(location, center, V3d.OOI)
     DefaultCameraController.control win.Mouse win.Keyboard win.Time view
