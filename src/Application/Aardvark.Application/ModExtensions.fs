@@ -14,6 +14,7 @@ type AdaptiveFunc<'a>(func : 'a -> 'a) =
             func v
         )
 
+[<CompiledName("ApplicationModModule")>]
 module Mod =
     let withLast (f : 's -> 's -> 'a -> 'a) (state : IMod<'s>)  : AdaptiveFunc<'a> =
 
