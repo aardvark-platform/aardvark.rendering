@@ -277,6 +277,8 @@ module TextureExtensions =
             GL.BindTexture(target, t.Handle)
             GL.Check "could not bind texture"
 
+            GL.TexParameter(target, TextureParameterName.TextureMaxLevel, if generateMipMap then 1000 else uploadLevels-1)
+
             for l in 0..uploadLevels-1 do
                 let level = data.[l]
                 //let level = level.ToPixImage(Col.Format.RGBA)
