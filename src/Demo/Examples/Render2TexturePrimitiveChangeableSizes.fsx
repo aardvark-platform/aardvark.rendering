@@ -1,5 +1,5 @@
 ﻿(*
-Render2TexturePrimitive.fsx
+Render2TexturePrimitiveChangeableSizes.fsx
 
 This examples demonstrates how to render to textures in an imperative style. No dependencies are tracked here between the
 processing steps. In contrast to the next tutorial we use a rather low level API and construct render tasks manually.
@@ -16,14 +16,18 @@ open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
+open Aardvark.SceneGraph.Semantics
 
 open Default // makes viewTrafo and other tutorial specicific default creators visible
 
 let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
 let size = V2i(1024,768)
-let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
-let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+let sizeM = Mod.init size
+let color = 
+    ChangeableResources.createTexture runtime ~~1 sizeM ~~TextureFormat.Rgba8
+let depth = 
+    ChangeableResources.createRenderbuffer runtime ~~1 sizeM ~~RenderbufferFormat.Depth24Stencil8
 
 // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
 // It describes the instances which can be used to exectute the render task (in other words
@@ -36,13 +40,8 @@ let signature =
 
 // Create a framebuffer matching signature and capturing the render to texture targets
 let fbo = 
-    runtime.CreateFramebuffer(
-        signature, 
-        Map.ofList [
-            DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
-            DefaultSemantic.Depth, (depth :> IFramebufferOutput)
-        ]
-    )
+    ChangeableResources.createFramebufferFromTexture runtime signature color depth 
+
   
 // Default scene graph setup with static camera
 let render2TextureSg =
@@ -52,12 +51,12 @@ let render2TextureSg =
         |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
 
 // Create render tasks given the signature and concrete buffers        
-let task = runtime.CompileRender(signature, render2TextureSg)
+let task = runtime.CompileRender(signature, render2TextureSg.RenderObjects())
 let clear = runtime.CompileClear(signature, ~~C4f.Red, ~~1.0)
 
 // Run the render task imperatively
-clear.Run(null, fbo) |> ignore
-task.Run(null, fbo) |> ignore
+clear.Run(null, Mod.force fbo) |> ignore
+task.Run(null,  Mod.force fbo) |> ignore
 
 // this module demonstrates how to read back textures. In order to see the result,
 // a form containing the readback result is shown
@@ -66,7 +65,7 @@ module DemonstrateReadback =
     open System.IO
 
     let pi = PixImage<byte>(Col.Format.BGRA, size) 
-    runtime.Download(color, 0, 0, pi)
+    runtime.Download(color |> Mod.force, 0, 0, pi)
     let tempFileName = Path.ChangeExtension( Path.combine [__SOURCE_DIRECTORY__;  Path.GetTempFileName() ], ".bmp" )
     pi.SaveAsImage tempFileName
     
@@ -83,9 +82,14 @@ module DemonstrateReadback =
 // The render to texture texture can also be used in another render pass (here we again render to our main window)
 let sg = 
     quadSg 
-        |> Sg.texture DefaultSemantic.DiffuseColorTexture ~~(color :> ITexture)
+        |> Sg.texture DefaultSemantic.DiffuseColorTexture (color |> Mod.map (fun s -> s :> ITexture))
         |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
         |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
         |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
 
 setSg sg
+
+// check out how to change render targets imperatively
+//transact (fun () -> Mod.change sizeM (V2i(16,16)))
+//clear.Run(null, Mod.force fbo) |> ignore
+//task.Run(null,  Mod.force fbo) |> ignore

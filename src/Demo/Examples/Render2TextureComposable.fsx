@@ -1,5 +1,5 @@
 ﻿(*
-Tutorial.fsx
+Render2TextureComposable.fsx
 
 This examples demonstrates how to render a scene graph to texture and map the resulting texture to another scene graph.
 
