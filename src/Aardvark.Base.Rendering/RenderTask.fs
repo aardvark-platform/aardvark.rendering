@@ -7,8 +7,117 @@ open Aardvark.Base.Incremental.Operators
 open System.Collections.Generic
 open Aardvark.Base.Rendering
 
+module ChangeableResources =
+
+    let createTexture (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) =
+        let mutable current = None
+
+        Mod.custom (fun self ->
+            let samples = samples.GetValue self
+            let size = size.GetValue self
+            let format = format.GetValue self
+
+            match current with
+                | Some (samples', size', format', c : IBackendTexture) -> 
+                    if samples = samples' && size = size' && format = format' then
+                        c
+                    else
+                        runtime.DeleteTexture c
+                        let n = runtime.CreateTexture(size, format, 1, samples, 1)
+                        current <- Some (samples, size, format, n)
+                        n
+                | None ->
+                    let n = runtime.CreateTexture(size, format, 1, samples, 1)
+                    current <- Some (samples, size, format, n)
+                    n
+        )
+
+    let createRenderbuffer (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<RenderbufferFormat>) =
+        let mutable current = None
+
+        Mod.custom (fun self ->
+            let samples = samples.GetValue self
+            let size = size.GetValue self
+            let format = format.GetValue self
+
+            match current with
+                | Some (samples', size', format', c : IRenderbuffer) -> 
+                    if samples = samples' && size = size' && format = format' then
+                        c
+                    else
+                        runtime.DeleteRenderbuffer c
+                        let n = runtime.CreateRenderbuffer(size, format, samples)
+                        current <- Some (samples, size, format, n)
+                        n
+                | None ->
+                    let n = runtime.CreateRenderbuffer(size, format, samples)
+                    current <- Some (samples, size, format, n)
+                    n
+        )
+
+    let createFramebuffer (runtime : IRuntime) (signature : IFramebufferSignature) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) =
+        
+        let mutable current = None
+
+        Mod.custom (fun self ->
+            let color = 
+                match color with
+                    | Some c -> Some (c.GetValue self)
+                    | None -> None
+
+            let depth =
+                match depth with
+                    | Some d -> Some (d.GetValue self)
+                    | None -> None
+
+            let create (color : Option<#IFramebufferOutput>) (depth : Option<#IFramebufferOutput>) =
+                match color, depth with
+                    | Some c, Some d -> 
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Colors, c :> IFramebufferOutput
+                                DefaultSemantic.Depth, d :> IFramebufferOutput
+                            ]
+                        )
+                    | Some c, None ->
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Colors, c :> IFramebufferOutput
+                            ]
+                        )
+                    | None, Some d ->
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Depth, d :> IFramebufferOutput
+                            ]
+                        ) 
+                    | None, None -> failwith "empty framebuffer"
+                            
+            match current with
+                | Some (c,d,f) ->
+                    if c = color && d = depth then
+                        f
+                    else
+                        runtime.DeleteFramebuffer f
+                        let n = create color depth
+                        current <- Some (color, depth, n)
+                        n
+                | None -> 
+                    let n = create color depth
+                    current <- Some (color, depth, n)
+                    n
+        )
+
+    let createFramebufferFromTexture (runtime : IRuntime) (signature : IFramebufferSignature) (color : IMod<IBackendTexture>) (depth : IMod<IRenderbuffer>) =
+        createFramebuffer  runtime signature  ( color |> Mod.map (fun s -> { texture = s; slice = 0; level = 0 } :> IFramebufferOutput) |> Some ) ( Mod.cast depth |> Some )
+
 
 module RenderTask =
+
+    open ChangeableResources
     
     type private EmptyRenderTask() =
         inherit ConstantObject()
@@ -241,110 +350,6 @@ module RenderTask =
     let mapStatistics (f : FrameStatistics -> FrameStatistics) (t : IRenderTask) =
         t |> mapResult (fun r -> RenderingResult(r.Framebuffer, f r.Statistics))
 
-
-
-    let private createTexture (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) =
-        let mutable current = None
-
-        Mod.custom (fun self ->
-            let samples = samples.GetValue self
-            let size = size.GetValue self
-            let format = format.GetValue self
-
-            match current with
-                | Some (samples', size', format', c : IBackendTexture) -> 
-                    if samples = samples' && size = size' && format = format' then
-                        c
-                    else
-                        runtime.DeleteTexture c
-                        let n = runtime.CreateTexture(size, format, 1, samples, 1)
-                        current <- Some (samples, size, format, n)
-                        n
-                | None ->
-                    let n = runtime.CreateTexture(size, format, 1, samples, 1)
-                    current <- Some (samples, size, format, n)
-                    n
-        )
-
-    let private createRenderbuffer (runtime : IRuntime) (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<RenderbufferFormat>) =
-        let mutable current = None
-
-        Mod.custom (fun self ->
-            let samples = samples.GetValue self
-            let size = size.GetValue self
-            let format = format.GetValue self
-
-            match current with
-                | Some (samples', size', format', c : IRenderbuffer) -> 
-                    if samples = samples' && size = size' && format = format' then
-                        c
-                    else
-                        runtime.DeleteRenderbuffer c
-                        let n = runtime.CreateRenderbuffer(size, format, samples)
-                        current <- Some (samples, size, format, n)
-                        n
-                | None ->
-                    let n = runtime.CreateRenderbuffer(size, format, samples)
-                    current <- Some (samples, size, format, n)
-                    n
-        )
-
-
-    let private createFramebuffer (runtime : IRuntime) (signature : IFramebufferSignature) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) =
-        
-        let mutable current = None
-
-        Mod.custom (fun self ->
-            let color = 
-                match color with
-                    | Some c -> Some (c.GetValue self)
-                    | None -> None
-
-            let depth =
-                match depth with
-                    | Some d -> Some (d.GetValue self)
-                    | None -> None
-
-            let create (color : Option<#IFramebufferOutput>) (depth : Option<#IFramebufferOutput>) =
-                match color, depth with
-                    | Some c, Some d -> 
-                        runtime.CreateFramebuffer(
-                            signature,
-                            Map.ofList [
-                                DefaultSemantic.Colors, c :> IFramebufferOutput
-                                DefaultSemantic.Depth, d :> IFramebufferOutput
-                            ]
-                        )
-                    | Some c, None ->
-                        runtime.CreateFramebuffer(
-                            signature,
-                            Map.ofList [
-                                DefaultSemantic.Colors, c :> IFramebufferOutput
-                            ]
-                        )
-                    | None, Some d ->
-                        runtime.CreateFramebuffer(
-                            signature,
-                            Map.ofList [
-                                DefaultSemantic.Depth, d :> IFramebufferOutput
-                            ]
-                        ) 
-                    | None, None -> failwith "empty framebuffer"
-                            
-            match current with
-                | Some (c,d,f) ->
-                    if c = color && d = depth then
-                        f
-                    else
-                        runtime.DeleteFramebuffer f
-                        let n = create color depth
-                        current <- Some (color, depth, n)
-                        n
-                | None -> 
-                    let n = create color depth
-                    current <- Some (color, depth, n)
-                    n
-        )
 
     let private defaultView (m : IMod<IBackendTexture>) =
         m |> Mod.map (fun t ->

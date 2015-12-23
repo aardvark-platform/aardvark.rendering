@@ -37,22 +37,22 @@ type RenderObject =
         Id : int
         mutable AttributeScope : Ag.Scope
                 
-        mutable IsActive : IMod<bool>
+        mutable IsActive   : IMod<bool>
         mutable RenderPass : uint64
                 
         mutable DrawCallInfo : IMod<DrawCallInfo>
-        mutable Mode : IMod<IndexedGeometryMode>
-        mutable Surface : IMod<ISurface>
+        mutable Mode         : IMod<IndexedGeometryMode>
+        mutable Surface      : IMod<ISurface>
                 
-        mutable DepthTest : IMod<DepthTestMode>
-        mutable CullMode : IMod<CullMode>
-        mutable BlendMode : IMod<BlendMode>
-        mutable FillMode : IMod<FillMode>
-        mutable StencilMode : IMod<StencilMode>
+        mutable DepthTest    : IMod<DepthTestMode>
+        mutable CullMode     : IMod<CullMode>
+        mutable BlendMode    : IMod<BlendMode>
+        mutable FillMode     : IMod<FillMode>
+        mutable StencilMode  : IMod<StencilMode>
                 
-        mutable Indices : IMod<Array>
+        mutable Indices            : IMod<Array>
         mutable InstanceAttributes : IAttributeProvider
-        mutable VertexAttributes : IAttributeProvider
+        mutable VertexAttributes   : IAttributeProvider
                 
         mutable Uniforms : IUniformProvider
     }  

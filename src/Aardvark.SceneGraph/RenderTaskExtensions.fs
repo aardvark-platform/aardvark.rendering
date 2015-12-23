@@ -47,16 +47,15 @@ module RenderTask =
                 return { color = c; depth = d }
             }
 
-    module private RenderObjects =
-
+    module RenderObjects =
         
-        let emptyUniforms =
+        let private emptyUniforms =
             { new IUniformProvider with
                 member x.TryGetUniform(scope, name) = None
                 member x.Dispose() = ()
             }
 
-        let uniformProvider (color : IMod<ITexture>) (depth : IMod<ITexture>) =
+        let private uniformProvider (color : IMod<ITexture>) (depth : IMod<ITexture>) =
             { new IUniformProvider with
                 member x.TryGetUniform(scope : Ag.Scope, semantic : Symbol) =
                     if semantic = DefaultSemantic.ColorTexture then Some (color :> IMod)
@@ -68,14 +67,14 @@ module RenderTask =
             }
 
 
-        let emptyAttributes =
+        let private emptyAttributes =
             { new IAttributeProvider with
                 member x.All = Seq.empty
                 member x.TryGetAttribute name = None
                 member x.Dispose() = ()
             }
 
-        let attributeProvider =
+        let private attributeProvider =
             let positions =  ArrayBuffer ([|V3f(-1.0f, -1.0f, 1.0f); V3f(1.0f, -1.0f, 1.0f); V3f(1.0f, 1.0f, 1.0f); V3f(-1.0f, 1.0f, 1.0f)|] :> Array)
             let texCoords = ArrayBuffer ([|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array)
 
