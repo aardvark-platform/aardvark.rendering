@@ -244,9 +244,12 @@ type ResourceManagerExtensions private() =
         // create all requested UniformLocations
         let uniforms =
             otherUniforms
-                |> List.map (fun uniform ->
-                    let r = x.CreateUniformLocation(rj.AttributeScope, rj.Uniforms, uniform)
-                    (uniform.location, r)
+                |> List.choose (fun uniform ->
+                    try
+                        let r = x.CreateUniformLocation(rj.AttributeScope, rj.Uniforms, uniform)
+                        Some (uniform.location, r)
+                    with _ ->
+                        None
                    )
                 |> Map.ofList
 

@@ -369,7 +369,7 @@ module RenderTask =
 
         //use lock = runtime.ContextLock
         let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
-        let depth = createRenderbuffer runtime samples size ~~RenderbufferFormat.Depth24Stencil8 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
+        let depth = createRenderbuffer runtime samples size ~~RenderbufferFormat.DepthComponent32 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
         let fbo = createFramebuffer runtime signature (Some <| defaultView color) (Some depth)

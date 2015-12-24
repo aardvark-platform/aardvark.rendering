@@ -56,3 +56,10 @@ type SceneGraphRuntimeExtensions private() =
     [<Extension>]
     static member CompileRender (x : IRuntime, signature : IFramebufferSignature, s : ISg) =
         SceneGraphRuntimeExtensions.CompileRender(x, signature, BackendConfiguration.Default, s)
+
+[<AutoOpen>]
+module RuntimeSgExtensions =
+    module Sg =
+    
+        let compile (runtime : IRuntime) (signature : IFramebufferSignature) (sg : ISg) =
+            runtime.CompileRender(signature, sg)
