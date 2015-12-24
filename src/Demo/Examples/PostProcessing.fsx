@@ -20,6 +20,7 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.NanoVg
 open Default // makes viewTrafo and other tutorial specicific default creators visible
 
 // let's start by creating our example-scene containing random points.
@@ -133,14 +134,33 @@ let blurredOnlyY =
 // we could now render the blurred result to a texutre too but for our example
 // we can also render it directly to the screen.
 let final =
+    let overlayRelativeSize = 0.3
 
     let overlayOriginal =
         fullscreenQuad
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
             |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
-            |> Sg.trafo ~~(Trafo3d.Scale(0.3) * Trafo3d.Translation(-0.7, 0.7, 0.0))
-            |> Sg.pass 1UL
+            |> Sg.trafo ~~(Trafo3d.Scale(overlayRelativeSize) * Trafo3d.Translation(-1.0 + overlayRelativeSize, 1.0 - overlayRelativeSize, 0.0))
+            |> Sg.pass 2UL
             |> Sg.blendMode ~~BlendMode.Blend
+
+    let overlayBox =
+        let box = win.Sizes |> Mod.map (fun s -> Box2d.FromMinAndSize(0.0, 0.0, overlayRelativeSize * float s.X, overlayRelativeSize * float s.Y))
+
+        box |> Mod.map Rectangle
+            |> Nvg.stroke
+            |> Nvg.strokeColor ~~C4f.Gray50
+            |> Nvg.strokeWidth ~~2.0
+
+    let overlayText =
+        Nvg.text ~~"Original"
+            |> Nvg.fontSize ~~20.0
+            |> Nvg.trafo (win.Sizes |> Mod.map (fun s -> M33d.Translation(float s.X * 0.5 * overlayRelativeSize, float s.Y * overlayRelativeSize - 10.0)))
+            |> Nvg.systemFont "Consolas" FontStyle.Bold
+            |> Nvg.align ~~TextAlign.Center
+            |> Nvg.andAlso overlayBox
+            |> win.Runtime.CompileRender
+            |> Sg.overlay
 
 
     let mainResult =
@@ -148,7 +168,7 @@ let final =
             |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
             |> Sg.effect [Shaders.gaussY |> toEffect]
         
-    Sg.group' [mainResult; overlayOriginal]
+    Sg.group' [mainResult; overlayOriginal; overlayText]
 
 let showTexture t =
     setSg (

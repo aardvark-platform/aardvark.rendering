@@ -10,6 +10,7 @@
 #r "FShade.dll"
 #r "FShade.Compiler.dll"
 #r "Aardvark.SceneGraph.dll"
+#r "Aardvark.Rendering.NanoVg.dll"
 #r "Aardvark.Rendering.GL.dll"
 #r "Aardvark.Application.dll"
 #r "Aardvark.Application.WinForms.dll"
@@ -25,6 +26,7 @@ module FsiSetup =
     open Aardvark.Base
     open Aardvark.Base.Incremental
     open Aardvark.Base.Rendering
+    open Aardvark.Rendering.NanoVg
     open Aardvark.SceneGraph
     open Aardvark.SceneGraph.Semantics
 
@@ -33,7 +35,7 @@ module FsiSetup =
 
     let runInteractive () =
            
-
+        
         System.Environment.CurrentDirectory <- System.IO.Path.Combine(__SOURCE_DIRECTORY__, @"..\..\..\bin\Debug\")
         IntrospectionProperties.CustomEntryAssembly <- System.Reflection.Assembly.LoadFile <| System.IO.Path.Combine(__SOURCE_DIRECTORY__, @"..\..\..\bin\Debug\Examples.exe")
 
@@ -46,8 +48,8 @@ module FsiSetup =
 
         let app = new OpenGlApplication()
         let win = app.CreateSimpleRenderWindow(1)
-
         let root = Mod.init <| (Sg.group [] :> ISg)
+
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, Sg.DynamicNode root)
 

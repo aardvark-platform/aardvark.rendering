@@ -149,6 +149,9 @@ module ``Semantic Extensions`` =
         let trafo (t : IMod<M33d>) (c : INvg) =
             Nvg.TrafoApplicator(t, Mod.constant c) :> INvg
 
+        let andAlso (after : INvg) (before : INvg) =
+            Nvg.Group (AList.ofList [before; after]) :> INvg
+
         let scissor (t : IMod<Box2d>) (c : INvg) =
             Nvg.ScissorApplicator(t, Mod.constant c) :> INvg
 
@@ -199,6 +202,9 @@ module ``Semantic Extensions`` =
         let ofList (l : list<INvg>) =
             Nvg.Group(AList.ofList l) :> INvg
 
+
+
+
 [<AbstractClass; Sealed; Extension>]
 type RuntimeExtensions private() =
     [<Extension>]
@@ -211,8 +217,6 @@ type RuntimeExtensions private() =
 module Semantics =
     open Aardvark.Base.Ag
     open Microsoft.FSharp.NativeInterop
-
-    
 
     module NanoVgExt =
     

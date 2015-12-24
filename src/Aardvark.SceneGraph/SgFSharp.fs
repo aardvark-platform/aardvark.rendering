@@ -376,6 +376,9 @@ module SgFSharp =
 
         let loadAsync (fboSignature : IFramebufferSignature) (sg : ISg) = Sg.AsyncLoadApplicator(fboSignature, Mod.constant sg) :> ISg
 
+        let overlay (task : IRenderTask) =
+            Sg.OverlayNode(task) :> ISg
+
 
     type IndexedGeometry with
         member x.Sg =

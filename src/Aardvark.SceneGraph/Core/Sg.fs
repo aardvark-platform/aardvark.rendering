@@ -310,6 +310,11 @@ module Sg =
 
         member x.FramebufferSignature = fboSignature
 
+    type OverlayNode(task : IRenderTask) =
+        interface ISg
+        member x.RenderTask = task
+
+
     type Environment (runtime : IRuntime, viewTrafo : IMod<Trafo3d>, projTrafo : IMod<Trafo3d>, viewSize : IMod<V2i>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
 

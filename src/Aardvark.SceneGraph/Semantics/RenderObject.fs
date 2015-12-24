@@ -13,11 +13,13 @@ module RenderObjectSemantics =
 
     type ISg with
         member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
+        member x.OverlayTasks() : aset<uint64 * IRenderTask> = x?OverlayTasks()
 
     module Semantic =
         [<System.Obsolete("renderJobs is deprecated, please use renderObjects instead.")>]        
         let renderJobs (s : ISg) : aset<IRenderObject> = s?RenderObjects()
         let renderObjects (s : ISg) : aset<IRenderObject> = s?RenderObjects()
+        let overlayTasks (s : ISg) : aset<uint64 * IRenderTask> = s?OverlayTasks()
 
     [<Semantic>]
     type RenderObjectSem() =
@@ -80,3 +82,27 @@ module RenderObjectSemantics =
             rj.DrawCallInfo <- callInfo
             rj.Mode <- r.Mode
             ASet.single (rj :> IRenderObject)
+
+        member x.RenderObjects(r : Sg.OverlayNode) : aset<IRenderObject> =
+            ASet.empty
+
+    [<Semantic>]
+    type SubTaskSem() =
+        member x.OverlayTasks(r : ISg) : aset<uint64 * IRenderTask> =
+            ASet.empty
+
+        member x.OverlayTasks(app : IApplicator) =
+            aset {
+                let! c = app.Child
+                yield! c.OverlayTasks()
+            }
+
+
+        member x.OverlayTasks(g : IGroup) =
+            aset {
+                for c in g.Children do
+                    yield! c.OverlayTasks()
+            }
+
+        member x.OverlayTasks(r : Sg.OverlayNode) =
+            ASet.single (r.RenderPass, r.RenderTask)

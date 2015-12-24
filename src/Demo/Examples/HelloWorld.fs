@@ -11,7 +11,7 @@ module HelloWorld =
 
     open Aardvark.Application
     open Aardvark.Application.WinForms
-
+    open Aardvark.Rendering.NanoVg
 
     let run () =
 
@@ -48,6 +48,6 @@ module HelloWorld =
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
-        win.RenderTask <- task
+        win.RenderTask <- task |> DefaultOverlays.withStatistics
         win.Run()
         0
