@@ -119,7 +119,7 @@ module Assimp =
                 | (true, sg) -> 
                     sg
                 | _ ->
-                    if m.HasFaces && m.PrimitiveType = PrimitiveType.Triangle then
+                    if m.HasFaces && m.FaceCount > 0 && m.PrimitiveType = PrimitiveType.Triangle then
                         let scene : Scene  = m?AssimpScene
                         let indexArray = m.GetIndices()
 
@@ -137,59 +137,71 @@ module Assimp =
                                     yield DefaultSemantic.Positions, m.Vertices |> mapAttribute (fun v -> V3f(v.X, v.Y, v.Z))
                         
                                 if m.Normals <> null then
-                                    yield DefaultSemantic.Normals, m.Normals |> mapAttribute (fun v -> V3f(v.X, v.Y, v.Z))
-
+                                    if m.Normals.Count = m.Vertices.Count then
+                                        yield DefaultSemantic.Normals, m.Normals |> mapAttribute (fun v -> V3f(v.X, v.Y, v.Z))
+                                    else
+                                        yield DefaultSemantic.Normals, BufferView(Mod.constant (NullBuffer(V4f.OOOO) :> IBuffer), typeof<V4f>)
+                                
                                 if m.TextureCoordinateChannelCount > 0 then
                                     let tc = m.TextureCoordinateChannels.[0]
                                     yield DefaultSemantic.DiffuseColorCoordinates, tc |> mapAttribute (fun v -> V2f(v.X, v.Y))
 
                             ]
 
-                    
+//                        for (KeyValue(k,att)) in attributes do
+//                            printfn "%s: %A" (k.ToString()) (Mod.force att.Buffer |> unbox<ArrayBuffer>).Data.Length
+//
+//                    
                         // try to find the Mesh's diffuse texture
                         let diffuseTexture = tryFindDiffuseTexture m
 
-
+                        
                         // if the mesh is indexed use its index for determinig the
                         // total face-vertex-count. otherwise use any 
                         let faceVertexCount =
                             if indexArray <> null then
                                 indexArray.Length
                             else
-                                vertexCount / 3
+                                vertexCount
 
-                        // create a partial SceneGraph containing only the information
-                        // provided by the Mesh itself. Note that this SceneGraph does not 
-                        // include Surfaces/Textures/etc. but will automatically inherit those
-                        // attributes from its containing scope.
-                        let sg = 
-                            Sg.VertexAttributeApplicator(attributes,
-                                Sg.RenderNode(
-                                    DrawCallInfo(
-                                        FaceVertexCount = faceVertexCount,
-                                        InstanceCount = 1
-                                    ),
-                                    IndexedGeometryMode.TriangleList
-                                )
-                            ) :> ISg
+                        if faceVertexCount = 0 || faceVertexCount % 3 <> 0 then
+                            let sg = Sg.group' []
+                            cache.Add(m, sg)
+                            sg
+                        else
 
-                        let sg =
-                            if indexArray <> null then
-                                Sg.VertexIndexApplicator(Mod.constant (indexArray :> Array), sg) :> ISg
-                            else
-                                sg
+                            // create a partial SceneGraph containing only the information
+                            // provided by the Mesh itself. Note that this SceneGraph does not 
+                            // include Surfaces/Textures/etc. but will automatically inherit those
+                            // attributes from its containing scope.
+                            let sg = 
+                                Sg.VertexAttributeApplicator(attributes,
+                                    Sg.RenderNode(
+                                        DrawCallInfo(
+                                            FaceVertexCount = faceVertexCount,
+                                            InstanceCount = 1
+                                        ),
+                                        IndexedGeometryMode.TriangleList
+                                    )
+                                ) :> ISg
 
-                        // if a diffuse texture was found apply it using the
-                        // standard SceneGraph
-                        let sg = 
-                            match diffuseTexture with
-                                | Some tex ->
-                                    sg |> Sg.texture DefaultSemantic.DiffuseColorTexture tex
-                                | None ->
+                            let sg =
+                                if indexArray <> null then
+                                    Sg.VertexIndexApplicator(Mod.constant (indexArray :> Array), sg) :> ISg
+                                else
                                     sg
 
-                        cache.Add(m, sg)
-                        sg
+                            // if a diffuse texture was found apply it using the
+                            // standard SceneGraph
+                            let sg = 
+                                match diffuseTexture with
+                                    | Some tex ->
+                                        sg |> Sg.texture DefaultSemantic.DiffuseColorTexture tex
+                                    | None ->
+                                        sg
+
+                            cache.Add(m, sg)
+                            sg
                     else
                         let sg = Sg.group' []
                         cache.Add(m, sg)
@@ -238,21 +250,21 @@ module Assimp =
         // Note that this code is quite compilcated since we want to efficiently
         //      filter out identity trafos here and also want to be aware of the system's 
         //      overall root-trafo (which is Identity too)
-        member x.ModelTrafo (n : Node) =
-            let p = n?ModelTrafo
+        member x.ModelTrafoStack (n : Node) =
+            let p : list<IMod<Trafo3d>> = n?ModelTrafoStack
             let mine = n.Transform |> toTrafo
 
             // in general the following code would be sufficient (but not optimal):
             // n.AllChildren?ModelTrafo <- Mod.map (fun t -> t * mine) p
 
             if mine.Forward.IsIdentity(Constant.PositiveTinyValue) then
-                n.AllChildren?ModelTrafo <- p
+                n.AllChildren?ModelTrafoStack <- p
             else
-                if p = Aardvark.SceneGraph.Semantics.TrafoSemantics.rootTrafo then
-                    n.AllChildren?ModelTrafo <- Mod.constant mine
-                else
-                    n.AllChildren?ModelTrafo <- Mod.map (fun t -> t * mine) p
-        
+                n.AllChildren?ModelTrafoStack <- (Mod.constant mine)::p
+
+        member x.ModelTrafo(e : Node) : IMod<Trafo3d> =
+            let sg = Sg.set (ASet.empty)
+            sg?ModelTrafo()
 
         // here we define the RenderObjects semantic for the Assimp-Scene
         // which directly queries RenderObjects from its contained Scene-Root
@@ -670,7 +682,8 @@ let main args =
     
     //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
-    let modelPath =  @"E:\Development\WorkDirectory\Sponza bunt\sponza_cm.obj"
+    let modelPath =  @"C:\Aardwork\SofiaEmbankement_LIGHTING.dae"
+    //let modelPath =  @"C:\Aardwork\Sponza bunt\sponza_cm.obj"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
@@ -679,7 +692,7 @@ let main args =
 //    System.Environment.Exit 0
 
     use app = new OpenGlApplication()
-    let f = app.CreateSimpleRenderWindow(1)
+    let f = app.CreateGameWindow(1)
     let ctrl = f //f.Control
 
 //    ctrl.Mouse.Events.Values.Subscribe(fun e ->
@@ -755,7 +768,8 @@ let main args =
                 //DefaultSurfaces.pointSurface pointSize |> toEffect
                 //DefaultSurfaces.uniformColor color |> toEffect
                 DefaultSurfaces.trafo |> toEffect
-                DefaultSurfaces.diffuseTexture |> toEffect
+                DefaultSurfaces.constantColor C4f.Red |> toEffect
+                //DefaultSurfaces.diffuseTexture |> toEffect
                 DefaultSurfaces.simpleLighting |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
@@ -844,9 +858,9 @@ let main args =
     //let sg = sg |> Sg.loadAsync
 
 
-    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, BackendConfiguration.UnmanagedRuntime, sg)
+    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, BackendConfiguration.NativeOptimized, sg)
 
-    let task = RenderTask.cache task
+    //let task = RenderTask.cache task
 
     let second =
         quadSg
@@ -857,7 +871,7 @@ let main args =
 
     let secTask = app.Runtime.CompileRender(ctrl.FramebufferSignature, second)
 
-    ctrl.RenderTask <- RenderTask.ofList [task; secTask] |> DefaultOverlays.withStatistics
+    ctrl.RenderTask <- RenderTask.ofList [task; ] |> DefaultOverlays.withStatistics
 
 
 //    w.Run()
