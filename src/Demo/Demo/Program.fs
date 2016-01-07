@@ -670,6 +670,261 @@ let testGpuThroughput () =
 
 
 
+open System.Runtime.InteropServices
+open Microsoft.FSharp.NativeInterop
+open System.Diagnostics
+#nowarn "9"
+
+let mycopy (src : nativeint, dst : nativeint, size : int) =
+    let mutable src = src
+    let mutable dst = dst
+    let e = src + nativeint size
+
+
+    while src < e do
+        NativePtr.write (NativePtr.ofNativeInt dst) (NativePtr.read (NativePtr.ofNativeInt<int64> src))
+        src <- src + 8n
+        dst <- dst + 8n
+
+    let bytes = size &&& 7
+    if bytes <> 0 then
+        src <- src - 8n
+        dst <- dst - 8n
+        while src < e do
+            NativePtr.write (NativePtr.ofNativeInt dst) (NativePtr.read (NativePtr.ofNativeInt<byte> src))
+            src <- src + 1n
+            dst <- dst + 1n
+
+let compare(size : int) =
+    let src = Marshal.AllocHGlobal size
+    let dst = Marshal.AllocHGlobal size
+
+    
+    mycopy(src, dst, size)
+    Marshal.Copy(src, dst, size)
+
+    let sw = Stopwatch()
+    sw.Start()
+    let mutable iter = 0
+    while sw.Elapsed.TotalSeconds < 1.0 do
+        mycopy(src, dst, size)
+        iter <- iter + 1
+    sw.Stop()
+    let tmine = sw.Elapsed.TotalMilliseconds / float iter
+    printfn "mycopy: %.3fms" (sw.Elapsed.TotalMilliseconds / float iter)
+
+
+    let sw = Stopwatch()
+    sw.Start()
+    let mutable iter = 0
+    while sw.Elapsed.TotalSeconds < 1.0 do
+        Marshal.Copy(src, dst, size)
+        iter <- iter + 1
+    sw.Stop()
+    let tmem = sw.Elapsed.TotalMilliseconds / float iter
+    printfn "memcpy: %.3fms" (sw.Elapsed.TotalMilliseconds / float iter)
+
+    printfn "factor: %.3f" (tmine / tmem)
+
+
+    Marshal.FreeHGlobal(src)
+    Marshal.FreeHGlobal(dst)
+
+
+module NativeTensors =
+
+    type NativeVolume<'a when 'a : unmanaged> =
+        struct
+            val mutable public DX : nativeint
+            val mutable public DY : nativeint
+            val mutable public DZ : nativeint
+            val mutable public SX : nativeint
+            val mutable public SY : nativeint
+            val mutable public SZ : nativeint
+            val mutable public Origin : nativeptr<'a>
+
+            member inline x.ForEachPtr(f : nativeptr<'a> -> unit) =
+            
+                let mutable i = NativePtr.toNativeInt x.Origin
+
+                let zs = x.SZ * x.DZ
+                let zj = x.DZ - x.SY * x.DY
+
+                let ys = x.SY * x.DY
+                let yj = x.DY - x.SX * x.DX
+
+                let xs = x.SX * x.DX
+                let xj = x.DX
+
+
+                let ze = i + zs
+                while i <> ze do
+                    let ye = i + ys
+                    while i <> ye do
+                        let xe = i + xs
+                        while i <> xe do
+                            f (NativePtr.ofNativeInt i) 
+                            i <- i + xj
+
+                        i <- i + yj
+
+                    i <- i + zj
+
+
+
+                ()
+
+            member inline x.ForEachPtr(other : NativeVolume<'b>, f : nativeptr<'a> -> nativeptr<'b> -> unit) =            
+                if x.SX <> other.SX || x.SY <> other.SY || x.SZ <> other.SZ then
+                    failwithf "NativeVolume sizes do not match { src = %A; dst = %A }" (x.SX, x.SY, x.SY) (other.SX, other.SY, other.SY)
+
+                let mutable i = NativePtr.toNativeInt x.Origin
+                let mutable i1 = NativePtr.toNativeInt other.Origin
+
+                let zs = x.SZ * x.DZ
+                let zj = x.DZ - x.SY * x.DY
+                let zj1 = other.DZ - other.SY * other.DY
+
+                let ys = x.SY * x.DY
+                let yj = x.DY - x.SX * x.DX
+                let yj1 = other.DY - other.SX * other.DX
+
+                let xs = x.SX * x.DX
+                let xj = x.DX
+                let xj1 = other.DX
+
+
+                let ze = i + zs
+                while i <> ze do
+                    let ye = i + ys
+                    while i <> ye do
+                        let xe = i + xs
+                        while i <> xe do
+                            f (NativePtr.ofNativeInt i) (NativePtr.ofNativeInt i1)
+                            i <- i + xj
+                            i1 <- i1 + xj1
+
+                        i <- i + yj
+                        i1 <- i1 + yj1
+
+                    i <- i + zj
+                    i1 <- i1 + zj1
+
+
+
+                ()
+
+            new(ptr : nativeptr<'a>, vi : VolumeInfo) =
+                let sa = int64 sizeof<'a>
+                {
+                    DX = nativeint (sa * vi.DX); DY = nativeint (sa * vi.DY); DZ = nativeint (sa * vi.DZ)
+                    SX = nativeint vi.SX; SY = nativeint vi.SY; SZ = nativeint vi.SZ
+                    Origin = NativePtr.ofNativeInt (NativePtr.toNativeInt ptr + nativeint (sa * vi.Origin))
+                }
+
+        end
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module NativeVolume =
+        open System.Reflection
+
+        let inline ofNativeInt (info : VolumeInfo) (ptr : nativeint) =
+            NativeVolume(NativePtr.ofNativeInt ptr, info)
+
+        let inline iter (f : nativeptr<'a>-> unit) (l : NativeVolume<'a>) =
+            l.ForEachPtr(f) 
+        
+        let inline iter2 (l : NativeVolume<'a>) (r : NativeVolume<'b>) (f : nativeptr<'a> -> nativeptr<'b> -> unit) =
+            l.ForEachPtr(r, f) 
+
+        let pin (f : NativeVolume<'a> -> 'b) (pi : PixImage<'a>) : 'b =
+            let gc = GCHandle.Alloc(pi.Data, GCHandleType.Pinned)
+            let nv = gc.AddrOfPinnedObject() |> ofNativeInt pi.VolumeInfo
+            try
+                f nv
+            finally
+                gc.Free()
+
+        let pin2 (l : PixImage<'a>) (r : PixImage<'b>) (f : NativeVolume<'a> -> NativeVolume<'b> -> 'c)  : 'c =
+            let lgc = GCHandle.Alloc(l.Data, GCHandleType.Pinned)
+            let lv = lgc.AddrOfPinnedObject() |> ofNativeInt l.VolumeInfo
+
+            let rgc = GCHandle.Alloc(r.Data, GCHandleType.Pinned)
+            let rv = rgc.AddrOfPinnedObject() |> ofNativeInt r.VolumeInfo
+
+            try
+                f lv rv
+            finally
+                lgc.Free()
+                rgc.Free()
+  
+        type private CopyImpl<'a when 'a : unmanaged>() =
+            static member Copy (src : PixImage<'a>, dst : nativeint, dstInfo : VolumeInfo) =
+                let dst = NativeVolume(NativePtr.ofNativeInt dst, dstInfo)
+                src |> pin (fun src ->
+                    iter2 src dst (fun s d -> NativePtr.write d (NativePtr.read s))
+                )
+
+        let copy (src : PixImage<'a>) (dst : NativeVolume<'a>) =
+            src |> pin (fun src ->
+                iter2 src dst (fun s d -> NativePtr.write d (NativePtr.read s))
+            )
+
+        let copyRuntime (src : PixImage) (dst : nativeint) (dstInfo : VolumeInfo) =
+            let t = typedefof<CopyImpl<byte>>.MakeGenericType [| src.PixFormat.Type |]
+            let mi = t.GetMethod("Copy", BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+            mi.Invoke(null, [|src; dst; dstInfo|]) |> ignore
+
+
+let testImageCopy<'a> (size : V2i) =
+    let image = PixImage<'a>(Col.Format.RGBA, size)
+
+    let byteSize = size.X * size.Y * 4 * sizeof<'a>
+    let dst = Marshal.AllocHGlobal(byteSize)
+
+
+    let srcInfo = image.Volume.Info
+    let dstInfo = VolumeInfo(srcInfo.Index(V3l(0L, srcInfo.SY-1L,0L)), srcInfo.Size, V3l(srcInfo.DX,-srcInfo.DY,srcInfo.DZ))
+
+    let copyNative() =
+        NativeTensors.NativeVolume.copyRuntime image dst dstInfo
+
+
+    let copyMem() =
+        let gc = GCHandle.Alloc(image.Data, GCHandleType.Pinned)
+        Marshal.Copy(gc.AddrOfPinnedObject(), dst, byteSize)
+        gc.Free()
+
+    copyNative()
+    copyMem()
+
+    let sw = Stopwatch()
+    sw.Start()
+    let mutable iter = 0
+    while sw.Elapsed.TotalSeconds < 10.0 do
+        copyNative()
+        iter <- iter + 1
+    sw.Stop()
+
+    let t = sw.Elapsed.TotalMilliseconds / float iter
+    printfn "mine: %.3fms" t
+
+    let sw = Stopwatch()
+    sw.Start()
+    let mutable iter = 0
+    while sw.Elapsed.TotalSeconds < 10.0 do
+        copyMem()
+        iter <- iter + 1
+    sw.Stop()
+
+    let t = sw.Elapsed.TotalMilliseconds / float iter
+    printfn "memcpy: %.3fms" t
+
+
+
+
+
+
 [<EntryPoint>]
 [<STAThread>]
 let main args = 
@@ -682,7 +937,7 @@ let main args =
     
     //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
-    let modelPath =  @"C:\Aardwork\SofiaEmbankement_LIGHTING.dae"
+    let modelPath =  @"E:\Development\WorkDirectory\Sponza bunt\sponza_cm.obj"
     //let modelPath =  @"C:\Aardwork\Sponza bunt\sponza_cm.obj"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
@@ -758,6 +1013,12 @@ let main args =
         )
     ) |> ignore
 
+    f.Keyboard.KeyDown(Keys.F12).Values.Add (fun () ->
+        let res = f.Capture()
+        res.SaveAsImage(@"C:\Users\schorsch\Desktop\screeny.png")
+    )
+
+
     let pointSize = Mod.constant <| V2d(0.06, 0.08)
 
     let sg =
@@ -768,8 +1029,8 @@ let main args =
                 //DefaultSurfaces.pointSurface pointSize |> toEffect
                 //DefaultSurfaces.uniformColor color |> toEffect
                 DefaultSurfaces.trafo |> toEffect
-                DefaultSurfaces.constantColor C4f.Red |> toEffect
-                //DefaultSurfaces.diffuseTexture |> toEffect
+                //DefaultSurfaces.constantColor C4f.Red |> toEffect
+                DefaultSurfaces.diffuseTexture |> toEffect
                 DefaultSurfaces.simpleLighting |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)

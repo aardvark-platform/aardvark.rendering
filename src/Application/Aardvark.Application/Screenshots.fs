@@ -42,7 +42,7 @@ module Screenshot =
 
 
         let colorTexture = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
-        runtime.ResolveMultisamples(color, colorTexture, ImageTrafo.MirrorY)
+        runtime.ResolveMultisamples(color, colorTexture, ImageTrafo.Rot0)
 
         runtime.Download(colorTexture, PixFormat.ByteBGRA)
 

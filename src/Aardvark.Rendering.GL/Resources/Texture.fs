@@ -11,6 +11,10 @@ open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
+open Aardvark.Base.NativeTensors
+open Microsoft.FSharp.NativeInterop
+
+#nowarn "9"
 
 type Texture =
     class
@@ -220,37 +224,45 @@ module TextureExtensions =
                 | _ -> failwithf "unknown texture dimension: %A" texture.Dimension
 
 
-        let private withAlignedPixImageContent (packAlign : int) (img : PixImage) (f : nativeint -> 'a) : 'a =
-            let image = img.ToCanonicalDenseLayout()
+        let uploadTexture2DLevelInternal (target : TextureTarget) (t : Texture) (level : int) (image : PixImage) =
+            // determine the input format and covert the image
+            // to a supported format if necessary.
+            let pixelType, pixelFormat, image =
+                match toPixelType image.PixFormat.Type, toPixelFormat image.Format with
+                    | Some t, Some f -> (t,f, image)
+                    | _ ->
+                        failwith "conversion not implemented"
 
-            let lineSize = image.Size.X * image.PixFormat.ChannelCount * image.PixFormat.Type.GLSize
-            let gc = GCHandle.Alloc(image.Data, GCHandleType.Pinned)
+            let elementSize = image.PixFormat.Type.GLSize
+            let lineSize = image.Size.X * image.PixFormat.ChannelCount * elementSize
+            let packAlign = t.Context.PackAlignment
 
-            let result = 
-                if lineSize % packAlign <> 0 then
-                    let adjustedLineSize = lineSize + (packAlign - lineSize % packAlign)
+            let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
+            let targetSize = alignedLineSize * image.Size.Y
+            //let data = Marshal.AllocHGlobal(alignedLineSize * image.Size.Y)
 
-                    let data = Marshal.AllocHGlobal(image.Size.Y * adjustedLineSize)
-                    let mutable src = gc.AddrOfPinnedObject()
-                    let mutable aligned = data
+            let b = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
+            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
 
-                    for line in 0..image.Size.Y-1 do
-                        Marshal.Copy(src, aligned, adjustedLineSize)
-                        src <- src + nativeint lineSize
-                        aligned <- aligned + nativeint adjustedLineSize
-                    
-                    try
-                        f(data)
-                    finally 
-                        Marshal.FreeHGlobal(data)
+            let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
+            try
+                let srcInfo = image.VolumeInfo
+                let dstInfo = 
+                    VolumeInfo(
+                        srcInfo.Index(V3l(0L, srcInfo.Size.Y-1L, 0L)), 
+                        srcInfo.Size, 
+                        V3l(srcInfo.SZ, -int64(alignedLineSize / elementSize), 1L)
+                    )
+                NativeVolume.copyImageToNative image ptr dstInfo
+            finally
+                GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
 
-                else
-                    f(gc.AddrOfPinnedObject())
+            GL.TexSubImage2D(target, level, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, 0n)
+            GL.Check (sprintf "could not upload texture data for level %d" level)
 
-            gc.Free()
-
-            result
-
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.DeleteBuffer(b)
 
         let private uploadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (startLevel : int) (textureParams : TextureParams) (data : PixImageMipMap) =
             if data.LevelCount <= 0 then
@@ -291,22 +303,40 @@ module TextureExtensions =
                         | _ ->
                             failwith "conversion not implemented"
 
-                // since OpenGL cannot upload image-regions we
-                // need to ensure that the image has a canonical layout. 
-                // TODO: Check id this is no "real" copy when already canonical
-                let image = image.ToCanonicalDenseLayout()
-
-
-                let lineSize = image.Size.X * image.PixFormat.ChannelCount * image.PixFormat.Type.GLSize
+                let elementSize = image.PixFormat.Type.GLSize
+                let lineSize = image.Size.X * image.PixFormat.ChannelCount * elementSize
                 let packAlign = t.Context.PackAlignment
 
-                withAlignedPixImageContent packAlign image (fun ptr ->
-                    if sizeChanged || formatChanged then
-                        GL.TexImage2D(target, startLevel + l, internalFormat, image.Size.X, image.Size.Y, 0, pixelFormat, pixelType, ptr)
-                    else
-                        GL.TexSubImage2D(target, startLevel + l, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, ptr)
-                    GL.Check (sprintf "could not upload texture data for level %d" l)
-                )
+                let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
+                let targetSize = alignedLineSize * image.Size.Y
+                //let data = Marshal.AllocHGlobal(alignedLineSize * image.Size.Y)
+
+                let b = GL.GenBuffer()
+                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
+                GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
+
+                let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
+                try
+                    let srcInfo = image.VolumeInfo
+                    let dstInfo = 
+                        VolumeInfo(
+                            srcInfo.Index(V3l(0L, srcInfo.Size.Y-1L, 0L)), 
+                            srcInfo.Size, 
+                            V3l(srcInfo.SZ,-int64(alignedLineSize / elementSize), 1L)
+                        )
+                    NativeVolume.copyImageToNative image ptr dstInfo
+                finally
+                    GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+
+                if sizeChanged || formatChanged then
+                    GL.TexImage2D(target, startLevel + l, internalFormat, image.Size.X, image.Size.Y, 0, pixelFormat, pixelType, 0n)
+                else
+                    GL.TexSubImage2D(target, startLevel + l, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, 0n)
+                GL.Check (sprintf "could not upload texture data for level %d" l)
+
+                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+                GL.DeleteBuffer(b)
+
 
 
             // if the image did not contain a sufficient
@@ -329,58 +359,6 @@ module TextureExtensions =
                 //t.ChannelType <- ChannelType.fromGlFormat internalFormat
 
             generateMipMap
-
-        let uploadTexture2DBitmap (t : Texture) (mipMaps : bool) (bmp : BitmapTexture) =
-
-            let size = V2i(bmp.Bitmap.Width, bmp.Bitmap.Height)
-            let expectedLevels = Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int //int(Fun.Ceiling(Fun.Log2(Fun.Min(size.X, size.Y))))
-            let uploadLevels = 1
-            let generateMipMap = mipMaps
-            let internalFormat = PixelInternalFormat.CompressedRgba
-            let sizeChanged = size <> t.Size2D
-            GL.BindTexture(TextureTarget.Texture2D, t.Handle)
-            GL.Check "could not bind texture"
-
-            // determine the input format and covert the image
-            // to a supported format if necessary.
-            let pixelType, pixelFormat =
-                PixelType.UnsignedByte, PixelFormat.Bgra
-
-            bmp.Bitmap.RotateFlip(Drawing.RotateFlipType.RotateNoneFlipY)
-            let locked = bmp.Bitmap.LockBits(Drawing.Rectangle(0,0,bmp.Bitmap.Width, bmp.Bitmap.Height), Drawing.Imaging.ImageLockMode.ReadOnly, Drawing.Imaging.PixelFormat.Format32bppArgb)
-            // if the size did not change it is more efficient
-            // to use glTexSubImage
-            if sizeChanged then
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits internalFormat) * size.X * size.Y) / 8
-                let sizeInBytes =  if generateMipMap then (sizeInBytes * 3L) / 2L else sizeInBytes
-                updateTexture t.Context t.SizeInBytes sizeInBytes
-                t.SizeInBytes <- sizeInBytes
-                GL.TexImage2D(TextureTarget.Texture2D, 0, internalFormat, size.X, size.Y, 0, pixelFormat, pixelType, locked.Scan0)
-            else
-                GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, size.X, size.Y, pixelFormat, pixelType, locked.Scan0)
-            GL.Check (sprintf "could not upload texture data for level %d" 0)
-
-            bmp.Bitmap.UnlockBits(locked)
-            bmp.Bitmap.RotateFlip(Drawing.RotateFlipType.RotateNoneFlipY)
-
-            // if the image did not contain a sufficient
-            // number of MipMaps and the user demanded 
-            // MipMaps we generate them using OpenGL
-            if generateMipMap then
-                GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
-                GL.Check "failed to generate mipmaps"
-
-            GL.BindTexture(TextureTarget.Texture2D, 0)
-            GL.Check "could not bind texture"
-
-            // since some attributes of the texture
-            // may have changed we mutate them here
-
-            t.Size <- V3i(size.X, size.Y, 0)
-            t.Multisamples <- 1
-            t.Count <- 1
-            t.Dimension <- TextureDimension.Texture2D
-            t.Format <- unbox internalFormat
 
         let uploadTexture2D (t : Texture) (textureParams : TextureParams) (data : PixImageMipMap) =
             uploadTexture2DInternal TextureTarget.Texture2D true t 0 textureParams data |> ignore
@@ -418,6 +396,87 @@ module TextureExtensions =
             t.Multisamples <- 1
             t.Count <- 1
             t.Dimension <- TextureDimension.TextureCube
+
+
+
+        let uploadTexture2DBitmap (t : Texture) (mipMaps : bool) (bmp : BitmapTexture) =
+            let size = V2i(bmp.Bitmap.Width, bmp.Bitmap.Height)
+            let expectedLevels = Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int //int(Fun.Ceiling(Fun.Log2(Fun.Min(size.X, size.Y))))
+            let uploadLevels = 1
+            let generateMipMap = mipMaps
+            let internalFormat = PixelInternalFormat.CompressedRgba
+            let sizeChanged = size <> t.Size2D
+            GL.BindTexture(TextureTarget.Texture2D, t.Handle)
+            GL.Check "could not bind texture"
+
+            // determine the input format and covert the image
+            // to a supported format if necessary.
+            let pixelType, pixelFormat =
+                PixelType.UnsignedByte, PixelFormat.Bgra
+
+
+            let elementSize = 1
+            let lineSize = size.X * 4 * elementSize
+            let packAlign = t.Context.PackAlignment
+
+            let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
+            let targetSize = alignedLineSize * size.Y
+
+
+
+            let locked = bmp.Bitmap.LockBits(Drawing.Rectangle(0,0,bmp.Bitmap.Width, bmp.Bitmap.Height), Drawing.Imaging.ImageLockMode.ReadOnly, Drawing.Imaging.PixelFormat.Format32bppArgb)          
+            let srcInfo = VolumeInfo(V3l(size.X, size.Y, 4), V3l(4, size.X * 4, 1))
+            let src : NativeVolume<byte> = locked.Scan0 |> NativeVolume.ofNativeInt srcInfo
+  
+  
+            let b = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
+            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
+
+            let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
+            try
+                let dstInfo = 
+                    VolumeInfo(
+                        srcInfo.Index(V3l(0L, srcInfo.Size.Y-1L, 0L)), 
+                        srcInfo.Size, 
+                        V3l(srcInfo.SZ, -int64(alignedLineSize / elementSize), 1L)
+                    )
+                let dst = ptr |> NativeVolume.ofNativeInt dstInfo
+
+                NativeVolume.iter2 src dst (fun s d -> NativePtr.write d (NativePtr.read s))
+            finally
+                GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+
+            if sizeChanged then
+                GL.TexImage2D(TextureTarget.Texture2D, 0, internalFormat, size.X, size.Y, 0, pixelFormat, pixelType, 0n)
+            else
+                GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, size.X, size.Y, pixelFormat, pixelType, 0n)
+            GL.Check "could not upload texture data"
+
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.DeleteBuffer(b)
+
+
+            bmp.Bitmap.UnlockBits(locked)
+
+            // if the image did not contain a sufficient
+            // number of MipMaps and the user demanded 
+            // MipMaps we generate them using OpenGL
+            if generateMipMap then
+                GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
+                GL.Check "failed to generate mipmaps"
+
+            GL.BindTexture(TextureTarget.Texture2D, 0)
+            GL.Check "could not bind texture"
+
+            // since some attributes of the texture
+            // may have changed we mutate them here
+
+            t.Size <- V3i(size.X, size.Y, 0)
+            t.Multisamples <- 1
+            t.Count <- 1
+            t.Dimension <- TextureDimension.Texture2D
+            t.Format <- unbox internalFormat
 
         let uploadTexture3D (t : Texture) (textureParams : TextureParams) (data : PixVolume) =
             let size = data.Size
@@ -478,11 +537,9 @@ module TextureExtensions =
             t.Dimension <- TextureDimension.Texture3D
             t.Format <- newFormat
 
-        let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage) =
-            let format =  image.PixFormat
-            
-            //let levelSize = t.Size2D
 
+        let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage) =
+            let format = image.PixFormat
             GL.BindTexture(target, t.Handle)
             GL.Check "could not bind texture"
 
@@ -492,36 +549,48 @@ module TextureExtensions =
                     | _ ->
                         failwith "conversion not implemented"
 
-            let gc = GCHandle.Alloc(image.Data, GCHandleType.Pinned)
 
-            OpenTK.Graphics.OpenGL4.GL.GetTexImage(target, level, pixelFormat, pixelType, gc.AddrOfPinnedObject())
-            GL.Check "could not download image"
-
-            gc.Free()
-          
-        let uploadTexture2DLevelInternal (target : TextureTarget) (t : Texture) (level : int) (image : PixImage) =
-            // determine the input format and covert the image
-            // to a supported format if necessary.
-            let pixelType, pixelFormat, image =
-                match toPixelType image.PixFormat.Type, toPixelFormat image.Format with
-                    | Some t, Some f -> (t,f, image)
-                    | _ ->
-                        failwith "conversion not implemented"
-
-            // since OpenGL cannot upload image-regions we
-            // need to ensure that the image has a canonical layout. 
-            // TODO: Check id this is no "real" copy when already canonical
-            let image = image.ToCanonicalDenseLayout()
-
-            let lineSize = image.Size.X * image.PixFormat.ChannelCount * image.PixFormat.Type.GLSize
+            let elementSize = image.PixFormat.Type.GLSize
+            let lineSize = image.Size.X * image.PixFormat.ChannelCount * elementSize
             let packAlign = t.Context.PackAlignment
 
+            let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
+            let targetSize = alignedLineSize * image.Size.Y
 
-            withAlignedPixImageContent packAlign image (fun ptr ->
-                GL.TexSubImage2D(target, level, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, ptr)
-                GL.Check (sprintf "could not upload texture data for level %d" level)
-            )
+            let b = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
+            GL.Check "could not bind buffer"
+            GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
+            GL.Check "could not set buffer storage"
+            GL.GetTexImage(target, level, pixelFormat, pixelType, 0n)
+            GL.Check "could not get texture image"
 
+            let src = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapReadBit)
+            GL.Check "could not map buffer"
+            try
+                let dstInfo = image.VolumeInfo
+                let srcInfo = 
+                    VolumeInfo(
+                        dstInfo.Index(V3l(0L, dstInfo.Size.Y-1L, 0L)), 
+                        dstInfo.Size, 
+                        V3l(dstInfo.SZ, -int64(alignedLineSize / elementSize), 1L)
+                    )
+
+                NativeVolume.copyNativeToImage src srcInfo image
+
+            finally
+                GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
+                GL.Check "could not unmap buffer"
+
+            GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
+            GL.Check "could not unbind buffer"
+            GL.DeleteBuffer(b)
+            GL.Check "could not delete buffer"
+
+            GL.BindTexture(target, 0)
+            GL.Check "could not unbind texture"
+
+          
         let downloadTexture2D (t : Texture) (level : int) (image : PixImage) =
             downloadTexture2DInternal TextureTarget.Texture2D true t level image
 
