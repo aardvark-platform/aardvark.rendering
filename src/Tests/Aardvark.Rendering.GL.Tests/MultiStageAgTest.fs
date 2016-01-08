@@ -59,20 +59,35 @@ module MultipleStageAgMemoryLeakTest =
         member x.Trafos = localTrafos
         member x.Child = c
 
+    type DogRoot(c : IMod<IDog>) =
+        interface IDog
+        member x.Child = c
+
     type RenderData = Data * IMod<Trafo3d>
 
     [<Semantic>]
     type DogSemantics() = 
 
+        let getMyTrafo d =
+            Mod.mapN (fun (xs:seq<Trafo3d>) -> Seq.fold (*) Trafo3d.Identity xs) ( d?Trafos )
+
         member x.Leafs(data : DataDog) : aset<RenderData> =
             aset {
                 let! d = data.Data
-                let trafo : IMod<Trafo3d> = Mod.constant Trafo3d.Identity // data?Trafo()
-                let trafo : IMod<Trafo3d> = data?Trafo()
+//                let trafo : IMod<Trafo3d> = Mod.constant Trafo3d.Identity // data?Trafo()
+//                let trafo : IMod<Trafo3d> = data?Trafo()
+//                let trafo : IMod<Trafo3d> = getMyTrafo data
+                let trafo : IMod<Trafo3d> = data?Trafo2
                 yield d,trafo
             }
 
         member x.Leafs(t : TrafoNode) : aset<RenderData> =
+            aset {
+                let! c = t.Child
+                yield! c?Leafs()
+            }
+
+        member x.Leafs(t : DogRoot) : aset<RenderData> =
             aset {
                 let! c = t.Child
                 yield! c?Leafs()
@@ -83,6 +98,16 @@ module MultipleStageAgMemoryLeakTest =
                 for e in t.Children do
                     yield! e?Leafs()
             }
+
+//        member x.Trafo2(r : Root<IDog>) =
+//            r.Child?Trafo2 <- Mod.init Trafo3d.Identity
+
+        member x.Trafo2(r : DogRoot) =
+            r.Child?Trafo2 <- Mod.init Trafo3d.Identity
+
+        member x.Trafo2(r : TrafoNode) =
+            r.Child?Trafo2 <- Mod.map2 (*) (Mod.init Trafo3d.Identity) r?Trafo2 // BUG: this makes a leak
+            //r.Child?Trafo2 <- Mod.init Trafo3d.Identity // this works
 
         member x.Trafos(r : Root<IDog>) = 
             r.Child?Trafo <- [Mod.init Trafo3d.Identity]
@@ -121,7 +146,7 @@ module MultipleStageAgMemoryLeakTest =
             }
 
 
-        let dog = DogGroup d1 :> IDog
+        let dog = DogRoot (Mod.init <| (DogGroup d1 :> IDog))
 
 
         let chunkVisualization t2 ((trafo,vertics,colors,leak) : PointChunk) : ISg =
