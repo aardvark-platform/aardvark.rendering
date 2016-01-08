@@ -4,5 +4,6 @@
 let main args =
     Aardvark.Base.Ag.initialize()
     //RenderingTests.``[GL] concurrent group change``()
-    RenderingTests.``[GL] memory leak test``()
+    //RenderingTests.``[GL] memory leak test``()
+    MultipleStageAgMemoryLeakTest.run() |> ignore
     0

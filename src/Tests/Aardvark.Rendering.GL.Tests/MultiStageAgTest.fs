@@ -67,6 +67,7 @@ module MultipleStageAgMemoryLeakTest =
         member x.Leafs(data : DataDog) : aset<RenderData> =
             aset {
                 let! d = data.Data
+                let trafo : IMod<Trafo3d> = Mod.constant Trafo3d.Identity // data?Trafo()
                 let trafo : IMod<Trafo3d> = data?Trafo()
                 yield d,trafo
             }
@@ -144,7 +145,7 @@ module MultipleStageAgMemoryLeakTest =
         let rsg = Sg.set sg
 
         use app = new OpenGlApplication()
-        let win = app.CreateSimpleRenderWindow(1)
+        let win = app.CreateGameWindow()
    
 
         win.Keyboard.Down.Values.Subscribe(fun k -> 
@@ -152,17 +153,30 @@ module MultipleStageAgMemoryLeakTest =
                 transact (fun () ->
                     Mod.change activeEngine  { p = Mod.init <| Some (SideEffectingMonster() :> _)}
                 )
+                GC.Collect()
+                GC.WaitForPendingFinalizers()
+                printfn "leak cnt: %A" !globalLeakCnt
         ) |> ignore
 
         win.Keyboard.Down.Values.Subscribe(fun k -> 
-            if k = Keys.G then 
-                transact (fun () ->
-                    Mod.change activeEngine  { p = Mod.init <| None}
-                )
+            
+            if k = Keys.G then
+                let doit () =
+                    GC.Collect()
+                    GC.WaitForPendingFinalizers()
+                    printfn "leak cnt: %A" !globalLeakCnt
+                System.Threading.Tasks.Task.Factory.StartNew(fun () ->
+                    System.Threading.Thread.Sleep 200
+                    doit ()
+                ) |> ignore
 
-            GC.Collect()
-            GC.WaitForPendingFinalizers()
-            printfn "leak cnt: %A" !globalLeakCnt
+                let foo () =
+                        transact (fun () ->
+                            Mod.change activeEngine  { p = Mod.init <| None}
+                        )
+
+                foo ()
+
         ) |> ignore
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
