@@ -192,7 +192,7 @@ module MultipleStageAgMemoryLeakTest =
                     GC.Collect()
                     GC.WaitForPendingFinalizers()
                     printfn "leak cnt: %A" !globalLeakCnt
-                    printfn "%A" Aardvark.SceneGraph.Semantics.TrafoSemantics.mulCache
+                    //printfn "%A" Aardvark.SceneGraph.Semantics.TrafoSemantics.mulCache
 
                 System.Threading.Tasks.Task.Factory.StartNew(fun () ->
                     System.Threading.Thread.Sleep 100

@@ -2,6 +2,7 @@
 
 open System
 open Aardvark.Base
+open System.Runtime.CompilerServices
 
 type CameraView private(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d) =
     let viewTrafo = lazy ( Trafo3d.ViewTrafo(location, right, up, -forward) )
@@ -227,3 +228,9 @@ module Camera =
     let inline left     (cam : Camera) = cam.cameraView |> CameraView.left
     let inline near     (cam : Camera) = cam.frustum.near
     let inline far      (cam : Camera) = cam.frustum.far
+
+
+[<Extension;AutoOpen>]
+type CSharpExtensions() =
+    [<Extension>]
+    static member ProjTrafo(f : Frustum) = Frustum.projTrafo f

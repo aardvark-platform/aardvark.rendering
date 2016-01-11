@@ -26,6 +26,11 @@ type SceneGraphExtensions =
     [<Extension>]
     static member CameraView(sg : ISg, view : ICameraView) = Sg.ViewTrafoApplicator(view.ViewTrafos, sg) :> ISg
 
+    [<Extension>]
+    static member ViewTrafo(sg : ISg, view : IMod<Trafo3d>) = Sg.viewTrafo view sg
+
+    [<Extension>]
+    static member ProjTrafo(sg : ISg, proj : IMod<Trafo3d>) = Sg.projTrafo proj sg
 
     [<Extension>]
     static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(Mod.constant surface, sg) :> ISg
@@ -85,6 +90,8 @@ type SceneGraphExtensions =
     [<Extension>]
     static member DepthTestMode(sg : ISg, mode : IMod<DepthTestMode>) = Sg.DepthTestModeApplicator(mode, sg) :> ISg
 
+    [<Extension>]
+    static member WithEffects(sg : ISg, effects : seq<FShadeEffect>) : ISg = Sg.effect effects sg
 
 [<Extension>]
 [<AbstractClass>]
