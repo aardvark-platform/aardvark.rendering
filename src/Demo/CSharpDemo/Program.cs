@@ -1,4 +1,14 @@
-﻿using System;
+﻿/*
+
+This example demonstrates how to setup a rendering application in C#. The file is a 1:1 copy of 
+https://github.com/vrvis/aardvark.rendering/blob/master/src/Demo/Examples/HelloWorld.fs
+
+Feel free to contribute our C# interfaces. You'll win 10 beers if you find a nice way to use
+FShade from within C# ;)
+
+*/
+
+using System;
 using Aardvark.Base;
 using Aardvark.Base.Incremental.CSharp;
 using Aardvark.SceneGraph;
@@ -45,6 +55,12 @@ namespace CSharpDemo
 
                 var quadSg = quad.ToSg();
 
+                // This is one of the hardest parts in C#. Our FShade interface is rather generic and
+                // works super awesome in F#. In C# however, without proper type inference doing simple function
+                // calls suddenly requires a Phd in CS. Therefore, and especially since shaders cannot be written
+                // in C# anyways, write application setup and shader code in F# ;)
+                // Or don't use FShade. FShade simply does not work in without functional language 
+                // features such as type inference and function currying.
                 Func<DefaultSurfaces.Vertex, FSharpExpr<V4d>> whiteShader =
                         HighFun.ApplyArg0<C4f, DefaultSurfaces.Vertex, FSharpExpr<V4d>>(
                             DefaultSurfaces.constantColor, C4f.White);
