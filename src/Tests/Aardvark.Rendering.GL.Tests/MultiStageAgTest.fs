@@ -26,23 +26,23 @@ module MultipleStageAgMemoryLeakTest =
     type Data =
         | PointSet of aset<PointChunk>
 
-    type ISideEffectingMonster = 
+    type IContentWithImperativeInterface = 
         abstract member AdaptiveRenderArrays : aset<PointChunk>
 
-    type SideEffectingMonster() =
+    type ImperativeSceneStructure() =
         let cset = 
             CSet.ofSeq [ Trafo3d.Identity, 
                          Array.init 1000 (constF V3f.OOI), 
                          Array.init 1000 (constF C4b.Red),
                          ZZZZZLeak globalLeakCnt ]
-        interface ISideEffectingMonster with
+        interface IContentWithImperativeInterface with
             member x.AdaptiveRenderArrays = cset :> aset<_>
 
-    type EmptySideEffectingMonster() =
-        interface ISideEffectingMonster with
+    type EmptyImperativeSceneStructure() =
+        interface IContentWithImperativeInterface with
             member x.AdaptiveRenderArrays = ASet.empty
 
-    type Engine = { p : IModRef<Option<ISideEffectingMonster>> }
+    type Engine = { p : IModRef<Option<IContentWithImperativeInterface>> }
 
     type IDog = interface end
 
@@ -122,7 +122,7 @@ module MultipleStageAgMemoryLeakTest =
         Ag.initialize()
         Aardvark.Init()
 
-        let activeEngine = Mod.init { p = Mod.init (Some ( EmptySideEffectingMonster() :> ISideEffectingMonster))}
+        let activeEngine = Mod.init { p = Mod.init (Some ( EmptyImperativeSceneStructure() :> IContentWithImperativeInterface))}
 
         let sceneData (e : IMod<Engine>) =
             aset {
@@ -153,7 +153,8 @@ module MultipleStageAgMemoryLeakTest =
             Sg.draw IndexedGeometryMode.PointList
                 |> Sg.vertexAttribute DefaultSemantic.Positions     (vertics |> Mod.constant)
                 |> Sg.vertexAttribute DefaultSemantic.Colors        (colors  |> Mod.constant)
-                |> Sg.trafo (Mod.map (fun t -> t* trafo) t2)
+                |> Sg.trafo (Mod.map (fun t -> t * trafo) t2)
+                //|> Sg.trafo (Mod.init trafo)
 
         let renderView (d : IDog) =
             let leafs  : aset<RenderData> = d?Leafs()
@@ -167,6 +168,7 @@ module MultipleStageAgMemoryLeakTest =
 
 
         let sg = renderView dog
+        let reader = sg.GetReader()
         let rsg = Sg.set sg
 
         use app = new OpenGlApplication()
@@ -176,7 +178,7 @@ module MultipleStageAgMemoryLeakTest =
         win.Keyboard.Down.Values.Subscribe(fun k -> 
             if k = Keys.N then 
                 transact (fun () ->
-                    Mod.change activeEngine  { p = Mod.init <| Some (SideEffectingMonster() :> _)}
+                    Mod.change activeEngine  { p = Mod.init <| Some (ImperativeSceneStructure() :> _)}
                 )
                 GC.Collect()
                 GC.WaitForPendingFinalizers()
@@ -190,17 +192,22 @@ module MultipleStageAgMemoryLeakTest =
                     GC.Collect()
                     GC.WaitForPendingFinalizers()
                     printfn "leak cnt: %A" !globalLeakCnt
+                    printfn "%A" Aardvark.SceneGraph.Semantics.TrafoSemantics.mulCache
+
                 System.Threading.Tasks.Task.Factory.StartNew(fun () ->
-                    System.Threading.Thread.Sleep 200
+                    System.Threading.Thread.Sleep 100
                     doit ()
                 ) |> ignore
 
                 let foo () =
-                        transact (fun () ->
-                            Mod.change activeEngine  { p = Mod.init <| None}
-                        )
+                    transact (fun () ->
+                        Mod.change activeEngine  { p = Mod.init <| None}
+                    )
+                    reader.GetDelta() |> ignore
 
                 foo ()
+                GC.Collect()
+                GC.WaitForPendingFinalizers()
 
         ) |> ignore
 
