@@ -18,6 +18,10 @@ Linux:
 - run ./build.sh
 - run xbuild src/Aardvark.Rendering.sln or use MonoDevelop to build src/Aardvark.Rendering
 
+Tutorials can be found here:
+https://github.com/vrvis/aardvark.rendering/tree/master/src/Demo/Examples
+e.g. interactive rendering "Hello World": https://github.com/vrvis/aardvark.rendering/blob/master/src/Demo/Examples/HelloWorld.fs
+
 
 [1] https://visualfsharp.codeplex.com/releases/view/161288
 
