@@ -47,7 +47,7 @@ let pointSg =
 module Shaders =
     open FShade
 
-    type Vertex = { [<TexCoord>] tc : V2d }
+    type Vertex = { [<TexCoord>] tc : V2d; [<Position>] p : V4d }
 
     let input =
         sampler2d {
@@ -55,6 +55,8 @@ module Shaders =
             filter Filter.MinMagMipPoint
         }
 
+//    let cube =
+//        SamplerCube(uniform?CubeMap, { SamplerState.Empty with Filter = Some Filter.MinMagLinear })
 
     // for a given filterSize and sigma calculate the weights CPU-side
     let filterSize = 15
@@ -95,6 +97,11 @@ module Shaders =
             return V4d(color.XYZ, 1.0)
         }
 
+//    let bla (v : Vertex) =
+//        fragment {
+//            return cube.Sample(v.p.XYZ.Normalized)
+//        }
+
 
 // for rendering the filtered image we need a fullscreen quad
 let fullscreenQuad =
@@ -112,7 +119,28 @@ let mainResult =
     pointSg
         |> Sg.compile win.Runtime win.FramebufferSignature 
         |> RenderTask.renderToColor win.Sizes ~~TextureFormat.Rgba8
-   
+ 
+//let runtime = win.Runtime  
+//let signature =
+//    runtime.CreateFramebufferSignature [
+//        DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+//        DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+//    ]
+//let cube = win.Runtime.CreateTextureCube(V2i(1024,1024), TextureFormat.Rgba8, 1, 1)
+//let depth = win.Runtime.CreateRenderbuffer(V2i(1024,1024),RenderbufferFormat.Depth24Stencil8, 1)
+//
+//let fbo = 
+//    runtime.CreateFramebuffer(signature, 
+//        Map.ofList [
+//             DefaultSemantic.Colors, { texture = cube; slice = int CubeSide.PositiveX; level = 0 } :> IFramebufferOutput 
+//             DefaultSemantic.Depth, depth :> IFramebufferOutput
+//        ])
+//
+//let cubeResult = 
+//    RenderTask.renderTo (Mod.constant <| OutputDescription.ofFramebuffer fbo) (pointSg |> Sg.compile win.Runtime win.FramebufferSignature)
+//
+//let a = RenderTask.getResult DefaultSemantic.Colors cubeResult
+
 // by taking the texture created above and the fullscreen quad we can now apply
 // the first gaussian filter to it and in turn get a new IMod<ITexture>     
 let blurredOnlyX =

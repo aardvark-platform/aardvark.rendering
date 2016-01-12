@@ -637,14 +637,14 @@ module TextureExtensions =
                 tex
             )
 
-        member x.CreateTextureCube(size : V2i, mipMapLevels : int, t : TextureFormat) =
+        member x.CreateTextureCube(size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
 
                 addTexture x 0L
                 let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size.X, size.Y, 0), 1, t, 0L)
-                x.UpdateTextureCube(tex, size, mipMapLevels, t)
+                x.UpdateTextureCube(tex, size, mipMapLevels, t, samples)
 
                 tex
             )
@@ -744,7 +744,7 @@ module TextureExtensions =
                 tex.Format <- t
             )
 
-        member x.UpdateTextureCube(tex : Texture, size : V2i, mipMapLevels : int, t : TextureFormat) =
+        member x.UpdateTextureCube(tex : Texture, size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 for (_,target) in cubeSides do
                     GL.BindTexture(target, tex.Handle)
@@ -752,7 +752,11 @@ module TextureExtensions =
                     
                     let target2d = target |> int |> unbox<TextureTarget2d>
                     let ifmt = toSizedInternalFormat t
-                    GL.TexStorage2D(target2d, mipMapLevels, ifmt, size.X, size.Y)
+                    if samples = 1 then
+                        GL.TexStorage2D(target2d, mipMapLevels, ifmt, size.X, size.Y)
+                    else 
+                        if mipMapLevels <> 1 then failwith "Mipmapping not supported on multisampled textures."
+                        GL.TexStorage2DMultisample(target2d |> int |> unbox, samples, ifmt, size.X, size.Y, false)
                     GL.Check "could allocate texture"
 
                     GL.BindTexture(TextureTarget.Texture2D, 0)
@@ -909,8 +913,8 @@ module Texture =
     let create2D (c : Context) (size : V2i) (mipLevels : int) (format : TextureFormat) (samples : int) =
         c.CreateTexture2D(size, mipLevels, format, samples)
 
-    let createCube (c : Context) (size : V2i) (mipLevels : int) (format : TextureFormat) =
-        c.CreateTextureCube(size, mipLevels, format)
+    let createCube (c : Context) (size : V2i) (mipLevels : int) (format : TextureFormat) (samples : int) =
+        c.CreateTextureCube(size, mipLevels, format, samples)
 
     let create3D (c : Context) (size : V3i) (mipLevels : int) (format : TextureFormat) (samples : int) =
         c.CreateTexture3D(size, mipLevels, format, samples)

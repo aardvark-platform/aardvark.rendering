@@ -357,7 +357,7 @@ module RenderTask =
         )
 
 
-    let private getResult (sem : Symbol) (t : RenderToFramebufferMod) =
+    let getResult (sem : Symbol) (t : RenderToFramebufferMod) =
         RenderingResultMod(t, sem) :> IMod<_>
 
     let renderTo (target : IMod<OutputDescription>) (task : IRenderTask) : RenderToFramebufferMod =
