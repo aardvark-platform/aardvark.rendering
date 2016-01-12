@@ -63,6 +63,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
             ignore, 
             [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
         )
+    let mutable defaultOutput = OutputDescription.ofFramebuffer defaultFramebuffer
 
     let avgFrameTime = RunningMean(10)
     let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
@@ -148,14 +149,17 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                         sw.Start()
                         if size <> sizes.Value then
                             transact (fun () -> Mod.change sizes size)
+
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
+                        defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size) }
+
                         GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
                         GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
                         GL.ClearDepth(1.0)
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
 
                         let res = EvaluationUtilities.evaluateTopLevel(fun () ->
-                            t.Run(null, defaultFramebuffer)
+                            t.Run(null, defaultOutput)
                         )
                         
                         statistics.Emit res.Statistics

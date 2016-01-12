@@ -364,7 +364,8 @@ type GameWindow(runtime : Runtime, samples : int) as this =
             (fun _ -> 0), 
             ignore, 
             [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
-        )
+        ) 
+    let mutable defaultOutput = defaultFramebuffer |> OutputDescription.ofFramebuffer
 
     let avgFrameTime = RunningMean(10)
     let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
@@ -420,13 +421,15 @@ type GameWindow(runtime : Runtime, samples : int) as this =
                             transact (fun () -> Mod.change sizes size)
 
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
+                        defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size) }
+
                         GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
                         GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
                         GL.ClearDepth(1.0)
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
 
-                        
-                        let res = t.Run(null, defaultFramebuffer)
+                        let desc = OutputDescription.ofFramebuffer defaultFramebuffer
+                        let res = t.Run(null, defaultOutput)
                         
                         statistics.Emit res.Statistics
                         

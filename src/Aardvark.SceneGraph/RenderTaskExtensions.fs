@@ -139,10 +139,10 @@ module RenderTask =
 
                 RenderTask.ofList [
                     RenderTask.custom (fun (self, target) ->
-                        if target.Size <> size.Value then
-                            transact (fun () -> Mod.change size target.Size)
+                        if target.framebuffer.Size <> size.Value then
+                            transact (fun () -> Mod.change size target.framebuffer.Size)
 
-                        RenderingResult(target, FrameStatistics.Zero)
+                        RenderingResult(target.framebuffer, FrameStatistics.Zero)
                     )
                     composeTask
                 ]
@@ -173,10 +173,10 @@ module RenderTask =
 
                 RenderTask.ofList [
                     RenderTask.custom (fun (self, target) ->
-                        if target.Size <> size.Value then
-                            transact (fun () -> Mod.change size target.Size)
+                        if target.framebuffer.Size <> size.Value then
+                            transact (fun () -> Mod.change size target.framebuffer.Size)
 
-                        RenderingResult(target, FrameStatistics.Zero)
+                        RenderingResult(target.framebuffer, FrameStatistics.Zero)
                     )
                     composeTask
                 ]

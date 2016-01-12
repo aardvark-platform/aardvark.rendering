@@ -124,7 +124,7 @@ module RenderTask =
         interface IRenderTask with
             member x.FramebufferSignature = null
             member x.Dispose() = ()
-            member x.Run(caller, fbo) = RenderingResult(fbo, FrameStatistics.Zero)
+            member x.Run(caller, fbo) = RenderingResult(fbo.framebuffer, FrameStatistics.Zero)
             member x.Runtime = None
             member x.FrameId = 0UL
 
@@ -159,7 +159,7 @@ module RenderTask =
                         frameId <- max frameId t.FrameId
                         stats <- stats + res.Statistics
 
-                    RenderingResult(fbo, stats) |> f
+                    RenderingResult(fbo.framebuffer, stats) |> f
                 )
 
             member x.Dispose() =
@@ -278,7 +278,7 @@ module RenderTask =
                         stats <- stats + res.Statistics
 
                     // return the accumulated statistics
-                    RenderingResult(fbo, stats)
+                    RenderingResult(fbo.framebuffer, stats)
                 )
 
             member x.Dispose() =
@@ -295,7 +295,7 @@ module RenderTask =
 
             member x.FrameId = frameId
 
-    type private CustomRenderTask(f : afun<IRenderTask * IFramebuffer, RenderingResult>) as this =
+    type private CustomRenderTask(f : afun<IRenderTask * OutputDescription, RenderingResult>) as this =
         inherit AdaptiveObject()
         do f.AddOutput this
         interface IRenderTask with
@@ -316,10 +316,10 @@ module RenderTask =
 
     let empty = new EmptyRenderTask() :> IRenderTask
 
-    let ofAFun (f : afun<IRenderTask * IFramebuffer, RenderingResult>) =
+    let ofAFun (f : afun<IRenderTask * OutputDescription, RenderingResult>) =
         new CustomRenderTask(f) :> IRenderTask
 
-    let custom (f : IRenderTask * IFramebuffer -> RenderingResult) =
+    let custom (f : IRenderTask * OutputDescription -> RenderingResult) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
 
@@ -360,7 +360,7 @@ module RenderTask =
     let private getResult (sem : Symbol) (t : RenderToFramebufferMod) =
         RenderingResultMod(t, sem) :> IMod<_>
 
-    let renderTo (target : IMod<IFramebuffer>) (task : IRenderTask) : RenderToFramebufferMod =
+    let renderTo (target : IMod<OutputDescription>) (task : IRenderTask) : RenderToFramebufferMod =
         RenderToFramebufferMod(task, target)
 
     let renderToColorMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
@@ -372,7 +372,9 @@ module RenderTask =
         let depth = createRenderbuffer runtime samples size ~~RenderbufferFormat.DepthComponent32 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-        let fbo = createFramebuffer runtime signature (Some <| defaultView color) (Some depth)
+        let fbo = 
+            createFramebuffer runtime signature (Some <| defaultView color) (Some depth)
+            |> Mod.map OutputDescription.ofFramebuffer
 
         new SequentialRenderTask([|clear; task|]) 
             |> renderTo fbo
@@ -389,7 +391,9 @@ module RenderTask =
 
         
 
-        let fbo = createFramebuffer runtime signature None (Some <| defaultView depth)
+        let fbo = 
+            createFramebuffer runtime signature None (Some <| defaultView depth)
+            |> Mod.map OutputDescription.ofFramebuffer
 
 
  
@@ -407,7 +411,9 @@ module RenderTask =
         let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-        let fbo = createFramebuffer runtime signature (Some <| defaultView color) (Some <| defaultView depth)
+        let fbo = 
+            createFramebuffer runtime signature (Some <| defaultView color) (Some <| defaultView depth)
+            |> Mod.map OutputDescription.ofFramebuffer
 
         let renderResult = 
             new SequentialRenderTask([|clear; task|]) 

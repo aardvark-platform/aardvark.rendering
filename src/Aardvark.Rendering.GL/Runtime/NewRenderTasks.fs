@@ -70,7 +70,8 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
     member x.CurrentContext =
         currentContext :> IMod<_>
 
-    member x.Run(caller : IAdaptiveObject, fbo : IFramebuffer) =
+    member x.Run(caller : IAdaptiveObject, desc : OutputDescription) =
+        let fbo = desc.framebuffer // TODO: fix outputdesc
         if not <| fboSignature.IsAssignableFrom fbo.Signature then
             failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
 

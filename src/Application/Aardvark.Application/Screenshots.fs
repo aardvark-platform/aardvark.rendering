@@ -35,10 +35,11 @@ module Screenshot =
                     DefaultSemantic.Colors, (color :> IFramebufferOutput)
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
-            )
+            ) 
+        let desc = OutputDescription.ofFramebuffer fbo
 
-        clear.Run(null, fbo) |> ignore
-        task.Run(null, fbo) |> ignore
+        clear.Run(null, desc) |> ignore
+        task.Run(null, desc) |> ignore
 
 
         let colorTexture = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)

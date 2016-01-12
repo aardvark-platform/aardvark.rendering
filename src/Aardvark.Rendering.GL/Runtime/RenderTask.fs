@@ -314,7 +314,8 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
 
 
 
-    member x.Run (caller : IAdaptiveObject, fbo : IFramebuffer) =
+    member x.Run (caller : IAdaptiveObject, fbo : OutputDescription) =
+        let fbo = fbo.framebuffer
         x.EvaluateAlways caller (fun () ->
             using ctx.ResourceLock (fun _ ->
 
@@ -447,7 +448,8 @@ type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color :
 
     let mutable frameId = 0UL
 
-    member x.Run(caller : IAdaptiveObject, fbo : IFramebuffer) =
+    member x.Run(caller : IAdaptiveObject, desc : OutputDescription) =
+        let fbo = desc.framebuffer
         using ctx.ResourceLock (fun _ ->
             x.EvaluateAlways caller (fun () ->
 

@@ -76,7 +76,7 @@ and IRenderTask =
     inherit IAdaptiveObject
     abstract member FramebufferSignature : IFramebufferSignature
     abstract member Runtime : Option<IRuntime>
-    abstract member Run : IAdaptiveObject * IFramebuffer -> RenderingResult
+    abstract member Run : IAdaptiveObject * OutputDescription -> RenderingResult
     abstract member FrameId : uint64
 
 and [<AllowNullLiteral>] IFramebufferSignature =
@@ -98,10 +98,46 @@ and RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
     member x.Framebuffer = f
     member x.Statistics = stats
 
+and [<Flags>]ColorWriteMask = 
+    | Red = 0x1
+    | Green = 0x2
+    | Blue = 0x4
+    | Alpha = 0x8
+    | All = 0xf
+    | None = 0x0
+
+and OutputDescription =
+    {
+        framebuffer : IFramebuffer
+        viewport    : Box2i
+        colorWrite : ColorWriteMask
+        depthWrite : bool
+        stencilMaskFront : uint32
+        stencilMaskBack : uint32
+    }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module OutputDescription =
+
+    let ofFramebuffer (framebuffer : IFramebuffer) =
+        { 
+            framebuffer = framebuffer
+            viewport = Box2i.FromMinAndSize(V2i.OO, framebuffer.Size)
+            colorWrite = ColorWriteMask.All
+            depthWrite = true
+            stencilMaskFront = UInt32.MaxValue
+            stencilMaskBack  = UInt32.MaxValue
+        }
+   
+
 [<Extension>]
 type RenderTaskRunExtensions() =
     [<Extension>]
     static member Run(t : IRenderTask, fbo : IFramebuffer) =
+        t.Run(null, OutputDescription.ofFramebuffer fbo)
+
+    [<Extension>]
+    static member Run(t : IRenderTask, fbo : OutputDescription) =
         t.Run(null, fbo)
 
 type ShaderStage =
@@ -131,7 +167,7 @@ type IGeneratedSurface =
     abstract member Generate : IRuntime * IFramebufferSignature -> BackendSurface
 
 
-type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<IFramebuffer>) =
+type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<OutputDescription>) =
     inherit Mod.AbstractMod<RenderingResult>()
 
     member x.Task = task

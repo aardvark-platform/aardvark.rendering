@@ -274,7 +274,8 @@ module RenderingTests =
                     DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
-            )
+            ) 
+        let outputDesc = OutputDescription.ofFramebuffer fbo
 
 
         
@@ -287,8 +288,8 @@ module RenderingTests =
         use task = runtime.CompileRender(signature, sg)
         use clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 
-        clear.Run(null, fbo) |> ignore
-        task.Run(null, fbo) |> ignore
+        clear.Run(null, outputDesc) |> ignore
+        task.Run(null, outputDesc) |> ignore
         
 
         let pi = PixImage<byte>(Col.Format.BGRA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
@@ -339,6 +340,7 @@ module RenderingTests =
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
+        let outputDesc = OutputDescription.ofFramebuffer fbo
 
 
         
@@ -356,8 +358,8 @@ module RenderingTests =
                 ~~1.0
             )
 
-        clear.Run(null, fbo) |> ignore
-        task.Run(null, fbo) |> ignore
+        clear.Run(null, outputDesc) |> ignore
+        task.Run(null, outputDesc) |> ignore
 
         let pi = PixImage<byte>(Col.Format.BGRA, size) //color.Download(0).[0].ToPixImage<byte>(Col.Format.BGRA)
         runtime.Download(color, 0, 0, pi)
