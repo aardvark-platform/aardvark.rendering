@@ -110,7 +110,7 @@ and OutputDescription =
     {
         framebuffer : IFramebuffer
         viewport    : Box2i
-        colorWrite : ColorWriteMask
+        colorWrite : Map<Symbol,ColorWriteMask>
         depthWrite : bool
         stencilMaskFront : uint32
         stencilMaskBack : uint32
@@ -123,7 +123,7 @@ module OutputDescription =
         { 
             framebuffer = framebuffer
             viewport = Box2i.FromMinAndSize(V2i.OO, framebuffer.Size)
-            colorWrite = ColorWriteMask.All
+            colorWrite = Map.empty 
             depthWrite = true
             stencilMaskFront = UInt32.MaxValue
             stencilMaskBack  = UInt32.MaxValue

@@ -61,6 +61,7 @@ type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aard
         outputBySem <- List.append bindings depth |> Map.ofList
 
     member x.Attachments = outputBySem
+    member x.Signature = signature
 
     interface IFramebuffer with
         member x.Signature = signature

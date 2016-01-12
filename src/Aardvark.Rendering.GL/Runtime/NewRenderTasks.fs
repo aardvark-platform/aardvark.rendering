@@ -34,7 +34,8 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
             if wasEnabled then GL.Enable EnableCap.DebugOutput
             else GL.Disable EnableCap.DebugOutput
 
-    let pushFbo (fbo : Framebuffer) =
+    let pushFbo (desc : OutputDescription) =
+        let fbo = desc.framebuffer |> unbox<Framebuffer>
         let old = Array.create 4 0
         let mutable oldFbo = 0
         OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
@@ -45,17 +46,31 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
         if ExecutionContext.framebuffersSupported then
             GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
             GL.Check "could not bind framebuffer"
-            let drawBuffers = Array.init fbo.Attachments.Count (fun i -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
+            let attachmentCount = fbo.Attachments.Count
+            let drawBuffers = Array.init attachmentCount (fun i -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
             if handle <> 0 then
+                
+                for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
+                    match Map.tryFind sem desc.colorWrite with
+                     | Some v -> 
+                         GL.ColorMask(
+                            index, 
+                            (v &&& ColorWriteMask.Red)   <> ColorWriteMask.None, 
+                            (v &&& ColorWriteMask.Green) <> ColorWriteMask.None,
+                            (v &&& ColorWriteMask.Blue)  <> ColorWriteMask.None, 
+                            (v &&& ColorWriteMask.Alpha) <> ColorWriteMask.None
+                        )
+                     | None -> GL.ColorMask(index, true, true, true, true)
+
                 GL.DrawBuffers(drawBuffers.Length, drawBuffers)
                 GL.Check "DrawBuffers errored"
         elif handle <> 0 then
             failwithf "cannot render to texture on this OpenGL driver"
 
-
-        GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+        GL.Viewport(desc.viewport.Min.X, desc.viewport.Min.Y, desc.viewport.SizeX, desc.viewport.SizeY)
         GL.Check "could not set viewport"
 
+       
 
         oldFbo, old
 
@@ -87,7 +102,7 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
 
 
             let debugState = pushDebugOutput()
-            let fboState = pushFbo fbo
+            let fboState = pushFbo desc
 
 
             let stats = x.Run fbo
