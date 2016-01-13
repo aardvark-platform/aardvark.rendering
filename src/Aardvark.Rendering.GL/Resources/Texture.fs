@@ -89,8 +89,8 @@ module TextureExtensions =
             CubeSide.PositiveX, TextureTarget.TextureCubeMapPositiveX
             CubeSide.NegativeX, TextureTarget.TextureCubeMapNegativeX
 
-            CubeSide.PositiveY, TextureTarget.TextureCubeMapPositiveY
-            CubeSide.NegativeY, TextureTarget.TextureCubeMapNegativeY
+            CubeSide.PositiveY, TextureTarget.TextureCubeMapNegativeY
+            CubeSide.NegativeY, TextureTarget.TextureCubeMapPositiveY
                 
             CubeSide.PositiveZ, TextureTarget.TextureCubeMapPositiveZ
             CubeSide.NegativeZ, TextureTarget.TextureCubeMapNegativeZ
@@ -264,7 +264,7 @@ module TextureExtensions =
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
             GL.DeleteBuffer(b)
 
-        let private uploadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (startLevel : int) (textureParams : TextureParams) (data : PixImageMipMap) =
+        let private uploadTexture2DInternal (bindTarget : TextureTarget) (target : TextureTarget) (isTopLevel : bool) (t : Texture) (startLevel : int) (textureParams : TextureParams) (data : PixImageMipMap) =
             if data.LevelCount <= 0 then
                 failwith "cannot upload texture having 0 levels"
 
@@ -286,7 +286,7 @@ module TextureExtensions =
                 updateTexture t.Context t.SizeInBytes sizeInBytes
                 t.SizeInBytes <- sizeInBytes
 
-            GL.BindTexture(target, t.Handle)
+            GL.BindTexture(bindTarget, t.Handle)
             GL.Check "could not bind texture"
 
             GL.TexParameter(target, TextureParameterName.TextureMaxLevel, if generateMipMap then 1000 else uploadLevels-1)
@@ -346,7 +346,7 @@ module TextureExtensions =
                 GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
                 GL.Check "failed to generate mipmaps"
 
-            GL.BindTexture(target, 0)
+            GL.BindTexture(bindTarget, 0)
             GL.Check "could not bind texture"
 
             // since some attributes of the texture
@@ -361,7 +361,7 @@ module TextureExtensions =
             generateMipMap
 
         let uploadTexture2D (t : Texture) (textureParams : TextureParams) (data : PixImageMipMap) =
-            uploadTexture2DInternal TextureTarget.Texture2D true t 0 textureParams data |> ignore
+            uploadTexture2DInternal TextureTarget.Texture2D TextureTarget.Texture2D true t 0 textureParams data |> ignore
 
         let uploadTextureCube (t : Texture) (textureParams : TextureParams) (data : PixImageCube) =
             for (s,_) in cubeSides do
@@ -371,9 +371,12 @@ module TextureExtensions =
             let mutable generateMipMaps = false
             let size = data.[CubeSide.NegativeX].[0].Size
 
+            let mutable minLevels = Int32.MaxValue
             for (side, target) in cubeSides do
                 let data = data.[side]
-                let generate = uploadTexture2DInternal target false t 0 textureParams data
+                
+                minLevels <- min minLevels data.LevelCount
+                let generate = uploadTexture2DInternal TextureTarget.TextureCubeMap target false t 0 textureParams data
 
                 if generate && textureParams.wantMipMaps then
                     generateMipMaps <- true
@@ -382,16 +385,23 @@ module TextureExtensions =
             updateTexture t.Context t.SizeInBytes realSize
             t.SizeInBytes <- realSize
 
-            if generateMipMaps then
-                GL.BindTexture(TextureTarget.TextureCubeMap, t.Handle)
-                GL.Check "could not bind texture"
+            let levels =
+                if generateMipMaps then
+                    GL.BindTexture(TextureTarget.TextureCubeMap, t.Handle)
+                    GL.Check "could not bind texture"
 
-                GL.GenerateMipmap(GenerateMipmapTarget.TextureCubeMap)
-                GL.Check "failed to generate mipmaps"
+                    GL.GenerateMipmap(GenerateMipmapTarget.TextureCubeMap)
+                    GL.Check "failed to generate mipmaps"
 
-                GL.BindTexture(TextureTarget.TextureCubeMap, 0)
-                GL.Check "could not unbind texture"
+                    GL.BindTexture(TextureTarget.TextureCubeMap, 0)
+                    GL.Check "could not unbind texture"
 
+                    GL.GetTexParameterI(TextureTarget.TextureCubeMap, GetTextureParameter.TextureMaxLevel, &minLevels)
+                    minLevels + 1
+                else
+                    minLevels
+                
+            t.MipMapLevels <- levels
             t.Size <- V3i(size.X, size.Y, 0)
             t.Multisamples <- 1
             t.Count <- 1

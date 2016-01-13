@@ -38,7 +38,7 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DocumentationFile>
     </DocumentationFile>
-    <Prefer32Bit>true</Prefer32Bit>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
