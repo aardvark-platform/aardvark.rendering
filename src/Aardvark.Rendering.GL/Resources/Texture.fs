@@ -318,12 +318,16 @@ module TextureExtensions =
                 let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
                 try
                     let srcInfo = image.VolumeInfo
+
+                    let dy = int64 (alignedLineSize / elementSize)
                     let dstInfo = 
                         VolumeInfo(
-                            srcInfo.Index(V3l(0L, srcInfo.Size.Y-1L, 0L)), 
+                            dy * (srcInfo.Size.Y-1L),
                             srcInfo.Size, 
-                            V3l(srcInfo.SZ,-int64(alignedLineSize / elementSize), 1L)
+                            V3l(srcInfo.SZ,-dy, 1L)
                         )
+
+
                     NativeVolume.copyImageToNative image ptr dstInfo
                 finally
                     GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
