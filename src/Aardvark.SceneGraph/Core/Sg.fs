@@ -297,6 +297,8 @@ module Sg =
             member x.SetEquals other = (aset :> ISet<ISg>).SetEquals other
 
         new() = Group(Seq.empty)
+
+        new([<ParamArray>] items: ISg[]) = Group(items |> Array.toSeq)
         
     type Set(content : aset<ISg>) =
 
