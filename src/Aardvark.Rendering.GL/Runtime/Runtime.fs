@@ -8,7 +8,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 
-type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, depthStencil : Option<AttachmentSignature>) =
+type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
    
     let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
         let myCol = RenderbufferFormat.toColFormat mine.format
@@ -32,7 +32,8 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
 
     member x.Runtime = runtime
     member x.ColorAttachments = colors
-    member x.DepthStencilAttachment = depthStencil
+    member x.DepthAttachment = depth
+    member x.StencilAttachment = depth
 
     member x.IsAssignableFrom (other : IFramebufferSignature) =
         if x.Equals other then 
@@ -41,18 +42,19 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
             match other with
                 | :? FramebufferSignature as other ->
                     runtime = other.Runtime &&
-                    colorsAssignableFrom colors other.ColorAttachments &&
-                    depthAssignableFrom depthStencil other.DepthStencilAttachment
+                    colorsAssignableFrom colors other.ColorAttachments
+                    // TODO: check depth and stencil (cumbersome for combined DepthStencil attachments)
                 | _ ->
                     false
 
     override x.ToString() =
-        sprintf "{ ColorAttachments = %A; DepthStencilAttachment = %A }" colors depthStencil
+        sprintf "{ ColorAttachments = %A; DepthAttachment = %A; StencilAttachment = %A }" colors depth stencil
 
     interface IFramebufferSignature with
         member x.Runtime = runtime
         member x.ColorAttachments = colors
-        member x.DepthStencilAttachment = depthStencil
+        member x.DepthAttachment = depth
+        member x.StencilAttachment = stencil
         member x.IsAssignableFrom other = x.IsAssignableFrom other
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
@@ -152,12 +154,17 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
 
-        let depthStencil =
+        let depth =
             Map.tryFind DefaultSemantic.Depth attachments
+
+        let stencil =
+            Map.tryFind DefaultSemantic.Stencil attachments
+
 
         let indexedColors =
             attachments
                 |> Map.remove DefaultSemantic.Depth
+                |> Map.remove DefaultSemantic.Stencil
                 |> Map.toList
                 |> List.sortWith (fun (a,_) (b,_) -> 
                     if a = DefaultSemantic.Colors then Int32.MinValue
@@ -167,7 +174,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 |> List.mapi (fun i t -> (i, t))
                 |> Map.ofList
 
-        FramebufferSignature(x, indexedColors, depthStencil)
+        FramebufferSignature(x, indexedColors, depth, stencil)
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
@@ -334,7 +341,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                    )
 
         let depth =
-            match signature.DepthStencilAttachment with
+            match signature.DepthAttachment with
                 | Some desc ->
                     let b = bindings.[DefaultSemantic.Depth]
                     if b.Format <> desc.format || b.Samples <> desc.samples then
@@ -344,7 +351,18 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | None ->
                     None
 
-        ctx.CreateFramebuffer(signature, colors, depth)
+        let stencil =
+            match signature.StencilAttachment with
+                | Some desc ->
+                    let b = bindings.[DefaultSemantic.Stencil]
+                    if b.Format <> desc.format || b.Samples <> desc.samples then
+                        failwithf "incompatible StencilAttachment: expected (%A, %A) but got: (%A, %A)" desc.format desc.samples b.Format b.Samples
+
+                    Some b
+                | None ->
+                    None
+
+        ctx.CreateFramebuffer(signature, colors, depth, stencil)
 
     member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
         match count with

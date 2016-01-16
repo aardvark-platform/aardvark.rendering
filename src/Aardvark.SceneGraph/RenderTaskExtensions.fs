@@ -124,10 +124,9 @@ module RenderTask =
             | Some runtime ->
                 
                 let size = Mod.init V2i.II
-                let format = Mod.init TextureFormat.Rgba8
 
                 let color, depth =
-                    t |> RenderTask.renderToColorAndDepth size format
+                    t |> RenderTask.renderToColorAndDepth size
 
                 let compose =
                     ASet.ofList [
@@ -156,10 +155,9 @@ module RenderTask =
             | Some runtime ->
                 
                 let size = Mod.init V2i.II
-                let format = Mod.init TextureFormat.Rgba8
 
                 let color, depth =
-                    t |> RenderTask.renderToColorAndDepth size format
+                    t |> RenderTask.renderToColorAndDepth size
 
                 let compose =
                     ASet.ofList [

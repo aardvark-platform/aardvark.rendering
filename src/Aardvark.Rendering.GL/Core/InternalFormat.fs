@@ -4,7 +4,7 @@ module InternalFormat =
     open System.Collections.Generic
     open OpenTK.Graphics.OpenGL4
 
-    let internal lookupTable (l : list<'a * 'b>) =
+    let internal lookupTable (def : 'b) (l : list<'a * 'b>) =
         let d = Dictionary()
         for (k,v) in l do
 
@@ -17,10 +17,10 @@ module InternalFormat =
         fun (key : 'a) ->
             match d.TryGetValue key with
                 | (true, v) -> v
-                | _ -> failwithf "unsupported %A: %A" typeof<'a> key
+                | _ -> def
 
     let getSizeInBits = 
-        lookupTable [
+        lookupTable 8 [
             //PixelInternalFormat.DepthComponent, 24
             //PixelInternalFormat.Alpha, 0
             PixelInternalFormat.Rgb, 24
@@ -179,7 +179,7 @@ module RenderbufferStorage =
     open OpenTK.Graphics.OpenGL4
 
     let getSizeInBits = 
-        InternalFormat.lookupTable [
+        InternalFormat.lookupTable 8 [
             RenderbufferStorage.DepthComponent, 32
             RenderbufferStorage.R3G3B2, 8
             RenderbufferStorage.Rgb4, 12

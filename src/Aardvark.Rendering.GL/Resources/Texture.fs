@@ -699,22 +699,28 @@ module TextureExtensions =
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes // TODO check multiampling
 
-                match tryGetSizedInternalFormat t with
-                    | Some ifmt ->
-                        if samples = 1 then
-                            GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, ifmt, size.X, size.Y)
-                        else
-                            if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                            GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, ifmt, size.X, size.Y, false)
-                
-                    | None ->
-                        if samples = 1 then
-                            GL.TexImage2D(TextureTarget.Texture2D, 0, unbox (int t), size.X, size.Y, 0, PixelFormat.DepthComponent, PixelType.Byte, 0n)
-                        else
-                            GL.TexImage2DMultisample(TextureTargetMultisample.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
-                
-                        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.DepthTextureMode, int All.Intensity)
-         
+                if samples = 1 then
+                    GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int t), size.X, size.Y)
+                else
+                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                    GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
+//                
+//                match tryGetSizedInternalFormat t with
+//                    | Some ifmt ->
+//                        if samples = 1 then
+//                            GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, ifmt, size.X, size.Y)
+//                        else
+//                            if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+//                            GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, ifmt, size.X, size.Y, false)
+//                
+//                    | None ->
+//                        if samples = 1 then
+//                            GL.TexImage2D(TextureTarget.Texture2D, 0, unbox (int t), size.X, size.Y, 0, PixelFormat.DepthComponent, PixelType.Byte, 0n)
+//                        else
+//                            GL.TexImage2DMultisample(TextureTargetMultisample.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
+//                
+//                        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.DepthTextureMode, int All.Intensity)
+//         
                 GL.Check "could allocate texture"
 
                 GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, mipMapLevels)

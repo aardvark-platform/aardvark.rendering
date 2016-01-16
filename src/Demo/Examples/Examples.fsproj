@@ -58,6 +58,7 @@
     <None Include="Render2TextureComposable.fsx" />
     <None Include="Render2TexturePrimitiveChangeableSizes.fsx" />
     <None Include="PostProcessing.fsx" />
+    <None Include="Shadows.fsx" />
     <Compile Include="HelloWorld.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />

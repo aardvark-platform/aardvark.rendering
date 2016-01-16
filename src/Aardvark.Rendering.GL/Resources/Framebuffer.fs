@@ -78,7 +78,14 @@ type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aard
 [<AutoOpen>]
 module FramebufferExtensions =
 
-    let private init (bindings : list<int * Symbol * IFramebufferOutput>) (depth : Option<IFramebufferOutput>) (c : Aardvark.Rendering.GL.ContextHandle) : int =
+    let private depthStencilFormats =
+        HashSet.ofList [
+            RenderbufferFormat.Depth24Stencil8
+            RenderbufferFormat.Depth32fStencil8
+            RenderbufferFormat.DepthStencil
+        ]
+
+    let private init (bindings : list<int * Symbol * IFramebufferOutput>) (depth : Option<IFramebufferOutput>) (stencil : Option<IFramebufferOutput>) (c : Aardvark.Rendering.GL.ContextHandle) : int =
         let handle = GL.GenFramebuffer()
         GL.Check "could not create framebuffer"
 
@@ -127,7 +134,17 @@ module FramebufferExtensions =
         // attach depth
         match depth with
             | Some o ->
-                attach o FramebufferAttachment.DepthAttachment
+                if depthStencilFormats.Contains o.Format then
+                    attach o FramebufferAttachment.DepthStencilAttachment
+                else
+                    attach o FramebufferAttachment.DepthAttachment
+            | None ->
+                ()
+
+        // attach stencil
+        match stencil with
+            | Some o ->
+                attach o FramebufferAttachment.StencilAttachment
             | None ->
                 ()
 
@@ -150,8 +167,8 @@ module FramebufferExtensions =
 
     type Context with
 
-        member x.CreateFramebuffer (signature : IFramebufferSignature, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
-            let init = init bindings depth
+        member x.CreateFramebuffer (signature : IFramebufferSignature, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>, stencil : Option<IFramebufferOutput>) =
+            let init = init bindings depth stencil
             addVirtualFbo x
             new Framebuffer(x, signature, init, destroy, bindings, depth)
 
@@ -159,6 +176,6 @@ module FramebufferExtensions =
             removeVirtualFbo x
             f.DestroyHandles()
 
-        member x.Update (f : Framebuffer, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
-            let init = init bindings depth
+        member x.Update (f : Framebuffer, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>, stencil : Option<IFramebufferOutput>) =
+            let init = init bindings depth stencil
             f.Update(init, bindings, depth)

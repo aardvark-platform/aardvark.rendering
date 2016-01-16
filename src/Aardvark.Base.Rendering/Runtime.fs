@@ -83,7 +83,8 @@ and IRenderTask =
 and [<AllowNullLiteral>] IFramebufferSignature =
     abstract member Runtime : IRuntime
     abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
-    abstract member DepthStencilAttachment : Option<AttachmentSignature>
+    abstract member DepthAttachment : Option<AttachmentSignature>
+    abstract member StencilAttachment : Option<AttachmentSignature>
 
     abstract member IsAssignableFrom : other : IFramebufferSignature -> bool
 

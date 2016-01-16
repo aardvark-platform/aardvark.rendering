@@ -337,7 +337,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 
     let mutable task : Option<IRenderTask> = None
 
-    let depthStencilSignature =
+    let depthSignature =
         match Config.DepthBits, Config.StencilBits with
             | 0, 0 -> None
             | 16, 0 -> Some { format = RenderbufferFormat.DepthComponent16; samples = samples }
@@ -351,7 +351,8 @@ type GameWindow(runtime : Runtime, samples : int) as this =
         FramebufferSignature(
             runtime,
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
-            depthStencilSignature
+            depthSignature,
+            None
         )
 
 

@@ -19,7 +19,7 @@ module Screenshot =
         let (_,color) = signature.ColorAttachments |> Map.find 0
 
         let depth = 
-            match signature.DepthStencilAttachment with
+            match signature.DepthAttachment with
                 | Some depth -> depth.format
                 | None -> RenderbufferFormat.DepthComponent32
 

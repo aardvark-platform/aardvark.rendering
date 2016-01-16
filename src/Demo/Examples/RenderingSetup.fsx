@@ -13,9 +13,6 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 
 let setSg, win, mainTask = runInteractive ()
-let mkViewTrafo location center = 
-    let view =  CameraView.LookAt(location, center, V3d.OOI)
-    DefaultCameraController.control win.Mouse win.Keyboard win.Time view
 
 module Default =
     let quadSg =
@@ -28,7 +25,9 @@ module Default =
 
         quad |> Sg.ofIndexedGeometry
 
-    let viewTrafo () = mkViewTrafo (V3d(3.0,3.0,3.0)) V3d.Zero
+    let viewTrafo () =
+        let view =  CameraView.LookAt(V3d(3.0, 3.0, 3.0), V3d.Zero, V3d.OOI)
+        DefaultCameraController.control win.Mouse win.Keyboard win.Time view
+
     let perspective () = 
-        win.Sizes 
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 10.0 (float s.X / float s.Y))
+        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 10.0 (float s.X / float s.Y))

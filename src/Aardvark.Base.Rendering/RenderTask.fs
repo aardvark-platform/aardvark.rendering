@@ -6,6 +6,8 @@ open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.Operators
 open System.Collections.Generic
 open Aardvark.Base.Rendering
+open System.Runtime.CompilerServices
+open System.Threading
 
 module ChangeableResources =
 
@@ -55,7 +57,7 @@ module ChangeableResources =
                     n
         )
 
-    let createFramebuffer (runtime : IRuntime) (signature : IFramebufferSignature) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) =
+    let createFramebuffer (runtime : IRuntime) (signature : IFramebufferSignature) (color : Option<IMod<#IFramebufferOutput>>) (depth : Option<IMod<#IFramebufferOutput>>) (stencil : Option<IMod<#IFramebufferOutput>>) =
         
         let mutable current = None
 
@@ -70,9 +72,14 @@ module ChangeableResources =
                     | Some d -> Some (d.GetValue self)
                     | None -> None
 
-            let create (color : Option<#IFramebufferOutput>) (depth : Option<#IFramebufferOutput>) =
-                match color, depth with
-                    | Some c, Some d -> 
+            let stencil =
+                match stencil with
+                    | Some s -> Some (s.GetValue self)
+                    | None -> None
+
+            let create (color : Option<#IFramebufferOutput>) (depth : Option<#IFramebufferOutput>) (stencil : Option<#IFramebufferOutput>) =
+                match color, depth, stencil with
+                    | Some c, Some d, None -> 
                         runtime.CreateFramebuffer(
                             signature,
                             Map.ofList [
@@ -80,40 +87,342 @@ module ChangeableResources =
                                 DefaultSemantic.Depth, d :> IFramebufferOutput
                             ]
                         )
-                    | Some c, None ->
+                    | Some c, None, None ->
                         runtime.CreateFramebuffer(
                             signature,
                             Map.ofList [
                                 DefaultSemantic.Colors, c :> IFramebufferOutput
                             ]
                         )
-                    | None, Some d ->
+                    | None, Some d, None ->
                         runtime.CreateFramebuffer(
                             signature,
                             Map.ofList [
                                 DefaultSemantic.Depth, d :> IFramebufferOutput
                             ]
                         ) 
-                    | None, None -> failwith "empty framebuffer"
+
+                    | Some c, Some d, Some s ->
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Colors, c :> IFramebufferOutput
+                                DefaultSemantic.Depth, d :> IFramebufferOutput
+                                DefaultSemantic.Stencil, s :> IFramebufferOutput
+                            ]
+                        )
+
+
+                    | None, Some d, Some s ->
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Depth, d :> IFramebufferOutput
+                                DefaultSemantic.Stencil, s :> IFramebufferOutput
+                            ]
+                        )
+
+                    | Some c, None, Some s ->
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Colors, c :> IFramebufferOutput
+                                DefaultSemantic.Stencil, s :> IFramebufferOutput
+                            ]
+                        )
+
+
+
+                    | None, None, Some s ->
+                        runtime.CreateFramebuffer(
+                            signature,
+                            Map.ofList [
+                                DefaultSemantic.Stencil, s :> IFramebufferOutput
+                            ]
+                        )
+
+                    | None, None, None -> failwith "empty framebuffer"
                             
             match current with
-                | Some (c,d,f) ->
-                    if c = color && d = depth then
+                | Some (c,d,s,f) ->
+                    if c = color && d = depth && s = stencil then
                         f
                     else
                         runtime.DeleteFramebuffer f
-                        let n = create color depth
-                        current <- Some (color, depth, n)
+                        let n = create color depth stencil
+                        current <- Some (color, depth, stencil, n)
                         n
                 | None -> 
-                    let n = create color depth
-                    current <- Some (color, depth, n)
+                    let n = create color depth stencil
+                    current <- Some (color, depth, stencil, n)
                     n
         )
 
     let createFramebufferFromTexture (runtime : IRuntime) (signature : IFramebufferSignature) (color : IMod<IBackendTexture>) (depth : IMod<IRenderbuffer>) =
         createFramebuffer  runtime signature  ( color |> Mod.map (fun s -> { texture = s; slice = 0; level = 0 } :> IFramebufferOutput) |> Some ) ( Mod.cast depth |> Some )
 
+
+type IOutputMod<'a> =
+    inherit IMod<'a>
+    abstract member LastStatistics : FrameStatistics
+    abstract member Acquire : unit -> unit
+    abstract member Release : unit -> unit
+
+[<AutoOpen>]
+module private RefCountedResources = 
+    type ChangeableFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =
+        inherit Mod.AbstractMod<IFramebuffer>()
+
+        let mutable refCount = 0
+
+        let mutable colors = Map.empty
+        let mutable depth = None
+        let mutable stencil = None
+        let mutable handle = None
+
+        // TODO: create renderbuffers where textures are not needed (specified by textures-set)
+
+        let createTexture (size : IMod<V2i>) (att : AttachmentSignature) =
+            let mutable old = None
+            Mod.custom (fun self ->
+                let s = size.GetValue self
+                let tex = runtime.CreateTexture(s, unbox (int att.format), 1, att.samples, 1)
+
+                match old with
+                    | Some o -> runtime.DeleteTexture(o)
+                    | None -> ()
+
+                old <- Some tex
+
+                tex
+            )
+
+
+
+        let create() =
+            Log.line "framebuffer created"
+            let colorTextures = 
+                signature.ColorAttachments 
+                    |> Map.toSeq
+                    |> Seq.map (fun (idx, (sem,att)) -> sem, createTexture size att)
+                    |> Map.ofSeq
+
+            let depthTexture =
+                match signature.DepthAttachment with
+                    | Some att -> createTexture size att |> Some
+                    | None -> None
+
+            let stencilTexture =
+                match signature.StencilAttachment with
+                    | Some att -> createTexture size att |> Some
+                    | None -> None
+       
+            let mutable current = None
+            let fbo = 
+                Mod.custom (fun self ->
+                    let attachments = colorTextures |> Map.map (fun _ v -> { texture = v.GetValue self; slice = 0; level = 0 } :> IFramebufferOutput)
+
+                    let attachments =
+                        match depthTexture with
+                            | Some v -> Map.add DefaultSemantic.Depth ({ texture = v.GetValue self; slice = 0; level = 0 } :> IFramebufferOutput) attachments
+                            | None -> attachments
+
+                    let attachments =
+                        match stencilTexture with
+                            | Some v -> Map.add DefaultSemantic.Stencil ({ texture = v.GetValue self; slice = 0; level = 0 } :> IFramebufferOutput) attachments
+                            | None -> attachments
+
+                    match current with
+                        | Some old -> runtime.DeleteFramebuffer(old)
+                        | None -> ()
+
+                    let v = runtime.CreateFramebuffer(signature, attachments)
+                    current <- Some v
+                    v
+                )
+
+            colors <- colorTextures
+            depth <- depthTexture
+            stencil <- stencilTexture
+            handle <- Some fbo
+
+            fbo
+
+
+        let destroy() =
+            Log.line "framebuffer deleted"
+
+            handle |> Option.iter (fun v -> runtime.DeleteFramebuffer (v |> unbox<Mod.AbstractMod<IFramebuffer>>).cache)
+            colors |> Map.iter (fun _ v -> runtime.DeleteTexture (v |> unbox<Mod.AbstractMod<IBackendTexture>>).cache)
+            depth |> Option.iter (fun v -> runtime.DeleteTexture (v |> unbox<Mod.AbstractMod<IBackendTexture>>).cache)
+            stencil |> Option.iter (fun v -> runtime.DeleteTexture (v |> unbox<Mod.AbstractMod<IBackendTexture>>).cache)
+       
+            handle <- None
+            colors <- Map.empty
+            depth <- None
+            stencil <- None
+
+
+        member x.Acquire() =
+            Interlocked.Increment(&refCount) |> ignore
+
+        member x.Release() =
+            if Interlocked.Decrement(&refCount) = 0 then
+                lock x destroy
+                transact (fun () -> x.MarkOutdated())
+
+        override x.Compute() =
+            if refCount = 0 then
+                failwith "pull on ChangeableFramebuffer without reference!!"
+
+            match handle with
+                | Some h ->
+                    h.GetValue x
+
+                | None ->
+                    let h = create()
+                    h.GetValue x
+
+        override x.Inputs =
+            seq {
+                yield! colors |> Map.toSeq |> Seq.map snd |> Seq.cast
+                match depth with
+                    | Some d -> yield d :> _
+                    | None -> ()
+
+                match stencil with
+                    | Some s -> yield s :> _
+                    | None -> ()
+            }
+
+        interface IOutputMod<IFramebuffer> with
+            member x.LastStatistics = FrameStatistics.Zero
+            member x.Acquire() = x.Acquire()
+            member x.Release() = x.Release()
+
+    type AdaptiveRenderingResult(task : IRenderTask, target : IMod<IFramebuffer>) =
+        inherit Mod.AbstractMod<RenderingResult>()
+
+        let mutable refCount = 0
+        let mutable stats = FrameStatistics.Zero
+
+        let targetRef = 
+            match target with
+                | :? IOutputMod<IFramebuffer> as t -> Some t
+                | _ -> None
+
+        override x.Compute() =
+            if refCount = 0 then
+                failwith "pull on AdaptiveRenderingResult without reference!!"
+
+            let fbo = target.GetValue x
+            let res =task.Run(x, OutputDescription.ofFramebuffer fbo)
+            stats <- res.Statistics
+            res
+
+        override x.Inputs =
+            seq {
+                yield task :> _
+                yield target :> _
+            }
+
+        member x.Acquire() =
+            if Interlocked.Increment(&refCount) = 1 then
+                Log.line "result created"
+                match targetRef with
+                    | Some t -> t.Acquire()
+                    | None -> ()
+
+        member x.Release() =
+            if Interlocked.Decrement(&refCount) = 0 then
+                Log.line "result deleted"
+                match targetRef with
+                    | Some t -> t.Release()
+                    | None -> ()
+
+        interface IOutputMod<RenderingResult> with
+            member x.LastStatistics = 
+                match targetRef with 
+                    | Some m -> stats + m.LastStatistics 
+                    | None -> stats
+
+            member x.Acquire() = x.Acquire()
+            member x.Release() = x.Release()
+
+    type AdaptiveOutputTexture(semantic : Symbol, res : IMod<RenderingResult>) =
+        inherit Mod.AbstractMod<ITexture>()
+
+        let mutable refCount = 0
+
+        let resultRef =
+            match res with
+                | :? IOutputMod<RenderingResult> as r -> Some r
+                | _ -> None
+
+        override x.Compute() =
+            if refCount = 0 then
+                failwith "pull on AdaptiveOutputTexture without reference!!"
+
+            let res = res.GetValue x
+
+            match Map.tryFind semantic res.Framebuffer.Attachments with
+                | Some (:? BackendTextureOutputView as t) ->
+                    t.texture :> ITexture
+                | _ ->
+                    failwithf "could not get result for semantic %A as texture" semantic
+
+        override x.Inputs =
+            Seq.singleton (res :> _)
+
+        member x.Acquire() =
+            if Interlocked.Increment &refCount = 1 then
+                Log.line "texture created"
+                match resultRef with
+                    | Some r -> r.Acquire()
+                    | None -> ()
+
+        member x.Release() =
+            if Interlocked.Decrement &refCount = 0 then
+                Log.line "texture deleted"
+                match resultRef with
+                    | Some r -> r.Release()
+                    | None -> ()
+
+        interface IOutputMod<ITexture> with
+            member x.LastStatistics =
+                match resultRef with
+                    | Some r -> r.LastStatistics
+                    | None -> FrameStatistics.Zero
+
+            member x.Acquire() = x.Acquire()
+            member x.Release() = x.Release()
+            
+
+[<AbstractClass; Sealed; Extension>]
+type RuntimeFramebufferExtensions private() =
+
+    [<Extension>]
+    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) : IMod<IFramebuffer> =
+        ChangeableFramebuffer(this, signature, textures, size) :> IMod<IFramebuffer>
+
+    [<Extension>]
+    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, size : IMod<V2i>) : IMod<IFramebuffer> =
+        let sems =
+            Set.ofList [
+                yield! signature.ColorAttachments |> Map.toSeq |> Seq.map snd |> Seq.map fst
+                if Option.isSome signature.DepthAttachment then yield DefaultSemantic.Depth
+                if Option.isSome signature.StencilAttachment then yield DefaultSemantic.Stencil
+            ]
+        
+        ChangeableFramebuffer(this, signature, sems, size) :> IMod<IFramebuffer>
+
+    [<Extension>]
+    static member RenderTo(this : IRenderTask, output : IMod<IFramebuffer>) =
+        AdaptiveRenderingResult(this, output) :> IMod<_>
+
+    [<Extension>]
+    static member GetOutputTexture (this : IMod<RenderingResult>, semantic : Symbol) =
+        AdaptiveOutputTexture(semantic, this) :> IMod<_>
 
 module RenderTask =
 
@@ -351,87 +660,40 @@ module RenderTask =
         t |> mapResult (fun r -> RenderingResult(r.Framebuffer, f r.Statistics))
 
 
-    let private defaultView (m : IMod<IBackendTexture>) =
-        m |> Mod.map (fun t ->
-            { texture = t; level = 0; slice = 0 }
-        )
+    let getResult (sem : Symbol) (t : IMod<RenderingResult>) =
+        t.GetOutputTexture sem
 
+    let renderTo (target : IMod<IFramebuffer>) (task : IRenderTask) : IMod<RenderingResult> =
+        task.RenderTo target
 
-    let getResult (sem : Symbol) (t : RenderToFramebufferMod) =
-        RenderingResultMod(t, sem) :> IMod<_>
-
-    let renderTo (target : IMod<OutputDescription>) (task : IRenderTask) : RenderToFramebufferMod =
-        RenderToFramebufferMod(task, target)
-
-    let renderToColorMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
+    let renderSemantics (sem : Set<Symbol>) (size : IMod<V2i>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature
 
-        //use lock = runtime.ContextLock
-        let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
-        let depth = createRenderbuffer runtime samples size ~~RenderbufferFormat.DepthComponent32 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+        let fbo = runtime.CreateFramebuffer(signature, sem, size)
 
-        let fbo = 
-            createFramebuffer runtime signature (Some <| defaultView color) (Some depth)
-            |> Mod.map OutputDescription.ofFramebuffer
-
-        new SequentialRenderTask([|clear; task|]) 
-            |> renderTo fbo
-            |> getResult DefaultSemantic.Colors
-
-
-    let renderToDepthMS (samples : IMod<int>) (size : IMod<V2i>) (task : IRenderTask) =
-        let runtime = task.Runtime.Value
-        let signature = task.FramebufferSignature
-
-        //use lock = runtime.ContextLock
-        let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32
-        let clear = runtime.CompileClear(signature, ~~Map.empty, ~~(Some 1.0))
-
+        let res = 
+            new SequentialRenderTask([|clear; task|]) |> renderTo fbo
         
 
-        let fbo = 
-            createFramebuffer runtime signature None (Some <| defaultView depth)
-            |> Mod.map OutputDescription.ofFramebuffer
+        sem |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
 
 
- 
-        new SequentialRenderTask([|clear; task|]) 
-            |> renderTo fbo
-            |> getResult DefaultSemantic.Depth
+    let renderToColor (size : IMod<V2i>) (task : IRenderTask) =
+        task |> renderSemantics (Set.singleton DefaultSemantic.Colors) size |> Map.find DefaultSemantic.Colors
 
+    let renderToDepth (size : IMod<V2i>) (task : IRenderTask) =
+        task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size |> Map.find DefaultSemantic.Depth
 
-    let renderToColorAndDepthMS (samples : IMod<int>) (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
-        let runtime = task.Runtime.Value
-        let signature = task.FramebufferSignature
+    let renderToDepthAndStencil (size : IMod<V2i>) (task : IRenderTask) =
+        let map = task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size
+        (Map.find DefaultSemantic.Depth map, Map.find DefaultSemantic.Stencil map)
 
-        //use lock = runtime.ContextLock
-        let color = createTexture runtime samples size format //runtime.CreateTexture(size, format, samples, ~~1)
-        let depth = createTexture runtime samples size ~~TextureFormat.DepthComponent32 // runtime.CreateRenderbuffer(size, ~~RenderbufferFormat.Depth24Stencil8, samples)
-        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+    let renderToColorAndDepth (size : IMod<V2i>) (task : IRenderTask) =
+        let map = task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size
+        (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.Depth map)
 
-        let fbo = 
-            createFramebuffer runtime signature (Some <| defaultView color) (Some <| defaultView depth)
-            |> Mod.map OutputDescription.ofFramebuffer
-
-        let renderResult = 
-            new SequentialRenderTask([|clear; task|]) 
-                |> renderTo fbo
-
-        let colorTexture = renderResult |> getResult DefaultSemantic.Colors
-        let depthTexture = renderResult |> getResult DefaultSemantic.Depth
-
-        colorTexture, depthTexture
-
-    let inline renderToColor (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
-        renderToColorMS ~~1 size format task
-
-    let inline renderToDepth (size : IMod<V2i>) (task : IRenderTask) =
-        renderToDepthMS ~~1 size task
-
-    let inline renderToColorAndDepth (size : IMod<V2i>) (format : IMod<TextureFormat>) (task : IRenderTask) =
-        renderToColorAndDepthMS ~~1 size format task
 
 [<AutoOpen>]
 module ``RenderTask Builder`` =

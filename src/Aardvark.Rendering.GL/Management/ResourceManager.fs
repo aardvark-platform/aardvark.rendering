@@ -542,6 +542,20 @@ module ResourceManager =
                 [data],
                 fun self ->
                     match data with
+                        | :? IOutputMod<ITexture> as refc ->
+                            let self = unbox<ChangeableResource<Texture>> self
+                            refc.Acquire()
+                            let handle = Mod.init (refc.GetValue self |> unbox<Texture>)
+                            { trackChangedInputs = false
+                              dependencies = [data]
+                              updateCPU = fun _ -> ()
+                              updateGPU = fun () -> 
+                                let t = refc.GetValue(self) |> unbox<Texture>
+                                if handle.Value <> t then transact (fun () -> Mod.change handle t)
+                                refc.LastStatistics
+                              destroy = fun () -> refc.Release()
+                              resource = handle
+                              kind = ResourceKind.Texture  }  
                         | :? RenderingResultMod as res ->
                             let self = unbox<ChangeableResource<Texture>> self
                             let handle = Mod.init (res.GetValue self |> unbox<Texture>)
