@@ -191,6 +191,8 @@ module TextureExtensions =
             TextureFormat.Rgba8, SizedInternalFormat.Rgba8
             TextureFormat.Rgba8i, SizedInternalFormat.Rgba8i
             TextureFormat.Rgba8ui, SizedInternalFormat.Rgba8ui
+            TextureFormat.DepthComponent32, SizedInternalFormat.R32ui
+            TextureFormat.DepthComponent32f, SizedInternalFormat.R32f
         ]
 
     let private toSizedInternalFormat (fmt : TextureFormat) =
@@ -678,7 +680,7 @@ module TextureExtensions =
                     | _ ->
                         GL.TexImage1D(TextureTarget.Texture1D, 0, unbox (int t), size, 0, PixelFormat.Red, PixelType.Byte, 0n)
 
-                GL.Check "could allocate texture"
+                GL.Check "could not allocate texture"
 
                 GL.BindTexture(TextureTarget.Texture1D, 0)
                 GL.Check "could not unbind texture"
@@ -721,7 +723,7 @@ module TextureExtensions =
 //                
 //                        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.DepthTextureMode, int All.Intensity)
 //         
-                GL.Check "could allocate texture"
+                GL.Check "could not allocate texture"
 
                 GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, mipMapLevels)
                 GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBaseLevel, 0)
@@ -752,7 +754,7 @@ module TextureExtensions =
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
                     GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, ifmt, size.X, size.Y, size.Z, false)
-                GL.Check "could allocate texture"
+                GL.Check "could not allocate texture"
 
 
                 GL.BindTexture(TextureTarget.Texture3D, 0)
@@ -766,21 +768,19 @@ module TextureExtensions =
 
         member x.UpdateTextureCube(tex : Texture, size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
-                for (_,target) in cubeSides do
-                    GL.BindTexture(target, tex.Handle)
-                    GL.Check "could not bind texture"
-                    
-                    let target2d = target |> int |> unbox<TextureTarget2d>
-                    let ifmt = toSizedInternalFormat t
-                    if samples = 1 then
-                        GL.TexStorage2D(target2d, mipMapLevels, ifmt, size.X, size.Y)
-                    else 
-                        if mipMapLevels <> 1 then failwith "Mipmapping not supported on multisampled textures."
-                        GL.TexStorage2DMultisample(target2d |> int |> unbox, samples, ifmt, size.X, size.Y, false)
-                    GL.Check "could allocate texture"
 
-                    GL.BindTexture(TextureTarget.Texture2D, 0)
-                    GL.Check "could not unbind texture"
+                GL.BindTexture(TextureTarget.TextureCubeMap, tex.Handle)
+                GL.Check "could not bind texture"
+
+                if samples = 1 then
+                    GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int t), size.X, size.Y)
+                else
+                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                    //GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
+                    failwith "ms not supported: TODO"
+
+                GL.BindTexture(TextureTarget.TextureCubeMap, 0)
+                GL.Check "could not unbind texture"
 
                 let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size.X * size.Y) / 8
                 let sizeInBytes = sizeInBytes * 6L

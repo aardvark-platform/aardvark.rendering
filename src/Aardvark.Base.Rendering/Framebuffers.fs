@@ -309,7 +309,8 @@ module TextureFormat =
             TextureFormat.Rgb8, PixFormat.ByteRGB
             TextureFormat.CompressedRgb, PixFormat.ByteRGB
             TextureFormat.CompressedRgba, PixFormat.ByteRGBA
-
+            TextureFormat.R32f, PixFormat.FloatGray
+            TextureFormat.Rgba32f, PixFormat.FloatRGBA
         ]
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
