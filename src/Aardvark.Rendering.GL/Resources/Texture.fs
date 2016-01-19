@@ -160,46 +160,6 @@ module TextureExtensions =
             Col.Format.NormalUV, PixelFormat.Rg
         ]
 
-    let private tryGetSizedInternalFormat = 
-        lookupTable [
-            TextureFormat.R16, SizedInternalFormat.R16
-            TextureFormat.R16f, SizedInternalFormat.R16f
-            TextureFormat.R16i, SizedInternalFormat.R16i
-            TextureFormat.R16ui, SizedInternalFormat.R16ui
-            TextureFormat.R32f, SizedInternalFormat.R32f
-            TextureFormat.R32i, SizedInternalFormat.R32i
-            TextureFormat.R32ui, SizedInternalFormat.R32ui
-            TextureFormat.R8, SizedInternalFormat.R8
-            TextureFormat.R8i, SizedInternalFormat.R8i
-            TextureFormat.R8ui, SizedInternalFormat.R8ui
-            TextureFormat.Rg16, SizedInternalFormat.Rg16
-            TextureFormat.Rg16i, SizedInternalFormat.Rg16i
-            TextureFormat.Rg16ui, SizedInternalFormat.Rg16ui
-            TextureFormat.Rg32f, SizedInternalFormat.Rg32f
-            TextureFormat.Rg32i, SizedInternalFormat.Rg32i
-            TextureFormat.Rg32ui, SizedInternalFormat.Rg32ui
-            TextureFormat.Rg8, SizedInternalFormat.Rg8
-            TextureFormat.Rg8i, SizedInternalFormat.Rg8i
-            TextureFormat.Rg8ui, SizedInternalFormat.Rg8ui
-            TextureFormat.Rgba16, SizedInternalFormat.Rgba16
-            TextureFormat.Rgba16f, SizedInternalFormat.Rgba16f
-            TextureFormat.Rgba16i, SizedInternalFormat.Rgba16i
-            TextureFormat.Rgba16ui, SizedInternalFormat.Rgba16ui
-            TextureFormat.Rgba32f, SizedInternalFormat.Rgba32f
-            TextureFormat.Rgba32i, SizedInternalFormat.Rgba32i
-            TextureFormat.Rgba32ui, SizedInternalFormat.Rgba32ui
-            TextureFormat.Rgba8, SizedInternalFormat.Rgba8
-            TextureFormat.Rgba8i, SizedInternalFormat.Rgba8i
-            TextureFormat.Rgba8ui, SizedInternalFormat.Rgba8ui
-            TextureFormat.DepthComponent32, SizedInternalFormat.R32ui
-            TextureFormat.DepthComponent32f, SizedInternalFormat.R32f
-        ]
-
-    let private toSizedInternalFormat (fmt : TextureFormat) =
-        match tryGetSizedInternalFormat fmt with
-            | Some v -> v
-            | _ -> failwithf "cannot get SizedInternalFormat for: %A" fmt
-
 
     [<AutoOpen>]
     module private Uploads =
@@ -250,11 +210,13 @@ module TextureExtensions =
             let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
             try
                 let srcInfo = image.VolumeInfo
+                let dy = int64 (alignedLineSize / elementSize)
+
                 let dstInfo = 
                     VolumeInfo(
-                        srcInfo.Index(V3l(0L, srcInfo.Size.Y-1L, 0L)), 
+                        dy * (srcInfo.Size.Y-1L), 
                         srcInfo.Size, 
-                        V3l(srcInfo.SZ, -int64(alignedLineSize / elementSize), 1L)
+                        V3l(srcInfo.SZ, -dy, 1L)
                     )
                 NativeVolume.copyImageToNative image ptr dstInfo
             finally
@@ -451,11 +413,13 @@ module TextureExtensions =
 
             let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
             try
+                let dy = int64 (alignedLineSize / elementSize)
+
                 let dstInfo = 
                     VolumeInfo(
-                        srcInfo.Index(V3l(0L, srcInfo.Size.Y-1L, 0L)), 
+                        dy * (srcInfo.Size.Y-1L), 
                         srcInfo.Size, 
-                        V3l(srcInfo.SZ, -int64(alignedLineSize / elementSize), 1L)
+                        V3l(srcInfo.SZ, -dy, 1L)
                     )
                 let dst = ptr |> NativeVolume.ofNativeInt dstInfo
 
@@ -585,11 +549,12 @@ module TextureExtensions =
             GL.Check "could not map buffer"
             try
                 let dstInfo = image.VolumeInfo
+                let dy = int64(alignedLineSize / elementSize)
                 let srcInfo = 
                     VolumeInfo(
-                        dstInfo.Index(V3l(0L, dstInfo.Size.Y-1L, 0L)), 
+                        dy * (dstInfo.Size.Y - 1L), 
                         dstInfo.Size, 
-                        V3l(dstInfo.SZ, -int64(alignedLineSize / elementSize), 1L)
+                        V3l(dstInfo.SZ, -dy, 1L)
                     )
 
                 NativeVolume.copyNativeToImage src srcInfo image
@@ -622,7 +587,7 @@ module TextureExtensions =
                 GL.Check "could not create texture"
 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i(size,0,0), 1, t, 0L)
+                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, 1, t, 0L)
                 x.UpdateTexture1D(tex, size, mipMapLevels, t)
 
                 tex
@@ -634,21 +599,21 @@ module TextureExtensions =
                 GL.Check "could not create texture"
                 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i(size.X,size.Y,0), 1, t, 0L)
+                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, 1, t, 0L)
 
                 x.UpdateTexture2D(tex, size, mipMapLevels, t, samples)
 
                 tex
             )
 
-        member x.CreateTexture3D(size : V3i, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.CreateTexture3D(size : V3i, mipMapLevels : int, t : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, size, 1, t, 0L)
-                x.UpdateTexture3D(tex, size, mipMapLevels, t, samples)
+                let tex = Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, V3i.Zero, 1, t, 0L)
+                x.UpdateTexture3D(tex, size, mipMapLevels, t)
 
                 tex
             )
@@ -665,6 +630,32 @@ module TextureExtensions =
                 tex
             )
 
+        member x.CreateTexture1DArray(size : int, count : int, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, 1, t, 0L)
+                x.UpdateTexture1DArray(tex, size, count, mipMapLevels, t)
+
+                tex
+            ) 
+
+        member x.CreateTexture2DArray(size : V2i, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+                
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, 1, t, 0L)
+
+                x.UpdateTexture2DArray(tex, size, count, mipMapLevels, t, samples)
+
+                tex
+            )
+
+
         member x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, t : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 GL.BindTexture(TextureTarget.Texture1D, tex.Handle)
@@ -673,13 +664,8 @@ module TextureExtensions =
                 let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size) / 8
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
-
-                match tryGetSizedInternalFormat t with
-                    | Some ifmt -> 
-                        GL.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, ifmt, size)
-                    | _ ->
-                        GL.TexImage1D(TextureTarget.Texture1D, 0, unbox (int t), size, 0, PixelFormat.Red, PixelType.Byte, 0n)
-
+  
+                GL.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, unbox (int t), size)
                 GL.Check "could not allocate texture"
 
                 GL.BindTexture(TextureTarget.Texture1D, 0)
@@ -693,75 +679,62 @@ module TextureExtensions =
 
         member x.UpdateTexture2D(tex : Texture, size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
-                GL.BindTexture(TextureTarget.Texture2D, tex.Handle)
+                let target =
+                    if samples = 1 then TextureTarget.Texture2D
+                    else TextureTarget.Texture2DMultisample
+
+                GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
 
                 let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size.X * size.Y) / 8
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
-                tex.SizeInBytes <- sizeInBytes // TODO check multiampling
+                tex.SizeInBytes <- sizeInBytes // TODO check multisampling
 
                 if samples = 1 then
                     GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int t), size.X, size.Y)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
                     GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
-//                
-//                match tryGetSizedInternalFormat t with
-//                    | Some ifmt ->
-//                        if samples = 1 then
-//                            GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, ifmt, size.X, size.Y)
-//                        else
-//                            if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-//                            GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, ifmt, size.X, size.Y, false)
-//                
-//                    | None ->
-//                        if samples = 1 then
-//                            GL.TexImage2D(TextureTarget.Texture2D, 0, unbox (int t), size.X, size.Y, 0, PixelFormat.DepthComponent, PixelType.Byte, 0n)
-//                        else
-//                            GL.TexImage2DMultisample(TextureTargetMultisample.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
-//                
-//                        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.DepthTextureMode, int All.Intensity)
-//         
+
                 GL.Check "could not allocate texture"
 
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, mipMapLevels)
-                GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureBaseLevel, 0)
+                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels)
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
 
 
-                GL.BindTexture(TextureTarget.Texture2D, 0)
+                GL.BindTexture(target, 0)
                 GL.Check "could not unbind texture"
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.Texture2D
+                tex.Multisamples <- samples
+                tex.Count <- 1
                 tex.Size <- V3i(size.X, size.Y, 0)
                 tex.Format <- t
             )
 
-        member x.UpdateTexture3D(tex : Texture, size : V3i, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.UpdateTexture3D(tex : Texture, size : V3i, mipMapLevels : int, t : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 GL.BindTexture(TextureTarget.Texture3D, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let ifmt = toSizedInternalFormat t
+                let ifmt = unbox (int t) 
 
                 let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int ifmt))) * size.X * size.Y * size.Z) / 8
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
-                if samples = 1 then
-                    GL.TexStorage3D(TextureTarget3d.Texture3D, mipMapLevels, ifmt, size.X, size.Y, size.Z)
-                else
-                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, ifmt, size.X, size.Y, size.Z, false)
+                GL.TexStorage3D(TextureTarget3d.Texture3D, mipMapLevels, ifmt, size.X, size.Y, size.Z)
                 GL.Check "could not allocate texture"
-
 
                 GL.BindTexture(TextureTarget.Texture3D, 0)
                 GL.Check "could not unbind texture"
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.Texture3D
+                tex.Count <- 1
+                tex.Multisamples <- 1
                 tex.Size <- size
                 tex.Format <- t
             )
@@ -776,8 +749,10 @@ module TextureExtensions =
                     GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int t), size.X, size.Y)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    //GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
-                    failwith "ms not supported: TODO"
+                    // TODO: verify that this works!!
+                    for f in 0..5 do
+                        let target = int TextureTarget.TextureCubeMapPositiveX + f
+                        GL.TexImage2DMultisample(unbox target, samples, unbox (int t), size.X, size.Y, true)
 
                 GL.BindTexture(TextureTarget.TextureCubeMap, 0)
                 GL.Check "could not unbind texture"
@@ -790,9 +765,70 @@ module TextureExtensions =
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.TextureCube
                 tex.Size <- V3i(size.X, size.Y, 0)
+                tex.Count <- 1
+                tex.Multisamples <- samples
                 tex.Format <- t
             )
 
+        member x.UpdateTexture2DArray(tex : Texture, size : V2i, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+            using x.ResourceLock (fun _ ->
+                let target =
+                    if samples = 1 then TextureTarget.Texture2DArray
+                    else TextureTarget.Texture2DMultisampleArray
+
+                GL.BindTexture(target, tex.Handle)
+                GL.Check "could not bind texture"
+
+
+                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size.X * size.Y * count) / 8
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes // TODO check multisampling
+
+                if samples = 1 then
+                    GL.TexStorage3D(TextureTarget3d.Texture2DArray, mipMapLevels, unbox (int t), size.X, size.Y, count)
+                else
+                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                    GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, unbox (int t), size.X, size.Y, count, true)
+  
+                GL.Check "could not allocate texture"
+
+                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels)
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+
+
+                GL.BindTexture(target, 0)
+                GL.Check "could not unbind texture"
+
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.Texture2D
+                tex.Count <- count
+                tex.Multisamples <- samples
+                tex.Size <- V3i(size.X, size.Y, 0)
+                tex.Format <- t
+            )
+
+        member x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
+                GL.Check "could not bind texture"
+
+                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size) / 8
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
+  
+                GL.TexStorage2D(TextureTarget2d.Texture1DArray, mipMapLevels, unbox (int t), size, count)
+                GL.Check "could not allocate texture"
+
+                GL.BindTexture(TextureTarget.Texture1DArray, 0)
+                GL.Check "could not unbind texture"
+
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.Texture1D
+                tex.Count <- count
+                tex.Multisamples <- 1
+                tex.Size <- V3i(size, 0, 0)
+                tex.Format <- t
+            )
 
 
         member x.CreateTexture(data : ITexture) =
@@ -876,6 +912,177 @@ module TextureExtensions =
                         failwith "unsupported texture data"
             )
 
+
+            
+        member x.Delete(t : Texture) =
+            using x.ResourceLock (fun _ ->
+                GL.DeleteTexture(t.Handle)
+                GL.Check "could not delete texture"
+            )
+            
+        member x.Blit(src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
+            using x.ResourceLock (fun _ ->
+                let fSrc = GL.GenFramebuffer()
+                GL.Check "could not create framebuffer"
+                let fDst = GL.GenFramebuffer()
+                GL.Check "could not create framebuffer"
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
+                GL.Check "could not bind framebuffer"
+                if src.Count > 1 then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
+                else GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel)
+                GL.Check "could not attach texture to framebuffer"
+
+                let srcCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
+                if srcCheck <> FramebufferErrorCode.FramebufferComplete then
+                    failwithf "could not create input framebuffer: %A" srcCheck
+
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
+                GL.Check "could not bind framebuffer"
+
+                if src.Count > 1 then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel, dstSlice)
+                else GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel)
+                GL.Check "could not attach texture to framebuffer"
+
+                let dstCheck = GL.CheckFramebufferStatus(FramebufferTarget.DrawFramebuffer)
+                if dstCheck <> FramebufferErrorCode.FramebufferComplete then
+                    failwithf "could not create output framebuffer: %A" dstCheck
+
+                GL.BlitFramebuffer(
+                    srcRegion.Min.X, srcRegion.Min.Y,
+                    srcRegion.Max.X, srcRegion.Max.Y,
+
+                    dstRegion.Min.X, dstRegion.Min.Y,
+                    dstRegion.Max.X, dstRegion.Max.Y,
+
+                    ClearBufferMask.ColorBufferBit,
+                    (if linear then BlitFramebufferFilter.Linear else BlitFramebufferFilter.Nearest)
+                )
+                GL.Check "could blit framebuffer"
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                GL.Check "could unbind framebuffer"
+
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+                GL.Check "could unbind framebuffer"
+
+                GL.DeleteFramebuffer(fSrc)
+                GL.Check "could delete framebuffer"
+
+                GL.DeleteFramebuffer(fDst)
+                GL.Check "could delete framebuffer"
+
+            )
+
+        member x.Copy(src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
+            using x.ResourceLock (fun _ ->
+                let fSrc = GL.GenFramebuffer()
+                GL.Check "could not create framebuffer"
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
+                GL.Check "could not bind framebuffer"
+
+                if srcSlice <> 0 then
+                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
+                else
+                    GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel)
+                GL.Check "could not attach texture to framebuffer"
+
+                let srcCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
+                if srcCheck <> FramebufferErrorCode.FramebufferComplete then
+                    failwithf "could not create input framebuffer: %A" srcCheck
+
+                GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
+                GL.Check "could not set readbuffer"
+
+                GL.BindTexture(TextureTarget.Texture2D, dst.Handle)
+                GL.Check "could not bind texture"
+
+                GL.CopyTexSubImage2D(
+                    TextureTarget.Texture2D,
+                    dstLevel,
+                    dstOffset.X, dstOffset.Y,
+                    srcOffset.X, srcOffset.Y,
+                    size.X, size.Y
+                )
+                GL.Check "could not copy texture"
+
+                GL.ReadBuffer(ReadBufferMode.None)
+                GL.Check "could not unset readbuffer"
+
+                GL.BindTexture(TextureTarget.Texture2D, 0)
+                GL.Check "could not unbind texture"
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                GL.Check "could not unbind framebuffer"
+
+                GL.DeleteFramebuffer(fSrc)
+                GL.Check "could not delete framebuffer"
+
+            )
+
+
+        member x.Upload(t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
+            using x.ResourceLock (fun _ ->
+                let levelSize = t.Size2D / (1 <<< level)
+                if offset = V2i.Zero && source.Size = levelSize then
+                    x.Upload(t, level, slice, source)
+                else
+                    let temp = x.CreateTexture2D(source.Size, 1, t.Format, 1)
+                    x.Upload(temp, 0, 0, source)
+                    x.Copy(temp, 0, 0, V2i.Zero, t, level, slice, offset, source.Size)
+                    x.Delete(temp)
+            )
+
+        member x.Upload(t : Texture, level : int, slice : int, source : PixImage) =
+            using x.ResourceLock (fun _ ->
+                match t.Dimension with
+                    | TextureDimension.Texture2D -> 
+                        let target = getTextureTarget t
+                        GL.BindTexture(target, t.Handle)
+                        GL.Check "could not bind texture"
+
+                        uploadTexture2DLevelInternal target t level source
+
+                        GL.BindTexture(target, 0)
+                        GL.Check "could not unbind texture"
+
+                    | TextureDimension.TextureCube ->
+                        let target = getTextureTarget t
+                        GL.BindTexture(target, t.Handle)
+                        GL.Check "could not bind texture"
+
+                        let target = snd cubeSides.[slice]
+                        uploadTexture2DLevelInternal target t level source
+
+                        GL.BindTexture(target, 0)
+                        GL.Check "could not unbind texture"
+                    | _ ->  
+                        failwithf "cannot upload textures of kind: %A" t.Dimension
+            )
+
+        member x.Upload(t : Texture, level : int, source : PixImage) =
+            x.Upload(t, level, 0, source)
+
+
+
+        member x.Download(t : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
+            using x.ResourceLock (fun _ ->
+                let levelSize = t.Size2D / (1 <<< level)
+                if offset = V2i.Zero && target.Size = levelSize then
+                    x.Download(t, level, slice, target)
+                else
+                    let temp = x.CreateTexture2D(target.Size, 1, t.Format, 1)
+                    
+                    if target.Size = levelSize then
+                        x.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, target.Size)
+                    else
+                        x.Blit(t, level, slice, Box2i.FromMinAndSize(offset, levelSize), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
+                    
+                    x.Download(temp, 0, 0, target)
+                    x.Delete(temp)
+            )
+
         member x.Download(t : Texture, level : int, slice : int, target : PixImage) =
             using x.ResourceLock (fun _ ->
                 match t.Dimension with
@@ -889,26 +1096,24 @@ module TextureExtensions =
                         failwithf "cannot download textures of kind: %A" t.Dimension
             )
 
-        member x.Upload(t : Texture, level : int, slice : int, source : PixImage) =
-            using x.ResourceLock (fun _ ->
-                match t.Dimension with
-                    | TextureDimension.Texture2D -> 
-                        let target = getTextureTarget t
-                        uploadTexture2DLevelInternal target t level source
+        member x.Download(t : Texture, level : int, slice : int) : PixImage =
+            let fmt = TextureFormat.toDownloadFormat t.Format
+            let levelSize = t.Size2D / (1 <<< level)
+            let img = PixImage.Create(fmt, int64 levelSize.X, int64 levelSize.Y)
+            x.Download(t, level, slice, img)
+            img
 
-                    | TextureDimension.TextureCube ->
-                        let target = snd cubeSides.[slice]
-                        uploadTexture2DLevelInternal target t level source
-                    | _ ->  
-                        failwithf "cannot download textures of kind: %A" t.Dimension
-            )
-            
-        member x.Delete(t : Texture) =
-            using x.ResourceLock (fun _ ->
-                GL.DeleteTexture(t.Handle)
-                GL.Check "could not delete texture"
-            )
-            
+        member x.Download(t : Texture, level : int) : PixImage =
+            x.Download(t, level, 0)
+
+        member x.Download(t : Texture) : PixImage =
+            x.Download(t, 0, 0)
+
+        
+
+
+
+
     module ExecutionContext =
 
         let internal getTextureTarget (texture : Texture) = Uploads.getTextureTarget texture
@@ -936,8 +1141,8 @@ module Texture =
     let createCube (c : Context) (size : V2i) (mipLevels : int) (format : TextureFormat) (samples : int) =
         c.CreateTextureCube(size, mipLevels, format, samples)
 
-    let create3D (c : Context) (size : V3i) (mipLevels : int) (format : TextureFormat) (samples : int) =
-        c.CreateTexture3D(size, mipLevels, format, samples)
+    let create3D (c : Context) (size : V3i) (mipLevels : int) (format : TextureFormat)  =
+        c.CreateTexture3D(size, mipLevels, format)
 
     let delete (tex : Texture) =
         tex.Context.Delete(tex)

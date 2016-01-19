@@ -396,8 +396,7 @@ module private RefCountedResources =
 
             member x.Acquire() = x.Acquire()
             member x.Release() = x.Release()
-            
-
+ 
 [<AbstractClass; Sealed; Extension>]
 type RuntimeFramebufferExtensions private() =
 
@@ -428,8 +427,12 @@ module RenderTask =
 
     open ChangeableResources
     
-    type private EmptyRenderTask() =
+    type private EmptyRenderTask private() =
         inherit ConstantObject()
+
+        static let instance = new EmptyRenderTask() :> IRenderTask
+        static member Instance = instance
+
         interface IRenderTask with
             member x.FramebufferSignature = null
             member x.Dispose() = ()
@@ -622,8 +625,31 @@ module RenderTask =
             
             member x.FrameId = 0UL
 
+    type private FinalizerRenderTask(inner : IRenderTask) =
+        inherit AdaptiveObject()
+        let mutable inner = inner
 
-    let empty = new EmptyRenderTask() :> IRenderTask
+        member private x.Dispose(disposing : bool) =
+            let old = Interlocked.Exchange(&inner, EmptyRenderTask.Instance)
+            old.Dispose()
+            if disposing then GC.SuppressFinalize(x)
+
+        override x.Finalize() =
+            try x.Dispose false
+            with _ -> ()
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose true
+
+        interface IRenderTask with
+            member x.Run(caller, fbo) = inner.Run(caller, fbo)
+            member x.FrameId = inner.FrameId
+            member x.FramebufferSignature = inner.FramebufferSignature
+            member x.Runtime = inner.Runtime
+
+
+
+    let empty = EmptyRenderTask.Instance
 
     let ofAFun (f : afun<IRenderTask * OutputDescription, RenderingResult>) =
         new CustomRenderTask(f) :> IRenderTask
@@ -659,6 +685,10 @@ module RenderTask =
     let mapStatistics (f : FrameStatistics -> FrameStatistics) (t : IRenderTask) =
         t |> mapResult (fun r -> RenderingResult(r.Framebuffer, f r.Statistics))
 
+    let withFinalize (t : IRenderTask) =
+        match t with
+            | :? FinalizerRenderTask -> t
+            | _ -> new FinalizerRenderTask(t) :> IRenderTask
 
     let getResult (sem : Symbol) (t : IMod<RenderingResult>) =
         t.GetOutputTexture sem
