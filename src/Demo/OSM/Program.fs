@@ -38,14 +38,14 @@ let realTileResolution = V2i(256, 256)
 
 [<AutoOpen>]
 module Textures =
-    let mutable shouldInit = true
-
-    let init() =
-        if shouldInit then
-            shouldInit <- false
-            IL.Init()
-            IL.OriginFunc(OriginMode.LowerLeft) |> ignore
-            IL.Enable(EnableCap.AbsoluteOrigin) |> ignore
+//    let mutable shouldInit = true
+//
+//    let init() =
+//        if shouldInit then
+//            shouldInit <- false
+//            IL.Init()
+//            IL.OriginFunc(OriginMode.LowerLeft) |> ignore
+//            IL.Enable(EnableCap.AbsoluteOrigin) |> ignore
 
     // get a chached texture for the given tile and zoom-level
     // TODO: add proper memory management (textures are never deleted)
@@ -67,7 +67,7 @@ module Textures =
         app.Runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true)) :> ITexture
 
     let getTileTexure (coord : V2i) (zoom : string)=
-        init()
+        //init()
         cache.GetOrAdd((zoom, coord), fun (zoom, coord) ->
             let info = TileInfo()
             info.Index <- TileIndex(coord.X, coord.Y, zoom)
@@ -113,7 +113,7 @@ module Geometry =
         q.IndexArray <- [|0;1;2; 0;2;3|]
         q.IndexedAttributes <- SymDict.ofList [
             DefaultSemantic.Positions, [|V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO|] :> Array
-            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OO; V2f.IO; V2f.II; V2f.OI|] :> Array
+            DefaultSemantic.DiffuseColorCoordinates, [|V2f.OI; V2f.II; V2f.IO; V2f.OO|] :> Array
         ]
 
         Sg.ofIndexedGeometryInterleaved [DefaultSemantic.Positions; DefaultSemantic.DiffuseColorCoordinates]  q
@@ -394,6 +394,25 @@ let main argv =
         pi.SaveAsImage @"C:\Users\schorsch\Desktop\screeny.jpg"
         ()
     ) |> ignore
+
+//    let ctx = app.Runtime.Context
+//
+//    let i0 = PixImage.Create @"C:\Users\Schorsch\Development\WorkDirectory\Server\bump.jpg" |> unbox<PixImage<byte>>
+//    let i1 = PixImage.Create @"C:\Users\Schorsch\Development\WorkDirectory\Server\bump2.jpg" |> unbox<PixImage<byte>>
+//
+//    let t0 = ctx.CreateTexture(PixTexture2d(PixImageMipMap [|i0 :> PixImage|], false))
+//    let t1 = ctx.CreateTexture(PixTexture2d(PixImageMipMap [|i1 :> PixImage|], false))
+//
+//    ctx.Copy(t0, 0, 0, V2i(32,32), t1, 0, 0, V2i(64,64), V2i(64,64))
+//    ctx.Blit(t0, 0, 0, Box2i.FromMinAndSize(V2i.Zero, i0.Size), t1, 0, 0, Box2i.FromMinAndSize(V2i(128,128), V2i(128,128)), true)
+//    let pi = ctx.Download(t1)
+//    pi.SaveAsImage @"C:\Users\Schorsch\Desktop\composite0.jpg"
+//
+//    ctx.Upload(t0, 0, 0, V2i(128,128), i1.SubImage(V2i(128,128), V2i(128,128)))
+//    let pi = ctx.Download(t0)
+//    pi.SaveAsImage @"C:\Users\Schorsch\Desktop\composite1.jpg"
+
+
 
 
 //
