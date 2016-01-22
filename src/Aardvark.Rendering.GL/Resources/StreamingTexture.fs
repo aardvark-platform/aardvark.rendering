@@ -22,7 +22,7 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
         if mipMap then Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int
         else 1
 
-    let texture = Texture(ctx, handle, TextureDimension.Texture2D, expectedLevels V2i.II, 1, V3i(1,1,0), 1, TextureFormat.R11fG11fB10f, 0L)
+    let texture = Texture(ctx, handle, TextureDimension.Texture2D, expectedLevels V2i.II, 1, V3i(1,1,0), 1, TextureFormat.R11fG11fB10f, 0L, false)
     let mutable size = V2i.Zero
     let mutable format = PixFormat()
     let mutable formatSize = 0

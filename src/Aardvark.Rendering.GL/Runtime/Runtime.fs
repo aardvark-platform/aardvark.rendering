@@ -367,7 +367,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
         match count with
             | 1 -> ctx.CreateTexture2D(size, levels, format, samples)
-            | _ -> failwith "not implemented" //ctx.CreateTexture3D(V3i(size.X, size.Y, count), levels, format, samples) TODO
+            | _ -> ctx.CreateTexture2DArray(size, count, levels, format, samples)
 
     member x.CreateTextureCube(size : V2i, format : TextureFormat, levels : int, samples : int) : Texture =
         ctx.CreateTextureCube(size, levels, format, samples)

@@ -11,6 +11,7 @@ open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.Rendering.NanoVg
+open Aardvark.Rendering.GL
 
 module Shaders =
     open FShade
@@ -469,15 +470,26 @@ module HelloWorld =
                 CubeSide.PositiveZ, "lazarus2_positive_z.jpg"
                 CubeSide.NegativeZ, "lazarus2_negative_z.jpg"
             ]
-
-        let envCube = 
+        let envCubePix = 
             faceFiles   
-                |> Map.map (fun _ f -> Path.combine [@"E:\Development\WorkDirectory\DataSVN"; f])
+                |> Map.map (fun _ f -> Path.combine [@"C:\Users\Schorsch\Development\WorkDirectory\Server"; f])
                 |> PixImageCube.create
                 |> PixImageCube.ofOpenGlConvention
                 |> PixImageCube.toTexture true
-                |> Mod.constant
 
+        let envCube = 
+            envCubePix |> Mod.constant
+
+        let ctx = app.Runtime.Context
+
+        let cube = ctx.CreateTexture(envCubePix)
+        let newCube = ctx.CreateTextureCube(cube.Size2D, 1, cube.Format, 1)
+
+        for f in 0..5 do
+            ctx.Copy(cube, 0, f, V2i.Zero, newCube, 0, f, V2i.Zero, cube.Size2D)
+
+        let faceX = ctx.CreateTextureView(newCube, Range1i(0,0), Range1i(0,0))
+        ctx.Download(faceX).SaveAsImage @"C:\Users\Schorsch\Desktop\x.jpg"
 
         let fullscreenQuad =
             Sg.draw IndexedGeometryMode.TriangleStrip
