@@ -178,6 +178,10 @@ module AttributePacking =
                     b, dirty
             )
     
+        member x.Reset() =
+            initial <- true
+            dirty <- RangeSet.empty
+
         member x.AddDirty (r : Range1i) =
             Interlocked.Change(&dirty, RangeSet.insert r) |> ignore
 
@@ -221,6 +225,12 @@ module AttributePacking =
                         dirtyGeometries.Remove geometry |> ignore
                     | _ ->
                         ()
+
+        member x.Reset() =
+            Marshal.FreeHGlobal storage
+            storage <- 0n
+            dirtyGeometries.Clear()
+            lock readers (fun () -> for r in readers do r.Reset())
 
         override x.Compute() =
             let ptrs, capacity = input.GetValue(x)
@@ -346,6 +356,21 @@ module AttributePacking =
                                 for b in buffers.Values do b.RemoveGeometry(g)
                                 manager.Free ptr
                                 ptrs.Remove g |> ignore
+
+                                // shrinking code:
+//                                if manager.AllocatedBytes * 3 < manager.Capacity then
+//                                    ranges <- RangeSet.empty
+//                                    let newMan = MemoryManager.createNop()
+//
+//                                    for (g,ptr) in Dictionary.toArray ptrs do
+//                                        let newPtr = newMan.Alloc(ptr.Size)
+//                                        ptrs.[g] <- newPtr
+//                                        ranges <- RangeSet.insert (Range1i.FromMinAndSize(int newPtr.Offset, newPtr.Size - 1)) ranges
+//                                    
+//                                    for b in buffers.Values do
+//                                        b.Reset()
+
+
                             | _ ->
                                 ()
 
