@@ -525,7 +525,7 @@ module HelloWorld =
 
     let testBla() =
 
-        Ag.initialize()
+        //Ag.initialize()
         Aardvark.Init()
 
         use app = new OpenGlApplication()
