@@ -93,7 +93,7 @@ module RenderObjectSemantics =
             rj.IsActive <- r.IsActive
             rj.RenderPass <- r.RenderPass
             
-            let vertexAttributes = new AttributePacking.AdaptiveBufferLayout(r.Geometries, r.AttributeTypes)
+            let vertexAttributes = new AttributePacking.PackingLayout(r.Geometries, r.AttributeTypes)
             let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
 
             rj.Uniforms <- new Providers.UniformProvider(scope, r?Uniforms, 

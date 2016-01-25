@@ -143,6 +143,15 @@ module RenderObjectExtensions =
             x.Id >= 0
 
 
+type IBufferRangeReader =
+    inherit IAdaptiveObject
+    abstract member GetDirtyRanges : IAdaptiveObject -> NativeMemoryBuffer * RangeSet
+
+type IAdaptiveBuffer =
+    inherit IMod<IBuffer>
+    abstract member ElementType : Type
+    abstract member GetReader : unit -> IBufferRangeReader
+
 module AttributePacking =
 
     open System
@@ -150,80 +159,9 @@ module AttributePacking =
     open System.Collections.Generic
     open System.Runtime.InteropServices
 
-    type RegionReader(parent : NativeBuffer) =
-        inherit AdaptiveObject()
-        let mutable dirty = RangeSet.ofList [ Range1i(0,parent.Capacity - 1) ]
-
-        member x.Update caller =
-            x.EvaluateAlways caller (fun () ->
-                parent.GetValue x |> ignore
-                Interlocked.Exchange(&dirty, RangeSet.empty)
-            )
-
-        member x.AddDirtyRegion (range : Range1i) =
-            Interlocked.Change(&dirty, RangeSet.insert range) |> ignore
-
-    and NativeBuffer(capacity : int, input : IMod<unit>, manager : MemoryManager, elementType : Type) =
-        inherit Mod.AbstractMod<IBuffer>()
-
-        let elementSize = Marshal.SizeOf elementType
-
-        let mutable capacity = capacity
-        let mutable mem = Marshal.AllocHGlobal capacity
-        let readers = HashSet<RegionReader>()
-
-        let resize() =
-            let newSize = manager.Capacity * elementSize
-            if newSize > capacity then
-                for r in readers do 
-                    r.AddDirtyRegion (Range1i (capacity, newSize - 1))
-
-            if newSize <> capacity then
-                mem <- Marshal.ReAllocHGlobal(mem,nativeint newSize)
-                capacity <- newSize
-               
-        member x.Capacity = capacity
-        member x.Ptr = mem
-
-        member x.ElementType = elementType
-        member x.ElementSize = elementSize
-
-        member x.Write(offset : nativeint, a : Array) =
-            resize()
-            let gc = GCHandle.Alloc(a, GCHandleType.Pinned)
-            try
-                Marshal.Copy(gc.AddrOfPinnedObject(), mem + nativeint elementSize * offset, elementSize * a.Length)
-            finally
-                gc.Free()
-
-           
-
-        // TODO: locking scheme
-        member x.GetReader() =
-            let r = RegionReader x
-            readers.Add r |> ignore
-            r
-
-        member x.AddDirtyRegion(range : Range1i) =
-            for r in readers do
-                r.AddDirtyRegion range
-
-        override x.Compute() =
-            input.GetValue x
-            NativeMemoryBuffer(mem, capacity) :> IBuffer
 
 
-
-
-    type IRangeReader =
-        inherit IAdaptiveObject
-        abstract member GetDirtyRanges : IAdaptiveObject -> IBuffer * RangeSet
-
-    type IAdaptiveBuffer =
-        inherit IMod<IBuffer>
-        abstract member GetReader : unit -> IRangeReader
-
-    type AdaptiveBufferReader(buffer : AdaptiveBuffer) =
+    type private AdaptiveBufferReader(buffer : AdaptiveBuffer) =
         inherit AdaptiveObject()
 
         let mutable dirty = RangeSet.empty
@@ -231,7 +169,7 @@ module AttributePacking =
 
         member x.GetDirtyRanges(caller : IAdaptiveObject) =
             x.EvaluateAlways caller (fun () ->
-                let b = buffer.GetValue x
+                let b = buffer.GetValue x |> unbox<NativeMemoryBuffer>
                 let dirty = Interlocked.Exchange(&dirty, RangeSet.empty)
                 if initial then
                     initial <- false
@@ -246,11 +184,11 @@ module AttributePacking =
         member x.RemoveDirty (r : Range1i) =
             Interlocked.Change(&dirty, RangeSet.remove r) |> ignore
 
-        interface IRangeReader with
+        interface IBufferRangeReader with
             member x.GetDirtyRanges(caller) = x.GetDirtyRanges(caller)
 
 
-    and AdaptiveBuffer(sem : Symbol, elementType : Type, input : IMod<Dictionary<IndexedGeometry, managedptr> * int>) =
+    and private AdaptiveBuffer(sem : Symbol, elementType : Type, input : IMod<Dictionary<IndexedGeometry, managedptr> * int>) =
         inherit Mod.AbstractMod<IBuffer>()
         let readers = HashSet<AdaptiveBufferReader>()
         let elementSize = Marshal.SizeOf elementType
@@ -264,8 +202,8 @@ module AttributePacking =
 
         member x.GetReader() =
             let r = AdaptiveBufferReader(x)
-            readers.Add r |> ignore
-            r :> IRangeReader
+            lock readers (fun () -> readers.Add r |> ignore)
+            r :> IBufferRangeReader
 
         member x.ElementType = elementType
 
@@ -273,13 +211,13 @@ module AttributePacking =
             if storage <> 0n then
                 let range = Range1i(elementSize * range.Min, elementSize * range.Max + elementSize - 1)
                 dirtyGeometries.[geometry] <- range
-                for r in readers do r.AddDirty range
+                lock readers (fun () -> for r in readers do r.AddDirty range)
 
         member x.RemoveGeometry(geometry : IndexedGeometry) =
             if storage <> 0n then
                 match dirtyGeometries.TryGetValue geometry with
                     | (true, range) ->
-                        for r in readers do r.RemoveDirty range
+                        lock readers (fun () -> for r in readers do r.RemoveDirty range)
                         dirtyGeometries.Remove geometry |> ignore
                     | _ ->
                         ()
@@ -333,8 +271,12 @@ module AttributePacking =
 
             NativeMemoryBuffer(storage, capacity) :> IBuffer
 
+        interface IAdaptiveBuffer with
+            member x.ElementType = elementType
+            member x.GetReader() = x.GetReader()
 
-    type AdaptiveBufferLayout(set : aset<IndexedGeometry>, elementTypes : Map<Symbol, Type>) =
+
+    type PackingLayout(set : aset<IndexedGeometry>, elementTypes : Map<Symbol, Type>) =
         inherit Mod.AbstractMod<Dictionary<IndexedGeometry, managedptr> * int>()
 
         let reader = set.GetReader()
@@ -353,13 +295,13 @@ module AttributePacking =
 
         member x.TryGetBuffer(sem : Symbol) =
             match buffers.TryGetValue(sem) with
-                | (true, b) -> Some b
+                | (true, b) -> Some (b :> IAdaptiveBuffer)
                 | _ ->
                     match Map.tryFind sem elementTypes with
                         | Some et ->
                             let b = AdaptiveBuffer(sem, et, x)
                             buffers.[sem] <- b
-                            Some b
+                            Some (b :> IAdaptiveBuffer)
                         | None ->
                             None
 
@@ -423,104 +365,3 @@ module AttributePacking =
                     | Some b -> BufferView(b, b.ElementType) |> Some
                     | None -> None
 
-
-
-    type PackingAttributeProvider(scope : Ag.Scope, attributeTypes : Map<Symbol, Type>, geometries : aset<IndexedGeometry>) =
-        let mutable scope = scope
-        let memoryManager = Aardvark.Base.MemoryManager.createNop()
-        let reader = geometries.GetReader()
-        let attributes = Dictionary<Symbol, NativeBuffer>()
-        let ranges = Dictionary<IndexedGeometry,managedptr>()
-        let cache = Dictionary<Symbol, BufferView>()
-
-        let vertexCount (i : IndexedGeometry) =
-            match i.IndexArray with
-             | null -> i.IndexedAttributes.Values |> Seq.head |> (fun s -> s.Length)
-             | arr -> arr.Length
-
-        let processDeltas (caller : IAdaptiveObject) =
-            reader.GetDelta(caller) |> List.choose (fun d ->
-                match d with
-                 | Add v ->
-                    let length = vertexCount v
-                    let range = memoryManager.Alloc length
-                    ranges.[v] <- range
-                    Some (range, v)
-                 | Rem v -> 
-                    match ranges.TryGetValue v with 
-                     | (true,ptr) -> 
-                        memoryManager.Free ptr
-                        ranges.Remove v |> ignore
-                     | _ -> ()
-                    None
-            )
-
-        let update (caller : IAdaptiveObject) =
-            let dirtyRanges = processDeltas(caller)
-             
-            for (range,g) in dirtyRanges do
-                for (sem,ptr) in attributes |> Dictionary.toSeq do
-                    match g.IndexedAttributes.TryGetValue sem with
-                     | (true,v) ->
-                        ptr.Write(range.Offset, v)
-                     | _ ->
-                        ()
-             
-        let updater = Mod.custom update   
-
-        let drawCallInfos =
-            Mod.custom (fun self ->
-                updater.GetValue self
-
-                ranges.Values
-                    |> Seq.toList
-                    |> List.map (fun range ->
-                        DrawCallInfo(
-                            FirstIndex = int range.Offset,
-                            FaceVertexCount = range.Size,
-                            InstanceCount = 1,
-                            BaseVertex = 0
-                        )
-                    )
-
-            )
-
-
-        member x.DrawCalls =
-            drawCallInfos
-
-        member x.TryGetAttribute s =
-            match attributeTypes |> Map.tryFind s with
-             | Some t -> 
-                match cache.TryGetValue s with
-                    | (true, view) -> Some view
-                    | _ ->
-                        let target = NativeBuffer(0, updater, memoryManager, t)
-                        attributes.[s] <- target
-
-                        let view = BufferView(target, t)
-                        cache.[s] <- view
-
-                        for (g) in reader.Content do
-                            match ranges.TryGetValue g with
-                                | (true, range) ->
-                                    match g.IndexedAttributes.TryGetValue s with
-                                        | (true,v) ->
-                                            target.Write(range.Offset, v)
-                                        | _ ->
-                                            ()
-                                | _ -> ()
-
-
-                        Some view
-             | None -> None
-
-        interface IAttributeProvider with
-
-            member x.Dispose() =
-                ()
-
-            member x.All =
-                Seq.empty
-
-            member x.TryGetAttribute(s : Symbol) = x.TryGetAttribute s

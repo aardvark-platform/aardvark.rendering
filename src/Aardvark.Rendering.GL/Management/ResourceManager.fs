@@ -460,57 +460,91 @@ module ResourceManager =
             )
 
 
+        member x.CreateBuffer(a : IAdaptiveBuffer) : ChangeableResource<Buffer> =
+            let reader = a.GetReader()
+            cache.[arrayBuffer].GetOrAdd(
+                [a], 
+                fun self ->
+                    let current,ranges = reader.GetDirtyRanges(self)
+                    let handle = ctx.CreateBuffer(current.Ptr, current.SizeInBytes, BufferUsage.Dynamic)
+
+                    let handleMod = Mod.constant handle
+
+
+                    { trackChangedInputs = false
+                      dependencies = [a]
+                      updateCPU = fun _ -> a.GetValue(reader) |> ignore
+                      updateGPU = fun () -> 
+                        let current, ranges = reader.GetDirtyRanges(self)
+                        using ctx.ResourceLock (fun _ ->
+                            if nativeint current.SizeInBytes <> handle.SizeInBytes then
+                                ctx.Upload(handle, current.Ptr, current.SizeInBytes)
+                            else
+                                let mutable cnt = 0
+                                for r in ranges do
+                                    Log.line "upload range: %A" r
+                                    ctx.UploadRange(handle, current.Ptr + nativeint r.Min, r.Min, r.Size + 1)
+                                    cnt <- cnt + 1
+                        )
+                        FrameStatistics.Zero
+                      destroy = fun () -> ctx.Delete(handle)
+                      resource = handleMod
+                      kind = ResourceKind.Buffer  }
+            )
+
         /// <summary>
         /// creates a buffer from a mod-array simply updating its
         /// content whenever the array changes
         /// </summary>
         member x.CreateBuffer(data : IMod<IBuffer>) =
-            
-            cache.[arrayBuffer].GetOrAdd(
-                [data], 
-                fun self ->
-                    let created = ref false
-                    let current = data.GetValue(self)
-                    let handle = 
-                        match current with
-                            | :? Buffer as bb ->
-                                ref (Mod.constant bb)
-                            | _ ->
-                                created := true
-                                ref (bufferHandler.Create(current))
+            match data with
+                | :? IAdaptiveBuffer as data -> x.CreateBuffer(data)
+                | _ ->
+                    cache.[arrayBuffer].GetOrAdd(
+                        [data], 
+                        fun self ->
+                            let created = ref false
+                            let current = data.GetValue(self)
+                            let handle = 
+                                match current with
+                                    | :? Buffer as bb ->
+                                        ref (Mod.constant bb)
+                                    | _ ->
+                                        created := true
+                                        ref (bufferHandler.Create(current))
 
-                    let handleMod = Mod.init !handle
+                            let handleMod = Mod.init !handle
 
-                    let updateTo (t : Buffer) =
-                        if !created then
-                            bufferHandler.Delete(!handle)
-                            created := false
-
-                        let h = Mod.constant t
-                        handle := h
-                        transact (fun () -> handleMod.Value <- h)
-
-                    { trackChangedInputs = false
-                      dependencies = [data]
-                      updateCPU = fun _ -> data.GetValue(self) |> ignore
-                      updateGPU = fun () ->
-                        match data.GetValue(self) with
-                            | :? Buffer as t -> updateTo t
-                            | :? NullBuffer as n -> updateTo ( Buffer(ctx,0n,0) )
-                            | _ -> 
+                            let updateTo (t : Buffer) =
                                 if !created then
-                                    bufferHandler.Update(!handle, data.GetValue(self))
-                                else
-                                    created := true
-                                    handle := bufferHandler.Create(current)
+                                    bufferHandler.Delete(!handle)
+                                    created := false
 
-                                if handleMod.Value <> !handle then 
-                                    transact (fun () -> handleMod.Value <- !handle)
-                        FrameStatistics.Zero
-                      destroy = fun () -> if !created then bufferHandler.Delete(!handle)
-                      resource = handleMod |> Mod.bind id
-                      kind = ResourceKind.Buffer  }
-            )
+                                let h = Mod.constant t
+                                handle := h
+                                transact (fun () -> handleMod.Value <- h)
+
+                            { trackChangedInputs = false
+                              dependencies = [data]
+                              updateCPU = fun _ -> data.GetValue(self) |> ignore
+                              updateGPU = fun () ->
+                                match data.GetValue(self) with
+                                    | :? Buffer as t -> updateTo t
+                                    | :? NullBuffer as n -> updateTo ( Buffer(ctx,0n,0) )
+                                    | _ -> 
+                                        if !created then
+                                            bufferHandler.Update(!handle, data.GetValue(self))
+                                        else
+                                            created := true
+                                            handle := bufferHandler.Create(current)
+
+                                        if handleMod.Value <> !handle then 
+                                            transact (fun () -> handleMod.Value <- !handle)
+                                FrameStatistics.Zero
+                              destroy = fun () -> if !created then bufferHandler.Delete(!handle)
+                              resource = handleMod |> Mod.bind id
+                              kind = ResourceKind.Buffer  }
+                    )
 
 
 
