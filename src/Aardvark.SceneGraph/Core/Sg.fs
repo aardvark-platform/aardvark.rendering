@@ -316,6 +316,12 @@ module Sg =
         interface ISg
         member x.RenderTask = task
 
+    type GeometrySet(geometries : aset<IndexedGeometry>, mode : IndexedGeometryMode, attributeTypes : Map<Symbol,Type>) =
+        interface ISg
+        member x.Geometries = geometries
+        member x.Mode = mode
+        member x.AttributeTypes = attributeTypes
+
 
     type Environment (runtime : IRuntime, viewTrafo : IMod<Trafo3d>, projTrafo : IMod<Trafo3d>, viewSize : IMod<V2i>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)

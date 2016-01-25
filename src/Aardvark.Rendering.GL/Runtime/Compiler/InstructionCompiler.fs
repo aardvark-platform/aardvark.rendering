@@ -155,7 +155,7 @@ module Instructions =
                 | _ -> []
         )
 
-    let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<DrawCallInfo>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
+    let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<list<DrawCallInfo>>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
         let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
         let indexType = 
@@ -171,58 +171,60 @@ module Instructions =
                 | IndexedGeometryMode.TriangleList -> 3
                 | m -> failwithf "unsupported patch-mode: %A" m
 
-        let instruction =
+        let instruction  =
             adaptive {
                 let! igMode = mode
                 let! (indexed, indexType) = indexType
-                let! (call, isActive) = call, isActive
+                let! (isActive) = isActive
 
-                let faceVertexCount =
-                    if isActive then call.FaceVertexCount
-                    else 0
+                let! calls = call
+                return 
+                    igMode,
+                    calls |> List.map (fun call ->
+                        let faceVertexCount =
+                            if isActive then call.FaceVertexCount
+                            else 0
 
-                let mode =
-                    if hasTess then int OpenGl.Enums.DrawMode.Patches
-                    else 
-                        let realMode = 
-                            match program.SupportedModes with
-                                | Some set ->
-                                    if Set.contains igMode set then 
-                                        igMode
-                                    else failwith "invalid mode for program: %A (should be in: %A)" igMode set
-                                | None -> 
-                                    igMode
+                        let mode =
+                            if hasTess then int OpenGl.Enums.DrawMode.Patches
+                            else 
+                                let realMode = 
+                                    match program.SupportedModes with
+                                        | Some set ->
+                                            if Set.contains igMode set then 
+                                                igMode
+                                            else failwith "invalid mode for program: %A (should be in: %A)" igMode set
+                                        | None -> 
+                                            igMode
 
-                        Translations.toGLMode realMode
+                                Translations.toGLMode realMode
 
-                if indexed then
-                    let offset = nativeint (call.FirstIndex * indexType.GLSize)
+                        if indexed then
+                            let offset = nativeint (call.FirstIndex * indexType.GLSize)
 
-                    let indexType =
-                        if indexType = typeof<byte> then int OpenGl.Enums.IndexType.UnsignedByte
-                        elif indexType = typeof<uint16> then int OpenGl.Enums.IndexType.UnsignedShort
-                        elif indexType = typeof<uint32> then int OpenGl.Enums.IndexType.UnsignedInt
-                        elif indexType = typeof<sbyte> then int OpenGl.Enums.IndexType.UnsignedByte
-                        elif indexType = typeof<int16> then int OpenGl.Enums.IndexType.UnsignedShort
-                        elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
-                        else failwithf "unsupported index type: %A"  indexType
+                            let indexType =
+                                if indexType = typeof<byte> then int OpenGl.Enums.IndexType.UnsignedByte
+                                elif indexType = typeof<uint16> then int OpenGl.Enums.IndexType.UnsignedShort
+                                elif indexType = typeof<uint32> then int OpenGl.Enums.IndexType.UnsignedInt
+                                elif indexType = typeof<sbyte> then int OpenGl.Enums.IndexType.UnsignedByte
+                                elif indexType = typeof<int16> then int OpenGl.Enums.IndexType.UnsignedShort
+                                elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
+                                else failwithf "unsupported index type: %A"  indexType
 
-                    match call.InstanceCount with
-                        | 1 -> return igMode, Instruction.DrawElements mode faceVertexCount indexType offset
-                        | n -> return igMode, Instruction.DrawElementsInstanced mode faceVertexCount indexType offset n
-                else
-                    match call.InstanceCount with
-                        | 1 -> return igMode, Instruction.DrawArrays mode call.FirstIndex faceVertexCount
-                        | n -> return igMode, Instruction.DrawArraysInstanced mode call.FirstIndex faceVertexCount n
+                            match call.InstanceCount with
+                                | 1 -> Instruction.DrawElements mode faceVertexCount indexType offset
+                                | n -> Instruction.DrawElementsInstanced mode faceVertexCount indexType offset n
+                        else
+                            match call.InstanceCount with
+                                | 1 -> Instruction.DrawArrays mode call.FirstIndex faceVertexCount
+                                | n -> Instruction.DrawArraysInstanced mode call.FirstIndex faceVertexCount n
+                    )
             }
 
         instruction |> Mod.map (fun (mode,i) ->
             if hasTess then
                 let size = patchSize mode
-                [ 
-                    Instruction.PatchParameter (int OpenTK.Graphics.OpenGL4.PatchParameterInt.PatchVertices) size
-                    i
-                ]
+                [ Instruction.PatchParameter (int OpenTK.Graphics.OpenGL4.PatchParameterInt.PatchVertices) size ] @ i
             else
-                [i]
+                i
         )

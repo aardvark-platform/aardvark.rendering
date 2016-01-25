@@ -6,7 +6,6 @@ open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
 
-open Aardvark.SceneGraph.Internal
 
 [<AutoOpen>]
 module RenderObjectSemantics =
@@ -20,6 +19,7 @@ module RenderObjectSemantics =
         let renderJobs (s : ISg) : aset<IRenderObject> = s?RenderObjects()
         let renderObjects (s : ISg) : aset<IRenderObject> = s?RenderObjects()
         let overlayTasks (s : ISg) : aset<uint64 * IRenderTask> = s?OverlayTasks()
+
 
     [<Semantic>]
     type RenderObjectSem() =
@@ -68,19 +68,49 @@ module RenderObjectSemantics =
                     if info.FaceVertexCount < 0 then
                         let! (count : int) = scope?FaceVertexCount
                         return 
-                            DrawCallInfo(
+                            [ DrawCallInfo(
                                 FirstIndex = info.FirstIndex,
                                 FirstInstance = info.FirstInstance,
                                 InstanceCount = info.InstanceCount,
                                 FaceVertexCount = count,
                                 BaseVertex = 0
-                            )
+                            ) ]
                     else
-                        return info
+                        return [info]
                 }
 
             rj.DrawCallInfo <- callInfo
             rj.Mode <- r.Mode
+            ASet.single (rj :> IRenderObject)
+
+        member x.RenderObjects(r : Sg.GeometrySet) : aset<IRenderObject> =
+            let scope = Ag.getContext()
+            let rj = RenderObject.Create()
+            
+            rj.AttributeScope <- scope 
+            rj.Indices <- null
+         
+            rj.IsActive <- r.IsActive
+            rj.RenderPass <- r.RenderPass
+            
+            let vertexAttributes = new AttributePacking.PackingAttributeProvider(scope, r.AttributeTypes, r.Geometries)
+            let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
+
+            rj.Uniforms <- new Providers.UniformProvider(scope, r?Uniforms, 
+                                                         [vertexAttributes; instanceAttributes])
+            rj.VertexAttributes <- vertexAttributes
+            rj.InstanceAttributes <- instanceAttributes
+            
+            rj.DepthTest <- r.DepthTestMode
+            rj.CullMode <- r.CullMode
+            rj.FillMode <- r.FillMode
+            rj.StencilMode <- r.StencilMode
+            rj.BlendMode <- r.BlendMode
+              
+            rj.Surface <- r.Surface
+            
+            rj.DrawCallInfo <- vertexAttributes.DrawCalls
+            rj.Mode <- Mod.constant r.Mode
             ASet.single (rj :> IRenderObject)
 
         member x.RenderObjects(r : Sg.OverlayNode) : aset<IRenderObject> =
