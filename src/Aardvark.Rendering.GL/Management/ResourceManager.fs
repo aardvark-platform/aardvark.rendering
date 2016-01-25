@@ -481,10 +481,7 @@ module ResourceManager =
                                 ctx.Upload(handle, current.Ptr, current.SizeInBytes)
                             else
                                 let mutable cnt = 0
-                                for r in ranges do
-                                    Log.line "upload range: %A" r
-                                    ctx.UploadRange(handle, current.Ptr + nativeint r.Min, r.Min, r.Size + 1)
-                                    cnt <- cnt + 1
+                                ctx.UploadRanges(handle, current.Ptr, ranges)
                         )
                         FrameStatistics.Zero
                       destroy = fun () -> ctx.Delete(handle)

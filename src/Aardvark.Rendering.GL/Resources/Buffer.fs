@@ -230,6 +230,30 @@ module BufferExtensions =
                 GL.Check "failed to unbind buffer"
             )
 
+
+        member x.UploadRanges(buffer : Buffer, src : nativeint, ranges : seq<Range1i>) =
+            using x.ResourceLock (fun _ ->
+                GL.BindBuffer(BufferTarget.ArrayBuffer, buffer.Handle)
+                GL.Check "failed to bind buffer"
+
+                let target = GL.MapBufferRange(BufferTarget.ArrayBuffer, 0n, buffer.SizeInBytes, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+                GL.Check "failed to map buffer for writing"
+
+                for r in ranges do
+                    let offset = nativeint r.Min
+                    let size = nativeint (r.Size + 1)
+                    // TODO: Marshal.Copy should possibly take int64 sizes
+                    Marshal.Copy(src + offset, target + offset, int size)
+
+                    GL.FlushMappedBufferRange(BufferTarget.ArrayBuffer, offset, size)
+                    GL.Check "failed to invalidate buffer-range"
+
+                GL.UnmapBuffer(BufferTarget.ArrayBuffer) |> ignore
+                GL.Check "failed to unmap buffer"
+
+                GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
+                GL.Check "failed to unbind buffer"
+            )
         /// <summary>
         /// uploads a subrange of the given array to a (possibly different) range of the buffer. 
         /// source: [sourceStartIndex, sourceStartIndex + count)
