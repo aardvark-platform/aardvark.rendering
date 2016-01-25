@@ -163,16 +163,17 @@ module AttributePacking =
         member x.AddDirtyRegion (range : Range1i) =
             Interlocked.Change(&dirty, RangeSet.insert range) |> ignore
 
-    and NativeBuffer(capacity : int, input : IMod) =
+    and NativeBuffer(capacity : int, input : IMod<unit>, manager : MemoryManager, elementType : Type) =
         inherit Mod.AbstractMod<IBuffer>()
+
+        let elementSize = Marshal.SizeOf elementType
 
         let mutable capacity = capacity
         let mutable mem = Marshal.AllocHGlobal capacity
         let readers = HashSet<RegionReader>()
 
-        member x.Capacity = capacity
-        member x.Ptr = mem
-        member x.Resize newSize =
+        let resize() =
+            let newSize = manager.Capacity * elementSize
             if newSize > capacity then
                 for r in readers do 
                     r.AddDirtyRegion (Range1i (capacity, newSize - 1))
@@ -181,6 +182,21 @@ module AttributePacking =
                 mem <- Marshal.ReAllocHGlobal(mem,nativeint newSize)
                 capacity <- newSize
                
+        member x.Capacity = capacity
+        member x.Ptr = mem
+
+        member x.ElementType = elementType
+        member x.ElementSize = elementSize
+
+        member x.Write(offset : nativeint, a : Array) =
+            resize()
+            let gc = GCHandle.Alloc(a, GCHandleType.Pinned)
+            try
+                Marshal.Copy(gc.AddrOfPinnedObject(), mem + nativeint elementSize * offset, elementSize * a.Length)
+            finally
+                gc.Free()
+
+           
 
         // TODO: locking scheme
         member x.GetReader() =
@@ -193,7 +209,7 @@ module AttributePacking =
                 r.AddDirtyRegion range
 
         override x.Compute() =
-            input.GetValue x |> ignore
+            input.GetValue x
             NativeMemoryBuffer(mem, capacity) :> IBuffer
 
 
@@ -201,7 +217,7 @@ module AttributePacking =
         let mutable scope = scope
         let memoryManager = Aardvark.Base.MemoryManager.createNop()
         let reader = geometries.GetReader()
-        let attributes = Dictionary<Symbol, int * Type * NativeBuffer>()
+        let attributes = Dictionary<Symbol, NativeBuffer>()
         let ranges = Dictionary<IndexedGeometry,managedptr>()
         let cache = Dictionary<Symbol, BufferView>()
 
@@ -229,25 +245,20 @@ module AttributePacking =
 
         let update (caller : IAdaptiveObject) =
             let dirtyRanges = processDeltas(caller)
-            for (sem,(es,et, ptr)) in attributes |> Dictionary.toSeq do
-                ptr.Resize (es * memoryManager.Capacity)
-
+             
             for (range,g) in dirtyRanges do
-                for (sem,(elementSize, _, ptr)) in attributes |> Dictionary.toSeq do
+                for (sem,ptr) in attributes |> Dictionary.toSeq do
                     match g.IndexedAttributes.TryGetValue sem with
                      | (true,v) ->
-                        let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
-                        try
-                            Marshal.Copy(gc.AddrOfPinnedObject(), ptr.Ptr + nativeint elementSize * range.Offset, elementSize * range.Size)
-                        finally
-                            gc.Free()
+                        ptr.Write(range.Offset, v)
                      | _ ->
                         ()
-                
+             
+        let updater = Mod.custom update   
 
         let drawCallInfos =
             Mod.custom (fun self ->
-                update self
+                updater.GetValue self
 
                 ranges.Values
                     |> Seq.toList
@@ -272,10 +283,22 @@ module AttributePacking =
                 match cache.TryGetValue s with
                     | (true, view) -> Some view
                     | _ ->
-                        let target = NativeBuffer(0, drawCallInfos)
-                        attributes.[s] <- (Marshal.SizeOf(t), t, target)
-                        let view = BufferView(target, attributeTypes.[s])
+                        let target = NativeBuffer(0, updater, memoryManager, t)
+                        attributes.[s] <- target
+
+                        let view = BufferView(target, t)
                         cache.[s] <- view
+
+                        for (g) in reader.Content do
+                            match ranges.TryGetValue g with
+                                | (true, range) ->
+                                    match g.IndexedAttributes.TryGetValue s with
+                                        | (true,v) ->
+                                            target.Write(range.Offset, v)
+                                        | _ ->
+                                            ()
+                                | _ -> ()
+
 
                         Some view
              | None -> None
