@@ -521,3 +521,75 @@ module HelloWorld =
         win.RenderTask <- task |> DefaultOverlays.withStatistics
         win.Run()
         0
+
+
+    let testBla() =
+
+        Ag.initialize()
+        Aardvark.Init()
+
+        use app = new OpenGlApplication()
+        let win = app.CreateSimpleRenderWindow(1)
+   
+        let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
+        let perspective = 
+            win.Sizes 
+              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 10.0 (float s.X / float s.Y))
+
+
+        let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
+
+        let rand = Random()
+        let randomPoints pointCount =
+            let randomV3f() = V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
+            let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
+
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.PointList,
+                IndexedAttributes = 
+                    SymDict.ofList [
+                         DefaultSemantic.Positions, Array.init pointCount (fun _ -> randomV3f()) :> Array
+                         DefaultSemantic.Colors, Array.init pointCount (fun _ -> randomColor()) :> Array
+                    ]
+            )
+                                    
+        let geometries = Array.init 10 (fun _ -> randomPoints 1000) |> CSet.ofArray 
+        let sg = Sg.GeometrySet( geometries, IndexedGeometryMode.PointList, 
+                                    Map.ofList [ DefaultSemantic.Positions, typeof<V3f>
+                                                 DefaultSemantic.Colors, typeof<C4b> ] ) :> ISg
+
+
+        
+        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+            if k = Keys.R then
+                if geometries.Count > 0 then
+                    let g = geometries |> Seq.head
+                    transact (fun () ->
+                        geometries.Remove g |> ignore
+                        printfn "removed"
+                    )
+            elif k = Keys.T then
+                transact (fun () ->
+                    geometries.Add (randomPoints 1000) |> ignore
+                    printfn "added"
+                )
+        )
+
+
+        let final =
+            sg |> Sg.effect [
+                    DefaultSurfaces.trafo |> toEffect                  
+                    DefaultSurfaces.vertexColor |> toEffect 
+                    ]
+                // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
+                |> Sg.viewTrafo (viewTrafo |> Mod.map CameraView.viewTrafo ) 
+                // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
+                // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
+                |> Sg.projTrafo (perspective  |> Mod.map Frustum.projTrafo    )
+
+
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, final)
+
+        win.RenderTask <- task |> DefaultOverlays.withStatistics
+        win.Run()
+        0

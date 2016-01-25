@@ -7,4 +7,4 @@ open Rendering.Examples
 [<STAThread>]
 let main args = 
     //HelloWorld.run()
-    HelloWorld.envTest ()
+    HelloWorld.testBla ()
