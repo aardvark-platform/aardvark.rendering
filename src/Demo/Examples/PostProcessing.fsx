@@ -118,7 +118,7 @@ let fullscreenQuad =
 let mainResult =
     pointSg
         |> Sg.compile win.Runtime win.FramebufferSignature 
-        |> RenderTask.renderToColor win.Sizes ~~TextureFormat.Rgba8
+        |> RenderTask.renderToColor win.Sizes
  
 //let runtime = win.Runtime  
 //let signature =
@@ -148,7 +148,7 @@ let blurredOnlyX =
         |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
         |> Sg.effect [Shaders.gaussX |> toEffect]
         |> Sg.compile win.Runtime win.FramebufferSignature
-        |> RenderTask.renderToColor win.Sizes ~~TextureFormat.Rgba8
+        |> RenderTask.renderToColor win.Sizes
 
 // by taking the texture created above and the fullscreen quad we can now apply
 // the first gaussian filter to it and in turn get a new IMod<ITexture>     
@@ -157,7 +157,7 @@ let blurredOnlyY =
         |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
         |> Sg.effect [Shaders.gaussY |> toEffect]
         |> Sg.compile win.Runtime win.FramebufferSignature
-        |> RenderTask.renderToColor win.Sizes ~~TextureFormat.Rgba8
+        |> RenderTask.renderToColor win.Sizes
 
 // we could now render the blurred result to a texutre too but for our example
 // we can also render it directly to the screen.

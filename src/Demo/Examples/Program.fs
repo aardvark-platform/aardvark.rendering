@@ -6,4 +6,5 @@ open Rendering.Examples
 [<EntryPoint>]
 [<STAThread>]
 let main args = 
+    //HelloWorld.run()
     HelloWorld.envTest ()

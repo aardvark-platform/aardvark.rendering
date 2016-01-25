@@ -472,7 +472,7 @@ module HelloWorld =
             ]
         let envCubePix = 
             faceFiles   
-                |> Map.map (fun _ f -> Path.combine [@"C:\Users\Schorsch\Development\WorkDirectory\Server"; f])
+                |> Map.map (fun _ f -> Path.combine [@"C:\Aardwork"; f])
                 |> PixImageCube.create
                 |> PixImageCube.ofOpenGlConvention
                 |> PixImageCube.toTexture true
@@ -489,7 +489,7 @@ module HelloWorld =
             ctx.Copy(cube, 0, f, V2i.Zero, newCube, 0, f, V2i.Zero, cube.Size2D)
 
         let faceX = ctx.CreateTextureView(newCube, Range1i(0,0), Range1i(0,0))
-        ctx.Download(faceX).SaveAsImage @"C:\Users\Schorsch\Desktop\x.jpg"
+        //ctx.Download(faceX).SaveAsImage @"C:\Users\Schorsch\Desktop\x.jpg"
 
         let fullscreenQuad =
             Sg.draw IndexedGeometryMode.TriangleStrip

@@ -40,7 +40,7 @@ let signature =
 
 // Create a framebuffer matching signature and capturing the render to texture targets
 let fbo = 
-    ChangeableResources.createFramebufferFromTexture runtime signature color depth 
+    ChangeableResources.createFramebufferFromTexture runtime signature color depth None
 
   
 // Default scene graph setup with static camera
@@ -55,8 +55,8 @@ let task = runtime.CompileRender(signature, render2TextureSg.RenderObjects())
 let clear = runtime.CompileClear(signature, ~~C4f.Red, ~~1.0)
 
 // Run the render task imperatively
-clear.Run(null, Mod.force fbo) |> ignore
-task.Run(null,  Mod.force fbo) |> ignore
+clear.Run(null, Mod.force fbo |> OutputDescription.ofFramebuffer) |> ignore
+task.Run(null,  Mod.force fbo |> OutputDescription.ofFramebuffer) |> ignore
 
 // this module demonstrates how to read back textures. In order to see the result,
 // a form containing the readback result is shown
