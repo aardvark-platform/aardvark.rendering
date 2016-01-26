@@ -522,8 +522,7 @@ module HelloWorld =
         win.Run()
         0
 
-
-    let testBla() =
+    let testGeometrySet() =
 
         //Ag.initialize()
         Aardvark.Init()
@@ -546,6 +545,7 @@ module HelloWorld =
 
             IndexedGeometry(
                 Mode = IndexedGeometryMode.PointList,
+                IndexArray = Array.init pointCount id,
                 IndexedAttributes = 
                     SymDict.ofList [
                          DefaultSemantic.Positions, Array.init pointCount (fun _ -> randomV3f()) :> Array
@@ -575,12 +575,19 @@ module HelloWorld =
                 )
         )
 
+        let mutable blendMode = BlendMode.Blend
+        blendMode.Operation <- BlendOperation.Add
+        blendMode.AlphaOperation <- BlendOperation.Add
+        blendMode.SourceFactor <- BlendFactor.One
+        blendMode.DestinationFactor <- BlendFactor.One
 
         let final =
             sg |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect                  
                     DefaultSurfaces.vertexColor |> toEffect 
                     ]
+                |> Sg.depthTest (Mod.constant DepthTestMode.None)
+                |> Sg.blendMode (Mod.constant blendMode)
                 // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
                 |> Sg.viewTrafo (viewTrafo |> Mod.map CameraView.viewTrafo ) 
                 // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.

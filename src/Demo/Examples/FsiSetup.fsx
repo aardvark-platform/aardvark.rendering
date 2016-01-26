@@ -1,5 +1,7 @@
 ﻿
 #I @"..\..\..\bin\Debug\"
+#I @"..\..\..\bin\Release\"
+
 #r @"..\..\..\Packages\Aardvark.Base.FSharp\lib\net45\Aardvark.Base.TypeProviders.dll"
 #r "Aardvark.Base.dll"
 #r "Aardvark.Base.Essentials.dll"

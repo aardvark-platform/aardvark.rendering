@@ -605,28 +605,37 @@ module AttributePackingV2 =
         interface IAdaptiveBufferReader with
             member x.GetDirtyRanges(caller) = x.GetDirtyRanges(caller)
 
-    type private IndexFlat<'a, 'b when 'a : unmanaged and 'b : unmanaged>() =
+    type private IndexFlat<'b when 'b : unmanaged>() =
         static member Copy(index : Array, src : nativeint, dst : nativeint) =
             let src = NativePtr.ofNativeInt<'b> src
             let mutable dst = dst
-            let s = sizeof<'a> |> nativeint
 
             match index with
                 | :? array<int> as arr -> 
                     for i in arr do
                         NativePtr.write (NativePtr.ofNativeInt dst) (NativePtr.get src i)
-                        dst <- dst + s
+                        dst <- dst + 4n
                 | :? array<int16> as arr -> 
                     for i in arr do
                         NativePtr.write (NativePtr.ofNativeInt dst) (NativePtr.get src (int i))
-                        dst <- dst + s
+                        dst <- dst + 2n
                 | :? array<int8> as arr -> 
                     for i in arr do
                         NativePtr.write (NativePtr.ofNativeInt dst) (NativePtr.get src (int i))
-                        dst <- dst + s
+                        dst <- dst + 1n
                 | _ ->
                     failwith ""
 
+    let private dictCache = System.Collections.Concurrent.ConcurrentDictionary<Type, Action<Array, nativeint, nativeint>>()
+
+    let private copyIndexed (dt : Type, index : Array, src : nativeint, dst : nativeint) =
+        let action = 
+            dictCache.GetOrAdd(dt, fun dt ->
+                let flat = typedefof<IndexFlat<int>>.MakeGenericType [| dt |]
+                let meth = flat.GetMethod("Copy", Reflection.BindingFlags.NonPublic ||| Reflection.BindingFlags.Static )
+                meth.CreateDelegate(typeof<Action<Array, nativeint, nativeint>>) |> unbox<Action<Array, nativeint, nativeint>>
+            )
+        action.Invoke(index, src, dst)
 
     type private AdaptiveBuffer(sem : Symbol, elementType : Type, updateLayout : IMod<Dictionary<IndexedGeometry, managedptr>>) =
         inherit Mod.AbstractMod<IBuffer>()
@@ -673,12 +682,8 @@ module AttributePackingV2 =
                             finally gc.Free()
                 
                         else
-                            let it = g.IndexArray.GetType().GetElementType()
-                            let flat = typedefof<IndexFlat<int, int>>.MakeGenericType [|it; dt|]
-                            let meth = flat.GetMethod("Copy")
-
                             let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                            try meth.Invoke(null, [| g.IndexArray; gc.AddrOfPinnedObject(); storage + offset |]) |> ignore
+                            try copyIndexed(dt, g.IndexArray, gc.AddrOfPinnedObject(), storage + offset) 
                             finally gc.Free()
 
 
