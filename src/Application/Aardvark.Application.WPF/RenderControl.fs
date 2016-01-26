@@ -28,7 +28,6 @@ type RenderControl() =
             let! s = sizes
             match impl with
              | Some v -> 
-                printfn "switched to impl"
                 return! v.Sizes
              | None -> return s
         }
