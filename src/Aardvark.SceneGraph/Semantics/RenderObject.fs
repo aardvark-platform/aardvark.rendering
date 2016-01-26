@@ -79,7 +79,7 @@ module RenderObjectSemantics =
                         return [info]
                 }
 
-            rj.DrawCallInfo <- callInfo
+            rj.DrawCallInfos <- callInfo
             rj.Mode <- r.Mode
             ASet.single (rj :> IRenderObject)
 
@@ -110,7 +110,7 @@ module RenderObjectSemantics =
               
             rj.Surface <- r.Surface
             
-            rj.DrawCallInfo <- packer.DrawCallInfos
+            rj.DrawCallInfos <- packer.DrawCallInfos
             rj.Mode <- Mod.constant r.Mode
             ASet.single (rj :> IRenderObject)
 

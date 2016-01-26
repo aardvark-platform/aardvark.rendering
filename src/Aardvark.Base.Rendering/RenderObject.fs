@@ -43,15 +43,15 @@ type RenderObject =
         mutable IsActive   : IMod<bool>
         mutable RenderPass : uint64
                 
-        mutable DrawCallInfo : IMod<list<DrawCallInfo>>
-        mutable Mode         : IMod<IndexedGeometryMode>
-        mutable Surface      : IMod<ISurface>
-                
-        mutable DepthTest    : IMod<DepthTestMode>
-        mutable CullMode     : IMod<CullMode>
-        mutable BlendMode    : IMod<BlendMode>
-        mutable FillMode     : IMod<FillMode>
-        mutable StencilMode  : IMod<StencilMode>
+        mutable DrawCallInfos : IMod<list<DrawCallInfo>>
+        mutable Mode          : IMod<IndexedGeometryMode>
+        mutable Surface       : IMod<ISurface>
+                              
+        mutable DepthTest     : IMod<DepthTestMode>
+        mutable CullMode      : IMod<CullMode>
+        mutable BlendMode     : IMod<BlendMode>
+        mutable FillMode      : IMod<FillMode>
+        mutable StencilMode   : IMod<StencilMode>
                 
         mutable Indices            : IMod<Array>
         mutable InstanceAttributes : IAttributeProvider
@@ -73,7 +73,7 @@ type RenderObject =
           AttributeScope = Ag.emptyScope
           IsActive = null
           RenderPass = 0UL
-          DrawCallInfo = null
+          DrawCallInfos = null
           Mode = null
           Surface = null
           DepthTest = null
@@ -123,7 +123,7 @@ module RenderObjectExtensions =
           AttributeScope = Ag.emptyScope
           IsActive = null
           RenderPass = 0UL
-          DrawCallInfo = null
+          DrawCallInfos = null
           Mode = null
           Surface = null
           DepthTest = null
@@ -605,6 +605,29 @@ module AttributePackingV2 =
         interface IAdaptiveBufferReader with
             member x.GetDirtyRanges(caller) = x.GetDirtyRanges(caller)
 
+    type private IndexFlat<'a, 'b when 'a : unmanaged and 'b : unmanaged>() =
+        static member Copy(index : Array, src : nativeint, dst : nativeint) =
+            let src = NativePtr.ofNativeInt<'b> src
+            let mutable dst = dst
+            let s = sizeof<'a> |> nativeint
+
+            match index with
+                | :? array<int> as arr -> 
+                    for i in arr do
+                        NativePtr.write (NativePtr.ofNativeInt dst) (NativePtr.get src i)
+                        dst <- dst + s
+                | :? array<int16> as arr -> 
+                    for i in arr do
+                        NativePtr.write (NativePtr.ofNativeInt dst) (NativePtr.get src (int i))
+                        dst <- dst + s
+                | :? array<int8> as arr -> 
+                    for i in arr do
+                        NativePtr.write (NativePtr.ofNativeInt dst) (NativePtr.get src (int i))
+                        dst <- dst + s
+                | _ ->
+                    failwith ""
+
+
     type private AdaptiveBuffer(sem : Symbol, elementType : Type, updateLayout : IMod<Dictionary<IndexedGeometry, managedptr>>) =
         inherit Mod.AbstractMod<IBuffer>()
 
@@ -614,6 +637,12 @@ module AttributePackingV2 =
         let mutable storeCapacity = 0
         let mutable storage = 0n
         let writes = Dictionary<IndexedGeometry, managedptr>()
+
+        let faceVertexCount (i : IndexedGeometry) =
+            match i.IndexArray with
+             | null -> i.IndexedAttributes.Values |> Seq.head |> (fun s -> s.Length)
+             | arr -> arr.Length
+
 
         let removeReader (r : AdaptiveBufferReader) =
             lock readers (fun () -> readers.Remove r |> ignore)
@@ -629,7 +658,8 @@ module AttributePackingV2 =
                     let dt = data.GetType().GetElementType()
 
                     if dt = elementType then
-                        let arraySize = elementSize * data.Length
+                        let count = faceVertexCount g
+                        let arraySize = elementSize * count
 
                         #if DEBUG
                         let available = max 0 (storeCapacity - int offset)
@@ -637,19 +667,30 @@ module AttributePackingV2 =
                             failwithf "writing out of bounds: { available = %A; real = %A }" available arraySize
                         #endif
 
-                        let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                        try Marshal.Copy(gc.AddrOfPinnedObject(), storage + offset, arraySize)
-                        finally gc.Free()
+                        if isNull g.IndexArray then
+                            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                            try Marshal.Copy(gc.AddrOfPinnedObject(), storage + offset, arraySize)
+                            finally gc.Free()
                 
+                        else
+                            let it = g.IndexArray.GetType().GetElementType()
+                            let flat = typedefof<IndexFlat<int, int>>.MakeGenericType [|it; dt|]
+                            let meth = flat.GetMethod("Copy")
+
+                            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                            try meth.Invoke(null, [| g.IndexArray; gc.AddrOfPinnedObject(); storage + offset |]) |> ignore
+                            finally gc.Free()
+
+
                         let range = Range1i.FromMinAndSize(int offset, arraySize - 1)
                         iter (fun r -> r.AddDirty range)
-
                     else
                         failwithf "unexpected input-type: %A" dt   
                 | _ ->
-                    let anyAtt = g.IndexedAttributes.Values |> Seq.head
-                    let clearSize = elementSize * anyAtt.Length
+                    let count = faceVertexCount g
+                    let clearSize = elementSize * count
 
+                    // TODO: maybe respect NullBuffers here
                     Marshal.Set(storage + offset, 0, clearSize)
 
                     let range = Range1i.FromMinAndSize(int offset, clearSize - 1)
@@ -732,9 +773,6 @@ module AttributePackingV2 =
              | null -> i.IndexedAttributes.Values |> Seq.head |> (fun s -> s.Length)
              | arr -> arr.Length
 
-        let vertexCount (i : IndexedGeometry) =
-            i.IndexedAttributes.Values |> Seq.head |> (fun s -> s.Length)
-
         let write (g : IndexedGeometry) (ptr : managedptr) =
             lock lockObj (fun () ->
                 for (sem, b) in SymDict.toSeq buffers do
@@ -779,7 +817,7 @@ module AttributePackingV2 =
             for d in deltas do
                 match d with
                     | Add g ->
-                        let ptr = g |> vertexCount |> manager.Alloc
+                        let ptr = g |> faceVertexCount |> manager.Alloc
                         lock dataRanges (fun () -> dataRanges.[g] <- ptr)
                         write g ptr
 

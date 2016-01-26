@@ -42,7 +42,7 @@ type PreparedRenderObject =
     member x.IsActive = x.Original.IsActive
     member x.RenderPass = x.Original.RenderPass
 
-    member x.DrawCallInfo = x.Original.DrawCallInfo
+    member x.DrawCallInfos = x.Original.DrawCallInfos
     member x.Mode = x.Original.Mode
 
     member x.DepthTest = x.Original.DepthTest

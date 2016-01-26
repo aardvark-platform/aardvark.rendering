@@ -788,7 +788,7 @@ module RenderingTests =
                 AttributeScope = Ag.emptyScope
                 IsActive = Mod.constant true
                 RenderPass = 0UL
-                DrawCallInfo = Mod.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
+                DrawCallInfos = Mod.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)]
                 Mode = Mod.constant IndexedGeometryMode.TriangleList
                 Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> toFShadeSurface |> Mod.constant
                 DepthTest = Mod.constant Aardvark.Base.Rendering.DepthTestMode.LessOrEqual
