@@ -57,6 +57,33 @@ module BoundingBoxes =
 
         let boxFromArray (v : V3d[]) = if v.Length = 0 then Box3d.Invalid else Box3d v
 
+        let computeBoundingBox (g : IndexedGeometry) =
+            match g.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
+                | (true, arr) ->
+                    match arr with
+                        | :? array<V3f> as arr -> Box3f(arr) |> Box3f.op_Explicit
+                        | :? array<V4f> as arr -> Box3f(arr |> Array.map Vec.xyz) |> Box3f.op_Explicit
+                        | _ -> failwithf "unknown position-type: %A" arr
+                | _ ->
+                    Box3d.Invalid
+
+        member x.LocalBoundingBox(r : Sg.GeometrySet) : IMod<Box3d> =
+            r.Geometries 
+                |> ASet.map computeBoundingBox
+                |> ASet.foldMonoid (curry Box3d.Union) Box3d.Invalid
+
+        member x.GlobalBoundingBox(r : Sg.GeometrySet) : IMod<Box3d> =
+            let l = r.LocalBoundingBox()
+            let t = r.ModelTrafo
+            Mod.map2 (fun (t : Trafo3d) (b : Box3d) -> b.Transformed(t)) t l
+
+
+        member x.LocalBoundingBox(p : Sg.OverlayNode) : IMod<Box3d> =
+            Mod.constant Box3d.Invalid
+
+        member x.GlobalBoundingBox(p : Sg.OverlayNode) : IMod<Box3d> =
+            Mod.constant Box3d.Invalid
+
         member x.GlobalBoundingBox(node : Sg.RenderNode) : IMod<Box3d> =
             let scope = Ag.getContext()
             let va = node.VertexAttributes

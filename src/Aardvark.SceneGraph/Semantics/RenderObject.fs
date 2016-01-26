@@ -23,7 +23,6 @@ module RenderObjectSemantics =
 
     [<Semantic>]
     type RenderObjectSem() =
-
         member x.RenderObjects(a : IApplicator) : aset<IRenderObject> =
             aset {
                 let! c = a.Child
@@ -82,6 +81,10 @@ module RenderObjectSemantics =
             rj.DrawCallInfos <- callInfo
             rj.Mode <- r.Mode
             ASet.single (rj :> IRenderObject)
+
+
+
+
 
         member x.RenderObjects(r : Sg.GeometrySet) : aset<IRenderObject> =
             let scope = Ag.getContext()

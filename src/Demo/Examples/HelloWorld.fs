@@ -541,7 +541,7 @@ module HelloWorld =
 
         let rand = Random()
         let randomPoints pointCount =
-            let randomV3f() = V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
+            let randomV3f() = 3.0f*V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
             let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
 
             IndexedGeometry(
@@ -586,7 +586,7 @@ module HelloWorld =
                 // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
                 // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
                 |> Sg.projTrafo (perspective  |> Mod.map Frustum.projTrafo    )
-
+                |> Sg.normalizeAdaptive
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, final)
 

@@ -773,6 +773,7 @@ module AttributePackingV2 =
              | null -> i.IndexedAttributes.Values |> Seq.head |> (fun s -> s.Length)
              | arr -> arr.Length
 
+
         let write (g : IndexedGeometry) (ptr : managedptr) =
             lock lockObj (fun () ->
                 for (sem, b) in SymDict.toSeq buffers do
@@ -820,6 +821,7 @@ module AttributePackingV2 =
                         let ptr = g |> faceVertexCount |> manager.Alloc
                         lock dataRanges (fun () -> dataRanges.[g] <- ptr)
                         write g ptr
+
 
                         let r = Range1i.FromMinAndSize(int ptr.Offset, ptr.Size - 1)
                         drawRanges <- RangeSet.insert r drawRanges
@@ -894,7 +896,6 @@ module AttributePackingV2 =
                         )
                     )
             )
-
 
 
 
