@@ -93,7 +93,8 @@ module RenderObjectSemantics =
             rj.IsActive <- r.IsActive
             rj.RenderPass <- r.RenderPass
             
-            let vertexAttributes = new AttributePacking.PackingLayout(r.Geometries, r.AttributeTypes)
+            let packer = new AttributePackingV2.Packer(r.Geometries, r.AttributeTypes)
+            let vertexAttributes = packer.AttributeProvider
             let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
 
             rj.Uniforms <- new Providers.UniformProvider(scope, r?Uniforms, 
@@ -109,7 +110,7 @@ module RenderObjectSemantics =
               
             rj.Surface <- r.Surface
             
-            rj.DrawCallInfo <- vertexAttributes.DrawCallInfos
+            rj.DrawCallInfo <- packer.DrawCallInfos
             rj.Mode <- Mod.constant r.Mode
             ASet.single (rj :> IRenderObject)
 
