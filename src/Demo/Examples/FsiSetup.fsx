@@ -1,8 +1,8 @@
 ﻿
-#I @"..\..\..\bin\Debug\"
-#I @"..\..\..\bin\Release\"
+#I @"../../../bin/Debug"
+#I @"../../../bin/Release"
 
-#r @"..\..\..\Packages\Aardvark.Base.FSharp\lib\net45\Aardvark.Base.TypeProviders.dll"
+#r @"../../../packages/Aardvark.Base.FSharp/lib/net45/Aardvark.Base.TypeProviders.dll"
 #r "Aardvark.Base.dll"
 #r "Aardvark.Base.Essentials.dll"
 #r "Aardvark.Base.FSharp.dll"
@@ -45,9 +45,13 @@ module FsiSetup =
 
 
     let init() =
+        let debugPath = System.IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "bin", "Debug")
+        let releasePath = System.IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "bin", "Release")
+        let path = if System.IO.File.Exists(System.IO.Path.Combine(debugPath, "Examples.exe")) then debugPath else releasePath
+        
         if Interlocked.Exchange(&initialized, 1) = 0 then
-            System.Environment.CurrentDirectory <- System.IO.Path.Combine(__SOURCE_DIRECTORY__, @"..\..\..\bin\Debug\")
-            IntrospectionProperties.CustomEntryAssembly <- System.Reflection.Assembly.LoadFile <| System.IO.Path.Combine(__SOURCE_DIRECTORY__, @"..\..\..\bin\Debug\Examples.exe")
+            System.Environment.CurrentDirectory <- path
+            IntrospectionProperties.CustomEntryAssembly <- System.Reflection.Assembly.LoadFile <| System.IO.Path.Combine(path, "Examples.exe")
 
             Ag.initialize()
             Aardvark.Base.Ag.unpack <- fun o ->
@@ -64,7 +68,7 @@ module FsiSetup =
 
         win.Text <- @"Aardvark rocks \o/"
         win.TopMost <- true
-        win.Visible <- true
+        win.Visible <- true 
         win.RenderTask <- task
 
         win :> IRenderControl
@@ -110,9 +114,12 @@ module FsiSetup =
 
     let runInteractive () =
            
+        let debugPath = System.IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "bin", "Debug")
+        let releasePath = System.IO.Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "..", "bin", "Release")
+        let path = if System.IO.File.Exists(System.IO.Path.Combine(debugPath, "Examples.exe")) then debugPath else releasePath
         
-        System.Environment.CurrentDirectory <- System.IO.Path.Combine(__SOURCE_DIRECTORY__, @"..\..\..\bin\Debug\")
-        IntrospectionProperties.CustomEntryAssembly <- System.Reflection.Assembly.LoadFile <| System.IO.Path.Combine(__SOURCE_DIRECTORY__, @"..\..\..\bin\Debug\Examples.exe")
+        System.Environment.CurrentDirectory <- path 
+        IntrospectionProperties.CustomEntryAssembly <- System.Reflection.Assembly.LoadFile <| System.IO.Path.Combine(path, "Examples.exe")
 
         Ag.initialize()
         Aardvark.Base.Ag.unpack <- fun o ->
