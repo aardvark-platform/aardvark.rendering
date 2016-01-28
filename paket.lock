@@ -21,7 +21,7 @@ NUGET
       Aardvark.Base.Essentials (1.6.27)
       Aardvark.Base.FSharp (1.6.27)
       Aardvark.Base.Incremental (1.6.27)
-    FShade (1.6.8)
+    FShade (1.6.10)
       Aardvark.Base (>= 1.6.0 < 1.7.0)
       Aardvark.Base.FSharp (>= 1.6.0 < 1.7.0)
       FSharp.Compiler.Service (>= 0.0.90 < 0.1.0)
