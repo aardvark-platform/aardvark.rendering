@@ -6,4 +6,3 @@ description
 files
     ..\..\bin\Release\Aardvark.Rendering.NanoVg.dll ==> lib\net45
     ..\..\bin\Release\Aardvark.Rendering.NanoVg.pdb ==> lib\net45
-    ..\..\bin\Release\Aardvark.Rendering.NanoVg.xml ==> lib\net45

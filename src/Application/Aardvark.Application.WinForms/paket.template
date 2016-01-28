@@ -6,6 +6,5 @@ description
 frameworkAssemblies
     System.Windows.Forms
 files
-    ..\..\bin\BUILDCONFIG\Aardvark.Application.WinForms.dll ==> lib\net45
-    ..\..\bin\BUILDCONFIG\Aardvark.Application.WinForms.pdb ==> lib\net45
-    ..\..\bin\BUILDCONFIG\Aardvark.Application.WinForms.xml ==> lib\net45
+    ..\..\..\bin\Release\Aardvark.Application.WinForms.dll ==> lib\net45
+    ..\..\..\bin\Release\Aardvark.Application.WinForms.pdb ==> lib\net45
