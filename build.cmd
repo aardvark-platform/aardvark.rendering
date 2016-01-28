@@ -1,31 +1,22 @@
 @echo off
-
+SETLOCAL
 PUSHD %~dp0
-REM cls
 
-IF exist packages\FAKE ( echo skipping FAKE download ) ELSE ( 
-echo downloading FAKE
-REM dir
-"bin\nuget.exe" "install" "FAKE" "-Version" "3.35.2" "-OutputDirectory" "Packages" "-ExcludeVersion"
-REM "bin\nuget.exe" "install" "FSharp.Formatting.CommandTool" "-OutputDirectory" "Packages" "-ExcludeVersion"
-REM "bin\nuget.exe" "install" "SourceLink.Fake" "-OutputDirectory" "Packages" "-ExcludeVersion"
-REM "bin\nuget.exe" "install" "NUnit.Runners" "-OutputDirectory" "Packages" "-ExcludeVersion"
-"bin\nuget.exe" "install" "Paket.Core" "-Version" "1.18.5" "-OutputDirectory" "packages" "-ExcludeVersion"
-"bin\nuget.exe" "install" "Paket.Core" "-Version" "1.18.5" "-OutputDirectory" "packages" "-ExcludeVersion"
+
+.paket\paket.bootstrapper.exe
+if errorlevel 1 (
+  exit /b %errorlevel%
 )
 
-bin\wget.exe -q --no-check-certificate https://github.com/vrvis/Aardvark.Fake/raw/master/bin/Aardvark.Fake.dll -O bin/Aardvark.Fake.dll
+.paket\paket.exe restore group Build
+if errorlevel 1 (
+  exit /b %errorlevel%
+)
 
-SET TARGET=Default
-IF NOT [%1]==[] (set TARGET=%1)
+cls
 
->tmp ECHO(%*
-SET /P t=<tmp
-SETLOCAL EnableDelayedExpansion
-IF DEFINED t SET "t=!t:%1 =!"
-SET args=!t!
-del tmp
+SET FSI_PATH=packages\build\FAKE\tools\Fake.exe
+"%FSI_PATH%" "build.fsx" Dummy --fsiargs build.fsx %* 
 
-"packages\FAKE\tools\Fake.exe" "build.fsx" "target=%TARGET%" %args%
 
 

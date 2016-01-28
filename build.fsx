@@ -1,11 +1,4 @@
-#I @"packages/FAKE/tools/"
-#I @"packages/Paket.Core/lib/net45"
-#I @"bin"
-#r @"System.Xml.Linq"
-#r @"FakeLib.dll"
-#r @"Paket.Core.dll"
-#r @"Aardvark.Fake.dll"
-
+#load @"paket-files\build\vrvis\Aardvark.Fake\DefaultSetup.fsx"
 
 open Fake
 open System
@@ -13,9 +6,14 @@ open System.IO
 open System.Diagnostics
 open Aardvark.Fake
 
+
 do Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 
-DefaultTargets.install ["src/Aardvark.Rendering.sln"]
+DefaultSetup.install ["src/Aardvark.Rendering.sln"]
 
-// start build
-RunTargetOrDefault "Default"
+#if DEBUG
+do System.Diagnostics.Debugger.Launch() |> ignore
+#endif
+
+
+entry()
