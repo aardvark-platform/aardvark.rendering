@@ -44,7 +44,7 @@ module SgFSharp =
         let set (set : aset<ISg>) =
             Sg.Set(set) :> ISg
 
-        let geometrySet (geometries : aset<_>) mode attributeTypes =
+        let geometrySet mode attributeTypes (geometries : aset<_>) =
             Sg.GeometrySet(geometries,mode,attributeTypes) :> ISg
 
         let dynamic (s : IMod<ISg>) = 

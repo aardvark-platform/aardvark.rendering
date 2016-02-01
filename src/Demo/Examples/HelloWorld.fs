@@ -600,3 +600,96 @@ module HelloWorld =
         win.RenderTask <- task |> DefaultOverlays.withStatistics
         win.Run()
         0
+
+    type Geometry = { bounds : Box3d; createLevel : int -> IndexedGeometry; levels : int }
+
+    let testLoD() =
+
+        //Ag.initialize()
+        Aardvark.Init()
+
+        use app = new OpenGlApplication()
+        let win = app.CreateSimpleRenderWindow(1)
+   
+        let view = CameraView.LookAt(V3d(150.0,150.0,150.0), V3d(50,50,50), V3d.OOI)
+        let perspective = 
+            win.Sizes 
+              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+
+
+        let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
+
+        let rand = Random()
+        let randomPoints (bounds : Box3d) pointCount =
+            let randomV3f() = V3d(rand.NextDouble(), rand.NextDouble(), rand.NextDouble()) * bounds.Size + bounds.Min |> V3f.op_Explicit
+            let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
+
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.PointList,
+                IndexArray = Array.init pointCount id,
+                IndexedAttributes = 
+                    SymDict.ofList [
+                         DefaultSemantic.Positions, Array.init pointCount (fun _ -> randomV3f()) :> Array
+                         DefaultSemantic.Colors, Array.init pointCount (fun _ -> randomColor()) :> Array
+                    ]
+            )
+
+        let scene = 
+            aset {
+                for x in 0 .. 10 do
+                    for y in 0 .. 10 do
+                        for z in 0 .. 3 do
+                            let bounds = Box3d.FromMinAndSize(V3d(x,y,z), V3d.III)
+                            yield { bounds = bounds; levels = 3; createLevel = fun level -> randomPoints bounds ((1 <<< level)*10) }
+            }
+
+        let getLodRepr (vt : IMod<CameraView>) (proj : IMod<Frustum>) (g : Geometry) : IMod<IndexedGeometry> =
+            let mutable current = None
+            adaptive  {
+                let proj = proj
+                let! vt = vt
+                let level = 
+                    match V3d.Distance(g.bounds.GetClosestPointOn vt.Location, vt.Location) with
+                    | v when v < 5.0 -> 3
+                    | v when v < 10.0 -> 2
+                    | v when v < 50.0 -> 1
+                    | _ -> 0
+                match current with 
+                 | Some (oldLevel,g) when oldLevel = level -> 
+                    return g
+                 | _ -> 
+                    printfn "%A" level
+                    let g = g.createLevel level
+                    current <- Some (level,g)
+                    return g
+            }
+
+        let attributeTypes = 
+             Map.ofList [ 
+                DefaultSemantic.Positions, typeof<V3f>
+                DefaultSemantic.Colors, typeof<C4b> 
+             ]
+
+        let sg = 
+            scene |> ASet.mapM ( getLodRepr viewTrafo perspective ) 
+            //|> Sg.geometrySet IndexedGeometryMode.PointList attributeTypes
+            |> ASet.map Sg.ofIndexedGeometry |> Sg.set
+
+
+        let final =
+            sg |> Sg.effect [
+                    DefaultSurfaces.trafo |> toEffect                  
+                    DefaultSurfaces.vertexColor |> toEffect 
+                    ]
+                // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
+                |> Sg.viewTrafo (viewTrafo |> Mod.map CameraView.viewTrafo ) 
+                // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
+                // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
+                |> Sg.projTrafo (perspective  |> Mod.map Frustum.projTrafo    )
+                //|> Sg.normalizeAdaptive
+
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, final)
+
+        win.RenderTask <- task |> DefaultOverlays.withStatistics
+        win.Run()
+        0
