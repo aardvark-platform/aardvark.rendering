@@ -552,36 +552,37 @@ type UniformBufferPool =
 
 
         member x.Upload(required : UniformBufferView[]) =
-            using x.Context.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
-                GL.Check "could not bind uniform buffer pool"
+            if x.Handle <> 0 then
+                using x.Context.ResourceLock (fun _ ->
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
+                    GL.Check "could not bind uniform buffer pool"
 
-                let sizeChanged = x.Size <> x.Storage.Capacity
-                let uploadAll = isNull required || required.Length = 0 || required.Length >= x.ViewCount / 4
+                    let sizeChanged = x.Size <> x.Storage.Capacity
+                    let uploadAll = isNull required || required.Length = 0 || required.Length >= x.ViewCount / 4
  
-                ReaderWriterLock.read x.Storage.PointerLock (fun () ->
-                    if uploadAll || sizeChanged then
-                        lock x (fun () -> x.DirtyViews.Clear())
-                        if sizeChanged then
-                            updateUniformPool x.Context (int64 x.Size) (int64 x.Storage.Capacity)
-                            x.Size <- x.Storage.Capacity
-                            GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
-                        else
-                            GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint x.Size, x.Storage.Pointer)
+                    ReaderWriterLock.read x.Storage.PointerLock (fun () ->
+                        if uploadAll || sizeChanged then
+                            lock x (fun () -> x.DirtyViews.Clear())
+                            if sizeChanged then
+                                updateUniformPool x.Context (int64 x.Size) (int64 x.Storage.Capacity)
+                                x.Size <- x.Storage.Capacity
+                                GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint x.Storage.Capacity, x.Storage.Pointer, BufferUsageHint.DynamicDraw)              
+                            else
+                                GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint x.Size, x.Storage.Pointer)
 
-                        GL.Check "could not upload uniform buffer pool"      
-                    else
-                        lock x (fun () -> x.DirtyViews.ExceptWith required)
-                        for r in required do
-                            let offset = r.Pointer.Offset
-                            let size = nativeint r.Pointer.Size
-                            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, x.Storage.Pointer + offset)
                             GL.Check "could not upload uniform buffer pool"      
-                )
+                        else
+                            lock x (fun () -> x.DirtyViews.ExceptWith required)
+                            for r in required do
+                                let offset = r.Pointer.Offset
+                                let size = nativeint r.Pointer.Size
+                                GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, x.Storage.Pointer + offset)
+                                GL.Check "could not upload uniform buffer pool"      
+                    )
 
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                GL.Check "could not unbind uniform buffer pool"
-            )
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                    GL.Check "could not unbind uniform buffer pool"
+                )
 
         member inline x.UploadAll() =
             x.Upload(null)
@@ -596,7 +597,7 @@ type UniformBufferPool =
 and UniformBufferView =
     class
         val mutable public Pool : UniformBufferPool
-        val mutable internal Pointer : managedptr
+        val mutable Pointer : managedptr
 
         member x.Handle = x.Pool.Handle
         member x.Offset = x.Pointer.Offset
@@ -607,12 +608,13 @@ and UniformBufferView =
         member x.Dispose() = 
             x.Pool.Free x
 
-        member inline x.WriteOperation(f : unit -> 'a) =
-            ReaderWriterLock.read x.Pool.Storage.PointerLock (fun () ->
-                let res = f()
-                x.Pool.Updated x
-                res
-            )
+        member inline x.WriteOperation(f : unit -> unit) =
+            if not x.Pointer.Free then
+                ReaderWriterLock.read x.Pool.Storage.PointerLock (fun () ->
+                    let res = f()
+                    x.Pool.Updated x
+                    res
+                )
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
