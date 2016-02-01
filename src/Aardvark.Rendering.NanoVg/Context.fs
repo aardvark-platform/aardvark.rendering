@@ -87,7 +87,10 @@ module Context =
             let getSystemFontFileName (name : string) (style : FontStyle) =
                 match allNames.Value.TryGetValue ((name, style)) with
                     | (true, p) -> Some p
-                    | _ -> None
+                    | _ -> 
+                        match allNames.Value.TryGetValue(("Ubuntu Mono", FontStyle.Regular)) with
+                            | (true, p) -> Some p
+                            | _ -> None
 
         module MacOS =
             let getSystemFontFileName (name : string) (style : FontStyle) =

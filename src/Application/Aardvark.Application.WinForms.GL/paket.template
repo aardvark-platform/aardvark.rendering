@@ -4,6 +4,5 @@ authors VRVis Research Center
 description
     Aardvark.Application.WinForms.GL
 files
-    ..\..\bin\BUILDCONFIG\Aardvark.Application.WinForms.GL.dll ==> lib\net45
-    ..\..\bin\BUILDCONFIG\Aardvark.Application.WinForms.GL.pdb ==> lib\net45
-    ..\..\bin\BUILDCONFIG\Aardvark.Application.WinForms.GL.xml ==> lib\net45
+    ..\..\..\bin\Release\Aardvark.Application.WinForms.GL.dll ==> lib\net45
+    ..\..\..\bin\Release\Aardvark.Application.WinForms.GL.pdb ==> lib\net45

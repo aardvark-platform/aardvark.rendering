@@ -19,3 +19,5 @@ src/GLVM/*.so
 /sources.lock
 /bin/Aardvark.Fake.dll
 ~$*
+/paket-files
+.fake

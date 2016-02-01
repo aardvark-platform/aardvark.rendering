@@ -1,11 +1,8 @@
 #!/bin/bash
 
-if [ ! -d "packages/FAKE" ]; then
-	echo "downloading FAKE"
-	mono --runtime=v4.0 bin/nuget.exe install FAKE -OutputDirectory packages -Version 3.35.2 -ExcludeVersion
-	mono --runtime=v4.0 bin/nuget.exe install Paket.Core -OutputDirectory packages -Version 1.18.5 -ExcludeVersion 
-fi
+mono .paket/paket.bootstrapper.exe
+mono .paket/paket.exe restore group Build
 
-wget -q --no-check-certificate https://github.com/vrvis/Aardvark.Fake/raw/master/bin/Aardvark.Fake.dll -O bin/Aardvark.Fake.dll
+clear
 
-mono packages/FAKE/tools/FAKE.exe "build.fsx"  $@
+mono packages/build/FAKE/tools/FAKE.exe "build.fsx" Dummy --fsiargs build.fsx $@
