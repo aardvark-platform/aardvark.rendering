@@ -397,6 +397,77 @@ module private RefCountedResources =
             member x.Acquire() = x.Acquire()
             member x.Release() = x.Release()
  
+    [<AbstractClass>]
+    type AbstractOutputMod<'a, 'b>() =
+        inherit Mod.AbstractMod<'b>()
+
+        let mutable refCount = 0
+        let mutable lastStats = FrameStatistics.Zero
+        let mutable value = None
+
+        abstract member Create : unit -> 'a * FrameStatistics
+        abstract member Destroy : 'a -> unit
+        abstract member View : 'a -> 'b
+
+        member x.Acquire() =
+            Interlocked.Increment(&refCount) |> ignore
+
+        member x.Release() =
+            if Interlocked.Decrement(&refCount) = 0 then
+                lock x (fun () -> 
+                    match value with
+                        | Some v -> x.Destroy v
+                        | None -> ()
+                    lastStats <- FrameStatistics.Zero
+                )
+                transact (fun () -> x.MarkOutdated())
+
+        override x.Compute() =
+            let v, stats = 
+                match value with
+                    | Some v ->
+                        x.Destroy(v)
+                        x.Create()
+                    | None -> 
+                        x.Create()
+
+            lastStats <- stats
+            value <- Some v
+            x.View v
+
+        interface IOutputMod<'b> with
+            member x.Acquire() = x.Acquire()
+            member x.Release() = x.Release()
+            member x.LastStatistics = lastStats
+            
+    type TextureCube(runtime : IRuntime, size : IMod<V2i>, format : IMod<TextureFormat>, levels : IMod<int>, samples : IMod<int>) =
+        inherit AbstractOutputMod<IBackendTexture, ITexture>()
+
+        static let updatedTexture = 
+            { FrameStatistics.Zero with
+                ResourceUpdateCount = 1.0
+                ResourceUpdateCounts = Map.ofList [ResourceKind.Texture, 1.0] 
+            }
+
+        override x.Create() =
+            let size = size.GetValue x
+            let format = format.GetValue x
+            let levels = levels.GetValue x
+            let samples = samples.GetValue x
+            let tex = runtime.CreateTextureCube(size, format, levels, samples)
+            tex, updatedTexture
+
+        override x.Destroy(t : IBackendTexture) =
+            runtime.DeleteTexture(t)
+
+        override x.View(t : IBackendTexture) =
+            t :> ITexture
+
+
+    
+
+
+
 [<AbstractClass; Sealed; Extension>]
 type RuntimeFramebufferExtensions private() =
 
@@ -422,6 +493,36 @@ type RuntimeFramebufferExtensions private() =
     [<Extension>]
     static member GetOutputTexture (this : IMod<RenderingResult>, semantic : Symbol) =
         AdaptiveOutputTexture(semantic, this) :> IMod<_>
+
+[<AbstractClass>]
+type AbstractRenderTask() =
+    inherit AdaptiveObject()
+
+    let mutable frameId = 0UL
+
+    abstract member FramebufferSignature : IFramebufferSignature
+    abstract member Runtime : Option<IRuntime>
+    abstract member Perform : OutputDescription -> FrameStatistics
+    abstract member Dispose : unit -> unit
+
+    member x.FrameId = frameId
+    member x.Run(caller : IAdaptiveObject, out : OutputDescription) =
+        x.EvaluateAlways caller (fun () ->
+            let stats = x.Perform(out)
+            frameId <- frameId + 1UL
+            RenderingResult(out.framebuffer, stats)
+        )
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+    interface IRenderTask with
+        member x.FramebufferSignature = x.FramebufferSignature
+        member x.Runtime = x.Runtime
+        member x.FrameId = frameId
+        member x.Run(caller, out) = RenderingResult(out.framebuffer, FrameStatistics.Zero)
+
+
 
 module RenderTask =
 
@@ -647,6 +748,36 @@ module RenderTask =
             member x.FramebufferSignature = inner.FramebufferSignature
             member x.Runtime = inner.Runtime
 
+    type private BeforeAfterRenderTask(before : Option<unit -> unit>, after : Option<unit -> unit>, inner : IRenderTask) =
+        inherit AdaptiveObject()
+
+        member x.Before = before
+        member x.After = after
+        member x.Inner = inner
+
+        interface IRenderTask with
+            member x.FramebufferSignature = inner.FramebufferSignature
+            member x.Run(caller, fbo) =
+                x.EvaluateAlways caller (fun () ->
+
+                    match before with
+                        | Some before -> before()
+                        | None -> ()
+
+                    let res = inner.Run(x, fbo)
+
+                    match after with
+                        | Some after -> after()
+                        | None -> ()
+
+                    res
+                )
+
+            member x.Dispose() = 
+                inner.RemoveOutput x
+                inner.Dispose()
+            member x.Runtime = inner.Runtime
+            member x.FrameId = inner.FrameId
 
 
     let empty = EmptyRenderTask.Instance
@@ -657,6 +788,27 @@ module RenderTask =
     let custom (f : IRenderTask * OutputDescription -> RenderingResult) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
+    let before (f : unit -> unit) (t : IRenderTask) =
+        match t with
+            | :? BeforeAfterRenderTask as t ->
+                let before =
+                    match t.Before with
+                        | None -> f
+                        | Some old -> f >> old
+                new BeforeAfterRenderTask(Some before, t.After, t.Inner) :> IRenderTask
+            | _ ->
+                new BeforeAfterRenderTask(Some f, None, t) :> IRenderTask
+
+    let after (f : unit -> unit) (t : IRenderTask) =
+        match t with
+            | :? BeforeAfterRenderTask as t ->
+                let after =
+                    match t.After with
+                        | None -> f
+                        | Some old -> old >> f
+                new BeforeAfterRenderTask(t.Before, Some after, t.Inner) :> IRenderTask
+            | _ ->
+                new BeforeAfterRenderTask(None, Some f, t) :> IRenderTask
 
     let ofMod (m : IMod<IRenderTask>) : IRenderTask =
         new ModRenderTask(m) :> IRenderTask
@@ -724,38 +876,76 @@ module RenderTask =
         let map = task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size
         (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.Depth map)
 
+    let log fmt =
+        Printf.kprintf (fun str -> 
+            let task = 
+                custom (fun (self, out) -> 
+                    Log.line "%s" str
+                    RenderingResult(out.framebuffer, FrameStatistics.Zero)
+                )
+
+            task
+        ) fmt
 
 [<AutoOpen>]
 module ``RenderTask Builder`` =
+    type private Result = list<alist<IRenderTask>>
 
     type RenderTaskBuilder() =
-        member x.Bind(m : IMod<'a>, f : 'a -> alist<IRenderTask>) =
-            alist.Bind(m, f)
+        member x.Bind(m : IMod<'a>, f : 'a -> Result) : Result =
+            [alist.Bind(m, f >> AList.concat')]
 
-        member x.For(s : alist<'a>, f : 'a -> alist<IRenderTask>) =
-            alist.For(s,f)
+        member x.For(s : alist<'a>, f : 'a -> Result): Result =
+            [alist.For(s,f >> AList.concat')]
 
+        member x.Bind(f : unit -> unit, c : unit -> Result) : Result =
+            let task = 
+                RenderTask.custom (fun (self, out) -> 
+                    f()
+                    RenderingResult(out.framebuffer, FrameStatistics.Zero)
+                )
+            (AList.single task)::c()
 
-        member x.Yield(t : IRenderTask) = 
-            alist.Yield(t)
+        member x.Return(u : unit) : Result =
+            []
 
-        member x.YieldFrom(l : alist<IRenderTask>) =
-            alist.YieldFrom(l)
+        member x.Bind(t : IRenderTask, c : unit -> Result) = 
+            alist.Yield(t)::c()
 
-        member x.Yield(m : IMod<IRenderTask>) =
-            m |> RenderTask.ofMod |> alist.Yield
+        member x.Bind(t : list<IRenderTask>, c : unit -> Result) = 
+            (AList.ofList t)::c()
 
-        member x.Combine(l : alist<IRenderTask>, r : alist<IRenderTask>) =
-            alist.Combine(l,r)
+        member x.Bind(l : alist<IRenderTask>, c : unit -> Result) =
+            alist.YieldFrom(l)::c()
 
-        member x.Delay(f : unit -> alist<IRenderTask>) = 
-            alist.Delay(f)
+        member x.Bind(m : IMod<IRenderTask>, c : unit -> Result) =
+            let head = m |> RenderTask.ofMod |> alist.Yield
+            head::c()
+
+        member x.Combine(l : Result, r : Result) =
+            l @ r
+
+        member x.Delay(f : unit -> Result) = 
+            f()
 
         member x.Zero() =
-            alist.Zero()
+            []
 
-        member x.Run(l : alist<IRenderTask>) =
+        member x.Run(l : Result) =
+            let l = AList.concat' l
             RenderTask.ofAList l
 
 
     let rendertask = RenderTaskBuilder()
+//
+//    let test (renderActive : IMod<bool>) (clear : IMod<IRenderTask>) (render : alist<IRenderTask>) =
+//        rendertask {
+//            do! RenderTask.log "before clear: %d" 190
+//            do! clear
+//            do! RenderTask.log "after clear"
+//
+//            let! active = renderActive
+//            if active then
+//                do! render
+//                do! RenderTask.log "rendered"
+//        }
