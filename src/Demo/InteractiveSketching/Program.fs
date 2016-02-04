@@ -11,6 +11,7 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
+open Aardvark.Base.Rendering
 
 type HighlightConfig =
     {
