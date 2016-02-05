@@ -89,7 +89,7 @@ module Translations =
             | StencilOperationFunction.Keep -> StencilOperation.Keep  |> int
             | StencilOperationFunction.Replace -> StencilOperation.Replace  |> int
             | StencilOperationFunction.Zero -> StencilOperation.Zero  |> int
-            | _ -> failwith "unknown stencil operation %A" o
+            | _ -> failwithf "unknown stencil operation %A" o
 
     let toGLPolygonMode (f : FillMode) =
         match f with

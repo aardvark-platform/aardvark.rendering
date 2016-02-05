@@ -83,7 +83,7 @@ let main argv =
                     //Log.startTimed "adding"
                     // submit the new point-set
                     transact (fun () ->
-                        lock leafs (fun () -> leafs.Add points |> ignore)
+                        leafs.Add points |> ignore
                     )
                     Interlocked.Increment(&inputCounter.contents) |> ignore
                     Log.line "added: %A" !inputCounter

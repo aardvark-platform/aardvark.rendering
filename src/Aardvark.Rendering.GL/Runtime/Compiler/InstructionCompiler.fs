@@ -193,7 +193,7 @@ module Instructions =
                                         | Some set ->
                                             if Set.contains igMode set then 
                                                 igMode
-                                            else failwith "invalid mode for program: %A (should be in: %A)" igMode set
+                                            else failwithf "invalid mode for program: %A (should be in: %A)" igMode set
                                         | None -> 
                                             igMode
 

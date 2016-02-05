@@ -6,6 +6,6 @@ open Rendering.Examples
 [<EntryPoint>]
 [<STAThread>]
 let main args =  
-    HelloWorld.testLoD()
+    //HelloWorld.testLoD()
     //HelloWorld.run()
-    //HelloWorld.testGeometrySet ()
+    HelloWorld.testGeometrySet ()

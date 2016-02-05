@@ -49,7 +49,7 @@ module Memory =
                 elif position = size then
                     None
                 else
-                    failwith "cannot split block of size %A at position %A" size position
+                    failwithf "cannot split block of size %A at position %A" size position
             )
 
         member x.Memory = mem

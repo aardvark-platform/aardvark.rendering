@@ -71,7 +71,7 @@ type OpenGlApplication() =
                 ctrl.Implementation <- new OpenGlRenderControl(runtime, samples)
                 init ctx impl.Context impl.WindowInfo  
             | _ ->
-                failwith "unknown control type: %A" ctrl
+                failwithf "unknown control type: %A" ctrl
         
 
     member x.CreateGameWindow(?samples : int) =

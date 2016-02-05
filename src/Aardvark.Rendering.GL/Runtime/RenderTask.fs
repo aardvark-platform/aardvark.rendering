@@ -134,7 +134,7 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
                         ) :> IRenderProgram
 
                     | _ ->
-                        failwith "unsupported configuration: %A" engine
+                        failwithf "unsupported configuration: %A" engine
 
     let getProgramForPass (pass : uint64) (scope : Ag.Scope) =
         match lastScope with | Some v -> () | None -> lastScope <- Some scope
