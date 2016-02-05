@@ -69,6 +69,8 @@
     <Compile Include="Runtime.fs" />
     <Compile Include="RuntimeExtensions.fs" />
     <Compile Include="RenderTask.fs" />
+    <Compile Include="Camera.fs" />
+    <Compile Include="LoD.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

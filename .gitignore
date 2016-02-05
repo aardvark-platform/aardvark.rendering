@@ -21,3 +21,4 @@ src/GLVM/*.so
 ~$*
 /paket-files
 .fake
+/.paket/paket.exe

@@ -30,4 +30,4 @@ module Default =
         DefaultCameraController.control win.Mouse win.Keyboard win.Time view
 
     let perspective () = 
-        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 10.0 (float s.X / float s.Y))
+        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))

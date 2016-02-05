@@ -10,6 +10,7 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open System.Threading.Tasks
 open System.Threading
+open Aardvark.Base.Rendering
 
 let random = Random()
 
