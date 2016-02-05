@@ -54,10 +54,50 @@ module TrafoSemantics =
     let rootTrafo = Mod.constant Trafo3d.Identity
     let inline private (~%) (l : list<IMod<Trafo3d>>) = l
 
+    open System
+    open System.Collections.Generic
+    type BinaryWeakCache<'a, 'b, 'c when 'a :> IAdaptiveObject and 'b :> IAdaptiveObject and 'c :> IAdaptiveObject>(f : 'a -> 'b -> 'c) =
+        let cache = Dictionary<WeakReference<IAdaptiveObject> * WeakReference<IAdaptiveObject>, WeakReference<IAdaptiveObject>>()
+
+        member x.Invoke (a : 'a) (b : 'b) : 'c =
+            let key = (a.Weak, b.Weak)
+            match cache.TryGetValue(key) with
+                | (true, w) ->
+                    match w.TryGetTarget() with
+                        | (true, strong) -> unbox<'c> strong
+                        | _ ->
+                            let strong = f a b
+                            cache.[key] <- strong.Weak
+                            strong
+                | _ ->
+                    let strong = f a b
+                    cache.[key] <- strong.Weak
+                    strong
+
+    type UnaryWeakCache<'a, 'b when 'a :> IAdaptiveObject and 'b :> IAdaptiveObject>(f : 'a -> 'b) =
+        let cache = Dictionary<WeakReference<IAdaptiveObject>, WeakReference<IAdaptiveObject>>()
+
+        member x.Invoke (a : 'a)  : 'b =
+            let key = a.Weak
+            match cache.TryGetValue(key) with
+                | (true, w) ->
+                    match w.TryGetTarget() with
+                        | (true, strong) -> unbox<'b> strong
+                        | _ ->
+                            let strong = f a
+                            cache.[key] <- strong.Weak
+                            strong
+                | _ ->
+                    let strong = f a
+                    cache.[key] <- strong.Weak
+                    strong
+
+
+
     [<Semantic>]
     type Trafos() =
-        let mulCache = Caching.BinaryOpCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
-        let invCache = Caching.UnaryOpCache(Mod.map (fun (t : Trafo3d) -> t.Inverse))
+        let mulCache = BinaryWeakCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
+        let invCache = UnaryWeakCache (Mod.map (fun (t : Trafo3d) -> t.Inverse))
 
         let (<*>) a b = 
             if a = rootTrafo then b
@@ -104,14 +144,6 @@ module TrafoSemantics =
                 | _ -> 
                     // TODO: add a better logic here
                     s |> List.fold (<*>) rootTrafo
-
-//        member x.ModelTrafo(e : Root<ISg>) = 
-//            e.Child?ModelTrafo <- rootTrafo
-//
-//        member x.ModelTrafo(t : Sg.TrafoApplicator) =
-//            t.Child?ModelTrafo <- t.Trafo <*> t.ModelTrafo
-
-
 
         member x.ViewTrafo(v : Sg.ViewTrafoApplicator) =
             v.Child?ViewTrafo <- v.ViewTrafo
