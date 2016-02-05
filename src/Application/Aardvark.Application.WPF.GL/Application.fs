@@ -66,7 +66,7 @@ type OpenGlApplication() =
                 ctrl.Implementation <- impl
                 init ctx impl.Context impl.WindowInfo
             | _ ->
-                failwith "unknown control type: %A" ctrl
+                failwithf "unknown control type: %A" ctrl
                     
         ()
 
