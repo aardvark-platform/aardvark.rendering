@@ -47,7 +47,8 @@ module InstructionStatistics =
 
     let toStats (i : Instruction) =
         let isDraw = i.Operation = InstructionCode.DrawArrays  || i.Operation = InstructionCode.DrawArraysInstanced  || 
-                     i.Operation = InstructionCode.DrawElements || i.Operation = InstructionCode.DrawElementsInstanced
+                     i.Operation = InstructionCode.DrawElements || i.Operation = InstructionCode.DrawElementsInstanced ||
+                     i.Operation = InstructionCode.MultiDrawArraysIndirect || i.Operation = InstructionCode.MultiDrawElementsIndirect
 
         let primitiveCount =
             match i with

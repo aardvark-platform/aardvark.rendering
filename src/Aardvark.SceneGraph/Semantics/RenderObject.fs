@@ -113,7 +113,10 @@ module RenderObjectSemantics =
               
             rj.Surface <- r.Surface
             
-            rj.DrawCallInfos <- packer.DrawCallInfos
+            let indirect = packer.DrawCallInfos |> Mod.map List.toArray
+            rj.IndirectBuffer <- indirect |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
+            rj.IndirectCount <- indirect |> Mod.map Array.length
+            //rj.DrawCallInfos <- packer.DrawCallInfos
             rj.Mode <- Mod.constant r.Mode
             ASet.single (rj :> IRenderObject)
 

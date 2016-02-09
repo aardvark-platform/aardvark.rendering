@@ -95,6 +95,14 @@ module Instructions =
             Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index r.Handle r.Offset (nativeint r.Size)
         )
 
+    let bindIndirectBuffer (u : ChangeableResource<Buffer>) =   
+        u.Resource |> Mod.map (fun r -> 
+            //ExecutionContext.bindUniformBuffer index r
+            Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer) r.Handle
+        )
+
+   
+
     let setActiveTexture (index : int) =
         Instruction.ActiveTexture ((int OpenGl.Enums.TextureUnit.Texture0) + index)
 
@@ -153,6 +161,68 @@ module Instructions =
             match v with
                 | Some v -> [Instruction.VertexAttrib4f index v.X v.Y v.Z v.W]
                 | _ -> []
+        )
+
+    let drawIndirect (program : Program) (indexArray : IMod<System.Array>) (count : IMod<int>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
+        let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
+
+        let indexType = 
+            if indexArray <> null then
+                indexArray |> Mod.map (fun ia -> (ia <> null, if ia <> null then ia.GetType().GetElementType() else typeof<obj>))
+            else
+                Mod.constant (false, typeof<obj>) 
+
+        let patchSize (mode : IndexedGeometryMode) =
+            match mode with
+                | IndexedGeometryMode.LineList -> 2
+                | IndexedGeometryMode.PointList -> 1
+                | IndexedGeometryMode.TriangleList -> 3
+                | m -> failwithf "unsupported patch-mode: %A" m
+
+        let instruction  =
+            adaptive {
+                let! igMode = mode
+                let! (indexed, indexType) = indexType
+                let! cnt = Mod.map2 (fun a c -> if a then c else 0) isActive count
+
+                let mode =
+                    if hasTess then int OpenGl.Enums.DrawMode.Patches
+                    else 
+                        let realMode = 
+                            match program.SupportedModes with
+                                | Some set ->
+                                    if Set.contains igMode set then 
+                                        igMode
+                                    else failwithf "invalid mode for program: %A (should be in: %A)" igMode set
+                                | None -> 
+                                    igMode
+
+                        Translations.toGLMode realMode
+                
+
+                if indexed then
+
+                    let indexType =
+                        if indexType = typeof<byte> then int OpenGl.Enums.IndexType.UnsignedByte
+                        elif indexType = typeof<uint16> then int OpenGl.Enums.IndexType.UnsignedShort
+                        elif indexType = typeof<uint32> then int OpenGl.Enums.IndexType.UnsignedInt
+                        elif indexType = typeof<sbyte> then int OpenGl.Enums.IndexType.UnsignedByte
+                        elif indexType = typeof<int16> then int OpenGl.Enums.IndexType.UnsignedShort
+                        elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
+                        else failwithf "unsupported index type: %A"  indexType
+
+                    return igMode, Instruction.MultiDrawElementsIndirect mode indexType 0n cnt 0
+                else
+                    return igMode, Instruction.MultiDrawArraysIndirect mode 0n cnt 0
+            }
+
+
+        instruction |> Mod.map (fun (mode,i) ->
+            if hasTess then
+                let size = patchSize mode
+                [ Instruction.PatchParameter (int OpenTK.Graphics.OpenGL4.PatchParameterInt.PatchVertices) size; i]
+            else
+                [i]
         )
 
     let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<list<DrawCallInfo>>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =

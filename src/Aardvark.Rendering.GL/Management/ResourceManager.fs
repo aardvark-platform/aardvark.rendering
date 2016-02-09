@@ -556,18 +556,11 @@ module ResourceManager =
                     let handle = ctx.CreateIndirect(indexed, current)
                     let handleMod = Mod.constant handle
 
-                    let updateTo (t : Buffer) =
-                        if !created then
-                            bufferHandler.Delete(!handle)
-                            created := false
-
-                        let h = Mod.constant t
-                        handle := h
-                        transact (fun () -> handleMod.Value <- h)
 
                     { trackChangedInputs = false
                       dependencies = [data]
-                      updateCPU = fun _ -> data.GetValue(self) |> ignore
+                      updateCPU = fun _ -> 
+                        data.GetValue(self) |> ignore
                       updateGPU = fun () ->
                         let data = data.GetValue(self)
                         ctx.UploadIndirect(handle, indexed, data)
