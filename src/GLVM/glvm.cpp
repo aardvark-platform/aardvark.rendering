@@ -77,6 +77,9 @@ DllExport(void) vmInit()
 	glVertexAttrib2f = (PFNGLVERTEXATTRIB2FPROC)getProc("glVertexAttrib2f");
 	glVertexAttrib3f = (PFNGLVERTEXATTRIB3FPROC)getProc("glVertexAttrib3f");
 	glVertexAttrib4f = (PFNGLVERTEXATTRIB4FPROC)getProc("glVertexAttrib4f");
+
+	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
+	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
 }
 
 DllExport(Fragment*) vmCreate()
@@ -290,6 +293,12 @@ void runInstruction(Instruction* i)
 		break;
 	case VertexAttrib4f:
 		glVertexAttrib4f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2), *((GLfloat*)&i->Arg3), *((GLfloat*)&i->Arg4));
+		break;
+	case MultiDrawArraysIndirect:
+		glMultiDrawArraysIndirect((GLenum)i->Arg0, (const void*)i->Arg1, (GLsizei)i->Arg2, (GLsizei)i->Arg3);
+		break;
+	case MultiDrawElementsIndirect:
+		glMultiDrawElementsIndirect((GLenum)i->Arg0, (GLenum)i->Arg1, (const void*)i->Arg2, (GLsizei)i->Arg3, (GLsizei)i->Arg4);
 		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
@@ -523,6 +532,13 @@ Statistics runRedundancyChecks(Fragment* frag)
 					break;
 				case VertexAttrib4f:
 					glVertexAttrib4f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2), *((GLfloat*)&i->Arg3), *((GLfloat*)&i->Arg4));
+					break;
+
+				case MultiDrawArraysIndirect:
+					glMultiDrawArraysIndirect((GLenum)i->Arg0, (const void*)i->Arg1, (GLsizei)i->Arg2, (GLsizei)i->Arg3);
+					break;
+				case MultiDrawElementsIndirect:
+					glMultiDrawElementsIndirect((GLenum)i->Arg0, (GLenum)i->Arg1, (const void*)i->Arg2, (GLsizei)i->Arg3, (GLsizei)i->Arg4);
 					break;
 
 				default:
