@@ -586,36 +586,6 @@ module Sg =
         member x.AverageDistance = avgDistance
         member x.DataProvider = data
 
-    type PointCloudSem() =
-        
-        member x.RenderObjects(p : PointCloud) : aset<IRenderObject> =
-
-            let viewTrafo = p.ViewTrafo
-            let projTrafo = p.ProjTrafo
-
-            let cache = ConcurrentDictionary<obj, managedptr>()
-
-            let raster =
-                Mod.custom (fun self ->
-                    let view = viewTrafo.GetValue self
-                    let proj = projTrafo.GetValue self
-
-                    // TODO: proper frustum here
-                    let wanted = p.DataProvider.Rasterize(view, Frustum.perspective 60.0 0.1 100.0 1.0, p.AverageDistance)
-
-                    let newOnes = wanted |> Seq.filter (cache.ContainsKey >> not) |> Seq.toArray
-
-                    newOnes
-                )
-
-            let worker =
-                async {
-                    
-                }
-
-
-            failwith ""
-
 
 let boxes = Sg.group' []
 //    nodes 
