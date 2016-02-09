@@ -17,6 +17,7 @@
 #r "Aardvark.Application.dll"
 #r "Aardvark.Application.WinForms.dll"
 #r "Aardvark.Application.WinForms.GL.dll"
+#r "System.Reactive.Core.dll"
 
 namespace Examples
 
