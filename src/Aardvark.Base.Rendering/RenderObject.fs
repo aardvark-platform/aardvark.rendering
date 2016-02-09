@@ -454,22 +454,22 @@ module AttributePackingV2 =
                                 remove g
                                 manager.Free ptr
 
-                                if float manager.AllocatedBytes < shrinkThreshold * float manager.Capacity then
-                                    let mutable newDrawRanges = RangeSet.empty
-                                    let newManager = MemoryManager.createNop()
-                                    let newRanges = Dictionary.empty
-
-                                    for (g,ptr) in Dictionary.toList dataRanges do
-                                        let nptr = newManager.Alloc(ptr.Size)
-                                        newRanges.[g] <- nptr
-                                        let r = Range1i.FromMinAndSize(int nptr.Offset, nptr.Size - 1)
-                                        newDrawRanges <- RangeSet.insert r newDrawRanges
-                                    
-                                    manager.Dispose()
-                                    manager <- newManager
-                                    drawRanges <- newDrawRanges
-                                    dataRanges <- newRanges
-                                    resize()
+//                                if float manager.AllocatedBytes < shrinkThreshold * float manager.Capacity then
+//                                    let mutable newDrawRanges = RangeSet.empty
+//                                    let newManager = MemoryManager.createNop()
+//                                    let newRanges = Dictionary.empty
+//
+//                                    for (g,ptr) in Dictionary.toList dataRanges do
+//                                        let nptr = newManager.Alloc(ptr.Size)
+//                                        newRanges.[g] <- nptr
+//                                        let r = Range1i.FromMinAndSize(int nptr.Offset, nptr.Size - 1)
+//                                        newDrawRanges <- RangeSet.insert r newDrawRanges
+//                                    
+//                                    manager.Dispose()
+//                                    manager <- newManager
+//                                    drawRanges <- newDrawRanges
+//                                    dataRanges <- newRanges
+//                                    resize()
 
 
 
