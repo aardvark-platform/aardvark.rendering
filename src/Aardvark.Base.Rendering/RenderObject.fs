@@ -40,22 +40,26 @@ type RenderObject =
         Id : int
         mutable AttributeScope : Ag.Scope
                 
-        mutable IsActive   : IMod<bool>
-        mutable RenderPass : uint64
+        mutable IsActive            : IMod<bool>
+        mutable RenderPass          : uint64
                 
-        mutable DrawCallInfos : IMod<list<DrawCallInfo>>
-        mutable Mode          : IMod<IndexedGeometryMode>
-        mutable Surface       : IMod<ISurface>
+        mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
+        mutable IndirectBuffer      : IMod<IBuffer>
+        mutable IndirectCount       : IMod<int>
+        mutable Mode                : IMod<IndexedGeometryMode>
+        
+
+        mutable Surface             : IMod<ISurface>
                               
-        mutable DepthTest     : IMod<DepthTestMode>
-        mutable CullMode      : IMod<CullMode>
-        mutable BlendMode     : IMod<BlendMode>
-        mutable FillMode      : IMod<FillMode>
-        mutable StencilMode   : IMod<StencilMode>
+        mutable DepthTest           : IMod<DepthTestMode>
+        mutable CullMode            : IMod<CullMode>
+        mutable BlendMode           : IMod<BlendMode>
+        mutable FillMode            : IMod<FillMode>
+        mutable StencilMode         : IMod<StencilMode>
                 
-        mutable Indices            : IMod<Array>
-        mutable InstanceAttributes : IAttributeProvider
-        mutable VertexAttributes   : IAttributeProvider
+        mutable Indices             : IMod<Array>
+        mutable InstanceAttributes  : IAttributeProvider
+        mutable VertexAttributes    : IAttributeProvider
                 
         mutable Uniforms : IUniformProvider
     }  
@@ -74,6 +78,9 @@ type RenderObject =
           IsActive = null
           RenderPass = 0UL
           DrawCallInfos = null
+          IndirectBuffer = null
+          IndirectCount = null
+
           Mode = null
           Surface = null
           DepthTest = null
@@ -124,6 +131,8 @@ module RenderObjectExtensions =
           IsActive = null
           RenderPass = 0UL
           DrawCallInfos = null
+          IndirectBuffer = null
+          IndirectCount = null
           Mode = null
           Surface = null
           DepthTest = null
@@ -445,22 +454,22 @@ module AttributePackingV2 =
                                 remove g
                                 manager.Free ptr
 
-                                if float manager.AllocatedBytes < shrinkThreshold * float manager.Capacity then
-                                    let mutable newDrawRanges = RangeSet.empty
-                                    let newManager = MemoryManager.createNop()
-                                    let newRanges = Dictionary.empty
-
-                                    for (g,ptr) in Dictionary.toList dataRanges do
-                                        let nptr = newManager.Alloc(ptr.Size)
-                                        newRanges.[g] <- nptr
-                                        let r = Range1i.FromMinAndSize(int nptr.Offset, nptr.Size - 1)
-                                        newDrawRanges <- RangeSet.insert r newDrawRanges
-                                    
-                                    manager.Dispose()
-                                    manager <- newManager
-                                    drawRanges <- newDrawRanges
-                                    dataRanges <- newRanges
-                                    resize()
+//                                if float manager.AllocatedBytes < shrinkThreshold * float manager.Capacity then
+//                                    let mutable newDrawRanges = RangeSet.empty
+//                                    let newManager = MemoryManager.createNop()
+//                                    let newRanges = Dictionary.empty
+//
+//                                    for (g,ptr) in Dictionary.toList dataRanges do
+//                                        let nptr = newManager.Alloc(ptr.Size)
+//                                        newRanges.[g] <- nptr
+//                                        let r = Range1i.FromMinAndSize(int nptr.Offset, nptr.Size - 1)
+//                                        newDrawRanges <- RangeSet.insert r newDrawRanges
+//                                    
+//                                    manager.Dispose()
+//                                    manager <- newManager
+//                                    drawRanges <- newDrawRanges
+//                                    dataRanges <- newRanges
+//                                    resize()
 
 
 

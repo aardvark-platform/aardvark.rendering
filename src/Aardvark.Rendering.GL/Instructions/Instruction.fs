@@ -7,60 +7,64 @@
 /// these InstructionCodes represent our abstract machine instructions.
 /// </summary>
 type InstructionCode = 
-    | BindVertexArray          = 1
-    | BindProgram              = 2
-    | ActiveTexture            = 3
-    | BindSampler              = 4
-    | BindTexture              = 5
-    | BindBufferBase           = 6
-    | BindBufferRange          = 7
-    | BindFramebuffer          = 8
-    | Viewport                 = 9
-    | Enable                   = 10
-    | Disable                  = 11
-    | DepthFunc                = 12
-    | CullFace                 = 13
-    | BlendFuncSeparate        = 14
-    | BlendEquationSeparate    = 15
-    | BlendColor               = 16
-    | PolygonMode              = 17
-    | StencilFuncSeparate      = 18
-    | StencilOpSeparate        = 19
-    | PatchParameter           = 20
-    | DrawElements             = 21
-    | DrawArrays               = 22
-    | DrawElementsInstanced    = 23
-    | DrawArraysInstanced      = 24
-    | Clear                    = 25
-    | BindImageTexture         = 26
-    | ClearColor               = 27
-    | ClearDepth               = 28
-    | GetError                 = 29
-    | BindBuffer               = 30
-    | VertexAttribPointer      = 31
-    | VertexAttribDivisor      = 32
-    | EnableVertexAttribArray  = 33
-    | DisableVertexAttribArray = 34
+    | BindVertexArray               = 1
+    | BindProgram                   = 2
+    | ActiveTexture                 = 3
+    | BindSampler                   = 4
+    | BindTexture                   = 5
+    | BindBufferBase                = 6
+    | BindBufferRange               = 7
+    | BindFramebuffer               = 8
+    | Viewport                      = 9
+    | Enable                        = 10
+    | Disable                       = 11
+    | DepthFunc                     = 12
+    | CullFace                      = 13
+    | BlendFuncSeparate             = 14
+    | BlendEquationSeparate         = 15
+    | BlendColor                    = 16
+    | PolygonMode                   = 17
+    | StencilFuncSeparate           = 18
+    | StencilOpSeparate             = 19
+    | PatchParameter                = 20
+    | DrawElements                  = 21
+    | DrawArrays                    = 22
+    | DrawElementsInstanced         = 23
+    | DrawArraysInstanced           = 24
+    | Clear                         = 25
+    | BindImageTexture              = 26
+    | ClearColor                    = 27
+    | ClearDepth                    = 28
+    | GetError                      = 29
+    | BindBuffer                    = 30
+    | VertexAttribPointer           = 31
+    | VertexAttribDivisor           = 32
+    | EnableVertexAttribArray       = 33
+    | DisableVertexAttribArray      = 34
 
-    | Uniform1fv               = 35
-    | Uniform1iv               = 36
-    | Uniform2fv               = 37
-    | Uniform2iv               = 38
-    | Uniform3fv               = 39
-    | Uniform3iv               = 40
-    | Uniform4fv               = 41
-    | Uniform4iv               = 42
-    | UniformMatrix2fv         = 43
-    | UniformMatrix3fv         = 44
-    | UniformMatrix4fv         = 45
+    | Uniform1fv                    = 35
+    | Uniform1iv                    = 36
+    | Uniform2fv                    = 37
+    | Uniform2iv                    = 38
+    | Uniform3fv                    = 39
+    | Uniform3iv                    = 40
+    | Uniform4fv                    = 41
+    | Uniform4iv                    = 42
+    | UniformMatrix2fv              = 43
+    | UniformMatrix3fv              = 44
+    | UniformMatrix4fv              = 45
 
-    | TexParameteri            = 46
-    | TexParameterf            = 47
+    | TexParameteri                 = 46
+    | TexParameterf                 = 47
     
-    | VertexAttrib1f           = 48
-    | VertexAttrib2f           = 49
-    | VertexAttrib3f           = 50
-    | VertexAttrib4f           = 51
+    | VertexAttrib1f                = 48
+    | VertexAttrib2f                = 49
+    | VertexAttrib3f                = 50
+    | VertexAttrib4f                = 51
+
+    | MultiDrawArraysIndirect       = 52
+    | MultiDrawElementsIndirect     = 53
+
 
 /// <summary>
 /// an instrution consists of an instruction-code and the corresponding arguments
@@ -162,4 +166,8 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
     static member VertexAttrib4f (index : int) (v0 : float32) (v1 : float32) (v2 : float32) (v3 : float32) =
         Instruction(InstructionCode.VertexAttrib4f, [|index :> obj; v0 :> obj; v1 :> obj; v2 :> obj; v3 :> obj|])
 
+    static member MultiDrawArraysIndirect (mode : int) (indirect : nativeint) (drawCount : int) (stride : int) =
+        Instruction(InstructionCode.MultiDrawArraysIndirect, [|mode :> obj; indirect :> obj; drawCount :> obj; stride :> obj|])
 
+    static member MultiDrawElementsIndirect (mode : int) (t : int) (indirect : nativeint) (drawCount : int) (stride : int) =
+        Instruction(InstructionCode.MultiDrawElementsIndirect, [|mode :> obj; t :> obj; indirect :> obj; drawCount :> obj; stride :> obj|])

@@ -22,6 +22,9 @@ type PreparedRenderObject =
         Textures : Map<int, ChangeableResource<Texture> * ChangeableResource<Sampler>>
         Buffers : list<int * BufferView * AttributeFrequency * ChangeableResource<Buffer>>
         IndexBuffer : Option<ChangeableResource<Buffer>>
+
+        IndirectBuffer : Option<ChangeableResource<Buffer>>
+
         mutable VertexArray : ChangeableResource<VertexArrayObject>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
         mutable IsDisposed : bool
@@ -50,6 +53,7 @@ type PreparedRenderObject =
     member x.BlendMode = x.Original.BlendMode
     member x.FillMode = x.Original.FillMode
     member x.StencilMode = x.Original.StencilMode
+    member x.IndirectCount = x.Original.IndirectCount
 
     member x.Update(caller : IAdaptiveObject) =
         use token = x.Context.ResourceLock
@@ -93,6 +97,13 @@ type PreparedRenderObject =
                     ib.UpdateGPU(caller) |> ignore
             | _ -> ()
 
+        match x.IndirectBuffer with
+            | Some ib ->
+                if ib.OutOfDate then
+                    ib.UpdateCPU(caller)
+                    ib.UpdateGPU(caller) |> ignore
+            | _ -> ()
+
         if x.VertexArray.OutOfDate then
             x.VertexArray.UpdateCPU(caller)
             x.VertexArray.UpdateGPU(caller) |> ignore
@@ -103,6 +114,7 @@ type PreparedRenderObject =
             x.VertexArray.Dispose() 
             x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
             x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
+            x.IndirectBuffer |> Option.iter (fun b -> b.Dispose())
             x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
             x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
             x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
@@ -144,6 +156,7 @@ module ``Prepared render object extensions`` =
                 Textures = Map.empty
                 Buffers = []
                 IndexBuffer = None
+                IndirectBuffer = None
                 VertexArray = Unchecked.defaultof<_>
                 VertexAttributeValues = Map.empty
                 IsDisposed = false
@@ -279,6 +292,10 @@ type ResourceManagerExtensions private() =
             if isNull rj.Indices then None
             else x.CreateBuffer rj.Indices |> Some
 
+        let indirect =
+            if isNull rj.IndirectBuffer then None
+            else x.CreateIndirectBuffer(not (isNull rj.Indices), rj.IndirectBuffer) |> Some
+
         // create the VertexArrayObject
         let vao =
             x.CreateVertexArrayObject(buffers, index)
@@ -309,6 +326,7 @@ type ResourceManagerExtensions private() =
             Textures = textures
             Buffers = buffers
             IndexBuffer = index
+            IndirectBuffer = indirect
             VertexArray = vao
             VertexAttributeValues = attributeValues
             IsDisposed = false

@@ -50,6 +50,8 @@ static PFNGLVERTEXATTRIB2FPROC			glVertexAttrib2f;
 static PFNGLVERTEXATTRIB3FPROC			glVertexAttrib3f;
 static PFNGLVERTEXATTRIB4FPROC			glVertexAttrib4f;
 
+static PFNGLMULTIDRAWARRAYSINDIRECTPROC glMultiDrawArraysIndirect;
+static PFNGLMULTIDRAWELEMENTSINDIRECTPROC glMultiDrawElementsIndirect;
 
 
 // enum holding the available instruction codes
@@ -104,7 +106,9 @@ typedef enum {
 	VertexAttrib1f = 48,
 	VertexAttrib2f = 49,
 	VertexAttrib3f = 50,
-	VertexAttrib4f = 51
+	VertexAttrib4f = 51,
+	MultiDrawArraysIndirect = 52,
+	MultiDrawElementsIndirect = 53
 
 } InstructionCode;
 

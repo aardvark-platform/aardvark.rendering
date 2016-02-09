@@ -332,6 +332,7 @@ module ResourceManager =
 
         // some identifiers for caches
         static let arrayBuffer = Sym.ofString "ArrayBuffer"
+        static let indirectBuffer = Sym.ofString "IndirectBuffer"
         static let dataBuffer = Sym.ofString "DataBuffer"
         static let pixTexture = Sym.ofString "PixTexture"
         static let program = Sym.ofString "Program"
@@ -543,6 +544,32 @@ module ResourceManager =
                               kind = ResourceKind.Buffer  }
                     )
 
+        /// <summary>
+        /// creates a buffer from a mod-array simply updating its
+        /// content whenever the array changes
+        /// </summary>
+        member x.CreateIndirectBuffer(indexed : bool, data : IMod<IBuffer>) =
+            cache.[indirectBuffer].GetOrAdd(
+                [indexed :> obj; data :> obj], 
+                fun self ->
+                    let current = data.GetValue(self)
+                    let handle = ctx.CreateIndirect(indexed, current)
+                    let handleMod = Mod.constant handle
+
+
+                    { trackChangedInputs = false
+                      dependencies = [data]
+                      updateCPU = fun _ -> 
+                        data.GetValue(self) |> ignore
+                      updateGPU = fun () ->
+                        let data = data.GetValue(self)
+                        ctx.UploadIndirect(handle, indexed, data)
+
+                        FrameStatistics.Zero
+                      destroy = fun () -> ctx.Delete(handle)
+                      resource = handleMod
+                      kind = ResourceKind.Buffer  }
+            )
 
 
         /// <summary>
