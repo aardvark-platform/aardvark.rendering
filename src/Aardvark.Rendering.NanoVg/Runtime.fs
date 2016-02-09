@@ -421,7 +421,8 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
 
                 OpenTK.Graphics.OpenGL.GL.PushAttrib(OpenTK.Graphics.OpenGL.AttribMask.AllAttribBits)
                 OpenTK.Graphics.OpenGL.GL.BindSampler(0,0)
-                
+                OpenTK.Graphics.OpenGL.GL.PolygonMode(OpenTK.Graphics.OpenGL.MaterialFace.FrontAndBack, OpenTK.Graphics.OpenGL.PolygonMode.Fill)
+
                 NanoVg.nvgBeginFrame(current.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
              
                 r.Content.All |> Seq.sortBy fst |> Seq.map snd |> Interpreter.run x current
