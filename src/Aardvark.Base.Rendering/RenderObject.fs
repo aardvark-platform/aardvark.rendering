@@ -382,6 +382,8 @@ module AttributePackingV2 =
         let buffers = SymbolDict<AdaptiveBuffer>()
         let mutable manager = MemoryManager.createNop()
         let mutable dataRanges = Dictionary<IndexedGeometry, managedptr>()
+        
+
         let mutable drawRanges = RangeSet.empty
 
         let faceVertexCount (i : IndexedGeometry) =
@@ -513,6 +515,79 @@ module AttributePackingV2 =
                     )
             )
 
+
+    type ChangeableBuffer(elementType : Type) =
+        inherit Mod.AbstractMod<IBuffer>()
+
+        let elementSize = Marshal.SizeOf elementType
+        let rw = new ReaderWriterLockSlim()
+        let mutable capacity = 0n
+        let mutable storage = 0n
+        let readers = HashSet<AdaptiveBufferReader>()
+
+        let removeReader(r : AdaptiveBufferReader) =
+            lock readers (fun () -> readers.Remove r |> ignore)
+
+        let addDirty (r : Range1i) =
+            let all = lock readers (fun () -> readers |> HashSet.toArray)
+            all |> Array.iter (fun reader -> reader.AddDirty r)
+            
+        member x.Capacity = capacity
+
+        member x.Resize(newCapacity : nativeint) =
+            let changed = 
+                ReaderWriterLock.write rw (fun () ->
+                    if newCapacity = 0n then
+                        if storage <> 0n then
+                            Marshal.FreeHGlobal(storage)
+                            storage <- 0n
+                            capacity <- 0n
+                            true
+                        else
+                            false
+                    elif newCapacity <> capacity then
+                        if storage = 0n then
+                            capacity <- newCapacity
+                            storage <- Marshal.AllocHGlobal(capacity)
+                        else
+                            capacity <- newCapacity
+                            storage <- Marshal.ReAllocHGlobal(storage, capacity)
+
+                        addDirty (Range1i(0, int capacity - 1))
+                        true
+                    else
+                        false
+                )
+
+            if changed then transact (fun () -> x.MarkOutdated())
+
+        member x.Write(index : int, data : Array) =
+            let size = elementSize * data.Length |> nativeint
+            let offset = index * elementSize |> nativeint
+
+            ReaderWriterLock.read rw (fun () ->
+                let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                try Marshal.Copy(gc.AddrOfPinnedObject(), storage + offset, int size)
+                finally gc.Free()
+            )
+
+            addDirty (Range1i.FromMinAndSize(int offset, int size - 1))
+            transact (fun () -> x.MarkOutdated())
+
+        override x.Compute() =
+            NativeMemoryBuffer(storage, int capacity) :> IBuffer
+
+        member private x.GetReader() =
+            let r = new AdaptiveBufferReader(x, removeReader)
+            lock readers (fun () -> readers.Add r |> ignore)
+            r :> IAdaptiveBufferReader
+
+        interface IAdaptiveBuffer with
+            member x.GetReader() = x.GetReader()
+            member x.ElementType = elementType
+
+    
+    
 
 
 

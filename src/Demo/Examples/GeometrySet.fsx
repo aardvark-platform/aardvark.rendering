@@ -382,9 +382,9 @@ module ASet =
 // LoD stuff
 // ===================================================================================
 [<CustomEquality; NoComparison>]
-type Node<'a when 'a : equality> =
+type Node =
     {
-        id : 'a
+        id : obj
         bounds : Box3d
         inner : bool
         granularity : float
@@ -393,19 +393,19 @@ type Node<'a when 'a : equality> =
     override x.GetHashCode() = x.id.GetHashCode()
     override x.Equals o =
         match o with
-            | :? Node<'a> as o -> x.id.Equals(o.id)
+            | :? Node as o -> x.id.Equals(o.id)
             | _ -> false
 
 
-type IDataProvider<'a when 'a : equality> =
+type IDataProvider =
     abstract member BoundingBox : Box3d
-    abstract member Traverse : (Node<'a> -> bool) -> unit
-    abstract member GetData : node : 'a -> count : int -> Async<IndexedGeometry>
+    abstract member Traverse : (Node -> bool) -> unit
+    abstract member GetData : node : Node -> count : int -> Async<IndexedGeometry>
 
 
 type DummyDataProvider(root : Box3d) =
     
-    interface IDataProvider<Box3d> with
+    interface IDataProvider with
         member x.BoundingBox = root
 
         member x.Traverse f =
@@ -437,63 +437,33 @@ type DummyDataProvider(root : Box3d) =
                     ()
             traverse 0 root
 
-        member x.GetData (cell : Box3d) (count : int) =
+        member x.GetData (cell : Node) (count : int) =
             async {
-                return IndexedGeometry()
+                return Helpers.box (Helpers.randomColor()) cell.bounds
             }
 
 [<AutoOpen>]
 module ``Data Provider Extensions`` =
-    
-    type IDataProvider<'a when 'a : equality> with
+    open System.Collections.Concurrent
+
+    type IDataProvider with
         member x.Rasterize(view : Trafo3d, frustum : Frustum, wantedNearPlaneDistance : float) =
             let projTrafo = Frustum.projTrafo frustum
             let viewProj = view * projTrafo
             let camLocation = view.GetViewPosition()
 
-            let result = HashSet<Node<'a>>()
+            let result = List<Node>()
 
             x.Traverse(fun node ->
-//                let viewBox = 
-//                    node.bounds.ComputeCorners()
-//                        |> Array.map (fun p -> viewProj.Forward.TransformPosProj p)
-//                        |> Box3d
-//                
-
                 if node.bounds.IntersectsFrustum viewProj.Forward then
                     if node.inner then
                         let bounds = node.bounds
-
-//                        let nearPlanePoints =
-//                            bounds.ComputeCorners()
-//                                |> Array.map viewProj.Forward.TransformPosProj
-//                                |> Array.map Vec.xy
-//
-//                        let nearPlanePolygon =
-//                            Polygon2d(nearPlanePoints)
-//                                .ComputeConvexHullIndexPolygon()
-//                                .ToPolygon2d()
-//                                .ConvexClipped(Box2d(-V2d.II, V2d.II))
 
                         let depthRange =
                             bounds.ComputeCorners()
                                 |> Array.map view.Forward.TransformPos
                                 |> Array.map (fun v -> -v.Z)
                                 |> Range1d
-
-//                        let depthRange =
-//                            nearPlanePolygon.Points
-//                                |> Seq.choose (fun v -> 
-//                                    let p = viewProj.Backward.TransformPosProj(V3d(v, 0.0))
-//                                    let r = Ray3d(camLocation, Vec.normalize (p - camLocation))
-//                                    match bounds.Intersects(r) with
-//                                        | (true, t) -> 
-//                                            let vp = view.Forward.TransformPos (r.GetPointOnRay t)
-//                                            Some -vp.Z
-//                                        | _ -> None
-//                                   )
-//                                |> Seq.map (clamp frustum.near frustum.far)
-//                                |> Range1d
 
                         if depthRange.Max < frustum.near || depthRange.Min > frustum.far then
                             false
@@ -504,24 +474,22 @@ module ``Data Provider Extensions`` =
                             if projAvgDistance > wantedNearPlaneDistance then
                                 true
                             else
-                                if not (result.Add node) then
-                                    failwith "duplicate box"
+                                result.Add node
                                 false
                     else
-                        if not (result.Add node) then
-                            failwith "duplicate box"
+                        result.Add node
                         false
                 else
                     false
             )
 
-            result :> ISet<_>
+            result
 
 
 // ===================================================================================
 // example usage
 // ===================================================================================
-let data = DummyDataProvider(Box3d(V3d.OOO, 5.0 * V3d.III)) :> IDataProvider<_>
+let data = DummyDataProvider(Box3d(V3d.OOO, 5.0 * V3d.III)) :> IDataProvider
 
 [<AutoOpen>]
 module Camera =
@@ -586,22 +554,20 @@ module Camera =
                 | Main -> return! mainProj
                 | Test -> return! gridProj
         }
-
-let nodes =
-    ASet.custom (fun self ->
-        let proj = gridProj.GetValue self
-        let view = gridCam.GetValue self
-        let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.005)
-
-        let viewProj = CameraView.viewTrafo view * Frustum.projTrafo proj
-
-        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
-        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
-
-        Seq.append add rem |> Seq.toList
-    )
-
-let boxes = nodes |> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
+//
+//let nodes =
+//    ASet.custom (fun self ->
+//        let proj = gridProj.GetValue self
+//        let view = gridCam.GetValue self
+//        let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.005)
+//
+//        let viewProj = CameraView.viewTrafo view * Frustum.projTrafo proj
+//
+//        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
+//        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+//
+//        Seq.append add rem |> Seq.toList
+//    )
 
 let attributeTypes =
     Map.ofList [
@@ -609,11 +575,58 @@ let attributeTypes =
         DefaultSemantic.Colors, typeof<C4b>
         DefaultSemantic.Normals, typeof<V3f>
     ]
-                                    
+
+module Sg =
+    open Aardvark.SceneGraph.Semantics
+    open System.Collections.Concurrent
+
+    type PointCloud(data : IDataProvider, avgDistance : float) =
+        interface ISg
+
+        member x.AverageDistance = avgDistance
+        member x.DataProvider = data
+
+    type PointCloudSem() =
+        
+        member x.RenderObjects(p : PointCloud) : aset<IRenderObject> =
+
+            let viewTrafo = p.ViewTrafo
+            let projTrafo = p.ProjTrafo
+
+            let cache = ConcurrentDictionary<obj, managedptr>()
+
+            let raster =
+                Mod.custom (fun self ->
+                    let view = viewTrafo.GetValue self
+                    let proj = projTrafo.GetValue self
+
+                    // TODO: proper frustum here
+                    let wanted = p.DataProvider.Rasterize(view, Frustum.perspective 60.0 0.1 100.0 1.0, p.AverageDistance)
+
+                    let newOnes = wanted |> Seq.filter (cache.ContainsKey >> not) |> Seq.toArray
+
+                    newOnes
+                )
+
+            let worker =
+                async {
+                    
+                }
+
+
+            failwith ""
+
+
+let boxes = Sg.group' []
+//    nodes 
+//        |> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
+//        |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
+//        //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
+//
+//                                    
 let sg = 
     Sg.group' [
         boxes
-            |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
         Helpers.frustum gridCam gridProj
 
         data.BoundingBox.EnlargedByRelativeEps(0.005)
