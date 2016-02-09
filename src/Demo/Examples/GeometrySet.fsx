@@ -207,7 +207,9 @@ module Helpers =
         )
 
     let randomColor() =
-        C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, 255uy)
+        C4b(128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 255uy)
+    let randomColor2(alpha) =
+        C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, alpha)
 
     let box (color : C4b) (box : Box3d) =
 
@@ -358,10 +360,29 @@ module ASet =
         ASet.AdaptiveSet(fun () -> new CustomReader<'a>(f) :> IReader<_>) :> aset<_>
 
 
+    type WithUpdateReader<'a>(m : IMod<unit>, r : IReader<'a>) =
+        inherit ASetReaders.AbstractReader<'a>()
+
+
+        override x.ComputeDelta() =
+            m.GetValue x
+            r.GetDelta x
+
+        override x.Release() =
+            r.Dispose()
+
+        override x.Inputs = Seq.ofList [m; r]
+
+
+    let withUpdater (m : IMod<unit>) (s : aset<'a>) =
+        ASet.AdaptiveSet(fun () -> new WithUpdateReader<_>(m, s.GetReader()) :> IReader<_>) :> aset<_>
+
+
 // ===================================================================================
 // LoD stuff
 // ===================================================================================
-type Node<'a> =
+[<CustomEquality; NoComparison>]
+type Node<'a when 'a : equality> =
     {
         id : 'a
         bounds : Box3d
@@ -369,28 +390,54 @@ type Node<'a> =
         granularity : float
     }
 
+    override x.GetHashCode() = x.id.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? Node<'a> as o -> x.id.Equals(o.id)
+            | _ -> false
+
+
 type IDataProvider<'a when 'a : equality> =
     abstract member BoundingBox : Box3d
     abstract member Traverse : (Node<'a> -> bool) -> unit
     abstract member GetData : node : 'a -> count : int -> Async<IndexedGeometry>
 
-type DummyDataProvider(root : GridCell) =
+
+type DummyDataProvider(root : Box3d) =
     
-    interface IDataProvider<GridCell> with
-        member x.BoundingBox = root.Box
+    interface IDataProvider<Box3d> with
+        member x.BoundingBox = root
 
         member x.Traverse f =
-            let rec traverse (b : GridCell) =
-                let box = b.Box
+            let rec traverse (level : int) (b : Box3d) =
+                let box = b
                 let n = 100.0
                 let node = { id = b; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / (n*n*n)) }
+
                 if f node then
-                    b.Children |> List.iter traverse
+                    let center = b.Center
+
+                    let children =
+                        let l = b.Min
+                        let u = b.Max
+                        let c = center
+                        [
+                            Box3d(V3d(l.X, l.Y, l.Z), V3d(c.X, c.Y, c.Z))
+                            Box3d(V3d(c.X, l.Y, l.Z), V3d(u.X, c.Y, c.Z))
+                            Box3d(V3d(l.X, c.Y, l.Z), V3d(c.X, u.Y, c.Z))
+                            Box3d(V3d(c.X, c.Y, l.Z), V3d(u.X, u.Y, c.Z))
+                            Box3d(V3d(l.X, l.Y, c.Z), V3d(c.X, c.Y, u.Z))
+                            Box3d(V3d(c.X, l.Y, c.Z), V3d(u.X, c.Y, u.Z))
+                            Box3d(V3d(l.X, c.Y, c.Z), V3d(c.X, u.Y, u.Z))
+                            Box3d(V3d(c.X, c.Y, c.Z), V3d(u.X, u.Y, u.Z))
+                        ]
+
+                    children |> List.iter (traverse (level + 1))
                 else
                     ()
-            traverse root
+            traverse 0 root
 
-        member x.GetData (cell : GridCell) (count : int) =
+        member x.GetData (cell : Box3d) (count : int) =
             async {
                 return IndexedGeometry()
             }
@@ -407,45 +454,62 @@ module ``Data Provider Extensions`` =
             let result = HashSet<Node<'a>>()
 
             x.Traverse(fun node ->
+//                let viewBox = 
+//                    node.bounds.ComputeCorners()
+//                        |> Array.map (fun p -> viewProj.Forward.TransformPosProj p)
+//                        |> Box3d
+//                
+
                 if node.bounds.IntersectsFrustum viewProj.Forward then
                     if node.inner then
                         let bounds = node.bounds
 
-                        let nearPlanePoints =
-                            bounds.ComputeCorners()
-                                |> Array.map viewProj.Forward.TransformPosProj
-                                |> Array.map Vec.xy
-
-                        let nearPlanePolygon =
-                            Polygon2d(nearPlanePoints)
-                                .ComputeConvexHullIndexPolygon()
-                                .ToPolygon2d()
-                                .ConvexClipped(Box2d(-V2d.II, V2d.II))
+//                        let nearPlanePoints =
+//                            bounds.ComputeCorners()
+//                                |> Array.map viewProj.Forward.TransformPosProj
+//                                |> Array.map Vec.xy
+//
+//                        let nearPlanePolygon =
+//                            Polygon2d(nearPlanePoints)
+//                                .ComputeConvexHullIndexPolygon()
+//                                .ToPolygon2d()
+//                                .ConvexClipped(Box2d(-V2d.II, V2d.II))
 
                         let depthRange =
-                            nearPlanePolygon.Points
-                                |> Seq.choose (fun v -> 
-                                    let p = viewProj.Backward.TransformPosProj(V3d(v, 0.0))
-                                    let r = Ray3d(camLocation, Vec.normalize (p - camLocation))
-                                    match bounds.Intersects(r) with
-                                        | (true, t) -> 
-                                            let vp = view.Forward.TransformPos (r.GetPointOnRay t)
-                                            Some -vp.Z
-                                        | _ -> None
-                                   )
-                                |> Seq.map (clamp frustum.near frustum.far)
+                            bounds.ComputeCorners()
+                                |> Array.map view.Forward.TransformPos
+                                |> Array.map (fun v -> -v.Z)
                                 |> Range1d
 
-                        let projAvgDistance =
-                            node.granularity / depthRange.Min
+//                        let depthRange =
+//                            nearPlanePolygon.Points
+//                                |> Seq.choose (fun v -> 
+//                                    let p = viewProj.Backward.TransformPosProj(V3d(v, 0.0))
+//                                    let r = Ray3d(camLocation, Vec.normalize (p - camLocation))
+//                                    match bounds.Intersects(r) with
+//                                        | (true, t) -> 
+//                                            let vp = view.Forward.TransformPos (r.GetPointOnRay t)
+//                                            Some -vp.Z
+//                                        | _ -> None
+//                                   )
+//                                |> Seq.map (clamp frustum.near frustum.far)
+//                                |> Range1d
 
-                        if projAvgDistance > wantedNearPlaneDistance then
-                            true
-                        else
-                            result.Add node |> ignore
+                        if depthRange.Max < frustum.near || depthRange.Min > frustum.far then
                             false
+                        else
+                            let projAvgDistance =
+                                abs (node.granularity / depthRange.Min)
+
+                            if projAvgDistance > wantedNearPlaneDistance then
+                                true
+                            else
+                                if not (result.Add node) then
+                                    failwith "duplicate box"
+                                false
                     else
-                        result.Add node |> ignore
+                        if not (result.Add node) then
+                            failwith "duplicate box"
                         false
                 else
                     false
@@ -457,7 +521,7 @@ module ``Data Provider Extensions`` =
 // ===================================================================================
 // example usage
 // ===================================================================================
-let data = DummyDataProvider(GridCell(V3l.OOO, 4)) :> IDataProvider<_>
+let data = DummyDataProvider(Box3d(V3d.OOO, 5.0 * V3d.III)) :> IDataProvider<_>
 
 [<AutoOpen>]
 module Camera =
@@ -527,17 +591,17 @@ let nodes =
     ASet.custom (fun self ->
         let proj = gridProj.GetValue self
         let view = gridCam.GetValue self
-        let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.01)
+        let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.005)
 
-        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add |> Seq.toArray
-        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem |> Seq.toArray
+        let viewProj = CameraView.viewTrafo view * Frustum.projTrafo proj
 
-        printfn "+%d / -%d" add.Length rem.Length
+        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
+        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
 
         Seq.append add rem |> Seq.toList
     )
 
-let boxes = nodes |> ASet.map (fun n -> Helpers.wireBox (Helpers.randomColor()) n.bounds)
+let boxes = nodes |> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
 
 let attributeTypes =
     Map.ofList [
@@ -548,8 +612,8 @@ let attributeTypes =
                                     
 let sg = 
     Sg.group' [
-        Sg.geometrySet IndexedGeometryMode.LineList attributeTypes boxes
-
+        boxes
+            |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
         Helpers.frustum gridCam gridProj
 
         data.BoundingBox.EnlargedByRelativeEps(0.005)
