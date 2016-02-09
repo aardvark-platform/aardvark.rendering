@@ -40,22 +40,26 @@ type RenderObject =
         Id : int
         mutable AttributeScope : Ag.Scope
                 
-        mutable IsActive   : IMod<bool>
-        mutable RenderPass : uint64
+        mutable IsActive            : IMod<bool>
+        mutable RenderPass          : uint64
                 
-        mutable DrawCallInfos : IMod<list<DrawCallInfo>>
-        mutable Mode          : IMod<IndexedGeometryMode>
-        mutable Surface       : IMod<ISurface>
+        mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
+        mutable IndirectBuffer      : IMod<IBuffer>
+        mutable IndirectCount       : IMod<int>
+        mutable Mode                : IMod<IndexedGeometryMode>
+        
+
+        mutable Surface             : IMod<ISurface>
                               
-        mutable DepthTest     : IMod<DepthTestMode>
-        mutable CullMode      : IMod<CullMode>
-        mutable BlendMode     : IMod<BlendMode>
-        mutable FillMode      : IMod<FillMode>
-        mutable StencilMode   : IMod<StencilMode>
+        mutable DepthTest           : IMod<DepthTestMode>
+        mutable CullMode            : IMod<CullMode>
+        mutable BlendMode           : IMod<BlendMode>
+        mutable FillMode            : IMod<FillMode>
+        mutable StencilMode         : IMod<StencilMode>
                 
-        mutable Indices            : IMod<Array>
-        mutable InstanceAttributes : IAttributeProvider
-        mutable VertexAttributes   : IAttributeProvider
+        mutable Indices             : IMod<Array>
+        mutable InstanceAttributes  : IAttributeProvider
+        mutable VertexAttributes    : IAttributeProvider
                 
         mutable Uniforms : IUniformProvider
     }  
@@ -74,6 +78,9 @@ type RenderObject =
           IsActive = null
           RenderPass = 0UL
           DrawCallInfos = null
+          IndirectBuffer = null
+          IndirectCount = null
+
           Mode = null
           Surface = null
           DepthTest = null
@@ -124,6 +131,8 @@ module RenderObjectExtensions =
           IsActive = null
           RenderPass = 0UL
           DrawCallInfos = null
+          IndirectBuffer = null
+          IndirectCount = null
           Mode = null
           Surface = null
           DepthTest = null
