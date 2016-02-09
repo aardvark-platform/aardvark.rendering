@@ -10,6 +10,8 @@ open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 
+#nowarn "9"
+
 /// <summary>
 /// defines usage hints for buffers. Note that these 
 /// hints can (but must not) be respected by the backend implementation.
@@ -476,6 +478,70 @@ module BufferExtensions =
             [
                 yield Instruction.BindBuffer (int target) 0
             ]
+
+[<AutoOpen>]
+module IndirectBufferExtensions =
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type private DrawArraysIndirectCommand =
+        struct
+            val mutable public count : uint32
+            val mutable public instanceCount : uint32
+            val mutable public first : uint32
+            val mutable public baseInstance : uint32
+
+            new(info : DrawCallInfo) =
+                {
+                    count = uint32 info.FaceVertexCount
+                    instanceCount = uint32 info.InstanceCount
+                    first = uint32 info.FirstIndex
+                    baseInstance = uint32 info.FirstInstance
+                }
+        end
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type private DrawElementsIndirectCommand =
+        struct
+            val mutable public count : uint32
+            val mutable public instanceCount : uint32
+            val mutable public first : uint32
+            val mutable public baseVertex : uint32
+            val mutable public baseInstance : uint32
+
+            new(info : DrawCallInfo) =
+                {
+                    count = uint32 info.FaceVertexCount
+                    instanceCount = uint32 info.InstanceCount
+                    first = uint32 info.FirstIndex
+                    baseVertex = uint32 info.BaseVertex
+                    baseInstance = uint32 info.FirstInstance
+                }
+        end
+
+    let private getIndirectData (indexed : bool) (data : IBuffer) =
+        match data with
+            | :? ArrayBuffer as ab ->
+                match ab.Data with
+                    | :? array<DrawCallInfo> as arr ->
+                            
+                        if indexed then
+                            arr |> Array.map DrawElementsIndirectCommand :> Array
+                        else
+                            arr |> Array.map DrawArraysIndirectCommand :> Array
+
+                    | _ ->
+                        failwith "IndirectBuffer must contain DrawCallInfos"
+            | _ -> 
+                failwith "IndirectBuffers must be ArrayBuffers atm."
+
+    type Context with
+        member x.UploadIndirect(buffer : Buffer, indexed : bool, data : IBuffer) =
+            x.Upload(buffer, getIndirectData indexed data)
+
+        member x.CreateIndirect(indexed : bool, data : IBuffer) =
+            x.CreateBuffer(getIndirectData indexed data)
+
+
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
