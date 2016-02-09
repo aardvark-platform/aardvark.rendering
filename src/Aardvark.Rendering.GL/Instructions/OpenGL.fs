@@ -582,6 +582,17 @@ module OpenGl =
         /// </summary>
         let DisableVertexAttribArray = getProcAddress "glDisableVertexAttribArray"
 
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/html/glMultiDrawArraysIndirect.xhtml
+        /// </summary>
+        let MultiDrawArraysIndirect = getProcAddress "glMultiDrawArraysIndirect"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/html/glMultiDrawElementsIndirect.xhtml
+        /// </summary>
+        let MultiDrawElementsIndirect = getProcAddress "glMultiDrawElementsIndirect"
+
+
         let Uniform1iv = getProcAddress "glUniform1iv"
         let Uniform1fv = getProcAddress "glUniform1fv"
         let Uniform2iv = getProcAddress "glUniform2iv"
@@ -656,6 +667,10 @@ module OpenGl =
               VertexAttrib3f, "glVertexAttrib3f"
               VertexAttrib4f, "glVertexAttrib4f"
 
+
+              MultiDrawArraysIndirect, "glMultiDrawArraysIndirect"
+              MultiDrawElementsIndirect, "glMultiDrawElementsIndirect"
+
             ] |> Map.ofList
 
         let getPointerName (ptr : nativeint) =
@@ -725,3 +740,5 @@ module OpenGl =
         let ClearDepth : int64 -> unit = wrap Pointers.ClearDepth
         let GetError : unit -> int = wrap Pointers.GetError
 
+        let MultiDrawArraysIndirect : int -> nativeint -> int -> int -> unit = wrap Pointers.MultiDrawArraysIndirect
+        let MultiDrawElementsIndirect : int -> int -> nativeint -> int -> int -> unit = wrap Pointers.MultiDrawElementsIndirect

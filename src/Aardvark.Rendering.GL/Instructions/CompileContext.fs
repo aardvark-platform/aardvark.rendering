@@ -108,26 +108,28 @@ module ExecutionContext =
             | InstructionCode.GetError -> OpenGl.Pointers.GetError
             | InstructionCode.VertexAttribPointer -> OpenGl.Pointers.VertexAttribPointer
 
-            | InstructionCode.Uniform1fv               -> OpenGl.Pointers.Uniform1fv
-            | InstructionCode.Uniform1iv               -> OpenGl.Pointers.Uniform1iv
-            | InstructionCode.Uniform2fv               -> OpenGl.Pointers.Uniform2fv
-            | InstructionCode.Uniform2iv               -> OpenGl.Pointers.Uniform2iv
-            | InstructionCode.Uniform3fv               -> OpenGl.Pointers.Uniform3fv
-            | InstructionCode.Uniform3iv               -> OpenGl.Pointers.Uniform3iv
-            | InstructionCode.Uniform4fv               -> OpenGl.Pointers.Uniform4fv
-            | InstructionCode.Uniform4iv               -> OpenGl.Pointers.Uniform4iv
-            | InstructionCode.UniformMatrix2fv         -> OpenGl.Pointers.UniformMatrix2fv
-            | InstructionCode.UniformMatrix3fv         -> OpenGl.Pointers.UniformMatrix3fv
-            | InstructionCode.UniformMatrix4fv         -> OpenGl.Pointers.UniformMatrix4fv
-            | InstructionCode.EnableVertexAttribArray  -> OpenGl.Pointers.EnableVertexAttribArray
-            | InstructionCode.TexParameteri            -> OpenGl.Pointers.TexParameteri
-            | InstructionCode.TexParameterf            -> OpenGl.Pointers.TexParameterf
+            | InstructionCode.Uniform1fv                    -> OpenGl.Pointers.Uniform1fv
+            | InstructionCode.Uniform1iv                    -> OpenGl.Pointers.Uniform1iv
+            | InstructionCode.Uniform2fv                    -> OpenGl.Pointers.Uniform2fv
+            | InstructionCode.Uniform2iv                    -> OpenGl.Pointers.Uniform2iv
+            | InstructionCode.Uniform3fv                    -> OpenGl.Pointers.Uniform3fv
+            | InstructionCode.Uniform3iv                    -> OpenGl.Pointers.Uniform3iv
+            | InstructionCode.Uniform4fv                    -> OpenGl.Pointers.Uniform4fv
+            | InstructionCode.Uniform4iv                    -> OpenGl.Pointers.Uniform4iv
+            | InstructionCode.UniformMatrix2fv              -> OpenGl.Pointers.UniformMatrix2fv
+            | InstructionCode.UniformMatrix3fv              -> OpenGl.Pointers.UniformMatrix3fv
+            | InstructionCode.UniformMatrix4fv              -> OpenGl.Pointers.UniformMatrix4fv
+            | InstructionCode.EnableVertexAttribArray       -> OpenGl.Pointers.EnableVertexAttribArray
+            | InstructionCode.TexParameteri                 -> OpenGl.Pointers.TexParameteri
+            | InstructionCode.TexParameterf                 -> OpenGl.Pointers.TexParameterf
 
-            | InstructionCode.VertexAttrib1f           -> OpenGl.Pointers.VertexAttrib1f
-            | InstructionCode.VertexAttrib2f           -> OpenGl.Pointers.VertexAttrib2f
-            | InstructionCode.VertexAttrib3f           -> OpenGl.Pointers.VertexAttrib3f
-            | InstructionCode.VertexAttrib4f           -> OpenGl.Pointers.VertexAttrib4f
+            | InstructionCode.VertexAttrib1f                -> OpenGl.Pointers.VertexAttrib1f
+            | InstructionCode.VertexAttrib2f                -> OpenGl.Pointers.VertexAttrib2f
+            | InstructionCode.VertexAttrib3f                -> OpenGl.Pointers.VertexAttrib3f
+            | InstructionCode.VertexAttrib4f                -> OpenGl.Pointers.VertexAttrib4f
 
+            | InstructionCode.MultiDrawArraysIndirect       -> OpenGl.Pointers.MultiDrawArraysIndirect
+            | InstructionCode.MultiDrawElementsIndirect     -> OpenGl.Pointers.MultiDrawElementsIndirect
 
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 
@@ -185,6 +187,9 @@ module ExecutionContext =
             OpenGl.Pointers.VertexAttrib2f, fun args -> Instruction(InstructionCode.VertexAttrib2f, args)
             OpenGl.Pointers.VertexAttrib3f, fun args -> Instruction(InstructionCode.VertexAttrib3f, args)
             OpenGl.Pointers.VertexAttrib4f, fun args -> Instruction(InstructionCode.VertexAttrib4f, args)
+
+            OpenGl.Pointers.MultiDrawArraysIndirect, fun args -> Instruction(InstructionCode.MultiDrawArraysIndirect, args)
+            OpenGl.Pointers.MultiDrawElementsIndirect, fun args -> Instruction(InstructionCode.MultiDrawElementsIndirect, args)
         ]
 
     let callToInstruction (ptr : nativeint, args : obj[]) =
@@ -263,6 +268,9 @@ module ExecutionContext =
             | InstructionCode.VertexAttrib2f           -> OpenGl.Unsafe.VertexAttrib2f (int 0) (float 1) (float 2)
             | InstructionCode.VertexAttrib3f           -> OpenGl.Unsafe.VertexAttrib3f (int 0) (float 1) (float 2) (float 3)
             | InstructionCode.VertexAttrib4f           -> OpenGl.Unsafe.VertexAttrib4f (int 0) (float 1) (float 2) (float 3) (float 4)
+
+            | InstructionCode.MultiDrawArraysIndirect  -> OpenGl.Unsafe.MultiDrawArraysIndirect (int 0) (ptr 1) (int 2) (int 3)
+            | InstructionCode.MultiDrawElementsIndirect  -> OpenGl.Unsafe.MultiDrawElementsIndirect (int 0) (int 1) (ptr 2) (int 3) (int 4)
 
             | InstructionCode.GetError                 -> ()
             | _ -> failwithf "unknown instruction: %A" i
