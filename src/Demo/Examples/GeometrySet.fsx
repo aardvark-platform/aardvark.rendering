@@ -529,8 +529,10 @@ let nodes =
         let view = gridCam.GetValue self
         let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.01)
 
-        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
-        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add |> Seq.toArray
+        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem |> Seq.toArray
+
+        printfn "+%d / -%d" add.Length rem.Length
 
         Seq.append add rem |> Seq.toList
     )
@@ -550,7 +552,7 @@ let sg =
 
         Helpers.frustum gridCam gridProj
 
-        data.BoundingBox
+        data.BoundingBox.EnlargedByRelativeEps(0.005)
             |> Helpers.wireBox C4b.VRVisGreen
             |> Sg.ofIndexedGeometry
     ]
