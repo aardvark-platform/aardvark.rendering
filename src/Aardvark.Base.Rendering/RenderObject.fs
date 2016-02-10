@@ -29,6 +29,11 @@ module private RenderObjectIds =
     let mutable private currentId = 0
     let newId() = Interlocked.Increment &currentId
 
+[<AutoOpen>]
+module private RenderObjectHelpers =
+    let private nopDisposable = { new IDisposable with member x.Dispose() = () }
+    let nopActivate () = nopDisposable
+
 type IRenderObject =
     abstract member RenderPass : uint64
     abstract member AttributeScope : Ag.Scope
@@ -62,6 +67,9 @@ type RenderObject =
         mutable VertexAttributes    : IAttributeProvider
                 
         mutable Uniforms : IUniformProvider
+
+        mutable Activate            : unit -> IDisposable
+
     }  
     interface IRenderObject with
         member x.RenderPass = x.RenderPass
@@ -92,6 +100,7 @@ type RenderObject =
           InstanceAttributes = null
           VertexAttributes = null
           Uniforms = null
+          Activate = nopActivate
         }
 
     static member Clone(org : RenderObject) =
@@ -144,6 +153,7 @@ module RenderObjectExtensions =
           InstanceAttributes = emptyAttributes
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms
+          Activate = nopActivate
         }
 
 
@@ -515,14 +525,63 @@ module AttributePackingV2 =
                     )
             )
 
+module GeometrySetUtilities =
+    open System.Collections.Concurrent
+    open System.Threading
+    open System.Collections.Generic
 
-    type ChangeableBuffer(elementType : Type) =
+    type private AdaptiveBufferReader(b : IAdaptiveBuffer, remove : AdaptiveBufferReader -> unit) =
+        inherit AdaptiveObject()
+
+        let mutable realCapacity = 0
+        let mutable dirtyCapacity = -1
+        let mutable dirtyRanges = RangeSet.empty
+
+        member x.AddDirty(r : Range1i) =
+            if dirtyCapacity = realCapacity then
+                Interlocked.Change(&dirtyRanges, RangeSet.insert r) |> ignore
+
+        member x.RemoveDirty(r : Range1i) =
+            if dirtyCapacity = realCapacity then
+                Interlocked.Change(&dirtyRanges, RangeSet.remove r) |> ignore
+            
+        member x.Resize(cap : int) =
+            if cap <> realCapacity then
+                realCapacity <- cap
+                dirtyRanges <- RangeSet.empty
+
+        member x.GetDirtyRanges(caller : IAdaptiveObject) =
+            x.EvaluateAlways caller (fun () ->
+                let buffer = b.GetValue x :?> NativeMemoryBuffer
+                let dirtyCap = Interlocked.Exchange(&dirtyCapacity, buffer.SizeInBytes)
+
+                if dirtyCap <> buffer.SizeInBytes then
+                    buffer, RangeSet.ofList [Range1i(0, buffer.SizeInBytes-1)]
+                else
+                    let dirty = Interlocked.Exchange(&dirtyRanges, RangeSet.empty)
+                    buffer, dirty
+            )
+
+        member x.Dispose() =
+            if Interlocked.Exchange(&realCapacity, -1) >= 0 then
+                b.RemoveOutput x
+                remove x
+                dirtyRanges <- RangeSet.empty
+                dirtyCapacity <- -1
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+        interface IAdaptiveBufferReader with
+            member x.GetDirtyRanges(caller) = x.GetDirtyRanges(caller)
+
+    type ChangeableBuffer(elementType : Type, initialLength : int) =
         inherit Mod.AbstractMod<IBuffer>()
 
         let elementSize = Marshal.SizeOf elementType
         let rw = new ReaderWriterLockSlim()
-        let mutable capacity = 0n
-        let mutable storage = 0n
+        let mutable capacity = nativeint (initialLength * elementSize)
+        let mutable storage = if initialLength > 0 then Marshal.AllocHGlobal(capacity) else 0n
         let readers = HashSet<AdaptiveBufferReader>()
 
         let removeReader(r : AdaptiveBufferReader) =
@@ -532,9 +591,11 @@ module AttributePackingV2 =
             let all = lock readers (fun () -> readers |> HashSet.toArray)
             all |> Array.iter (fun reader -> reader.AddDirty r)
             
-        member x.Capacity = capacity
+        member x.Capacity = capacity / nativeint elementSize
 
-        member x.Resize(newCapacity : nativeint) =
+        member x.Resize(newLength : nativeint) =
+            let newCapacity = nativeint elementSize * newLength
+
             let changed = 
                 ReaderWriterLock.write rw (fun () ->
                     if newCapacity = 0n then
@@ -561,9 +622,20 @@ module AttributePackingV2 =
 
             if changed then transact (fun () -> x.MarkOutdated())
 
-        member x.Write(index : int, data : Array) =
-            let size = elementSize * data.Length |> nativeint
-            let offset = index * elementSize |> nativeint
+        member x.Write(offset : int, data : nativeint, length : int) =
+            let size = elementSize * length |> nativeint
+            let offset = offset * elementSize |> nativeint
+
+            ReaderWriterLock.read rw (fun () ->
+                Marshal.Copy(data, storage + offset, int size)
+            )
+
+            addDirty (Range1i.FromMinAndSize(int offset, int size - 1))
+            transact (fun () -> x.MarkOutdated()) 
+
+        member x.Write(offset : int, data : Array, length : int) =
+            let size = elementSize * length |> nativeint
+            let offset = offset * elementSize |> nativeint
 
             ReaderWriterLock.read rw (fun () ->
                 let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
@@ -573,6 +645,14 @@ module AttributePackingV2 =
 
             addDirty (Range1i.FromMinAndSize(int offset, int size - 1))
             transact (fun () -> x.MarkOutdated())
+
+        member x.Write(offset : int, data : Array) =
+            x.Write(offset, data, data.Length)
+
+        member x.Dispose() =
+            x.Resize(0n)
+            rw.Dispose()
+            lock readers (fun () -> readers.Clear())
 
         override x.Compute() =
             NativeMemoryBuffer(storage, int capacity) :> IBuffer
@@ -586,7 +666,118 @@ module AttributePackingV2 =
             member x.GetReader() = x.GetReader()
             member x.ElementType = elementType
 
-    
+        new(t) = ChangeableBuffer(t, 0)
+
+    type GeometryPacker(attributeTypes : Map<Symbol, Type>) =
+        inherit Mod.AbstractMod<RangeSet>()
+
+        let manager = MemoryManager.createNop()
+        let locations = ConcurrentDictionary<IndexedGeometry, managedptr>()
+        let mutable buffers = ConcurrentDictionary<Symbol, Option<ChangeableBuffer>>()
+        let mutable ranges = RangeSet.empty
+        let mutable marked = 1
+
+        let writeAttribute (sem : Symbol) (region : managedptr) (buffer : ChangeableBuffer) (source : IndexedGeometry) =
+            let cap = nativeint manager.Capacity
+            if buffer.Capacity <> cap then buffer.Resize(cap)
+            match source.IndexedAttributes.TryGetValue(sem) with
+                | (true, arr) ->
+                    buffer.Write(int region.Offset, arr, region.Size)
+                | _ ->
+                    // TODO: write NullBuffer content or 0 here
+                    ()
+
+        let tryGetBuffer (sem : Symbol) =
+            let mutable isNew = false
+            let result = 
+                buffers.GetOrAdd(sem, fun sem ->
+                    match Map.tryFind sem attributeTypes with
+                        | Some t ->
+                            isNew <- true
+                            let b = ChangeableBuffer(t, manager.Capacity)
+                            Some b
+                        | None ->
+                            None
+                )
+
+            if isNew then
+                let b = result.Value // safe here
+                for (KeyValue(g,region)) in locations do
+                    writeAttribute sem region b g
+
+            result
+                     
+        member private x.AddRange (ptr : managedptr) =
+            let r = Range1i(int ptr.Offset, ptr.Size - 1)
+            Interlocked.Change(&ranges, RangeSet.insert r) |> ignore
+            if Interlocked.Exchange(&marked, 1) = 0 then
+                transact (fun () -> x.MarkOutdated())
+
+        member private x.RemoveRange (ptr : managedptr) =
+            let r = Range1i(int ptr.Offset, ptr.Size - 1)
+            Interlocked.Change(&ranges, RangeSet.remove r) |> ignore
+            if Interlocked.Exchange(&marked, 1) = 0 then
+                transact (fun () -> x.MarkOutdated())
+           
+        member x.Add (g : IndexedGeometry) =
+            let mutable isNew = false
+
+            let region = 
+                locations.GetOrAdd(g, fun g ->
+                    let faceVertexCount =
+                        if isNull g.IndexArray then
+                            let att = g.IndexedAttributes.Values |> Seq.head   
+                            att.Length
+                        else
+                            g.IndexArray.Length
+                    
+                    isNew <- true
+                    manager.Alloc(faceVertexCount)
+                )
+            
+            if isNew then
+                
+                let cap = nativeint manager.Capacity
+                for (KeyValue(sem, buffer)) in buffers do
+                    match buffer with
+                        | Some buffer ->
+                            writeAttribute sem region buffer g
+                        | _ ->
+                            ()
+                true
+            else
+                false
+
+        member x.Remove (g : IndexedGeometry) =
+            match locations.TryRemove g with
+                | (true, region) ->
+                    manager.Free(region)
+                    true
+                | _ ->
+                    false
+
+        member x.TryGetBuffer (sem : Symbol) =
+            match tryGetBuffer sem with
+                | Some b ->
+                    b :> IMod<IBuffer> |> Some
+                | None ->
+                    None
+
+        member x.Dispose() =
+            let old = Interlocked.Exchange(&buffers, ConcurrentDictionary())
+            if old.Count > 0 then
+                old.Values |> Seq.iter (fun b ->
+                    match b with
+                        | Some b -> b.Dispose()
+                        | _ -> ()
+                )
+                old.Clear()
+
+        override x.Compute() =
+            marked <- 0
+            ranges
+
+        
     
 
 
