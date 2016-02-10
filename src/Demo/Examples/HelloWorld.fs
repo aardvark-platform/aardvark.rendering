@@ -540,7 +540,7 @@ module HelloWorld =
 
         let rand = Random()
         let randomPoints pointCount =
-            let randomV3f() = 3.0f*V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
+            let randomV3f() = 3.0*V3d(rand.NextDouble(), rand.NextDouble(), rand.NextDouble()) |> V3f.op_Explicit
             let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
 
             IndexedGeometry(
@@ -559,21 +559,63 @@ module HelloWorld =
                                                  DefaultSemantic.Colors, typeof<C4b> ] ) :> ISg
 
 
-        
-        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
-            if k = Keys.R then
-                if geometries.Count > 0 then
-                    let g = geometries |> Seq.head
+
+        let add = win.Keyboard.IsDown(Keys.T)
+        let rem = win.Keyboard.IsDown(Keys.R)
+        let lockObj = obj()
+
+        let mutable added = geometries.Count
+        let mutable removed = 0
+
+        async {
+            do! Async.SwitchToNewThread()
+            while true do
+                if Mod.force add then
+                    let g = randomPoints 10
                     transact (fun () ->
-                        geometries.Remove g |> ignore
-                        printfn "removed"
+                        lock lockObj (fun () -> geometries.Add g |> ignore)
+                        added <- added + 1
                     )
-            elif k = Keys.T then
-                transact (fun () ->
-                    geometries.Add (randomPoints 1000) |> ignore
-                    printfn "added"
-                )
-        )
+                do! Async.Sleep(1)
+        } |> Async.Start
+
+        async {
+            do! Async.SwitchToNewThread()
+            while true do
+                if Mod.force rem then
+                    if geometries.Count > 0 then
+                        transact (fun () ->
+                            lock lockObj (fun () -> 
+                                let g = geometries |> Seq.head
+                                geometries.Remove g |> ignore
+                                removed <- removed + 1
+                            )
+                        )
+                do! Async.Sleep(1)
+        } |> Async.Start
+
+        async {
+            do! Async.SwitchToNewThread()
+            while true do
+                printfn "add: %A" added
+                printfn "rem: %A" removed
+                do! Async.Sleep(500)
+        } |> Async.Start
+//
+//        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
+//            if k = Keys.R then
+//                if geometries.Count > 0 then
+//                    let g = geometries |> Seq.head
+//                    transact (fun () ->
+//                        geometries.Remove g |> ignore
+//                        printfn "removed"
+//                    )
+//            elif k = Keys.T then
+//                transact (fun () ->
+//                    geometries.Add (randomPoints 1000) |> ignore
+//                    printfn "added"
+//                )
+//        )
 
         let mutable blendMode = BlendMode.Blend
         blendMode.Operation <- BlendOperation.Add
@@ -593,7 +635,7 @@ module HelloWorld =
                 // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
                 // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
                 |> Sg.projTrafo (perspective  |> Mod.map Frustum.projTrafo    )
-                |> Sg.normalizeAdaptive
+                //|> Sg.normalizeAdaptive
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.NativeOptimized, final)
 

@@ -554,20 +554,20 @@ module Camera =
                 | Main -> return! mainProj
                 | Test -> return! gridProj
         }
-//
-//let nodes =
-//    ASet.custom (fun self ->
-//        let proj = gridProj.GetValue self
-//        let view = gridCam.GetValue self
-//        let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.005)
-//
-//        let viewProj = CameraView.viewTrafo view * Frustum.projTrafo proj
-//
-//        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
-//        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
-//
-//        Seq.append add rem |> Seq.toList
-//    )
+
+let nodes =
+    ASet.custom (fun self ->
+        let proj = gridProj.GetValue self
+        let view = gridCam.GetValue self
+        let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.005)
+
+        let viewProj = CameraView.viewTrafo view * Frustum.projTrafo proj
+
+        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
+        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+
+        Seq.append add rem |> Seq.toList
+    )
 
 let attributeTypes =
     Map.ofList [
@@ -587,13 +587,13 @@ module Sg =
         member x.DataProvider = data
 
 
-let boxes = Sg.group' []
-//    nodes 
-//        |> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
-//        |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
-//        //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
-//
-//                                    
+let boxes = 
+    nodes 
+        |> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
+        |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
+        //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
+
+                                    
 let sg = 
     Sg.group' [
         boxes

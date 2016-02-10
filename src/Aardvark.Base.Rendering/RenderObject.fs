@@ -327,7 +327,6 @@ module AttributePackingV2 =
             lock readers (fun () -> readers.Add r |> ignore)
             r :> IAdaptiveBufferReader
 
-        member x.ElementType = elementType
 
         /// may only be called in layout-update
         member x.Resize(count : int) =
@@ -379,9 +378,11 @@ module AttributePackingV2 =
 
             NativeMemoryBuffer(storage, storeCapacity) :> IBuffer
 
+        member x.ElementType = elementType
+
         interface IAdaptiveBuffer with
-            member x.GetReader() = x.GetReader()
             member x.ElementType = elementType
+            member x.GetReader() = x.GetReader()
 
     type Packer(set : aset<IndexedGeometry>, elementTypes : Map<Symbol, Type>) =
         inherit Mod.AbstractMod<Dictionary<IndexedGeometry, managedptr>>()
@@ -663,8 +664,8 @@ module GeometrySetUtilities =
             r :> IAdaptiveBufferReader
 
         interface IAdaptiveBuffer with
-            member x.GetReader() = x.GetReader()
             member x.ElementType = elementType
+            member x.GetReader() = x.GetReader()
 
         new(t) = ChangeableBuffer(t, 0)
 
@@ -675,7 +676,7 @@ module GeometrySetUtilities =
         let locations = ConcurrentDictionary<IndexedGeometry, managedptr>()
         let mutable buffers = ConcurrentDictionary<Symbol, Option<ChangeableBuffer>>()
         let mutable ranges = RangeSet.empty
-        let mutable marked = 1
+
 
         let writeAttribute (sem : Symbol) (region : managedptr) (buffer : ChangeableBuffer) (source : IndexedGeometry) =
             let cap = nativeint manager.Capacity
@@ -708,17 +709,26 @@ module GeometrySetUtilities =
             result
                      
         member private x.AddRange (ptr : managedptr) =
-            let r = Range1i(int ptr.Offset, ptr.Size - 1)
+            let r = Range1i.FromMinAndSize(int ptr.Offset, ptr.Size - 1)
             Interlocked.Change(&ranges, RangeSet.insert r) |> ignore
-            if Interlocked.Exchange(&marked, 1) = 0 then
-                transact (fun () -> x.MarkOutdated())
+            transact (fun () -> x.MarkOutdated())
 
         member private x.RemoveRange (ptr : managedptr) =
-            let r = Range1i(int ptr.Offset, ptr.Size - 1)
+            let r = Range1i.FromMinAndSize(int ptr.Offset, ptr.Size - 1)
             Interlocked.Change(&ranges, RangeSet.remove r) |> ignore
-            if Interlocked.Exchange(&marked, 1) = 0 then
-                transact (fun () -> x.MarkOutdated())
+            transact (fun () -> x.MarkOutdated())
            
+
+        member x.Activate (g : IndexedGeometry) =
+            match locations.TryGetValue g with
+                | (true, ptr) -> x.AddRange ptr
+                | _ -> ()
+
+        member x.Deactivate (g : IndexedGeometry) =
+            match locations.TryGetValue g with
+                | (true, ptr) -> x.RemoveRange ptr
+                | _ -> ()
+
         member x.Add (g : IndexedGeometry) =
             let mutable isNew = false
 
@@ -732,11 +742,15 @@ module GeometrySetUtilities =
                             g.IndexArray.Length
                     
                     isNew <- true
-                    manager.Alloc(faceVertexCount)
+                    let range = manager.Alloc(faceVertexCount)
+
+                    x.AddRange range
+
+                    range
                 )
             
             if isNew then
-                
+                printfn "add geometry"
                 let cap = nativeint manager.Capacity
                 for (KeyValue(sem, buffer)) in buffers do
                     match buffer with
@@ -751,6 +765,8 @@ module GeometrySetUtilities =
         member x.Remove (g : IndexedGeometry) =
             match locations.TryRemove g with
                 | (true, region) ->
+                    printfn "rem geometry"
+                    x.RemoveRange region
                     manager.Free(region)
                     true
                 | _ ->
@@ -774,7 +790,7 @@ module GeometrySetUtilities =
                 old.Clear()
 
         override x.Compute() =
-            marked <- 0
+            printfn "draw: %A" ranges
             ranges
 
         

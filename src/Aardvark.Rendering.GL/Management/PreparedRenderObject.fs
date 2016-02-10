@@ -10,6 +10,7 @@ open System.Runtime.CompilerServices
 [<CustomEquality;CustomComparison>]
 type PreparedRenderObject =
     {
+        Activation : IDisposable
         Context : Context
         Original : RenderObject
         FramebufferSignature : IFramebufferSignature
@@ -110,6 +111,7 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         if not x.IsDisposed then
+            x.Activation.Dispose()
             x.IsDisposed <- true
             x.VertexArray.Dispose() 
             x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
@@ -144,6 +146,7 @@ type PreparedRenderObject =
 module ``Prepared render object extensions`` =
 
     let private empty = {
+                Activation = { new IDisposable with member x.Dispose() = () }
                 Context = Unchecked.defaultof<_>
                 Original = RenderObject.Empty
                 FramebufferSignature = null
@@ -178,9 +181,12 @@ type ResourceManagerExtensions private() =
         // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
 
+        let activation = rj.Activate()
+
         // create a program and get its handle (ISSUE: assumed to be constant here)
         let program = x.CreateSurface(fboSignature, rj.Surface)
         let prog = program.Resource.GetValue()
+
 
         let createdViews = System.Collections.Generic.List()
 
@@ -314,6 +320,7 @@ type ResourceManagerExtensions private() =
 
         // finally return the PreparedRenderObject
         {
+            Activation = activation
             Context = x.Context
             Original = rj
             FramebufferSignature = fboSignature
