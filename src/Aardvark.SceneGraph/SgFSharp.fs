@@ -44,6 +44,9 @@ module SgFSharp =
         let set (set : aset<ISg>) =
             Sg.Set(set) :> ISg
 
+        let andAlso (sg : ISg) (andSg : ISg) = 
+            group [sg;andSg] :> ISg
+
         let geometrySet mode attributeTypes (geometries : aset<_>) =
             Sg.GeometrySet(geometries,mode,attributeTypes) :> ISg
 
