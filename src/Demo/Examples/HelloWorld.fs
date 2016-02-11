@@ -594,14 +594,7 @@ module HelloWorld =
                 do! Async.Sleep(1)
         } |> Async.Start
 
-        async {
-            do! Async.SwitchToNewThread()
-            while true do
-                printfn "add: %A" added
-                printfn "rem: %A" removed
-                do! Async.Sleep(500)
-        } |> Async.Start
-//
+
 //        win.Keyboard.DownWithRepeats.Values.Add (fun k ->
 //            if k = Keys.R then
 //                if geometries.Count > 0 then

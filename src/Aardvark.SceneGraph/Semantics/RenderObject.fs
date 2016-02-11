@@ -149,16 +149,18 @@ module RenderObjectSemantics =
 
             let indirect =
                 packer |> Mod.map (fun set ->
+                    
                     set |> Seq.toArray
                         |> Array.map (fun r ->
                             DrawCallInfo(
-                                FirstIndex = 0,
+                                FirstIndex = r.Min,
                                 FaceVertexCount = 1 + r.Size,
                                 FirstInstance = 0,
                                 InstanceCount = 1,
                                 BaseVertex = 0
                             )
                         )
+
 
                 )
 
@@ -191,6 +193,7 @@ module RenderObjectSemantics =
                         for op in d do
                             deltas.Enqueue(op)
                             cnt <- cnt + 1
+
 
                         if cnt > 0 then
                             sem.Release(cnt) |> ignore

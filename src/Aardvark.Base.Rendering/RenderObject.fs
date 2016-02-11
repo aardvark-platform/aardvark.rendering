@@ -750,7 +750,6 @@ module GeometrySetUtilities =
                 )
             
             if isNew then
-                printfn "add geometry"
                 let cap = nativeint manager.Capacity
                 for (KeyValue(sem, buffer)) in buffers do
                     match buffer with
@@ -765,7 +764,6 @@ module GeometrySetUtilities =
         member x.Remove (g : IndexedGeometry) =
             match locations.TryRemove g with
                 | (true, region) ->
-                    printfn "rem geometry"
                     x.RemoveRange region
                     manager.Free(region)
                     true
@@ -790,7 +788,6 @@ module GeometrySetUtilities =
                 old.Clear()
 
         override x.Compute() =
-            printfn "draw: %A" ranges
             ranges
 
         
