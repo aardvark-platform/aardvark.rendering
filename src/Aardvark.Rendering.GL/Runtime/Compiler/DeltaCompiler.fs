@@ -54,6 +54,7 @@ module DeltaCompiler =
                     s, ()
         }
 
+
     let useResources (resources : seq<ChangeableResource<'a>>) : Compiled<unit> =
         { runCompile = 
             fun s -> 

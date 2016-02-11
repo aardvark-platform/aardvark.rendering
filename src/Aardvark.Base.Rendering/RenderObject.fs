@@ -172,7 +172,6 @@ type IAdaptiveBufferReader =
 
 type IAdaptiveBuffer =
     inherit IMod<IBuffer>
-    abstract member ElementType : Type
     abstract member GetReader : unit -> IAdaptiveBufferReader
 
 module AttributePackingV2 =
@@ -381,7 +380,6 @@ module AttributePackingV2 =
         member x.ElementType = elementType
 
         interface IAdaptiveBuffer with
-            member x.ElementType = elementType
             member x.GetReader() = x.GetReader()
 
     type Packer(set : aset<IndexedGeometry>, elementTypes : Map<Symbol, Type>) =
@@ -546,7 +544,8 @@ module GeometrySetUtilities =
             if dirtyCapacity = realCapacity then
                 Interlocked.Change(&dirtyRanges, RangeSet.remove r) |> ignore
             
-        member x.Resize(cap : int) =
+        member x.Resize(cap : nativeint) =
+            let cap = int cap
             if cap <> realCapacity then
                 realCapacity <- cap
                 dirtyRanges <- RangeSet.empty
@@ -576,13 +575,12 @@ module GeometrySetUtilities =
         interface IAdaptiveBufferReader with
             member x.GetDirtyRanges(caller) = x.GetDirtyRanges(caller)
 
-    type ChangeableBuffer(elementType : Type, initialLength : int) =
+    type ChangeableBuffer(initialCapacity : int) =
         inherit Mod.AbstractMod<IBuffer>()
 
-        let elementSize = Marshal.SizeOf elementType
         let rw = new ReaderWriterLockSlim()
-        let mutable capacity = nativeint (initialLength * elementSize)
-        let mutable storage = if initialLength > 0 then Marshal.AllocHGlobal(capacity) else 0n
+        let mutable capacity = nativeint initialCapacity
+        let mutable storage = if initialCapacity > 0 then Marshal.AllocHGlobal(capacity) else 0n
         let readers = HashSet<AdaptiveBufferReader>()
 
         let removeReader(r : AdaptiveBufferReader) =
@@ -590,13 +588,14 @@ module GeometrySetUtilities =
 
         let addDirty (r : Range1i) =
             let all = lock readers (fun () -> readers |> HashSet.toArray)
-            all |> Array.iter (fun reader -> reader.AddDirty r)
+            all |> Array.iter (fun reader -> 
+                reader.Resize capacity
+                reader.AddDirty r
+            )
             
-        member x.Capacity = capacity / nativeint elementSize
+        member x.Capacity = capacity
 
-        member x.Resize(newLength : nativeint) =
-            let newCapacity = nativeint elementSize * newLength
-
+        member x.Resize(newCapacity : nativeint) =
             let changed = 
                 ReaderWriterLock.write rw (fun () ->
                     if newCapacity = 0n then
@@ -623,32 +622,23 @@ module GeometrySetUtilities =
 
             if changed then transact (fun () -> x.MarkOutdated())
 
-        member x.Write(offset : int, data : nativeint, length : int) =
-            let size = elementSize * length |> nativeint
-            let offset = offset * elementSize |> nativeint
-
+        member x.Write(offset : int, data : nativeint, sizeInBytes : int) =
             ReaderWriterLock.read rw (fun () ->
-                Marshal.Copy(data, storage + offset, int size)
+                Marshal.Copy(data, storage + nativeint offset, sizeInBytes)
             )
 
-            addDirty (Range1i.FromMinAndSize(int offset, int size - 1))
+            addDirty (Range1i.FromMinAndSize(offset, sizeInBytes - 1))
             transact (fun () -> x.MarkOutdated()) 
 
-        member x.Write(offset : int, data : Array, length : int) =
-            let size = elementSize * length |> nativeint
-            let offset = offset * elementSize |> nativeint
-
+        member x.Write(offset : int, data : Array, sizeInBytes : int) =
             ReaderWriterLock.read rw (fun () ->
                 let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                try Marshal.Copy(gc.AddrOfPinnedObject(), storage + offset, int size)
+                try Marshal.Copy(gc.AddrOfPinnedObject(), storage + nativeint offset, sizeInBytes)
                 finally gc.Free()
             )
 
-            addDirty (Range1i.FromMinAndSize(int offset, int size - 1))
+            addDirty (Range1i.FromMinAndSize(offset, sizeInBytes - 1))
             transact (fun () -> x.MarkOutdated())
-
-        member x.Write(offset : int, data : Array) =
-            x.Write(offset, data, data.Length)
 
         member x.Dispose() =
             x.Resize(0n)
@@ -656,7 +646,9 @@ module GeometrySetUtilities =
             lock readers (fun () -> readers.Clear())
 
         override x.Compute() =
-            NativeMemoryBuffer(storage, int capacity) :> IBuffer
+            ReaderWriterLock.read rw (fun () ->
+                NativeMemoryBuffer(storage, int capacity) :> IBuffer
+            )
 
         member private x.GetReader() =
             let r = new AdaptiveBufferReader(x, removeReader)
@@ -664,47 +656,49 @@ module GeometrySetUtilities =
             r :> IAdaptiveBufferReader
 
         interface IAdaptiveBuffer with
-            member x.ElementType = elementType
             member x.GetReader() = x.GetReader()
 
-        new(t) = ChangeableBuffer(t, 0)
+        new() = ChangeableBuffer(0)
 
     type GeometryPacker(attributeTypes : Map<Symbol, Type>) =
         inherit Mod.AbstractMod<RangeSet>()
 
         let manager = MemoryManager.createNop()
         let locations = ConcurrentDictionary<IndexedGeometry, managedptr>()
-        let mutable buffers = ConcurrentDictionary<Symbol, Option<ChangeableBuffer>>()
+        let mutable buffers = ConcurrentDictionary<Symbol, ChangeableBuffer>()
+        let elementSizes = attributeTypes |> Map.map (fun _ v -> nativeint(Marshal.SizeOf v)) |> Map.toSeq |> Dictionary.ofSeq
         let mutable ranges = RangeSet.empty
 
 
+        let getElementSize (sem : Symbol) =
+            elementSizes.[sem]
+
         let writeAttribute (sem : Symbol) (region : managedptr) (buffer : ChangeableBuffer) (source : IndexedGeometry) =
-            let cap = nativeint manager.Capacity
-            if buffer.Capacity <> cap then buffer.Resize(cap)
             match source.IndexedAttributes.TryGetValue(sem) with
                 | (true, arr) ->
-                    buffer.Write(int region.Offset, arr, region.Size)
+                    let elementSize = getElementSize sem
+                    let cap = elementSize * (nativeint manager.Capacity)
+
+                    if buffer.Capacity <> cap then 
+                        buffer.Resize(cap)
+
+                    buffer.Write(int (region.Offset * elementSize), arr, (region.Size * int elementSize))
                 | _ ->
                     // TODO: write NullBuffer content or 0 here
                     ()
 
-        let tryGetBuffer (sem : Symbol) =
+        let getBuffer (sem : Symbol) =
             let mutable isNew = false
             let result = 
                 buffers.GetOrAdd(sem, fun sem ->
-                    match Map.tryFind sem attributeTypes with
-                        | Some t ->
-                            isNew <- true
-                            let b = ChangeableBuffer(t, manager.Capacity)
-                            Some b
-                        | None ->
-                            None
+                    isNew <- true
+                    let b = ChangeableBuffer(manager.Capacity)
+                    b
                 )
 
             if isNew then
-                let b = result.Value // safe here
                 for (KeyValue(g,region)) in locations do
-                    writeAttribute sem region b g
+                    writeAttribute sem region result g
 
             result
                      
@@ -752,11 +746,7 @@ module GeometrySetUtilities =
             if isNew then
                 let cap = nativeint manager.Capacity
                 for (KeyValue(sem, buffer)) in buffers do
-                    match buffer with
-                        | Some buffer ->
-                            writeAttribute sem region buffer g
-                        | _ ->
-                            ()
+                    writeAttribute sem region buffer g
                 true
             else
                 false
@@ -770,24 +760,17 @@ module GeometrySetUtilities =
                 | _ ->
                     false
 
-        member x.TryGetBuffer (sem : Symbol) =
-            match tryGetBuffer sem with
-                | Some b ->
-                    b :> IMod<IBuffer> |> Some
-                | None ->
-                    None
+        member x.GetBuffer (sem : Symbol) =
+            getBuffer sem  :> IMod<IBuffer>
 
         member x.Dispose() =
             let old = Interlocked.Exchange(&buffers, ConcurrentDictionary())
             if old.Count > 0 then
-                old.Values |> Seq.iter (fun b ->
-                    match b with
-                        | Some b -> b.Dispose()
-                        | _ -> ()
-                )
+                old.Values |> Seq.iter (fun b -> b.Dispose())
                 old.Clear()
 
         override x.Compute() =
+            printfn "%A" ranges
             ranges
 
         

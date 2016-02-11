@@ -322,7 +322,6 @@ module Sg =
         member x.Mode = mode
         member x.AttributeTypes = attributeTypes
 
-
     type Environment (runtime : IRuntime, viewTrafo : IMod<Trafo3d>, projTrafo : IMod<Trafo3d>, viewSize : IMod<V2i>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
 

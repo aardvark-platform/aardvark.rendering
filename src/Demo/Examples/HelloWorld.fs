@@ -576,7 +576,7 @@ module HelloWorld =
                         lock lockObj (fun () -> geometries.Add g |> ignore)
                         added <- added + 1
                     )
-                do! Async.Sleep(1)
+                System.Threading.Thread.SpinWait(50000)
         } |> Async.Start
 
         async {
@@ -591,7 +591,7 @@ module HelloWorld =
                                 removed <- removed + 1
                             )
                         )
-                do! Async.Sleep(1)
+                System.Threading.Thread.SpinWait(50000)
         } |> Async.Start
 
 
