@@ -7,6 +7,57 @@ open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
 
 
+module RenderObject =
+    
+    let ofScope (scope : Ag.Scope) =
+        let rj = RenderObject.Create()
+            
+        let indexArray = scope?VertexIndexArray
+        let isActive = scope?IsActive
+        let renderPass = scope?RenderPass
+
+        rj.AttributeScope <- scope 
+        rj.Indices <- if indexArray = AttributeSemantics.emptyIndex then null else indexArray 
+         
+        rj.IsActive <- isActive
+        rj.RenderPass <- renderPass
+            
+        let attributes =
+            { new IAttributeProvider with
+                member x.TryGetAttribute(sem) =
+                    match rj.VertexAttributes.TryGetAttribute sem with
+                        | Some att -> Some att
+                        | None -> rj.InstanceAttributes.TryGetAttribute sem
+
+                member x.All = Seq.append rj.VertexAttributes.All rj.InstanceAttributes.All
+
+                member x.Dispose() = ()
+            }
+
+        rj.Uniforms <- new Providers.UniformProvider(scope, scope?Uniforms, [attributes])
+
+
+        let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes")
+        let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
+
+        rj.VertexAttributes <- vertexAttributes
+        rj.InstanceAttributes <- instanceAttributes
+            
+        rj.DepthTest <- scope?DepthTestMode
+        rj.CullMode <- scope?CullMode
+        rj.FillMode <- scope?FillMode
+        rj.StencilMode <- scope?StencilMode
+        rj.BlendMode <- scope?BlendMode
+        rj.Surface <- scope?Surface
+            
+        rj
+
+    let inline create() =
+        Ag.getContext() |> ofScope
+
+
+
+
 [<AutoOpen>]
 module RenderObjectSemantics =
 
@@ -37,31 +88,9 @@ module RenderObjectSemantics =
 
         member x.RenderObjects(r : Sg.RenderNode) : aset<IRenderObject> =
             let scope = Ag.getContext()
-            let rj = RenderObject.Create()
-            
-            rj.AttributeScope <- scope 
-            rj.Indices <- let index  = r.VertexIndexArray in if index = AttributeSemantics.emptyIndex then null else index 
-         
-            rj.IsActive <- r.IsActive
-            rj.RenderPass <- r.RenderPass
-            
-            let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes")
-            let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
+            let rj = RenderObject.ofScope scope
 
-            rj.Uniforms <- new Providers.UniformProvider(scope, r?Uniforms, 
-                                                         [vertexAttributes; instanceAttributes])
-            rj.VertexAttributes <- vertexAttributes
-            rj.InstanceAttributes <- instanceAttributes
-            
-            rj.DepthTest <- r.DepthTestMode
-            rj.CullMode <- r.CullMode
-            rj.FillMode <- r.FillMode
-            rj.StencilMode <- r.StencilMode
-            rj.BlendMode <- r.BlendMode
-              
-            rj.Surface <- r.Surface
-            
-            let callInfo =
+            let callInfos =
                 adaptive {
                     let! info = r.DrawCallInfo
                     if info.FaceVertexCount < 0 then
@@ -78,46 +107,83 @@ module RenderObjectSemantics =
                         return [info]
                 }
 
-            rj.DrawCallInfos <- callInfo
+            rj.DrawCallInfos <- callInfos
             rj.Mode <- r.Mode
+
             ASet.single (rj :> IRenderObject)
-
-
-
-
 
         member x.RenderObjects(r : Sg.GeometrySet) : aset<IRenderObject> =
             let scope = Ag.getContext()
-            let rj = RenderObject.Create()
-            
-            rj.AttributeScope <- scope 
-            rj.Indices <- null
-         
-            rj.IsActive <- r.IsActive
-            rj.RenderPass <- r.RenderPass
-            
-            let packer = new AttributePackingV2.Packer(r.Geometries, r.AttributeTypes)
-            let vertexAttributes = packer.AttributeProvider
-            let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
+            let rj = RenderObject.ofScope scope
 
-            rj.Uniforms <- new Providers.UniformProvider(scope, r?Uniforms, 
-                                                         [vertexAttributes; instanceAttributes])
+            let packer = new GeometrySetUtilities.GeometryPacker(r.AttributeTypes)
+            let vertexAttributes =
+                { new IAttributeProvider with
+                    member x.TryGetAttribute(sem) =
+                        match Map.tryFind sem r.AttributeTypes with
+                            | Some t ->
+                                let b = packer.GetBuffer sem
+                                BufferView(b, t) |> Some
+                            | None -> None
+
+                    member x.All = Seq.empty
+
+                    member x.Dispose() = ()
+                
+                }
+
+            let indirect =
+                packer |> Mod.map (fun set ->
+                    set |> Seq.toArray
+                        |> Array.map (fun r ->
+                            DrawCallInfo(
+                                FirstIndex = r.Min,
+                                FaceVertexCount = 1 + r.Size,
+                                FirstInstance = 0,
+                                InstanceCount = 1,
+                                BaseVertex = 0
+                            )
+                        )
+
+
+                )
+
+            let activate() =
+                let deltas = ConcurrentDeltaQueue.ofASet r.Geometries
+
+                let runner =
+                    async {
+                        do! Async.SwitchToNewThread()
+                        while true do
+                            let! operation = deltas.DequeueAsync()
+
+                            match operation with
+                                | Add g -> packer.Add g |> ignore
+                                | Rem g -> packer.Remove g |> ignore
+
+                            ()
+                        
+                    }
+
+
+                let cancel = new System.Threading.CancellationTokenSource()
+                let task = Async.StartAsTask(runner, cancellationToken = cancel.Token)
+
+                { new System.IDisposable with
+                    member x.Dispose() =
+                        (deltas :> System.IDisposable).Dispose()
+                        cancel.Cancel()
+                        cancel.Dispose()
+                        packer.Dispose()
+                        ()
+                }
+
             rj.VertexAttributes <- vertexAttributes
-            rj.InstanceAttributes <- instanceAttributes
-            
-            rj.DepthTest <- r.DepthTestMode
-            rj.CullMode <- r.CullMode
-            rj.FillMode <- r.FillMode
-            rj.StencilMode <- r.StencilMode
-            rj.BlendMode <- r.BlendMode
-              
-            rj.Surface <- r.Surface
-            
-            let indirect = packer.DrawCallInfos |> Mod.map List.toArray
             rj.IndirectBuffer <- indirect |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
             rj.IndirectCount <- indirect |> Mod.map Array.length
-            //rj.DrawCallInfos <- packer.DrawCallInfos
             rj.Mode <- Mod.constant r.Mode
+            rj.Activate <- activate
+
             ASet.single (rj :> IRenderObject)
 
         member x.RenderObjects(r : Sg.OverlayNode) : aset<IRenderObject> =
