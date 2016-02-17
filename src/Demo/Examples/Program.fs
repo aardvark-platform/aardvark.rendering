@@ -8,4 +8,5 @@ open Rendering.Examples
 let main args =  
     //HelloWorld.testLoD()
     //HelloWorld.run()
-    HelloWorld.testGeometrySet ()
+    //HelloWorld.testGeometrySet ()
+    0

@@ -439,7 +439,10 @@ type DummyDataProvider(root : Box3d) =
 
         member x.GetData (cell : Node) (count : int) =
             async {
-                return Helpers.box (Helpers.randomColor()) cell.bounds
+                //do! Async.SwitchToNewThread()
+                let b = Helpers.box (Helpers.randomColor()) cell.bounds
+                //do! Async.Sleep 100
+                return b
             }
 
 [<AutoOpen>]
@@ -589,7 +592,7 @@ module Sg =
 
 let boxes = 
     nodes 
-        |> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
+        |> ASet.mapAsync (fun n -> data.GetData n 100 )
         |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
         //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
 

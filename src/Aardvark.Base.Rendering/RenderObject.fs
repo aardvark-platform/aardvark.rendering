@@ -770,7 +770,7 @@ module GeometrySetUtilities =
                 old.Clear()
 
         override x.Compute() =
-            printfn "%A" ranges
+            //printfn "%A" ranges
             ranges
 
         
