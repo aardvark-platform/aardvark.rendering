@@ -61,6 +61,9 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FsiSetup.fs" />
+    <Compile Include="RenderingSetup.fs" />
+    <None Include="LoadReferences.fsx" />
     <None Include="FsiSetup.fsx" />
     <None Include="RenderingSetup.fsx" />
     <None Include="Tutorial.fsx" />
@@ -70,6 +73,8 @@
     <None Include="PostProcessing.fsx" />
     <None Include="Shadows.fsx" />
     <None Include="GeometrySet.fsx" />
+    <Compile Include="LoD.fs" />
+    <Compile Include="Tic-Tac-Toe.fs" />
     <Compile Include="HelloWorld.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
