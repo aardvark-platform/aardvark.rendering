@@ -7,7 +7,7 @@ open Rendering.Examples
 [<STAThread>]
 let main args =  
     //HelloWorld.testLoD()
-    //HelloWorld.run()
+    HelloWorld.run() |> ignore
     //HelloWorld.testGeometrySet ()
-    Examples.LoD.run()
+    //Examples.LoD.run()
     0

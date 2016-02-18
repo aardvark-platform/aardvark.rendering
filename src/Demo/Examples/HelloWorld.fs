@@ -413,7 +413,7 @@ module HelloWorld =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateSimpleRenderWindow(1)
+        let win = app.CreateGameWindow()
    
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
@@ -440,9 +440,9 @@ module HelloWorld =
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.ManagedOptimized, sg.RenderObjects())
 
-        win.RenderTask <- task |> DefaultOverlays.withStatistics
+        win.RenderTask <- task //|> DefaultOverlays.withStatistics
         win.Run()
         0
 

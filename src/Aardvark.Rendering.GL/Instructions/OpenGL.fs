@@ -319,6 +319,7 @@ module OpenGl =
             | WriteOnly = 35001
             | ReadWrite = 35002 
 
+    let mutable opengl32Lib = Unchecked.defaultof<_>
     let mutable private opengl32 = 0n
     
     /// <summary>
@@ -366,23 +367,35 @@ module OpenGl =
     /// by successively checking "GetDefaultProcAddress", "glGetProcAddress"
     /// </summary>
     let getProcAddressInternal (name : string) =
-       
-        if System.Environment.OSVersion.Platform = System.PlatformID.Unix
-        then
-            if opengl32 = 0n then opengl32 <- (DynamicLinker.loadLibrary "libGL.so.1").Handle
-            match GLX.GetProcAddress name with
-                | 0n -> 0n
-                | ptr -> ptr
+        match System.Environment.OSVersion with
+            | Linux ->
+                if opengl32 = 0n then 
+                    opengl32Lib <- DynamicLinker.loadLibrary "libGL.so.1"
+                    opengl32 <- opengl32Lib.Handle
 
-        else
-            if opengl32 = 0n then opengl32 <- (DynamicLinker.loadLibrary "Opengl32.dll").Handle
-            match Wgl.GetDefaultProcAddress name with
-                    | 0n -> match Wgl.GLGetProcAddress name with
-                            | 0n -> match Wgl.GetProcAddress(opengl32, name) with
-                                        | 0n -> 0n
-                                        | ptr -> ptr
-                            | ptr -> ptr
-                    | ptr -> ptr  
+                match GLX.GetProcAddress name with
+                    | 0n -> 0n
+                    | ptr -> ptr
+            | Mac ->
+
+                if opengl32 = 0n then 
+                    opengl32Lib <- DynamicLinker.loadLibrary "/System/Library/Frameworks/OpenGL.framework/Versions/A/Libraries/libGL.dylib"
+                    opengl32 <- opengl32Lib.Handle
+
+                opengl32Lib.GetFunction(name).Handle
+
+            | Windows ->
+                if opengl32 = 0n then 
+                    opengl32Lib <- DynamicLinker.loadLibrary "Opengl32.dll"
+                    opengl32 <- opengl32Lib.Handle
+
+                match Wgl.GetDefaultProcAddress name with
+                        | 0n -> match Wgl.GLGetProcAddress name with
+                                | 0n -> match Wgl.GetProcAddress(opengl32, name) with
+                                            | 0n -> 0n
+                                            | ptr -> ptr
+                                | ptr -> ptr
+                        | ptr -> ptr  
 
 
     let rec getProcAddressProbing (suffixes : list<string>) (name : string) =

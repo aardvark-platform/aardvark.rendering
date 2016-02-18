@@ -198,8 +198,12 @@ module FShadeSceneGraph =
 
                 if n.Contains ".gl" then 
                     let supportsUniformBuffers = t.GetProperty("SupportsUniformBuffers").GetValue(r) |> unbox<bool>
-                    if supportsUniformBuffers then Some glsl410
-                    else Some glsl120
+                    match System.Environment.OSVersion with
+                        | Mac ->
+                            Some glsl410
+                        | _ ->
+                            if supportsUniformBuffers then Some glsl410
+                            else Some glsl120
 
                 elif n.Contains "vulkan" then
                     Some vulkan

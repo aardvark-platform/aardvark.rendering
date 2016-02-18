@@ -16,7 +16,7 @@ module Config =
     /// <summary>
     /// The major GL Version for default contexts
     /// </summary>
-    let MajorVersion = 3
+    let MajorVersion = 4
 
     /// <summary>
     /// The minor GL Version for default contexts
