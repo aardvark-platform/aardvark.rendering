@@ -476,7 +476,9 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="FsiSetup.fs" />
     <Compile Include="RenderingSetup.fs" />
-    <None Include="LoadReferences.fsx" />
+    <None Include="LoadReferences.fsx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="DemoSetup.fsx" />
   </ItemGroup>
   <ItemGroup>

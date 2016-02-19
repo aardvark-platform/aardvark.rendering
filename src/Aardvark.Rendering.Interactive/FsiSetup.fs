@@ -104,7 +104,7 @@ module FsiSetup =
         let root = Mod.init <| (Sg.group [] :> ISg)
 
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, Sg.DynamicNode root) //|> DefaultOverlays.withStatistics
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, Sg.DynamicNode root) |> DefaultOverlays.withStatistics
 
         win.Text <- @"Aardvark rocks \o/"
         win.Visible <- true

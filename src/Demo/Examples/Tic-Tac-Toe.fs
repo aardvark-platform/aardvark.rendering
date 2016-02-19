@@ -1,13 +1,14 @@
 ﻿#if INTERACTIVE
+#I @"../../../bin/Debug"
+#I @"../../../bin/Release"
 #load "LoadReferences.fsx"
-open Examples.FsiSetup
-open Examples.RenderingSetup
 #else
 namespace Examples
-open RenderingSetup
 #endif
 
 module TicTacToe = 
+
+    open Aardvark.Rendering.Interactive
 
     open System
     open Aardvark.Base
@@ -16,6 +17,7 @@ module TicTacToe =
     open Aardvark.Application
 
     open Default // makes viewTrafo and other tutorial specicific default creators visible
+    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
 
     let quadSg =
         let quad =
@@ -42,8 +44,7 @@ module TicTacToe =
     setSg sg
     printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
     #else
-    let run() =
+    let run () =
         setSg sg
         win.Run()
     #endif
-
