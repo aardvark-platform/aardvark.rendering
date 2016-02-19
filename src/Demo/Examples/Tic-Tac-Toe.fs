@@ -16,8 +16,8 @@ module TicTacToe =
     open Aardvark.SceneGraph
     open Aardvark.Application
 
-    open Default // makes viewTrafo and other tutorial specicific default creators visible
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+    open Default // makes viewTrafo and other tutorial specicific default creators visible
 
     let quadSg =
         let quad =
