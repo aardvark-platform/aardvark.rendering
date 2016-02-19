@@ -103,7 +103,8 @@ module FsiSetup =
         let win = app.CreateSimpleRenderWindow(1)
         let root = Mod.init <| (Sg.group [] :> ISg)
 
-
+        // mk use of nanovg
+        Aardvark.Rendering.NanoVg.TextAlign.BaseLine |> ignore
         let task = app.Runtime.CompileRender(win.FramebufferSignature, Sg.DynamicNode root) //|> DefaultOverlays.withStatistics
 
         win.Text <- @"Aardvark rocks \o/"
