@@ -3,3 +3,6 @@ id Aardvark.Rendering.Interactive
 authors VRVis Research Center
 description
     Aardvark.Rendering.Interactive
+files
+    ..\..\bin\Release\Aardvark.Rendering.Interactive.dll ==> lib\net45
+    ..\..\bin\Release\LoadReferences.fsx ==> scripts\

@@ -59,6 +59,60 @@
   <Target Name="AfterBuild">
   </Target>
   -->
+  <ItemGroup>
+    <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="FsiSetup.fs" />
+    <Compile Include="RenderingSetup.fs" />
+    <None Include="LoadReferences.fsx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="DemoSetup.fsx" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Windows.Forms" />
+    <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
+      <Name>Aardvark.Base.Rendering</Name>
+      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
+      <Name>Aardvark.Rendering.GL</Name>
+      <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj">
+      <Name>Aardvark.Rendering.NanoVg</Name>
+      <Project>{054df582-d549-4da0-b74b-762ab2585d3f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
+      <Name>Aardvark.SceneGraph</Name>
+      <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
+      <Name>Aardvark.Application.WinForms.GL</Name>
+      <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
+      <Name>Aardvark.Application.WinForms</Name>
+      <Project>{b1d5938d-ab5d-4d0e-8dde-482ef5308f16}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Application\Aardvark.Application\Aardvark.Application.fsproj">
+      <Name>Aardvark.Application</Name>
+      <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And ($(TargetFrameworkVersion) == 'v4.5' Or $(TargetFrameworkVersion) == 'v4.5.1' Or $(TargetFrameworkVersion) == 'v4.5.2' Or $(TargetFrameworkVersion) == 'v4.5.3' Or $(TargetFrameworkVersion) == 'v4.6' Or $(TargetFrameworkVersion) == 'v4.6.1')">
       <ItemGroup>
@@ -472,58 +526,4 @@
       </ItemGroup>
     </When>
   </Choose>
-  <ItemGroup>
-    <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="FsiSetup.fs" />
-    <Compile Include="RenderingSetup.fs" />
-    <None Include="LoadReferences.fsx">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="DemoSetup.fsx" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-    <Reference Include="System.Windows.Forms" />
-    <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
-      <Name>Aardvark.Base.Rendering</Name>
-      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
-      <Name>Aardvark.Rendering.GL</Name>
-      <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj">
-      <Name>Aardvark.Rendering.NanoVg</Name>
-      <Project>{054df582-d549-4da0-b74b-762ab2585d3f}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
-      <Name>Aardvark.SceneGraph</Name>
-      <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
-      <Name>Aardvark.Application.WinForms.GL</Name>
-      <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
-      <Name>Aardvark.Application.WinForms</Name>
-      <Project>{b1d5938d-ab5d-4d0e-8dde-482ef5308f16}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\Application\Aardvark.Application\Aardvark.Application.fsproj">
-      <Name>Aardvark.Application</Name>
-      <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-  </ItemGroup>
 </Project>
