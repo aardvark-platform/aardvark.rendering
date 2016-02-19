@@ -12,12 +12,13 @@ module TicTacToe =
 
     open System
     open Aardvark.Base
-    open Aardvark.Base.Incremental
-    open Aardvark.SceneGraph
-    open Aardvark.Application
 
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
     open Default // makes viewTrafo and other tutorial specicific default creators visible
+    
+    open Aardvark.Base.Incremental
+    open Aardvark.SceneGraph
+    open Aardvark.Application
 
     let quadSg =
         let quad =
@@ -45,6 +46,7 @@ module TicTacToe =
     printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
     #else
     let run () =
+        Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg sg
         win.Run()
     #endif

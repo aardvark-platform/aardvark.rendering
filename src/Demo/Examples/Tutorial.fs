@@ -34,18 +34,19 @@ How to build:
 namespace Examples
 #endif
 
-module HelloWorld = 
-
-    open Aardvark.Rendering.Interactive
+module Tutorial = 
 
     open System
     open Aardvark.Base
+    open Aardvark.Rendering.Interactive
+
+    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+    open Default // makes viewTrafo and other tutorial specicific default creators visible
+
     open Aardvark.Base.Incremental
     open Aardvark.SceneGraph
     open Aardvark.Application
 
-    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-    open Default // makes viewTrafo and other tutorial specicific default creators visible
 
     let quadSg =
         let quad =
@@ -68,6 +69,11 @@ module HelloWorld =
             // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
             |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
 
+    #if INTERACTIVE
     setSg sg
-
     printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
+    #else
+    let run () =
+        setSg sg
+        win.Run()
+    #endif

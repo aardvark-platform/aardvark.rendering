@@ -61,18 +61,13 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="FsiSetup.fs" />
-    <Compile Include="RenderingSetup.fs" />
-    <None Include="LoadReferences.fsx" />
-    <None Include="FsiSetup.fsx" />
-    <None Include="RenderingSetup.fsx" />
-    <None Include="Tutorial.fsx" />
-    <None Include="Render2TexturePrimitive.fsx" />
-    <None Include="Render2TextureComposable.fsx" />
-    <None Include="Render2TexturePrimitiveChangeableSizes.fsx" />
-    <None Include="PostProcessing.fsx" />
-    <None Include="Shadows.fsx" />
-    <None Include="GeometrySet.fsx" />
+    <Compile Include="Tutorial.fs" />
+    <Compile Include="Render2TexturePrimitive.fs" />
+    <Compile Include="Render2TextureComposable.fs" />
+    <Compile Include="Render2TexturePrimitiveChangeableSizes.fs" />
+    <Compile Include="PostProcessing.fs" />
+    <Compile Include="Shadows.fs" />
+    <Compile Include="GeometrySet.fs" />
     <Compile Include="LoD.fs" />
     <Compile Include="Tic-Tac-Toe.fs" />
     <Compile Include="HelloWorld.fs" />

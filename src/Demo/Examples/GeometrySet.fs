@@ -1,4 +1,5 @@
-﻿#if INTERACTIVE
+﻿
+#if INTERACTIVE
 #I @"../../../bin/Debug"
 #I @"../../../bin/Release"
 #load "LoadReferences.fsx"
@@ -6,21 +7,21 @@
 namespace Examples
 #endif
 
-module LoD = 
+module GeometrySet = 
 
     open System
     open Aardvark.Base
     open Aardvark.Rendering.Interactive
 
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-    //open Default // makes viewTrafo and other tutorial specicific default creators visible
-
+    open Default // makes viewTrafo and other tutorial specicific default creators visible
 
     open System.Collections.Generic
     open Aardvark.Base.Rendering
     open Aardvark.Base.Incremental
     open Aardvark.SceneGraph
     open Aardvark.Application
+    open Default 
 
     // ===================================================================================
     // kill entirely?
@@ -212,8 +213,8 @@ module LoD =
                 Mode = IndexedGeometryMode.PointList,
                 IndexedAttributes = 
                     SymDict.ofList [
-                            DefaultSemantic.Positions, Array.init pointCount (fun _ -> randomV3f()) :> Array
-                            DefaultSemantic.Colors, Array.init pointCount (fun _ -> randomColor()) :> Array
+                         DefaultSemantic.Positions, Array.init pointCount (fun _ -> randomV3f()) :> Array
+                         DefaultSemantic.Colors, Array.init pointCount (fun _ -> randomColor()) :> Array
                     ]
             )
 
@@ -452,7 +453,7 @@ module LoD =
                 async {
                     //do! Async.SwitchToNewThread()
                     let b = Helpers.box (Helpers.randomColor()) cell.bounds
-                    //do! Async.Sleep 5000
+                    //do! Async.Sleep 100
                     return b
                 }
 
@@ -558,7 +559,7 @@ module LoD =
             )
         )
 
-        let mainProj = perspective win
+        let mainProj = perspective()
         let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> Mod.constant
 
         let proj =
@@ -603,8 +604,7 @@ module LoD =
 
     let boxes = 
         nodes 
-            |> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
-            //|> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
+            |> ASet.mapAsync (fun n -> data.GetData n 100 )
             |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
             //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
 
@@ -623,7 +623,7 @@ module LoD =
         sg |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect                  
                 DefaultSurfaces.vertexColor  |> toEffect 
-                ]
+              ]
             // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
             // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
@@ -631,11 +631,12 @@ module LoD =
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
             //|> Sg.fillMode (Mod.constant FillMode.Line)
             //|> Sg.trafo (Mod.constant (Trafo3d.Scale 0.1))
-    
+   
     #if INTERACTIVE
     setSg final
+    printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
     #else
-    let run() =
+    let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg final
         win.Run()
