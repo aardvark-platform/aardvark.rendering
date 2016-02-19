@@ -39,34 +39,94 @@ module TicTacToe =
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
 
 
-    let cube = [| 0;1;2; 2;3;0;  
-                  0;3;4; 4;5;0;
-                  0;5;6; 6;1;0;
-                  1;6;7; 7;2;1;
-                  7;4;3; 3;2;7;
-                  4;7;6; 6;5;4 |]
+    open Aardvark.Base.Incremental.Git
 
-    let vertices = [| V3f.IIO; V3f.OIO; V3f.IOO; V3f.IOI; V3f.III; V3f.OII; V3f.OOI; |]
-    let cubeSg = 
-        IndexedGeometry(IndexedGeometryMode.TriangleList, cube,  
-                SymDict.ofList [DefaultSemantic.Positions, vertices :> Array], SymDict.empty)
-          |> Sg.ofIndexedGeometry
+    let git = Aardvark.Base.Incremental.Git.init ()
+
+    module PMod =
+        let value (p : pmod<_>) = p.Value
+        let modify f p =
+            PMod.change p (f (value p))
+
+    type Tick = X | O
+    type Player = A | B
+    type PlayerState = { cursor : V3i }
+    type GameState = 
+        { 
+            player : Player
+            arr    : pmod<Tick>[,,] 
+            stateA : pmod<PlayerState>
+            stateB : pmod<PlayerState>
+        }
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module GameState = 
+        let mapCursor f { cursor = cursor } = { cursor = f cursor }
+        let empty = { 
+            arr = Array3D.init 4 4 4 (fun x y z -> git.pmod (sprintf "%A" (x,y,z)) O)
+            player = A
+            stateA = git.pmod "playerA" { cursor = V3i.OOO }
+            stateB = git.pmod "playerA" { cursor = V3i.OOO }
+        }
+
+    type Dir = Left | Right | Forward | Backward | Up | Down
+    type Input = Move of Dir | Set
+    
+    let directions = Map.ofList [ Left, (fun v -> v - V3i.IOO); Right, (fun v -> v + V3i.IOO); Forward, (fun v -> v + V3i.OIO); Backward, (fun v -> v - V3i.OIO); Up, (fun v -> v + V3i.OOI); Down, (fun v -> v - V3i.OOI) ]
+    let processInput (g : GameState) (i : Input) =
+        let c = [
+            match i with
+             | Move d -> 
+                let dir = Map.find d directions
+                match g.player with 
+                 | A -> yield PMod.modify (GameState.mapCursor dir) g.stateA 
+                 | B -> yield PMod.modify (GameState.mapCursor dir) g.stateB
+             | _ -> ()
+        ]
+        for c in c do git.apply c
+        git.commit "blubber"
+        g
+
+    let mutable s = GameState.empty
+
+    win.Keyboard.KeyDown(Keys.Up).Values.Subscribe(fun () -> 
+        s <- processInput s (Move Up)
+    ) |> ignore
+    win.Keyboard.KeyDown(Keys.Down).Values.Subscribe(fun () -> 
+        s <- processInput s (Move Down)
+    ) |> ignore
+    win.Keyboard.KeyDown(Keys.Right).Values.Subscribe(fun () -> 
+        s <- processInput s (Move Right)
+    ) |> ignore
+    win.Keyboard.KeyDown(Keys.Left).Values.Subscribe(fun () -> 
+        s <- processInput s (Move Left)
+    ) |> ignore
+
+
+    let cubeSg = Helpers.wireBox C4b.White Box3d.Unit |> Sg.ofIndexedGeometry
+    let cube c = Helpers.box c Box3d.Unit |> Sg.ofIndexedGeometry
 
     let boxes = 
         [| for x in 0 .. 3 do
             for y in 0 .. 3 do
               for z in 0 .. 3 do
-                let t = Trafo3d.Translation(float x * 2.0,float y * 2.0 ,float z * 2.0) |> Mod.constant
+                let t = Trafo3d.Translation(float x ,float y ,float z) |> Mod.constant
                 yield Sg.trafo t cubeSg |] |> Sg.group
 
+    let cursor = 
+        let toTrafo c = c.cursor |> V3d.op_Explicit |> Trafo3d.Translation
+        Sg.group [ Sg.trafo (s.stateA |> Mod.map toTrafo) (cube C4b.Red)
+                   Sg.trafo (s.stateA |> Mod.map toTrafo) (cube C4b.Red) ]
 
     let sg =
         boxes |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect                   // compose shaders by using FShade composition.
                 DefaultSurfaces.constantColor C4f.Red |> toEffect   // use standard trafo + map a constant color to each fragment
-                //Shaders.simpleLighting |> toEffect
+                Shaders.simpleLighting |> toEffect
                 ]
-            |> Sg.cullMode (Mod.constant Rendering.CullMode.CounterClockwise)
+            |> Sg.andAlso cursor 
+            |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
+            |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
 
 
     let run () =

@@ -12,9 +12,9 @@ let main args =
     //Examples.Render2TexturePrimitive.run()
     //Examples.Render2TextureComposable.run()
     //Examples.Render2TexturePrimiviteChangeableSize.run()
-    Examples.PostProcessing.run()
+    //Examples.PostProcessing.run()
     //Examples.Shadows.run()
     //Examples.GeometrySet.run()
     //Examples.LoD.run()
-    //Examples.TicTacToe.run()
+    Examples.TicTacToe.run()
     0
