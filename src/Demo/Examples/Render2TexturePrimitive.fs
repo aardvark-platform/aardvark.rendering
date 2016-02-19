@@ -15,20 +15,20 @@ After creation, we run the render tasks by executing the side effecting function
 namespace Examples
 #endif
 
+open System
+open Aardvark.Base
+open Aardvark.Rendering.Interactive
+
+open Aardvark.Base.Incremental
+open Aardvark.SceneGraph
+open Aardvark.Application
+open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
+open Default // makes viewTrafo and other tutorial specicific default creators visible
+
 module Render2TexturePrimitive = 
 
-    open System
-    open Aardvark.Base
-    open Aardvark.Rendering.Interactive
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
     
-
-    open Aardvark.Base.Incremental
-    open Aardvark.SceneGraph
-    open Aardvark.Application
-    open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
-    open Default // makes viewTrafo and other tutorial specicific default creators visible
-
 
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
@@ -99,12 +99,14 @@ module Render2TexturePrimitive =
             |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
             |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
 
-    #if INTERACTIVE
-    setSg sg
-    printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
-    #else
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg sg
         win.Run()
-    #endif
+
+open Render2TexturePrimitive
+
+#if INTERACTIVE
+setSg sg
+printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
+#endif

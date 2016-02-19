@@ -17,6 +17,8 @@ module FsiSetup =
     open Aardvark.Application
     open Aardvark.Application.WinForms
 
+    let mutable defaultCamera = true
+
     let mutable private initialized = 0
 
     let private winFormsApp = lazy ( new OpenGlApplication() )
@@ -105,7 +107,20 @@ module FsiSetup =
 
         // mk use of nanovg
         Aardvark.Rendering.NanoVg.TextAlign.BaseLine |> ignore
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, Sg.DynamicNode root) //|> DefaultOverlays.withStatistics
+
+        let sg = 
+            if defaultCamera |> not then Sg.dynamic root
+            else
+              Sg.dynamic root
+                |> Sg.effect [
+                        DefaultSurfaces.trafo |> toEffect               
+                        DefaultSurfaces.constantColor C4f.Red |> toEffect  
+                        ]
+                |> Sg.viewTrafo (viewTrafo   win |> Mod.map CameraView.viewTrafo ) 
+                |> Sg.projTrafo (perspective win |> Mod.map Frustum.projTrafo    )  
+
+        let task = 
+            app.Runtime.CompileRender(win.FramebufferSignature, sg) //|> DefaultOverlays.withStatistics
 
         win.Text <- @"Aardvark rocks \o/"
         win.Visible <- true
@@ -113,6 +128,7 @@ module FsiSetup =
         let fixupRenderTask () =
             if win.RenderTask = Unchecked.defaultof<_> then win.RenderTask <- task
 
-        (fun s -> fixupRenderTask () ; transact (fun () -> Mod.change root s)), win, task
+
+        (fun (s:ISg) -> fixupRenderTask () ; transact (fun () -> Mod.change root  s)), win, task
       
     

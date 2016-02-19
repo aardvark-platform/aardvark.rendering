@@ -98,17 +98,21 @@ module Render2TexturePrimiviteChangeableSize =
             |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
             |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
 
-    #if INTERACTIVE
-    setSg sg
-    printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
-    #else
+
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg sg
         win.Run()
-    #endif
 
-    // check out how to change render targets imperatively
-    //transact (fun () -> Mod.change sizeM (V2i(16,16)))
-    //clear.Run(null, Mod.force fbo) |> ignore
-    //task.Run(null,  Mod.force fbo) |> ignore
+    
+open Render2TexturePrimiviteChangeableSize
+
+#if INTERACTIVE
+setSg sg
+printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
+#endif
+
+// check out how to change render targets imperatively
+//transact (fun () -> Mod.change sizeM (V2i(16,16)))
+//clear.Run(null, Mod.force fbo) |> ignore
+//task.Run(null,  Mod.force fbo) |> ignore

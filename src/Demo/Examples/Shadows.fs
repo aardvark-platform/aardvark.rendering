@@ -18,22 +18,22 @@ similar way. (e.g. fluid-rendering things, etc.)
 namespace Examples
 #endif
 
+open System
+open Aardvark.Base
+open Aardvark.Rendering.Interactive
+
+
+open Aardvark.Base.Incremental
+open Aardvark.SceneGraph
+open Aardvark.Application
+open Aardvark.Base.Incremental.Operators
+open Aardvark.Base.Rendering
+open Aardvark.Rendering.NanoVg
+
 module Shadows = 
 
-    open System
-    open Aardvark.Base
-    open Aardvark.Rendering.Interactive
-
+    Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-
-    open Aardvark.Base.Incremental
-    open Aardvark.SceneGraph
-    open Aardvark.Application
-    open Aardvark.Base.Incremental.Operators
-    open Aardvark.Base.Rendering
-    open Aardvark.Rendering.NanoVg
-    open Examples
-
 
     let win = openWindow()
 
@@ -136,16 +136,11 @@ module Shadows =
             |> Sg.texture DefaultSemantic.DiffuseColorTexture shadowDepth
 
     let g = Sg.group [sg]
-    showSg win g
 
-    #if INTERACTIVE
-    showSg win g
-    #else
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         showSg win g
         System.Windows.Forms.Application.Run ()
-    #endif
 
     let reset() = g.Clear()
     let set() = g.Add(sg) |> ignore
@@ -154,3 +149,9 @@ module Shadows =
         transact (fun () ->
             Mod.change shadowMapSize (V2i(w,h))
         )
+
+open Shadows
+
+#if INTERACTIVE
+showSg win g
+#endif

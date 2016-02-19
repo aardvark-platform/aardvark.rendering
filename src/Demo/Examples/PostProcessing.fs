@@ -18,21 +18,23 @@ similar way. (e.g. fluid-rendering things, etc.)
 namespace Examples
 #endif
 
+open System
+open Aardvark.Base
+open Aardvark.Rendering.Interactive
+
+open Default // makes viewTrafo and other tutorial specicific default creators visible
+
+open Aardvark.Base.Incremental
+open Aardvark.SceneGraph
+open Aardvark.Application
+open Aardvark.Base.Incremental.Operators
+open Aardvark.Base.Rendering
+open Aardvark.Rendering.NanoVg
+
 module PostProcessing = 
 
-    open System
-    open Aardvark.Base
-    open Aardvark.Rendering.Interactive
-
+    Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-    open Default // makes viewTrafo and other tutorial specicific default creators visible
-
-    open Aardvark.Base.Incremental
-    open Aardvark.SceneGraph
-    open Aardvark.Application
-    open Aardvark.Base.Incremental.Operators
-    open Aardvark.Base.Rendering
-    open Aardvark.Rendering.NanoVg
 
     // let's start by creating our example-scene containing random points.
     let pointSize = Mod.init 50.0
@@ -216,18 +218,10 @@ module PostProcessing =
                 |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
         )
 
-
-
-
-    #if INTERACTIVE
-    setSg final
-    printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
-    #else
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg final
         win.Run()
-    #endif
 
     // finally we create a simple utility for changing the pointSize
     // you can play with it and see the render-result adjust to the given point-size.
@@ -240,4 +234,12 @@ module PostProcessing =
     let showOnlyX() = showTexture blurredOnlyX
     let showOnlyY() = showTexture blurredOnlyY
     let showFinal() = setSg final      
+
+
+open PostProcessing
+
+#if INTERACTIVE
+setSg final
+printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
+#endif
 

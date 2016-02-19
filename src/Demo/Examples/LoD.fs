@@ -6,21 +6,23 @@
 namespace Examples
 #endif
 
+open System
+open Aardvark.Base
+open Aardvark.Rendering.Interactive
+
+//open Default // makes viewTrafo and other tutorial specicific default creators visible
+
+
+open System.Collections.Generic
+open Aardvark.Base.Rendering
+open Aardvark.Base.Incremental
+open Aardvark.SceneGraph
+open Aardvark.Application
+
 module LoD = 
 
-    open System
-    open Aardvark.Base
-    open Aardvark.Rendering.Interactive
-
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-    //open Default // makes viewTrafo and other tutorial specicific default creators visible
 
-
-    open System.Collections.Generic
-    open Aardvark.Base.Rendering
-    open Aardvark.Base.Incremental
-    open Aardvark.SceneGraph
-    open Aardvark.Application
 
     // ===================================================================================
     // kill entirely?
@@ -632,11 +634,14 @@ module LoD =
             //|> Sg.fillMode (Mod.constant FillMode.Line)
             //|> Sg.trafo (Mod.constant (Trafo3d.Scale 0.1))
     
-    #if INTERACTIVE
-    setSg final
-    #else
     let run() =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg final
         win.Run()
-    #endif
+
+open LoD
+
+#if INTERACTIVE
+setSg final
+#else
+#endif
