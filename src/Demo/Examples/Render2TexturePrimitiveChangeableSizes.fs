@@ -15,21 +15,21 @@ After creation, we run the render tasks by executing the side effecting function
 namespace Examples
 #endif
 
+
+open System
+open Aardvark.Base
+open Aardvark.Rendering.Interactive
+
+open Default // makes viewTrafo and other tutorial specicific default creators visible
+
+open Aardvark.Base.Incremental
+open Aardvark.SceneGraph
+open Aardvark.Application
+open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
+open Aardvark.SceneGraph.Semantics
+
 module Render2TexturePrimiviteChangeableSize = 
-
-    open System
-    open Aardvark.Base
-    open Aardvark.Rendering.Interactive
-
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-    open Default // makes viewTrafo and other tutorial specicific default creators visible
-
-    open Aardvark.Base.Incremental
-    open Aardvark.SceneGraph
-    open Aardvark.Application
-    open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
-    open Aardvark.SceneGraph.Semantics
-
 
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
