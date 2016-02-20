@@ -111,6 +111,7 @@ module FsiSetup =
         let sg = 
             if defaultCamera |> not then Sg.dynamic root
             else
+              Log.line "using default camera. If you need identity transformation for your scene, use Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false prior to initialization. "
               Sg.dynamic root
                 |> Sg.effect [
                         DefaultSurfaces.trafo |> toEffect               

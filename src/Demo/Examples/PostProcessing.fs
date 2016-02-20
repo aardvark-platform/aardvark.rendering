@@ -62,7 +62,7 @@ module PostProcessing =
 
         type Vertex = { [<TexCoord>] tc : V2d; [<Position>] p : V4d }
 
-        let input =
+        let inputTex =
             sampler2d {
                 texture uniform?DiffuseColorTexture
                 filter Filter.MinMagMipPoint
@@ -94,7 +94,7 @@ module PostProcessing =
                 let off = V2d(1.0 / float uniform.ViewportSize.X, 0.0)
                 for x in -halfFilterSize..halfFilterSize do
                     let w = weights.[x+halfFilterSize]
-                    color <- color + w * input.Sample(v.tc + (float x) * off)
+                    color <- color + w * inputTex.Sample(v.tc + (float x) * off)
 
                 return V4d(color.XYZ, 1.0)
             }
@@ -105,7 +105,7 @@ module PostProcessing =
                 let off = V2d(0.0, 1.0 / float uniform.ViewportSize.Y)
                 for y in -halfFilterSize..halfFilterSize do
                     let w = weights.[y+halfFilterSize]
-                    color <- color + w * input.Sample(v.tc + (float y) * off)
+                    color <- color + w * inputTex.Sample(v.tc + (float y) * off)
 
                 return V4d(color.XYZ, 1.0)
             }
@@ -219,6 +219,7 @@ module PostProcessing =
         )
 
     let run () =
+        Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg final
         win.Run()
