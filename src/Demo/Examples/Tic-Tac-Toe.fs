@@ -125,6 +125,7 @@ module TicTacToe =
                 Shaders.simpleLighting |> toEffect
                 ]
             |> Sg.andAlso cursor 
+            |> Sg.andAlso (Sphere.solidSphere C4b.Gray 5 |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; Shaders.simpleLighting |> toEffect ])
             |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
             |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
 

@@ -129,3 +129,94 @@ module RenderingSetup =
                     ]
 
             )
+
+    module Sphere =
+        open System.Collections.Generic
+
+        let generate level =
+            let vertices = List<_>()
+        
+            let addVertex =
+                let mutable index = 0 
+                fun (p:V3f) ->
+                    vertices.Add <| Vec.normalize p
+                    index <- index + 1
+                    index - 1
+
+            let emitTriangle (indices:List<_>) tri =
+                indices.Add tri
+
+            let getMiddlePoint =
+                let cache = Dictionary()
+                fun p1 p2 -> 
+                    let small,great = if p1 < p2 then int64 p1,int64 p2 else int64 p2,int64 p1
+                    let key = (small <<< 32) + great
+                    match cache.TryGetValue key with
+                        | (false,_) -> 
+                            let p1 = vertices.[p1]
+                            let p2 = vertices.[p2]
+                            let m = V3f.op_Multiply(0.5f,p1+p2)
+                            let i = addVertex m
+                            //cache.[key] <- i
+                            i
+                        | (true,v) -> v
+
+            let t = (1.0 + Fun.Sqrt 5.0) / 2.0
+
+            let v = 
+                [
+                    V3f(-1.0,  t, 0.0);  V3f( 1.0,  t, 0.0);  V3f(-1.0, -t, 0.0); V3f( 1.0, -t, 0.0)
+                    V3f( 0.0, -1.0,  t); V3f( 0.0,  1.0,  t); V3f( 0.0, -1.0, -t); V3f( 0.0,  1.0, -t)
+                    V3f(  t, 0.0, -1.0); V3f(  t, 0.0,  1.0); V3f( -t, 0.0, -1.0); V3f( -t, 0.0,  1.0)
+                ] |> List.iter (ignore << addVertex)
+
+            let indices = List<_>()
+
+            let i = 
+                [ 
+                  (0, 11, 5); (0,  5,  1); (0 ,  1, 7 ); (0 , 7, 10); (0, 10, 11)
+                  (1, 5 , 9); (5, 11,  4); (11, 10, 2 ); (10, 7, 6 ); (7, 1 , 8 )
+                  (3,  9, 4); (3,  4,  2); (3 ,  2, 6 ); (3 , 6, 8 ); (3, 8 , 9 )
+                  (4,  9, 5); (2,  4, 11); (6 ,  2, 10); (8 , 6, 7 ); (9, 8 , 1 ) 
+                ] |> List.iter (emitTriangle indices)
+        
+            let rec run faces toGo = 
+                if toGo = 0 then faces
+                else
+                    let newFaces = List()
+                    for (v1,v2,v3) in faces do
+                      let a = getMiddlePoint v1 v2
+                      let b = getMiddlePoint v2 v3
+                      let c = getMiddlePoint v3 v1
+                  
+                      emitTriangle newFaces (v1, a, c)
+                      emitTriangle newFaces (v2, b, a)
+                      emitTriangle newFaces (v3, c, b)
+                      emitTriangle newFaces (a, b, c)
+                    run newFaces (toGo - 1)
+
+            let indices = run indices level
+
+            let normals =
+                let center = V3f.OOO
+                let normals = List()
+                for v in vertices do
+                    normals.Add ( (v - center).Normalized )
+                normals
+
+            indices.ToArray() |> Array.collect (fun (a,b,c) -> [|a;b;c|]), vertices.ToArray(), normals.ToArray()
+
+
+        let solidSphere color n =
+            let (indices,positions,normals) = generate n
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.TriangleList,
+                IndexArray = indices,
+
+                IndexedAttributes =
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, positions :> Array
+                        DefaultSemantic.Normals, normals :> Array
+                        DefaultSemantic.Colors, indices |> Array.map (fun _ -> color) :> Array
+                    ]
+            ) |> Sg.ofIndexedGeometry
