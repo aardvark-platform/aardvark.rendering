@@ -18,6 +18,9 @@ type CameraView private(sky : V3d, location : V3d, forward : V3d, up : V3d, righ
 
     member x.ViewTrafo = viewTrafo.Value
 
+    override x.ToString() =
+        sprintf "CameraView(sky=%A, location=%A, forward=%A, up=%A, right=%A)" sky location forward up right
+
     static member LookAt (location : V3d, center : V3d, sky : V3d) =
         let fw = center - location |> Vec.normalize
         let right = Vec.cross fw sky |> Vec.normalize

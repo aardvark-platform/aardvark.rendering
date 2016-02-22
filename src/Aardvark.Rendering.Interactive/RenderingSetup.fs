@@ -28,9 +28,13 @@ module RenderingSetup =
 
             quad |> Sg.ofIndexedGeometry
 
-        let viewTrafo () =
-            let view =  CameraView.LookAt(V3d(3.0, 3.0, 3.0), V3d.Zero, V3d.OOI)
+        let viewTrafo' center lookAt =
+            let view =  CameraView.LookAt(center, lookAt, V3d.OOI)
             DefaultCameraController.control win.Mouse win.Keyboard win.Time view
+
+        let viewTrafo () =
+            viewTrafo' ( V3d(3.0, 3.0, 3.0) ) V3d.Zero
+
 
         let perspective () = 
             win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))

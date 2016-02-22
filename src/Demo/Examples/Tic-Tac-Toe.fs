@@ -116,6 +116,7 @@ module TicTacToe =
     let inField (c : V3i) = 
         Box3i.FromMinAndSize(V3i.OOO,V3i.III * 3).Contains c
 
+
     let visualizeHistory = GitVis.visualizeHistory "history.dgml"
 
     let processInput (g : GameState) (i : Input) =
@@ -187,7 +188,7 @@ module TicTacToe =
                     Array3D.get s.arr x y z
                       |> Mod.map (function
                               | Tick A -> Sg.trafo t markA
-                              | Tick b -> Sg.trafo t markB
+                              | Tick B -> Sg.trafo t markB
                               | Free -> Sg.trafo t cubeSg
                           ) 
                       |> Sg.dynamic
