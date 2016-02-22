@@ -52,10 +52,14 @@ module TicTacToe =
                     links.AppendLine(sprintf "\t\t<Link Source=\"%A\" Target=\"%A\"/>" h.hash h.parent.hash) |> ignore
                     genDgml nodes links v h.parent
 
-        let visualizeHistory (fileName : string) (h : Commit) =
+        let visualizeHistory (fileName : string) (branches : list<string*Commit>) =
             let nodes = StringBuilder()
             let links = StringBuilder()
-            genDgml nodes links (HashSet()) h 
+            let visited = HashSet()
+            for (name,b) in branches do
+                nodes.AppendLine(sprintf "\t\t<Node Id=\"%s\" Label=\"%s\"/>" name name) |> ignore
+                links.AppendLine(sprintf "\t\t<Link Source=\"%s\" Target=\"%A\"/>" name b.hash) |> ignore
+                genDgml nodes links visited b
             use file = new StreamWriter( fileName )
             file.WriteLine("<?xml version='1.0' encoding='utf-8'?>")
             file.WriteLine("<DirectedGraph xmlns=\"http://schemas.microsoft.com/vs/2009/dgml\">")
@@ -85,10 +89,12 @@ module TicTacToe =
             stateA : pmod<PlayerState>
             stateB : pmod<PlayerState>
         }
+    type Dir = Left | Right | Forward | Backward | Up | Down
+    type Input = Move of Dir | Set
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module GameState = 
-        let mapCursor v f old = 
+        let move v f old = 
             let c : V3i = f old.cursor
             if v c then { cursor = c }
             else old
@@ -99,9 +105,6 @@ module TicTacToe =
             stateA = git.pmod "playerA" { cursor = V3i.OOO }
             stateB = git.pmod "playerA" { cursor = V3i.OOO }
         }
-
-    type Dir = Left | Right | Forward | Backward | Up | Down
-    type Input = Move of Dir | Set
     
     let directions = Map.ofList [ Left, (fun v -> v - V3i.IOO); Right, (fun v -> v + V3i.IOO); Forward, (fun v -> v + V3i.OIO); Backward, (fun v -> v - V3i.OIO); Up, (fun v -> v + V3i.OOI); Down, (fun v -> v - V3i.OOI) ]
 
@@ -110,9 +113,10 @@ module TicTacToe =
          | A -> Mod.change g.player B
          | B -> Mod.change g.player A
 
-    let visualizeHistory = GitVis.visualizeHistory "history.dgml"
+    let inField (c : V3i) = 
+        Box3i.FromMinAndSize(V3i.OOO,V3i.III * 3).Contains c
 
-    let inField (c : V3i) = Box3i.FromMinAndSize(V3i.OOO,V3i.III * 3).Contains c
+    let visualizeHistory = GitVis.visualizeHistory "history.dgml"
 
     let processInput (g : GameState) (i : Input) =
         let player = Mod.force g.player
@@ -125,22 +129,22 @@ module TicTacToe =
                     inField c && (Array3D.get g.arr c.X c.Y c.Z).Value = Free
 
                 match player with 
-                 | A -> yield PMod.modify (GameState.mapCursor valid dir) g.stateA, "a moved"
-                 | B -> yield PMod.modify (GameState.mapCursor valid dir) g.stateB, "b moved"
+                 | A -> yield PMod.modify (GameState.move valid dir) g.stateA, "a moved"
+                 | B -> yield PMod.modify (GameState.move valid dir) g.stateB, "b moved"
              
              | Set ->
-                let (x,y,z),msg = 
+                let pos,msg = 
                     match player with
-                      | A -> g.stateA.Value.cursor |> V3i.toTup, sprintf "A set on %A" g.stateA.Value.cursor
-                      | B -> g.stateB.Value.cursor |> V3i.toTup, sprintf "B set on %A" g.stateA.Value.cursor
-                yield PMod.change (Array3D.get g.arr x y z) (Tick player),msg
+                      | A -> g.stateA.Value.cursor, sprintf "A set on %A" g.stateA.Value.cursor
+                      | B -> g.stateB.Value.cursor, sprintf "B set on %A" g.stateA.Value.cursor
+                yield PMod.change (Array3D.get g.arr pos.X pos.Y pos.Z) (Tick player),msg
         ]
         for (a,msg) in c do git.apply a
         let msg = c |> Seq.toArray |> Array.map snd |> String.Concat
         git.commit (sprintf "game: %s" msg)
         
         match i with 
-            | Set -> visualizeHistory git.History  |> ignore 
+            | Set -> visualizeHistory (git.Branches |> Dictionary.toList) |> ignore 
             | _ -> ()
         if i = Set then transact (fun _ -> flipPlayer g) else ()
 
@@ -221,6 +225,16 @@ module TicTacToe =
 
 
 open TicTacToe
+
+module SaveGames =
+    open System.Collections.Generic
+    let saveGames = List<_>()
+    let save s =
+        git.checkout s
+        saveGames.Add s
+
+    let load s = 
+        git.checkout s
 
 #if INTERACTIVE
 setSg sg
