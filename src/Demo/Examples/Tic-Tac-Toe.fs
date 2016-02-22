@@ -76,11 +76,11 @@ module TicTacToe =
             PMod.change p (f (value p))
 
     type Player = A | B
-    type Tick = X of Player | O
+    type Tick = Tick of Player | Free
     type PlayerState = { cursor : V3i }
     type GameState = 
         { 
-            player : Player
+            player : IModRef<Player>
             arr    : pmod<Tick>[,,] 
             stateA : pmod<PlayerState>
             stateB : pmod<PlayerState>
@@ -88,13 +88,14 @@ module TicTacToe =
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module GameState = 
-        let mapCursor f { cursor = cursor } = 
-            let c : V3i = f cursor
-            printfn "map to: %A" c
-            { cursor = V3i(clamp 0 3 c.X, clamp 0 3 c.Y, clamp 0 3 c.Z) }
+        let mapCursor v f old = 
+            let c : V3i = f old.cursor
+            if v c then { cursor = c }
+            else old
+
         let empty = { 
-            arr = Array3D.init 4 4 4 (fun x y z -> git.pmod (sprintf "%A" (x,y,z)) O)
-            player = A
+            arr = Array3D.init 4 4 4 (fun x y z -> git.pmod (sprintf "%A" (x,y,z)) Free)
+            player = Mod.init A
             stateA = git.pmod "playerA" { cursor = V3i.OOO }
             stateB = git.pmod "playerA" { cursor = V3i.OOO }
         }
@@ -105,50 +106,59 @@ module TicTacToe =
     let directions = Map.ofList [ Left, (fun v -> v - V3i.IOO); Right, (fun v -> v + V3i.IOO); Forward, (fun v -> v + V3i.OIO); Backward, (fun v -> v - V3i.OIO); Up, (fun v -> v + V3i.OOI); Down, (fun v -> v - V3i.OOI) ]
 
     let flipPlayer (g : GameState) =
-        match g.player with
-         | A -> { g with player = B }
-         | B -> { g with player = A }
+        match g.player |> Mod.force with
+         | A -> Mod.change g.player B
+         | B -> Mod.change g.player A
 
     let visualizeHistory = GitVis.visualizeHistory "history.dgml"
 
+    let inField (c : V3i) = Box3i.FromMinAndSize(V3i.OOO,V3i.III * 3).Contains c
+
     let processInput (g : GameState) (i : Input) =
+        let player = Mod.force g.player
         let c = [
             match i with
              | Move d -> 
                 let dir = Map.find d directions
-                match g.player with 
-                 | A -> yield PMod.modify (GameState.mapCursor dir) g.stateA, "a moved"
-                 | B -> yield PMod.modify (GameState.mapCursor dir) g.stateB, "b moved"
+
+                let valid ( c : V3i ) = 
+                    inField c && (Array3D.get g.arr c.X c.Y c.Z).Value = Free
+
+                match player with 
+                 | A -> yield PMod.modify (GameState.mapCursor valid dir) g.stateA, "a moved"
+                 | B -> yield PMod.modify (GameState.mapCursor valid dir) g.stateB, "b moved"
+             
              | Set ->
                 let (x,y,z),msg = 
-                    match g.player with
+                    match player with
                       | A -> g.stateA.Value.cursor |> V3i.toTup, sprintf "A set on %A" g.stateA.Value.cursor
                       | B -> g.stateB.Value.cursor |> V3i.toTup, sprintf "B set on %A" g.stateA.Value.cursor
-                yield PMod.change (Array3D.get g.arr x y z) (X g.player),msg
+                yield PMod.change (Array3D.get g.arr x y z) (Tick player),msg
         ]
         for (a,msg) in c do git.apply a
         let msg = c |> Seq.toArray |> Array.map snd |> String.Concat
         git.commit (sprintf "game: %s" msg)
+        
         match i with 
             | Set -> visualizeHistory git.History  |> ignore 
             | _ -> ()
-        if i = Set then flipPlayer g else g
+        if i = Set then transact (fun _ -> flipPlayer g) else ()
 
-    let mutable s = GameState.empty
+    let s = GameState.empty
 
     let keyBindings =
         [ Keys.Up,    Move Up
           Keys.Down,  Move Down 
-          Keys.Right, Move Right 
-          Keys.Left,  Move Left 
-          Keys.F,     Move Backward 
-          Keys.R,     Move Forward 
+          Keys.Right, Move Left 
+          Keys.Left,  Move Right 
+          Keys.F,     Move Forward 
+          Keys.R,     Move Backward 
           Keys.Space, Set
         ] 
 
     for (k,a) in keyBindings do
         win.Keyboard.KeyDown(k).Values.Subscribe(fun () -> 
-            s <- processInput s a
+            processInput s a
         ) |> ignore
 
     win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () -> 
@@ -157,41 +167,51 @@ module TicTacToe =
 
     let cubeSg = Helpers.wireBox C4b.White Box3d.Unit |> Sg.ofIndexedGeometry
     let cube c = Helpers.box c Box3d.Unit |> Sg.ofIndexedGeometry
-    let markA = 
-        Sphere.solidSphere C4b.Green 5 |> Sg.trafo (Mod.constant <| Trafo3d.Translation(0.5,0.5,0.5) * Trafo3d.Scale 0.5)
+    let cursorA = Helpers.wireBox C4b.Green Box3d.Unit |> Sg.ofIndexedGeometry
+    let cursorB = Helpers.wireBox C4b.Red Box3d.Unit |> Sg.ofIndexedGeometry
+    let markA = Sphere.solidSphere C4b.Green 5 |> Sg.trafo (Mod.constant <| Trafo3d.Scale 0.5 *  Trafo3d.Translation(0.5,0.5,0.5))
     let markB = cube C4b.Red
 
     let boxes = 
         [|
             for x in 0 .. 3 do
-                for y in 0 .. 3 do
-                    for z in 0 .. 3 do
-                        let t = Trafo3d.Translation(float x ,float y ,float z) |> Mod.constant
-                        yield Array3D.get s.arr x y z
-                                |> Mod.map (fun n ->
-                                        match n with 
-                                         | X p -> match p with
-                                                    | A -> Sg.trafo t markA
-                                                    | b -> Sg.trafo t markB
-                                         | O -> Sg.trafo t cubeSg
-                                    ) 
-                                |> Sg.dynamic
+             for y in 0 .. 3 do
+              for z in 0 .. 3 do
+                 let t = 
+                    Trafo3d.Translation(float x ,float y ,float z) |> Mod.constant
+                 yield 
+                    Array3D.get s.arr x y z
+                      |> Mod.map (function
+                              | Tick A -> Sg.trafo t markA
+                              | Tick b -> Sg.trafo t markB
+                              | Free -> Sg.trafo t cubeSg
+                          ) 
+                      |> Sg.dynamic
         |] |> Sg.group
 
     let cursor = 
         let toTrafo c = c.cursor |> V3d.op_Explicit |> Trafo3d.Translation
-        Sg.group [ Sg.trafo (s.stateA |> Mod.map toTrafo) (cube C4b.Red)
-                   Sg.trafo (s.stateB |> Mod.map toTrafo) (cube C4b.Red) ]
+        let A = s.player |> Mod.map ((=)A)
+        let B = s.player |> Mod.map ((=)B)
+        Sg.group [ Sg.onOff A <| Sg.trafo (s.stateA |> Mod.map toTrafo) (cube C4b.Blue)
+                   Sg.onOff B <| Sg.trafo (s.stateB |> Mod.map toTrafo) (cube C4b.Red) ]
+
+    let viewTrafo = 
+        let view =  CameraView.LookAt(V3d(2, 12, 7), V3d(2,2,2), V3d.OOI)
+        Mod.integrate view win.Time 
+            [DefaultCameraController.controlOrbitAround win.Mouse 
+                (Mod.constant <| V3d(2,2,2))]
 
     let sg =
-        boxes |> Sg.effect [
-                DefaultSurfaces.trafo |> toEffect                   // compose shaders by using FShade composition.
-                DefaultSurfaces.constantColor C4f.Red |> toEffect   // use standard trafo + map a constant color to each fragment
+        boxes
+        |> Sg.andAlso cursor 
+        |> Sg.effect [
+                DefaultSurfaces.trafo |> toEffect            
                 DefaultSurfaces.simpleLighting |> toEffect
                 ]
-            |> Sg.andAlso cursor 
-            |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
-            |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
+        |> Sg.andAlso cursor 
+        |> Sg.viewTrafo (viewTrafo      |> Mod.map CameraView.viewTrafo )
+        |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
 
 
     let run () =
