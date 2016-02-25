@@ -452,9 +452,9 @@ module LoD =
 
             member x.GetData (cell : Node) (count : int) =
                 async {
-                    //do! Async.SwitchToNewThread()
+                    do! Async.SwitchToThreadPool()
                     let b = Helpers.box (Helpers.randomColor()) cell.bounds
-                    //do! Async.Sleep 5000
+                    do! Async.Sleep 200
                     return b
                 }
 
@@ -468,7 +468,7 @@ module LoD =
                 let viewProj = view * projTrafo
                 let camLocation = view.GetViewPosition()
 
-                let result = List<Node>()
+                let result = HashSet<Node>()
 
                 x.Traverse(fun node ->
                     if node.bounds.IntersectsFrustum viewProj.Forward then
@@ -490,10 +490,10 @@ module LoD =
                                 if projAvgDistance > wantedNearPlaneDistance then
                                     true
                                 else
-                                    result.Add node
+                                    result.Add node |> ignore
                                     false
                         else
-                            result.Add node
+                            result.Add node |> ignore
                             false
                     else
                         false
@@ -605,7 +605,7 @@ module LoD =
 
     let boxes = 
         nodes 
-            |> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
+            |> ASet.mapAsync (fun n -> data.GetData n 100)
             //|> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
             |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
             //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
