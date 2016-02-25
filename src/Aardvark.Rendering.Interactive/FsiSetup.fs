@@ -34,9 +34,11 @@ module FsiSetup =
         else failwithf "could not find entry assembly: %s" entryPath
         
         if Interlocked.Exchange(&initialized, 1) = 0 then
+            #if INTERACTIVE
             System.Environment.CurrentDirectory <- entryDir
             IntrospectionProperties.CustomEntryAssembly <- 
                 System.Reflection.Assembly.LoadFile(entryPath)
+            #endif
 
             Ag.initialize()
             Aardvark.Base.Ag.unpack <- fun o ->

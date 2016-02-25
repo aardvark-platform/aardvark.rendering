@@ -398,6 +398,7 @@ module LoD =
     type Node =
         {
             id : obj
+            level : int
             bounds : Box3d
             inner : bool
             granularity : float
@@ -425,7 +426,7 @@ module LoD =
                 let rec traverse (level : int) (b : Box3d) =
                     let box = b
                     let n = 100.0
-                    let node = { id = b; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / (n*n*n)) }
+                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n) }
 
                     if f node then
                         let center = b.Center
@@ -464,12 +465,13 @@ module LoD =
         open System.Collections.Concurrent
 
         type IDataProvider with
-            member x.Rasterize(view : Trafo3d, frustum : Frustum, wantedNearPlaneDistance : float) =
-                let projTrafo = Frustum.projTrafo frustum
+            member x.Rasterize(view : Trafo3d, projTrafo : Trafo3d, wantedNearPlaneDistance : float) =
                 let viewProj = view * projTrafo
                 let camLocation = view.GetViewPosition()
 
                 let result = HashSet<Node>()
+                let near = -projTrafo.Backward.TransformPosProj(V3d.OOO).Z
+                let far = -projTrafo.Backward.TransformPosProj(V3d.OOI).Z
 
                 x.Traverse(fun node ->
                     if node.bounds.IntersectsFrustum viewProj.Forward then
@@ -482,9 +484,10 @@ module LoD =
                                     |> Array.map (fun v -> -v.Z)
                                     |> Range1d
 
-                            if depthRange.Max < frustum.near || depthRange.Min > frustum.far then
+                            if depthRange.Max < near || depthRange.Min > far then
                                 false
                             else
+                                let depthRange = Range1d(clamp near far depthRange.Min, clamp near far depthRange.Max)
                                 let projAvgDistance =
                                     abs (node.granularity / depthRange.Min)
 
@@ -574,17 +577,164 @@ module LoD =
 
     let nodes =
         ASet.custom (fun self ->
-            let proj = gridProj.GetValue self
+            let proj = gridProj.GetValue self |> Frustum.projTrafo
             let view = gridCam.GetValue self
-            let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.0025)
+            let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.5)
 
-            let viewProj = CameraView.viewTrafo view * Frustum.projTrafo proj
+            let viewProj = CameraView.viewTrafo view * proj
 
             let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
             let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
 
             Seq.append add rem |> Seq.toList
         )
+
+    module Sg = 
+        open System.Threading
+        open System.Threading.Tasks
+        open Aardvark.Base.Ag
+        open Aardvark.SceneGraph.Semantics
+
+        type LodNode(attributeTypes : Map<Symbol, Type>, data : IDataProvider, wantedNearPlaneDistance : float, view : IMod<Trafo3d>, proj : IMod<Trafo3d>) =
+            interface ISg
+
+            member x.AttributeTypes = attributeTypes
+            member x.Data = data
+            member x.WantedNearPlaneDistance = wantedNearPlaneDistance
+            member x.View = view
+            member x.Proj = proj
+
+        type LodHandler(node : LodNode, view : IMod<Trafo3d>, proj : IMod<Trafo3d>) =
+            let cancel = new System.Threading.CancellationTokenSource()
+
+            let packer = GeometrySetUtilities.GeometryPacker(node.AttributeTypes)
+            let geometries = FastConcurrentDict<obj, Task<IndexedGeometry>>()
+            let inactive = FastConcurrentDictSet<Node>()
+
+            member x.Add(n : Node) =
+                let result = 
+                    geometries.GetOrCreate(n.id, fun _ ->
+                        let run =
+                            async {
+                                do! Async.SwitchToThreadPool()
+                                let! g = node.Data.GetData n 100
+                                packer.Add(g) |> ignore
+                                return g
+                            }
+
+                        Async.StartAsTask(run, cancellationToken = cancel.Token)
+                    )
+
+                if inactive.Remove n then
+                    packer.Activate(result.Result)
+
+                result
+
+            member x.Remove(n : Node) =
+                match geometries.TryGetValue n.id with
+                    | (true, t) ->
+                        if t.IsCompleted then
+                            packer.Deactivate(t.Result)
+                            inactive.Add n |> ignore
+                        else
+                            t.ContinueWith(fun (s : Task<_>) -> 
+                                packer.Deactivate s.Result
+                                inactive.Add n |> ignore
+                            ) |> ignore
+                    | _ ->
+                        ()
+
+
+            member x.Activate() =
+                
+                let content =
+                    ASet.custom (fun self ->
+                        let view = view.GetValue self
+                        let proj = proj.GetValue self
+
+                        let set = node.Data.Rasterize(view, proj, node.WantedNearPlaneDistance)
+
+                        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
+                        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+
+                        let res = Seq.append add rem |> Seq.toList
+
+
+                        res
+                    )
+
+
+                let deltas = ConcurrentDeltaQueue.ofASet content
+
+                let runner =
+                    async {
+                        while true do
+                            let! op = deltas.DequeueAsync()
+
+                            match op with
+                                | Add n -> x.Add n |> ignore
+                                | Rem n -> x.Remove n |> ignore
+
+
+                    }
+
+
+                Async.StartAsTask(runner, cancellationToken = cancel.Token) |> ignore
+
+                { new IDisposable with member x.Dispose() = () }
+
+
+            member x.Attributes =
+                { new IAttributeProvider with
+                    member x.TryGetAttribute sem =
+                        match Map.tryFind sem node.AttributeTypes with
+                            | Some t ->
+                                let b = packer.GetBuffer sem
+                                BufferView(b, t) |> Some
+                            | None ->
+                                None
+
+                    member x.All = Seq.empty
+                    member x.Dispose() = ()
+                }
+
+            member x.DrawCallInfos =
+                packer |> Mod.map (fun set ->
+                    set |> Seq.toArray
+                        |> Array.map (fun range ->
+                            DrawCallInfo(
+                                FirstIndex = range.Min,
+                                FaceVertexCount = range.Size + 1,
+                                FirstInstance = 0,
+                                InstanceCount = 1,
+                                BaseVertex = 0
+                            )
+                        )
+                )
+
+
+
+        [<Semantic>]
+        type LodSem() =
+            member x.RenderObjects(l : LodNode) =
+                let obj = RenderObject.create()
+                let h = LodHandler(l, l.View, l.Proj)
+
+                let calls = h.DrawCallInfos
+
+                obj.IndirectBuffer <- calls |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
+                obj.IndirectCount <- calls |> Mod.map (fun a -> a.Length)
+                obj.Activate <- h.Activate
+                obj.VertexAttributes <- h.Attributes
+                obj.Mode <- Mod.constant IndexedGeometryMode.PointList
+
+                ASet.single (obj :> IRenderObject)
+
+
+
+
+
+
 
     let attributeTypes =
         Map.ofList [
@@ -593,28 +743,27 @@ module LoD =
             DefaultSemantic.Normals, typeof<V3f>
         ]
 
-    module Sg =
-        open Aardvark.SceneGraph.Semantics
-        open System.Collections.Concurrent
 
-        type PointCloud(data : IDataProvider, avgDistance : float) =
-            interface ISg
-
-            member x.AverageDistance = avgDistance
-            member x.DataProvider = data
-
-
-    let boxes = 
-        nodes 
-            //|> ASet.mapAsync (fun n -> data.GetData n 100)
-            |> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
-            |> Sg.geometrySet IndexedGeometryMode.PointList attributeTypes
+//    let boxes = 
+//        Sg.LodNode(attributeTypes, data, 0.5, gridCam |> Mod.map CameraView.viewTrafo, gridProj |> Mod.map Frustum.projTrafo)  :> ISg
+//            //|> ASet.mapAsync (fun n -> data.GetData n 100)
+//            |> ASet.map (fun n -> 
+////                    match n.level with
+////                        | l when l < 4 -> data.GetData n 10000 |> Async.RunSynchronously
+////                        | _ -> data.GetData n 100 |> Async.RunSynchronously
+//                    data.GetData n 100 |> Async.RunSynchronously
+//                )
+//            |> Sg.geometrySet IndexedGeometryMode.PointList attributeTypes
             //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
 
                                     
     let sg = 
         Sg.group' [
-            boxes
+            Sg.LodNode(attributeTypes, data, 0.05, gridCam |> Mod.map CameraView.viewTrafo, gridProj |> Mod.map Frustum.projTrafo)  :> ISg
+                |> Sg.effect [
+                    DefaultSurfaces.trafo |> toEffect                  
+                    DefaultSurfaces.vertexColor  |> toEffect 
+                ]
             Helpers.frustum gridCam gridProj
 
             data.BoundingBox.EnlargedByRelativeEps(0.005)
@@ -632,6 +781,8 @@ module LoD =
             // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
             // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
+            |> Sg.uniform "PointSize" (Mod.constant 5.0)
+            |> Sg.uniform "ViewportSize" win.Sizes
             //|> Sg.fillMode (Mod.constant FillMode.Line)
             //|> Sg.trafo (Mod.constant (Trafo3d.Scale 0.1))
     
