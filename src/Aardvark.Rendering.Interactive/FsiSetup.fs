@@ -94,7 +94,7 @@ module FsiSetup =
         DefaultCameraController.control win.Mouse win.Keyboard win.Time view
 
     let perspective (win : IRenderControl) = 
-        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 10.0 (float s.X / float s.Y))
+        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 100.0 (float s.X / float s.Y))
 
 
     let runInteractive () =

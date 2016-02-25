@@ -453,8 +453,9 @@ module LoD =
             member x.GetData (cell : Node) (count : int) =
                 async {
                     do! Async.SwitchToThreadPool()
-                    let b = Helpers.box (Helpers.randomColor()) cell.bounds
-                    do! Async.Sleep 200
+                    let b = Helpers.randomPoints cell.bounds 100
+                    //let b = Helpers.box (Helpers.randomColor()) cell.bounds
+                    //do! Async.Sleep 400
                     return b
                 }
 
@@ -575,7 +576,7 @@ module LoD =
         ASet.custom (fun self ->
             let proj = gridProj.GetValue self
             let view = gridCam.GetValue self
-            let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.005)
+            let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.0025)
 
             let viewProj = CameraView.viewTrafo view * Frustum.projTrafo proj
 
@@ -605,9 +606,9 @@ module LoD =
 
     let boxes = 
         nodes 
-            |> ASet.mapAsync (fun n -> data.GetData n 100)
-            //|> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
-            |> Sg.geometrySet IndexedGeometryMode.TriangleList attributeTypes
+            //|> ASet.mapAsync (fun n -> data.GetData n 100)
+            |> ASet.map (fun n -> data.GetData n 100 |> Async.RunSynchronously)
+            |> Sg.geometrySet IndexedGeometryMode.PointList attributeTypes
             //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
 
                                     
