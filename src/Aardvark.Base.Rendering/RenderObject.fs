@@ -168,7 +168,7 @@ module RenderObjectExtensions =
 type IAdaptiveBufferReader =
     inherit IAdaptiveObject
     inherit IDisposable
-    abstract member GetDirtyRanges : IAdaptiveObject -> NativeMemoryBuffer * RangeSet
+    abstract member GetDirtyRanges : IAdaptiveObject -> INativeBuffer * RangeSet
 
 type IAdaptiveBuffer =
     inherit IMod<IBuffer>
@@ -202,7 +202,7 @@ module AttributePackingV2 =
 
         member x.GetDirtyRanges(caller : IAdaptiveObject) =
             x.EvaluateAlways caller (fun () ->
-                let buffer = b.GetValue x :?> NativeMemoryBuffer
+                let buffer = b.GetValue x :?> INativeBuffer
                 let dirtyCap = Interlocked.Exchange(&dirtyCapacity, buffer.SizeInBytes)
 
                 if dirtyCap <> buffer.SizeInBytes then
@@ -552,7 +552,7 @@ module GeometrySetUtilities =
 
         member x.GetDirtyRanges(caller : IAdaptiveObject) =
             x.EvaluateAlways caller (fun () ->
-                let buffer = b.GetValue x :?> NativeMemoryBuffer
+                let buffer = b.GetValue x :?> INativeBuffer
                 let dirtyCap = Interlocked.Exchange(&dirtyCapacity, buffer.SizeInBytes)
 
                 if dirtyCap <> buffer.SizeInBytes then
@@ -682,7 +682,7 @@ module GeometrySetUtilities =
                     if buffer.Capacity <> cap then 
                         buffer.Resize(cap)
 
-                    buffer.Write(int (region.Offset * elementSize), arr, (region.Size * int elementSize))
+                    buffer.Write(int (region.Offset * elementSize), arr, region.Size * int elementSize)
                 | _ ->
                     // TODO: write NullBuffer content or 0 here
                     ()
@@ -692,7 +692,8 @@ module GeometrySetUtilities =
             let result = 
                 buffers.GetOrAdd(sem, fun sem ->
                     isNew <- true
-                    let b = ChangeableBuffer(manager.Capacity)
+                    let elementSize = getElementSize sem |> int
+                    let b = ChangeableBuffer(elementSize * manager.Capacity)
                     b
                 )
 
@@ -736,17 +737,14 @@ module GeometrySetUtilities =
                             g.IndexArray.Length
                     
                     isNew <- true
-                    let range = manager.Alloc(faceVertexCount)
-
-                    x.AddRange range
-
-                    range
+                    manager.Alloc(faceVertexCount)
                 )
             
             if isNew then
-                let cap = nativeint manager.Capacity
                 for (KeyValue(sem, buffer)) in buffers do
                     writeAttribute sem region buffer g
+
+                x.AddRange region
                 true
             else
                 false

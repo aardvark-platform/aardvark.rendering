@@ -467,7 +467,7 @@ module ResourceManager =
                 [a], 
                 fun self ->
                     let current,ranges = reader.GetDirtyRanges(self)
-                    let handle = ctx.CreateBuffer(current.Ptr, current.SizeInBytes, BufferUsage.Dynamic)
+                    let handle = ctx.CreateBuffer(current)
 
                     let handleMod = Mod.constant handle
 
@@ -479,10 +479,13 @@ module ResourceManager =
                         let current, ranges = reader.GetDirtyRanges(self)
                         using ctx.ResourceLock (fun _ ->
                             if nativeint current.SizeInBytes <> handle.SizeInBytes then
-                                ctx.Upload(handle, current.Ptr, current.SizeInBytes)
+                                ctx.Upload(handle, current)
                             else
                                 let mutable cnt = 0
-                                ctx.UploadRanges(handle, current.Ptr, ranges)
+
+                                current.Use (fun ptr ->
+                                    ctx.UploadRanges(handle, ptr, ranges)
+                                )
                         )
                         FrameStatistics.Zero
                       destroy = fun () -> ctx.Delete(handle)

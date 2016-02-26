@@ -175,11 +175,14 @@ module BufferExtensions =
                     x.CreateBuffer(ab.Data)
                 | :? NullBuffer -> 
                     Buffer(x,0n,0)
-                | :? NativeMemoryBuffer as nativeBuffer ->
-                    x.CreateBuffer(nativeBuffer.Ptr,nativeBuffer.SizeInBytes, Static)
+
+                | :? INativeBuffer as nb ->
+                    nb.Use (fun ptr -> x.CreateBuffer(ptr, nb.SizeInBytes, Static))
 
                 | _ -> 
                     failwith "unsupported buffer-type"
+
+
 
         member x.Upload(b : Buffer, data : IBuffer) =
             if b.Handle = 0 then failwith "cannot update null buffer"
@@ -189,8 +192,9 @@ module BufferExtensions =
                     if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
                 | :? NullBuffer ->
                     failwith "cannot create null buffer out of non-null buffer"
-                | :? NativeMemoryBuffer as n ->
-                   x.Upload(b,n.Ptr,n.SizeInBytes)
+
+                | :? INativeBuffer as n ->
+                    n.Use (fun ptr -> x.Upload(b, ptr, n.SizeInBytes))
                 | _ ->
                     failwithf "unsupported buffer-data-type: %A" data
 

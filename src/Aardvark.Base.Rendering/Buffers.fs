@@ -27,17 +27,6 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
                 o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
             | _ -> false
 
-type ArrayBuffer(data : Array) =
-    interface IBuffer
-    member x.Data = data
-
-
-    override x.GetHashCode() = data.GetHashCode()
-    override x.Equals o =
-        match o with
-            | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
-            | _ -> false
-
 type NullBuffer(value : V4f) =
     interface IBuffer
 
@@ -51,8 +40,36 @@ type NullBuffer(value : V4f) =
 
     new() = NullBuffer(V4f.Zero)
 
-type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
+
+type INativeBuffer =
+    inherit IBuffer
+    abstract member SizeInBytes : int
+    abstract member Use : (nativeint -> 'a) -> 'a
+
+type ArrayBuffer(data : Array) =
+    let elementType = data.GetType().GetElementType()
+
     interface IBuffer
+    member x.Data = data
+    member x.ElementType = elementType
+
+    interface INativeBuffer with
+        member x.SizeInBytes = data.Length * Marshal.SizeOf elementType
+        member x.Use (f : nativeint -> 'a) =
+            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+            try f (gc.AddrOfPinnedObject())
+            finally gc.Free()
+
+    override x.GetHashCode() = data.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
+            | _ -> false
+
+type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
+    interface INativeBuffer with
+        member x.SizeInBytes = sizeInBytes
+        member x.Use f = f ptr
 
     member x.Ptr = ptr
     member x.SizeInBytes = sizeInBytes
