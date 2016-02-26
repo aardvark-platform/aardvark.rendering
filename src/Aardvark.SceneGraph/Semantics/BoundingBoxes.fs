@@ -26,7 +26,7 @@ module BoundingBoxExtensions =
                                 v.Buffer |> Mod.bind (fun buffer ->
                                     match buffer with
                                         | :? ArrayBuffer as pos ->
-                                            let trafo : IMod<Trafo3d> = x.AttributeScope?ModelTrafo
+                                            let trafo : IMod<Trafo3d> = x.AttributeScope?ModelTrafo()
 
                                             Mod.map (fun trafo ->
                                                 let box = Box3f.op_Explicit (Box3f(pos.Data |> unbox<V3f[]>))

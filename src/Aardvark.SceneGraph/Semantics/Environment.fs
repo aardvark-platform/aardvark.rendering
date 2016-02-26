@@ -29,7 +29,7 @@ module EnvironmentSemantics =
 
 
         member x.NormalMatrix(s : ISg) : IMod<M33d> = 
-            Mod.map (fun (t : Trafo3d) -> t.Backward.Transposed.UpperLeftM33()) s?ModelTrafo
+            Mod.map (fun (t : Trafo3d) -> t.Backward.Transposed.UpperLeftM33()) (s?ModelTrafo())
 
 
         member x.ViewportSize(e : Sg.Environment) = e.Child?ViewportSize <- e.ViewSize
