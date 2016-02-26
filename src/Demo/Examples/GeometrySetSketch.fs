@@ -79,11 +79,11 @@ type cbuffer(sizeInBytes : nativeint, release : cbuffer -> unit) =
         }
 
     member x.AdjustToSize(capacityInBytes : nativeint) =
-        let old = Interlocked.Exchange(&capacity, capacityInBytes)
-        if old <> capacityInBytes then
-            ReaderWriterLock.write ptrLock (fun () ->
+        ReaderWriterLock.write ptrLock (fun () ->
+            let old = Interlocked.Exchange(&capacity, capacityInBytes)
+            if old <> capacityInBytes then
                 ptr <- Mem.realloc ptr capacityInBytes
-            )
+        )
 
     member x.Write(source : nativeint, offsetInBytes : nativeint, sizeInBytes : nativeint) =
         // check for out of bounds writes
@@ -127,9 +127,10 @@ and internal CBufferReader(buffer : cbuffer) =
     let mutable lastCapacity = -1n
 
     member x.Add(r : Range1i) =
-        if lastCapacity = buffer.SizeInBytes then
-            Interlocked.Change(&dirty, RangeSet.insert r) |> ignore
-
+        lock x (fun () ->
+            if lastCapacity = buffer.SizeInBytes then
+                Interlocked.Change(&dirty, RangeSet.insert r) |> ignore
+        )
     member x.Dispose() =
         buffer.RemoveReader x
         dirty <- RangeSet.empty
@@ -234,13 +235,15 @@ type GeometryPool() =
     let pointers = ConcurrentDictionary<IndexedGeometry, managedptr>()
     let buffers = ConcurrentDictionary<Symbol, TypedCBuffer>()
         
+    let pointersRW = new ReaderWriterLockSlim()
+    let buffersRW = new ReaderWriterLockSlim()
+
     let faceVertexCount (g : IndexedGeometry) =
         if isNull g.IndexArray then
             let att = g.IndexedAttributes.Values |> Seq.head
             att.Length
         else
             g.IndexArray.Length
-
 
     let write (g : IndexedGeometry) (sem : Symbol) (ptr : managedptr) (buffer : TypedCBuffer) =
         buffer.AdjustToCount(nativeint manager.Capacity)
@@ -256,44 +259,53 @@ type GeometryPool() =
         let isNew = ref false
             
         let result = 
-            buffers.GetOrAdd(sem, fun sem ->
-                isNew := true
+            ReaderWriterLock.write buffersRW (fun () ->
+                buffers.GetOrAdd(sem, fun sem ->
+                    isNew := true
 
-                let destroy (t : cbuffer) =
-                    buffers.TryRemove sem |> ignore
+                    let destroy (t : cbuffer) =
+                        buffers.TryRemove sem |> ignore
 
-                new TypedCBuffer(destroy)
+                    new TypedCBuffer(destroy)
+                )
             )
 
         if !isNew then
-            for (KeyValue(g,ptr)) in pointers do
-                write g sem ptr result
-
+            ReaderWriterLock.read pointersRW (fun () ->
+                for (KeyValue(g,ptr)) in pointers do
+                    write g sem ptr result
+            )
         result.Buffer
 
     member x.Add(g : IndexedGeometry) =
         let isNew = ref false
         let ptr = 
-            pointers.GetOrAdd(g, fun g ->
-                let count = faceVertexCount g
-                isNew := true
-                manager.Alloc count
+            ReaderWriterLock.write pointersRW (fun () ->
+                pointers.GetOrAdd(g, fun g ->
+                    let count = faceVertexCount g
+                    isNew := true
+                    manager.Alloc count
+                )
             )
 
         if !isNew then
-            for (KeyValue(sem, buffer)) in buffers do
-                write g sem ptr buffer
+            ReaderWriterLock.read buffersRW (fun () ->
+                for (KeyValue(sem, buffer)) in buffers do
+                    write g sem ptr buffer
+            )
             
         Range.ofPtr ptr
 
     member x.Remove(g : IndexedGeometry) =
-        match pointers.TryRemove g with
-            | (true, ptr) -> 
-                let range = Range.ofPtr ptr
-                manager.Free ptr
-                range
-            | _ ->
-                Range1i.Invalid
+        ReaderWriterLock.write pointersRW (fun () ->
+            match pointers.TryRemove g with
+                | (true, ptr) -> 
+                    let range = Range.ofPtr ptr
+                    manager.Free ptr
+                    range
+                | _ ->
+                    Range1i.Invalid
+        )
 
     member x.Contains(g : IndexedGeometry) =
         pointers.ContainsKey g

@@ -173,6 +173,91 @@ module LoD =
                 |> Sg.ofIndexedGeometry
                 |> Sg.trafo invViewProj
 
+    [<AutoOpen>]
+    module ``Move To Base`` =
+        open System.Threading
+        open System.Runtime.InteropServices
+
+        [<AllowNullLiteral>]
+        type private HashQueueNode<'a> =
+            class
+                val mutable public Value : 'a
+                val mutable public Next : HashQueueNode<'a>
+                val mutable public Prev : HashQueueNode<'a>
+
+                new(v,p,n) = { Value = v; Prev = p; Next = n }
+            end
+
+        type ConcurrentHashQueue<'a when 'a : equality>() =
+            let lockObj = obj()
+            let nodes = Dict<'a, HashQueueNode<'a>>()
+            let mutable first = null
+            let mutable last = null
+
+            let detach (node : HashQueueNode<'a>) =
+                if isNull node.Prev then first <- node.Next
+                else node.Prev.Next <- node.Next
+
+                if isNull node.Next then last <- node.Prev
+                else node.Next.Prev <- node.Prev
+                                 
+
+            member x.Count = lock lockObj (fun () -> nodes.Count)
+
+            member x.Enqueue(value : 'a) =
+                lock lockObj (fun () ->
+                    let node = 
+                        match nodes.TryGetValue value with
+                            | (true, node) -> 
+                                detach node
+                                node.Prev <- last
+                                node.Next <- null
+                                node    
+                            | _ ->
+                                HashQueueNode(value, last, null)
+
+                    if isNull last then first <- node
+                    else last.Next <- node
+                    last <- node
+                )
+
+            member x.Dequeue() =
+                lock lockObj (fun () ->
+                    if isNull first then 
+                        failwith "HashQueue empty"
+                    else
+                        let value = first.Value
+                        first <- first.Next
+                        first.Prev <- null
+                        nodes.Remove value |> ignore
+                        value
+                )
+
+            member x.TryDequeue([<Out>] result : byref<'a>) =
+                try
+                    Monitor.Enter lockObj
+                    if isNull first then 
+                        false
+                    else
+                        let value = first.Value
+                        first <- first.Next
+                        first.Prev <- null
+                        nodes.Remove value |> ignore
+                        result <- value
+                        true
+                finally
+                    Monitor.Exit lockObj
+
+            member x.Remove(value : 'a) =
+                lock lockObj (fun () ->
+                    match nodes.TryRemove value with
+                        | (true, node) ->
+                            detach node
+                            true
+                        | _ ->
+                            false
+                )
+
 
     // ===================================================================================
     // LoD stuff
@@ -229,10 +314,10 @@ module LoD =
                                 let projAvgDistance =
                                     abs (node.granularity / depthRange.Min)
 
+                                result.Add node |> ignore
                                 if projAvgDistance > wantedNearPlaneDistance then
                                     true
                                 else
-                                    result.Add node |> ignore
                                     false
                         else
                             result.Add node |> ignore
@@ -275,6 +360,8 @@ module LoD =
             PointCloud(data, info) :> ISg
             
 
+    
+
 
     module PointCloudRenderObjectSemantics = 
         open System.Threading
@@ -282,45 +369,52 @@ module LoD =
         open Aardvark.Base.Ag
         open Aardvark.SceneGraph.Semantics
 
+        type GeometryRef = { node : LodDataNode; geometry : IndexedGeometry; range : Range1i }
+
         type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>) =
             let cancel = new System.Threading.CancellationTokenSource()
 
             let pool = GeometryPool.create()
             let calls = DrawCallSet(true)
+            let inactive = ConcurrentHashQueue<GeometryRef>()
+            let mutable inactiveSize = 0
+            let mutable activeSize = 0
 
-            let geometries = FastConcurrentDict<obj, Task<Range1i>>()
-            //let inactive = FastConcurrentDictSet<Node>()
+            let geometries = FastConcurrentDict<LodDataNode, GeometryRef>()
+
+            let activate (n : GeometryRef) =
+                let size = n.range.Size
+                if inactive.Remove n then
+                    Interlocked.Add(&inactiveSize, -size) |> ignore
+
+                Interlocked.Add(&activeSize, size) |> ignore
+
+                calls.Add n.range |> ignore
+
+            let deactivate (n : GeometryRef) =
+                calls.Remove n.range |> ignore
+                inactive.Enqueue n |> ignore
+                let size = n.range.Size
+                Interlocked.Add(&inactiveSize, size) |> ignore
+                Interlocked.Add(&activeSize, -size) |> ignore
+
 
             member x.Add(n : LodDataNode) =
                 let result = 
-                    geometries.GetOrCreate(n.id, fun _ ->
-                        let run =
-                            async {
-                                do! Async.SwitchToThreadPool()
-                                let! g = node.Data.GetData n
-                                let range = pool.Add(g)
-                                return range
-                            }
-
-                        Async.StartAsTask(run, cancellationToken = cancel.Token)
+                    geometries.GetOrCreate(n, fun n ->
+                        let g = node.Data.GetData n |> Async.RunSynchronously
+                        let range = pool.Add(g)
+                        { node = n; geometry = g; range = range }
                     )
 
-                calls.Add(result.Result) |> ignore
+                activate result
+
                 result
 
             member x.Remove(n : LodDataNode) =
-                match geometries.TryGetValue n.id with
-                    | (true, t) ->
-                        if t.IsCompleted then
-                            calls.Remove(t.Result) |> ignore
-                            //inactive.Add n |> ignore
-                        else
-                            t.ContinueWith(fun (s : Task<_>) -> 
-                                calls.Remove(s.Result) |> ignore
-                                //inactive.Add n |> ignore
-                            ) |> ignore
-                    | _ ->
-                        ()
+                match geometries.TryGetValue n with
+                    | (true, t) -> deactivate t
+                    | _ -> ()
 
 
             member x.Activate() =
@@ -363,8 +457,23 @@ module LoD =
                                 | Add n -> x.Add n |> ignore
                                 | Rem n -> x.Remove n |> ignore
 
+//                            let mutable cnt = 0
+//                            while inactiveSize > activeSize do
+//                                match inactive.TryDequeue() with
+//                                    | (true, v) ->
+//                                        calls.Remove v.range |> ignore
+//                                        geometries.TryRemove v.node |> ignore
+//                                        pool.Remove v.geometry |> ignore
+//                                        Interlocked.Add(&inactiveSize, -v.range.Size) |> ignore
+//                                        cnt <- cnt + 1
+//
+//                                    | _ ->
+//                                        ()
+
 
                     }
+
+
 
 
                 Async.StartAsTask(runner, cancellationToken = cancel.Token) |> ignore
@@ -538,7 +647,7 @@ module LoD =
 
     let cloud =
         Sg.pointCloud data {
-            targetPointDistance     = Mod.constant 20.0
+            targetPointDistance     = Mod.constant 40.0
             customView              = Some (gridCam |> Mod.map CameraView.viewTrafo)
             customProjection        = Some (gridProj |> Mod.map Frustum.projTrafo)
             attributeTypes =
