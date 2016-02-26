@@ -61,6 +61,7 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="GeometrySetSketch.fs" />
     <Compile Include="Tutorial.fs" />
     <Compile Include="Render2TexturePrimitive.fs" />
     <Compile Include="Render2TextureComposable.fs" />

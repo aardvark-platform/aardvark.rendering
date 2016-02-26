@@ -24,185 +24,6 @@ module LoD =
     Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
 
 
-    // ===================================================================================
-    // kill entirely?
-    // ===================================================================================
-    [<CustomEquality; NoComparison>]
-    type GridCell =
-        struct
-            val mutable public Id : V3l
-            val mutable public Exponent : int
-
-
-            member x.Box =
-                let size = pow 2.0 (float x.Exponent)
-                let center = V3d(x.Id) * size
-                Box3d.FromMinAndSize(center, V3d(size, size, size))
-
-            member x.Children =
-                let baseId = 2L * x.Id
-                let exp = x.Exponent - 1
-                [
-                    GridCell(baseId + V3l.OOO, exp)
-                    GridCell(baseId + V3l.OOI, exp)
-                    GridCell(baseId + V3l.OIO, exp)
-                    GridCell(baseId + V3l.OII, exp)
-                    GridCell(baseId + V3l.IOO, exp)
-                    GridCell(baseId + V3l.IOI, exp)
-                    GridCell(baseId + V3l.IIO, exp)
-                    GridCell(baseId + V3l.III, exp)
-                ]
-
-            member x.Parent =
-                let fp = V3d.op_Explicit x.Id / 2.0
-
-                let id =
-                    V3l(
-                        (if fp.X < 0.0 then floor fp.X else ceil fp.X),
-                        (if fp.Y < 0.0 then floor fp.Y else ceil fp.Y),
-                        (if fp.Z < 0.0 then floor fp.Z else ceil fp.Z)
-                    )
-
-                GridCell(id, x.Exponent + 1)
-
-            override x.ToString() =
-                sprintf "{ id = %A; exponent = %d; box = %A }" x.Id x.Exponent x.Box
-
-            override x.GetHashCode() =
-                HashCode.Combine(x.Id.GetHashCode(), x.Exponent.GetHashCode())
-
-            override x.Equals o =
-                match o with
-                    | :? GridCell as o -> x.Id = o.Id && x.Exponent = o.Exponent
-                    | _ -> false
-
-            new(id : V3l, exp : int) = { Id = id; Exponent = exp }
-        end
-
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module GridCell =
-    
-        let inline parent (c : GridCell) = c.Parent
-        let inline children (c : GridCell) = c.Children
-        let inline box (c : GridCell) = c.Box
-
-        type V3l with
-            static member Floor(v : V3d) = V3l(floor v.X, floor v.Y, floor v.Z)
-            static member Round(v : V3d) = V3l(round v.X, round v.Y, round v.Z)
-            static member Ceil(v : V3d) = V3l(ceil v.X, ceil v.Y, ceil v.Z)
-
-        let containingCells (b : Box3d) =
-            let exp = Fun.Log2 b.Size.NormMax |> ceil
-            let mutable size = pow 2.0 exp
-            let mutable exp = int exp
-            let mutable minId = (b.Min + 10.0 * Constant<float>.PositiveTinyValue) / size |> V3l.Floor
-            let mutable maxId = (b.Max - 10.0 * Constant<float>.PositiveTinyValue) / size |> V3l.Floor
-                                 
-            [ for x in minId.X..maxId.X do
-                for y in minId.Y..maxId.Y do
-                    for z in minId.Z..maxId.Z do
-                        yield GridCell(V3l(x,y,z), exp)
-            ]
-
-        let inline px (c : GridCell) = GridCell(c.Id + V3l.IOO, c.Exponent)
-        let inline py (c : GridCell) = GridCell(c.Id + V3l.OIO, c.Exponent)
-        let inline pz (c : GridCell) = GridCell(c.Id + V3l.OOI, c.Exponent)
-        let inline nx (c : GridCell) = GridCell(c.Id - V3l.IOO, c.Exponent)
-        let inline ny (c : GridCell) = GridCell(c.Id - V3l.OIO, c.Exponent)
-        let inline nz (c : GridCell) = GridCell(c.Id - V3l.OOI, c.Exponent)
-
-        let viewVolumeCells (viewProj : Trafo3d) =
-            Box3d(-V3d.III, V3d.III).ComputeCorners() 
-                |> Array.map (fun p -> viewProj.Backward.TransformPosProj(p))
-                |> Box3d
-                |> containingCells
-
-
-
-        let raster (split : GridCell -> Polygon2d -> Range1d -> bool) (view : CameraView) (proj : Frustum) =
-            let view = CameraView.viewTrafo view
-            let projTrafo = Frustum.projTrafo proj
-            let viewProj = view * projTrafo
-
-            let split (b : GridCell) =
-        
-                let viewSpacePoints =
-                    b.Box.ComputeCorners()
-                        |> Array.map (fun v ->
-                            let vp = view.Forward.TransformPos(v)
-                            let res = projTrafo.Forward.TransformPosProj(vp)
-
-                            let ld = -vp.Z / (proj.far - proj.near)
-                            V3d(res.XY, ld)
-                        )
-
-                let poly =
-                    viewSpacePoints 
-                        |> Array.map Vec.xy
-                        |> Polygon2d
-
-                let clipped = 
-                    poly.ComputeConvexHullIndexPolygon().ToPolygon2d().ConvexClipped(Box2d(-V2d.II, V2d.II))
-
-
-                let zrange = viewSpacePoints |> Array.map (fun v -> clamp -1.0 1.0 v.Z) |> Range1d
-
-
-                //printfn "{ area = %A; distance = %A }" area distance
-                //printfn "%A, %A -> %A" distance area f
-                split b clipped zrange
-        
-            let rec splitCells (current : list<GridCell>) =
-                match current with
-                    | [] -> []
-                    | _ ->
-                        let split, keep = 
-                            current |> List.partition split
-
-                        let nested = 
-                            split 
-                                |> List.collect children 
-                                |> List.filter (fun c -> c.Box.IntersectsFrustum(viewProj.Forward))
-                                |> splitCells
-
-                        keep @ nested
-
-            viewProj 
-                |> viewVolumeCells 
-                |> splitCells
-                |> List.filter (fun c -> c.Box.IntersectsFrustum(viewProj.Forward))
-
-
-
-        let test() =
-            let view = CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI
-            let proj = Frustum.perspective 60.0 0.1 1000.0 1.0
-
-            let decide _ (poly : Polygon2d) (range : Range1d) =
-                let f = poly.ComputeArea() / (range.Min * range.Min)
-                f > 0.4
-
-            let mutable cnt = 0
-            let mutable bounds = Box3d.Invalid
-            let cells = raster decide view proj
-
-            let iter = 100
-            let sw = System.Diagnostics.Stopwatch()
-            sw.Start()
-            for i in 1..iter do
-                let cells = raster decide view proj
-                ()
-            sw.Stop()
-
-            for c in cells do
-                printfn "%A" c
-                cnt <- cnt + 1
-                bounds <- Box3d.Union(bounds, c.Box)
-
-            printfn "took %.3f ms" (sw.Elapsed.TotalMilliseconds / float iter)
-            printfn "count = %A" cnt
-            printfn "box = %A" bounds
-
     module Helpers = 
         let rand = Random()
         let randomPoints (bounds : Box3d) (pointCount : int) =
@@ -353,49 +174,11 @@ module LoD =
                 |> Sg.trafo invViewProj
 
 
-
-    // ===================================================================================
-    // move to Aardvark.Base
-    // ===================================================================================
-    module ASet =
-        type CustomReader<'a>(f : IReader<'a> -> list<Delta<'a>>) =
-            inherit ASetReaders.AbstractReader<'a>()
-
-            override x.ComputeDelta() =
-                f x
-
-            override x.Release() =
-                ()
-
-            override x.Inputs = Seq.empty
-    
-        let custom (f : IReader<'a> -> list<Delta<'a>>) =
-            ASet.AdaptiveSet(fun () -> new CustomReader<'a>(f) :> IReader<_>) :> aset<_>
-
-
-        type WithUpdateReader<'a>(m : IMod<unit>, r : IReader<'a>) =
-            inherit ASetReaders.AbstractReader<'a>()
-
-
-            override x.ComputeDelta() =
-                m.GetValue x
-                r.GetDelta x
-
-            override x.Release() =
-                r.Dispose()
-
-            override x.Inputs = Seq.ofList [m; r]
-
-
-        let withUpdater (m : IMod<unit>) (s : aset<'a>) =
-            ASet.AdaptiveSet(fun () -> new WithUpdateReader<_>(m, s.GetReader()) :> IReader<_>) :> aset<_>
-
-
     // ===================================================================================
     // LoD stuff
     // ===================================================================================
     [<CustomEquality; NoComparison>]
-    type Node =
+    type LodDataNode =
         {
             id : obj
             level : int
@@ -407,69 +190,24 @@ module LoD =
         override x.GetHashCode() = x.id.GetHashCode()
         override x.Equals o =
             match o with
-                | :? Node as o -> x.id.Equals(o.id)
+                | :? LodDataNode as o -> x.id.Equals(o.id)
                 | _ -> false
 
-
-    type IDataProvider =
+    type ILodData =
         abstract member BoundingBox : Box3d
-        abstract member Traverse : (Node -> bool) -> unit
-        abstract member GetData : node : Node -> count : int -> Async<IndexedGeometry>
-
-
-    type DummyDataProvider(root : Box3d) =
-    
-        interface IDataProvider with
-            member x.BoundingBox = root
-
-            member x.Traverse f =
-                let rec traverse (level : int) (b : Box3d) =
-                    let box = b
-                    let n = 100.0
-                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n) }
-
-                    if f node then
-                        let center = b.Center
-
-                        let children =
-                            let l = b.Min
-                            let u = b.Max
-                            let c = center
-                            [
-                                Box3d(V3d(l.X, l.Y, l.Z), V3d(c.X, c.Y, c.Z))
-                                Box3d(V3d(c.X, l.Y, l.Z), V3d(u.X, c.Y, c.Z))
-                                Box3d(V3d(l.X, c.Y, l.Z), V3d(c.X, u.Y, c.Z))
-                                Box3d(V3d(c.X, c.Y, l.Z), V3d(u.X, u.Y, c.Z))
-                                Box3d(V3d(l.X, l.Y, c.Z), V3d(c.X, c.Y, u.Z))
-                                Box3d(V3d(c.X, l.Y, c.Z), V3d(u.X, c.Y, u.Z))
-                                Box3d(V3d(l.X, c.Y, c.Z), V3d(c.X, u.Y, u.Z))
-                                Box3d(V3d(c.X, c.Y, c.Z), V3d(u.X, u.Y, u.Z))
-                            ]
-
-                        children |> List.iter (traverse (level + 1))
-                    else
-                        ()
-                traverse 0 root
-
-            member x.GetData (cell : Node) (count : int) =
-                async {
-                    do! Async.SwitchToThreadPool()
-                    let b = Helpers.randomPoints cell.bounds 100
-                    //let b = Helpers.box (Helpers.randomColor()) cell.bounds
-                    //do! Async.Sleep 400
-                    return b
-                }
+        abstract member Traverse : (LodDataNode -> bool) -> unit
+        abstract member GetData : node : LodDataNode -> Async<IndexedGeometry>
 
     [<AutoOpen>]
-    module ``Data Provider Extensions`` =
+    module ``Lod Data Extensions`` =
         open System.Collections.Concurrent
 
-        type IDataProvider with
+        type ILodData with
             member x.Rasterize(view : Trafo3d, projTrafo : Trafo3d, wantedNearPlaneDistance : float) =
                 let viewProj = view * projTrafo
                 let camLocation = view.GetViewPosition()
 
-                let result = HashSet<Node>()
+                let result = HashSet<LodDataNode>()
                 let near = -projTrafo.Backward.TransformPosProj(V3d.OOO).Z
                 let far = -projTrafo.Backward.TransformPosProj(V3d.OOI).Z
 
@@ -506,10 +244,231 @@ module LoD =
                 result
 
 
+
+
+    // ===================================================================================
+    // SceneGraph LoD adapters
+    // ===================================================================================
+    type PointCloudInfo =
+        {
+            attributeTypes : Map<Symbol, Type>
+
+            /// the target point distance in pixels
+            targetPointDistance : IMod<float>
+
+            /// an optional custom view trafo
+            customView : Option<IMod<Trafo3d>>
+
+            /// an optional custom view projection trafo
+            customProjection : Option<IMod<Trafo3d>>
+
+        }
+
+    module Sg = 
+        type PointCloud(data : ILodData, config : PointCloudInfo) =
+            interface ISg
+
+            member x.Data = data
+            member x.Config = config
+
+        let pointCloud (data : ILodData) (info : PointCloudInfo) =
+            PointCloud(data, info) :> ISg
+            
+
+
+    module PointCloudRenderObjectSemantics = 
+        open System.Threading
+        open System.Threading.Tasks
+        open Aardvark.Base.Ag
+        open Aardvark.SceneGraph.Semantics
+
+        type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>) =
+            let cancel = new System.Threading.CancellationTokenSource()
+
+            let pool = GeometryPool.create()
+            let calls = DrawCallSet(true)
+
+            let geometries = FastConcurrentDict<obj, Task<Range1i>>()
+            //let inactive = FastConcurrentDictSet<Node>()
+
+            member x.Add(n : LodDataNode) =
+                let result = 
+                    geometries.GetOrCreate(n.id, fun _ ->
+                        let run =
+                            async {
+                                do! Async.SwitchToThreadPool()
+                                let! g = node.Data.GetData n
+                                let range = pool.Add(g)
+                                return range
+                            }
+
+                        Async.StartAsTask(run, cancellationToken = cancel.Token)
+                    )
+
+                calls.Add(result.Result) |> ignore
+                result
+
+            member x.Remove(n : LodDataNode) =
+                match geometries.TryGetValue n.id with
+                    | (true, t) ->
+                        if t.IsCompleted then
+                            calls.Remove(t.Result) |> ignore
+                            //inactive.Add n |> ignore
+                        else
+                            t.ContinueWith(fun (s : Task<_>) -> 
+                                calls.Remove(s.Result) |> ignore
+                                //inactive.Add n |> ignore
+                            ) |> ignore
+                    | _ ->
+                        ()
+
+
+            member x.Activate() =
+                
+                let wantedNearPlaneDistance =
+                    Mod.custom (fun self ->
+                        let viewportSize = viewportSize.GetValue self
+                        let wantedPixelDistance = node.Config.targetPointDistance.GetValue self
+
+                        let size = max viewportSize.X viewportSize.Y
+                        2.0 * float wantedPixelDistance / float size
+                    )
+
+                let content =
+                    ASet.custom (fun self ->
+                        let view = view.GetValue self
+                        let proj = proj.GetValue self
+                        let wantedNearPlaneDistance = wantedNearPlaneDistance.GetValue self
+
+                        let set = node.Data.Rasterize(view, proj, wantedNearPlaneDistance)
+
+                        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
+                        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+
+                        let res = Seq.append add rem |> Seq.toList
+
+
+                        res
+                    )
+
+
+                let deltas = ConcurrentDeltaQueue.ofASet content
+
+                let runner =
+                    async {
+                        while true do
+                            let! op = deltas.DequeueAsync()
+
+                            match op with
+                                | Add n -> x.Add n |> ignore
+                                | Rem n -> x.Remove n |> ignore
+
+
+                    }
+
+
+                Async.StartAsTask(runner, cancellationToken = cancel.Token) |> ignore
+
+                { new IDisposable with member x.Dispose() = () }
+
+
+            member x.Attributes =
+                { new IAttributeProvider with
+                    member x.TryGetAttribute sem =
+                        match Map.tryFind sem node.Config.attributeTypes with
+                            | Some t ->
+                                let b = pool.GetBuffer sem
+                                BufferView(b, t) |> Some
+                            | None ->
+                                None
+
+                    member x.All = Seq.empty
+                    member x.Dispose() = ()
+                }
+
+            member x.DrawCallInfos =
+                calls |> DrawCallSet.toMod
+
+        [<Semantic>]
+        type PointCloudSemantics() =
+            member x.RenderObjects(l : Sg.PointCloud) =
+                let obj = RenderObject.create()
+
+                let view = 
+                    match l.Config.customView with
+                        | Some v -> v
+                        | None -> l.ViewTrafo
+
+                let proj = 
+                    match l.Config.customProjection with
+                        | Some p -> p
+                        | None -> l.ProjTrafo
+
+                let viewportSize =
+                    match obj.Uniforms.TryGetUniform(obj.AttributeScope, Symbol.Create "ViewportSize") with
+                        | Some (:? IMod<V2i> as vs) -> vs
+                        | _ -> failwith "[PointCloud] could not get viewport size (please apply to scenegraph)"
+
+                let h = PointCloudHandler(l, view, proj, viewportSize)
+
+                let calls = h.DrawCallInfos
+
+                obj.IndirectBuffer <- calls |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
+                obj.IndirectCount <- calls |> Mod.map (fun a -> a.Length)
+                obj.Activate <- h.Activate
+                obj.VertexAttributes <- h.Attributes
+                obj.Mode <- Mod.constant IndexedGeometryMode.PointList
+
+                ASet.single (obj :> IRenderObject)
+
+
     // ===================================================================================
     // example usage
     // ===================================================================================
-    let data = DummyDataProvider(Box3d(V3d.OOO, 5.0 * V3d.III)) :> IDataProvider
+    type DummyDataProvider(root : Box3d) =
+    
+        interface ILodData with
+            member x.BoundingBox = root
+
+            member x.Traverse f =
+                let rec traverse (level : int) (b : Box3d) =
+                    let box = b
+                    let n = 100.0
+                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n) }
+
+                    if f node then
+                        let center = b.Center
+
+                        let children =
+                            let l = b.Min
+                            let u = b.Max
+                            let c = center
+                            [
+                                Box3d(V3d(l.X, l.Y, l.Z), V3d(c.X, c.Y, c.Z))
+                                Box3d(V3d(c.X, l.Y, l.Z), V3d(u.X, c.Y, c.Z))
+                                Box3d(V3d(l.X, c.Y, l.Z), V3d(c.X, u.Y, c.Z))
+                                Box3d(V3d(c.X, c.Y, l.Z), V3d(u.X, u.Y, c.Z))
+                                Box3d(V3d(l.X, l.Y, c.Z), V3d(c.X, c.Y, u.Z))
+                                Box3d(V3d(c.X, l.Y, c.Z), V3d(u.X, c.Y, u.Z))
+                                Box3d(V3d(l.X, c.Y, c.Z), V3d(c.X, u.Y, u.Z))
+                                Box3d(V3d(c.X, c.Y, c.Z), V3d(u.X, u.Y, u.Z))
+                            ]
+
+                        children |> List.iter (traverse (level + 1))
+                    else
+                        ()
+                traverse 0 root
+
+            member x.GetData (cell : LodDataNode) =
+                async {
+                    do! Async.SwitchToThreadPool()
+                    let b = Helpers.randomPoints cell.bounds 100
+                    //let b = Helpers.box (Helpers.randomColor()) cell.bounds
+                    //do! Async.Sleep 400
+                    return b
+                }
+
+    let data = DummyDataProvider(Box3d(V3d.OOO, 20.0 * V3d.III)) :> ILodData
 
     [<AutoOpen>]
     module Camera =
@@ -575,194 +534,31 @@ module LoD =
                     | Test -> return! gridProj
             }
 
-    let nodes =
-        ASet.custom (fun self ->
-            let proj = gridProj.GetValue self |> Frustum.projTrafo
-            let view = gridCam.GetValue self
-            let set = data.Rasterize(CameraView.viewTrafo view, proj, 0.5)
-
-            let viewProj = CameraView.viewTrafo view * proj
-
-            let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
-            let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
-
-            Seq.append add rem |> Seq.toList
-        )
-
-    module Sg = 
-        open System.Threading
-        open System.Threading.Tasks
-        open Aardvark.Base.Ag
-        open Aardvark.SceneGraph.Semantics
-
-        type LodNode(attributeTypes : Map<Symbol, Type>, data : IDataProvider, wantedNearPlaneDistance : float, view : IMod<Trafo3d>, proj : IMod<Trafo3d>) =
-            interface ISg
-
-            member x.AttributeTypes = attributeTypes
-            member x.Data = data
-            member x.WantedNearPlaneDistance = wantedNearPlaneDistance
-            member x.View = view
-            member x.Proj = proj
-
-        type LodHandler(node : LodNode, view : IMod<Trafo3d>, proj : IMod<Trafo3d>) =
-            let cancel = new System.Threading.CancellationTokenSource()
-
-            let packer = GeometrySetUtilities.GeometryPacker(node.AttributeTypes)
-            let geometries = FastConcurrentDict<obj, Task<IndexedGeometry>>()
-            let inactive = FastConcurrentDictSet<Node>()
-
-            member x.Add(n : Node) =
-                let result = 
-                    geometries.GetOrCreate(n.id, fun _ ->
-                        let run =
-                            async {
-                                do! Async.SwitchToThreadPool()
-                                let! g = node.Data.GetData n 100
-                                packer.Add(g) |> ignore
-                                return g
-                            }
-
-                        Async.StartAsTask(run, cancellationToken = cancel.Token)
-                    )
-
-                if inactive.Remove n then
-                    packer.Activate(result.Result)
-
-                result
-
-            member x.Remove(n : Node) =
-                match geometries.TryGetValue n.id with
-                    | (true, t) ->
-                        if t.IsCompleted then
-                            packer.Deactivate(t.Result)
-                            inactive.Add n |> ignore
-                        else
-                            t.ContinueWith(fun (s : Task<_>) -> 
-                                packer.Deactivate s.Result
-                                inactive.Add n |> ignore
-                            ) |> ignore
-                    | _ ->
-                        ()
 
 
-            member x.Activate() =
-                
-                let content =
-                    ASet.custom (fun self ->
-                        let view = view.GetValue self
-                        let proj = proj.GetValue self
+    let cloud =
+        Sg.pointCloud data {
+            targetPointDistance     = Mod.constant 20.0
+            customView              = Some (gridCam |> Mod.map CameraView.viewTrafo)
+            customProjection        = Some (gridProj |> Mod.map Frustum.projTrafo)
+            attributeTypes =
+                Map.ofList [
+                    DefaultSemantic.Positions, typeof<V3f>
+                    DefaultSemantic.Colors, typeof<C4b>
+                    DefaultSemantic.Normals, typeof<V3f>
+                ]
 
-                        let set = node.Data.Rasterize(view, proj, node.WantedNearPlaneDistance)
-
-                        let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
-                        let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
-
-                        let res = Seq.append add rem |> Seq.toList
-
-
-                        res
-                    )
-
-
-                let deltas = ConcurrentDeltaQueue.ofASet content
-
-                let runner =
-                    async {
-                        while true do
-                            let! op = deltas.DequeueAsync()
-
-                            match op with
-                                | Add n -> x.Add n |> ignore
-                                | Rem n -> x.Remove n |> ignore
-
-
-                    }
-
-
-                Async.StartAsTask(runner, cancellationToken = cancel.Token) |> ignore
-
-                { new IDisposable with member x.Dispose() = () }
-
-
-            member x.Attributes =
-                { new IAttributeProvider with
-                    member x.TryGetAttribute sem =
-                        match Map.tryFind sem node.AttributeTypes with
-                            | Some t ->
-                                let b = packer.GetBuffer sem
-                                BufferView(b, t) |> Some
-                            | None ->
-                                None
-
-                    member x.All = Seq.empty
-                    member x.Dispose() = ()
-                }
-
-            member x.DrawCallInfos =
-                packer |> Mod.map (fun set ->
-                    set |> Seq.toArray
-                        |> Array.map (fun range ->
-                            DrawCallInfo(
-                                FirstIndex = range.Min,
-                                FaceVertexCount = range.Size + 1,
-                                FirstInstance = 0,
-                                InstanceCount = 1,
-                                BaseVertex = 0
-                            )
-                        )
-                )
-
-
-
-        [<Semantic>]
-        type LodSem() =
-            member x.RenderObjects(l : LodNode) =
-                let obj = RenderObject.create()
-                let h = LodHandler(l, l.View, l.Proj)
-
-                let calls = h.DrawCallInfos
-
-                obj.IndirectBuffer <- calls |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
-                obj.IndirectCount <- calls |> Mod.map (fun a -> a.Length)
-                obj.Activate <- h.Activate
-                obj.VertexAttributes <- h.Attributes
-                obj.Mode <- Mod.constant IndexedGeometryMode.PointList
-
-                ASet.single (obj :> IRenderObject)
-
-
-
-
-
-
-
-    let attributeTypes =
-        Map.ofList [
-            DefaultSemantic.Positions, typeof<V3f>
-            DefaultSemantic.Colors, typeof<C4b>
-            DefaultSemantic.Normals, typeof<V3f>
-        ]
-
-
-//    let boxes = 
-//        Sg.LodNode(attributeTypes, data, 0.5, gridCam |> Mod.map CameraView.viewTrafo, gridProj |> Mod.map Frustum.projTrafo)  :> ISg
-//            //|> ASet.mapAsync (fun n -> data.GetData n 100)
-//            |> ASet.map (fun n -> 
-////                    match n.level with
-////                        | l when l < 4 -> data.GetData n 10000 |> Async.RunSynchronously
-////                        | _ -> data.GetData n 100 |> Async.RunSynchronously
-//                    data.GetData n 100 |> Async.RunSynchronously
-//                )
-//            |> Sg.geometrySet IndexedGeometryMode.PointList attributeTypes
-            //|> ASet.map (fun n -> Helpers.box (Helpers.randomColor()) n.bounds)
+        }
 
                                     
     let sg = 
         Sg.group' [
-            Sg.LodNode(attributeTypes, data, 0.05, gridCam |> Mod.map CameraView.viewTrafo, gridProj |> Mod.map Frustum.projTrafo)  :> ISg
+            cloud
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect                  
-                    DefaultSurfaces.vertexColor  |> toEffect 
+                    DefaultSurfaces.vertexColor  |> toEffect         
+                    DefaultSurfaces.pointSprite  |> toEffect     
+                    DefaultSurfaces.pointSpriteFragment  |> toEffect 
                 ]
             Helpers.frustum gridCam gridProj
 
@@ -776,20 +572,26 @@ module LoD =
                 DefaultSurfaces.trafo |> toEffect                  
                 DefaultSurfaces.vertexColor  |> toEffect 
                 ]
-            // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
-            // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
-            // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
-            |> Sg.uniform "PointSize" (Mod.constant 5.0)
+            |> Sg.uniform "PointSize" (Mod.constant 4.0)
             |> Sg.uniform "ViewportSize" win.Sizes
-            //|> Sg.fillMode (Mod.constant FillMode.Line)
-            //|> Sg.trafo (Mod.constant (Trafo3d.Scale 0.1))
     
     let run() =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg final
         win.Run()
+
+
+
+
+
+
+
+
+
+
+
 
 open LoD
 
