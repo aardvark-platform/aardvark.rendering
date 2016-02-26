@@ -161,6 +161,22 @@ module FShadeSceneGraph =
                 depthRange = Range1d(-1.0,1.0)
             }
 
+         static let mac410 = 
+            {
+                languageVersion = Version(4,1)
+                enabledExtensions = Set.empty
+                createUniformBuffers = true
+                createGlobalUniforms = false
+                createBindings = false
+                createDescriptorSets = false
+                createInputLocations = false
+                createRowMajorMatrices = false
+                createPerStageUniforms = false
+                flipHandedness = false
+                depthRange = Range1d(-1.0,1.0)
+            }
+
+
         static let glsl120 = 
             {
                 languageVersion = Version(1,2)
@@ -200,7 +216,7 @@ module FShadeSceneGraph =
                     let supportsUniformBuffers = t.GetProperty("SupportsUniformBuffers").GetValue(r) |> unbox<bool>
                     match System.Environment.OSVersion with
                         | Mac ->
-                            Some glsl410
+                            Some mac410
                         | _ ->
                             if supportsUniformBuffers then Some glsl410
                             else Some glsl120

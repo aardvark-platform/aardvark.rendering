@@ -11,6 +11,8 @@ open Aardvark.Base
 /// </summary>
 module OpenGl =
 
+    let mutable DefaultContext = Unchecked.defaultof<OpenTK.Graphics.IGraphicsContextInternal>
+
     type Handle = int
 
     [<AutoOpen>]
@@ -378,11 +380,22 @@ module OpenGl =
                     | ptr -> ptr
             | Mac ->
 
-                if opengl32 = 0n then 
+                let ctx = OpenTK.Graphics.GraphicsContext.CurrentContext :?> OpenTK.Graphics.IGraphicsContextInternal
+
+                let handle = ctx.GetAddress name
+                if handle = 0n then printfn "could not grab: %s" name
+                handle
+                (*if opengl32 = 0n then 
+                    let ctx : OpenTK.Graphics.IGraphicsContextInternal = failwith ""
+
+                    ctx.GetAddress(name)
+
                     opengl32Lib <- DynamicLinker.loadLibrary "/System/Library/Frameworks/OpenGL.framework/Versions/A/Libraries/libGL.dylib"
                     opengl32 <- opengl32Lib.Handle
 
-                opengl32Lib.GetFunction(name).Handle
+                let handle = opengl32Lib.GetFunction(name).Handle
+                if handle <> 0n then Log.warn "could not get function ptr: %A" name
+                handle*)
 
             | Windows ->
                 if opengl32 = 0n then 
