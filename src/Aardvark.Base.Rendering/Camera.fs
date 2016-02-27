@@ -152,6 +152,23 @@ module Frustum =
                 )
         )
 
+    let ofTrafo (t : Trafo3d) =
+        let bw = t.Backward
+        let far = 1.0 / (bw.M32 + bw.M33)
+        let near = 1.0 / bw.M33
+        let cx = bw.M03 * near
+        let cy = bw.M13 * near
+        let hsx = bw.M00 * near
+        let hsy = bw.M11 * near
+
+        {
+            left = cx - hsx
+            right = cx + hsx
+            top = cy + hsy
+            bottom = cy - hsy
+            near = near
+            far = far
+        }
 
     [<Obsolete("use projTrafo instead")>]
     let toTrafo f : Trafo3d = projTrafo f
