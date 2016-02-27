@@ -4,7 +4,7 @@ open System
 open Aardvark.Base
 open System.Runtime.CompilerServices
 
-type CameraView private(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d) =
+type CameraView(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d) =
     let viewTrafo = lazy ( Trafo3d.ViewTrafo(location, right, up, -forward) )
 
     member x.Sky = sky
@@ -101,6 +101,15 @@ module CameraView =
     let viewTrafo (c : CameraView) =
         c.ViewTrafo
 
+    let ofTrafo (t : Trafo3d) =
+        let bw = t.Backward
+
+        let right       = bw.C0.XYZ     // bw.TransformDir(V3d.IOO)
+        let up          = bw.C1.XYZ     // bw.TransformDir(V3d.OIO)
+        let forward     = -bw.C2.XYZ    // bw.TransformDir(-V3d.OOI)
+        let location    = bw.C3.XYZ     // bw.TransformPos(V3d.OOO)
+
+        CameraView(up, location, forward, up, right)
 
     let tryGetCenterOn (p : Plane3d) (c : CameraView) =
         let r = Ray3d(c.Location, c.Forward)
@@ -120,6 +129,9 @@ module CameraView =
     let inline backward (c : CameraView) = c.Backward
     let inline left     (c : CameraView) = c.Left
     let inline down     (c : CameraView) = c.Down
+
+
+
 
 
 type Frustum = { left   : float
@@ -207,7 +219,6 @@ type Camera =
         frustum : Frustum
     }
 
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Camera =
     
@@ -253,21 +264,23 @@ module Camera =
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ViewProj = 
+module ViewProjection = 
+    
+    [<AutoOpen>]
+    module private Helpers = 
+        let inline toPlane (v : V4d) =
+            Plane3d(-v.XYZ, v.W)
 
-    let inline private toPlane (v : V4d) =
-        Plane3d(-v.XYZ, v.W)
+        let inline maxDir (dir : V3d) (b : Box3d) =
+            V4d(
+                (if dir.X > 0.0 then b.Max.X else b.Min.X), 
+                (if dir.Y > 0.0 then b.Max.Y else b.Min.Y), 
+                (if dir.Z > 0.0 then b.Max.Z else b.Min.Z), 
+                 1.0
+            )
 
-    let inline private maxDir (dir : V3d) (b : Box3d) =
-        V4d(
-            (if dir.X > 0.0 then b.Max.X else b.Min.X), 
-            (if dir.Y > 0.0 then b.Max.Y else b.Min.Y), 
-            (if dir.Z > 0.0 then b.Max.Z else b.Min.Z), 
-             1.0
-        )
-
-    let inline private height (plane : V4d) (b : Box3d) =
-        plane.Dot(maxDir plane.XYZ b)
+        let inline height (plane : V4d) (b : Box3d) =
+            plane.Dot(maxDir plane.XYZ b)
          
 
     let intersects (b : Box3d) (viewProj : Trafo3d) =
@@ -284,6 +297,21 @@ module ViewProj =
         height (r3 + r2) b >= 0.0 &&
         height (r3 - r2) b >= 0.0        
 
+    let contains (point : V3d) (viewProj : Trafo3d) =
+        let fw = viewProj.Forward
+        let r0 = fw.R0
+        let r1 = fw.R1
+        let r2 = fw.R2
+        let r3 = fw.R3
+        let p = V4d(point, 1.0)
+
+        Vec.dot (r3 + r0) p >= 0.0 &&
+        Vec.dot (r3 - r0) p >= 0.0 &&
+        Vec.dot (r3 + r1) p >= 0.0 &&
+        Vec.dot (r3 - r1) p >= 0.0 &&
+        Vec.dot (r3 + r2) p >= 0.0 &&
+        Vec.dot (r3 - r2) p >= 0.0       
+
     let toHull3d (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
         let r1 = viewProj.Forward.R1
@@ -292,16 +320,17 @@ module ViewProj =
 
 
         Hull3d [|
-            r3 + r0 |> toPlane
-            r3 - r0 |> toPlane
-            r3 + r1 |> toPlane
-            r3 - r1 |> toPlane
-            r3 + r2 |> toPlane
-            r3 - r2 |> toPlane
+            r3 + r0 |> toPlane  // left
+            r3 - r0 |> toPlane  // right
+            r3 + r1 |> toPlane  // bottom
+            r3 - r1 |> toPlane  // top
+            r3 + r2 |> toPlane  // near
+            r3 - r2 |> toPlane  // far
         |]
 
     let inline toFastHull3d (viewProj : Trafo3d) =
         FastHull3d(toHull3d viewProj)
+
 
     let intersectsDX (b : Box3d) (viewProj : Trafo3d) =
         let fw = viewProj.Forward
@@ -316,6 +345,21 @@ module ViewProj =
         height (r3 - r1) b >= 0.0 &&
         height (     r2) b >= 0.0 &&
         height (r3 - r2) b >= 0.0        
+
+    let containsDX (point : V3d) (viewProj : Trafo3d) =
+        let fw = viewProj.Forward
+        let r0 = fw.R0
+        let r1 = fw.R1
+        let r2 = fw.R2
+        let r3 = fw.R3
+        let p = V4d(point, 1.0)
+
+        Vec.dot (r3 + r0) p >= 0.0 &&
+        Vec.dot (r3 - r0) p >= 0.0 &&
+        Vec.dot (r3 + r1) p >= 0.0 &&
+        Vec.dot (r3 - r1) p >= 0.0 &&
+        Vec.dot (     r2) p >= 0.0 &&
+        Vec.dot (r3 - r2) p >= 0.0       
 
     let toHull3dDX (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
