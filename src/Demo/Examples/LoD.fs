@@ -302,58 +302,48 @@ module LoD =
         let inline private height (plane : V4d) (b : Box3d) =
             plane.Dot(maxDir plane.XYZ b)
 
+        let inline private extendView (view : CameraView) =
+            // TODO: find some magic here (maybe needing movement info)
+            view
 
-
-        type Box3d with
-            member x.IntersectsFrustumGL (viewProj : M44d) =
-                let r0 = viewProj.R0
-                let r1 = viewProj.R1
-                let r2 = viewProj.R2
-                let r3 = viewProj.R3
-
-                height (r3 + r0) x >= 0.0 &&
-                height (r3 - r0) x >= 0.0 &&
-                height (r3 + r1) x >= 0.0 &&
-                height (r3 - r1) x >= 0.0 &&
-                height (r3 + r2) x >= 0.0 &&
-                height (r3 - r2) x >= 0.0 
-                
-
-
+        let inline private extendFrustum (frustum : Frustum) =
+            // TODO: find some magic here
+            frustum
 
 
         type ILodData with
-            member x.Rasterize(view : Trafo3d, projTrafo : Trafo3d, wantedNearPlaneDistance : float) =
-                let viewProj = view * projTrafo
-                let camLocation = view.GetViewPosition()
-
+            member x.Rasterize(viewTrafo : Trafo3d, projTrafo : Trafo3d, wantedNearPlaneDistance : float) =
                 let result = HashSet<LodDataNode>()
 
-                let frustum = Frustum.ofTrafo projTrafo
 
-                let hull = ViewProj.toFastHull3d viewProj
+                // extend view and proj a bit to reduce the amount of missing
+                // cells in the rasterization when moving
+                let view        = viewTrafo |> CameraView.ofTrafo |> extendView
+                let frustum     = projTrafo |> Frustum.ofTrafo |> extendFrustum
+                let viewTrafo = CameraView.viewTrafo view
+                let projTrafo = Frustum.projTrafo frustum
+           
+                // create a FastHull3d for the (extended) camera
+                let hull = viewTrafo * projTrafo |> ViewProjection.toFastHull3d
 
-
+                // traverse the ILodData building a set of nodes in view respecting
+                // the given nearPlaneDistance in [(-1,-1) x (1,1)] space
                 x.Traverse(fun node ->
                     if hull.Intersects(node.bounds) then
                         if node.inner then
                             let bounds = node.bounds
 
-
-
                             let depthRange =
                                 bounds.ComputeCorners()
-                                    |> Array.map view.Forward.TransformPos
+                                    |> Array.map viewTrafo.Forward.TransformPos
                                     |> Array.map (fun v -> -v.Z)
                                     |> Range1d
-//
-//                            if depthRange.Max < frustum.near || depthRange.Min > frustum.far then
-//                                false
-//                            else
+
                             let depthRange = Range1d(clamp frustum.near frustum.far depthRange.Min, clamp frustum.near frustum.far depthRange.Max)
                             let projAvgDistance =
                                 abs (node.granularity / depthRange.Min)
 
+                            // add all inner nodes to the result too
                             result.Add node |> ignore
                             if projAvgDistance > wantedNearPlaneDistance then
                                 true
@@ -366,7 +356,8 @@ module LoD =
                         false
                 )
 
-                result
+                // return the resulting node-set
+                result :> ISet<_>
 
 
 
@@ -376,6 +367,7 @@ module LoD =
     // ===================================================================================
     type PointCloudInfo =
         {
+            /// the element-types for all available attributes
             attributeTypes : Map<Symbol, Type>
 
             /// the target point distance in pixels
@@ -386,6 +378,16 @@ module LoD =
 
             /// an optional custom view projection trafo
             customProjection : Option<IMod<Trafo3d>>
+
+            /// the maximal percentage of inactive vertices kept in memory
+            /// For Example a value of 0.5 means that at most 50% of the vertices in memory are inactive
+            maxReuseRatio : float
+
+            /// the minimal number of inactive vertices kept in memory
+            minReuseCount : int64
+
+            /// the time interval for the pruning process in ms
+            pruneInterval : int
 
         }
 
@@ -424,8 +426,8 @@ module LoD =
             let pool = GeometryPool.create()
             let calls = DrawCallSet(true)
             let inactive = ConcurrentHashQueue<GeometryRef>()
-            let mutable inactiveSize = 0
-            let mutable activeSize = 0
+            let mutable inactiveSize = 0L
+            let mutable activeSize = 0L
 
             let levelCounts = Array.zeroCreate 128
 
@@ -436,9 +438,9 @@ module LoD =
             let activate (n : GeometryRef) =
                 let size = n.range.Size
                 if inactive.Remove n then
-                    Interlocked.Add(&inactiveSize, -size) |> ignore
+                    Interlocked.Add(&inactiveSize, int64 -size) |> ignore
 
-                Interlocked.Add(&activeSize, size) |> ignore
+                Interlocked.Add(&activeSize, int64 size) |> ignore
                 levelCounts.[n.node.level] <- levelCounts.[n.node.level] + 1
 
 
@@ -447,7 +449,7 @@ module LoD =
             let deactivate (n : GeometryRef) =
                 calls.Remove n.range |> ignore
                 inactive.Enqueue n |> ignore
-                let size = n.range.Size
+                let size = int64 n.range.Size
                 Interlocked.Add(&inactiveSize, size) |> ignore
                 Interlocked.Add(&activeSize, -size) |> ignore
                 levelCounts.[n.node.level] <- levelCounts.[n.node.level] - 1
@@ -506,17 +508,17 @@ module LoD =
 
                 let deltas = ConcurrentDeltaQueue.ofASet content
 
-                let printer =
-                    async {
-                        while true do
-                            do! Async.Sleep 5000
-                            Log.start "LoD"
-                            for i in 0..levelCounts.Length-1 do
-                                let cnt = levelCounts.[i]
-                                if cnt <> 0 then
-                                    Log.line "level %d: %d" i cnt
-                            Log.stop()
-                    }
+//                let printer =
+//                    async {
+//                        while true do
+//                            do! Async.Sleep 5000
+//                            Log.start "LoD"
+//                            for i in 0..levelCounts.Length-1 do
+//                                let cnt = levelCounts.[i]
+//                                if cnt <> 0 then
+//                                    Log.line "level %d: %d" i cnt
+//                            Log.stop()
+//                    }
 
                 let runner =
                     async {
@@ -535,14 +537,24 @@ module LoD =
                     async {
                         while true do
                             let mutable cnt = 0
-                            while inactiveSize > activeSize do
+
+                            let shouldPrune () =
+                                if inactiveSize > node.Config.minReuseCount then 
+                                    let ratio = float inactiveSize / float (inactiveSize + activeSize)
+                                    if ratio > node.Config.maxReuseRatio then true
+                                    else false
+                                else
+                                    false
+
+
+                            while shouldPrune() do
                                 match inactive.TryDequeue() with
                                     | (true, v) ->
                                         ReaderWriterLock.write geometriesRW (fun () ->
                                             match geometries.TryRemove v.node with
                                                 | (true, v) ->
                                                     let r = pool.Remove v.geometry
-                                                    Interlocked.Add(&inactiveSize, -v.range.Size) |> ignore
+                                                    Interlocked.Add(&inactiveSize, int64 -v.range.Size) |> ignore
                                                     cnt <- cnt + 1
                                                 | _ ->
                                                     Log.warn "failed to remove node: %A" v.node.id
@@ -550,13 +562,12 @@ module LoD =
 
                                     | _ ->
                                         ()
-                            if cnt > 0 then
-                                Log.line "{ active = %A; inactive = %A; removed = %A }" activeSize inactiveSize cnt
-                            do! Async.Sleep 500
+                            
+                            do! Async.Sleep node.Config.pruneInterval
                     }
 
                 Async.StartAsTask(runner, cancellationToken = cancel.Token) |> ignore
-                Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
+                //Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
                 Async.StartAsTask(prune, cancellationToken = cancel.Token) |> ignore
 
                 { new IDisposable with member x.Dispose() = () }
@@ -729,6 +740,9 @@ module LoD =
     let cloud =
         Sg.pointCloud data {
             targetPointDistance     = Mod.constant 40.0
+            maxReuseRatio           = 0.5
+            minReuseCount           = 1L <<< 20
+            pruneInterval           = 500
             customView              = Some (gridCam |> Mod.map CameraView.viewTrafo)
             customProjection        = Some (gridProj |> Mod.map Frustum.projTrafo)
             attributeTypes =
@@ -747,8 +761,8 @@ module LoD =
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect                  
                     DefaultSurfaces.vertexColor  |> toEffect         
-                    DefaultSurfaces.pointSprite  |> toEffect     
-                    DefaultSurfaces.pointSpriteFragment  |> toEffect 
+                    //DefaultSurfaces.pointSprite  |> toEffect     
+                    //DefaultSurfaces.pointSpriteFragment  |> toEffect 
                 ]
             Helpers.frustum gridCam gridProj
 
