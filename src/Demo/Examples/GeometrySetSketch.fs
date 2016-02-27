@@ -232,8 +232,8 @@ type private TypedCBuffer(release : cbuffer -> unit)  =
 
 type GeometryPool() =
     let manager = MemoryManager.createNop()
-    let pointers = ConcurrentDictionary<IndexedGeometry, managedptr>()
-    let buffers = ConcurrentDictionary<Symbol, TypedCBuffer>()
+    let pointers = Dict<IndexedGeometry, managedptr>()
+    let buffers = SymbolDict<TypedCBuffer>()
         
     let pointersRW = new ReaderWriterLockSlim()
     let buffersRW = new ReaderWriterLockSlim()
@@ -260,7 +260,7 @@ type GeometryPool() =
             
         let result = 
             ReaderWriterLock.write buffersRW (fun () ->
-                buffers.GetOrAdd(sem, fun sem ->
+                buffers.GetOrCreate(sem, fun sem ->
                     isNew := true
 
                     let destroy (t : cbuffer) =
@@ -281,7 +281,7 @@ type GeometryPool() =
         let isNew = ref false
         let ptr = 
             ReaderWriterLock.write pointersRW (fun () ->
-                pointers.GetOrAdd(g, fun g ->
+                pointers.GetOrCreate(g, fun g ->
                     let count = faceVertexCount g
                     isNew := true
                     manager.Alloc count

@@ -214,7 +214,9 @@ module LoD =
                                 node.Next <- null
                                 node    
                             | _ ->
-                                HashQueueNode(value, last, null)
+                                let node = HashQueueNode(value, last, null)
+                                nodes.[value] <- node
+                                node
 
                     if isNull last then first <- node
                     else last.Next <- node
@@ -240,8 +242,7 @@ module LoD =
                         false
                     else
                         let value = first.Value
-                        first <- first.Next
-                        first.Prev <- null
+                        detach first
                         nodes.Remove value |> ignore
                         result <- value
                         true
@@ -253,6 +254,9 @@ module LoD =
                     match nodes.TryRemove value with
                         | (true, node) ->
                             detach node
+                            node.Value <- Unchecked.defaultof<_>
+                            node.Prev <- null
+                            node.Next <- null
                             true
                         | _ ->
                             false
@@ -287,38 +291,74 @@ module LoD =
     module ``Lod Data Extensions`` =
         open System.Collections.Concurrent
 
+        let inline private maxDir (dir : V3d) (b : Box3d) =
+            V4d(
+                (if dir.X > 0.0 then b.Max.X else b.Min.X), 
+                (if dir.Y > 0.0 then b.Max.Y else b.Min.Y), 
+                (if dir.Z > 0.0 then b.Max.Z else b.Min.Z), 
+                 1.0
+            )
+
+        let inline private height (plane : V4d) (b : Box3d) =
+            plane.Dot(maxDir plane.XYZ b)
+
+
+
+        type Box3d with
+            member x.IntersectsFrustumGL (viewProj : M44d) =
+                let r0 = viewProj.R0
+                let r1 = viewProj.R1
+                let r2 = viewProj.R2
+                let r3 = viewProj.R3
+
+                height (r3 + r0) x >= 0.0 &&
+                height (r3 - r0) x >= 0.0 &&
+                height (r3 + r1) x >= 0.0 &&
+                height (r3 - r1) x >= 0.0 &&
+                height (r3 + r2) x >= 0.0 &&
+                height (r3 - r2) x >= 0.0 
+                
+
+
+
+
         type ILodData with
             member x.Rasterize(view : Trafo3d, projTrafo : Trafo3d, wantedNearPlaneDistance : float) =
                 let viewProj = view * projTrafo
                 let camLocation = view.GetViewPosition()
 
                 let result = HashSet<LodDataNode>()
-                let near = -projTrafo.Backward.TransformPosProj(V3d.OOO).Z
-                let far = -projTrafo.Backward.TransformPosProj(V3d.OOI).Z
+
+                let frustum = Frustum.ofTrafo projTrafo
+
+                
+
 
                 x.Traverse(fun node ->
-                    if node.bounds.IntersectsFrustum viewProj.Forward then
+                    if node.bounds.IntersectsFrustumGL viewProj.Forward then
                         if node.inner then
                             let bounds = node.bounds
+
+
 
                             let depthRange =
                                 bounds.ComputeCorners()
                                     |> Array.map view.Forward.TransformPos
                                     |> Array.map (fun v -> -v.Z)
                                     |> Range1d
+//
+//                            if depthRange.Max < frustum.near || depthRange.Min > frustum.far then
+//                                false
+//                            else
+                            let depthRange = Range1d(clamp frustum.near frustum.far depthRange.Min, clamp frustum.near frustum.far depthRange.Max)
+                            let projAvgDistance =
+                                abs (node.granularity / depthRange.Min)
 
-                            if depthRange.Max < near || depthRange.Min > far then
-                                false
+                            result.Add node |> ignore
+                            if projAvgDistance > wantedNearPlaneDistance then
+                                true
                             else
-                                let depthRange = Range1d(clamp near far depthRange.Min, clamp near far depthRange.Max)
-                                let projAvgDistance =
-                                    abs (node.granularity / depthRange.Min)
-
-                                result.Add node |> ignore
-                                if projAvgDistance > wantedNearPlaneDistance then
-                                    true
-                                else
-                                    false
+                                false
                         else
                             result.Add node |> ignore
                             false
@@ -369,7 +409,14 @@ module LoD =
         open Aardvark.Base.Ag
         open Aardvark.SceneGraph.Semantics
 
-        type GeometryRef = { node : LodDataNode; geometry : IndexedGeometry; range : Range1i }
+        [<CustomEquality; NoComparison>]
+        type GeometryRef = { node : LodDataNode; geometry : IndexedGeometry; range : Range1i } with
+
+            override x.GetHashCode() = x.node.GetHashCode()
+            override x.Equals o =
+                match o with
+                    | :? GeometryRef as o -> x.node.Equals(o.node)
+                    | _ -> false
 
         type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>) =
             let cancel = new System.Threading.CancellationTokenSource()
@@ -380,7 +427,11 @@ module LoD =
             let mutable inactiveSize = 0
             let mutable activeSize = 0
 
-            let geometries = FastConcurrentDict<LodDataNode, GeometryRef>()
+            let levelCounts = Array.zeroCreate 128
+
+
+            let geometriesRW = new ReaderWriterLockSlim()
+            let geometries = Dict<LodDataNode, GeometryRef>()
 
             let activate (n : GeometryRef) =
                 let size = n.range.Size
@@ -388,6 +439,8 @@ module LoD =
                     Interlocked.Add(&inactiveSize, -size) |> ignore
 
                 Interlocked.Add(&activeSize, size) |> ignore
+                levelCounts.[n.node.level] <- levelCounts.[n.node.level] + 1
+
 
                 calls.Add n.range |> ignore
 
@@ -397,14 +450,17 @@ module LoD =
                 let size = n.range.Size
                 Interlocked.Add(&inactiveSize, size) |> ignore
                 Interlocked.Add(&activeSize, -size) |> ignore
+                levelCounts.[n.node.level] <- levelCounts.[n.node.level] - 1
 
 
             member x.Add(n : LodDataNode) =
                 let result = 
-                    geometries.GetOrCreate(n, fun n ->
-                        let g = node.Data.GetData n |> Async.RunSynchronously
-                        let range = pool.Add(g)
-                        { node = n; geometry = g; range = range }
+                    ReaderWriterLock.write geometriesRW (fun () ->
+                        geometries.GetOrCreate(n, fun n ->
+                            let g = node.Data.GetData n |> Async.RunSynchronously
+                            let range = pool.Add(g)
+                            { node = n; geometry = g; range = range }
+                        )
                     )
 
                 activate result
@@ -412,9 +468,11 @@ module LoD =
                 result
 
             member x.Remove(n : LodDataNode) =
-                match geometries.TryGetValue n with
-                    | (true, t) -> deactivate t
-                    | _ -> ()
+                ReaderWriterLock.read geometriesRW (fun () ->
+                    match geometries.TryGetValue n with
+                        | (true, t) -> deactivate t
+                        | _ -> ()
+                )
 
 
             member x.Activate() =
@@ -448,6 +506,18 @@ module LoD =
 
                 let deltas = ConcurrentDeltaQueue.ofASet content
 
+                let printer =
+                    async {
+                        while true do
+                            do! Async.Sleep 5000
+                            Log.start "LoD"
+                            for i in 0..levelCounts.Length-1 do
+                                let cnt = levelCounts.[i]
+                                if cnt <> 0 then
+                                    Log.line "level %d: %d" i cnt
+                            Log.stop()
+                    }
+
                 let runner =
                     async {
                         while true do
@@ -457,26 +527,37 @@ module LoD =
                                 | Add n -> x.Add n |> ignore
                                 | Rem n -> x.Remove n |> ignore
 
-//                            let mutable cnt = 0
-//                            while inactiveSize > activeSize do
-//                                match inactive.TryDequeue() with
-//                                    | (true, v) ->
-//                                        calls.Remove v.range |> ignore
-//                                        geometries.TryRemove v.node |> ignore
-//                                        pool.Remove v.geometry |> ignore
-//                                        Interlocked.Add(&inactiveSize, -v.range.Size) |> ignore
-//                                        cnt <- cnt + 1
-//
-//                                    | _ ->
-//                                        ()
-
 
                     }
 
 
+                let prune =
+                    async {
+                        while true do
+                            let mutable cnt = 0
+                            while inactiveSize > activeSize do
+                                match inactive.TryDequeue() with
+                                    | (true, v) ->
+                                        ReaderWriterLock.write geometriesRW (fun () ->
+                                            match geometries.TryRemove v.node with
+                                                | (true, v) ->
+                                                    let r = pool.Remove v.geometry
+                                                    Interlocked.Add(&inactiveSize, -v.range.Size) |> ignore
+                                                    cnt <- cnt + 1
+                                                | _ ->
+                                                    Log.warn "failed to remove node: %A" v.node.id
+                                        )
 
+                                    | _ ->
+                                        ()
+                            if cnt > 0 then
+                                Log.line "{ active = %A; inactive = %A; removed = %A }" activeSize inactiveSize cnt
+                            do! Async.Sleep 500
+                    }
 
                 Async.StartAsTask(runner, cancellationToken = cancel.Token) |> ignore
+                Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
+                Async.StartAsTask(prune, cancellationToken = cancel.Token) |> ignore
 
                 { new IDisposable with member x.Dispose() = () }
 
@@ -632,7 +713,7 @@ module LoD =
             )
         )
 
-        let mainProj = perspective win
+        let mainProj = perspective win 
         let gridProj = Frustum.perspective 60.0 1.0 50.0 1.0 |> Mod.constant
 
         let proj =
