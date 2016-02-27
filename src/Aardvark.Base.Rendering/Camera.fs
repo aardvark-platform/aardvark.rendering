@@ -233,6 +233,7 @@ module Camera =
 
     let inline projTrafo (cam : Camera) = cam.frustum |> Frustum.projTrafo
 
+    let viewProjTrafo (cam : Camera) = (CameraView.viewTrafo cam.cameraView) * (Frustum.projTrafo cam.frustum)
 
     let inline cameraView (cam : Camera) = cam.cameraView
     let inline frustum (cam : Camera) = cam.frustum
@@ -250,7 +251,92 @@ module Camera =
     let inline far      (cam : Camera) = cam.frustum.far
 
 
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ViewProj = 
+
+    let inline private toPlane (v : V4d) =
+        Plane3d(-v.XYZ, v.W)
+
+    let inline private maxDir (dir : V3d) (b : Box3d) =
+        V4d(
+            (if dir.X > 0.0 then b.Max.X else b.Min.X), 
+            (if dir.Y > 0.0 then b.Max.Y else b.Min.Y), 
+            (if dir.Z > 0.0 then b.Max.Z else b.Min.Z), 
+             1.0
+        )
+
+    let inline private height (plane : V4d) (b : Box3d) =
+        plane.Dot(maxDir plane.XYZ b)
+         
+
+    let intersects (b : Box3d) (viewProj : Trafo3d) =
+        let fw = viewProj.Forward
+        let r0 = fw.R0
+        let r1 = fw.R1
+        let r2 = fw.R2
+        let r3 = fw.R3
+
+        height (r3 + r0) b >= 0.0 &&
+        height (r3 - r0) b >= 0.0 &&
+        height (r3 + r1) b >= 0.0 &&
+        height (r3 - r1) b >= 0.0 &&
+        height (r3 + r2) b >= 0.0 &&
+        height (r3 - r2) b >= 0.0        
+
+    let toHull3d (viewProj : Trafo3d) =
+        let r0 = viewProj.Forward.R0
+        let r1 = viewProj.Forward.R1
+        let r2 = viewProj.Forward.R2
+        let r3 = viewProj.Forward.R3
+
+
+        Hull3d [|
+            r3 + r0 |> toPlane
+            r3 - r0 |> toPlane
+            r3 + r1 |> toPlane
+            r3 - r1 |> toPlane
+            r3 + r2 |> toPlane
+            r3 - r2 |> toPlane
+        |]
+
+    let inline toFastHull3d (viewProj : Trafo3d) =
+        FastHull3d(toHull3d viewProj)
+
+    let intersectsDX (b : Box3d) (viewProj : Trafo3d) =
+        let fw = viewProj.Forward
+        let r0 = fw.R0
+        let r1 = fw.R1
+        let r2 = fw.R2
+        let r3 = fw.R3
+
+        height (r3 + r0) b >= 0.0 &&
+        height (r3 - r0) b >= 0.0 &&
+        height (r3 + r1) b >= 0.0 &&
+        height (r3 - r1) b >= 0.0 &&
+        height (     r2) b >= 0.0 &&
+        height (r3 - r2) b >= 0.0        
+
+    let toHull3dDX (viewProj : Trafo3d) =
+        let r0 = viewProj.Forward.R0
+        let r1 = viewProj.Forward.R1
+        let r2 = viewProj.Forward.R2
+        let r3 = viewProj.Forward.R3
+
+
+        Hull3d [|
+            r3 + r0 |> toPlane
+            r3 - r0 |> toPlane
+            r3 + r1 |> toPlane
+            r3 - r1 |> toPlane
+            r2      |> toPlane
+            r3 - r2 |> toPlane
+        |]
+
+    let inline toFastHull3dDX (viewProj : Trafo3d) =
+        FastHull3d(toHull3dDX viewProj)
+
 [<Extension;AutoOpen>]
-type CSharpExtensions() =
+type CameraCSharpExtensions() =
     [<Extension>]
     static member ProjTrafo(f : Frustum) = Frustum.projTrafo f
