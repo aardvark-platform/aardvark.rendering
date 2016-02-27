@@ -331,11 +331,11 @@ module LoD =
 
                 let frustum = Frustum.ofTrafo projTrafo
 
-                
+                let hull = ViewProj.toFastHull3d viewProj
 
 
                 x.Traverse(fun node ->
-                    if node.bounds.IntersectsFrustumGL viewProj.Forward then
+                    if hull.Intersects(node.bounds) then
                         if node.inner then
                             let bounds = node.bounds
 
