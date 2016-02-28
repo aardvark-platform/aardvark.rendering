@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Rendering.GL
 
+#nowarn "9"
+
 open System
 open System.Threading
 open Aardvark.Base
@@ -8,6 +10,7 @@ open Aardvark.Rendering.GL
 open Aardvark.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
+open Microsoft.FSharp.NativeInterop
 
 [<AutoOpen>]
 module ResourceManager =
@@ -341,6 +344,7 @@ module ResourceManager =
         static let vao = Sym.ofString "VertexArrayObject"
         static let uniformBufferViews = Sym.ofString "UniformBufferView"
         static let bufferViews = Sym.ofString "BufferView"
+        static let memoryLocations = Sym.ofString "MemoryLocations"
 
         let bufferHandler = 
             if shareBuffers then 
@@ -457,6 +461,29 @@ module ResourceManager =
                       destroy = fun () -> bufferHandler.Delete(handle)
                       resource = handle
                       kind = ResourceKind.Buffer 
+                    } 
+            )
+
+        
+        member x.CreateMemoryLocation<'a when 'a : unmanaged>(data : IMod<'a>) =
+            cache.[arrayBuffer].GetOrAdd(
+                [data], 
+                fun self ->
+                    
+                    let current = NativePtr.alloc 1
+                    NativePtr.write current (data.GetValue self)
+                    let handle = Mod.constant (current |> NativePtr.toNativeInt)
+
+                    { trackChangedInputs = false
+                      dependencies = [data]
+                      updateCPU = fun _ -> ()
+                      updateGPU = fun () -> 
+                        let v = data.GetValue self
+                        NativePtr.write current v
+                        FrameStatistics.Zero
+                      destroy = fun () -> NativePtr.free current
+                      resource = handle
+                      kind = ResourceKind.Unknown 
                     } 
             )
 

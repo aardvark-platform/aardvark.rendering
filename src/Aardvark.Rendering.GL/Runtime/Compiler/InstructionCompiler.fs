@@ -163,7 +163,7 @@ module Instructions =
                 | _ -> []
         )
 
-    let drawIndirect (program : Program) (indexArray : IMod<System.Array>) (count : IMod<int>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
+    let drawIndirect (program : Program) (indexArray : IMod<System.Array>) (count : ChangeableResource<nativeint>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
         let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
         let indexType = 
@@ -181,10 +181,9 @@ module Instructions =
 
         let instruction  =
             adaptive {
+                let! cntPtr = count.Resource
                 let! igMode = mode
                 let! (indexed, indexType) = indexType
-                let! cnt = Mod.map2 (fun a c -> if a then c else 0) isActive count
-
                 let mode =
                     if hasTess then int OpenGl.Enums.DrawMode.Patches
                     else 
@@ -211,9 +210,9 @@ module Instructions =
                         elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
                         else failwithf "unsupported index type: %A"  indexType
 
-                    return igMode, Instruction.MultiDrawElementsIndirect mode indexType 0n cnt 0
+                    return igMode, Instruction.MultiDrawElementsIndirectPtr mode indexType 0n cntPtr 0
                 else
-                    return igMode, Instruction.MultiDrawArraysIndirect mode 0n cnt 0
+                    return igMode, Instruction.MultiDrawArraysIndirectPtr mode 0n cntPtr 0
             }
 
 

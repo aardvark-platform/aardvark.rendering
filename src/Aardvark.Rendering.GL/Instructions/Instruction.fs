@@ -171,3 +171,10 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
 
     static member MultiDrawElementsIndirect (mode : int) (t : int) (indirect : nativeint) (drawCount : int) (stride : int) =
         Instruction(InstructionCode.MultiDrawElementsIndirect, [|mode :> obj; t :> obj; indirect :> obj; drawCount :> obj; stride :> obj|])
+
+    static member MultiDrawArraysIndirectPtr (mode : int) (indirect : nativeint) (drawCountPtr : nativeint) (stride : int) =
+        Instruction(InstructionCode.MultiDrawArraysIndirect, [|mode :> obj; indirect :> obj; Aardvark.Base.Ptr32 drawCountPtr :> obj; stride :> obj|])
+
+
+    static member MultiDrawElementsIndirectPtr (mode : int) (t : int) (indirect : nativeint) (drawCountPtr : nativeint) (stride : int) =
+        Instruction(InstructionCode.MultiDrawElementsIndirect, [|mode :> obj; t :> obj; indirect :> obj; Aardvark.Base.Ptr32 drawCountPtr :> obj; stride :> obj|])

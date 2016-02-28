@@ -24,6 +24,7 @@ type PreparedRenderObject =
         Buffers : list<int * BufferView * AttributeFrequency * ChangeableResource<Buffer>>
         IndexBuffer : Option<ChangeableResource<Buffer>>
 
+        IndirectCountPtr : Option<ChangeableResource<nativeint>>
         IndirectBuffer : Option<ChangeableResource<Buffer>>
 
         mutable VertexArray : ChangeableResource<VertexArrayObject>
@@ -105,6 +106,13 @@ type PreparedRenderObject =
                     ib.UpdateGPU(caller) |> ignore
             | _ -> ()
 
+        match x.IndirectCountPtr with
+            | Some ib ->
+                if ib.OutOfDate then
+                    ib.UpdateCPU(caller)
+                    ib.UpdateGPU(caller) |> ignore
+            | _ -> ()
+
         if x.VertexArray.OutOfDate then
             x.VertexArray.UpdateCPU(caller)
             x.VertexArray.UpdateGPU(caller) |> ignore
@@ -116,6 +124,7 @@ type PreparedRenderObject =
             x.VertexArray.Dispose() 
             x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
             x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
+            x.IndirectCountPtr |> Option.iter (fun b -> b.Dispose())
             x.IndirectBuffer |> Option.iter (fun b -> b.Dispose())
             x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
             x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
@@ -159,6 +168,7 @@ module ``Prepared render object extensions`` =
                 Textures = Map.empty
                 Buffers = []
                 IndexBuffer = None
+                IndirectCountPtr = None
                 IndirectBuffer = None
                 VertexArray = Unchecked.defaultof<_>
                 VertexAttributeValues = Map.empty
@@ -302,6 +312,10 @@ type ResourceManagerExtensions private() =
             if isNull rj.IndirectBuffer then None
             else x.CreateIndirectBuffer(not (isNull rj.Indices), rj.IndirectBuffer) |> Some
 
+        let indirectCount =
+            if isNull rj.IndirectCount then None
+            else x.CreateMemoryLocation(rj.IndirectCount) |> Some
+
         // create the VertexArrayObject
         let vao =
             x.CreateVertexArrayObject(buffers, index)
@@ -333,6 +347,7 @@ type ResourceManagerExtensions private() =
             Textures = textures
             Buffers = buffers
             IndexBuffer = index
+            IndirectCountPtr = indirectCount
             IndirectBuffer = indirect
             VertexArray = vao
             VertexAttributeValues = attributeValues
