@@ -69,6 +69,9 @@
     <Compile Include="RuntimeExtensions.fs" />
     <Compile Include="RenderTask.fs" />
     <Compile Include="Camera.fs" />
+    <Compile Include="ChangeableBuffer.fs" />
+    <Compile Include="GeometryPool.fs" />
+    <Compile Include="DrawCallSet.fs" />
     <Compile Include="LoD.fs" />
   </ItemGroup>
   <ItemGroup>
