@@ -96,7 +96,8 @@ type SwitchFragment(mode : VMMode) =
                 | :? int as i -> nativeint i
                 | :? nativeint as i -> i
                 | :? float32 as f -> BitConverter.ToInt32(BitConverter.GetBytes(f), 0) |> nativeint
-                | _ -> failwith "invalid argument"
+                | :? PtrArgument as ptr -> failwith "[GLVM] does not support ptr arguments atm."
+                | a -> failwithf "[GLVM] invalid argument: %A" a
         )
 
     let appendToBlock (id : int) (instructions : seq<Instruction>) =
@@ -107,7 +108,7 @@ type SwitchFragment(mode : VMMode) =
                 | [| a; b; c |] -> GLVM.vmAppend3(frag, id, i.Operation, a, b, c)
                 | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, i.Operation, a, b, c, d)
                 | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
-                | _ -> failwithf "invalid instruction: %A" i
+                | _ -> failwithf "[GLVM] invalid instruction: %A" i
 
     member x.NativeFragment = frag
 
