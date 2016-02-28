@@ -220,6 +220,15 @@ module ExecutionContext =
         let inline int64 id = i.Arguments.[id] |> unbox<int64>
         let inline ptr id = i.Arguments.[id] |> unbox<nativeint>
 
+        let drawCount (id : int) =
+            match i.Arguments.[id] with
+                | :? Aardvark.Base.PtrArgument as p -> 
+                    match p with
+                        | Ptr32 p -> System.Runtime.InteropServices.Marshal.ReadInt32 p
+                        | Ptr64 p -> System.Runtime.InteropServices.Marshal.ReadInt64 p |> int32
+                | :? int as v -> v
+                | _ -> failwith "bad draw call count"
+
         match i.Operation with
             | InstructionCode.BindVertexArray          -> OpenGl.Unsafe.BindVertexArray(int 0)
             | InstructionCode.BindProgram              -> OpenGl.Unsafe.BindProgram(int 0)
@@ -269,8 +278,10 @@ module ExecutionContext =
             | InstructionCode.VertexAttrib3f           -> OpenGl.Unsafe.VertexAttrib3f (int 0) (float 1) (float 2) (float 3)
             | InstructionCode.VertexAttrib4f           -> OpenGl.Unsafe.VertexAttrib4f (int 0) (float 1) (float 2) (float 3) (float 4)
 
-            | InstructionCode.MultiDrawArraysIndirect  -> OpenGl.Unsafe.MultiDrawArraysIndirect (int 0) (ptr 1) (int 2) (int 3)
-            | InstructionCode.MultiDrawElementsIndirect  -> OpenGl.Unsafe.MultiDrawElementsIndirect (int 0) (int 1) (ptr 2) (int 3) (int 4)
+            | InstructionCode.MultiDrawArraysIndirect  -> 
+                OpenGl.Unsafe.MultiDrawArraysIndirect (int 0) (ptr 1) (drawCount 2) (int 3)
+            | InstructionCode.MultiDrawElementsIndirect  -> 
+                OpenGl.Unsafe.MultiDrawElementsIndirect (int 0) (int 1) (ptr 2) (drawCount 3) (int 4)
 
             | InstructionCode.GetError                 -> ()
             | _ -> failwithf "unknown instruction: %A" i
