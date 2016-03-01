@@ -110,6 +110,10 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
             popFbo fboState
             popDebugOutput debugState
 
+            GL.BindVertexArray 0
+            GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
+            
+
             frameId <- frameId + 1UL
             RenderingResult(fbo, stats)
         )
@@ -237,8 +241,12 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
         let mutable count = 0 
         let counts = Dictionary<ResourceKind, ref<int>>()
 
-
-        let dirtyResources = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
+        let dirtyResources =
+            lock dirtyLock (fun () ->
+                let current = dirtyResources
+                dirtyResources <- HashSet()
+                current
+            )
         if dirtyResources.Count > 0 then
             System.Threading.Tasks.Parallel.ForEach(dirtyResources, fun (d : IChangeableResource) ->
                 lock d (fun () ->

@@ -213,10 +213,18 @@ module LoD =
             member x.GetData (cell : LodDataNode) =
                 async {
                     do! Async.SwitchToThreadPool()
-                    let b = Helpers.randomPoints cell.bounds 100
+                    let box = cell.bounds
+                    let points = 
+                        [| for x in 0 .. 9 do
+                             for y in 0 .. 9 do
+                                for z in 0 .. 9 do
+                                    yield V3d(x,y,z)*0.1*box.Size + box.Min |> V3f.op_Explicit
+                         |]
+                    let colors = Array.create points.Length (Helpers.randomColor())
+                    //let b = Helpers.randomPoints cell.bounds 100
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
                     //do! Async.Sleep 400
-                    return b
+                    return IndexedGeometry(IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
                 }
 
     let data = DummyDataProvider(Box3d(V3d.OOO, 20.0 * V3d.III)) :> ILodData
@@ -332,6 +340,8 @@ module LoD =
             |> Sg.uniform "ViewportSize" win.Sizes
     
     let run() =
+        Report.Warn "other hate"
+        printfn "HATEBREED"
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg final
         win.Run()

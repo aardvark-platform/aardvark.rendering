@@ -9,6 +9,7 @@ open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
+open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 
@@ -538,12 +539,32 @@ module IndirectBufferExtensions =
             | _ -> 
                 failwith "IndirectBuffers must be ArrayBuffers atm."
 
+
+    type IndirectBuffer =
+        class
+            val mutable public Buffer : Buffer
+            val mutable public Count : nativeptr<int>
+        
+            new(b, ptr) = { Buffer = b; Count = ptr }
+        end 
+
     type Context with
-        member x.UploadIndirect(buffer : Buffer, indexed : bool, data : IBuffer) =
-            x.Upload(buffer, getIndirectData indexed data)
+
+        member x.Delete(buffer : IndirectBuffer) =
+            x.Delete(buffer.Buffer)
+            NativePtr.free buffer.Count
+
+        member x.UploadIndirect(buffer : IndirectBuffer, indexed : bool, data : IBuffer) =
+            let data = getIndirectData indexed data
+            x.Upload(buffer.Buffer, data)
+            NativePtr.write buffer.Count data.Length
 
         member x.CreateIndirect(indexed : bool, data : IBuffer) =
-            x.CreateBuffer(getIndirectData indexed data)
+            let data = getIndirectData indexed data
+            let buffer = x.CreateBuffer(data)
+            let cnt = NativePtr.alloc 1
+            NativePtr.write cnt data.Length
+            IndirectBuffer(buffer, cnt)
 
 
 

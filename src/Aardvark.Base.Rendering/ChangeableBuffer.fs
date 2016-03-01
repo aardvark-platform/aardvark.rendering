@@ -85,7 +85,7 @@ type cbuffer(sizeInBytes : nativeint, release : cbuffer -> unit) =
     member x.Write(source : nativeint, offsetInBytes : nativeint, sizeInBytes : nativeint) =
         // check for out of bounds writes
         assert(offsetInBytes >= 0n && sizeInBytes >= 0n)
-        assert(offsetInBytes + sizeInBytes < capacity)
+        assert(offsetInBytes + sizeInBytes <= capacity)
 
         ReaderWriterLock.read ptrLock (fun () ->
             // copy the content

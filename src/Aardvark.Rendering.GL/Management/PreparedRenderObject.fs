@@ -24,8 +24,7 @@ type PreparedRenderObject =
         Buffers : list<int * BufferView * AttributeFrequency * ChangeableResource<Buffer>>
         IndexBuffer : Option<ChangeableResource<Buffer>>
 
-        IndirectCountPtr : Option<ChangeableResource<nativeint>>
-        IndirectBuffer : Option<ChangeableResource<Buffer>>
+        IndirectBuffer : Option<ChangeableResource<IndirectBuffer>>
 
         mutable VertexArray : ChangeableResource<VertexArrayObject>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
@@ -55,7 +54,6 @@ type PreparedRenderObject =
     member x.BlendMode = x.Original.BlendMode
     member x.FillMode = x.Original.FillMode
     member x.StencilMode = x.Original.StencilMode
-    member x.IndirectCount = x.Original.IndirectCount
 
     member x.Update(caller : IAdaptiveObject) =
         use token = x.Context.ResourceLock
@@ -106,12 +104,6 @@ type PreparedRenderObject =
                     ib.UpdateGPU(caller) |> ignore
             | _ -> ()
 
-        match x.IndirectCountPtr with
-            | Some ib ->
-                if ib.OutOfDate then
-                    ib.UpdateCPU(caller)
-                    ib.UpdateGPU(caller) |> ignore
-            | _ -> ()
 
         if x.VertexArray.OutOfDate then
             x.VertexArray.UpdateCPU(caller)
@@ -124,7 +116,6 @@ type PreparedRenderObject =
             x.VertexArray.Dispose() 
             x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
             x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
-            x.IndirectCountPtr |> Option.iter (fun b -> b.Dispose())
             x.IndirectBuffer |> Option.iter (fun b -> b.Dispose())
             x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
             x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
@@ -168,7 +159,6 @@ module ``Prepared render object extensions`` =
                 Textures = Map.empty
                 Buffers = []
                 IndexBuffer = None
-                IndirectCountPtr = None
                 IndirectBuffer = None
                 VertexArray = Unchecked.defaultof<_>
                 VertexAttributeValues = Map.empty
@@ -313,8 +303,15 @@ type ResourceManagerExtensions private() =
             else x.CreateIndirectBuffer(not (isNull rj.Indices), rj.IndirectBuffer) |> Some
 
         let indirectCount =
-            if isNull rj.IndirectCount then None
-            else x.CreateMemoryLocation(rj.IndirectCount) |> Some
+            if isNull rj.IndirectBuffer then None
+            else 
+                let count = 
+                    rj.IndirectBuffer |> Mod.map (fun b -> 
+                        match b with
+                            | :? ArrayBuffer as ab -> ab.Data.Length
+                            | _ -> failwith "unsupported Indirect Buffer"
+                    )
+                x.CreateMemoryLocation(count) |> Some
 
         // create the VertexArrayObject
         let vao =
@@ -347,7 +344,6 @@ type ResourceManagerExtensions private() =
             Textures = textures
             Buffers = buffers
             IndexBuffer = index
-            IndirectCountPtr = indirectCount
             IndirectBuffer = indirect
             VertexArray = vao
             VertexAttributeValues = attributeValues

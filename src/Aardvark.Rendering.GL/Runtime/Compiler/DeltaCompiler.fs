@@ -157,13 +157,12 @@ module DeltaCompiler =
             // TODO: surface assumed to be constant here
             let prog = me.Program.Resource.GetValue()
 
-            match me.IndirectBuffer, me.IndirectCountPtr with
-                | Some ib, Some ibc ->
+            match me.IndirectBuffer with
+                | Some ib ->
                     do! useResource ib
-                    do! useResource ibc
                     
                     yield Instructions.bindIndirectBuffer ib
-                    yield Instructions.drawIndirect prog me.Original.Indices ibc me.Mode me.IsActive
+                    yield Instructions.drawIndirect prog me.Original.Indices ib me.Mode me.IsActive
                 | _ ->
                     yield Instructions.draw prog me.Original.Indices me.DrawCallInfos me.Mode me.IsActive
 

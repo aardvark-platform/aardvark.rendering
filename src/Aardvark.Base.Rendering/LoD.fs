@@ -55,10 +55,10 @@ module ``Lod Data Extensions`` =
 
             // extend view and proj a bit to reduce the amount of missing
             // cells in the rasterization when moving
-            let view        = viewTrafo |> CameraView.ofTrafo |> extendView
+            //let view        = viewTrafo |> CameraView.ofTrafo |> extendView
             let frustum     = projTrafo |> Frustum.ofTrafo |> extendFrustum
-            let viewTrafo = CameraView.viewTrafo view
-            let projTrafo = Frustum.projTrafo frustum
+//            let viewTrafo = CameraView.viewTrafo view
+//            let projTrafo = Frustum.projTrafo frustum
            
             // create a FastHull3d for the (extended) camera
             let hull = viewTrafo * projTrafo |> ViewProjection.toFastHull3d

@@ -50,7 +50,6 @@ type RenderObject =
                 
         mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
         mutable IndirectBuffer      : IMod<IBuffer>
-        mutable IndirectCount       : IMod<int>
         mutable Mode                : IMod<IndexedGeometryMode>
         
 
@@ -87,7 +86,6 @@ type RenderObject =
           RenderPass = 0UL
           DrawCallInfos = null
           IndirectBuffer = null
-          IndirectCount = null
 
           Mode = null
           Surface = null
@@ -141,7 +139,6 @@ module RenderObjectExtensions =
           RenderPass = 0UL
           DrawCallInfos = null
           IndirectBuffer = null
-          IndirectCount = null
           Mode = null
           Surface = null
           DepthTest = null
