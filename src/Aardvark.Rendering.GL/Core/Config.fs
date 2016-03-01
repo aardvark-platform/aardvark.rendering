@@ -43,7 +43,7 @@ module Config =
     /// defines whether the GL context should log errors
     /// </summary>
     [<Literal>]
-    let CheckErrors = true
+    let CheckErrors = false
 
     /// ResourceSet.Update and Program.Run use a GL fence sync if true.
     /// This flag improves timings for gpu uploads but also incurs a (possible) performance

@@ -141,11 +141,9 @@ type GeometryPool() =
 
 type private TypedMappedBuffer(runtime : IRuntime)  =
     let lockObj = obj()
-    let mutable elementTypeAndSize : Option<Type*nativeint> = None
+    let mutable elementTypeAndSize = None
     let mutable sizeInElements = 0n
     let buffer = runtime.CreateMappedBuffer()
-
-    let bufferMod = buffer :> IMod<IBuffer>
 
     member x.AdjustToCount(count : nativeint) =
         lock lockObj (fun () ->
@@ -176,12 +174,10 @@ type private TypedMappedBuffer(runtime : IRuntime)  =
         let sizeInBytes = elementSize * count
 
         let arr = GCHandle.Alloc(data,GCHandleType.Pinned)
-        try
-            buffer.Write(arr.AddrOfPinnedObject(), int offsetInBytes, int sizeInBytes)
-        finally
-            arr.Free()
+        try buffer.Write(arr.AddrOfPinnedObject(), int offsetInBytes, int sizeInBytes)
+        finally arr.Free()
 
-    member x.Buffer = bufferMod
+    member x.Buffer = buffer :> IMod<IBuffer>
 
     member x.Dispose() =
         elementTypeAndSize <- None
@@ -195,8 +191,7 @@ type GeometryPoolMapped(runtime : IRuntime) =
     let manager = MemoryManager.createNop()
     let pointers = Dict<IndexedGeometry, managedptr>()
     let buffers = SymbolDict<TypedMappedBuffer>()
-    let sizes = SymbolDict<int>()
-        
+
     let pointersRW = new ReaderWriterLockSlim()
     let buffersRW = new ReaderWriterLockSlim()
 
@@ -280,7 +275,7 @@ type GeometryPoolMapped(runtime : IRuntime) =
     member x.Count = pointers.Count
 
 //[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-//module GeometryPool =
+//module GeometryPoolMapped =
 //    let inline create() = GeometryPool()
 //
 //    let inline getBuffer (sem : Symbol) (pool : GeometryPool) =
