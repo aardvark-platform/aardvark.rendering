@@ -921,23 +921,34 @@ module ResourceManager =
                          | Some index -> ctx.CreateVertexArrayObject(index.Resource.GetValue(self), bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
                          | None -> ctx.CreateVertexArrayObject(bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
                     
-                    let attributes = bindings |> List.map (fun (_,_,_,b) -> b :> IAdaptiveObject)
+                    let attributes = bindings |> List.map (fun (_,_,_,b) -> b.Resource :> IAdaptiveObject)
                     let dependencies = 
                         match index with
                          | Some index -> (index.Resource :> IAdaptiveObject)::attributes
                          | None -> attributes
 
-                    { trackChangedInputs = true
+                    let handleMod = Mod.init handle
+
+                    { trackChangedInputs = false
                       dependencies = dependencies
                       updateCPU = fun _ -> ()
                       updateGPU = fun () -> 
-                         match index with 
-                          | Some index -> ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
-                          | None -> ctx.Update(handle, bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
-                    
-                         FrameStatistics.Zero
-                      destroy = fun () -> ctx.Delete(handle)
-                      resource = Mod.constant handle 
+                        
+                        let handle = 
+                            match index with 
+                             | Some index -> ctx.CreateVertexArrayObject(index.Resource.GetValue(self), bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
+                             | None -> ctx.CreateVertexArrayObject(bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
+                        
+                        ctx.Delete(handleMod.Value)
+                        transact (fun () -> handleMod.Value <- handle)
+
+//                         match index with 
+//                          | Some index -> ctx.Update(handle, index.Resource.GetValue(self), bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
+//                          | None -> ctx.Update(handle, bindings |> List.map (fun (i,v,a,b) -> i, createView (i,v,a,b)))
+//                    
+                        FrameStatistics.Zero
+                      destroy = fun () -> ctx.Delete(handleMod.Value)
+                      resource = handleMod
                       kind = ResourceKind.VertexArrayObject
                     }
             )

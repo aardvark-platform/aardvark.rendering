@@ -122,8 +122,10 @@ module FsiSetup =
                 |> Sg.viewTrafo (viewTrafo   win |> Mod.map CameraView.viewTrafo ) 
                 |> Sg.projTrafo (perspective win |> Mod.map Frustum.projTrafo    )  
 
+
+        let b = { BackendConfiguration.NativeOptimized with useDebugOutput = true }
         let task = 
-            app.Runtime.CompileRender(win.FramebufferSignature, sg) //|> DefaultOverlays.withStatistics
+            app.Runtime.CompileRender(win.FramebufferSignature, b, sg) //|> DefaultOverlays.withStatistics
 
         win.Text <- @"Aardvark rocks \o/"
         win.Visible <- true

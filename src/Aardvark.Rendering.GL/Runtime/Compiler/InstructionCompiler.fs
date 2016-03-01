@@ -138,26 +138,28 @@ module Instructions =
 
     let bindVertexArray (vao : ChangeableResource<VertexArrayObject>) =
         if ExecutionContext.vertexArrayObjectsSupported then
-            fun (ctx : ContextHandle) -> 
-                [Instruction.BindVertexArray(vao.Resource.GetValue().Handle)]
+            vao.Resource |> Mod.map (fun r -> 
+                fun (ctx : ContextHandle) -> 
+                    [Instruction.BindVertexArray(r.Handle)]
+            )
         else
-            let vao = vao.Resource.GetValue()
-
-            fun (ctx : ContextHandle) ->
-                [
-                    for (i,b) in vao.Bindings do
-                        yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ArrayBuffer) b.Buffer.Handle
-                        yield Instruction.EnableVertexAttribArray i
-                        if b.BaseType = typeof<C4b> then
-                            yield Instruction.VertexAttribPointer i 0x80E1 (int b.VertexAttributeType) b.Normalized b.Stride (nativeint b.Offset)
-                        else
-                            yield Instruction.VertexAttribPointer i b.Dimension (int b.VertexAttributeType) b.Normalized b.Stride (nativeint b.Offset)
+            vao.Resource |> Mod.map (fun r -> 
+                fun (ctx : ContextHandle) ->
+                    [
+                        for (i,b) in r.Bindings do
+                            yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ArrayBuffer) b.Buffer.Handle
+                            yield Instruction.EnableVertexAttribArray i
+                            if b.BaseType = typeof<C4b> then
+                                yield Instruction.VertexAttribPointer i 0x80E1 (int b.VertexAttributeType) b.Normalized b.Stride (nativeint b.Offset)
+                            else
+                                yield Instruction.VertexAttribPointer i b.Dimension (int b.VertexAttributeType) b.Normalized b.Stride (nativeint b.Offset)
 
           
-                    match vao.Index with
-                        | Some i -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) i.Handle
-                        | None -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) 0
-                ]
+                        match r.Index with
+                            | Some i -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) i.Handle
+                            | None -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) 0
+                    ]
+            )
     
     let bindVertexAttribValue (index : int) (value : IMod<Option<V4f>>) =
         value |> Mod.map (fun v ->

@@ -44,9 +44,9 @@ module ``Compiled Builder`` =
         member x.Yield(m : list<Instruction>) =
             m |> MetaInstruction.ofList |> x.Yield
 
-        member x.Yield(m : ContextHandle -> list<Instruction>) =
+        member x.Yield(m : IMod<ContextHandle -> list<Instruction>>) =
             { runCompile = fun s ->
-                let i = s.currentContext |> Mod.map m |> MetaInstruction.ofModList
+                let i = Mod.map2 (fun f ctx -> f ctx) m s.currentContext |> MetaInstruction.ofModList
                 { s with instructions = s.instructions @ [i] }, ()
             }
 
@@ -61,9 +61,9 @@ module ``Compiled Builder`` =
                 s,()
             }
 
-        member x.Yield(m : ContextHandle -> Instruction) =
+        member x.Yield(m : IMod<ContextHandle -> Instruction>) =
             { runCompile = fun s ->
-                let i = s.currentContext |> Mod.map m |> MetaInstruction.ofMod
+                let i = Mod.map2 (fun f ctx -> f ctx) m s.currentContext |> MetaInstruction.ofMod
                 { s with instructions = s.instructions @ [i] }, ()
             }
 

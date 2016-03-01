@@ -20,6 +20,8 @@ type MappedBuffer(ctx : Context) =
     let mutable buffer = Buffer(ctx, 0n, 0)
     let mutable mappedPtr = 0n
 
+    let mutable oldBuffers = []
+
     let unmap () =
         GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
         GL.Check "[MappedBuffer] could bind buffer"
@@ -33,6 +35,7 @@ type MappedBuffer(ctx : Context) =
         if nativeint newCapacity <> buffer.SizeInBytes then
             let copySize = min buffer.SizeInBytes (nativeint newCapacity)
 
+            let oldBuffer = buffer.Handle
             let newBuffer = GL.GenBuffer()
             GL.Check "[MappedBuffer] could not create buffer"
             
@@ -51,15 +54,13 @@ type MappedBuffer(ctx : Context) =
             GL.BufferStorage(BufferTarget.CopyWriteBuffer, nativeint newCapacity, 0n, BufferStorageFlags.MapPersistentBit ||| BufferStorageFlags.MapWriteBit ||| BufferStorageFlags.DynamicStorageBit)
             GL.Check "[MappedBuffer] could not set buffer storage"
 
-            if buffer.Handle <> 0 then
+            if oldBuffer <> 0 then
                 GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copySize)
                 GL.Check "[MappedBuffer] could not copy buffer"
 
                 GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
                 GL.Check "[MappedBuffer] could unbind old buffer"
 
-                GL.DeleteBuffer(buffer.Handle)
-                GL.Check "[MappedBuffer] could delete old buffer"
 
             buffer <- Buffer(ctx, nativeint newCapacity, newBuffer)
 
@@ -76,6 +77,10 @@ type MappedBuffer(ctx : Context) =
             GL.Check "[MappedBuffer] could unbind buffer"
 
             transact (fun () -> self.MarkOutdated())
+
+            if oldBuffer <> 0 then
+                Interlocked.Change(&oldBuffers, fun o -> oldBuffer::o) |> ignore
+                
 
     member x.Write(sourcePtr, offset, size) =   
         using ctx.ResourceLock (fun _ ->
@@ -102,6 +107,14 @@ type MappedBuffer(ctx : Context) =
         )
 
     override x.Compute() =
+        let delete = Interlocked.Exchange(&oldBuffers, [])
+        if not (List.isEmpty delete) then
+            using ctx.ResourceLock (fun _ ->
+                for d in delete do 
+                    GL.DeleteBuffer(d)
+                    GL.Check "[MappedBuffer] could delete old buffer"
+            )
+
         buffer :> IBuffer
 
     interface IMappedBuffer with

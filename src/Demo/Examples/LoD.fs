@@ -40,10 +40,10 @@ module LoD =
                     ]
             )
 
-        let randomColor() =
+        let randomColorAlpha abc =
             C4b(128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 255uy)
-        let randomColor2(alpha) =
-            C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, alpha)
+        let randomColor ()  =
+            C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, 255uy)
 
         let box (color : C4b) (box : Box3d) =
 
@@ -221,7 +221,7 @@ module LoD =
                                     yield V3d(x,y,z)*0.1*box.Size + box.Min |> V3f.op_Explicit
                          |]
                     let colors = Array.create points.Length (Helpers.randomColor())
-                    //let b = Helpers.randomPoints cell.bounds 100
+                    //let points = Helpers.randomPoints cell.bounds 1000
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
                     //do! Async.Sleep 400
                     return IndexedGeometry(IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
@@ -340,8 +340,6 @@ module LoD =
             |> Sg.uniform "ViewportSize" win.Sizes
     
     let run() =
-        Report.Warn "other hate"
-        printfn "HATEBREED"
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         setSg final
         win.Run()

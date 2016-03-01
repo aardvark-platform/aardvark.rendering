@@ -236,50 +236,61 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
             ]
         }
 
-    member x.UpdateDirtyResources() =
+    member x.UpdateDirtyResources(level : int) =
         let mutable stats = FrameStatistics.Zero
         let mutable count = 0 
         let counts = Dictionary<ResourceKind, ref<int>>()
 
-        let dirtyResources =
+        let myDirtyResources =
             lock dirtyLock (fun () ->
                 let current = dirtyResources
                 dirtyResources <- HashSet()
                 current
             )
-        if dirtyResources.Count > 0 then
-            System.Threading.Tasks.Parallel.ForEach(dirtyResources, fun (d : IChangeableResource) ->
-                lock d (fun () ->
-                    if d.OutOfDate then
-                        d.UpdateCPU(x)
-                    else
-                        d.Outputs.Add x |> ignore
-                )
-            ) |> ignore
-  
-            let mutable cc = Unchecked.defaultof<_>
-            for d in dirtyResources do
-                lock d (fun () ->
-                    if d.OutOfDate then
-                        count <- count + 1
-                        if counts.TryGetValue(d.Kind, &cc) then
-                            cc := !cc + 1
-                        else
-                            counts.[d.Kind] <- ref 1
 
-                        stats <- stats + d.UpdateGPU(x)
-                )
+        let innerStats = 
+            if myDirtyResources.Count > 0 then
+                if level > 0 then Report.Line("nested resource udpate")
+                System.Threading.Tasks.Parallel.ForEach(myDirtyResources, fun (d : IChangeableResource) ->
+                    lock d (fun () ->
+                        if d.OutOfDate then
+                            d.UpdateCPU(x)
+                        else
+                            d.Outputs.Add x |> ignore
+                    )
+                ) |> ignore
+  
+                let mutable cc = Unchecked.defaultof<_>
+                for d in myDirtyResources do
+                    lock d (fun () ->
+                        if d.OutOfDate then
+                            count <- count + 1
+                            if counts.TryGetValue(d.Kind, &cc) then
+                                cc := !cc + 1
+                            else
+                                counts.[d.Kind] <- ref 1
+
+                            stats <- stats + d.UpdateGPU(x)
+                    )
+
+                x.UpdateDirtyResources(level + 1)
+
+            else
+                FrameStatistics.Zero
 
         let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
 
-        if Config.SyncUploadsAndFrames && count > 0 then
+        if level = 0 && Config.SyncUploadsAndFrames && count > 0 then
             OpenTK.Graphics.OpenGL4.GL.Sync()
 
-        { stats with
-            ResourceUpdateCount = stats.ResourceUpdateCount + float count
-            ResourceUpdateCounts = counts
-            ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
-        }
+        let myStats =
+            { stats with
+                ResourceUpdateCount = stats.ResourceUpdateCount + float count
+                ResourceUpdateCounts = counts
+                ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
+            }
+
+        myStats + innerStats
 
     member x.GetStats() =
         let res = oneTimeStatistics + frameStatistics
@@ -588,7 +599,7 @@ module GroupedRenderTask =
                 init x
                 hasProgram <- true
 
-            let mutable stats = x.UpdateDirtyResources()
+            let mutable stats = x.UpdateDirtyResources(0)
 
             if hasProgram then
                 let programUpdateStats = program.Update x
@@ -742,7 +753,7 @@ module SortedRenderTask =
 
             let sorted = sorter.SortedList.GetValue x
 
-            let mutable stats = x.UpdateDirtyResources()
+            let mutable stats = x.UpdateDirtyResources(0)
 
             // update all links and contents
             let mutable current = prolog
