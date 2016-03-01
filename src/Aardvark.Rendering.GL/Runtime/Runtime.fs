@@ -150,6 +150,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
+        member x.CreateMappedBuffer()  =
+            x.CreateMappedBuffer ()
+
 
     member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
@@ -374,5 +377,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
         ctx.CreateRenderbuffer(size, format, samples)
+
+    member x.CreateMappedBuffer() : IMappedBuffer =
+        new MappedBuffer(ctx) :> _
 
     new() = new Runtime(null)

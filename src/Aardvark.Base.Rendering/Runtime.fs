@@ -59,6 +59,7 @@ type IRuntime =
     abstract member CreateTextureCube : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
     abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
+    abstract member CreateMappedBuffer : unit -> IMappedBuffer
 
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit

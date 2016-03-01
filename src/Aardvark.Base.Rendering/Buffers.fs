@@ -80,3 +80,15 @@ type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
             | :? NativeMemoryBuffer as n ->
                 n.Ptr = ptr && n.SizeInBytes = sizeInBytes
             | _ -> false
+
+
+type IMappedBuffer =
+    inherit IMod<IBuffer>
+    inherit IDisposable
+
+    abstract member Write : ptr : nativeint * offset : int * sizeInBytes : int -> unit
+    abstract member Read : ptr : nativeint * offset : int * sizeInBytes : int -> unit
+
+    abstract member Capacity : int
+    abstract member Resize : newCapacity : int -> unit
+    

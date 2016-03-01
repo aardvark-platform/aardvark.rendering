@@ -74,6 +74,7 @@
     <Compile Include="Resources\Renderbuffer.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\StreamingTexture.fs" />
+    <Compile Include="Resources\MappedBuffer.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\Statistics.fs" />

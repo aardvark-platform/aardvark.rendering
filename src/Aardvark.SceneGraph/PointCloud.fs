@@ -68,10 +68,10 @@ module PointCloudRenderObjectSemantics =
                 | :? GeometryRef as o -> x.node.Equals(o.node)
                 | _ -> false
 
-    type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>) =
+    type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, runtime : IRuntime) =
         let cancel = new System.Threading.CancellationTokenSource()
 
-        let pool = GeometryPool.create()
+        let pool = GeometryPoolMapped.create runtime
         let calls = DrawCallSet(true)
         let inactive = ConcurrentHashQueue<GeometryRef>()
         let mutable inactiveSize = 0L
@@ -251,7 +251,7 @@ module PointCloudRenderObjectSemantics =
                     | Some (:? IMod<V2i> as vs) -> vs
                     | _ -> failwith "[PointCloud] could not get viewport size (please apply to scenegraph)"
 
-            let h = PointCloudHandler(l, view, proj, viewportSize)
+            let h = PointCloudHandler(l, view, proj, viewportSize, l.Runtime)
 
             let calls = h.DrawCallInfos
 
