@@ -19,6 +19,7 @@ type MappedBuffer(ctx : Context) =
 
     let mutable buffer = Buffer(ctx, 0n, 0)
     let mutable mappedPtr = 0n
+    let onDispose = new System.Reactive.Subjects.Subject<unit>()
 
     let mutable oldBuffers = []
 
@@ -83,10 +84,10 @@ type MappedBuffer(ctx : Context) =
                 
 
     member x.Write(sourcePtr, offset, size) =   
-        using ctx.ResourceLock (fun _ ->
-            if size + offset > int buffer.SizeInBytes then failwith "insufficient buffer size"
-            Marshal.Copy(sourcePtr, mappedPtr + nativeint offset, size)
+        if size + offset > int buffer.SizeInBytes then failwith "insufficient buffer size"
+        Marshal.Copy(sourcePtr, mappedPtr + nativeint offset, size)
 
+        using ctx.ResourceLock (fun _ ->
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
             GL.Check "[MappedBuffer] could bind buffer"
 
@@ -117,13 +118,19 @@ type MappedBuffer(ctx : Context) =
 
         buffer :> IBuffer
 
+    member x.Dispose() =
+        if buffer.Handle <> 0 then
+            using ctx.ResourceLock (fun _ ->
+                unmap ()
+                ctx.Delete buffer
+            )
+            onDispose.OnNext()
+            onDispose.Dispose()
+
     interface IMappedBuffer with
         member x.Write(sourcePtr, offset, size) = x.Write(sourcePtr,offset,size)
         member x.Read(targetPtr, offset, size) = x.Read(targetPtr,offset,size)
         member x.Capacity = x.Capacity
         member x.Resize(newCapacity) = x.Resize(newCapacity)
-        member x.Dispose() =
-            using ctx.ResourceLock (fun _ ->
-                unmap ()
-                ctx.Delete buffer
-            )
+        member x.Dispose() = x.Dispose()
+        member x.OnDispose = onDispose :> IObservable<_>

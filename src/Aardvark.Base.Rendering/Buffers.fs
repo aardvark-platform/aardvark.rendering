@@ -91,4 +91,4 @@ type IMappedBuffer =
 
     abstract member Capacity : int
     abstract member Resize : newCapacity : int -> unit
-    
+    abstract member OnDispose : IObservable<unit>
