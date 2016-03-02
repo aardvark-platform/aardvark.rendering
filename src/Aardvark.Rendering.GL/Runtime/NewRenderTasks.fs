@@ -248,6 +248,8 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
                 current
             )
 
+        myDirtyResources.IntersectWith(inputSet.Resources)
+
         let innerStats = 
             if myDirtyResources.Count > 0 then
                 if level > 0 then Report.Line("nested resource udpate")

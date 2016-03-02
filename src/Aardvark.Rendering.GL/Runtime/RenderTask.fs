@@ -26,7 +26,8 @@ type RenderTaskInputSet(target : IRenderTask) =
                     allPools.Add (r.Resource.GetValue().Pool) |> ignore
                     target.InputChanged r
             | :? IChangeableResource as r ->
-                resources.Add r |> ignore
+                if resources.Add r then
+                    target.InputChanged r
             | _ -> ()
 
         base.Add(o)

@@ -302,17 +302,6 @@ type ResourceManagerExtensions private() =
             if isNull rj.IndirectBuffer then None
             else x.CreateIndirectBuffer(not (isNull rj.Indices), rj.IndirectBuffer) |> Some
 
-        let indirectCount =
-            if isNull rj.IndirectBuffer then None
-            else 
-                let count = 
-                    rj.IndirectBuffer |> Mod.map (fun b -> 
-                        match b with
-                            | :? ArrayBuffer as ab -> ab.Data.Length
-                            | _ -> failwith "unsupported Indirect Buffer"
-                    )
-                x.CreateMemoryLocation(count) |> Some
-
         // create the VertexArrayObject
         let vao =
             x.CreateVertexArrayObject(buffers, index)

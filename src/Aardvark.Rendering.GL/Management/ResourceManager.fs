@@ -36,51 +36,64 @@ module ResourceManager =
         abstract member Kind : ResourceKind
         
     type ChangeableResource<'a> internal(key : list<obj>, parent : ConcurrentDictionary<list<obj>, obj>, 
-                                         desc : IAdaptiveObject -> ChangeableResourceDescription<'a>) as this =
+                                         createDesc : IAdaptiveObject -> ChangeableResourceDescription<'a>) as this =
         inherit AdaptiveObject()
 
         static let updateCPUProbe = Symbol.Create "[Resource] update CPU"
         static let updateGPUProbe = Symbol.Create "[Resource] update GPU"
 
-        let desc = desc this
-        do this.OutOfDate <- false
-
         let mutable isDisposed = false
         let mutable refCount = 1
         let mutable changedInputs = []
 
+        let mutable initialized = false
+        let mutable desc = Unchecked.defaultof<_>
+
+        let getOrCreate() =
+            if initialized then 
+                true
+            else
+                initialized <- true
+                desc <- createDesc this 
+                this.OutOfDate <- false
+                false
+
         override x.InputChanged (i : IAdaptiveObject) =
-            if desc.trackChangedInputs then
-                Interlocked.Change(&changedInputs, fun l -> i::l) |> ignore
-                       
+            if getOrCreate() then
+                if desc.trackChangedInputs then
+                    Interlocked.Change(&changedInputs, fun l -> i::l) |> ignore
+    
+
         member x.UpdateCPU(caller : IAdaptiveObject) = 
-            Telemetry.timed updateCPUProbe (fun () ->
+            if getOrCreate() then
                 let changed = 
                     if desc.trackChangedInputs then Interlocked.Exchange(&changedInputs, [])
                     else []
                 desc.updateCPU changed
-            )
 
         member x.UpdateGPU(caller) = 
-            x.EvaluateIfNeeded (caller) FrameStatistics.Zero (fun () ->
-                Telemetry.timed updateGPUProbe (fun () ->
-                    //x.UpdateCPU(caller)
-                    desc.updateGPU()
+            if getOrCreate() then
+                x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () ->
+                    Telemetry.timed updateGPUProbe (fun () ->
+                        //x.UpdateCPU(caller)
+                        desc.updateGPU()
+                    )
                 )
-            )
+            else
+                FrameStatistics.Zero
 
-        member x.Resource = desc.resource
-        member x.Kind = desc.kind
+        member x.Resource = getOrCreate() |> ignore; desc.resource
+        member x.Kind = getOrCreate() |> ignore; desc.kind
 
         member x.IncrementRefCount () = Interlocked.Increment &refCount |> ignore
 
         member x.Dispose() =
-            if parent = null then
+            if parent = null && initialized then
                 isDisposed <- true
                 desc.destroy()
                 desc.dependencies |> Seq.iter (fun a -> a.RemoveOutput this)
 
-            elif not isDisposed then
+            elif not isDisposed && initialized then
                 let r = Interlocked.Decrement &refCount
                 if r = 0 then
                     isDisposed <- true
@@ -95,8 +108,8 @@ module ResourceManager =
             member x.IncrementRefCount() = x.IncrementRefCount()
             member x.UpdateCPU(caller) = x.UpdateCPU(caller)
             member x.UpdateGPU(caller) = x.UpdateGPU(caller)
-            member x.Resource = desc.resource :> obj
-            member x.Kind = desc.kind
+            member x.Resource = x.Resource :> obj
+            member x.Kind = x.Kind 
 
         internal new(desc) = new ChangeableResource<'a>([], null, desc)
 

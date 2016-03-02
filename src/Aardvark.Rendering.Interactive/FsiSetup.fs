@@ -130,6 +130,10 @@ module FsiSetup =
         win.Text <- @"Aardvark rocks \o/"
         win.Visible <- true
 
+        win.Keyboard.KeyDown(Keys.G).Values.Add(fun d ->
+            System.GC.Collect()
+        )
+
         let fixupRenderTask () =
             if win.RenderTask = Unchecked.defaultof<_> then win.RenderTask <- task
 

@@ -223,8 +223,13 @@ module LoD =
                     let colors = Array.create points.Length (Helpers.randomColor())
                     //let points = Helpers.randomPoints cell.bounds 1000
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
-                    //do! Async.Sleep 400
-                    return IndexedGeometry(IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
+                    
+//                    let a = 
+//                        let mutable a = 0
+//                        for i in 0..(1 <<< 20) do a <- a + 1
+//                        a
+                    let a = 0
+                    return IndexedGeometry(Mode = unbox a, IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
                 }
 
     let data = DummyDataProvider(Box3d(V3d.OOO, 20.0 * V3d.III)) :> ILodData
@@ -298,8 +303,8 @@ module LoD =
     let cloud =
         Sg.pointCloud data {
             targetPointDistance     = Mod.constant 40.0
-            maxReuseRatio           = 0.5
-            minReuseCount           = 1L <<< 20
+            maxReuseRatio           = 0.0
+            minReuseCount           = 0L //1L <<< 20
             pruneInterval           = 500
             customView              = Some (gridCam |> Mod.map CameraView.viewTrafo)
             customProjection        = Some (gridProj |> Mod.map Frustum.projTrafo)
