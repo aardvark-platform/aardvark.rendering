@@ -92,7 +92,6 @@ module PointCloudRenderObjectSemantics =
                         if refCnt > 0 then activate res
                         else deactivate res
                 }
-
             Async.StartAsTask(runner, cancellationToken = cancel.Token)
 
 
@@ -122,14 +121,10 @@ module PointCloudRenderObjectSemantics =
 
                 let killNow (t : Task<_>) =
                     cont t.Result
-//                    match t.Result with 
-//                     | None -> ()
-//                     | Some v -> cont v
 
                 if task.IsCompleted then cont task.Result
                 else task.ContinueWith killNow |> ignore
-//                if running then task.ContinueWith killNow |> ignore
-//                else killNow task
+
 
 
     type LoadTaskasdasd(factory : TaskFactory, run : Async<GeometryRef>, ct : CancellationToken, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
@@ -262,9 +257,8 @@ module PointCloudRenderObjectSemantics =
                             else
                                 false
 
-                        while shouldContinue () do
-                            do! Async.Sleep 5
-                            ReaderWriterLock.write geometriesRW (fun () ->
+                        ReaderWriterLock.write geometriesRW (fun () ->
+                            while shouldContinue () do
                                 match inactive.TryDequeue() with
                                     | (true, v) ->
                                             match geometries.TryRemove v.node with
@@ -278,7 +272,8 @@ module PointCloudRenderObjectSemantics =
                                                     Log.warn "failed to remove node: %A" v.node.id
                                     | _ ->
                                         Log.warn "inactive: %A / count : %A" inactiveSize inactive.Count 
-                           )
+                               
+                        )
                             
                         do! Async.Sleep node.Config.pruneInterval
                 }

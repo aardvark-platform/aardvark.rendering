@@ -134,6 +134,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
             
     override x.OnPaint(e) =
         if loaded then
+            needsRedraw <- false
             if contextHandle = null then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
 
@@ -145,7 +146,6 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                     using (ctx.RenderingLock contextHandle) (fun _ ->
 
                         let stopDispatcherProcessing = threadStealing.StopStealing()
-                        needsRedraw <- false
                         let sw = System.Diagnostics.Stopwatch()
                         sw.Start()
                         if size <> sizes.Value then
