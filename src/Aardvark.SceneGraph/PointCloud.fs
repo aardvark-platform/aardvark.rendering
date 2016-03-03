@@ -69,28 +69,32 @@ module PointCloudRenderObjectSemantics =
                     x.node.Equals(o.node) && x.range = o.range
                 | _ -> false
 
-    type LoadTask(factory : TaskFactory, run : Async<GeometryRef>, ct : CancellationToken, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
+    type LoadTask(factory : TaskFactory, data : ILodData, node : LodDataNode, ct : CancellationToken, pool : GeometryPool, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
         let cancel = new CancellationTokenSource()
         let mutable killed = 0
         let mutable refCnt = 1
         let mutable running = true
+     
+        let task =
+            let runner = 
+                async {
+                    let! geometry = data.GetData(node)
+                    do! Async.OnCancel(fun () -> pool.Remove geometry |> ignore) |> Async.Ignore
+                   
+                    let range = pool.Add(geometry) 
+                    
+                    let res = { node = node; geometry = geometry; range = range }
 
-        let task = factory.StartNew(fun () ->
-            try
-                let res = Async.RunSynchronously(run, cancellationToken = cancel.Token)
-                running <- false
+                    try
+                        return res
+                    finally
+                        running <- false
+                        if refCnt > 0 then activate res
+                        else deactivate res
+                }
 
-                let r = refCnt
-                if r > 0 then 
-                    activate res
-                    Some res
-                else
-                    deactivate res
-                    Some res
-            with :? OperationCanceledException ->
-                printfn "killed"
-                None
-        )
+            Async.StartAsTask(runner, cancellationToken = cancel.Token)
+
 
         member x.Deactivate() =
             if killed = 1 then failwith "cannot deactive killed LoadTask"
@@ -98,9 +102,8 @@ module PointCloudRenderObjectSemantics =
             let newCnt = Interlocked.Decrement(&refCnt)
             if newCnt = 0 then
                 if not running then 
-                    match task.Result with
-                        | Some res -> deactivate res
-                        | _ -> ()
+                    if task.IsCanceled |> not then
+                        deactivate task.Result
 
 
         member x.Activate() =
@@ -109,21 +112,25 @@ module PointCloudRenderObjectSemantics =
             let newCnt = Interlocked.Increment(&refCnt)
             if newCnt = 1 then
                 if not running then 
-                    match task.Result with
-                        | Some res -> activate res
-                        | _ -> ()
+                    if task.IsCanceled |> not then
+                        activate task.Result
+
 
         member x.Kill(cont : GeometryRef -> unit) =
             if Interlocked.Exchange(&killed, 1) = 0 then
                 cancel.Cancel()
 
-                let killNow (t : Task<Option<GeometryRef>>) =
-                    match t.Result with
-                        | Some res -> cont res
-                        | None -> ()
+                let killNow (t : Task<_>) =
+                    cont t.Result
+//                    match t.Result with 
+//                     | None -> ()
+//                     | Some v -> cont v
 
-                if running then task.ContinueWith killNow |> ignore
-                else killNow task
+                if task.IsCompleted then cont task.Result
+                else task.ContinueWith killNow |> ignore
+//                if running then task.ContinueWith killNow |> ignore
+//                else killNow task
+
 
     type LoadTaskasdasd(factory : TaskFactory, run : Async<GeometryRef>, ct : CancellationToken, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
         let r = Async.RunSynchronously run
@@ -175,10 +182,6 @@ module PointCloudRenderObjectSemantics =
                 Interlocked.Add(&activeSize, -size) |> ignore
                 Interlocked.Decrement(&activeCount) |> ignore
 
-
-        let loadTask (a : Async<GeometryRef>) =
-            new LoadTask(factory, a, cancel.Token, activate, deactivate)
-
         member x.Add(n : LodDataNode) =
             Interlocked.Increment(&desiredCount) |> ignore
             let isNew = ref false
@@ -186,12 +189,7 @@ module PointCloudRenderObjectSemantics =
                 ReaderWriterLock.write geometriesRW (fun () ->
                     geometries.GetOrCreate(n, fun n ->
                         isNew := true
-                        async {
-                            let! g = node.Data.GetData n
-                            return
-                                let range = pool.Add(g) 
-                                in { node = n; geometry = g; range = range }
-                        } |> loadTask
+                        new LoadTask(factory, node.Data, n, cancel.Token, pool, activate, deactivate)
                     )
                 )
 
@@ -265,6 +263,7 @@ module PointCloudRenderObjectSemantics =
                                 false
 
                         while shouldContinue () do
+                            do! Async.Sleep 5
                             ReaderWriterLock.write geometriesRW (fun () ->
                                 match inactive.TryDequeue() with
                                     | (true, v) ->
@@ -277,7 +276,8 @@ module PointCloudRenderObjectSemantics =
                                                     cnt <- cnt + 1
                                                 | _ ->
                                                     Log.warn "failed to remove node: %A" v.node.id
-                                    | _ -> Log.warn "strange"
+                                    | _ ->
+                                        Log.warn "inactive: %A / count : %A" inactiveSize inactive.Count 
                            )
                             
                         do! Async.Sleep node.Config.pruneInterval
