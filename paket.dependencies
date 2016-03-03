@@ -1,8 +1,8 @@
 source https://nuget.org/api/v2
 source https://vrvis.myget.org/F/aardvark_public/api/v2
 
-nuget Aardvark.Base.Incremental ~> 1.6.66
-nuget Aardvark.Base.Runtime ~> 1.6.66
+nuget Aardvark.Base.Incremental ~> 1.6.67
+nuget Aardvark.Base.Runtime ~> 1.6.67
 nuget FShade ~> 1.6.10
 nuget RegexProvider ~> 0.0.5
 nuget BruTile ~> 0.12.0

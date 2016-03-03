@@ -1,29 +1,29 @@
 NUGET
   remote: https://vrvis.myget.org/F/aardvark_public/api/v2
   specs:
-    Aardvark.Base (1.6.66)
+    Aardvark.Base (1.6.67)
       DevILSharp (>= 0.0.11 < 0.1.0)
-    Aardvark.Base.Essentials (1.6.66)
-      Aardvark.Base (>= 1.6.66)
+    Aardvark.Base.Essentials (1.6.67)
+      Aardvark.Base (>= 1.6.67)
       Rx-Linq (>= 2.2.5 < 2.3.0)
       System.Collections.Immutable (>= 1.1.36 < 1.2.0)
-    Aardvark.Base.FSharp (1.6.66)
-      Aardvark.Base (>= 1.6.66)
+    Aardvark.Base.FSharp (1.6.67)
+      Aardvark.Base (>= 1.6.67)
       DevILSharp (>= 0.0.11 < 0.1.0)
       FSharp.Compiler.Service (>= 0.0.90 < 0.1.0)
       RegexProvider (>= 0.0.5 < 0.1.0)
-    Aardvark.Base.Incremental (1.6.66)
-      Aardvark.Base (>= 1.6.66)
-      Aardvark.Base.Essentials (>= 1.6.66)
-      Aardvark.Base.FSharp (>= 1.6.66)
+    Aardvark.Base.Incremental (1.6.67)
+      Aardvark.Base (>= 1.6.67)
+      Aardvark.Base.Essentials (>= 1.6.67)
+      Aardvark.Base.FSharp (>= 1.6.67)
       FsPickler.Json (>= 1.8.0 < 1.9.0)
       Rx-Core (>= 2.2.5 < 2.3.0)
       Rx-Linq (>= 2.2.5 < 2.3.0)
-    Aardvark.Base.Runtime (1.6.66)
-      Aardvark.Base (1.6.66)
-      Aardvark.Base.Essentials (1.6.66)
-      Aardvark.Base.FSharp (1.6.66)
-      Aardvark.Base.Incremental (1.6.66)
+    Aardvark.Base.Runtime (1.6.67)
+      Aardvark.Base (1.6.67)
+      Aardvark.Base.Essentials (1.6.67)
+      Aardvark.Base.FSharp (1.6.67)
+      Aardvark.Base.Incremental (1.6.67)
     FShade (1.6.10)
       Aardvark.Base (>= 1.6.0 < 1.7.0)
       Aardvark.Base.FSharp (>= 1.6.0 < 1.7.0)
@@ -129,7 +129,7 @@ NUGET
     FSharp.Core (4.0.0.1) - content: none
     Mono.Cecil (0.9.5.4) - content: none
     Newtonsoft.Json (8.0.2) - content: none
-    Paket.Core (2.48.0) - content: none
+    Paket.Core (2.51.4) - content: none
       Chessie
       FSharp.Core
       Newtonsoft.Json
@@ -140,5 +140,5 @@ GITHUB
     FULLPROJECT (99e54e4563ce1b97c950e7789146c008d327b843)
       FAKE (>= 4.17.0 < 4.18.0)
       Mono.Cecil (>= 0.9.5.4 < 0.9.6.0)
-      Paket.Core (2.48.0)
+      Paket.Core (>= 2.51.0 < 2.52.0)
       SourceLink.Fake (>= 1.1.0 < 1.2.0)
