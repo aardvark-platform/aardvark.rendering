@@ -62,10 +62,11 @@ module PointCloudRenderObjectSemantics =
     [<CustomEquality; NoComparison>]
     type GeometryRef = { node : LodDataNode; geometry : IndexedGeometry; range : Range1i } with
 
-        override x.GetHashCode() = x.node.GetHashCode()
+        override x.GetHashCode() = HashCode.Combine(x.node.GetHashCode(), x.range.GetHashCode())
         override x.Equals o =
             match o with
-                | :? GeometryRef as o -> x.node.Equals(o.node)
+                | :? GeometryRef as o -> 
+                    x.node.Equals(o.node) && x.range = o.range
                 | _ -> false
 
     type LoadTask(factory : TaskFactory, run : Async<GeometryRef>, ct : CancellationToken, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
@@ -124,11 +125,18 @@ module PointCloudRenderObjectSemantics =
                 if running then task.ContinueWith killNow |> ignore
                 else killNow task
 
-    type LoadTasksada(run : Async<GeometryRef>, ct : CancellationToken, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
+    type LoadTaskasdasd(factory : TaskFactory, run : Async<GeometryRef>, ct : CancellationToken, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
         let r = Async.RunSynchronously run
-    
-        member x.Deactivate() = deactivate r
-        member x.Activate() = activate r
+        do activate r
+        let mutable refCnt = 1
+        member x.Deactivate() = 
+            if Interlocked.Decrement(&refCnt) = 0 then
+                deactivate r
+
+        member x.Activate() = 
+            if Interlocked.Increment(&refCnt) = 1 then
+                activate r
+
         member x.Kill cont = cont r
 
     type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, runtime : IRuntime) =
@@ -157,7 +165,6 @@ module PointCloudRenderObjectSemantics =
                 Interlocked.Add(&activeSize, int64 size) |> ignore
                 Interlocked.Increment(&activeCount) |> ignore
 
-
         let deactivate (n : GeometryRef) =
             let size = int64 n.range.Size
 
@@ -168,14 +175,17 @@ module PointCloudRenderObjectSemantics =
                 Interlocked.Add(&activeSize, -size) |> ignore
                 Interlocked.Decrement(&activeCount) |> ignore
 
+
         let loadTask (a : Async<GeometryRef>) =
             new LoadTask(factory, a, cancel.Token, activate, deactivate)
 
         member x.Add(n : LodDataNode) =
             Interlocked.Increment(&desiredCount) |> ignore
+            let isNew = ref false
             let result = 
                 ReaderWriterLock.write geometriesRW (fun () ->
                     geometries.GetOrCreate(n, fun n ->
+                        isNew := true
                         async {
                             let! g = node.Data.GetData n
                             return
@@ -185,6 +195,8 @@ module PointCloudRenderObjectSemantics =
                     )
                 )
 
+            if not !isNew then
+                result.Activate()
 
             result
 
@@ -193,7 +205,7 @@ module PointCloudRenderObjectSemantics =
             ReaderWriterLock.read geometriesRW (fun () ->
                 match geometries.TryGetValue n with
                     | (true, t) -> 
-                        t.Deactivate() |> ignore 
+                        t.Deactivate() 
                     | _ -> ()
             )
 
@@ -253,22 +265,20 @@ module PointCloudRenderObjectSemantics =
                                 false
 
                         while shouldContinue () do
-                            match inactive.TryDequeue() with
-                                | (true, v) ->
-                                    ReaderWriterLock.write geometriesRW (fun () ->
-                                        match geometries.TryRemove v.node with
-                                            | (true, v) ->
-                                                v.Kill (fun v ->
-                                                    let r = pool.Remove v.geometry
-                                                    Interlocked.Add(&inactiveSize, int64 -v.range.Size) |> ignore
-                                                )
-                                                cnt <- cnt + 1
-                                            | _ ->
-                                                Log.warn "failed to remove node: %A" v.node.id
-                                    )
-
-                                | _ ->
-                                    ()
+                            ReaderWriterLock.write geometriesRW (fun () ->
+                                match inactive.TryDequeue() with
+                                    | (true, v) ->
+                                            match geometries.TryRemove v.node with
+                                                | (true, v) ->
+                                                    v.Kill (fun v ->
+                                                        let r = pool.Remove v.geometry
+                                                        Interlocked.Add(&inactiveSize, int64 -v.range.Size) |> ignore
+                                                    )
+                                                    cnt <- cnt + 1
+                                                | _ ->
+                                                    Log.warn "failed to remove node: %A" v.node.id
+                                    | _ -> Log.warn "strange"
+                           )
                             
                         do! Async.Sleep node.Config.pruneInterval
                 }
@@ -277,7 +287,7 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "%A / %A" activeCount desiredCount
+                        printfn "%A / %A / %A" activeCount desiredCount geometries.Count
                         ()
                 }
 

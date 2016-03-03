@@ -40,9 +40,9 @@ module LoD =
                     ]
             )
 
-        let randomColorAlpha abc =
+        let randomColor() =
             C4b(128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 255uy)
-        let randomColor ()  =
+        let randomColor2 ()  =
             C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, 255uy)
 
         let box (color : C4b) (box : Box3d) =
@@ -224,11 +224,15 @@ module LoD =
                     //let points = Helpers.randomPoints cell.bounds 1000
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
                     
+//                    let mutable a = 0
+//                    for i in 0..(1 <<< 20) do a <- a + 1
+//
 //                    let a = 
 //                        let mutable a = 0
 //                        for i in 0..(1 <<< 20) do a <- a + 1
 //                        a
                     let a = 0
+
                     return IndexedGeometry(Mode = unbox a, IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
                 }
 
@@ -285,6 +289,13 @@ module LoD =
 
                 printfn "mode: %A" mode.Value
             )
+        )
+
+        win.Keyboard.KeyDown(Keys.P).Values.Add(fun _ ->
+            let task = win.RenderTask
+            
+            printfn "%A (%A)" task task.OutOfDate
+            printfn "%A" view
         )
 
         let mainProj = perspective win 
