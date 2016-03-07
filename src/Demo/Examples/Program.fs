@@ -15,7 +15,7 @@ let main args =
     //Examples.PostProcessing.run()
     //Examples.Shadows.run()
     //Examples.GeometrySet.run()
-    Examples.LoD.run()
-    //Examples.Polygons.run()
+    //Examples.LoD.run()
+    Examples.Polygons.run()
     //Examples.TicTacToe.run()
     0

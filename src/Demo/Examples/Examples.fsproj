@@ -71,6 +71,7 @@
     <Compile Include="GeometrySet.fs" />
     <Compile Include="LoD.fs" />
     <Compile Include="Tic-Tac-Toe.fs" />
+    <Compile Include="Polygons.fs" />
     <Compile Include="HelloWorld.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />

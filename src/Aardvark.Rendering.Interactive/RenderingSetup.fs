@@ -148,6 +148,19 @@ module RenderingSetup =
 
             quad |> Sg.ofIndexedGeometry
 
+        let lineGeometry (color : C4b) (positions : array<V3f>) =
+            let indices =
+                [| for i in 0 .. positions.Length - 2 do
+                    yield i
+                    yield i + 1
+                |]
+
+            IndexedGeometry(IndexedGeometryMode.LineList, indices, 
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, positions :> Array
+                        DefaultSemantic.Colors,  Array.init positions.Length (constF color  ) :> Array
+                    ], SymDict.empty) 
+                |> Sg.ofIndexedGeometry
 
     module Sphere =
         open System.Collections.Generic
