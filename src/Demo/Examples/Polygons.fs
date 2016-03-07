@@ -89,7 +89,7 @@ module Polygons =
                             if closedPolygon.Length > 0 then
                                 let newPolygon = 
                                     Scope.uniqueScope name (fun scope ->
-                                        Array.append closedPolygon [| closedPolygon.[0] |] 
+                                        Array.append closedPolygon [| (*closedPolygon.[0]*) |] 
                                             |> Array.mapi (fun i v -> Scope.pmod wc (sprintf "%d" i) v) 
                                             |> Array.rev
                                             |> Array.toList
@@ -164,7 +164,7 @@ module Polygons =
                         else Mod.change hoverPosition None
                     )
                 match !moving with
-                 | Some point ->  MovePoint (point, camPick |> Mod.force |> Option.get |> V3f.op_Explicit) |> interact  
+                 | Some point -> MovePoint (point, camPick |> Mod.force |> Option.get |> V3f.op_Explicit) |> interact  
                  | _ -> ()
             ) |> ignore
 
@@ -176,6 +176,7 @@ module Polygons =
                     match !moving, Mod.force hoverPosition with
                      | None, Some (poly,point,p) -> moving := Some point
                      | _, _ -> moving := None
+                 | _ -> ()
 
             ) |> ignore
 
@@ -184,18 +185,24 @@ module Polygons =
             let endPoint = camPick |> Mod.map (Option.map V3f.op_Explicit)
 
             let lineGeometry (color : C4b) (points : list<V3f>) (endPoint : Option<V3f>) =
-                Helpers.lineGeometry color (points |> List.append (endPoint |> Option.toList) |> List.toArray)
+                Helpers.lineLoopGeometry color (points |> List.append (endPoint |> Option.toList) |> List.toArray)
 
-            let createPolygon (p : IMod<list<pmod<V3f>>>) =
+            let polygonReader = (appState.polygons :> aset<_>).GetReader()
+            let polygonVis =
                 Mod.custom (fun self ->
-                    let positions = p.GetValue self
-                    List.foldBack (fun (x:pmod<_>) s -> (x :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
-                ) |> Mod.map (Helpers.lineGeometry C4b.White)
+                    polygonReader.GetDelta self |> ignore
+                    [
+                        for polygon in polygonReader.Content do
+                            let positions = (polygon :> IMod<_>).GetValue self
+                            let lines = List.foldBack (fun (x:pmod<_>) s -> (x :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
+                            yield Helpers.lineLoopGeometry C4b.White lines
+                    ] |> Sg.group :> ISg
+                ) 
 
             let workingPoly = 
                 Mod.map2 (lineGeometry C4b.Red) (fst workingState) endPoint |> Sg.dynamic
 
-            let scene = workingPoly |> Sg.andAlso (appState.polygons |> ASet.mapM createPolygon |> Sg.set)
+            let scene = workingPoly |> Sg.andAlso (polygonVis |> Sg.dynamic)
              
              
         let conditionally (size:float) color (m : IMod<_>) =
