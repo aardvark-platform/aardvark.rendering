@@ -29,7 +29,8 @@ open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ fo
 open Aardvark.SceneGraph.Semantics
 
 module Render2TexturePrimiviteChangeableSize = 
-    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+
+    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 

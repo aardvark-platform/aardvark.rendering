@@ -134,6 +134,21 @@ module RenderingSetup =
 
             )
 
+        let quad (color : C4b) =
+            let quad =
+                let index = [|0;1;2; 0;2;3|]
+                let positions = [|V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |]
+
+                IndexedGeometry(IndexedGeometryMode.TriangleList, index, 
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, positions :> Array
+                        DefaultSemantic.Colors,  Array.init positions.Length (constF color  ) :> Array
+                        DefaultSemantic.Normals, Array.init positions.Length (constF V3f.OOI) :> Array
+                    ], SymDict.empty)
+
+            quad |> Sg.ofIndexedGeometry
+
+
     module Sphere =
         open System.Collections.Generic
 
@@ -211,7 +226,7 @@ module RenderingSetup =
             indices.ToArray() |> Array.collect (fun (a,b,c) -> [|a;b;c|]), vertices.ToArray(), normals.ToArray()
 
 
-        let solidSphere color n =
+        let solidSphere (color : C4b) n =
             let (indices,positions,normals) = generate n
             IndexedGeometry(
                 Mode = IndexedGeometryMode.TriangleList,
@@ -221,6 +236,9 @@ module RenderingSetup =
                     SymDict.ofList [
                         DefaultSemantic.Positions, positions :> Array
                         DefaultSemantic.Normals, normals :> Array
-                        DefaultSemantic.Colors, indices |> Array.map (fun _ -> color) :> Array
+                        DefaultSemantic.Colors, Array.init positions.Length (constF color) :> Array
                     ]
             ) |> Sg.ofIndexedGeometry
+
+        let solidUnitSphere color n =
+            solidSphere color n |> Sg.trafo (Mod.constant <| Trafo3d.Scale 0.5 *  Trafo3d.Translation(0.5,0.5,0.5))

@@ -31,6 +31,8 @@ module SgFSharp =
         let projTrafo (m : IMod<Trafo3d>) (sg : ISg) =
             Sg.ProjectionTrafoApplicator(m, sg) :> ISg
 
+        let camera (cam : IMod<Camera>) (sg : ISg) =
+            sg |> viewTrafo (cam |> Mod.map Camera.viewTrafo) |> projTrafo (cam |> Mod.map Camera.projTrafo)
 
         let surface (m : IMod<ISurface>) (sg : ISg) =
             Sg.SurfaceApplicator(m, sg) :> ISg

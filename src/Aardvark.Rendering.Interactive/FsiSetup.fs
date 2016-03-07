@@ -47,6 +47,24 @@ module FsiSetup =
                         | _ -> o
 
             Aardvark.Init()
+
+    let initFsi entryPath =
+        if entryPath |> System.IO.File.Exists then
+            printfn "using %s as entry assembly." entryPath
+        else failwithf "could not find entry assembly: %s" entryPath
+        
+        if Interlocked.Exchange(&initialized, 1) = 0 then
+            System.Environment.CurrentDirectory <- System.IO.Path.GetDirectoryName entryPath
+            IntrospectionProperties.CustomEntryAssembly <- 
+                System.Reflection.Assembly.LoadFile(entryPath)
+
+            Ag.initialize()
+            Aardvark.Base.Ag.unpack <- fun o ->
+                    match o with
+                        | :? IMod as o -> o.GetValue(null)
+                        | _ -> o
+
+            Aardvark.Init()
  
     let openWindow() =
         if initialized = 0 then failwith "first use Aardvark.Rendering.Interactive.init(pathToBuild)"

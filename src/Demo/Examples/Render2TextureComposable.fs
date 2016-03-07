@@ -25,7 +25,9 @@ open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ fo
 open Default // makes viewTrafo and other tutorial specicific default creators visible
 
 module Render2TextureComposable = 
-    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+
+    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+
 
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 

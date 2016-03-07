@@ -19,7 +19,7 @@ open Default // makes viewTrafo and other tutorial specicific default creators v
 
 module TicTacToe = 
 
-    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
     module V3i =
         let toTup (v : V3i) = (v.X, v.Y, v.Z)
@@ -220,7 +220,7 @@ module TicTacToe =
 
 
     let run () =
-        Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+        FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
         setSg sg
         win.Run()
 

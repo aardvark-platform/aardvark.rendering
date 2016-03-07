@@ -34,7 +34,8 @@ open Aardvark.Rendering.NanoVg
 module PostProcessing = 
 
     Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
-    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+
 
     // let's start by creating our example-scene containing random points.
     let pointSize = Mod.init 50.0

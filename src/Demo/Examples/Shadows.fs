@@ -33,7 +33,8 @@ open Aardvark.Rendering.NanoVg
 module Shadows = 
 
     Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
-    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+
 
     let win = openWindow()
 

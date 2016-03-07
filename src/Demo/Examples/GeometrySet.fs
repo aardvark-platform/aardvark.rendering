@@ -21,7 +21,9 @@ open Aardvark.Application
 open Default 
 
 module GeometrySet = 
-    Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+
+    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+
 
     // ===================================================================================
     // kill entirely?
