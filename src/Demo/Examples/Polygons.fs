@@ -11,7 +11,7 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering.Interactive
 
-open Default // makes viewTrafo and other tutorial specicific default creators visible
+open Default 
 
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
@@ -78,7 +78,7 @@ module Polygons =
 
         let createScene (wc : WorkingCopy) = { polygons = Scope.pset wc "polygons" }
             
-        let interact (wc : WorkingCopy) ((scene,(state,name)) : Logics) (op : Operation) =
+        let interact (wc : WorkingCopy) ((scene,(state,name)) : Logics) (commit : bool)  (op : Operation) =
             let changes =
                 [
                     match op with
@@ -89,10 +89,9 @@ module Polygons =
                             if closedPolygon.Length > 0 then
                                 let newPolygon = 
                                     Scope.uniqueScope name (fun scope ->
-                                        Array.append closedPolygon [| (*closedPolygon.[0]*) |] 
-                                            |> Array.mapi (fun i v -> Scope.pmod wc (sprintf "%d" i) v) 
-                                            |> Array.rev
-                                            |> Array.toList
+                                        state.Value 
+                                            |> List.mapi (fun i v -> Scope.pmod wc (sprintf "%d" i) v) 
+                                            |> List.rev
                                             |> Scope.pmod wc scope
                                 )
                                 yield PSet.add scene.polygons newPolygon
@@ -102,11 +101,11 @@ module Polygons =
                 ]
             for c in changes do wc.apply c
             let action = sprintf "%A" op
-            wc.commit action
 
-            Git2Dgml.visualizeHistory (Path.combine [ __SOURCE_DIRECTORY__; "polygons.dgml" ]) (wc.Branches |> Dictionary.toList) |> ignore
-            printfn "action=%A, polygons=%A" scene.polygons.Value action
- 
+            if commit then
+                wc.commit action
+                Git2Dgml.visualizeHistory (Path.combine [ __SOURCE_DIRECTORY__; "polygons.dgml" ]) (wc.Branches |> Dictionary.toList) |> ignore
+
 
     [<AutoOpen>]
     module View =
@@ -134,8 +133,9 @@ module Polygons =
                     Logics.createScene git, (Scope.pmod git "workingPolygon" [], Scope.empty ())
                 )
             let moving = ref None
-            let interact = Logics.interact git (appState,workingState)
-
+            let interact = Logics.interact git (appState,workingState) true
+            let interactFast =  Logics.interact git (appState,workingState) false
+             
             let polygons = (appState.polygons.CSet :> aset<_>).GetReader()
             win.Mouse.Move.Values.Subscribe(fun (last,current) ->
                 polygons.GetDelta() |> ignore
@@ -158,13 +158,12 @@ module Polygons =
                  | (p,bestPosition,d)::_ -> 
                     transact (fun () -> 
                         if d < Double.MaxValue then
-                            //printfn "%A, %A with d=%A" bestPosition.Value pick d
                             Mod.change hoverPosition (Some <| (p, bestPosition, V3d.op_Explicit bestPosition.Value))
-
                         else Mod.change hoverPosition None
                     )
                 match !moving with
-                 | Some point -> MovePoint (point, camPick |> Mod.force |> Option.get |> V3f.op_Explicit) |> interact  
+                 | Some point -> 
+                    MovePoint (point, camPick |> Mod.force |> Option.get |> V3f.op_Explicit) |> interactFast  
                  | _ -> ()
             ) |> ignore
 
@@ -175,10 +174,14 @@ module Polygons =
                  | MouseButtons.Middle -> 
                     match !moving, Mod.force hoverPosition with
                      | None, Some (poly,point,p) -> moving := Some point
-                     | _, _ -> moving := None
+                     | Some point, _ -> 
+                        interact <| MovePoint (point, camPick |> Mod.force |> Option.get |> V3f.op_Explicit)   
+                        moving := None
+                     | None, None -> ()
                  | _ -> ()
 
             ) |> ignore
+
 
         [<AutoOpen>]
         module Visualization =
@@ -187,24 +190,24 @@ module Polygons =
             let lineGeometry (color : C4b) (points : list<V3f>) (endPoint : Option<V3f>) =
                 Helpers.lineLoopGeometry color (points |> List.append (endPoint |> Option.toList) |> List.toArray)
 
-            let polygonReader = (appState.polygons :> aset<_>).GetReader()
             let polygonVis =
-                Mod.custom (fun self ->
-                    polygonReader.GetDelta self |> ignore
-                    [
-                        for polygon in polygonReader.Content do
-                            let positions = (polygon :> IMod<_>).GetValue self
-                            let lines = List.foldBack (fun (x:pmod<_>) s -> (x :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
-                            yield Helpers.lineLoopGeometry C4b.White lines
-                    ] |> Sg.group :> ISg
-                ) 
+                aset {
+                    for p in appState.polygons do
+                        let lines = 
+                            Mod.custom (fun self -> 
+                                let positions = (p :> IMod<_>).GetValue self
+                                let lines = List.foldBack (fun (x:pmod<_>) s -> (x :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
+                                Helpers.lineLoopGeometry C4b.White lines
+                         )
+                        yield Sg.dynamic lines
+                }
 
-            let workingPoly = 
-                Mod.map2 (lineGeometry C4b.Red) (fst workingState) endPoint |> Sg.dynamic
+            let scene =
+                Mod.map2 (lineGeometry C4b.Red) (fst workingState) endPoint 
+                    |> Sg.dynamic
+                    |> Sg.andAlso (polygonVis |> Sg.set)
 
-            let scene = workingPoly |> Sg.andAlso (polygonVis |> Sg.dynamic)
-             
-             
+
         let conditionally (size:float) color (m : IMod<_>) =
             Sphere.solidSphere color 5  |> Sg.trafo (Mod.constant <| Trafo3d.Scale size)
                 |> Sg.trafo (m |> Mod.map (Option.defaultValue Trafo3d.Identity << Option.map Trafo3d.Translation))
@@ -229,7 +232,8 @@ module Polygons =
                         |> Sg.effect [ 
                             DefaultSurfaces.trafo |> toEffect; 
                             DefaultSurfaces.constantColor C4f.Red |> toEffect
-                            DefaultSurfaces.thickLine |> toEffect ] 
+                            DefaultSurfaces.thickLine |> toEffect 
+                           ] 
                    )
                 |> Sg.camera camera
 
@@ -240,6 +244,9 @@ module Polygons =
         win.Run()
 
 open Polygons
+
+module TestOperations =
+    git.merge "urdar"
 
 #if INTERACTIVE
 setSg sg

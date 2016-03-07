@@ -164,12 +164,14 @@ module RenderingSetup =
 
         let lineLoopGeometry (color : C4b) (positions : array<V3f>) =
             let indices =
-                [| for i in 0 .. positions.Length - 2 do
-                    yield i
-                    yield i + 1
-                   yield positions.Length - 1
-                   yield 0
-                |]
+                if positions.Length = 0 then Array.zeroCreate 0
+                else
+                    [| for i in 0 .. positions.Length - 2 do
+                        yield i
+                        yield i + 1
+                       yield positions.Length - 1
+                       yield 0
+                    |]
 
             IndexedGeometry(IndexedGeometryMode.LineList, indices, 
                     SymDict.ofList [
