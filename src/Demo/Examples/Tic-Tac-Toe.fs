@@ -28,56 +28,15 @@ module TicTacToe =
 
     let git = Aardvark.Base.Incremental.Git.init ()
 
-
-    module GitVis =
-        open System.Text
-        open System.IO
-        open System.Collections.Generic
-        
-        let private properties = """
-          <Properties>
-            <Property Id="Background" Label="Background" DataType="Brush" />
-            <Property Id="Label" Label="Label" DataType="String" />
-            <Property Id="Size" DataType="String" />
-            <Property Id="Start" DataType="DateTime" />
-          </Properties>"""
-
-        let rec genDgml (nodes : StringBuilder) (links : StringBuilder) (v : HashSet<_>) (h : Commit) =
-            if Commit.isRoot h then ()
-            else
-                if v.Contains h then ()
-                else
-                    v.Add h |> ignore
-                    nodes.AppendLine(sprintf "\t\t<Node Id=\"%A\" Label=\"%s\"/>" h.hash h.message) |> ignore
-                    links.AppendLine(sprintf "\t\t<Link Source=\"%A\" Target=\"%A\"/>" h.hash h.parent.hash) |> ignore
-                    genDgml nodes links v h.parent
-
-        let visualizeHistory (fileName : string) (branches : list<string*Commit>) =
-            let nodes = StringBuilder()
-            let links = StringBuilder()
-            let visited = HashSet()
-            for (name,b) in branches do
-                nodes.AppendLine(sprintf "\t\t<Node Id=\"%s\" Label=\"%s\"/>" name name) |> ignore
-                links.AppendLine(sprintf "\t\t<Link Source=\"%s\" Target=\"%A\"/>" name b.hash) |> ignore
-                genDgml nodes links visited b
-            use file = new StreamWriter( fileName )
-            file.WriteLine("<?xml version='1.0' encoding='utf-8'?>")
-            file.WriteLine("<DirectedGraph xmlns=\"http://schemas.microsoft.com/vs/2009/dgml\">")
-            file.WriteLine("<Nodes>")
-            file.Write(nodes.ToString())
-            file.WriteLine(@"</Nodes>")
-            file.WriteLine("<Links>")
-            file.Write(links.ToString())
-            file.WriteLine("</Links>")
-            file.WriteLine(properties)
-            file.WriteLine("</DirectedGraph>")
-            fileName
-
-
     module PMod =
         let value (p : pmod<_>) = p.Value
         let modify f p =
             PMod.change p (f (value p))
+
+    module Mod =
+        let value (p : IModRef<_>) = p.Value
+        let modify f p =
+            transact (fun () -> Mod.change p (f (value p)))
 
     type Player = A | B
     type Tick = Tick of Player | Free
@@ -86,8 +45,8 @@ module TicTacToe =
         { 
             player : IModRef<Player>
             arr    : pmod<Tick>[,,] 
-            stateA : pmod<PlayerState>
-            stateB : pmod<PlayerState>
+            stateA : IModRef<PlayerState>
+            stateB : IModRef<PlayerState>
         }
     type Dir = Left | Right | Forward | Backward | Up | Down
     type Input = Move of Dir | Set
@@ -102,8 +61,8 @@ module TicTacToe =
         let empty = { 
             arr = Array3D.init 4 4 4 (fun x y z -> git.pmod (sprintf "%A" (x,y,z)) Free)
             player = Mod.init A
-            stateA = git.pmod "playerA" { cursor = V3i.OOO }
-            stateB = git.pmod "playerA" { cursor = V3i.OOO }
+            stateA = Mod.init { cursor = V3i.OOO }
+            stateB = Mod.init { cursor = V3i.OOO }
         }
     
     let directions = Map.ofList [ Left, (fun v -> v - V3i.IOO); Right, (fun v -> v + V3i.IOO); Forward, (fun v -> v + V3i.OIO); Backward, (fun v -> v - V3i.OIO); Up, (fun v -> v + V3i.OOI); Down, (fun v -> v - V3i.OOI) ]
@@ -116,8 +75,7 @@ module TicTacToe =
     let inField (c : V3i) = 
         Box3i.FromMinAndSize(V3i.OOO,V3i.III * 3).Contains c
 
-
-    let visualizeHistory = GitVis.visualizeHistory "history.dgml"
+    let visualizeHistory c = Git2Dgml.visualizeHistory (Path.combine [ __SOURCE_DIRECTORY__; "tictactoe.dgml" ])  c
 
     let processInput (g : GameState) (i : Input) =
         let player = Mod.force g.player
@@ -130,8 +88,8 @@ module TicTacToe =
                     inField c && (Array3D.get g.arr c.X c.Y c.Z).Value = Free
 
                 match player with 
-                 | A -> yield PMod.modify (GameState.move valid dir) g.stateA, "a moved"
-                 | B -> yield PMod.modify (GameState.move valid dir) g.stateB, "b moved"
+                 | A -> Mod.modify (GameState.move valid dir) g.stateA
+                 | B -> Mod.modify (GameState.move valid dir) g.stateB
              
              | Set ->
                 let pos,msg = 

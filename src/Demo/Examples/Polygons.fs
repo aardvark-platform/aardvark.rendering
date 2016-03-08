@@ -61,6 +61,15 @@ module Polygons =
     module PMod =
         let value (m : pmod<'a>) = m.Value
 
+    module ModInternal =
+        let getValue (x : IMod<_>) caller = x.GetValue(caller)
+
+    module ASet =
+        let getReader (x : aset<_>) = x.GetReader()
+
+    module ASetReader =
+        let getDelta (x : IReader<_>) = x.GetDelta()
+
     let toV3d (v : V3f) : V3d = V3d.op_Explicit v
 
     [<AutoOpen>]
@@ -71,11 +80,7 @@ module Polygons =
                        | ToggleMoving
 
     module Logics =
-
-        open Interaction
-
-        let private git = Git.init ()
-
+        let private git = Git.init () // git should be private, i.e. all modification should go via Logics module
         let unsafeGit = git
 
         let (<~) (p : pmod<'a>) v = PMod.change p v
@@ -141,11 +146,12 @@ module Polygons =
     module Picking =
         open Logics
 
-        let pick ((scene, state):Logics) =
-            let polygons = (scene.polygons :> aset<_>).GetReader()
+        let pick ( (scene, state) : Logics ) =
+            let polygons = scene.polygons |> ASet.getReader
+
             fun (camera : Camera) (current : PixelPosition) ->
                 
-                polygons.GetDelta() |> ignore
+                polygons |> ASetReader.getDelta |> ignore
                 let changes =
                     [
                         let pick = Camera.pickRay camera current
@@ -175,6 +181,13 @@ module Polygons =
                     for c in changes do c ()
                 )
 
+        let computePick (mousePosition : IMod<PixelPosition>) (camera : IMod<Camera>) =
+            adaptive {
+                let! camera        = camera
+                let! pixelPosition = mousePosition
+                let p = Camera.tryGetPickPointOnPlane camera (Plane3d(V3d.OOI,V3d.OOO)) pixelPosition
+                return p
+            }
 
     [<AutoOpen>]
     module View =
@@ -182,14 +195,6 @@ module Polygons =
         let viewTrafo = viewTrafo ()
         let frustum = perspective ()
         let camera = Mod.map2 Camera.create viewTrafo frustum
-    
-        let camPick = 
-            adaptive {
-                let! camera        = camera
-                let! pixelPosition = win.Mouse.Position
-                let p = Camera.tryGetPickPointOnPlane camera (Plane3d(V3d.OOI,V3d.OOO)) pixelPosition
-                return p
-            }
 
         [<AutoOpen>]
         module Controller =
@@ -198,6 +203,7 @@ module Polygons =
                     Logics.createScene (), Logics.createWorkingState ()
                 )
 
+            let camPick     = Picking.computePick win.Mouse.Position camera
             let interactGit = Logics.interact (appState,workingState) true
             let interact    = Logics.interact (appState,workingState) false
             let pick = Picking.pick (appState,workingState) 
@@ -205,15 +211,16 @@ module Polygons =
             let polygons = (appState.polygons.CSet :> aset<_>).GetReader()
             win.Mouse.Move.Values.Subscribe(fun (last,current) ->
                 pick (Mod.force camera) current
-                MovePoint (camPick |> Mod.force |> Option.get |> V3f.op_Explicit) |> interact  
+
+                interact <| MovePoint (camPick |> Mod.force |> Option.get |> V3f.op_Explicit) 
             ) |> ignore
 
             win.Mouse.Click.Values.Subscribe(fun c ->
                 match c with 
                  | MouseButtons.Left  -> 
-                    interactGit (camPick |> Mod.force |> Option.map V3f.op_Explicit |> Option.get |> AddPoint) 
+                    interactGit <| (camPick |> Mod.force |> Option.map V3f.op_Explicit |> Option.get |> AddPoint)
                  | MouseButtons.Right -> 
-                    interactGit ClosePolygon 
+                    interactGit <| ClosePolygon 
                  | MouseButtons.Middle -> 
                     interactGit <| ToggleMoving
                  | _ -> ()
@@ -232,9 +239,10 @@ module Polygons =
                     for p in appState.polygons do
                         let lines = 
                             Mod.custom (fun self -> 
-                                let positions = (p :> IMod<_>).GetValue self
-                                let lines = List.foldBack (fun (x:pmod<_>) s -> (x :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
-                                Helpers.lineLoopGeometry C4b.White lines
+                                let positions = ModInternal.getValue p self
+                                let lines = 
+                                    List.foldBack (fun p s -> ModInternal.getValue p self :: s) positions [] 
+                                Helpers.lineLoopGeometry C4b.White (lines |> List.toArray)
                          )
                         yield Sg.dynamic lines
                 }
