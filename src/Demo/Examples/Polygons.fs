@@ -84,6 +84,7 @@ module Polygons =
         type Polygons = pset<Polygon>
 
         type Scene = { polygons : Polygons }
+
         type State = { polygon : pmod<list<V3f>>; unique : Scope.Unique; 
                        hoverPosition : IModRef<Option<Polygon * pmod<V3f>>>; 
                        selectedPoint : ref<Option<pmod<V3f>>>
@@ -163,7 +164,7 @@ module Polygons =
                                 |> Seq.toList
                         match nearbyRay with
                             | [] -> ()
-                            | (p,bestPosition,d)::_ when d < Double.MaxValue && not !state.dragging -> 
+                            | (p,bestPosition,d) :: _ when d < Double.MaxValue && not !state.dragging -> 
                                 yield fun () -> 
                                     Mod.change state.hoverPosition (Some (p, bestPosition)) 
                             | _ -> 
@@ -209,9 +210,12 @@ module Polygons =
 
             win.Mouse.Click.Values.Subscribe(fun c ->
                 match c with 
-                 | MouseButtons.Left  -> interactGit (camPick |> Mod.force |> Option.map V3f.op_Explicit |> Option.get |> AddPoint) 
-                 | MouseButtons.Right -> interactGit ClosePolygon 
-                 | MouseButtons.Middle -> interactGit <| ToggleMoving
+                 | MouseButtons.Left  -> 
+                    interactGit (camPick |> Mod.force |> Option.map V3f.op_Explicit |> Option.get |> AddPoint) 
+                 | MouseButtons.Right -> 
+                    interactGit ClosePolygon 
+                 | MouseButtons.Middle -> 
+                    interactGit <| ToggleMoving
                  | _ -> ()
             ) |> ignore
 
@@ -228,8 +232,8 @@ module Polygons =
                     for p in appState.polygons do
                         let lines = 
                             Mod.custom (fun self -> 
-                                let positions = (p.UnsafeInner :> IMod<_>).GetValue self
-                                let lines = List.foldBack (fun (x:pmod<_>) s -> (x.UnsafeInner :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
+                                let positions = (p :> IMod<_>).GetValue self
+                                let lines = List.foldBack (fun (x:pmod<_>) s -> (x :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
                                 Helpers.lineLoopGeometry C4b.White lines
                          )
                         yield Sg.dynamic lines
