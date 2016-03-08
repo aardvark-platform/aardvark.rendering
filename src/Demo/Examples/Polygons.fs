@@ -58,13 +58,25 @@ module Polygons =
         let pset (git : WorkingCopy) (name : string) =
             git.pset (sprintf "%s.%s" (current.Value |> String.concat "") name)
 
+    module PMod =
+        let value (m : pmod<'a>) = m.Value
+
+    let toV3d (v : V3f) : V3d = V3d.op_Explicit v
+
     [<AutoOpen>]
     module Interaction =
-        type Operation = AddPoint of V3f | ClosePolygon | MovePoint of pmod<V3f> * V3f
+        type Operation = AddPoint of V3f 
+                       | ClosePolygon 
+                       | MovePoint of V3f
+                       | ToggleMoving
 
     module Logics =
 
         open Interaction
+
+        let private git = Git.init ()
+
+        let unsafeGit = git
 
         let (<~) (p : pmod<'a>) v = PMod.change p v
         
@@ -72,45 +84,99 @@ module Polygons =
         type Polygons = pset<Polygon>
 
         type Scene = { polygons : Polygons }
-        type State = pmod<list<V3f>> * Scope.Unique
+        type State = { polygon : pmod<list<V3f>>; unique : Scope.Unique; 
+                       hoverPosition : IModRef<Option<Polygon * pmod<V3f>>>; 
+                       selectedPoint : ref<Option<pmod<V3f>>>
+                       dragging      : ref<bool> }
 
         type Logics = Scene * State
 
-        let createScene (wc : WorkingCopy) = { polygons = Scope.pset wc "polygons" }
+        let createScene () = { polygons = Scope.pset git "polygons" }
+
+        let createWorkingState () = 
+            { polygon        = Scope.pmod git "workingPolygon" []; 
+              unique         = Scope.empty ()
+              hoverPosition  = Mod.init None;
+              selectedPoint  = ref None
+              dragging       = ref false
+            }
+
             
-        let interact (wc : WorkingCopy) ((scene,(state,name)) : Logics) (commit : bool)  (op : Operation) =
+        let interact ((scene,state) : Logics) (commit : bool)  (op : Operation) =
             let changes =
                 [
                     match op with
                         | AddPoint p   -> 
-                            yield state <~ p :: state.Value
+                            yield state.polygon <~ p :: state.polygon.Value
                         | ClosePolygon ->
-                            let closedPolygon = state.Value |> List.toArray
+                            let closedPolygon = state.polygon.Value |> List.toArray
                             if closedPolygon.Length > 0 then
                                 let newPolygon = 
-                                    Scope.uniqueScope name (fun scope ->
-                                        state.Value 
-                                            |> List.mapi (fun i v -> Scope.pmod wc (sprintf "%d" i) v) 
+                                    Scope.uniqueScope state.unique (fun scope ->
+                                        state.polygon.Value 
+                                            |> List.mapi (fun i v -> Scope.pmod git (sprintf "%d" i) v) 
                                             |> List.rev
-                                            |> Scope.pmod wc scope
+                                            |> Scope.pmod git scope
                                 )
                                 yield PSet.add scene.polygons newPolygon
-                            yield state <~ []
-                        | MovePoint (p,newPos) ->
-                            yield p <~ newPos
+                            yield state.polygon <~ []
+                        | MovePoint (newPos) when !state.dragging  ->
+                            yield (!state.selectedPoint).Value <~ newPos
+                        | ToggleMoving when !state.dragging ->
+                            state.dragging := false
+                            state.selectedPoint := None
+                        | ToggleMoving when not !state.dragging && state.hoverPosition.Value.IsSome ->
+                            state.dragging := true
+                            state.selectedPoint := Some (snd state.hoverPosition.Value.Value)
+                        | ToggleMoving | MovePoint _ -> ()
                 ]
-            for c in changes do wc.apply c
+            for c in changes do git.apply c
             let action = sprintf "%A" op
 
             if commit then
-                wc.commit action
-                Git2Dgml.visualizeHistory (Path.combine [ __SOURCE_DIRECTORY__; "polygons.dgml" ]) (wc.Branches |> Dictionary.toList) |> ignore
+                git.commit action
+                Git2Dgml.visualizeHistory (Path.combine [ __SOURCE_DIRECTORY__; "polygons.dgml" ]) (git.Branches |> Dictionary.toList) |> ignore
+
+    module Picking =
+        open Logics
+
+        let pick ((scene, state):Logics) =
+            let polygons = (scene.polygons :> aset<_>).GetReader()
+            fun (camera : Camera) (current : PixelPosition) ->
+                
+                polygons.GetDelta() |> ignore
+                let changes =
+                    [
+                        let pick = Camera.pickRay camera current
+                        let nearbyRay = 
+                            polygons.Content
+                                |> Seq.collect (fun (p : Logics.Polygon) -> 
+                                    [ for px in p.Value do 
+                                        let mutable hit = RayHit3d.MaxRange
+                                        let hitD = 
+                                            if pick.HitsSphere(V3d.op_Explicit px.Value, 0.1, 0.1, 10.0, &hit) 
+                                            then hit.T
+                                            else Double.MaxValue
+                                        yield p, px, hitD
+                                    ] )
+                                |> Seq.sortBy (fun (_,_,d) -> d)
+                                |> Seq.toList
+                        match nearbyRay with
+                            | [] -> ()
+                            | (p,bestPosition,d)::_ when d < Double.MaxValue && not !state.dragging -> 
+                                yield fun () -> 
+                                    Mod.change state.hoverPosition (Some (p, bestPosition)) 
+                            | _ -> 
+                                yield fun () -> Mod.change state.hoverPosition None 
+                    ]
+
+                transact (fun () -> 
+                    for c in changes do c ()
+                )
 
 
     [<AutoOpen>]
     module View =
-
-        let git = Git.init ()
 
         let viewTrafo = viewTrafo ()
         let frustum = perspective ()
@@ -124,62 +190,29 @@ module Polygons =
                 return p
             }
 
-        let hoverPosition = Mod.init None
-
         [<AutoOpen>]
         module Controller =
             let appState,workingState = 
                 Scope.scoped "mainScene" (fun () -> 
-                    Logics.createScene git, (Scope.pmod git "workingPolygon" [], Scope.empty ())
+                    Logics.createScene (), Logics.createWorkingState ()
                 )
-            let moving = ref None
-            let interact = Logics.interact git (appState,workingState) true
-            let interactFast =  Logics.interact git (appState,workingState) false
+
+            let interactGit = Logics.interact (appState,workingState) true
+            let interact    = Logics.interact (appState,workingState) false
+            let pick = Picking.pick (appState,workingState) 
              
             let polygons = (appState.polygons.CSet :> aset<_>).GetReader()
             win.Mouse.Move.Values.Subscribe(fun (last,current) ->
-                polygons.GetDelta() |> ignore
-                let pick = Camera.pickRay (Mod.force camera) current
-                let nearbyRay = 
-                    polygons.Content
-                        |> Seq.collect (fun (p : Logics.Polygon) -> 
-                            [ for px in p.Value do 
-                                let mutable hit = RayHit3d.MaxRange
-                                let hitD = 
-                                    if pick.HitsSphere(V3d.op_Explicit px.Value, 0.1, 0.1, 10.0, &hit) 
-                                    then hit.T
-                                    else Double.MaxValue
-                                yield p, px, hitD
-                            ] )
-                        |> Seq.sortBy (fun (_,_,d) -> d)
-                        |> Seq.toList
-                match nearbyRay with
-                 | [] -> ()
-                 | (p,bestPosition,d)::_ -> 
-                    transact (fun () -> 
-                        if d < Double.MaxValue then
-                            Mod.change hoverPosition (Some <| (p, bestPosition, V3d.op_Explicit bestPosition.Value))
-                        else Mod.change hoverPosition None
-                    )
-                match !moving with
-                 | Some point -> 
-                    MovePoint (point, camPick |> Mod.force |> Option.get |> V3f.op_Explicit) |> interactFast  
-                 | _ -> ()
+                pick (Mod.force camera) current
+                MovePoint (camPick |> Mod.force |> Option.get |> V3f.op_Explicit) |> interact  
             ) |> ignore
 
             win.Mouse.Click.Values.Subscribe(fun c ->
                 match c with 
-                 | MouseButtons.Left  -> interact (camPick |> Mod.force |> Option.map V3f.op_Explicit |> Option.get |> AddPoint) 
-                 | MouseButtons.Right -> interact ClosePolygon 
-                 | MouseButtons.Middle -> 
-                    match !moving, Mod.force hoverPosition with
-                     | None, Some (poly,point,p) -> moving := Some point
-                     | Some point, _ -> 
-                        interact <| MovePoint (point, camPick |> Mod.force |> Option.get |> V3f.op_Explicit)   
-                        moving := None
-                     | None, None -> ()
+                 | MouseButtons.Left  -> interactGit (camPick |> Mod.force |> Option.map V3f.op_Explicit |> Option.get |> AddPoint) 
+                 | MouseButtons.Right -> interactGit ClosePolygon 
+                 | MouseButtons.Middle -> interactGit <| ToggleMoving
                  | _ -> ()
-
             ) |> ignore
 
 
@@ -195,15 +228,15 @@ module Polygons =
                     for p in appState.polygons do
                         let lines = 
                             Mod.custom (fun self -> 
-                                let positions = (p :> IMod<_>).GetValue self
-                                let lines = List.foldBack (fun (x:pmod<_>) s -> (x :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
+                                let positions = (p.UnsafeInner :> IMod<_>).GetValue self
+                                let lines = List.foldBack (fun (x:pmod<_>) s -> (x.UnsafeInner :> IMod<_>).GetValue self :: s) positions [] |> List.toArray
                                 Helpers.lineLoopGeometry C4b.White lines
                          )
                         yield Sg.dynamic lines
                 }
 
             let scene =
-                Mod.map2 (lineGeometry C4b.Red) (fst workingState) endPoint 
+                Mod.map2 (lineGeometry C4b.Red) workingState.polygon endPoint 
                     |> Sg.dynamic
                     |> Sg.andAlso (polygonVis |> Sg.set)
 
@@ -214,7 +247,8 @@ module Polygons =
                 |> Sg.onOff (m |> Mod.map Option.isSome)    
 
         let pickSphere  = conditionally 0.040 C4b.Green camPick
-        let hoverSphere = conditionally 0.041 C4b.Yellow (Mod.map (Option.map (fun (_,_,p) -> p)) hoverPosition)
+        let hoverSphere = 
+            conditionally 0.041 C4b.Yellow (Mod.map (Option.map (toV3d << PMod.value << snd)) workingState.hoverPosition)
         let groundPlane = Helpers.quad C4b.Gray
 
         let sg =
@@ -244,9 +278,10 @@ module Polygons =
         win.Run()
 
 open Polygons
+open Logics
 
 module TestOperations =
-    git.merge "urdar"
+    unsafeGit.merge "urdar"
 
 #if INTERACTIVE
 setSg sg
