@@ -50,13 +50,15 @@ module ResourceManager =
         let mutable desc = Unchecked.defaultof<_>
 
         let getOrCreate() =
-            if initialized then 
-                true
-            else
-                initialized <- true
-                desc <- createDesc this 
-                this.OutOfDate <- false
-                false
+            lock this (fun () ->
+                if initialized then 
+                    true
+                else
+                    initialized <- true
+                    desc <- createDesc this 
+                    this.OutOfDate <- false
+                    false
+            )
 
         override x.InputChanged (i : IAdaptiveObject) =
             if getOrCreate() then
@@ -756,7 +758,9 @@ module ResourceManager =
         member x.CreateUniformBufferPool (layout : UniformBlock) =
             uniformBufferPools.GetOrAdd(layout, fun (layout : UniformBlock) ->
                 let uniformFields = layout.fields |> List.map (fun a -> a.UniformField)
-                ctx.CreateUniformBufferPool(layout.size, uniformFields)
+                let pool = ctx.CreateUniformBufferPool(layout.size, uniformFields)
+                if isNull (pool :> obj) then Log.warn "asdasdasd"
+                pool
             )
 
              
@@ -784,6 +788,7 @@ module ResourceManager =
 
 
                     // TODO: writers could be created by the pool!!!!
+                    if isNull (pool :> obj) then Log.warn "asdasdasd"
                     let writers = UnmanagedUniformWriters.writers true pool.Fields inputs
      
                     let view = pool.AllocView()
