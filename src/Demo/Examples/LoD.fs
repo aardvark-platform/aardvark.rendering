@@ -10,8 +10,6 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering.Interactive
 
-//open Default // makes viewTrafo and other tutorial specicific default creators visible
-
 
 open System.Collections.Generic
 open Aardvark.Base.Rendering

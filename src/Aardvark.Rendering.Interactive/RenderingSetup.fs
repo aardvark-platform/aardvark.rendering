@@ -35,9 +35,14 @@ module RenderingSetup =
         let viewTrafo () =
             viewTrafo' ( V3d(3.0, 3.0, 3.0) ) V3d.Zero
 
-
         let perspective () = 
-            win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+            win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 1000.0 (float s.X / float s.Y))
+
+        let defaultCamera () = 
+            let vt = viewTrafo ()
+            let p = perspective ()
+            let cam = Mod.map2 Camera.create vt p
+            cam
 
 
     module Helpers =
@@ -179,6 +184,20 @@ module RenderingSetup =
                         DefaultSemantic.Colors,  Array.init positions.Length (constF color  ) :> Array
                     ], SymDict.empty) 
                 |> Sg.ofIndexedGeometry
+
+        let normalizeTo (target : Box3d) (sg : ISg) =
+            let source = sg.LocalBoundingBox().GetValue()
+        
+            let sourceSize = source.Size
+            let scale =
+                if sourceSize.MajorDim = 0 then target.SizeX / sourceSize.X
+                elif sourceSize.MajorDim = 1 then target.SizeY / sourceSize.Y
+                else target.SizeZ / sourceSize.Z
+
+            let trafo = Trafo3d.Translation(-source.Center) * Trafo3d.Scale(scale) * Trafo3d.Translation(target.Center)
+
+            sg |> Sg.trafo (Mod.constant trafo)
+
 
     module Sphere =
         open System.Collections.Generic

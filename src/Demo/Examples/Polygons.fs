@@ -1,4 +1,5 @@
-﻿#if INTERACTIVE
+﻿#nowarn "77"
+#if INTERACTIVE
 #I @"../../../bin/Debug"
 #I @"../../../bin/Release"
 #load "LoadReferences.fsx"
@@ -70,7 +71,11 @@ module Polygons =
     module ASetReader =
         let getDelta (x : IReader<_>) = x.GetDelta()
 
-    let toV3d (v : V3f) : V3d = V3d.op_Explicit v
+    [<AutoOpen>]
+    module GenericConvert =
+        let inline conv< ^a, ^b when (^a or ^b) : (static member op_Explicit : ^a -> ^b)> (i : ^a) =
+            ((^a or ^b) : (static member op_Explicit : ^a -> ^b) (i))
+
 
     [<AutoOpen>]
     module Interaction =
@@ -102,7 +107,7 @@ module Polygons =
         let createWorkingState () = 
             { polygon        = Scope.pmod git "workingPolygon" []; 
               unique         = Scope.empty ()
-              hoverPosition  = Mod.init None;
+              hoverPosition  = Mod.init None
               selectedPoint  = ref None
               dragging       = ref false
             }
@@ -171,8 +176,7 @@ module Polygons =
                         match nearbyRay with
                             | [] -> ()
                             | (p,bestPosition,d) :: _ when d < Double.MaxValue && not !state.dragging -> 
-                                yield fun () -> 
-                                    Mod.change state.hoverPosition (Some (p, bestPosition)) 
+                                yield fun () -> Mod.change state.hoverPosition (Some (p, bestPosition)) 
                             | _ -> 
                                 yield fun () -> Mod.change state.hoverPosition None 
                     ]
@@ -260,7 +264,7 @@ module Polygons =
 
         let pickSphere  = conditionally 0.040 C4b.Green camPick
         let hoverSphere = 
-            conditionally 0.041 C4b.Yellow (Mod.map (Option.map (toV3d << PMod.value << snd)) workingState.hoverPosition)
+            conditionally 0.041 C4b.Yellow (Mod.map (Option.map (conv << PMod.value << snd)) workingState.hoverPosition)
         let groundPlane = Helpers.quad C4b.Gray
 
         let sg =

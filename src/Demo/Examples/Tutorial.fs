@@ -70,6 +70,7 @@ module Tutorial =
             |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
 
     let run () =
+        FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
         setSg sg
         win.Run()
 
