@@ -2,6 +2,7 @@
 #I @"../../../bin/Debug"
 #I @"../../../bin/Release"
 #load "LoadReferences.fsx"
+#r "AssimpNet.dll"
 #else
 namespace Examples
 #endif
