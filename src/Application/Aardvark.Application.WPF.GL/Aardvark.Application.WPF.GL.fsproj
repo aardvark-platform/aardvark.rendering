@@ -10,11 +10,12 @@
     <RootNamespace>Aardvark.Application.WPF.GL</RootNamespace>
     <AssemblyName>Aardvark.Application.WPF.GL</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
+    <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>Aardvark.Application.WPF.GL</Name>
     <NuGetPackageImportStamp>716d4491</NuGetPackageImportStamp>
     <OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
     <OperatingSystem Condition="Exists('/usr')">UNIX</OperatingSystem>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>

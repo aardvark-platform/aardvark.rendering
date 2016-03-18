@@ -10,10 +10,11 @@
     <RootNamespace>Aardvark.Application.WPF</RootNamespace>
     <AssemblyName>Aardvark.Application.WPF</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
+    <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>Aardvark.Application.WPF</Name>
     <OperatingSystem Condition="Exists('C:\Windows\')">WINDOWS</OperatingSystem>
     <OperatingSystem Condition="Exists('/usr')">UNIX</OperatingSystem>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
