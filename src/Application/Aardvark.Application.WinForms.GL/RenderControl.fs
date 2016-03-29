@@ -120,6 +120,8 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     member x.Sizes = sizes :> IMod<_>
     member x.Samples = samples
 
+
+
     override x.OnHandleCreated(e) =
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
         if c <> null then
@@ -135,7 +137,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     override x.OnPaint(e) =
         if loaded then
             needsRedraw <- false
-            if contextHandle = null then
+            if isNull contextHandle || contextHandle.Handle.IsDisposed then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)

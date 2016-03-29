@@ -251,7 +251,7 @@ module UniformPaths =
 
                     let p = input.Type.GetProperty("Item", all)
                     if p <> null then
-                        let element = Expr.PropertyGet(input, p)
+                        let element = Expr.PropertyGet(input, p, [Expr.Value index])
                         element
                     else
                         failwithf "input-type does not support indexing"
