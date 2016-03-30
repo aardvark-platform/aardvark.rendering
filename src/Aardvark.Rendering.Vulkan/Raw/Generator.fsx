@@ -712,4 +712,80 @@ let run () =
 
     File.WriteAllText(file, str)
 
-do run()
+
+module PCI =
+    open System
+    open System.IO
+    let builder = System.Text.StringBuilder()
+
+    let printfn fmt =
+        Printf.kprintf (fun str -> System.Console.WriteLine(str); builder.AppendLine(str) |> ignore) fmt
+
+
+    let writeVendorAndDeviceEnum() =
+
+        let rx = System.Text.RegularExpressions.Regex "\"0x(?<vendor>[0-9A-Fa-f]+)\",\"0x(?<device>[0-9A-Fa-f]+)\",\"(?<vendorName>[^\"]+)\",\"(?<deviceName>[^\"]+)\""
+
+        let req = System.Net.HttpWebRequest.Create("http://pcidatabase.com/reports.php?type=csv")
+        let response = req.GetResponse()
+        let reader = new System.IO.StreamReader(response.GetResponseStream())
+
+        let vendors = System.Collections.Generic.Dictionary<int64, string>()
+        let devices = System.Collections.Generic.Dictionary<int64, string>()
+
+        let mutable line = reader.ReadLine()
+
+        while not (isNull line) do
+            let m = rx.Match line
+
+            if m.Success then
+                let vid = System.Int64.Parse(m.Groups.["vendor"].Value, System.Globalization.NumberStyles.HexNumber)
+                let did = System.Int64.Parse(m.Groups.["device"].Value, System.Globalization.NumberStyles.HexNumber)
+                let vname = m.Groups.["vendorName"].Value
+                let dname = m.Groups.["deviceName"].Value
+
+                vendors.[vid] <- vname.Replace("\\", "\\\\")
+                devices.[did] <- dname.Replace("\\", "\\\\")
+
+            line <- reader.ReadLine()
+
+        printfn "namespace Aardvark.Rendering.Vulkan"
+        printfn "open System.Collections.Generic"
+        printfn "open Aardvark.Base"
+
+    
+        printfn "module PCI = "
+        printfn "    let vendors ="
+        printfn "        Dictionary.ofArray [|"
+        for (KeyValue(k,v)) in vendors do
+            if k <= int64 Int32.MaxValue then
+                printfn "            0x%08X, \"%s\"" k v
+        printfn "        |]"
+
+//        printfn "    let devices ="
+//        printfn "        Dictionary.ofArray [|"
+//        for (KeyValue(k,v)) in devices do
+//            if k <= int64 Int32.MaxValue then
+//                printfn "            0x%08X, \"%s\"" k v
+//        printfn "        |]"
+
+
+        printfn "    let vendorName (id : int) ="
+        printfn "        match vendors.TryGetValue id with"
+        printfn "            | (true, name) -> name"
+        printfn "            | _ -> \"Unknown\""
+
+//        printfn "    let deviceName (id : int) ="
+//        printfn "        match devices.TryGetValue id with"
+//        printfn "            | (true, name) -> name"
+//        printfn "            | _ -> \"Unknown\""          
+
+    let run() =
+        builder.Clear() |> ignore
+        writeVendorAndDeviceEnum()
+        let str = builder.ToString()
+        let file = Path.Combine(__SOURCE_DIRECTORY__, "PCI.fs")
+        File.WriteAllText(file, str)
+
+do  PCI.run()
+    run()
