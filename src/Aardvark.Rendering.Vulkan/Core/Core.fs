@@ -280,8 +280,35 @@ and PhysicalDevice(handle : VkPhysicalDevice) as this =
         )
 
 
+    let vendor =
+        lazy (
+            let props = properties.Value
+            match props.vendorID with
+                | 0x000010DEu -> 
+                    DeviceVendor.Nvidia
+
+                | 0x0000163Cu | 0x00008086u | 0x00008087u ->
+                    DeviceVendor.Intel
+
+                | 0x00001002u | 0x00001022u ->
+                    DeviceVendor.AMD
+
+                | 0x00005143u ->
+                    DeviceVendor.Qualcomm
+
+                | 0x000010C3u ->
+                    DeviceVendor.Samsung
+
+                | _ -> 
+                    DeviceVendor.Unknown
+        )
+
 
     member x.Handle = handle
+    member x.Vendor = vendor.Value
+    member x.Name = properties.Value.deviceName.Value
+    member x.DeviceId = properties.Value.deviceID
+    member x.DeviceType = properties.Value.deviceType
     member x.Features = features.Value
     member x.Extensions = extensions.Value
     member x.Layers = layers.Value

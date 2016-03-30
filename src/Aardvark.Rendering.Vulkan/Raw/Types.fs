@@ -43,6 +43,15 @@ type V4ui =
     end
 
 
+type DeviceVendor =
+    | Unknown = 0
+    | Nvidia = 1
+    | Intel = 2
+    | AMD = 3
+    | Qualcomm = 4
+    | Samsung = 5
+
+
 [<StructLayout(LayoutKind.Explicit, Size = 256)>]
 type String256 =
     struct
