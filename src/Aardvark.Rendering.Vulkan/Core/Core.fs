@@ -299,6 +299,24 @@ and PhysicalDevice(handle : VkPhysicalDevice) as this =
                 | 0x000010C3u ->
                     DeviceVendor.Samsung
 
+                | 0x0000121Au ->
+                    DeviceVendor.ThreeDFX
+
+                | 0x000013B5u ->
+                    DeviceVendor.ARM
+
+                | 0x000014E4u ->
+                    DeviceVendor.Broadcom
+
+                | 0x0000102Bu ->
+                    DeviceVendor.Matrox
+
+                | 0x00001039u ->
+                    DeviceVendor.SiS
+
+                | 0x00001106u ->
+                    DeviceVendor.VIA
+
                 | _ -> 
                     DeviceVendor.Unknown
         )

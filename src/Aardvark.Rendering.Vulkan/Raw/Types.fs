@@ -51,6 +51,13 @@ type DeviceVendor =
     | Qualcomm = 4
     | Samsung = 5
 
+    | ThreeDFX = 6
+    | ARM = 7
+    | Broadcom = 8
+    | Matrox = 9
+    | SiS = 10
+    | VIA = 11
+
 
 [<StructLayout(LayoutKind.Explicit, Size = 256)>]
 type String256 =
