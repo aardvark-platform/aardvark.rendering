@@ -1,0 +1,8 @@
+type project
+id Aardvark.Rendering.Vulkan
+authors VRVis Research Center
+description
+    Aardvark.Rendering.Vulkan
+files
+    ..\..\bin\Release\Aardvark.Rendering.Vulkan.dll ==> lib\net45
+    ..\..\bin\Release\Aardvark.Rendering.Vulkan.pdb ==> lib\net45
