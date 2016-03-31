@@ -9,45 +9,32 @@ open Aardvark.Base
 #nowarn "51"
 
 module Test =
-    let run() =
+    let runtest(device : Device) (manager : IMemoryManager) =
         
         //Instance.AvailableLayers |> List.iter (printfn "layer: %A")
 
-        let instance = new Instance(["VK_LAYER_LUNARG_draw_state"], ["VK_EXT_debug_report"])
-        let physical = instance.PhysicalDevices.[0]
-        
-        let device = instance.CreateDevice(physical, ["VK_LAYER_LUNARG_draw_state"], [])
+
         let cmdPool = device.DefaultCommandPool
 
-        instance.OnDebugMessage.Add (fun msg ->
-            match msg.messageFlags with
-                | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
-                    errorf "%s" msg.message
-                    
-                | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt ->
-                    warnf "%s" msg.message
 
-                | _ ->
-                    debugf "%s" msg.message
-        )
 
-        let m0 = device.HostVisibleMemory.Alloc(1044L)
-        let m1 = device.DeviceLocalMemory.Alloc(1024L)
-        let m2 = device.HostVisibleMemory.Alloc(1044L)
+        use m0 = device.HostVisibleMemory.Alloc(1044L)
+        use m1 = manager.Alloc(1024L)
+        use mt = manager.Alloc(25L)
+        use m2 = device.HostVisibleMemory.Alloc(1044L)
 
         let p0 = m0.Skip(10L).Take(1024L)
         let p1 = m1
         let p2 = m2.Skip(10L).Take(1024L)
         
-        DevicePtr.map m0 (fun p -> Marshal.Set(p, 0xFFFFFFFF, 1044))
-        DevicePtr.map m2 (fun p -> Marshal.Set(p, 0x00000000, 1044))
+        let initialize =
+            command {
+                do! m0 |> DevicePtr.upload (Array.create 1044 0xFFuy)
+                do! m2 |> DevicePtr.upload (Array.create 1044 0x00uy)
+                do! p0 |> DevicePtr.upload (Array.init 1024 (fun i -> byte (i % 255)))
+            }
 
-
-        DevicePtr.map p0 (fun p ->
-            let p = NativePtr.ofNativeInt p
-            for i in 0..1023 do
-                NativePtr.set p i (byte (i % 255))
-        )
+        initialize |> device.DefaultQueue.RunSynchronously
 
         DevicePtr.copy p0 p1 1024L |> device.DefaultQueue.RunSynchronously
         DevicePtr.copy p1 p2 1024L |> device.DefaultQueue.RunSynchronously
@@ -74,7 +61,28 @@ module Test =
             )
         printfn "rest untouched: %A" untouched
         
+
+
+    let run() =
+        let instance = new Instance(["VK_LAYER_LUNARG_draw_state"], ["VK_EXT_debug_report"])
+        let physical = instance.PhysicalDevices.[0]
         printfn "Vendor = %A" physical.Vendor
         printfn "Name   = %s" physical.Name
         printfn "Type   = %A" physical.DeviceType
 
+        let device = instance.CreateDevice(physical, ["VK_LAYER_LUNARG_draw_state"], [])
+        instance.OnDebugMessage.Add (fun msg ->
+            match msg.messageFlags with
+                | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
+                    errorf "%s" msg.message
+                    
+                | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt ->
+                    warnf "%s" msg.message
+
+                | _ ->
+                    debugf "%s" msg.message
+        )
+        let manager = MemoryManager.aligned 256L device.DeviceLocalMemory
+        runtest device manager
+
+        device.DeviceLocalMemory.Heap.Used |> printfn "used: %A"

@@ -46,14 +46,13 @@ type CommandPoolExtensions private() =
                 (if primary then VkCommandBufferLevel.Primary else VkCommandBufferLevel.Secondary),
                 uint32 count
             )
+            
+        let ptr = NativePtr.stackalloc count
+        VkRaw.vkAllocateCommandBuffers(this.Device.Handle, &&info, ptr)
+            |> check "vkAllocateCommandBuffers"
 
-        NativePtr.stackallocWith count (fun ptr ->
-            VkRaw.vkAllocateCommandBuffers(this.Device.Handle, &&info, ptr)
-                |> check "vkAllocateCommandBuffers"
-
-            ptr |> NativePtr.toArray count
-                |> Array.map (fun h -> new CommandBuffer(this, h))
-        )
+        ptr |> NativePtr.toArray count
+            |> Array.map (fun h -> new CommandBuffer(this, h))
 
     [<Extension>]
     static member CreateCommandBuffers(this : CommandPool, count : int) =

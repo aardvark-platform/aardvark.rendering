@@ -63,13 +63,14 @@ module Unchecked =
 type size_t(s : uint64) =
     
     override x.ToString() =
-        let exp = log (float s) / log 2.0 |> floor |> int
-
-        if exp >= 40 then   sprintf "%.3fTB" (float s / 1099511627776.0)
-        elif exp >= 30 then sprintf "%.3fGB" (float s / 1073741824.0)
-        elif exp >= 20 then sprintf "%.1fMB" (float s / 1048576.0)
-        elif exp >= 10 then sprintf "%.1fkB" (float s / 1024.0)
-        else sprintf "%db" s
+        if s = 0UL then "0"
+        else
+            let exp = log (float s) / log 2.0 |> floor |> int
+            if exp >= 40 then   sprintf "%.3fTB" (float s / 1099511627776.0)
+            elif exp >= 30 then sprintf "%.3fGB" (float s / 1073741824.0)
+            elif exp >= 20 then sprintf "%.1fMB" (float s / 1048576.0)
+            elif exp >= 10 then sprintf "%.1fkB" (float s / 1024.0)
+            else sprintf "%db" s
 
     member x.Bytes = s
     member x.Kilobytes = float s / 1024.0
