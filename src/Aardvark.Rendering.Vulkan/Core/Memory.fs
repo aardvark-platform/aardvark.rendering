@@ -403,6 +403,15 @@ type DevicePtrExtensions private() =
         DevicePtr.upload data this
 
     [<Extension>]
+    static member Upload(this : deviceptr, arr : Array, start : int, count : int) =
+        let et = arr.GetType().GetElementType()
+        let es = Marshal.SizeOf et 
+        let off = es * start |> int64
+        let size = es * count |> int64
+        DevicePtr.uploadPinned arr off this size
+
+
+    [<Extension>]
     static member Upload(this : deviceptr, data : 'a[], start : int, count : int) =
         DevicePtr.uploadRange data start count this
 
@@ -426,6 +435,14 @@ type DevicePtrExtensions private() =
     [<Extension>]
     static member Download(this : deviceptr, target : 'a[], start : int, count : int) =
         DevicePtr.downloadRange this target start count
+
+    [<Extension>]
+    static member Download(this : deviceptr, arr : Array, start : int, count : int) =
+        let et = arr.GetType().GetElementType()
+        let es = Marshal.SizeOf et 
+        let off = es * start |> int64
+        let size = es * count |> int64
+        DevicePtr.downloadPinned this arr off size
 
     [<Extension>]
     static member Read<'a>(this : deviceptr) : Command<'a> =

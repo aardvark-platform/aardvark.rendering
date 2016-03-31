@@ -624,6 +624,8 @@
     <Compile Include="Core\CommandBuffer.fs" />
     <Compile Include="Core\Commands.fs" />
     <Compile Include="Core\Memory.fs" />
+    <Compile Include="Core\Context.fs" />
+    <Compile Include="Core\Buffer.fs" />
     <Compile Include="Test.fs" />
   </ItemGroup>
   <ItemGroup>
