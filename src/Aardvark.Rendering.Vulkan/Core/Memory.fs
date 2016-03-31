@@ -25,7 +25,7 @@ type deviceptr =
         member private x.Dispose(disposing : bool) =
             let mem = Interlocked.Exchange(&x.Memory, Unchecked.defaultof<_>)
             if Unchecked.notNull mem then
-                if disposing || not x.IsView then
+                if disposing || not x.IsView && x.Handle.IsValid then
                     if x.Offset <> 0L then failf "cannot free deviceptr with non-zero offset"
                     VkRaw.vkFreeMemory(mem.Device.Handle, x.Handle, NativePtr.zero)
 
@@ -122,3 +122,67 @@ module DevicePtr =
     let inline size (ptr : deviceptr) = ptr.Size
     let inline memory (ptr : deviceptr) = ptr.Memory
     let inline device (ptr : deviceptr) = ptr.Memory.Device
+
+    let copy (source : deviceptr) (target : deviceptr) (size : int64) =
+        Command.custom (fun s ->
+            let device = source.Memory.Device
+            let createBuffer (ptr : deviceptr) (size : int64) (source : bool) =
+                let align = ptr.Memory.Device.Physical.Properties.limits.minUniformBufferOffsetAlignment
+                
+                let m = align - 1UL |> int64
+                let offset = ptr.Offset &&& ~~~m
+                let add = ptr.Offset - offset
+
+                let mutable info =
+                    VkBufferCreateInfo(
+                        VkStructureType.BufferCreateInfo,
+                        0n,
+                        VkBufferCreateFlags.None,
+                        uint64 (size + add),
+                        (if source then VkBufferUsageFlags.TransferSrcBit else VkBufferUsageFlags.TransferDstBit),
+                        VkSharingMode.Exclusive,
+                        0u, NativePtr.zero
+                    )
+                let mutable buffer = VkBuffer.Null
+                VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&buffer)
+                    |> check "vkCreateBuffer"
+        
+                let mutable reqs = VkMemoryRequirements()
+                VkRaw.vkGetBufferMemoryRequirements(device.Handle, buffer, &&reqs)
+                
+                let mask = 1u <<< ptr.Memory.TypeIndex
+                if mask &&& reqs.memoryTypeBits = 0u then
+                    failf "incompatible memory for buffers: %A" ptr.Memory
+  
+                VkRaw.vkBindBufferMemory(device.Handle, buffer, ptr.Handle, uint64 offset)
+                    |> check "vkBindBufferMemory"
+
+                buffer, add
+
+            let cmd = s.buffer
+
+            let src, srcOff = createBuffer source size true
+            let dst, dstOff = createBuffer target size false
+
+            let mutable copy =
+                VkBufferCopy(uint64 srcOff, uint64 dstOff, uint64 size)
+
+            VkRaw.vkCmdCopyBuffer(
+                cmd.Handle,
+                src, dst, 1u, &&copy
+            )
+
+            let cleanup() = 
+                VkRaw.vkDestroyBuffer(device.Handle, src, NativePtr.zero)
+                VkRaw.vkDestroyBuffer(device.Handle, dst, NativePtr.zero)
+
+            { s with cleanupActions = cleanup::s.cleanupActions }, ()
+        )
+
+    let map (ptr : deviceptr) (f : nativeint -> 'a) =
+        let mutable res = 0n
+        VkRaw.vkMapMemory(ptr.Memory.Device.Handle, ptr.Handle, uint64 ptr.Offset, uint64 ptr.Size, VkMemoryMapFlags.MinValue, &&res)
+            |> check "vkMapMemory"
+
+        try f res
+        finally VkRaw.vkUnmapMemory(ptr.Memory.Device.Handle, ptr.Handle)

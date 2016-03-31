@@ -108,8 +108,8 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
 
     let debugAdapterAndEvent =
         lazy (
-            if extensions |> Array.exists (fun n -> n = "DEBUG_REPORT") then
-                let adapter = DebugReport.Adapter(handle.Value, DebugReport.VkDbgReportFlags.All)
+            if extensions |> Array.exists (fun n -> n = "VK_EXT_debug_report") then
+                let adapter = DebugReport.Adapter(handle.Value, VkDebugReportFlagBitsEXT.All)
                 adapter.Start()
                 (Some adapter, adapter.OnMessageEvent)
             else
@@ -130,16 +130,31 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
         e.Publish
 
 
-    member x.CreateDevice(physical : PhysicalDevice, features : VkPhysicalDeviceFeatures, layers : list<string>, extensions : list<string>) =
-        let mutable features = features
+    member x.CreateDevice(physical : PhysicalDevice, requestedQueues : Map<PhysicalQueueFamily, int>, layers : list<string>, extensions : list<string>) =
+        let mutable features = physical.Features
 
-        let mutable queueInfo =
-            VkDeviceQueueCreateInfo(
-                VkStructureType.DeviceQueueCreateInfo,
-                0n, VkDeviceQueueCreateFlags.MinValue,
-                0u,
-                1u, NativePtr.zero
-            )
+        let queues = requestedQueues |> Map.toArray
+        let queueInfos = NativePtr.stackalloc queues.Length
+
+        if queues.Length = 0 then
+            failf "cannot create a device without any queues"
+
+        for i in 0..queues.Length-1 do
+            let (family, count) = queues.[i]
+
+            if count > family.QueueCount then
+                failf "cannot allocate %d queues in family: %A" count family
+
+            let info = 
+                VkDeviceQueueCreateInfo(
+                    VkStructureType.DeviceQueueCreateInfo,
+                    0n, VkDeviceQueueCreateFlags.MinValue,
+                    uint32 family.Index,
+                    uint32 count, 
+                    NativePtr.zero
+                )  
+            NativePtr.set queueInfos i info
+
 
 
         let layers =
@@ -166,8 +181,8 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
                 VkStructureType.DeviceCreateInfo,
                 0n, VkDeviceCreateFlags.MinValue,
 
-                1u,
-                &&queueInfo, 
+                uint32 queues.Length,
+                queueInfos, 
         
                 uint32 layers.Length, 
                 pLayers,
@@ -182,9 +197,23 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
         
         VkRaw.vkCreateDevice(physical.Handle, &&createInfo, NativePtr.zero, &&device) |> check "vkCreateDevice"
 
-        new Device(x, physical, device)
+        new Device(x, physical, device, requestedQueues)
 
+    member x.CreateDevice(physical : PhysicalDevice, queues : Map<PhysicalQueueFamily, int>) =
+        x.CreateDevice(physical, queues, [], [])
 
+    member x.CreateDevice(physical : PhysicalDevice, layers : list<string>, extensions : list<string>) =
+        let defaultQueue =
+            let families = physical.QueueFamilies
+            if families.Length = 1 then
+                Map.ofList [families.[0], 1]
+            else
+                failf "could not determine a default queue for device: %A" physical
+
+        x.CreateDevice(physical, defaultQueue, layers, extensions)
+
+    member x.CreateDevice(physical : PhysicalDevice) =
+        x.CreateDevice(physical, [], [])
 
     member x.Dispose() =
         if debugAdapterAndEvent.IsValueCreated then
@@ -202,6 +231,8 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
     new(layers, extensions) = new Instance("Aardvark", Version(1,0,0), layers, extensions)
     new() = new Instance("Aardvark", Version(1,0,0), [], [])
 
+    override x.ToString() =
+        sprintf "Instance { Name = %s; Version = %A }" appName appVersion
 
 /// PhysicalDevice represents a "real" hardware device with Vulkan functionality.
 /// It provides several properties for a device (e.g. Memory Kinds/Heaps, vendor information, etc.)
@@ -239,19 +270,6 @@ and PhysicalDevice(handle : VkPhysicalDevice) as this =
             )
         )
 
-    let queueProperties =
-        lazy (
-            let mutable count = 0u
-            VkRaw.vkGetPhysicalDeviceQueueFamilyProperties(handle, &&count, NativePtr.zero) 
-
-            NativePtr.stackallocWith (int count) (fun props ->
-                VkRaw.vkGetPhysicalDeviceQueueFamilyProperties(handle, &&count, props)
-
-                List.init (int count) (fun i -> NativePtr.get props i)
-            )
-
-        )
-
     let properties =
         lazy (
             let mutable properties = VkPhysicalDeviceProperties()
@@ -279,48 +297,78 @@ and PhysicalDevice(handle : VkPhysicalDevice) as this =
             Array.init (int props.memoryTypeCount) (fun i -> PhysicalMemory(this, i, props.memoryTypes.[i], memoryHeaps.Value.[int props.memoryTypes.[i].heapIndex]))
         )
 
-
+        
     let vendor =
         lazy (
             let props = properties.Value
             match props.vendorID with
-                | 0x000010DEu -> 
+                | 0x10DEu -> 
                     DeviceVendor.Nvidia
 
-                | 0x0000163Cu | 0x00008086u | 0x00008087u ->
+                | 0x163Cu | 0x8086u | 0x8087u ->
                     DeviceVendor.Intel
 
-                | 0x00001002u | 0x00001022u ->
+                | 0x1002u | 0x1022u ->
                     DeviceVendor.AMD
 
-                | 0x00005143u ->
+                | 0x5143u ->
                     DeviceVendor.Qualcomm
 
-                | 0x000010C3u ->
+                | 0x10C3u ->
                     DeviceVendor.Samsung
 
-                | 0x0000121Au ->
+                | 0x121Au ->
                     DeviceVendor.ThreeDFX
 
-                | 0x000013B5u ->
+                | 0x13B5u ->
                     DeviceVendor.ARM
 
-                | 0x000014E4u ->
+                | 0x14E4u ->
                     DeviceVendor.Broadcom
 
-                | 0x0000102Bu ->
+                | 0x102Bu ->
                     DeviceVendor.Matrox
 
-                | 0x00001039u ->
+                | 0x1039u ->
                     DeviceVendor.SiS
 
-                | 0x00001106u ->
+                | 0x1106u ->
                     DeviceVendor.VIA
 
                 | _ -> 
                     DeviceVendor.Unknown
         )
 
+    let queueFamilies =
+        lazy (
+            let mutable count = 0u
+            VkRaw.vkGetPhysicalDeviceQueueFamilyProperties(handle, &&count, NativePtr.zero)
+            
+            NativePtr.stackallocWith (int count) (fun ptr ->
+                VkRaw.vkGetPhysicalDeviceQueueFamilyProperties(handle, &&count, ptr)
+                ptr 
+                |> NativePtr.toArray (int count)
+                |> Array.mapi (fun i props -> PhysicalQueueFamily(this, i, props))
+
+            )
+        )
+
+    override x.ToString() =
+        sprintf "Device { Vendor = %A; Name = %s }" vendor.Value properties.Value.deviceName.Value
+
+    override x.GetHashCode() =
+        handle.GetHashCode()
+
+    override x.Equals o =
+        match o with
+            | :? PhysicalDevice as o -> handle = o.Handle
+            | _ -> false
+
+    interface IComparable with
+        member x.CompareTo o =
+            match o with
+                | :? PhysicalDevice as o -> compare x.Handle o.Handle
+                | _ -> failf "cannot compare PhysicalDevice to %A" o
 
     member x.Handle = handle
     member x.Vendor = vendor.Value
@@ -330,12 +378,15 @@ and PhysicalDevice(handle : VkPhysicalDevice) as this =
     member x.Features = features.Value
     member x.Extensions = extensions.Value
     member x.Layers = layers.Value
-    member x.QueueFamilyProperties = queueProperties.Value
     member x.Properties = properties.Value
     member x.MemoryProperties = memoryProperties.Value
     member x.MemoryHeaps = memoryHeaps.Value
     member x.MemoryTypes = memoryTypes.Value
-
+    member x.QueueFamilies : PhysicalQueueFamily[] = queueFamilies.Value
+ 
+/// PhysicalHeap represents a heap available on a PhysicalDevice which can be used to
+/// allocate memory. It provides information about the memory's capabilities as well
+/// as its size.
 and PhysicalHeap(device : PhysicalDevice, heapIndex : int, handle : VkMemoryHeap) =
     let size = handle.size |> size_t
     let mutable allocatedBytes = 0L
@@ -357,9 +408,32 @@ and PhysicalHeap(device : PhysicalDevice, heapIndex : int, handle : VkMemoryHeap
     member internal x.Remove(size : int64) =
         System.Threading.Interlocked.Add(&allocatedBytes, -size) |> ignore
 
+    override x.ToString() =
+        sprintf "PhysicalHeap { Index = %A; Size = %A }" heapIndex size
+
+    override x.GetHashCode() =
+        HashCode.Combine(device.GetHashCode(), heapIndex.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? PhysicalHeap as o -> heapIndex = o.HeapIndex && device = o.Device
+            | _ -> false
+
+    interface IComparable with
+        member x.CompareTo o =
+            match o with
+                | :? PhysicalHeap as o -> 
+                    let c = compare device o.Device
+                    if c = 0 then
+                        compare heapIndex o.HeapIndex
+                    else
+                        c
+                | _ -> failf "cannot compare PhysicalHeap to %A" o
 
     member x.IsDeviceLocal = handle.flags.HasFlag(VkMemoryHeapFlags.DeviceLocalBit)
 
+/// PhysicalMemory represents a "view" on a PhysicalHeap which extends the heap with
+/// information about the memory's capabilities such as mappability, etc.
 and PhysicalMemory(device : PhysicalDevice, typeIndex : int, memType : VkMemoryType, heap : PhysicalHeap) =
     member x.IsHostVisible = memType.propertyFlags.HasFlag(VkMemoryPropertyFlags.HostVisibleBit)
     member x.IsDeviceLocal = memType.propertyFlags.HasFlag(VkMemoryPropertyFlags.DeviceLocalBit)
@@ -369,11 +443,64 @@ and PhysicalMemory(device : PhysicalDevice, typeIndex : int, memType : VkMemoryT
     member x.Heap = heap
     member x.HeapIndex = heap.HeapIndex
     member x.HeapSize = heap.Size
-    member x.Flags = memType.propertyFlags
+    member x.Flags : VkMemoryPropertyFlags = memType.propertyFlags
+
+    override x.ToString() =
+        sprintf "PhysicalMemory { Index = %A; HeapIndex = %A; Flags = %A }" typeIndex heap.HeapIndex memType.propertyFlags
+
+    override x.GetHashCode() =
+        HashCode.Combine(device.GetHashCode(), typeIndex.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? PhysicalMemory as o -> typeIndex = o.TypeIndex && device = o.Device
+            | _ -> false
+
+    interface IComparable with
+        member x.CompareTo o =
+            match o with
+                | :? PhysicalMemory as o -> 
+                    let c = compare device o.Device
+                    if c = 0 then
+                        compare typeIndex o.TypeIndex
+                    else
+                        c
+                | _ -> failf "cannot compare PhysicalMemory to %A" o
+
+/// PhysicalQueueFamily provides information about queue families available on
+/// a specific PhysicalDevice. This includes a maximal number of queues available for the
+/// family as well as capabilities provided by the queue.
+and PhysicalQueueFamily(device : PhysicalDevice, index : int, properties : VkQueueFamilyProperties) =
+    member x.Device = device
+    member x.Index = index
+    member x.Compute = properties.queueFlags.HasFlag(VkQueueFlags.ComputeBit)
+    member x.Graphics = properties.queueFlags.HasFlag(VkQueueFlags.GraphicsBit)
+    member x.QueueCount = int properties.queueCount
+
+    override x.ToString() =
+        sprintf "PhysicalQueueFamily { Index = %A; Flags = %A; Count = %A }" index properties.queueFlags properties.queueCount
+    
+    override x.GetHashCode() =
+        HashCode.Combine(device.GetHashCode(), index.GetHashCode())
+
+    override x.Equals o =
+        match o with
+            | :? PhysicalQueueFamily as o -> index = o.Index && device = o.Device
+            | _ -> false
+
+    interface IComparable with
+        member x.CompareTo o =
+            match o with
+                | :? PhysicalQueueFamily as o -> 
+                    let c = compare device o.Device
+                    if c = 0 then
+                        compare index o.Index
+                    else
+                        c
+                | _ -> failf "cannot compare PhysicalQueueFamily to %A" o
 
 
-
-and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice) as this =
+and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice, queueFamilies : Map<PhysicalQueueFamily, int>) as this =
 
     let memories : Lazy<DeviceMemory[]> =
         lazy (
@@ -387,7 +514,18 @@ and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice) as
 
     let hostVisibleMemory =
         lazy (
-            memories.Value |> Array.find (fun m -> m.IsHostVisible)
+            memories.Value 
+                |> Array.filter (fun m -> m.IsHostVisible)
+                |> Array.maxBy (fun (m : DeviceMemory) ->
+                    let cached = m.PhysicalMemory.Flags.HasFlag(VkMemoryPropertyFlags.HostCachedBit)
+                    let coeherent = m.PhysicalMemory.Flags.HasFlag VkMemoryPropertyFlags.HostCoherentBit
+                    let lazyily = m.PhysicalMemory.Flags.HasFlag VkMemoryPropertyFlags.LazilyAllocatedBit
+                    
+                    (if cached then 1 else 0) +
+                    (if coeherent then 1 else 0) +
+                    (if lazyily then 1 else 0)
+                   
+                   )
         )
 
     let deviceLocalMemory =
@@ -395,16 +533,82 @@ and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice) as
             memories.Value |> Array.find (fun m -> m.IsDeviceLocal)
         )
 
+    let queues =
+        lazy (
+            Map.ofList [
+                for (family, count) in Map.toSeq queueFamilies do
+                    let queues =
+                        Array.init count (fun i ->
+                            let mutable res = VkQueue.Zero
+                            VkRaw.vkGetDeviceQueue(handle, uint32 family.Index, uint32 i, &&res)
+
+                            new Queue(this, family, res, i)
+                        )
+                    yield family, queues
+            ]
+        )
+
+    let defaultQueue =
+        lazy (
+            queues.Value |> Map.toSeq |> Seq.head |> snd |> Array.item 0
+        )
+
+    let defaultPool =
+        lazy (
+            let fam = queueFamilies |> Map.toSeq |> Seq.head |> fst
+            this.CreateCommandPool fam
+        )
+
+    member x.CreateCommandPool(queueFamily : PhysicalQueueFamily) =
+        let mutable info =
+            VkCommandPoolCreateInfo(
+                VkStructureType.CommandPoolCreateInfo,
+                0n,
+                VkCommandPoolCreateFlags.None,
+                uint32 queueFamily.Index
+            )
+
+        let mutable res = VkCommandPool.Null
+        VkRaw.vkCreateCommandPool(this.Handle, &&info, NativePtr.zero, &&res)
+            |> check "vkCreateCommandPool"
+
+        new CommandPool(this, queueFamily, res)
+
     member x.Handle = handle
+    member x.Physical = physical
+    member x.Instance = instance
     member x.MemoryHeaps = physical.MemoryHeaps
     member x.Memories = memories.Value
+
+    member x.Queues = queues.Value
+    member x.DefaultQueue = defaultQueue.Value
+    member x.DefaultCommandPool = defaultPool.Value
 
     member x.HostVisibleMemory = hostVisibleMemory.Value
     member x.DeviceLocalMemory = deviceLocalMemory.Value
 
+and Queue(device : Device, family : PhysicalQueueFamily, handle : VkQueue, index : int) =
+    member x.Device = device
+    member x.Family = family
+    member x.Handle = handle
+    member x.QueueIndex = index
+
+and CommandPool(device : Device, queueFamily : PhysicalQueueFamily, handle : VkCommandPool) =
+    member x.Handle = handle
+    member x.Device = device
+    member x.QueueFamily = queueFamily
+
+    override x.Equals o =
+        match o with
+            | :? CommandPool as o -> handle = o.Handle
+            | _ -> false
+
+    override x.GetHashCode() =
+        handle.GetHashCode()
+
 and DeviceMemory(device : Device, physical : PhysicalMemory, heap : PhysicalHeap) =
     member x.Device : Device = device
-    member x.PhysicalMemory = physical
+    member x.PhysicalMemory : PhysicalMemory = physical
     member x.Heap = heap
     member x.IsHostVisible = physical.IsHostVisible
     member x.IsDeviceLocal = physical.IsDeviceLocal

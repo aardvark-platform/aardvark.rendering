@@ -621,6 +621,8 @@
     <Compile Include="Raw\Utilities.fs" />
     <Compile Include="Extensions\DebugReport.fs" />
     <Compile Include="Core\Core.fs" />
+    <Compile Include="Core\CommandBuffer.fs" />
+    <Compile Include="Core\Commands.fs" />
     <Compile Include="Core\Memory.fs" />
     <Compile Include="Test.fs" />
   </ItemGroup>
