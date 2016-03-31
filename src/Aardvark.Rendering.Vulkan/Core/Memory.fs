@@ -289,47 +289,165 @@ module DevicePtr =
                 VkRaw.vkDestroyBuffer(device.Handle, src, NativePtr.zero)
                 VkRaw.vkDestroyBuffer(device.Handle, dst, NativePtr.zero)
 
-            { s with cleanupActions = cleanup::s.cleanupActions }, ()
+            { s with cleanupActions = cleanup::s.cleanupActions }
         )
 
 
-    let uploadPtr (source : nativeint) (target : deviceptr) (size : int64) =
+    let uploadPtr (source : nativeint) (target : deviceptr) (size : int64)  =
         Command.custom (fun s ->
             let mutable s = s
 
             let mem = memory target
             if mem.IsHostVisible then
                 map target (fun t -> Marshal.Copy(source, t, int size))
-                s, ()
+                s
             else
                 let device = mem.Device
                 let temp = alloc size device.HostVisibleMemory
                 map temp (fun t -> Marshal.Copy(source, t, int size))
-                (copy temp target size).RunUnit(&s)
+                (copy temp target size).Run(&s)
 
-                { s with cleanupActions = (fun () -> temp.Dispose())::s.cleanupActions }, ()
+                { s with cleanupActions = (fun () -> temp.Dispose())::s.cleanupActions }
 
         )
 
+    let uploadPinned (source : obj) (offset : int64) (target : deviceptr) (size : int64)  =
+        Command.custom (fun s ->
+            let mutable s = s
+            let gc = GCHandle.Alloc(source, GCHandleType.Pinned)
+            (uploadPtr (nativeint offset + gc.AddrOfPinnedObject()) target size).Run(&s)
+            gc.Free()
+            s
+        )
+
+    let uploadRange (data : 'a[]) (start : int) (count : int) (target : deviceptr) =
+        let off = sizeof<'a> * start |> int64
+        let size = sizeof<'a> * count |> int64
+        uploadPinned data off target size
+     
     let upload (data : 'a[]) (target : deviceptr) =
-        Command.custom (fun s ->
-            let size = sizeof<'a> * data.Length |> int64
-            let mutable s = s
-            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            (uploadPtr (gc.AddrOfPinnedObject()) target size).Run(&s)
-            gc.Free()
-            s, ()
-        )
-        
+        uploadRange data 0 data.Length target
+ 
     let write (value : 'a) (target : deviceptr) =
+        uploadPinned value 0L target (int64 sizeof<'a>)
+
+
+    let downloadPtr (source : deviceptr) (target : nativeint) (size : int64) =
         Command.custom (fun s ->
-            let size = sizeof<'a> |> int64
             let mutable s = s
-            let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-            (uploadPtr (gc.AddrOfPinnedObject()) target size).Run(&s)
-            gc.Free()
-            s, ()
+
+            let mem = memory source
+            if mem.IsHostVisible then
+                let cleanup() =
+                    map source (fun s -> Marshal.Copy(s, target, int size))
+                { s with cleanupActions = cleanup::s.cleanupActions }
+            else
+                let device = mem.Device
+                let temp = alloc size device.HostVisibleMemory
+                (copy source temp size).Run(&s)
+                
+                let cleanup() =
+                    map temp (fun s -> Marshal.Copy(s, target, int size))
+                    temp.Dispose()
+
+                { s with cleanupActions = cleanup::s.cleanupActions }
+
         )
+
+    let downloadPinned (source : deviceptr) (target : obj) (offset : int64) (size : int64) =
+        Command.custom (fun s ->
+            let mutable s = s
+            let gc = GCHandle.Alloc(target, GCHandleType.Pinned)
+            (downloadPtr source (nativeint offset + gc.AddrOfPinnedObject()) size).Run(&s)
+            let cleanup() = gc.Free()
+            { s with cleanupActions = cleanup::s.cleanupActions }
+        ) 
+
+    let downloadRange (source : deviceptr) (target : 'a[]) (start : int) (count : int) =
+        let off = sizeof<'a> * start |> int64
+        let size = sizeof<'a> * count |> int64
+        downloadPinned source target off size
+
+    let download (source : deviceptr) (target : 'a[]) =
+        downloadRange source target 0 target.Length
+
+    let read<'a> (source : deviceptr) : Command<'a> =
+        command {
+            let arr = Array.zeroCreate 1
+            do! download source arr
+
+            return! fun () -> 
+                arr.[0]
+        }
+
+
+[<AbstractClass; Sealed; Extension>]
+type DevicePtrExtensions private() =
+    
+    [<Extension>]
+    static member CopyTo(source : deviceptr, target : deviceptr, size : int64) =
+        DevicePtr.copy source target size
+
+    [<Extension>]
+    static member CopyTo(source : deviceptr, target : deviceptr) =
+        let size = min (DevicePtr.size source) (DevicePtr.size target)
+        DevicePtr.copy source target size
+
+
+    [<Extension>]
+    static member Upload(this : deviceptr, data : nativeint, size : int64) =
+        DevicePtr.uploadPtr data this size
+   
+    [<Extension>]
+    static member Upload(this : deviceptr, data : 'a[]) =
+        DevicePtr.upload data this
+
+    [<Extension>]
+    static member Upload(this : deviceptr, data : 'a[], start : int, count : int) =
+        DevicePtr.uploadRange data start count this
+
+    [<Extension>]
+    static member Write(this : deviceptr, value : 'a) =
+        DevicePtr.write value this
+
+    [<Extension>]
+    static member Write(this : deviceptr, value : 'a, offset : int64, size : int64) =
+        DevicePtr.uploadPinned value offset this size
+
+
+    [<Extension>]
+    static member Download(this : deviceptr, target : nativeint, size : int64) =
+        DevicePtr.downloadPtr this target size
+
+    [<Extension>]
+    static member Download(this : deviceptr, target : 'a[]) =
+        DevicePtr.download this target
+
+    [<Extension>]
+    static member Download(this : deviceptr, target : 'a[], start : int, count : int) =
+        DevicePtr.downloadRange this target start count
+
+    [<Extension>]
+    static member Read<'a>(this : deviceptr) : Command<'a> =
+        DevicePtr.read<'a>(this)
+
+    [<Extension>]
+    static member Download(this : deviceptr, count : int) : Command<'a[]> =
+        command {
+            //let count = (DevicePtr.size this) / int64 sizeof<'a> |> int
+            let arr = Array.zeroCreate count
+            do! DevicePtr.download this arr
+            return! fun () -> arr
+        }
+
+    [<Extension>]
+    static member Download(this : deviceptr) : Command<'a[]> =
+        command {
+            let count = (DevicePtr.size this) / int64 sizeof<'a> |> int
+            let arr = Array.zeroCreate count
+            do! DevicePtr.download this arr
+            return! fun () -> arr
+        }
 
 [<AbstractClass; Sealed; Extension>]
 type MemoryExtensions private() =

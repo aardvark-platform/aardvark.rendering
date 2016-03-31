@@ -11,6 +11,7 @@ open Aardvark.Base
 module Test =
     let runtest(device : Device) (manager : IMemoryManager) =
         
+        let queue = device.DefaultQueue
         //Instance.AvailableLayers |> List.iter (printfn "layer: %A")
 
 
@@ -27,29 +28,30 @@ module Test =
         let p1 = m1
         let p2 = m2.Skip(10L).Take(1024L)
         
-        let initialize =
+        let copyTest =
             command {
-                do! m0 |> DevicePtr.upload (Array.create 1044 0xFFuy)
-                do! m2 |> DevicePtr.upload (Array.create 1044 0x00uy)
-                do! p0 |> DevicePtr.upload (Array.init 1024 (fun i -> byte (i % 255)))
+                do! m0.Upload (Array.create 1044 0xFFuy)
+                do! m2.Upload (Array.create 1044 0x00uy)
+                
+                do! Command.barrier MemoryTransfer
+                do! p0.Upload (Array.init 1024 (fun i -> byte (i % 255)))
+                
+                do! Command.barrier MemoryTransfer
+                do! p0.CopyTo(p1)
+
+                do! Command.barrier MemoryTransfer
+                do! p1.CopyTo(p2)
+
+                do! Command.barrier MemoryTransfer
+                return! p2.Download()
             }
 
-        initialize |> device.DefaultQueue.RunSynchronously
-
-        DevicePtr.copy p0 p1 1024L |> device.DefaultQueue.RunSynchronously
-        DevicePtr.copy p1 p2 1024L |> device.DefaultQueue.RunSynchronously
-
-
-        let res : byte[] = Array.zeroCreate 1024
-        DevicePtr.map p2 (fun p ->
-            let p = NativePtr.ofNativeInt p
-            for i in 0..1023 do
-                res.[i] <- NativePtr.get p i
-        )
+        let res = copyTest.RunSynchronously queue
         let check = Array.init 1024 (fun i -> byte (i % 255))
-
         let success = Array.forall2 (=) res check
         printfn "success: %A" success
+
+
 
         let untouched = 
             DevicePtr.map m2 (fun p ->
@@ -59,6 +61,7 @@ module Test =
 
                 start && rest
             )
+
         printfn "rest untouched: %A" untouched
         
 

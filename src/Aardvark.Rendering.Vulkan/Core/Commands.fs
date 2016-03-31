@@ -1,5 +1,8 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+#nowarn "9"
+#nowarn "51"
+
 open System.Runtime.CompilerServices
 
 type CommandState = 
@@ -10,11 +13,17 @@ type CommandState =
 
 [<AbstractClass>]
 type Command<'a>() = 
-    abstract member Run : byref<CommandState> -> 'a
-    abstract member RunUnit : byref<CommandState> -> unit
+    abstract member Run : byref<CommandState> -> unit
+    default x.Run s = ()
 
-    default x.Run(s) = x.RunUnit(&s); Unchecked.defaultof<_>
-    default x.RunUnit(s) = x.Run(&s) |> ignore
+    abstract member GetResult : CommandState -> 'a
+    default x.GetResult(s) = Unchecked.defaultof<_>
+
+
+type BarrierKind =
+    | MemoryTransfer
+    | Global
+    
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -22,54 +31,150 @@ module Command =
 
     
     let ofValue (v : 'a) =
-        { new Command<'a>() with member x.Run(_) = v }
+        { new Command<'a>() with
+             member x.GetResult(_) = v 
+        }
+
+    let ofFunction (v : unit -> 'a) =
+        { new Command<'a>() with
+             member x.GetResult(_) = v()
+        }
 
     let map (f : 'a -> 'b) (m : Command<'a>) =
-        { new Command<'b>() with member x.Run(s) = m.Run(&s) |> f }
-
-    let bind (f : 'a -> Command<'b>) (m : Command<'a>) =
-        { new Command<'b>() with member x.Run(s) = (m.Run(&s) |> f).Run(&s) }
+        { new Command<'b>() with 
+            member x.Run(s) = m.Run(&s)
+            member x.GetResult(s) = m.GetResult(s) |> f
+        }
 
     let combine (l : Command<unit>) (r : Command<'a>) =
         { new Command<'a>() with
             member x.Run(s) =
                 l.Run(&s)
                 r.Run(&s)
+
+            member x.GetResult(s) =
+                r.GetResult(s)
         }
 
     let ofSeq (commands : seq<Command<unit>>) =
         { new Command<unit>() with
-            member x.RunUnit(s) =
-                for c in commands do c.Run(&s)
-                Unchecked.defaultof<unit>
-        }
-
-    let custom (f : CommandState -> CommandState * 'a) =
-        { new Command<'a>() with
             member x.Run(s) =
-                let (n,v) = f s
-                s <- n
-                v
+                for c in commands do c.Run(&s)
         }
 
-    let run (m : Command<'a>) (s : CommandState) =
-        let mutable s = s
-        let v = m.Run(&s)
-        s, v
+    let custom (f : CommandState -> CommandState) =
+        { new Command<unit>() with
+            member x.Run(s) =
+                s <- f s
+        }
 
-    let rununit (m : Command<unit>) (s : CommandState) =
-        let mutable s = s
-        m.RunUnit(&s)
-        s
 
+    let syncTransfer =
+        { new Command<unit>() with
+            member x.Run(s) =
+                let b = s.buffer
+
+                VkRaw.vkCmdPipelineBarrier(
+                    b.Handle,
+                    VkPipelineStageFlags.TransferBit,
+                    VkPipelineStageFlags.TransferBit,
+                    VkDependencyFlags.None,
+                    0u, NativePtr.zero,
+                    0u, NativePtr.zero,
+                    0u, NativePtr.zero
+                )
+
+        }
+
+    let sync =
+        { new Command<unit>() with
+            member x.Run(s) =
+                let b = s.buffer
+
+                VkRaw.vkCmdPipelineBarrier(
+                    b.Handle,
+                    VkPipelineStageFlags.AllCommandsBit,
+                    VkPipelineStageFlags.AllCommandsBit,
+                    VkDependencyFlags.None,
+                    0u, NativePtr.zero,
+                    0u, NativePtr.zero,
+                    0u, NativePtr.zero
+                )
+
+        }
+
+    let syncMem =
+        { new Command<unit>() with
+            member x.Run(s) =
+                let b = s.buffer
+
+                let mutable mem =
+                    VkMemoryBarrier(
+                        VkStructureType.MemoryBarrier,
+                        0n,
+                        VkAccessFlags.TransferWriteBit,
+                        VkAccessFlags.TransferReadBit
+                    )
+
+                VkRaw.vkCmdPipelineBarrier(
+                    b.Handle,
+                    VkPipelineStageFlags.None,
+                    VkPipelineStageFlags.None,
+                    VkDependencyFlags.None,
+                    1u, &&mem,
+                    0u, NativePtr.zero,
+                    0u, NativePtr.zero
+                )
+
+        }
+
+    let barrier (k : BarrierKind) =
+        match k with
+            | Global -> sync
+            | MemoryTransfer -> syncMem
 
 [<AutoOpen>]
 module ``Command Builder`` =
     type CommandBuilder() =
-        member x.Bind(m : Command<'a>, f : 'a -> Command<'b>) = Command.bind f m
+        member x.Bind(m : Command<unit>, f : unit -> Command<'b>) = 
+            let mutable res = Unchecked.defaultof<_>
+            Command.combine m { 
+                new Command<'b>() with 
+                    member x.Run(s) = 
+                        res <- f()
+                        res.Run(&s) 
+                    member x.GetResult(s) =
+                        res.GetResult(s)
+            }
+//
+//        member x.Bind(m : Command<unit>, f : unit -> unit -> 'b) = 
+//            Command.combine m (Command.ofFunction (fun () -> f()()))
+
         member x.Return(v : 'a) = Command.ofValue v
+        member x.ReturnFrom(v : unit -> 'a) = 
+            { new Command<'a>() with
+                member x.GetResult(s) = v()
+            }
+
+        
+        member x.ReturnFrom(v : Command<'a>) = v
+
+
         member x.Zero() = Command.ofValue ()
-        member x.Delay(f : unit -> Command<'a>) = { new Command<'a>() with member x.Run(s) = f().Run(&s) }
+        member x.Delay(f : unit -> unit -> 'a) = 
+            { new Command<'a>() with 
+                member x.GetResult(s) = f()() 
+            }
+        member x.Delay(f : unit -> Command<'a>) = 
+            let mutable res = Unchecked.defaultof<_>
+            { new Command<'a>() with 
+                member x.Run(s) = 
+                    res <- f()
+                    res.Run(&s) 
+                member x.GetResult(s) =
+                    res.GetResult(s)
+            
+            }
         member x.Combine(l : Command<unit>, r : Command<'a>) = Command.combine l r
         member x.For(elements : seq<'a>, f : 'a -> Command<unit>) = elements |> Seq.map f |> Command.ofSeq
 
@@ -80,37 +185,55 @@ module ``Command Builder`` =
 type CommandExtensions private() =
 
     [<Extension>]
-    static member Run(this : Queue, pool : CommandPool, cmd : Command<unit>) =
+    static member RunSynchronously(this : Command<'a>, queue : Queue) =
+        CommandExtensions.RunSynchronously(queue, this)
+
+    [<Extension>]
+    static member StartAsTask(this : Command<'a>, queue : Queue) =
+        CommandExtensions.StartAsTask(queue, this)
+
+    [<Extension>]
+    static member Run(this : Queue, pool : CommandPool, cmd : Command<'a>) =
         async {
             let buffer = pool.CreateCommandBuffer()
             buffer.Begin(false)
             let mutable state = { buffer = buffer; cleanupActions = [] }
-            cmd.RunUnit(&state)
+            cmd.Run(&state)
             buffer.End()
 
             do! this.Submit [|state.buffer|]
            
             VkRaw.vkQueueWaitIdle(this.Handle) |> check "vkQueueWaitIdle"
             buffer.Dispose()
-            for a in state.cleanupActions do a()
+
+            let rec clean (l : list<unit -> unit>) =
+                match l with
+                    | [] -> ()
+                    | h::t ->
+                        clean t
+                        h()
+
+            clean state.cleanupActions
+            let res = cmd.GetResult(state)
+            return res
         }
 
     [<Extension>]
-    static member RunSynchronously(this : Queue, pool : CommandPool, cmd : Command<unit>) =
+    static member RunSynchronously(this : Queue, pool : CommandPool, cmd : Command<'a>) =
         CommandExtensions.Run(this, pool, cmd) |> Async.RunSynchronously
 
     [<Extension>]
-    static member StartAsTask(this : Queue, pool : CommandPool, cmd : Command<unit>) =
+    static member StartAsTask(this : Queue, pool : CommandPool, cmd : Command<'a>) =
         CommandExtensions.Run(this, pool, cmd) |> Async.StartAsTask
 
     [<Extension>]
-    static member Run(this : Queue, cmd : Command<unit>) =
+    static member Run(this : Queue, cmd : Command<'a>) =
         CommandExtensions.Run(this, this.Device.DefaultCommandPool, cmd)
 
     [<Extension>]
-    static member RunSynchronously(this : Queue, cmd : Command<unit>) =
+    static member RunSynchronously(this : Queue, cmd : Command<'a>) =
         CommandExtensions.RunSynchronously(this, this.Device.DefaultCommandPool, cmd)
 
     [<Extension>]
-    static member StartAsTask(this : Queue, cmd : Command<unit>) =
+    static member StartAsTask(this : Queue, cmd : Command<'a>) =
         CommandExtensions.StartAsTask(this, this.Device.DefaultCommandPool, cmd)
