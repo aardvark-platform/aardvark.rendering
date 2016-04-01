@@ -193,6 +193,11 @@ type CommandExtensions private() =
         CommandExtensions.StartAsTask(queue, this)
 
     [<Extension>]
+    static member Run(this : Command<'a>, queue : Queue) =
+        CommandExtensions.Run(queue, this)
+
+
+    [<Extension>]
     static member Run(this : Queue, pool : CommandPool, cmd : Command<'a>) =
         async {
             let buffer = pool.CreateCommandBuffer()
@@ -226,14 +231,15 @@ type CommandExtensions private() =
     static member StartAsTask(this : Queue, pool : CommandPool, cmd : Command<'a>) =
         CommandExtensions.Run(this, pool, cmd) |> Async.StartAsTask
 
+
     [<Extension>]
     static member Run(this : Queue, cmd : Command<'a>) =
-        CommandExtensions.Run(this, this.Device.DefaultCommandPool, cmd)
+        CommandExtensions.Run(this, this.CommandPool, cmd)
 
     [<Extension>]
     static member RunSynchronously(this : Queue, cmd : Command<'a>) =
-        CommandExtensions.RunSynchronously(this, this.Device.DefaultCommandPool, cmd)
+        CommandExtensions.RunSynchronously(this, this.CommandPool, cmd)
 
     [<Extension>]
     static member StartAsTask(this : Queue, cmd : Command<'a>) =
-        CommandExtensions.StartAsTask(this, this.Device.DefaultCommandPool, cmd)
+        CommandExtensions.StartAsTask(this, this.CommandPool, cmd)

@@ -500,6 +500,8 @@ and PhysicalQueueFamily(device : PhysicalDevice, index : int, properties : VkQue
                 | _ -> failf "cannot compare PhysicalQueueFamily to %A" o
 
 
+/// Device represents a logical vulkan device which can be created using the instance.
+/// It's the central thing in vulkan which is needed for all resource-creations and commands.
 and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice, queueFamilies : Map<PhysicalQueueFamily, int>) as this =
 
     let memories : Lazy<DeviceMemory[]> =
@@ -533,79 +535,18 @@ and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice, qu
             memories.Value |> Array.find (fun m -> m.IsDeviceLocal)
         )
 
-    let queues =
-        lazy (
-            Map.ofList [
-                for (family, count) in Map.toSeq queueFamilies do
-                    let queues =
-                        Array.init count (fun i ->
-                            let mutable res = VkQueue.Zero
-                            VkRaw.vkGetDeviceQueue(handle, uint32 family.Index, uint32 i, &&res)
-
-                            new Queue(this, family, res, i)
-                        )
-                    yield family, queues
-            ]
-        )
-
-    let defaultQueue =
-        lazy (
-            queues.Value |> Map.toSeq |> Seq.head |> snd |> Array.item 0
-        )
-
-    let defaultPool =
-        lazy (
-            let fam = queueFamilies |> Map.toSeq |> Seq.head |> fst
-            this.CreateCommandPool fam
-        )
-
-    member x.CreateCommandPool(queueFamily : PhysicalQueueFamily) =
-        let mutable info =
-            VkCommandPoolCreateInfo(
-                VkStructureType.CommandPoolCreateInfo,
-                0n,
-                VkCommandPoolCreateFlags.None,
-                uint32 queueFamily.Index
-            )
-
-        let mutable res = VkCommandPool.Null
-        VkRaw.vkCreateCommandPool(this.Handle, &&info, NativePtr.zero, &&res)
-            |> check "vkCreateCommandPool"
-
-        new CommandPool(this, queueFamily, res)
-
+    member x.QueueFamilies = queueFamilies
     member x.Handle = handle
     member x.Physical = physical
     member x.Instance = instance
     member x.MemoryHeaps = physical.MemoryHeaps
     member x.Memories = memories.Value
 
-    member x.Queues = queues.Value
-    member x.DefaultQueue = defaultQueue.Value
-    member x.DefaultCommandPool = defaultPool.Value
-
     member x.HostVisibleMemory = hostVisibleMemory.Value
     member x.DeviceLocalMemory = deviceLocalMemory.Value
 
-and Queue(device : Device, family : PhysicalQueueFamily, handle : VkQueue, index : int) =
-    member x.Device = device
-    member x.Family = family
-    member x.Handle = handle
-    member x.QueueIndex = index
-
-and CommandPool(device : Device, queueFamily : PhysicalQueueFamily, handle : VkCommandPool) =
-    member x.Handle = handle
-    member x.Device = device
-    member x.QueueFamily = queueFamily
-
-    override x.Equals o =
-        match o with
-            | :? CommandPool as o -> handle = o.Handle
-            | _ -> false
-
-    override x.GetHashCode() =
-        handle.GetHashCode()
-
+/// DeviceMemory is the logical equivalent of PhysicalMemory but is associated with
+/// a logical device and can therefore provide alloc/free functionality.
 and DeviceMemory(device : Device, physical : PhysicalMemory, heap : PhysicalHeap) =
     member x.Device : Device = device
     member x.PhysicalMemory : PhysicalMemory = physical

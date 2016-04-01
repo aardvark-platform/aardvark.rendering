@@ -9,20 +9,16 @@ open Aardvark.Base
 #nowarn "51"
 
 module Test =
-    let runtest(device : Device) (manager : IMemoryManager) =
-        
-        let queue = device.DefaultQueue
-        //Instance.AvailableLayers |> List.iter (printfn "layer: %A")
-
-
-        let cmdPool = device.DefaultCommandPool
+    let runtest (ctx : Context) =
+        let queue = ctx.DefaultQueue
+        let cmdPool = ctx.DefaultCommandPool
 
 
 
-        use m0 = device.HostVisibleMemory.Alloc(1044L)
-        use m1 = manager.Alloc(1024L)
-        use mt = manager.Alloc(25L)
-        use m2 = device.HostVisibleMemory.Alloc(1044L)
+        use m0 = ctx.HostVisibleMemory.Alloc(1044L)
+        use m1 = ctx.DeviceLocalMemory.Alloc(1024L)
+        use mt = ctx.DeviceLocalMemory.Alloc(25L)
+        use m2 = ctx.HostVisibleMemory.Alloc(1044L)
 
         let p0 = m0.Skip(10L).Take(1024L)
         let p1 = m1
@@ -85,7 +81,8 @@ module Test =
                 | _ ->
                     debugf "%s" msg.message
         )
-        let manager = MemoryManager.aligned 256L device.DeviceLocalMemory
-        runtest device manager
+
+        let ctx = Context(device)
+        runtest ctx
 
         device.DeviceLocalMemory.Heap.Used |> printfn "used: %A"

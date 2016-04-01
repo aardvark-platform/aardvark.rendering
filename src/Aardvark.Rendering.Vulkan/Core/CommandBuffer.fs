@@ -12,6 +12,20 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 
 
+type CommandPool(device : Device, queueFamily : PhysicalQueueFamily, handle : VkCommandPool) =
+    member x.Handle = handle
+    member x.Device = device
+    member x.QueueFamily = queueFamily
+
+    override x.Equals o =
+        match o with
+            | :? CommandPool as o -> handle = o.Handle
+            | _ -> false
+
+    override x.GetHashCode() =
+        handle.GetHashCode()
+
+
 type CommandBuffer(pool : CommandPool, handle : VkCommandBuffer) =
     let mutable handle = handle
     member x.Pool = pool
@@ -34,6 +48,21 @@ type CommandBuffer(pool : CommandPool, handle : VkCommandBuffer) =
 [<AbstractClass; Sealed; Extension>]
 type CommandPoolExtensions private() =
     
+    [<Extension>]
+    static member CreateCommandPool(device : Device, queueFamily : PhysicalQueueFamily) =
+        let mutable info =
+            VkCommandPoolCreateInfo(
+                VkStructureType.CommandPoolCreateInfo,
+                0n,
+                VkCommandPoolCreateFlags.None,
+                uint32 queueFamily.Index
+            )
+
+        let mutable res = VkCommandPool.Null
+        VkRaw.vkCreateCommandPool(device.Handle, &&info, NativePtr.zero, &&res)
+            |> check "vkCreateCommandPool"
+
+        new CommandPool(device, queueFamily, res)
 
     [<Extension>]
     static member CreateCommandBuffers(this : CommandPool, count : int, primary : bool) =
@@ -66,7 +95,9 @@ type CommandPoolExtensions private() =
     static member CreateCommandBuffer(this : CommandPool) =
         CommandPoolExtensions.CreateCommandBuffers(this, 1, true).[0]
 
-
+[<AbstractClass; Sealed; Extension>]
+type CommandBufferExtensions private() =
+    
     [<Extension>]
     static member Begin(buffer : CommandBuffer, persistent : bool) =
         let mutable inh =
@@ -91,62 +122,11 @@ type CommandPoolExtensions private() =
             |> check "vkBeginCommandBuffer" 
 
     [<Extension>]
+    static member Begin(buffer : CommandBuffer) =
+        CommandBufferExtensions.Begin(buffer, false)
+
+    [<Extension>]
     static member End(buffer : CommandBuffer) =
         VkRaw.vkEndCommandBuffer(buffer.Handle)
             |> check "vkEndCommandBuffer"
 
-[<AbstractClass; Sealed; Extension>]
-type QueueCommandExtensions private() =
-    [<Extension>]
-    static member Submit(this : Queue, cmd : CommandBuffer[]) =
-
-        async {
-            let start() =
-                let ptrs = NativePtr.stackalloc cmd.Length
-                for i in 0..cmd.Length-1 do
-                    NativePtr.set ptrs i cmd.[i].Handle
-
-                let mutable submit =
-                    VkSubmitInfo(
-                        VkStructureType.SubmitInfo, 
-                        0n,
-                        0u, NativePtr.zero,
-                        NativePtr.zero,
-                        uint32 cmd.Length, ptrs,
-                        0u, NativePtr.zero
-                    )
-
-                let mutable fence = VkFence.Null
-                let mutable fenceInfo =
-                    VkFenceCreateInfo(
-                        VkStructureType.FenceCreateInfo, 
-                        0n,
-                        VkFenceCreateFlags.None
-                    )
-
-                VkRaw.vkCreateFence(this.Device.Handle, &&fenceInfo, NativePtr.zero, &&fence)
-                    |> check "vkCreateFence"
-
-                VkRaw.vkQueueSubmit(this.Handle, 1u, &&submit, fence)
-                    |> check "vkQueueSubmit"
-
-                let wait() =
-                    let mutable fence = fence
-                    VkRaw.vkWaitForFences(this.Device.Handle, 1u, &&fence, 1u, ~~~0UL)
-                        |> check "vkWaitForFences"
-
-                    VkRaw.vkDestroyFence(this.Device.Handle, fence, NativePtr.zero)
-
-                wait
-                
-            let wait = start()
-            wait()
-        }
-
-    [<Extension>]
-    static member SubmitAndWait(this : Queue, cmd : CommandBuffer[]) =
-        QueueCommandExtensions.Submit(this, cmd) |> Async.RunSynchronously
-
-    [<Extension>]
-    static member SubmitTask(this : Queue, cmd : CommandBuffer[]) =
-        QueueCommandExtensions.Submit(this, cmd) |> Async.StartAsTask

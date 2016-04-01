@@ -59,6 +59,36 @@
   <Target Name="AfterBuild">
   </Target>
   -->
+  <ItemGroup>
+    <None Include="Raw\Generator.fsx" />
+    <Compile Include="Raw\Types.fs" />
+    <Compile Include="Raw\Vulkan.fs" />
+    <Compile Include="Raw\PCI.fs" />
+    <Compile Include="Raw\Utilities.fs" />
+    <Compile Include="Extensions\DebugReport.fs" />
+    <Compile Include="Core\Core.fs" />
+    <Compile Include="Core\CommandBuffer.fs" />
+    <Compile Include="Core\Queue.fs" />
+    <Compile Include="Core\Commands.fs" />
+    <Compile Include="Core\Memory.fs" />
+    <Compile Include="Core\Context.fs" />
+    <Compile Include="Core\Buffer.fs" />
+    <Compile Include="Test.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
+      <Name>Aardvark.Base.Rendering</Name>
+      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And ($(TargetFrameworkVersion) == 'v4.5' Or $(TargetFrameworkVersion) == 'v4.5.1' Or $(TargetFrameworkVersion) == 'v4.5.2' Or $(TargetFrameworkVersion) == 'v4.5.3' Or $(TargetFrameworkVersion) == 'v4.6' Or $(TargetFrameworkVersion) == 'v4.6.1')">
       <ItemGroup>
@@ -613,33 +643,4 @@
       </ItemGroup>
     </When>
   </Choose>
-  <ItemGroup>
-    <None Include="Raw\Generator.fsx" />
-    <Compile Include="Raw\Types.fs" />
-    <Compile Include="Raw\Vulkan.fs" />
-    <Compile Include="Raw\PCI.fs" />
-    <Compile Include="Raw\Utilities.fs" />
-    <Compile Include="Extensions\DebugReport.fs" />
-    <Compile Include="Core\Core.fs" />
-    <Compile Include="Core\CommandBuffer.fs" />
-    <Compile Include="Core\Commands.fs" />
-    <Compile Include="Core\Memory.fs" />
-    <Compile Include="Core\Context.fs" />
-    <Compile Include="Core\Buffer.fs" />
-    <Compile Include="Test.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-    <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
-      <Name>Aardvark.Base.Rendering</Name>
-      <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-  </ItemGroup>
 </Project>
