@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
+open System.Threading
 open System.Collections.Generic
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
@@ -103,3 +104,43 @@ type size_t(s : uint64) =
     new(s : int32) = size_t(uint64 s)
     new(s : uint32) = size_t(uint64 s)
     new(s : int64) = size_t(uint64 s)
+
+[<AbstractClass>]
+type Resource(parent : Option<Resource>) =
+    let isDisposed = ref 0
+
+    let parentLive() =
+        match parent with
+            | Some p -> not p.IsDisposed
+            | _ -> true
+
+    let parentDisposed() =
+        match parent with
+            | Some p -> p.IsDisposed
+            | _ -> false
+
+    abstract member Release : unit -> unit
+
+    member private x.Dispose (disposing : bool) =
+        let old = Interlocked.Exchange(&isDisposed.contents, 1)
+        if old = 0 then
+            if parentLive() then x.Release()
+            if disposing then 
+                GC.SuppressFinalize x
+
+    member x.IsDisposed = !isDisposed = 1 || parentDisposed()
+    member x.IsLive = !isDisposed = 0 || parentLive()
+
+    override x.Finalize() =
+        try x.Dispose false
+        with _ -> ()
+
+    member x.Dispose() = x.Dispose true
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose true
+
+    new() = new Resource(None)
+    new(r : Resource) = new Resource(Some r)
+    
+

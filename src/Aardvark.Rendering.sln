@@ -47,6 +47,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Interact
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan", "Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj", "{67C2DD0D-8892-4953-B916-CED3AED034B1}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan.Tests", "Tests\Aardvark.Rendering.Vulkan.Tests\Aardvark.Rendering.Vulkan.Tests.fsproj", "{CBE9D375-2495-4496-834D-6253C557F414}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -129,6 +131,10 @@ Global
 		{67C2DD0D-8892-4953-B916-CED3AED034B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{67C2DD0D-8892-4953-B916-CED3AED034B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{67C2DD0D-8892-4953-B916-CED3AED034B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CBE9D375-2495-4496-834D-6253C557F414}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CBE9D375-2495-4496-834D-6253C557F414}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CBE9D375-2495-4496-834D-6253C557F414}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CBE9D375-2495-4496-834D-6253C557F414}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -148,5 +154,6 @@ Global
 		{6C943F93-9A9A-4A57-9A75-A235A3443C22} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{E12A854A-8B0F-44F6-96DC-BEEEC7E65320} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{79D48400-F885-461A-B747-E3675A7EF2EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
+		{CBE9D375-2495-4496-834D-6253C557F414} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
 	EndGlobalSection
 EndGlobal

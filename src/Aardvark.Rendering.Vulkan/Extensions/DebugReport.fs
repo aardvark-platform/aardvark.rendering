@@ -26,6 +26,27 @@ module DebugReport =
             message : string
         }
 
+    let startMessage =
+        {
+            messageFlags = VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt
+            objectType = VkDebugReportObjectTypeEXT.VkDebugReportObjectTypeInstanceExt
+            sourceObject = 0UL
+            location = 0UL
+            messageCode = 0
+            layerPrefix = "Instance"
+            message = "Debug Report started"
+        }
+
+    let stopMessage =
+        {
+            messageFlags = VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt
+            objectType = VkDebugReportObjectTypeEXT.VkDebugReportObjectTypeInstanceExt
+            sourceObject = 0UL
+            location = 0UL
+            messageCode = 0
+            layerPrefix = "Instance"
+            message = "Debug Report stopped"
+        }
 
     type VkDebugReportCallbackEXTDelegate = 
         delegate of 

@@ -13,9 +13,13 @@ open Aardvark.Base
 
 
 type CommandPool(device : Device, queueFamily : PhysicalQueueFamily, handle : VkCommandPool) =
+    inherit Resource(device)
     member x.Handle = handle
     member x.Device = device
     member x.QueueFamily = queueFamily
+
+    override x.Release() =
+        VkRaw.vkDestroyCommandPool(device.Handle, handle, NativePtr.zero)
 
     override x.Equals o =
         match o with
@@ -27,23 +31,15 @@ type CommandPool(device : Device, queueFamily : PhysicalQueueFamily, handle : Vk
 
 
 type CommandBuffer(pool : CommandPool, handle : VkCommandBuffer) =
+    inherit Resource(pool)
+
     let mutable handle = handle
     member x.Pool = pool
     member x.Handle = handle
 
-    member private x.Dispose(disposing : bool) =
-        let mutable old = Interlocked.Exchange(&handle, 0n)
-        if old <> 0n then
-            VkRaw.vkFreeCommandBuffers(pool.Device.Handle, pool.Handle, 1u, &&old)
-            if disposing then GC.SuppressFinalize x
+    override x.Release() =
+        VkRaw.vkFreeCommandBuffers(pool.Device.Handle, pool.Handle, 1u, &&handle)
 
-    member x.Dispose() = x.Dispose true
-    override x.Finalize() =
-        try x.Dispose false
-        with _ -> ()
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose true
 
 [<AbstractClass; Sealed; Extension>]
 type CommandPoolExtensions private() =

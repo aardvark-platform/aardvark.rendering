@@ -4,6 +4,7 @@
 #nowarn "51"
 
 open System
+open System.Threading
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 
@@ -12,6 +13,8 @@ open Aardvark.Base
 /// It also holds a list of associated PhysicalDevices which can in turn be used to create logical
 /// Devices.
 type Instance(appName : string, appVersion : Version, layers : list<string>, extensions : list<string>) =
+    inherit Resource()
+
     static let globalLayers : Lazy<list<VkLayerProperties>> =
         Lazy (fun () -> 
             let mutable layerCount = 0u
@@ -127,7 +130,26 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
     [<CLIEvent>]
     member x.OnDebugMessage = 
         let (_,e) = debugAdapterAndEvent.Value
-        e.Publish
+        let evt = e.Publish
+
+        { new FSharp.Control.IEvent<DebugReport.Message> with
+            member x.Subscribe (obs : IObserver<_>) = 
+                obs.OnNext(DebugReport.startMessage)
+                let s = evt.Subscribe(obs)
+                { new IDisposable with
+                    member x.Dispose() = 
+                        obs.OnNext(DebugReport.stopMessage)
+                        s.Dispose()
+                }
+
+            member x.AddHandler(h) =
+                h.Invoke(null, DebugReport.startMessage)
+                evt.AddHandler h
+
+            member x.RemoveHandler(h) =
+                h.Invoke(null, DebugReport.stopMessage)
+                evt.RemoveHandler h
+        }
 
 
     member x.CreateDevice(physical : PhysicalDevice, requestedQueues : Map<PhysicalQueueFamily, int>, layers : list<string>, extensions : list<string>) =
@@ -215,7 +237,7 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
     member x.CreateDevice(physical : PhysicalDevice) =
         x.CreateDevice(physical, [], [])
 
-    member x.Dispose() =
+    override x.Release() =
         if debugAdapterAndEvent.IsValueCreated then
             match debugAdapterAndEvent.Value with
                 | (Some a, _) -> a.Stop()
@@ -223,9 +245,6 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
 
         if handle.IsValueCreated then
             VkRaw.vkDestroyInstance(handle.Value, NativePtr.zero)
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
 
     new(appName, layers, extensions) = new Instance(appName, Version(1,0,0), layers, extensions)
     new(layers, extensions) = new Instance("Aardvark", Version(1,0,0), layers, extensions)
@@ -503,6 +522,7 @@ and PhysicalQueueFamily(device : PhysicalDevice, index : int, properties : VkQue
 /// Device represents a logical vulkan device which can be created using the instance.
 /// It's the central thing in vulkan which is needed for all resource-creations and commands.
 and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice, queueFamilies : Map<PhysicalQueueFamily, int>) as this =
+    inherit Resource(instance)
 
     let memories : Lazy<DeviceMemory[]> =
         lazy (
@@ -535,6 +555,13 @@ and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice, qu
             memories.Value |> Array.find (fun m -> m.IsDeviceLocal)
         )
 
+    override x.Release() =
+        if handle <> 0n then
+            VkRaw.vkDestroyDevice(handle, NativePtr.zero)
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
     member x.QueueFamilies = queueFamilies
     member x.Handle = handle
     member x.Physical = physical
@@ -554,3 +581,12 @@ and DeviceMemory(device : Device, physical : PhysicalMemory, heap : PhysicalHeap
     member x.IsHostVisible = physical.IsHostVisible
     member x.IsDeviceLocal = physical.IsDeviceLocal
     member x.TypeIndex = physical.TypeIndex
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Instance =
+    module Extensions =
+        let DebugReport = "VK_EXT_debug_report"
+    
+    module Layers =
+        let DrawState = "VK_LAYER_LUNARG_draw_state"

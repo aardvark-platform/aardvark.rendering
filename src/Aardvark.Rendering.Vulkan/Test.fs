@@ -82,7 +82,7 @@ module Test =
                     debugf "%s" msg.message
         )
 
-        let ctx = Context(device)
+        let ctx = new Context(device)
         runtest ctx
 
         device.DeviceLocalMemory.Heap.Used |> printfn "used: %A"

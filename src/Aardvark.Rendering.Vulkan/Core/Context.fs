@@ -12,15 +12,17 @@ open Aardvark.Base
 
 
 type Context (device : Device) =
+    inherit Resource(device)
+
     let physical = device.Physical
     let hostMem = MemoryManager.create device.HostVisibleMemory
     let deviceMem = MemoryManager.create device.DeviceLocalMemory
 
     let defaultPool =
-        new ThreadLocal<_>(fun () ->
+        let create() = 
             let fam = device.QueueFamilies |> Map.toSeq |> Seq.head |> fst
             device.CreateCommandPool fam
-        )
+        new ThreadLocal<_>(Func<_>(create), true)
 
     let queues =
         lazy (
@@ -49,6 +51,10 @@ type Context (device : Device) =
                 |> Array.item 0
         )
 
+
+    override x.Release() =
+        if defaultPool.IsValueCreated then 
+            defaultPool.Values |> Seq.iter (fun p -> p.Dispose())
 
     member x.Queues = queues.Value
     member x.DefaultQueue = defaultQueue.Value

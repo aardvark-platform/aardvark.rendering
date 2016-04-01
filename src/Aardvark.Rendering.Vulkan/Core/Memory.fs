@@ -12,6 +12,8 @@ open Aardvark.Base
 
 
 type devicemem internal(mem : DeviceMemory, handle : VkDeviceMemory, size : int64) =
+    inherit Resource(if Unchecked.isNull mem then None else Some (mem.Device :> Resource))
+
     static let nullPtr = new devicemem(Unchecked.defaultof<_>, VkDeviceMemory.Null, -1L)
     let mutable mem = mem
     let mutable handle = handle
@@ -25,18 +27,15 @@ type devicemem internal(mem : DeviceMemory, handle : VkDeviceMemory, size : int6
     member x.Memory = mem
     member x.Handle = handle
 
-    member x.Dispose() =
+    override x.Release() =
         let mem = Interlocked.Exchange(&mem, Unchecked.defaultof<_>)
         if Unchecked.notNull mem then
             mem.Heap.Remove size
             VkRaw.vkFreeMemory(mem.Device.Handle, handle, NativePtr.zero)
             handle <- VkDeviceMemory.Null
           
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
   
- [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DeviceMem =
     let alloc (size : int64) (this : DeviceMemory) =
         if this.Heap.TryAdd size then
@@ -91,32 +90,25 @@ type internal deviceptrimpl =
     | Managed of manager : IMemoryManager * block : ManagedBlock * size : int64
 
 [<CompiledName("DevicePtr")>]
-type deviceptr =
-    class 
-        val mutable internal Pointer : deviceptrimpl
+type deviceptr internal(pointer : deviceptrimpl) =
+    inherit Resource()
 
-        member private x.Dispose(disposing : bool) =
-            let old = Interlocked.Exchange(&x.Pointer, Unchecked.defaultof<_>)
-            if Unchecked.notNull old then
-                if disposing then GC.SuppressFinalize x
+    let mutable pointer = pointer
 
-                match old with
-                    | Real(memory, _) -> memory.Dispose()
-                    | Managed(manager, block, _) -> manager.FreeBlock block
-                    | Null -> ()
-                    | View _ -> ()
+    member internal x.Pointer
+        with get() = pointer
+        and set p = pointer <- p
 
-        member x.Dispose() = x.Dispose true
+    override x.Release() =
+        let old = Interlocked.Exchange(&pointer, Unchecked.defaultof<_>)
+        if Unchecked.notNull old then
+            match old with
+                | Real(memory, _) -> memory.Dispose()
+                | Managed(manager, block, _) -> manager.FreeBlock block
+                | Null -> ()
+                | View _ -> ()
 
-        override x.Finalize() =
-            try x.Dispose()
-            with _ -> ()
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose true
-
-        internal new(ptr) = { Pointer = ptr}
-    end
+    
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DevicePtr =
@@ -630,6 +622,8 @@ module MemoryManager =
                 member x.Dispose() = x.Dispose()
 
         type MemoryManager(mem : DeviceMemory, align : int64) =
+            inherit Resource(mem.Device)
+
             let alignMask = align - 1L
             let categories = 
                 Map.ofList [ 
@@ -673,17 +667,17 @@ module MemoryManager =
                     | _ -> None
 
             member x.FreeBlock(block : ManagedBlock) =
-                // actually free does not need the correct manager
-                let _, man = managers.[0]
-                man.Free(block)
+                if x.IsLive then
+                    // actually free does not need the correct manager
+                    let _, man = managers.[0]
+                    man.Free(block)
 
-            member x.Dispose() =
+            override x.Release() =
                 managers |> Array.iter (fun (_,m) ->
                     m.Dispose()
                 )
 
             interface IMemoryManager with
-                member x.Dispose() = x.Dispose()
                 member x.Memory = mem
                 member x.TryAllocBlock s = x.TryAllocBlock s
                 member x.FreeBlock p = x.FreeBlock p
