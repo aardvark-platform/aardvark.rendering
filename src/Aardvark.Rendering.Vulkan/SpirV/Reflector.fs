@@ -23,7 +23,7 @@ module SpirVReflector =
                     | None -> map <- Map.add k [v] map
             map
 
-    let ofInstructions (m : list<Instruction>) =
+    let ofInstructions (instructions : list<Instruction>) =
 
         let inputVariables = 
             instructions |> List.choose (fun i -> 
