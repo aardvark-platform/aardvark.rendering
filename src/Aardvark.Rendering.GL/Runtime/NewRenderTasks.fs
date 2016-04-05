@@ -496,11 +496,11 @@ module GroupedRenderTask =
         let managedUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
             { managedOptimized (fun _ v -> compile v) () with compileNeedsPrev = false }
 
-    type RenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) =
+    type RenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) =
         inherit AbstractRenderTaskWithResources(
             manager,
             fboSignature, 
-            config.useDebugOutput
+            config.GetValue().useDebugOutput
         )
 
         let ctx = manager.Context
@@ -518,6 +518,8 @@ module GroupedRenderTask =
         let mutable currentId = 0L
         let idCache = ConditionalWeakTable<IMod, ref<uint64>>()
 
+        let mutable currentConfig = config.GetValue()
+
         let getId (m : IMod) =
             match idCache.TryGetValue m with
                 | (true, r) -> !r
@@ -527,13 +529,13 @@ module GroupedRenderTask =
                     !r
 
         let createSortKey (prep : PreparedRenderObject) =
-            match config.sorting with
+            match config.GetValue().sorting with
                 | Grouping projections ->
                     let ids = projections |> List.map (fun f -> f prep.Original |> getId)
                     prep.RenderPass::ids
 
-                | _ ->
-                    failwithf "[RenderTask] unsupported sorting: %A" config.sorting
+                | s ->
+                    failwithf "[RenderTask] unsupported sorting: %A" s
 
         let vmStats = ref <| VMStats()
 
@@ -542,16 +544,21 @@ module GroupedRenderTask =
         let preparedObjects = objects |> ASet.mapUse prepareRenderObject |> ASet.map (fun prep -> createSortKey prep, prep)
 
         let mutable hasProgram = false
-        let mutable program = Unchecked.defaultof<_> // ( this.CreateProgram preparedObjects)
+        let mutable program : IAdaptiveProgram<unit> = Unchecked.defaultof<_> // ( this.CreateProgram preparedObjects)
 
         let executionTime = System.Diagnostics.Stopwatch()
 
         let setHandler (handler : unit -> FragmentHandler<unit, PreparedRenderObject, Instruction, 'a>) =
+            if hasProgram then
+                program.Dispose()
+
             hasProgram <- true
             program <- preparedObjects |> AdaptiveProgram.custom Comparer.Default handler
             program.AutoDefragmentation <- false
 
         let init(x : AbstractRenderTaskWithResources) =
+            let config = config.GetValue(x)
+            currentConfig <- config
             match config.execution, config.redundancy with
                 | ExecutionEngine.Native, RedundancyRemoval.Static ->
                     Log.line "using optimized native program"
@@ -596,8 +603,10 @@ module GroupedRenderTask =
 
         member x.Program = program
 
+
         override x.Run(fbo) =
-            if not hasProgram then 
+            let c = config.GetValue(x)
+            if not hasProgram || c <> currentConfig then 
                 init x
                 hasProgram <- true
 

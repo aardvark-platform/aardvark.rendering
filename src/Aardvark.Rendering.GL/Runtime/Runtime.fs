@@ -214,7 +214,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         match eng.sorting with
             | Grouping _ -> 
-                new GroupedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
+                new GroupedRenderTask.RenderTask(set, man, fboSignature, engine) :> IRenderTask
 
             | Dynamic _ -> 
                 new SortedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask

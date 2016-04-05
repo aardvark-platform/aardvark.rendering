@@ -7,16 +7,16 @@ How to build:
 ------
 
 Windows:
-- Visual Studio 2013,
-- FSharp 3.1 (at least Daily Builds Preview 10-27-2014) [1]
-- run build.bat
-- run msbuild src\Aardvark.sln or use VisualStudio to build the solution
+- Visual Studio 2015,
+- Visual FSharp Tools installed (we use 4.0 now) 
+- run build.cmd which will install all dependencies
+- msbuild src\Aardvark.sln or use VisualStudio to build the solution
 
 Linux:
-- install mono >= 3.2.8 (might work in older versions as well)
-- install fsharp 3.1 (http://fsharp.org/use/linux/)
-- run ./build.sh
-- run xbuild src/Aardvark.Rendering.sln or use MonoDevelop to build src/Aardvark.Rendering
+- install mono >= 4.2.3.0 (might work in older versions as well)
+- install fsharp 4.0 (http://fsharp.org/use/linux/)
+- run build.sh which will install all dependencies
+- run xbuild src/Aardvark.Rendering.sln
 
 Tutorials can be found here:
 https://github.com/vrvis/aardvark.rendering/tree/master/src/Demo/Examples
