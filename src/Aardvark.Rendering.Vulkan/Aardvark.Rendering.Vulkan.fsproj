@@ -81,6 +81,10 @@
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\UniformBuffer.fs" />
     <Compile Include="Resources\Image.fs" />
+    <Compile Include="Resources\ImageView.fs" />
+    <Compile Include="Resources\Sampler.fs" />
+    <Compile Include="Resources\Framebuffer.fs" />
+    <Compile Include="Resources\Pipeline.fs" />
     <Compile Include="Test.fs" />
   </ItemGroup>
   <ItemGroup>

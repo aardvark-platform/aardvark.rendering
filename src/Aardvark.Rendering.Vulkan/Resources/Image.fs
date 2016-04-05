@@ -18,6 +18,8 @@ type Image =
 
         val mutable public ImageType : VkImageType
         val mutable public Format : VkFormat
+        val mutable public TextureFormat : TextureFormat
+
         val mutable public Size : V3i
         val mutable public MipMapLevels : int
         val mutable public ArraySize : int
@@ -25,20 +27,7 @@ type Image =
         val mutable public Usage : VkImageUsageFlags
         val mutable public Layout : VkImageLayout
 
-        new(ctx,mem,h,t,f,s,m,a,sam,u,l) = { Context = ctx; Memory = mem; Handle = h; ImageType = t; Format = f; Size = s; MipMapLevels = m; ArraySize = a; Samples = sam; Usage = u; Layout = l }
-    end
-
-type ImageView =
-    class
-        val mutable public Handle : VkImageView
-        val mutable public Image : Image
-        val mutable public ImageViewType : VkImageViewType
-        val mutable public Format : VkFormat
-        val mutable public ChannelMapping : VkComponentMapping
-        val mutable public MipLevelRange : Range1i
-        val mutable public ArrayRange : Range1i
-
-        new(handle, image, viewType, format, cm, mip, arr) = { Handle = handle; Image = image; ImageViewType = viewType; Format = format; ChannelMapping = cm; MipLevelRange = mip; ArrayRange = arr }
+        new(ctx,mem,h,t,f,tf,s,m,a,sam,u,l) = { Context = ctx; Memory = mem; Handle = h; ImageType = t; Format = f; TextureFormat = tf; Size = s; MipMapLevels = m; ArraySize = a; Samples = sam; Usage = u; Layout = l }
     end
 
 type ImageSubResource =
@@ -64,13 +53,6 @@ type ImageSubResource =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkFormat =
-    let inline private convertEnum< ^a, ^b when ^a : (static member op_Explicit : ^a -> int)> (fmt : ^a) : ^b =
-        let v = int fmt
-        if Enum.IsDefined(typeof< ^b >, v) then
-            unbox< ^b > v
-        else
-            failwithf "cannot convert %s %A to %s" typeof< ^a >.Name fmt typeof< ^b >.Name
-
     let ofRenderbufferFormat =
         lookupTable [
             RenderbufferFormat.R3G3B2, VkFormat.Undefined
@@ -517,7 +499,6 @@ module VkFormat =
             VkFormat.A2b10g10r10UintPack32, TextureFormat.Rgb10A2ui
         ]
 
-
     let ofPixFormat (fmt : PixFormat) (textureParams : TextureParams) =
         TextureFormat.ofPixFormat fmt textureParams |> ofTextureFormat
 
@@ -572,6 +553,8 @@ module VkFormat =
     let toDownloadFormat (fmt : VkFormat) =
         fmt |> toTextureFormat |> TextureFormat.toDownloadFormat
 
+
+    // TODO: maybe remove??
     type Signedness =
         | Signed 
         | Unsigned
@@ -779,7 +762,6 @@ module VkFormat =
             VkFormat.Astc1212SrgbBlock, Srgb(8)
         ]
 
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ImageSubResource =
 
@@ -923,7 +905,9 @@ module ImageSubResource =
                 let tmpImg =
                     Image(
                         ctx, mem, tmp, 
-                        VkImageType.D2d, srcFormat,
+                        VkImageType.D2d, 
+                        srcFormat,
+                        TextureFormat.One,
                         size, 1, 1, 1, 
                         VkImageUsageFlags.TransferSrcBit,
                         VkImageLayout.General
@@ -1004,7 +988,9 @@ module ImageSubResource =
                 let tmpImg =
                     Image(
                         ctx, mem, tmp, 
-                        VkImageType.D2d, dstFormat,
+                        VkImageType.D2d, 
+                        dstFormat,
+                        TextureFormat.One,
                         size, 1, 1, 1, 
                         VkImageUsageFlags.TransferDstBit,
                         VkImageLayout.General
@@ -1204,7 +1190,6 @@ module ImageSubResource =
         else
             failf "cannot load image from %A" file
 
-
 [<AutoOpen>]
 module ``VkAccessFlags Extensions`` =
     let private anyRead =
@@ -1229,61 +1214,10 @@ module ``VkAccessFlags Extensions`` =
 
     let any = anyRead ||| anyWrite
 
-
     type VkAccessFlags with
         static member AnyWrite = anyWrite
         static member AnyRead = anyRead
         static member Any = any
-
-
-
-
-[<AbstractClass; Sealed; Extension>]
-type ImageExtensions private() =
-    
-    [<Extension>]
-    static member CreateImage(this : Context, imageType : VkImageType, format : VkFormat, 
-                              size : V3i, mipLevels : int, arraySize : int, samples : int, 
-                              usage : VkImageUsageFlags, layout : VkImageLayout, tiling : VkImageTiling) =
-        
-        let mutable info =
-            VkImageCreateInfo(
-                VkStructureType.ImageCreateInfo,
-                0n, VkImageCreateFlags.None,
-                imageType, 
-                format,
-                VkExtent3D(size.X, size.Y, size.Z),
-                uint32 mipLevels,
-                uint32 arraySize,
-                unbox<VkSampleCountFlags> samples,
-                tiling,
-                usage,
-                VkSharingMode.Exclusive,
-                0u,
-                NativePtr.zero,
-                layout
-            )
-
-
-        let mutable img = VkImage.Null
-        VkRaw.vkCreateImage(this.Device.Handle, &&info, NativePtr.zero, &&img) 
-            |> check "vkCreateImage"
-
-        let mutable reqs = VkMemoryRequirements()
-        VkRaw.vkGetImageMemoryRequirements(this.Device.Handle, img, &&reqs)
-
-        let mem = this.Alloc(reqs)
-        VkRaw.vkBindImageMemoryPtr(this.Device.Handle, img, mem)
-            |> check "vkBindImageMemory"
-
-        Image(this, mem, img, imageType, format, size, mipLevels, arraySize, samples, usage, layout)
-
-    [<Extension>]
-    static member Delete(this : Context, img : Image) =
-        if img.Handle.IsValid then
-            VkRaw.vkDestroyImage(this.Device.Handle, img.Handle, NativePtr.zero)
-            img.Memory.Dispose()
-            img.Handle <- VkImage.Null
 
 [<AbstractClass; Sealed; Extension>]
 type ImageSubResourceExtensions private() =
@@ -1340,13 +1274,58 @@ type ImageSubResourceExtensions private() =
             return! fun () -> dst
         }
 
-
 [<AbstractClass; Sealed; Extension>]
-type ImageTransferExtensions private() =
+type ImageExtensions private() =
+    
+    [<Extension>]
+    static member CreateImage(this : Context, imageType : VkImageType, format : TextureFormat, 
+                              size : V3i, mipLevels : int, arraySize : int, samples : int, 
+                              usage : VkImageUsageFlags, layout : VkImageLayout, tiling : VkImageTiling) =
+        
+        let vkfmt = VkFormat.ofTextureFormat format
+        let mutable info =
+            VkImageCreateInfo(
+                VkStructureType.ImageCreateInfo,
+                0n, VkImageCreateFlags.None,
+                imageType, 
+                vkfmt,
+                VkExtent3D(size.X, size.Y, size.Z),
+                uint32 mipLevels,
+                uint32 arraySize,
+                unbox<VkSampleCountFlags> samples,
+                tiling,
+                usage,
+                VkSharingMode.Exclusive,
+                0u,
+                NativePtr.zero,
+                layout
+            )
+
+
+        let mutable img = VkImage.Null
+        VkRaw.vkCreateImage(this.Device.Handle, &&info, NativePtr.zero, &&img) 
+            |> check "vkCreateImage"
+
+        let mutable reqs = VkMemoryRequirements()
+        VkRaw.vkGetImageMemoryRequirements(this.Device.Handle, img, &&reqs)
+
+        let mem = this.Alloc(reqs)
+        VkRaw.vkBindImageMemoryPtr(this.Device.Handle, img, mem)
+            |> check "vkBindImageMemory"
+
+        Image(this, mem, img, imageType, vkfmt, format, size, mipLevels, arraySize, samples, usage, layout)
 
     [<Extension>]
-    static member CreateImage2D(this : Context, format : VkFormat, size : V2i, mipLevels : int, usage : VkImageUsageFlags) =
-        this.CreateImage(
+    static member Delete(this : Context, img : Image) =
+        if img.Handle.IsValid then
+            VkRaw.vkDestroyImage(this.Device.Handle, img.Handle, NativePtr.zero)
+            img.Memory.Dispose()
+            img.Handle <- VkImage.Null
+
+    [<Extension>]
+    static member CreateImage2D(this : Context, format : TextureFormat, size : V2i, mipLevels : int, usage : VkImageUsageFlags) =
+        ImageExtensions.CreateImage(
+            this,
             VkImageType.D2d,
             format,
             V3i(size.X, size.Y, 1),
@@ -1358,8 +1337,9 @@ type ImageTransferExtensions private() =
         )
     
     [<Extension>]
-    static member CreateImage3D(this : Context, format : VkFormat, size : V3i, mipLevels : int, usage : VkImageUsageFlags) =
-        this.CreateImage(
+    static member CreateImage3D(this : Context, format : TextureFormat, size : V3i, mipLevels : int, usage : VkImageUsageFlags) =
+        ImageExtensions.CreateImage(
+            this,
             VkImageType.D3d,
             format,
             size,
