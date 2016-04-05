@@ -1,28 +1,28 @@
 NUGET
   remote: https://vrvis.myget.org/F/aardvark_public
   specs:
-    Aardvark.Base (2.0.0)
+    Aardvark.Base (2.0.3)
       DevILSharp (>= 0.0.11 < 0.1)
-    Aardvark.Base.Essentials (2.0.0)
-      Aardvark.Base (>= 2.0)
+    Aardvark.Base.Essentials (2.0.3)
+      Aardvark.Base (>= 2.0.3)
       Rx-Linq (>= 2.2.5 < 2.3)
       System.Collections.Immutable (>= 1.1.36 < 1.2)
-    Aardvark.Base.FSharp (2.0.0)
-      Aardvark.Base (>= 2.0)
+    Aardvark.Base.FSharp (2.0.3)
+      Aardvark.Base (>= 2.0.3)
       DevILSharp (>= 0.0.11 < 0.1)
       FSharp.Compiler.Service (>= 2.0.0.6 < 2.0.1)
-    Aardvark.Base.Incremental (2.0.0)
-      Aardvark.Base (>= 2.0)
-      Aardvark.Base.Essentials (>= 2.0)
-      Aardvark.Base.FSharp (>= 2.0)
+    Aardvark.Base.Incremental (2.0.3)
+      Aardvark.Base (>= 2.0.3)
+      Aardvark.Base.Essentials (>= 2.0.3)
+      Aardvark.Base.FSharp (>= 2.0.3)
       FsPickler.Json (>= 1.8 < 1.9)
       Rx-Core (>= 2.2.5 < 2.3)
       Rx-Linq (>= 2.2.5 < 2.3)
-    Aardvark.Base.Runtime (2.0.0)
-      Aardvark.Base (2.0)
-      Aardvark.Base.Essentials (2.0)
-      Aardvark.Base.FSharp (2.0)
-      Aardvark.Base.Incremental (2.0)
+    Aardvark.Base.Runtime (2.0.3)
+      Aardvark.Base (2.0.3)
+      Aardvark.Base.Essentials (2.0.3)
+      Aardvark.Base.FSharp (2.0.3)
+      Aardvark.Base.Incremental (2.0.3)
     FShade (2.0.0)
       Aardvark.Base (>= 2.0 < 2.1)
       Aardvark.Base.FSharp (>= 2.0 < 2.1)
@@ -41,7 +41,7 @@ NUGET
       DockPanelSuite (>= 2.10.0-beta2)
     DockPanelSuite.ThemeVS2013Blue (2.10.0-beta2)
       DockPanelSuite (>= 2.10.0-beta2)
-    FSharp.Compiler.Service (2.0.0.6)
+    FSharp.Compiler.Service (2.0.0.7)
     FSharp.Quotations.Evaluator (1.0.7)
     FsPickler (1.8.1)
     FsPickler.Json (1.8.1)
@@ -126,7 +126,7 @@ CONTENT: NONE
 NUGET
   remote: http://api.nuget.org/v3/index.json
   specs:
-    Chessie (0.4) - content: none
+    Chessie (0.5.1) - content: none
       FSharp.Core
     FAKE (4.17.1) - content: none
     FSharp.Core (4.0.0.1) - content: none
