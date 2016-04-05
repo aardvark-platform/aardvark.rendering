@@ -64,4 +64,10 @@ type Context (device : Device) =
     member x.HostVisibleMemory = hostMem
     member x.DeviceLocalMemory = deviceMem
 
-
+    member x.Alloc(reqs : VkMemoryRequirements) =
+        let dl = reqs.memoryTypeBits &&& (1u <<< deviceMem.Memory.TypeIndex) <> 0u
+        let hl = reqs.memoryTypeBits &&& (1u <<< hostMem.Memory.TypeIndex) <> 0u
+        
+        if hl then hostMem.Alloc(int64 reqs.size)
+        elif dl then deviceMem.Alloc(int64 reqs.size)
+        else failf "could not find compatible memory"

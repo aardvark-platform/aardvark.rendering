@@ -95,6 +95,20 @@ type deviceptr internal(pointer : deviceptrimpl) =
 
     let mutable pointer = pointer
 
+    member x.IsHostVisible =
+        match pointer with
+            | Null -> true
+            | Real(m,_) -> m.Memory.IsHostVisible
+            | View(m,_,_) -> m.Memory.IsHostVisible
+            | Managed(m,_,_) -> m.Memory.IsHostVisible
+
+    member x.IsDeviceLocal =
+        match pointer with
+            | Null -> false
+            | Real(m,_) -> m.Memory.IsDeviceLocal
+            | View(m,_,_) -> m.Memory.IsDeviceLocal
+            | Managed(m,_,_) -> m.Memory.IsDeviceLocal
+
     member internal x.Pointer
         with get() = pointer
         and set p = pointer <- p
@@ -108,7 +122,28 @@ type deviceptr internal(pointer : deviceptrimpl) =
                 | Null -> ()
                 | View _ -> ()
 
-    
+[<AutoOpen>]
+module VkRawExt =
+    module VkRaw =
+        let vkBindImageMemoryPtr(device : VkDevice, img : VkImage, ptr : deviceptr) =
+            let mem, off =
+                match ptr.Pointer with
+                    | Null -> VkDeviceMemory.Null, 0L
+                    | Real(h, _) -> h.Handle, 0L
+                    | View(h, o, _) -> h.Handle, o
+                    | Managed(_,b,_) -> b.Memory.Handle, b.Offset
+
+            VkRaw.vkBindImageMemory(device, img, mem, uint64 off)
+
+        let vkBindBufferMemoryPtr(device : VkDevice, buffer : VkBuffer, ptr : deviceptr) =
+            let mem, off =
+                match ptr.Pointer with
+                    | Null -> VkDeviceMemory.Null, 0L
+                    | Real(h, _) -> h.Handle, 0L
+                    | View(h, o, _) -> h.Handle, o
+                    | Managed(_,b,_) -> b.Memory.Handle, b.Offset
+
+            VkRaw.vkBindBufferMemory(device, buffer, mem, uint64 off)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DevicePtr =

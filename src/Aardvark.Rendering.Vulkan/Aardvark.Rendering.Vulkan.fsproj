@@ -66,6 +66,7 @@
     <Compile Include="Raw\PCI.fs" />
     <Compile Include="Raw\PrimitiveValueConverter.fs" />
     <Compile Include="Raw\Utilities.fs" />
+    <Compile Include="Raw\NativeVolume.fs" />
     <Compile Include="Extensions\DebugReport.fs" />
     <Compile Include="SpirV\ShaderInterface.fs" />
     <Compile Include="SpirV\Reflector.fs" />
@@ -79,6 +80,7 @@
     <Compile Include="Core\Context.fs" />
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\UniformBuffer.fs" />
+    <Compile Include="Resources\Image.fs" />
     <Compile Include="Test.fs" />
   </ItemGroup>
   <ItemGroup>

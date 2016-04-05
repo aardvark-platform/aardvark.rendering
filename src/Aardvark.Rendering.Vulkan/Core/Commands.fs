@@ -68,6 +68,12 @@ module Command =
                 s <- f s
         }
 
+    let onCleanup (f : unit -> unit) =
+        { new Command<unit>() with
+            member x.Run(s) =
+                s <- { s with cleanupActions = f :: s.cleanupActions }
+        }
+
 
     let syncTransfer =
         { new Command<unit>() with
@@ -177,6 +183,32 @@ module ``Command Builder`` =
             }
         member x.Combine(l : Command<unit>, r : Command<'a>) = Command.combine l r
         member x.For(elements : seq<'a>, f : 'a -> Command<unit>) = elements |> Seq.map f |> Command.ofSeq
+
+        member x.TryWith(m : Command<'a>, handler : exn -> Command<'a>) =
+            let mutable res = m
+            { new Command<'a>() with
+                member x.Run(s) =
+                    try 
+                        let mutable e = s
+                        m.Run(&e)
+                        s <- e
+                    with e ->
+                        let alt = handler e
+                        res <- alt
+                        alt.Run(&s)
+
+                member x.GetResult(s) =
+                    res.GetResult(s)
+            }
+
+        member x.TryFinally(m : Command<'a>, f : unit -> unit) =
+            { new Command<'a>() with
+                member x.Run(s) = 
+                    m.Run(&s)
+                    s <- { s with cleanupActions = f :: s.cleanupActions }
+
+                member x.GetResult(s) = m.GetResult(s)
+            }
 
     let command = CommandBuilder()
 
