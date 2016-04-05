@@ -143,6 +143,7 @@ module TextureExtensions =
             typeof<uint32>, PixelType.UnsignedInt
             typeof<int32>, PixelType.Int
             typeof<float32>, PixelType.Float
+            typeof<float16>, PixelType.HalfFloat
 
         ]
 

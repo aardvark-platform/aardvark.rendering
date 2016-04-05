@@ -1,0 +1,142 @@
+﻿#nowarn "9"
+#nowarn "51"
+(*
+Render2TexturePrimitive.fsx
+
+This examples demonstrates how to render to textures in an imperative style. No dependencies are tracked here between the
+processing steps. In contrast to the next tutorial we use a rather low level API and construct render tasks manually.
+After creation, we run the render tasks by executing the side effecting function task.Run(null, fbo)...
+
+*)
+
+#if INTERACTIVE
+#I @"../../../bin/Debug"
+#I @"../../../bin/Release"
+#load "LoadReferences.fsx"
+#else
+namespace Examples
+#endif
+
+open System
+open Aardvark.Base
+open Aardvark.Rendering.Interactive
+
+open Aardvark.Base.Incremental
+open Aardvark.SceneGraph
+open Aardvark.Application
+open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
+open Default // makes viewTrafo and other tutorial specicific default creators visible
+open Aardvark.Base.Rendering
+
+module Render2TexturePrimitiveFloat = 
+
+    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+
+
+    let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
+
+    let size = V2i(1024,768)
+    let color = runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1)
+    let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+
+    // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
+    // It describes the instances which can be used to exectute the render task (in other words
+    // the signature describes the formats and of all render targets which are subsequently used for rendering)
+    let signature =
+        runtime.CreateFramebufferSignature [
+            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba32f; samples = 1 }
+            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+        ]
+
+    // Create a framebuffer matching signature and capturing the render to texture targets
+    let fbo = 
+        runtime.CreateFramebuffer(
+            signature, 
+            Map.ofList [
+                DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+            ]
+        )
+  
+    let blendMode = 
+        BlendMode(
+            Enabled = true,
+            AlphaOperation = BlendOperation.Add,
+            DestinationAlphaFactor = BlendFactor.Zero,
+            SourceAlphaFactor = BlendFactor.One,
+            DestinationFactor = BlendFactor.One,
+            SourceFactor = BlendFactor.One,
+            Operation = BlendOperation.Add
+        ) |> Mod.constant
+
+    let cnt = Mod.init 300
+
+    // Default scene graph setup with static camera
+    let render2TextureSg =
+        aset {
+            let! cnt = cnt
+            for i in 0 .. cnt - 1 do yield quadSg |> Sg.trafo (Mod.constant Trafo3d.Identity)
+        } |> Sg.set
+            |> Sg.viewTrafo ~~(CameraView.lookAt (V3d(3,3,3)) V3d.OOO V3d.OOI                   |> CameraView.viewTrafo )
+            |> Sg.projTrafo ~~(Frustum.perspective 60.0 0.01 10.0 (float size.X / float size.Y) |> Frustum.projTrafo    )
+            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
+            |> Sg.blendMode blendMode
+            |> Sg.depthTest (Mod.constant DepthTestMode.None)
+
+    // Create render tasks given the signature and concrete buffers        
+    let task = runtime.CompileRender(signature, render2TextureSg)
+    let clear = runtime.CompileClear(signature, ~~C4f(0.0,0.0,0.0,0.0), ~~0.0)
+
+    // Run the render task imperatively
+    clear.Run(null, fbo |> OutputDescription.ofFramebuffer) |> ignore
+    task.Run(null, fbo |> OutputDescription.ofFramebuffer) |> ignore
+
+    // this module demonstrates how to read back textures. In order to see the result,
+    // a form containing the readback result is shown
+    module DemonstrateReadback = 
+        open System.Windows.Forms
+        open System.IO
+
+     
+
+        let pi = PixImage<float32>(Col.Format.BGRA, size) 
+        
+        runtime.Download(color, 0, 0, pi)
+
+        pi.Volume.Data |> Array.maxBy float32 |> printfn "max pixel %f"
+
+        //let file = "test16"
+        //let tempFileName = Path.ChangeExtension( Path.combine [__SOURCE_DIRECTORY__;  file ], ".tif" )
+        //pi.SaveAsImage tempFileName
+        //printfn "saved image to: %s" tempFileName
+   
+
+    let sg = 
+        quadSg
+            |> Sg.texture DefaultSemantic.DiffuseColorTexture ~~(color :> ITexture)
+            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
+            |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
+            |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
+
+    win.Keyboard.KeyDown(Keys.Add).Values.Subscribe(fun _ ->
+        transact (fun _ -> Mod.change cnt (cnt.Value + 1))
+        printfn "%A" cnt
+    ) |> ignore
+
+    win.Keyboard.KeyDown(Keys.OemMinus).Values.Subscribe(fun _ ->
+        transact (fun _ -> Mod.change cnt (cnt.Value - 1))
+        printfn "%A" cnt
+    ) |> ignore
+
+    let run () =
+        Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+        setSg sg
+        win.Run()
+
+open Render2TexturePrimitiveFloat
+
+
+#if INTERACTIVE
+setSg sg
+printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
+#endif
