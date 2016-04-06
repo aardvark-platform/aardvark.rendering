@@ -12,7 +12,7 @@ open Aardvark.Base
 /// Instance represents a Vulkan Instance which can be created using a set of extensions/layers.
 /// It also holds a list of associated PhysicalDevices which can in turn be used to create logical
 /// Devices.
-type Instance(appName : string, appVersion : Version, layers : list<string>, extensions : list<string>) =
+type Instance(appName : string, appVersion : Version, layers : list<string>, extensions : list<string>) as this =
     inherit Resource()
 
     static let globalLayers : Lazy<list<VkLayerProperties>> =
@@ -59,7 +59,7 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
                     warnf "could not enable instance extension %A since it is not available" requested
         |]
 
-    let handle =
+    let mutable handle =
         lazy (
             let appNameC = CStr.salloc appName
             let engineNameC = CStr.salloc "Aardvark"
@@ -105,11 +105,11 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
             NativePtr.stackallocWith (int count) (fun arr ->
                 VkRaw.vkEnumeratePhysicalDevices(handle.Value, &&count, arr) |> check "vkEnumeratePhysicalDevices"
 
-                List.init (int count) (fun i -> new PhysicalDevice(NativePtr.get arr i))
+                List.init (int count) (fun i -> new PhysicalDevice(this, NativePtr.get arr i))
             )
         )
 
-    let debugAdapterAndEvent =
+    let mutable debugAdapterAndEvent =
         lazy (
             if extensions |> Array.exists (fun n -> n = "VK_EXT_debug_report") then
                 let adapter = DebugReport.Adapter(handle.Value, VkDebugReportFlagBitsEXT.All)
@@ -238,13 +238,17 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
         x.CreateDevice(physical, [], [])
 
     override x.Release() =
-        if debugAdapterAndEvent.IsValueCreated then
-            match debugAdapterAndEvent.Value with
+        let old = Interlocked.Exchange(&debugAdapterAndEvent, null)
+        if Unchecked.notNull old && old.IsValueCreated then
+            match old.Value with
                 | (Some a, _) -> a.Stop()
                 | _ -> ()
 
-        if handle.IsValueCreated then
-            VkRaw.vkDestroyInstance(handle.Value, NativePtr.zero)
+        let old = Interlocked.Exchange(&handle, null)
+        if Unchecked.notNull old && old.IsValueCreated then
+            let h = old.Value
+            if h <> 0n then
+                VkRaw.vkDestroyInstance(h, NativePtr.zero)
 
     new(appName, layers, extensions) = new Instance(appName, Version(1,0,0), layers, extensions)
     new(layers, extensions) = new Instance("Aardvark", Version(1,0,0), layers, extensions)
@@ -255,7 +259,8 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
 
 /// PhysicalDevice represents a "real" hardware device with Vulkan functionality.
 /// It provides several properties for a device (e.g. Memory Kinds/Heaps, vendor information, etc.)
-and PhysicalDevice(handle : VkPhysicalDevice) as this =
+and PhysicalDevice(instance : Instance, handle : VkPhysicalDevice) as this =
+
     let features = 
         lazy (
             let mutable features = VkPhysicalDeviceFeatures()
@@ -389,6 +394,7 @@ and PhysicalDevice(handle : VkPhysicalDevice) as this =
                 | :? PhysicalDevice as o -> compare x.Handle o.Handle
                 | _ -> failf "cannot compare PhysicalDevice to %A" o
 
+    member x.Instance = instance
     member x.Handle = handle
     member x.Vendor = vendor.Value
     member x.Name = properties.Value.deviceName.Value

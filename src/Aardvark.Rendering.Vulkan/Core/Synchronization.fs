@@ -95,7 +95,6 @@ module Fence =
             | _ -> FenceStatus.Error
 
 
-
 type Event(device : Device, handle : VkEvent) =
     inherit Resource(device)
 
