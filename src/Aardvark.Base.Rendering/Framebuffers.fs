@@ -299,7 +299,8 @@ module TextureFormat =
             PixFormat.ByteRGBP , rgba
 
             PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
-                 
+            
+            PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)   
 
         ]
         
