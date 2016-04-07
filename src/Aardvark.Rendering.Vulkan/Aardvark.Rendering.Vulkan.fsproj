@@ -78,6 +78,7 @@
     <Compile Include="Core\Memory.fs" />
     <Compile Include="Core\RenderPass.fs" />
     <Compile Include="Core\ShaderProgram.fs" />
+    <Compile Include="Core\Instructions.fs" />
     <Compile Include="Core\Context.fs" />
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\UniformBuffer.fs" />

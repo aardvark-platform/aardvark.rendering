@@ -17,7 +17,7 @@ type Context (device : Device) =
     let physical = device.Physical
     let hostMem = MemoryManager.create device.HostVisibleMemory
     let deviceMem = MemoryManager.create device.DeviceLocalMemory
-
+    
     let defaultPool =
         let create() = 
             let fam = device.QueueFamilies |> Map.toSeq |> Seq.head |> fst
@@ -51,10 +51,15 @@ type Context (device : Device) =
                 |> Array.item 0
         )
 
+    let instructionCtx = InstructionContext(device)
+
 
     override x.Release() =
         if defaultPool.IsValueCreated then 
             defaultPool.Values |> Seq.iter (fun p -> p.Dispose())
+
+
+    member x.InstructionContext = instructionCtx
 
     member x.Queues = queues.Value
     member x.DefaultQueue = defaultQueue.Value
