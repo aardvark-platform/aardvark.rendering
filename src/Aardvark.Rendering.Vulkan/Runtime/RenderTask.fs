@@ -39,7 +39,7 @@ module private Compiler =
                         )
 
                         yield self.vertexBuffers |> Array.map (fun (v,_) -> v.Handle) |> Mod.mapN (fun handles ->
-                            ctx.BindVertexBuffers(Seq.toArray handles, 0)
+                            ctx.BindVertexBuffers(Seq.toArray handles, self.vertexBuffers |> Array.map snd, 0)
                         )
 
                         match self.indexBuffer with
@@ -64,7 +64,7 @@ module private Compiler =
                             )
                         if prev.vertexBuffers <> self.vertexBuffers then
                             yield self.vertexBuffers |> Array.map (fun (v,_) -> v.Handle) |> Mod.mapN (fun handles ->
-                                ctx.BindVertexBuffers(Seq.toArray handles, 0)
+                                ctx.BindVertexBuffers(Seq.toArray handles, self.vertexBuffers |> Array.map snd, 0)
                             )
 
                         match self.indexBuffer with

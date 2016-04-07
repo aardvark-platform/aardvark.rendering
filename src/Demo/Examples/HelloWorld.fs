@@ -425,16 +425,16 @@ module HelloWorld =
 
         let quadSg =
             let quad =
-                //let index = [|0;1;2; 0;2;3|]
-                let positions = [|V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0) |] //; V3f(-1,1,0) |]
+                let index = [|0;1;2; 0;2;3|]
+                let positions = [|V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |]
 
-                IndexedGeometry(IndexedGeometryMode.TriangleList, null, SymDict.ofList [DefaultSemantic.Positions, positions :> Array], SymDict.empty)
+                IndexedGeometry(IndexedGeometryMode.TriangleList, index, SymDict.ofList [DefaultSemantic.Positions, positions :> Array], SymDict.empty)
 
             quad |> Sg.ofIndexedGeometry
 
         let sg =
             quadSg |> Sg.effect [
-                    //DefaultSurfaces.trafo |> toEffect
+                    DefaultSurfaces.trafo |> toEffect
                     DefaultSurfaces.constantColor C4f.White |> toEffect
                   ]
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )

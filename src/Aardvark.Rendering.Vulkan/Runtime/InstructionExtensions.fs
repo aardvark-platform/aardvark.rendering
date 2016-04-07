@@ -76,14 +76,14 @@ type InstructionContextExtensions private() =
             []
 
     [<Extension>]
-    static member BindVertexBuffers(this : InstructionContext, buffers : Buffer[], startBinding : int) =    
+    static member BindVertexBuffers(this : InstructionContext, buffers : Buffer[], offsets : int[], startBinding : int) =    
         let cnt = buffers.Length
         let ptr = NativePtr.alloc<VkBuffer> cnt
         let pOffsets = NativePtr.alloc<uint64> cnt
 
         for i in 0..cnt-1 do
             NativePtr.set ptr i (buffers.[i].Handle)
-            NativePtr.set pOffsets i 0UL
+            NativePtr.set pOffsets i (uint64 offsets.[i])
         [ new Instruction(this, this.CmdBindVertexBuffers, startBinding, cnt, ptr, pOffsets) ]
 
     [<Extension>]

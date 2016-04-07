@@ -408,7 +408,7 @@ module ColorBlendState =
     let create (count : int) (blend : BlendMode) =
         {
             logicOpEnable           = false
-            logicOp                 = VkLogicOp.Clear
+            logicOp                 = VkLogicOp.NoOp
             attachmentStates        = Array.create count (toAttachmentState blend)
             constants               = V4f.IIII
         }
@@ -565,7 +565,7 @@ type PipelineExtensions private() =
                 VkPipelineInputAssemblyStateCreateFlags.MinValue,
 
                 desc.inputAssembly.topology,
-                vkbool desc.inputAssembly.restartEnable
+                0u // vkbool desc.inputAssembly.restartEnable
             )
         
         let mutable rasterizerState =
@@ -575,7 +575,7 @@ type PipelineExtensions private() =
                 VkPipelineRasterizationStateCreateFlags.MinValue,
                 
                 vkbool rs.depthClampEnable,
-                vkbool rs.rasterizerDiscardEnable,
+                0u, //vkbool rs.rasterizerDiscardEnable, //breaks if true
                 rs.polygonMode,
                 rs.cullMode,
                 rs.frontFace,
