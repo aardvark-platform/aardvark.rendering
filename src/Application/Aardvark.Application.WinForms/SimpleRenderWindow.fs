@@ -15,6 +15,7 @@ type SimpleRenderWindow() =
         base.ClientSize <- System.Drawing.Size(1024, 768)
         ctrl.Dock <- DockStyle.Fill
         base.Controls.Add ctrl
+        base.Text <- "Aardvark rocks \\o/"
 
     member x.Control = ctrl
 
