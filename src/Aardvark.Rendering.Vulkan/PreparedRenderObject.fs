@@ -14,7 +14,6 @@ open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.Rendering.Vulkan
 
-type private ShaderType = FShade.SpirV.Type
 
 type PreparedRenderObject =
     {
