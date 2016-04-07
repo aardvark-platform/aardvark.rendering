@@ -305,14 +305,13 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
                                 if ft.TextureParams.wantSrgb || ft.TextureParams.wantCompressed then
                                     warnf "compressed / srgb textures not implemented atm."
 
-                                let texFormat = VkFormat.toTextureFormat fmt
-
+        
                                 let img =
                                     ctx.CreateImage2D(
-                                        texFormat,
+                                        fmt,
                                         size,
                                         levels,
-                                        VkImageUsageFlags.SampledBit
+                                        VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit
                                     )
 
                                 let update =
@@ -344,15 +343,15 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
                                     else 
                                         false, 1
 
-                                let texFormat =
-                                    TextureFormat.ofPixFormat l0.PixFormat pt.TextureParams
+                                let format =
+                                    VkFormat.ofPixFormat l0.PixFormat pt.TextureParams
 
                                 let img =
                                     ctx.CreateImage2D(
-                                        texFormat,
+                                        format,
                                         l0.Size,
                                         levels,
-                                        VkImageUsageFlags.SampledBit
+                                        VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit
                                     )
 
                                 let update =

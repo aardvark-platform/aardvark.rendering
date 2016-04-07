@@ -79,7 +79,7 @@ type VulkanSwapChain(desc : VulkanSwapChainDescription,
     let renderPass = desc.RenderPass
 
     let imageViews = colorViews |> Array.mapi (fun i v -> ImageView(v, colorImages.[i], VkImageViewType.D2d, desc.ColorFormat, VkComponentMapping.rgba, Range1i(0,1), Range1i(0,1)))
-    let depthImage = Image(context, Unchecked.defaultof<_>, depthImage, VkImageType.D2d, desc.DepthFormat, VkFormat.toTextureFormat desc.DepthFormat, V3i(size.X, size.Y, 1), 1, 1, 1, VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.DepthStencilAttachmentOptimal)
+    let depthImage = Image(context, Unchecked.defaultof<_>, depthImage, VkImageType.D2d, desc.DepthFormat, V3i(size.X, size.Y, 1), 1, 1, 1, VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.DepthStencilAttachmentOptimal)
     let depthView = ImageView(depth, depthImage, VkImageViewType.D2d, desc.DepthFormat, VkComponentMapping.rgba, Range1i(0,1), Range1i(0,1))
 
     let framebuffers = 
@@ -166,7 +166,7 @@ type VulkanSwapChainMS( real : VulkanSwapChain, samples : int ) =
     let color = 
         context.CreateImage(
             VkImageType.D2d,
-            VkFormat.toTextureFormat desc.ColorFormat,
+            desc.ColorFormat,
             V3i(real.Size.X, real.Size.Y, 1),
             1,
             1,
@@ -292,7 +292,7 @@ module InstanceSwapExtensions =
             Array.init (int imageCount) (fun i ->
                 let image = NativePtr.get swapChainImages i
 
-                let img = Image(context, Unchecked.defaultof<_>, image, VkImageType.D2d, desc.ColorFormat, VkFormat.toTextureFormat desc.ColorFormat, V3i(size.X, size.Y, 1), 1, 1, 1, usageFlags, VkImageLayout.Undefined)
+                let img = Image(context, Unchecked.defaultof<_>, image, VkImageType.D2d, desc.ColorFormat, V3i(size.X, size.Y, 1), 1, 1, 1, usageFlags, VkImageLayout.Undefined)
                 img.ToLayout(layout) |> context.DefaultQueue.RunSynchronously
                 img
             )
@@ -484,7 +484,7 @@ module InstanceSwapExtensions =
                 VkRaw.vkCreateImageView(device.Handle, &&view, NativePtr.zero, &&depthView) |> check "vkCreateImageView"
 
 
-                let img = Image(context, Unchecked.defaultof<_>, depthImage, VkImageType.D2d, desc.DepthFormat, VkFormat.toTextureFormat desc.DepthFormat, V3i(size.X, size.Y, 1), 1, 1, 1, VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.Undefined)
+                let img = Image(context, Unchecked.defaultof<_>, depthImage, VkImageType.D2d, desc.DepthFormat, V3i(size.X, size.Y, 1), 1, 1, 1, VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.Undefined)
                 img.ToLayout(VkImageAspectFlags.DepthBit, VkImageLayout.DepthStencilAttachmentOptimal)
                     |> context.DefaultQueue.RunSynchronously
 

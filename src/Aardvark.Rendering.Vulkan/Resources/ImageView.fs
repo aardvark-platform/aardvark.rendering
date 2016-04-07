@@ -151,6 +151,30 @@ module VkComponentMapping =
             TextureFormat.Rgb10A2ui, create r g b a
         ]
 
+    let ofColFormat =
+        let r = VkComponentSwizzle.R
+        let g = VkComponentSwizzle.G
+        let b = VkComponentSwizzle.B
+        let a = VkComponentSwizzle.A
+        let z = VkComponentSwizzle.Zero
+        let i = VkComponentSwizzle.One
+
+        let create a b c d = VkComponentMapping(a,b,c,d)
+
+        lookupTable [
+            Col.Format.Alpha,       create z z z a
+            Col.Format.BGR,         create r g b i
+            Col.Format.BGRA,        create r g b a
+            Col.Format.BGRP,        create r g b a
+            Col.Format.BW,          create r r r i
+            Col.Format.Gray,        create r r r i
+            Col.Format.GrayAlpha,   create r r r g
+            Col.Format.NormalUV,    create r g z i
+            Col.Format.RGB,         create r g b i
+            Col.Format.RGBA,        create r g b a
+            Col.Format.RGBP,        create r g b a
+        ]
+
     let rgba =
         VkComponentMapping(
             VkComponentSwizzle.R,
@@ -171,7 +195,11 @@ type ImageViewExtensions private() =
     [<Extension>]
     static member CreateImageView(this : Context, image : Image, viewType : VkImageViewType,
                                   levels : Range1i, slices : Range1i, aspect : VkImageAspectFlags) =
-        let mapping = VkComponentMapping.ofTextureFormat image.TextureFormat
+
+        let mapping = 
+            image.Format 
+                |> VkFormat.toColFormat
+                |> VkComponentMapping.ofColFormat
 
         let range = 
             VkImageSubresourceRange(

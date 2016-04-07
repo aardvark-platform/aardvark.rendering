@@ -18,7 +18,6 @@ type Image =
 
         val mutable public ImageType : VkImageType
         val mutable public Format : VkFormat
-        val mutable public TextureFormat : TextureFormat
 
         val mutable public Size : V3i
         val mutable public MipMapLevels : int
@@ -27,7 +26,7 @@ type Image =
         val mutable public Usage : VkImageUsageFlags
         val mutable public Layout : VkImageLayout
 
-        new(ctx,mem,h,t,f,tf,s,m,a,sam,u,l) = { Context = ctx; Memory = mem; Handle = h; ImageType = t; Format = f; TextureFormat = tf; Size = s; MipMapLevels = m; ArraySize = a; Samples = sam; Usage = u; Layout = l }
+        new(ctx,mem,h,t,f,s,m,a,sam,u,l) = { Context = ctx; Memory = mem; Handle = h; ImageType = t; Format = f; Size = s; MipMapLevels = m; ArraySize = a; Samples = sam; Usage = u; Layout = l }
     end
 
 type ImageSubResource =
@@ -44,10 +43,10 @@ type ImageSubResource =
                 | l -> (x.Image.Size / (1 <<< l)) - x.Offset
 
         new(img, mml, arr, off) = { Image = img; MipMapLevel = mml; ArrayRange = arr; Offset = off }
-        new(img, mml, off) = { Image = img; MipMapLevel = mml; ArrayRange = Range1i(0,1); Offset = off }
-        new(img, mml) = { Image = img; MipMapLevel = mml; ArrayRange = Range1i(0,1); Offset = V3i.Zero }
+        new(img, mml, off) = { Image = img; MipMapLevel = mml; ArrayRange = Range1i(0,0); Offset = off }
+        new(img, mml) = { Image = img; MipMapLevel = mml; ArrayRange = Range1i(0,0); Offset = V3i.Zero }
         new(img, mml, arr) = { Image = img; MipMapLevel = mml; ArrayRange = arr; Offset = V3i.Zero }
-        new(img) = { Image = img; MipMapLevel = 0; ArrayRange = Range1i(0,1); Offset = V3i.Zero }
+        new(img) = { Image = img; MipMapLevel = 0; ArrayRange = Range1i(0,0); Offset = V3i.Zero }
 
     end
 
@@ -514,6 +513,194 @@ module VkFormat =
     let toDownloadFormat (fmt : VkFormat) =
         fmt |> toTextureFormat |> TextureFormat.toDownloadFormat
 
+    let toColFormat  =
+        lookupTable [
+            VkFormat.Undefined, Col.Format.None
+            VkFormat.R4g4UnormPack8, Col.Format.NormalUV
+            VkFormat.R4g4b4a4UnormPack16, Col.Format.RGBA
+            VkFormat.B4g4r4a4UnormPack16, Col.Format.BGRA
+            VkFormat.R5g6b5UnormPack16, Col.Format.RGB
+            VkFormat.B5g6r5UnormPack16, Col.Format.BGR
+            VkFormat.R5g5b5a1UnormPack16, Col.Format.RGBA
+            VkFormat.B5g5r5a1UnormPack16, Col.Format.BGRA
+            VkFormat.A1r5g5b5UnormPack16, Col.Format.None
+            VkFormat.R8Unorm, Col.Format.Gray
+            VkFormat.R8Snorm, Col.Format.Gray
+            VkFormat.R8Uscaled, Col.Format.Gray
+            VkFormat.R8Sscaled, Col.Format.Gray
+            VkFormat.R8Uint, Col.Format.Gray
+            VkFormat.R8Sint, Col.Format.Gray
+            VkFormat.R8Srgb, Col.Format.Gray
+            VkFormat.R8g8Unorm, Col.Format.NormalUV
+            VkFormat.R8g8Snorm, Col.Format.NormalUV
+            VkFormat.R8g8Uscaled, Col.Format.NormalUV
+            VkFormat.R8g8Sscaled, Col.Format.NormalUV
+            VkFormat.R8g8Uint, Col.Format.NormalUV
+            VkFormat.R8g8Sint, Col.Format.NormalUV
+            VkFormat.R8g8Srgb, Col.Format.NormalUV
+            VkFormat.R8g8b8Unorm, Col.Format.RGB
+            VkFormat.R8g8b8Snorm, Col.Format.RGB
+            VkFormat.R8g8b8Uscaled, Col.Format.RGB
+            VkFormat.R8g8b8Sscaled, Col.Format.RGB
+            VkFormat.R8g8b8Uint, Col.Format.RGB
+            VkFormat.R8g8b8Sint, Col.Format.RGB
+            VkFormat.R8g8b8Srgb, Col.Format.RGB
+            VkFormat.B8g8r8Unorm, Col.Format.BGR
+            VkFormat.B8g8r8Snorm, Col.Format.BGR
+            VkFormat.B8g8r8Uscaled, Col.Format.BGR
+            VkFormat.B8g8r8Sscaled, Col.Format.BGR
+            VkFormat.B8g8r8Uint, Col.Format.BGR
+            VkFormat.B8g8r8Sint, Col.Format.BGR
+            VkFormat.B8g8r8Srgb, Col.Format.BGR
+            VkFormat.R8g8b8a8Unorm, Col.Format.RGBA
+            VkFormat.R8g8b8a8Snorm, Col.Format.RGBA
+            VkFormat.R8g8b8a8Uscaled, Col.Format.RGBA
+            VkFormat.R8g8b8a8Sscaled, Col.Format.RGBA
+            VkFormat.R8g8b8a8Uint, Col.Format.RGBA
+            VkFormat.R8g8b8a8Sint, Col.Format.RGBA
+            VkFormat.R8g8b8a8Srgb, Col.Format.RGBA
+            VkFormat.B8g8r8a8Unorm, Col.Format.BGRA
+            VkFormat.B8g8r8a8Snorm, Col.Format.BGRA
+            VkFormat.B8g8r8a8Uscaled, Col.Format.BGRA
+            VkFormat.B8g8r8a8Sscaled, Col.Format.BGRA
+            VkFormat.B8g8r8a8Uint, Col.Format.BGRA
+            VkFormat.B8g8r8a8Sint, Col.Format.BGRA
+            VkFormat.B8g8r8a8Srgb, Col.Format.BGRA
+            VkFormat.A8b8g8r8UnormPack32, Col.Format.None
+            VkFormat.A8b8g8r8SnormPack32, Col.Format.None
+            VkFormat.A8b8g8r8UscaledPack32, Col.Format.None
+            VkFormat.A8b8g8r8SscaledPack32, Col.Format.None
+            VkFormat.A8b8g8r8UintPack32, Col.Format.None
+            VkFormat.A8b8g8r8SintPack32, Col.Format.None
+            VkFormat.A8b8g8r8SrgbPack32, Col.Format.None
+            VkFormat.A2r10g10b10UnormPack32, Col.Format.None
+            VkFormat.A2r10g10b10SnormPack32, Col.Format.None
+            VkFormat.A2r10g10b10UscaledPack32, Col.Format.None
+            VkFormat.A2r10g10b10SscaledPack32, Col.Format.None
+            VkFormat.A2r10g10b10UintPack32, Col.Format.None
+            VkFormat.A2r10g10b10SintPack32, Col.Format.None
+            VkFormat.A2b10g10r10UnormPack32, Col.Format.None
+            VkFormat.A2b10g10r10SnormPack32, Col.Format.None
+            VkFormat.A2b10g10r10UscaledPack32, Col.Format.None
+            VkFormat.A2b10g10r10SscaledPack32, Col.Format.None
+            VkFormat.A2b10g10r10UintPack32, Col.Format.None
+            VkFormat.A2b10g10r10SintPack32, Col.Format.None
+            VkFormat.R16Unorm, Col.Format.Gray
+            VkFormat.R16Snorm, Col.Format.Gray
+            VkFormat.R16Uscaled, Col.Format.Gray
+            VkFormat.R16Sscaled, Col.Format.Gray
+            VkFormat.R16Uint, Col.Format.Gray
+            VkFormat.R16Sint, Col.Format.Gray
+            VkFormat.R16Sfloat, Col.Format.Gray
+            VkFormat.R16g16Unorm, Col.Format.NormalUV
+            VkFormat.R16g16Snorm, Col.Format.NormalUV
+            VkFormat.R16g16Uscaled, Col.Format.NormalUV
+            VkFormat.R16g16Sscaled, Col.Format.NormalUV
+            VkFormat.R16g16Uint, Col.Format.NormalUV
+            VkFormat.R16g16Sint, Col.Format.NormalUV
+            VkFormat.R16g16Sfloat, Col.Format.NormalUV
+            VkFormat.R16g16b16Unorm, Col.Format.RGB
+            VkFormat.R16g16b16Snorm, Col.Format.RGB
+            VkFormat.R16g16b16Uscaled, Col.Format.RGB
+            VkFormat.R16g16b16Sscaled, Col.Format.RGB
+            VkFormat.R16g16b16Uint, Col.Format.RGB
+            VkFormat.R16g16b16Sint, Col.Format.RGB
+            VkFormat.R16g16b16Sfloat, Col.Format.RGB
+            VkFormat.R16g16b16a16Unorm, Col.Format.RGBA
+            VkFormat.R16g16b16a16Snorm, Col.Format.RGBA
+            VkFormat.R16g16b16a16Uscaled, Col.Format.RGBA
+            VkFormat.R16g16b16a16Sscaled, Col.Format.RGBA
+            VkFormat.R16g16b16a16Uint, Col.Format.RGBA
+            VkFormat.R16g16b16a16Sint, Col.Format.RGBA
+            VkFormat.R16g16b16a16Sfloat, Col.Format.RGBA
+            VkFormat.R32Uint, Col.Format.Gray
+            VkFormat.R32Sint, Col.Format.Gray
+            VkFormat.R32Sfloat, Col.Format.Gray
+            VkFormat.R32g32Uint, Col.Format.NormalUV
+            VkFormat.R32g32Sint, Col.Format.NormalUV
+            VkFormat.R32g32Sfloat, Col.Format.NormalUV
+            VkFormat.R32g32b32Uint, Col.Format.RGB
+            VkFormat.R32g32b32Sint, Col.Format.RGB
+            VkFormat.R32g32b32Sfloat, Col.Format.RGB
+            VkFormat.R32g32b32a32Uint, Col.Format.RGBA
+            VkFormat.R32g32b32a32Sint, Col.Format.RGBA
+            VkFormat.R32g32b32a32Sfloat, Col.Format.RGBA
+            VkFormat.R64Uint, Col.Format.Gray
+            VkFormat.R64Sint, Col.Format.Gray
+            VkFormat.R64Sfloat, Col.Format.Gray
+            VkFormat.R64g64Uint, Col.Format.NormalUV
+            VkFormat.R64g64Sint, Col.Format.NormalUV
+            VkFormat.R64g64Sfloat, Col.Format.NormalUV
+            VkFormat.R64g64b64Uint, Col.Format.RGB
+            VkFormat.R64g64b64Sint, Col.Format.RGB
+            VkFormat.R64g64b64Sfloat, Col.Format.RGB
+            VkFormat.R64g64b64a64Uint, Col.Format.RGBA
+            VkFormat.R64g64b64a64Sint, Col.Format.RGBA
+            VkFormat.R64g64b64a64Sfloat, Col.Format.RGBA
+            VkFormat.B10g11r11UfloatPack32, Col.Format.BGR
+            VkFormat.E5b9g9r9UfloatPack32, Col.Format.BGR
+            VkFormat.D16Unorm, Col.Format.Gray
+            VkFormat.X8D24UnormPack32, Col.Format.Gray
+            VkFormat.D32Sfloat, Col.Format.Gray
+            VkFormat.S8Uint, Col.Format.Gray
+            VkFormat.D16UnormS8Uint, Col.Format.Gray
+            VkFormat.D24UnormS8Uint, Col.Format.Gray
+            VkFormat.D32SfloatS8Uint, Col.Format.Gray
+            VkFormat.Bc1RgbUnormBlock, Col.Format.RGB
+            VkFormat.Bc1RgbSrgbBlock, Col.Format.RGB
+            VkFormat.Bc1RgbaUnormBlock, Col.Format.RGBA
+            VkFormat.Bc1RgbaSrgbBlock, Col.Format.RGBA
+//            VkFormat.Bc2UnormBlock, Col.Format.RGBA
+//            VkFormat.Bc2SrgbBlock, Col.Format.None
+//            VkFormat.Bc3UnormBlock, Col.Format.None
+//            VkFormat.Bc3SrgbBlock, Col.Format.None
+//            VkFormat.Bc4UnormBlock, Col.Format.None
+//            VkFormat.Bc4SnormBlock, Col.Format.None
+//            VkFormat.Bc5UnormBlock, Col.Format.None
+//            VkFormat.Bc5SnormBlock, Col.Format.None
+//            VkFormat.Bc6hUfloatBlock, Col.Format.None
+//            VkFormat.Bc6hSfloatBlock, Col.Format.None
+//            VkFormat.Bc7UnormBlock, Col.Format.None
+//            VkFormat.Bc7SrgbBlock, Col.Format.None
+//            VkFormat.Etc2R8g8b8UnormBlock, Col.Format.None
+//            VkFormat.Etc2R8g8b8SrgbBlock, Col.Format.None
+//            VkFormat.Etc2R8g8b8a1UnormBlock, Col.Format.None
+//            VkFormat.Etc2R8g8b8a1SrgbBlock, Col.Format.None
+//            VkFormat.Etc2R8g8b8a8UnormBlock, Col.Format.None
+//            VkFormat.Etc2R8g8b8a8SrgbBlock, Col.Format.None
+//            VkFormat.EacR11UnormBlock, Col.Format.None
+//            VkFormat.EacR11SnormBlock, Col.Format.None
+//            VkFormat.EacR11g11UnormBlock, Col.Format.None
+//            VkFormat.EacR11g11SnormBlock, Col.Format.None
+//            VkFormat.Astc44UnormBlock, Col.Format.None
+//            VkFormat.Astc44SrgbBlock, Col.Format.None
+//            VkFormat.Astc54UnormBlock, Col.Format.None
+//            VkFormat.Astc54SrgbBlock, Col.Format.None
+//            VkFormat.Astc55UnormBlock, Col.Format.None
+//            VkFormat.Astc55SrgbBlock, Col.Format.None
+//            VkFormat.Astc65UnormBlock, Col.Format.None
+//            VkFormat.Astc65SrgbBlock, Col.Format.None
+//            VkFormat.Astc66UnormBlock, Col.Format.None
+//            VkFormat.Astc66SrgbBlock, Col.Format.None
+//            VkFormat.Astc85UnormBlock, Col.Format.None
+//            VkFormat.Astc85SrgbBlock, Col.Format.None
+//            VkFormat.Astc86UnormBlock, Col.Format.None
+//            VkFormat.Astc86SrgbBlock, Col.Format.None
+//            VkFormat.Astc88UnormBlock, Col.Format.None
+//            VkFormat.Astc88SrgbBlock, Col.Format.None
+//            VkFormat.Astc105UnormBlock, Col.Format.None
+//            VkFormat.Astc105SrgbBlock, Col.Format.None
+//            VkFormat.Astc106UnormBlock, Col.Format.None
+//            VkFormat.Astc106SrgbBlock, Col.Format.None
+//            VkFormat.Astc108UnormBlock, Col.Format.None
+//            VkFormat.Astc108SrgbBlock, Col.Format.None
+//            VkFormat.Astc1010UnormBlock, Col.Format.None
+//            VkFormat.Astc1010SrgbBlock, Col.Format.None
+//            VkFormat.Astc1210UnormBlock, Col.Format.None
+//            VkFormat.Astc1210SrgbBlock, Col.Format.None
+//            VkFormat.Astc1212UnormBlock, Col.Format.None
+//            VkFormat.Astc1212SrgbBlock, Col.Format.None
+        ]
 
     // TODO: maybe remove??
     type Signedness =
@@ -806,8 +993,9 @@ module ImageSubResource =
             let pixelSize = targetLayout.size / uint64 (size.X * size.Y) |> nativeint
             let channelSize = src.Info.ElementSize
             let channels = pixelSize / channelSize
-            let dy = nativeint targetLayout.rowPitch / channelSize
+            let dy = nativeint size.X * channels
             let mem = dst.Image.Memory
+            // TODO: dy needs to be aligned somehow...
 
             if srcFormat = dst.Image.Format && mem.IsHostVisible then
                 DevicePtr.map mem (fun ptr ->
@@ -818,7 +1006,7 @@ module ImageSubResource =
                             channelSize
                         )
 
-                    let ptr = ptr + dy * nativeint size.Y
+                    let ptr = ptr + dy * nativeint (size.Y - 1)
                     let volume = NativeVolumeRaw.ofNativeInt info ptr
                     NativeVolumeRaw.copy src volume
                 )
@@ -854,12 +1042,12 @@ module ImageSubResource =
                     let info =
                         NativeVolumeInfo(
                             V3n(channels, -dy, 1n),
-                            V3n(nativeint size.X, nativeint size.Y, nativeint size.Z),
+                            V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
-                    let ptr = ptr + dy * nativeint size.Y
-                    let volume = NativeVolumeRaw.ofNativeInt info ptr
+                    let ptr1 = ptr + dy * nativeint (size.Y - 1)
+                    let volume = NativeVolumeRaw.ofNativeInt info ptr1
                     NativeVolumeRaw.copy src volume
                 )
 
@@ -868,7 +1056,6 @@ module ImageSubResource =
                         ctx, mem, tmp, 
                         VkImageType.D2d, 
                         srcFormat,
-                        TextureFormat.One,
                         size, 1, 1, 1, 
                         VkImageUsageFlags.TransferSrcBit,
                         VkImageLayout.General
@@ -913,7 +1100,7 @@ module ImageSubResource =
                             channelSize
                         )
 
-                    let ptr = ptr + dy * nativeint size.Y
+                    let ptr = ptr + dy * nativeint (size.Y - 1)
                     let volume = NativeVolumeRaw.ofNativeInt info ptr
                     NativeVolumeRaw.copy volume dst
                 )
@@ -951,7 +1138,6 @@ module ImageSubResource =
                         ctx, mem, tmp, 
                         VkImageType.D2d, 
                         dstFormat,
-                        TextureFormat.One,
                         size, 1, 1, 1, 
                         VkImageUsageFlags.TransferDstBit,
                         VkImageLayout.General
@@ -968,7 +1154,7 @@ module ImageSubResource =
                                 channelSize
                             )
 
-                        let ptr = ptr + dy * nativeint size.Y
+                        let ptr = ptr + dy * nativeint (size.Y - 1)
                         let volume = NativeVolumeRaw.ofNativeInt info ptr
                         NativeVolumeRaw.copy volume dst
                     )
@@ -1044,33 +1230,33 @@ module ImageSubResource =
 
         let dataFormat =
             lookupTable [
-                (ChannelFormat.Alpha, ChannelType.Byte),                    VkFormat.R8Sint
-                (ChannelFormat.BGR, ChannelType.Byte),                      VkFormat.B8g8r8Sint
-                (ChannelFormat.BGRA, ChannelType.Byte),                     VkFormat.B8g8r8a8Sint
-                (ChannelFormat.Luminance, ChannelType.Byte),                VkFormat.R8Sint
-                (ChannelFormat.LuminanceAlpha, ChannelType.Byte),           VkFormat.R8g8Sint
-                (ChannelFormat.RGB, ChannelType.Byte),                      VkFormat.R8g8b8Sint
-                (ChannelFormat.RGBA, ChannelType.Byte),                     VkFormat.R8g8b8a8Sint
+                (ChannelFormat.Alpha, ChannelType.Byte),                    VkFormat.R8Snorm
+                (ChannelFormat.BGR, ChannelType.Byte),                      VkFormat.B8g8r8Snorm
+                (ChannelFormat.BGRA, ChannelType.Byte),                     VkFormat.B8g8r8a8Snorm
+                (ChannelFormat.Luminance, ChannelType.Byte),                VkFormat.R8Snorm
+                (ChannelFormat.LuminanceAlpha, ChannelType.Byte),           VkFormat.R8g8Snorm
+                (ChannelFormat.RGB, ChannelType.Byte),                      VkFormat.R8g8b8Snorm
+                (ChannelFormat.RGBA, ChannelType.Byte),                     VkFormat.R8g8b8a8Snorm
 
-                (ChannelFormat.Alpha, ChannelType.UnsignedByte),            VkFormat.R8Uint
-                (ChannelFormat.BGR, ChannelType.UnsignedByte),              VkFormat.B8g8r8Uint
-                (ChannelFormat.BGRA, ChannelType.UnsignedByte),             VkFormat.B8g8r8a8Uint
-                (ChannelFormat.Luminance, ChannelType.UnsignedByte),        VkFormat.R8Uint
-                (ChannelFormat.LuminanceAlpha, ChannelType.UnsignedByte),   VkFormat.R8g8Uint
-                (ChannelFormat.RGB, ChannelType.UnsignedByte),              VkFormat.R8g8b8Uint
-                (ChannelFormat.RGBA, ChannelType.UnsignedByte),             VkFormat.R8g8b8a8Uint
+                (ChannelFormat.Alpha, ChannelType.UnsignedByte),            VkFormat.R8Unorm
+                (ChannelFormat.BGR, ChannelType.UnsignedByte),              VkFormat.B8g8r8Unorm
+                (ChannelFormat.BGRA, ChannelType.UnsignedByte),             VkFormat.B8g8r8a8Unorm
+                (ChannelFormat.Luminance, ChannelType.UnsignedByte),        VkFormat.R8Unorm
+                (ChannelFormat.LuminanceAlpha, ChannelType.UnsignedByte),   VkFormat.R8g8Unorm
+                (ChannelFormat.RGB, ChannelType.UnsignedByte),              VkFormat.R8g8b8Unorm
+                (ChannelFormat.RGBA, ChannelType.UnsignedByte),             VkFormat.R8g8b8a8Unorm
 
-                (ChannelFormat.Alpha, ChannelType.Short),                   VkFormat.R16Sint
-                (ChannelFormat.Luminance, ChannelType.Short),               VkFormat.R16Sint
-                (ChannelFormat.LuminanceAlpha, ChannelType.Short),          VkFormat.R16g16Sint
-                (ChannelFormat.RGB, ChannelType.Short),                     VkFormat.R16g16b16Sint
-                (ChannelFormat.RGBA, ChannelType.Short),                    VkFormat.R16g16b16a16Sint
+                (ChannelFormat.Alpha, ChannelType.Short),                   VkFormat.R16Snorm
+                (ChannelFormat.Luminance, ChannelType.Short),               VkFormat.R16Snorm
+                (ChannelFormat.LuminanceAlpha, ChannelType.Short),          VkFormat.R16g16Snorm
+                (ChannelFormat.RGB, ChannelType.Short),                     VkFormat.R16g16b16Snorm
+                (ChannelFormat.RGBA, ChannelType.Short),                    VkFormat.R16g16b16a16Snorm
 
-                (ChannelFormat.Alpha, ChannelType.UnsignedShort),           VkFormat.R16Uint
-                (ChannelFormat.Luminance, ChannelType.UnsignedShort),       VkFormat.R16Uint
-                (ChannelFormat.LuminanceAlpha, ChannelType.UnsignedShort),  VkFormat.R16g16Uint
-                (ChannelFormat.RGB, ChannelType.UnsignedShort),             VkFormat.R16g16b16Uint
-                (ChannelFormat.RGBA, ChannelType.UnsignedShort),            VkFormat.R16g16b16a16Uint
+                (ChannelFormat.Alpha, ChannelType.UnsignedShort),           VkFormat.R16Unorm
+                (ChannelFormat.Luminance, ChannelType.UnsignedShort),       VkFormat.R16Unorm
+                (ChannelFormat.LuminanceAlpha, ChannelType.UnsignedShort),  VkFormat.R16g16Unorm
+                (ChannelFormat.RGB, ChannelType.UnsignedShort),             VkFormat.R16g16b16Unorm
+                (ChannelFormat.RGBA, ChannelType.UnsignedShort),            VkFormat.R16g16b16a16Unorm
 
                 (ChannelFormat.Alpha, ChannelType.Int),                     VkFormat.R32Sint
                 (ChannelFormat.Luminance, ChannelType.Int),                 VkFormat.R32Sint
@@ -1095,10 +1281,7 @@ module ImageSubResource =
                 IL.BindImage(handle)
                 IL.LoadImage(src) |> checkDevil "ilLoadImage"
 
-                let fmt = IL.GetFormat()
                 let dataType = IL.GetDataType()
-                let width = IL.GetInteger(IntName.ImageWidth) |> nativeint
-                let height = IL.GetInteger(IntName.ImageHeight) |> nativeint
                 let channels = IL.GetInteger(IntName.ImageChannels) |> nativeint
 
                 // TODO: Vulkan does not seem to support three-channel images properly atm.
@@ -1110,12 +1293,16 @@ module ImageSubResource =
                     else
                         channels
 
+                let fmt = IL.GetFormat()
+                let width = IL.GetInteger(IntName.ImageWidth) |> nativeint
+                let height = IL.GetInteger(IntName.ImageHeight) |> nativeint
+
                 let ptr = IL.GetData()
 
                 let info =
                     NativeVolumeInfo(
                         V3n(channels, width * channels, 1n),
-                        V3n(width, height, 1n),
+                        V3n(width, height, channels),
                         typeSize dataType
                     )
 
@@ -1132,9 +1319,10 @@ module ImageSubResource =
 
                 v, dataFormat, release
 
-            finally
+            with e ->
                 IL.BindImage(0)
                 IL.DeleteImage(handle)
+                raise e
 
         let upload (src : string) (dst : ImageSubResource) =
             command {
@@ -1277,17 +1465,16 @@ type ImageSubResourceExtensions private() =
 type ImageExtensions private() =
     
     [<Extension>]
-    static member CreateImage(this : Context, imageType : VkImageType, format : TextureFormat, 
+    static member CreateImage(this : Context, imageType : VkImageType, format : VkFormat, 
                               size : V3i, mipLevels : int, arraySize : int, samples : int, 
                               usage : VkImageUsageFlags, layout : VkImageLayout, tiling : VkImageTiling) =
-        
-        let vkfmt = VkFormat.ofTextureFormat format
+
         let mutable info =
             VkImageCreateInfo(
                 VkStructureType.ImageCreateInfo,
                 0n, VkImageCreateFlags.None,
                 imageType, 
-                vkfmt,
+                format,
                 VkExtent3D(size.X, size.Y, size.Z),
                 uint32 mipLevels,
                 uint32 arraySize,
@@ -1312,7 +1499,7 @@ type ImageExtensions private() =
         VkRaw.vkBindImageMemoryPtr(this.Device.Handle, img, mem)
             |> check "vkBindImageMemory"
 
-        Image(this, mem, img, imageType, vkfmt, format, size, mipLevels, arraySize, samples, usage, layout)
+        Image(this, mem, img, imageType, format, size, mipLevels, arraySize, samples, usage, layout)
 
     [<Extension>]
     static member Delete(this : Context, img : Image) =
@@ -1322,7 +1509,7 @@ type ImageExtensions private() =
             img.Handle <- VkImage.Null
 
     [<Extension>]
-    static member CreateImage2D(this : Context, format : TextureFormat, size : V2i, mipLevels : int, usage : VkImageUsageFlags) =
+    static member CreateImage2D(this : Context, format : VkFormat, size : V2i, mipLevels : int, usage : VkImageUsageFlags) =
         ImageExtensions.CreateImage(
             this,
             VkImageType.D2d,
@@ -1336,7 +1523,7 @@ type ImageExtensions private() =
         )
     
     [<Extension>]
-    static member CreateImage3D(this : Context, format : TextureFormat, size : V3i, mipLevels : int, usage : VkImageUsageFlags) =
+    static member CreateImage3D(this : Context, format : VkFormat, size : V3i, mipLevels : int, usage : VkImageUsageFlags) =
         ImageExtensions.CreateImage(
             this,
             VkImageType.D3d,

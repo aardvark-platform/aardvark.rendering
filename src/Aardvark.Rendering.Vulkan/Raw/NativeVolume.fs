@@ -55,12 +55,13 @@ type NativeVolumeInfo =
         member x.DX = x.Delta.X * x.ElementSize
         member x.DY = x.Delta.Y * x.ElementSize
         member x.DZ = x.Delta.Z * x.ElementSize
-        member x.SX = x.Size.X * x.ElementSize
-        member x.SY = x.Size.Y * x.ElementSize
-        member x.SZ = x.Size.Z * x.ElementSize
+        member x.SX = x.Size.X
+        member x.SY = x.Size.Y
+        member x.SZ = x.Size.Z
 
         new(d,s,es) = { Delta = d; Size = s; ElementSize = es }
     end
+
 
 [<Struct>]
 type NativeVolume<'a when 'a : unmanaged> =
@@ -72,13 +73,13 @@ type NativeVolume<'a when 'a : unmanaged> =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let myInfo = x.Info
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SY * myInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SZ * myInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ
             
             
@@ -96,13 +97,13 @@ type NativeVolume<'a when 'a : unmanaged> =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let myInfo = x.Info
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SX * myInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SZ * myInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ
             
             
@@ -120,13 +121,13 @@ type NativeVolume<'a when 'a : unmanaged> =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let myInfo = x.Info
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SZ * myInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SX * myInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX
             
             
@@ -144,13 +145,13 @@ type NativeVolume<'a when 'a : unmanaged> =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let myInfo = x.Info
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SZ * myInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SY * myInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY
             
             
@@ -168,13 +169,13 @@ type NativeVolume<'a when 'a : unmanaged> =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let myInfo = x.Info
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SX * myInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SY * myInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY
             
             
@@ -192,13 +193,13 @@ type NativeVolume<'a when 'a : unmanaged> =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let myInfo = x.Info
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SY * myInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SX * myInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX
             
             
@@ -253,15 +254,15 @@ type NativeVolume<'a when 'a : unmanaged> =
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SY * myInfo.DY
             let xj1 = otherInfo.DX - otherInfo.SY * otherInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SZ * myInfo.DZ
             let yj1 = otherInfo.DY - otherInfo.SZ * otherInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ
             let zj1 = otherInfo.DZ
             
@@ -274,26 +275,26 @@ type NativeVolume<'a when 'a : unmanaged> =
                     while i <> ze do
                         f (NativePtr.ofNativeInt i) (NativePtr.ofNativeInt i1)
                         i <- i + zj
-                        i1 <- i1 + zj
+                        i1 <- i1 + zj1
                     i <- i + yj
-                    i1 <- i1 + yj
+                    i1 <- i1 + yj1
                 i <- i + xj
-                i1 <- i1 + xj
+                i1 <- i1 + xj1
         member inline private x.ForEachYXZ(other : NativeVolume<'b>, f : nativeptr<'a> -> nativeptr<'b> -> unit) =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let mutable i1 = NativePtr.toNativeInt other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SX * myInfo.DX
             let yj1 = otherInfo.DY - otherInfo.SX * otherInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SZ * myInfo.DZ
             let xj1 = otherInfo.DX - otherInfo.SZ * otherInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ
             let zj1 = otherInfo.DZ
             
@@ -306,26 +307,26 @@ type NativeVolume<'a when 'a : unmanaged> =
                     while i <> ze do
                         f (NativePtr.ofNativeInt i) (NativePtr.ofNativeInt i1)
                         i <- i + zj
-                        i1 <- i1 + zj
+                        i1 <- i1 + zj1
                     i <- i + xj
-                    i1 <- i1 + xj
+                    i1 <- i1 + xj1
                 i <- i + yj
-                i1 <- i1 + yj
+                i1 <- i1 + yj1
         member inline private x.ForEachYZX(other : NativeVolume<'b>, f : nativeptr<'a> -> nativeptr<'b> -> unit) =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let mutable i1 = NativePtr.toNativeInt other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SZ * myInfo.DZ
             let yj1 = otherInfo.DY - otherInfo.SZ * otherInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SX * myInfo.DX
             let zj1 = otherInfo.DZ - otherInfo.SX * otherInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX
             let xj1 = otherInfo.DX
             
@@ -338,26 +339,26 @@ type NativeVolume<'a when 'a : unmanaged> =
                     while i <> xe do
                         f (NativePtr.ofNativeInt i) (NativePtr.ofNativeInt i1)
                         i <- i + xj
-                        i1 <- i1 + xj
+                        i1 <- i1 + xj1
                     i <- i + zj
-                    i1 <- i1 + zj
+                    i1 <- i1 + zj1
                 i <- i + yj
-                i1 <- i1 + yj
+                i1 <- i1 + yj1
         member inline private x.ForEachXZY(other : NativeVolume<'b>, f : nativeptr<'a> -> nativeptr<'b> -> unit) =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let mutable i1 = NativePtr.toNativeInt other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SZ * myInfo.DZ
             let xj1 = otherInfo.DX - otherInfo.SZ * otherInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SY * myInfo.DY
             let zj1 = otherInfo.DZ - otherInfo.SY * otherInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY
             let yj1 = otherInfo.DY
             
@@ -370,26 +371,26 @@ type NativeVolume<'a when 'a : unmanaged> =
                     while i <> ye do
                         f (NativePtr.ofNativeInt i) (NativePtr.ofNativeInt i1)
                         i <- i + yj
-                        i1 <- i1 + yj
+                        i1 <- i1 + yj1
                     i <- i + zj
-                    i1 <- i1 + zj
+                    i1 <- i1 + zj1
                 i <- i + xj
-                i1 <- i1 + xj
+                i1 <- i1 + xj1
         member inline private x.ForEachZXY(other : NativeVolume<'b>, f : nativeptr<'a> -> nativeptr<'b> -> unit) =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let mutable i1 = NativePtr.toNativeInt other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SX * myInfo.DX
             let zj1 = otherInfo.DZ - otherInfo.SX * otherInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SY * myInfo.DY
             let xj1 = otherInfo.DX - otherInfo.SY * otherInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY
             let yj1 = otherInfo.DY
             
@@ -402,26 +403,26 @@ type NativeVolume<'a when 'a : unmanaged> =
                     while i <> ye do
                         f (NativePtr.ofNativeInt i) (NativePtr.ofNativeInt i1)
                         i <- i + yj
-                        i1 <- i1 + yj
+                        i1 <- i1 + yj1
                     i <- i + xj
-                    i1 <- i1 + xj
+                    i1 <- i1 + xj1
                 i <- i + zj
-                i1 <- i1 + zj
+                i1 <- i1 + zj1
         member inline private x.ForEachZYX(other : NativeVolume<'b>, f : nativeptr<'a> -> nativeptr<'b> -> unit) =
             let mutable i = NativePtr.toNativeInt x.Pointer
             let mutable i1 = NativePtr.toNativeInt other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SY * myInfo.DY
             let zj1 = otherInfo.DZ - otherInfo.SY * otherInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SX * myInfo.DX
             let yj1 = otherInfo.DY - otherInfo.SX * otherInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX
             let xj1 = otherInfo.DX
             
@@ -434,11 +435,11 @@ type NativeVolume<'a when 'a : unmanaged> =
                     while i <> xe do
                         f (NativePtr.ofNativeInt i) (NativePtr.ofNativeInt i1)
                         i <- i + xj
-                        i1 <- i1 + xj
+                        i1 <- i1 + xj1
                     i <- i + yj
-                    i1 <- i1 + yj
+                    i1 <- i1 + yj1
                 i <- i + zj
-                i1 <- i1 + zj
+                i1 <- i1 + zj1
         member inline x.ForEach(other : NativeVolume<'b>, f : nativeptr<'a> -> nativeptr<'b> -> unit) = 
             let myInfo = x.Info
             let cxy = compare (abs myInfo.DX) (abs myInfo.DY)
@@ -482,18 +483,18 @@ type NativeVolumeRaw =
     struct
         val mutable public Pointer : nativeint
         val mutable public Info : NativeVolumeInfo
-
+        
         member inline private x.ForEachXYZ(f : nativeint -> unit) =
             let mutable i = x.Pointer
             let myInfo = x.Info
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SY * myInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SZ * myInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ
             
             
@@ -511,13 +512,13 @@ type NativeVolumeRaw =
             let mutable i = x.Pointer
             let myInfo = x.Info
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SX * myInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SZ * myInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ
             
             
@@ -535,13 +536,13 @@ type NativeVolumeRaw =
             let mutable i = x.Pointer
             let myInfo = x.Info
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SZ * myInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SX * myInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX
             
             
@@ -559,13 +560,13 @@ type NativeVolumeRaw =
             let mutable i = x.Pointer
             let myInfo = x.Info
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SZ * myInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SY * myInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY
             
             
@@ -583,13 +584,13 @@ type NativeVolumeRaw =
             let mutable i = x.Pointer
             let myInfo = x.Info
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SX * myInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SY * myInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY
             
             
@@ -607,13 +608,13 @@ type NativeVolumeRaw =
             let mutable i = x.Pointer
             let myInfo = x.Info
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SY * myInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SX * myInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX
             
             
@@ -668,15 +669,15 @@ type NativeVolumeRaw =
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SY * myInfo.DY
             let xj1 = otherInfo.DX - otherInfo.SY * otherInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SZ * myInfo.DZ
             let yj1 = otherInfo.DY - otherInfo.SZ * otherInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ
             let zj1 = otherInfo.DZ
             
@@ -689,26 +690,26 @@ type NativeVolumeRaw =
                     while i <> ze do
                         f i i1
                         i <- i + zj
-                        i1 <- i1 + zj
+                        i1 <- i1 + zj1
                     i <- i + yj
-                    i1 <- i1 + yj
+                    i1 <- i1 + yj1
                 i <- i + xj
-                i1 <- i1 + xj
+                i1 <- i1 + xj1
         member inline private x.ForEachYXZ(other : NativeVolumeRaw, f : nativeint -> nativeint -> unit) =
             let mutable i = x.Pointer
             let mutable i1 = other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SX * myInfo.DX
             let yj1 = otherInfo.DY - otherInfo.SX * otherInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SZ * myInfo.DZ
             let xj1 = otherInfo.DX - otherInfo.SZ * otherInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ
             let zj1 = otherInfo.DZ
             
@@ -721,26 +722,26 @@ type NativeVolumeRaw =
                     while i <> ze do
                         f i i1
                         i <- i + zj
-                        i1 <- i1 + zj
+                        i1 <- i1 + zj1
                     i <- i + xj
-                    i1 <- i1 + xj
+                    i1 <- i1 + xj1
                 i <- i + yj
-                i1 <- i1 + yj
+                i1 <- i1 + yj1
         member inline private x.ForEachYZX(other : NativeVolumeRaw, f : nativeint -> nativeint -> unit) =
             let mutable i = x.Pointer
             let mutable i1 = other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SZ * myInfo.DZ
             let yj1 = otherInfo.DY - otherInfo.SZ * otherInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SX * myInfo.DX
             let zj1 = otherInfo.DZ - otherInfo.SX * otherInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX
             let xj1 = otherInfo.DX
             
@@ -753,26 +754,26 @@ type NativeVolumeRaw =
                     while i <> xe do
                         f i i1
                         i <- i + xj
-                        i1 <- i1 + xj
+                        i1 <- i1 + xj1
                     i <- i + zj
-                    i1 <- i1 + zj
+                    i1 <- i1 + zj1
                 i <- i + yj
-                i1 <- i1 + yj
+                i1 <- i1 + yj1
         member inline private x.ForEachXZY(other : NativeVolumeRaw, f : nativeint -> nativeint -> unit) =
             let mutable i = x.Pointer
             let mutable i1 = other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SZ * myInfo.DZ
             let xj1 = otherInfo.DX - otherInfo.SZ * otherInfo.DZ
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SY * myInfo.DY
             let zj1 = otherInfo.DZ - otherInfo.SY * otherInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY
             let yj1 = otherInfo.DY
             
@@ -785,26 +786,26 @@ type NativeVolumeRaw =
                     while i <> ye do
                         f i i1
                         i <- i + yj
-                        i1 <- i1 + yj
+                        i1 <- i1 + yj1
                     i <- i + zj
-                    i1 <- i1 + zj
+                    i1 <- i1 + zj1
                 i <- i + xj
-                i1 <- i1 + xj
+                i1 <- i1 + xj1
         member inline private x.ForEachZXY(other : NativeVolumeRaw, f : nativeint -> nativeint -> unit) =
             let mutable i = x.Pointer
             let mutable i1 = other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SX * myInfo.DX
             let zj1 = otherInfo.DZ - otherInfo.SX * otherInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX - myInfo.SY * myInfo.DY
             let xj1 = otherInfo.DX - otherInfo.SY * otherInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY
             let yj1 = otherInfo.DY
             
@@ -817,26 +818,26 @@ type NativeVolumeRaw =
                     while i <> ye do
                         f i i1
                         i <- i + yj
-                        i1 <- i1 + yj
+                        i1 <- i1 + yj1
                     i <- i + xj
-                    i1 <- i1 + xj
+                    i1 <- i1 + xj1
                 i <- i + zj
-                i1 <- i1 + zj
+                i1 <- i1 + zj1
         member inline private x.ForEachZYX(other : NativeVolumeRaw, f : nativeint -> nativeint -> unit) =
             let mutable i = x.Pointer
             let mutable i1 = other.Pointer
             let myInfo = x.Info
             let otherInfo = other.Info
             
-            let zs = myInfo.SZ
+            let zs = myInfo.SZ * myInfo.DZ
             let zj = myInfo.DZ - myInfo.SY * myInfo.DY
             let zj1 = otherInfo.DZ - otherInfo.SY * otherInfo.DY
             
-            let ys = myInfo.SY
+            let ys = myInfo.SY * myInfo.DY
             let yj = myInfo.DY - myInfo.SX * myInfo.DX
             let yj1 = otherInfo.DY - otherInfo.SX * otherInfo.DX
             
-            let xs = myInfo.SX
+            let xs = myInfo.SX * myInfo.DX
             let xj = myInfo.DX
             let xj1 = otherInfo.DX
             
@@ -849,11 +850,11 @@ type NativeVolumeRaw =
                     while i <> xe do
                         f i i1
                         i <- i + xj
-                        i1 <- i1 + xj
+                        i1 <- i1 + xj1
                     i <- i + yj
-                    i1 <- i1 + yj
+                    i1 <- i1 + yj1
                 i <- i + zj
-                i1 <- i1 + zj
+                i1 <- i1 + zj1
         member inline x.ForEach(other : NativeVolumeRaw, f : nativeint -> nativeint -> unit) = 
             let myInfo = x.Info
             let cxy = compare (abs myInfo.DX) (abs myInfo.DY)
@@ -891,6 +892,9 @@ type NativeVolumeRaw =
         
         new(ptr, info) = { Pointer = ptr; Info = info }
     end
+
+
+
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
