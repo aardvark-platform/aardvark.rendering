@@ -50,7 +50,7 @@ type CommandPoolExtensions private() =
             VkCommandPoolCreateInfo(
                 VkStructureType.CommandPoolCreateInfo,
                 0n,
-                VkCommandPoolCreateFlags.None,
+                VkCommandPoolCreateFlags.ResetCommandBufferBit,
                 uint32 queueFamily.Index
             )
 

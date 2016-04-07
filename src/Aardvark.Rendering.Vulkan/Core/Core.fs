@@ -596,3 +596,4 @@ module Instance =
     
     module Layers =
         let DrawState = "VK_LAYER_LUNARG_draw_state"
+        let ParamChecker = "VK_LAYER_LUNARG_param_checker"

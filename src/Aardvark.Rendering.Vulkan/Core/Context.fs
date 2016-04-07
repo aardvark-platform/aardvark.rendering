@@ -15,8 +15,8 @@ type Context (device : Device) =
     inherit Resource(device)
 
     let physical = device.Physical
-    let hostMem = MemoryManager.create device.HostVisibleMemory
-    let deviceMem = MemoryManager.create device.DeviceLocalMemory
+    let hostMem = MemoryManager.aligned 256L device.HostVisibleMemory
+    let deviceMem = MemoryManager.aligned 256L device.DeviceLocalMemory
     
     let defaultPool =
         let create() = 

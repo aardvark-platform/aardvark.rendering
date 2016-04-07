@@ -21,14 +21,26 @@ type IResource =
     abstract member Update : IAdaptiveObject -> Command<unit>
 
 [<AbstractClass>]
-type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) =
+type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
     inherit AdaptiveObject()
 
+
     let handle = Mod.init None
-    let h = handle |> Mod.map Option.get
+    let h = 
+        Mod.custom (fun self ->
+            match handle.Value with
+                | Some h -> h
+                | None ->
+                    let cmd = this.Update(null)
+                    cache.Context.DefaultQueue.RunSynchronously cmd
+                    handle.Value.Value
+        )
+    
     let mutable refCount = 0
     let mutable key = []
         
+
+
     abstract member Create  : Option<'h> -> 'h * Command<unit>
     abstract member Destroy : 'h -> unit
    
@@ -69,6 +81,8 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) =
                 | None ->
                     transact (fun () -> handle.Value <- Some h)
                     update
+
+
         )
             
     member x.Dispose() = x.RemoveRef()
@@ -92,8 +106,10 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) =
         member x.AddRef() = x.AddRef()
         member x.Update(caller) = x.Update(caller)
                 
-and ResourceCache<'h when 'h : equality>() =
+and ResourceCache<'h when 'h : equality>(context : Context) =
     let cache = ConcurrentDictionary<list<obj>, Resource<'h>>()
+
+    member x.Context : Context = context
 
     member x.Remove (key : list<obj>) : unit =
         match cache.TryRemove key with
@@ -120,15 +136,15 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
 
     let descriptorPool = ctx.CreateDescriptorPool (1 <<< 20)
 
-    let bufferCache = ResourceCache<Buffer>()
-    let bufferViewCache = ResourceCache<BufferView>()
-    let imageCache = ResourceCache<Image>()
-    let imageViewCache = ResourceCache<ImageView>()
-    let samplerCache = ResourceCache<Sampler>()
-    let shaderProgramCache = ResourceCache<ShaderProgram>()
-    let pipelineCache = ResourceCache<Pipeline>()
-    let uniformBufferCache = ResourceCache<UniformBuffer>()
-    let descriptorSetCache = ResourceCache<DescriptorSet>()
+    let bufferCache = ResourceCache<Buffer>(ctx)
+    let bufferViewCache = ResourceCache<BufferView>(ctx)
+    let imageCache = ResourceCache<Image>(ctx)
+    let imageViewCache = ResourceCache<ImageView>(ctx)
+    let samplerCache = ResourceCache<Sampler>(ctx)
+    let shaderProgramCache = ResourceCache<ShaderProgram>(ctx)
+    let pipelineCache = ResourceCache<Pipeline>(ctx)
+    let uniformBufferCache = ResourceCache<UniformBuffer>(ctx)
+    let descriptorSetCache = ResourceCache<DescriptorSet>(ctx)
 
     override x.Release() =
 
@@ -465,9 +481,6 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
                 let colorBlendState =
                     blendMode |> Mod.map (ColorBlendState.create attachments) 
 
-                let viewportState =
-                    ViewportState.create attachments Box2i.Infinite (Range1d(0.0,1.0))
-
                 let multisampleState =
                     MultisampleState.create samples
 
@@ -487,11 +500,10 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
                                 inputAssembly           = inputAssembly.GetValue(x)
                                 rasterizerState         = rasterizerState.GetValue(x)
                                 colorBlendState         = colorBlendState.GetValue(x)
-                                viewportState           = viewportState
                                 multisampleState        = multisampleState 
                                 depthState              = depthState.GetValue(x)
                                 stencilState            = stencilState.GetValue(x)
-                                dynamicStates           = [| VkDynamicState.Viewport |]
+                                dynamicStates           = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
                             }
                         
                         pipeline, Command.nop

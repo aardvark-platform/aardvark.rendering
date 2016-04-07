@@ -243,17 +243,21 @@ type ResourceMangerExtensions private() =
                     match ro.Indices with
                         | null -> None
                         | indices -> x.CreateBuffer(ro.Indices, VkBufferUsageFlags.IndexBufferBit) |> Some
-
-                {
-                    ctx = x.Context
-                    original = ro
-                    geometryMode = geometryMode
-                    program = program
-                    descriptorResources = descriptorResources
-                    descriptorSets = descriptorSets
-                    pipeline = pipeline
-                    vertexBuffers = buffers
-                    indexBuffer = indexBuffer
-                }
+                let res =
+                    {
+                        ctx = x.Context
+                        original = ro
+                        geometryMode = geometryMode
+                        program = program
+                        descriptorResources = descriptorResources
+                        descriptorSets = descriptorSets
+                        pipeline = pipeline
+                        vertexBuffers = buffers
+                        indexBuffer = indexBuffer
+                    }
+                
+                res.Update(null) |> x.Context.DefaultQueue.RunSynchronously
+                
+                res
 
             | _ -> failwithf "unsupported RenderObject-type: %A" ro

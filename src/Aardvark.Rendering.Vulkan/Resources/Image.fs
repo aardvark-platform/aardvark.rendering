@@ -67,7 +67,6 @@ module VkFormat =
             RenderbufferFormat.StencilIndex8, VkFormat.Undefined
             RenderbufferFormat.StencilIndex16, VkFormat.Undefined
 
-            RenderbufferFormat.DepthComponent, VkFormat.D16Unorm
             RenderbufferFormat.Rgb8, VkFormat.R8g8b8Unorm
             RenderbufferFormat.Rgb16, VkFormat.R16g16b16Unorm
             RenderbufferFormat.Rgba4, VkFormat.R4g4b4a4UnormPack16
@@ -179,7 +178,6 @@ module VkFormat =
             TextureFormat.QuadLuminance8Sgis, VkFormat.R8g8b8a8Unorm
             TextureFormat.QuadIntensity4Sgis, VkFormat.R4g4b4a4UnormPack16
             TextureFormat.QuadIntensity8Sgis, VkFormat.R8g8b8a8Unorm
-            TextureFormat.DepthComponent, VkFormat.D16Unorm
             TextureFormat.Rgb, VkFormat.R8g8b8Unorm
             TextureFormat.Rgba, VkFormat.R8g8b8a8Unorm
             TextureFormat.Luminance, VkFormat.R8Unorm
@@ -290,7 +288,8 @@ module VkFormat =
 //            VkFormat.Undefined, RenderbufferFormat.StencilIndex8
 //            VkFormat.Undefined, RenderbufferFormat.StencilIndex16
 
-            VkFormat.D16Unorm, RenderbufferFormat.DepthComponent
+            VkFormat.B8g8r8a8Unorm, RenderbufferFormat.Rgba8
+
             VkFormat.R8g8b8Unorm, RenderbufferFormat.Rgb8
             VkFormat.R16g16b16Unorm, RenderbufferFormat.Rgb16
             VkFormat.R4g4b4a4UnormPack16, RenderbufferFormat.Rgba4
@@ -299,7 +298,6 @@ module VkFormat =
             VkFormat.R16g16b16a16Unorm, RenderbufferFormat.Rgba16
             VkFormat.D16Unorm, RenderbufferFormat.DepthComponent16
             VkFormat.X8D24UnormPack32, RenderbufferFormat.DepthComponent24
-            VkFormat.D32Sfloat, RenderbufferFormat.DepthComponent32
             VkFormat.R8Unorm, RenderbufferFormat.R8
             VkFormat.R16Unorm, RenderbufferFormat.R16
             VkFormat.R8g8Unorm, RenderbufferFormat.Rg8
@@ -320,7 +318,6 @@ module VkFormat =
             VkFormat.R16g16Uint, RenderbufferFormat.Rg16ui
             VkFormat.R32g32Sint, RenderbufferFormat.Rg32i
             VkFormat.R32g32Uint, RenderbufferFormat.Rg32ui
-            VkFormat.D24UnormS8Uint, RenderbufferFormat.DepthStencil
             VkFormat.R32g32b32a32Sfloat, RenderbufferFormat.Rgba32f
             VkFormat.R32g32b32Sfloat, RenderbufferFormat.Rgb32f
             VkFormat.R16g16b16a16Sfloat, RenderbufferFormat.Rgba16f
@@ -387,29 +384,13 @@ module VkFormat =
 //            VkFormat.Undefined, TextureFormat.Three
 //            VkFormat.Undefined, TextureFormat.Four
 
-            VkFormat.R4g4UnormPack8, TextureFormat.DualAlpha4Sgis
-            VkFormat.R8g8Unorm, TextureFormat.DualAlpha8Sgis
-            VkFormat.R16g16Unorm, TextureFormat.DualAlpha16Sgis
-            VkFormat.R4g4UnormPack8, TextureFormat.DualLuminance4Sgis
-            VkFormat.R8g8Unorm, TextureFormat.DualLuminance8Sgis
-            VkFormat.R16g16Unorm, TextureFormat.DualLuminance16Sgis
-            VkFormat.R4g4UnormPack8, TextureFormat.DualIntensity4Sgis
-            VkFormat.R8g8Unorm, TextureFormat.DualIntensity8Sgis
-            VkFormat.R16g16Unorm, TextureFormat.DualIntensity16Sgis
-            VkFormat.R4g4b4a4UnormPack16, TextureFormat.QuadAlpha4Sgis
-            VkFormat.R8g8b8a8Unorm, TextureFormat.QuadAlpha8Sgis
-            VkFormat.R4g4b4a4UnormPack16, TextureFormat.QuadLuminance4Sgis
-            VkFormat.R8g8b8a8Unorm, TextureFormat.QuadLuminance8Sgis
-            VkFormat.R4g4b4a4UnormPack16, TextureFormat.QuadIntensity4Sgis
-            VkFormat.R8g8b8a8Unorm, TextureFormat.QuadIntensity8Sgis
-            VkFormat.D16Unorm, TextureFormat.DepthComponent
-            VkFormat.R8g8b8Unorm, TextureFormat.Rgb
-            VkFormat.R8g8b8a8Unorm, TextureFormat.Rgba
-            VkFormat.R8Unorm, TextureFormat.Luminance
-            VkFormat.R8g8Unorm, TextureFormat.LuminanceAlpha
-            VkFormat.R5g5b5a1UnormPack16, TextureFormat.Rgb5
+            VkFormat.B8g8r8a8Unorm, TextureFormat.Rgba8
+            VkFormat.B8g8r8a8Sint, TextureFormat.Rgba8i
+            VkFormat.B8g8r8a8Uint, TextureFormat.Rgba8ui
+            VkFormat.B8g8r8Sint, TextureFormat.Rgb8i
+            VkFormat.B8g8r8Uint, TextureFormat.Rgb8ui
+
             VkFormat.R8g8b8Unorm, TextureFormat.Rgb8
-            VkFormat.A2b10g10r10UnormPack32, TextureFormat.Rgb10
             VkFormat.R16g16b16Unorm, TextureFormat.Rgb16
             VkFormat.R4g4b4a4UnormPack16, TextureFormat.Rgba4
             VkFormat.R5g5b5a1UnormPack16, TextureFormat.Rgb5A1
@@ -418,7 +399,6 @@ module VkFormat =
             VkFormat.R16g16b16a16Unorm, TextureFormat.Rgba16
             VkFormat.D16Unorm, TextureFormat.DepthComponent16
             VkFormat.X8D24UnormPack32, TextureFormat.DepthComponent24
-            VkFormat.D32Sfloat, TextureFormat.DepthComponent32
             VkFormat.EacR11g11UnormBlock, TextureFormat.CompressedRg
             VkFormat.R8Unorm, TextureFormat.R8
             VkFormat.R16Unorm, TextureFormat.R16
@@ -440,19 +420,9 @@ module VkFormat =
             VkFormat.R16g16Uint, TextureFormat.Rg16ui
             VkFormat.R32g32Sint, TextureFormat.Rg32i
             VkFormat.R32g32Uint, TextureFormat.Rg32ui
-            VkFormat.R8g8b8Unorm, TextureFormat.RgbIccSgix
-            VkFormat.R8g8b8a8Unorm, TextureFormat.RgbaIccSgix
-            VkFormat.R8Unorm, TextureFormat.AlphaIccSgix
-            VkFormat.R8Unorm, TextureFormat.LuminanceIccSgix
-            VkFormat.R8Unorm, TextureFormat.IntensityIccSgix
-            VkFormat.R8g8Unorm, TextureFormat.LuminanceAlphaIccSgix
             VkFormat.R5g6b5UnormPack16, TextureFormat.R5G6B5IccSgix
-            VkFormat.R16Unorm, TextureFormat.Alpha16IccSgix
-            VkFormat.R16Unorm, TextureFormat.Luminance16IccSgix
-            VkFormat.R16Unorm, TextureFormat.Intensity16IccSgix
             VkFormat.Etc2R8g8b8UnormBlock, TextureFormat.CompressedRgb
             VkFormat.Etc2R8g8b8a8UnormBlock, TextureFormat.CompressedRgba
-            VkFormat.D24UnormS8Uint, TextureFormat.DepthStencil
             VkFormat.R32g32b32a32Sfloat, TextureFormat.Rgba32f
             VkFormat.R32g32b32Sfloat, TextureFormat.Rgb32f
             VkFormat.R16g16b16a16Sfloat, TextureFormat.Rgba16f
@@ -460,18 +430,11 @@ module VkFormat =
             VkFormat.D24UnormS8Uint, TextureFormat.Depth24Stencil8
             VkFormat.B10g11r11UfloatPack32, TextureFormat.R11fG11fB10f
             VkFormat.E5b9g9r9UfloatPack32, TextureFormat.Rgb9E5
-            VkFormat.R8g8b8Srgb, TextureFormat.Srgb
             VkFormat.R8g8b8Srgb, TextureFormat.Srgb8
-            VkFormat.R8g8b8a8Srgb, TextureFormat.SrgbAlpha
             VkFormat.R8g8b8a8Srgb, TextureFormat.Srgb8Alpha8
-            VkFormat.R8g8Snorm, TextureFormat.SluminanceAlpha
-            VkFormat.R8g8Snorm, TextureFormat.Sluminance8Alpha8
-            VkFormat.R8Snorm, TextureFormat.Sluminance
-            VkFormat.R8Snorm, TextureFormat.Sluminance8
             VkFormat.Etc2R8g8b8SrgbBlock, TextureFormat.CompressedSrgb
             VkFormat.Etc2R8g8b8a8SrgbBlock, TextureFormat.CompressedSrgbAlpha
             VkFormat.D32Sfloat, TextureFormat.DepthComponent32f
-            VkFormat.D24UnormS8Uint, TextureFormat.Depth32fStencil8
             VkFormat.R32g32b32a32Uint, TextureFormat.Rgba32ui
             VkFormat.R32g32b32Uint, TextureFormat.Rgb32ui
             VkFormat.R16g16b16a16Uint, TextureFormat.Rgba16ui
@@ -484,8 +447,6 @@ module VkFormat =
             VkFormat.R16g16b16Sint, TextureFormat.Rgb16i
             VkFormat.R8g8b8a8Sint, TextureFormat.Rgba8i
             VkFormat.R8g8b8Sint, TextureFormat.Rgb8i
-            VkFormat.D24UnormS8Uint, TextureFormat.Float32UnsignedInt248Rev
-            VkFormat.Etc2R8g8b8a8UnormBlock, TextureFormat.CompressedRgbaBptcUnorm
             VkFormat.Bc6hSfloatBlock, TextureFormat.CompressedRgbBptcSignedFloat
             VkFormat.Bc6hUfloatBlock, TextureFormat.CompressedRgbBptcUnsignedFloat
             VkFormat.R8Snorm, TextureFormat.R8Snorm

@@ -27,7 +27,9 @@ module VulkanHelpers =
         for (k,v) in l do
 
             match d.TryGetValue k with
-                | (true, vo) -> failwithf "duplicated lookup-entry: %A (%A vs %A)" k vo v
+                | (true, vo) -> 
+                    Log.warn "duplicated lookup-entry: %A (%A vs %A)" k vo v
+
                 | _ -> ()
 
             d.[k] <- v
@@ -131,9 +133,9 @@ type Resource(parent : Option<Resource>) =
     member x.IsDisposed = !isDisposed = 1 || parentDisposed()
     member x.IsLive = !isDisposed = 0 || parentLive()
 
-    override x.Finalize() =
-        try x.Dispose false
-        with _ -> ()
+//    override x.Finalize() =
+//        try x.Dispose false
+//        with _ -> ()
 
     member x.Dispose() = x.Dispose true
 

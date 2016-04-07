@@ -52,12 +52,6 @@ type ColorBlendState =
         constants               : V4f
     }
 
-type ViewportState =
-    {
-        viewports               : VkViewport[]
-        scissors                : Box2i[]
-    }
-
 type MultisampleState =
     {
         samples                 : int
@@ -420,21 +414,6 @@ module ColorBlendState =
         }
  
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ViewportState =
-    let private toVkViewport (b : Box2i) (depth : Range1d) =
-        VkViewport(
-            float32 b.Min.X, float32 b.Min.Y,
-            float32 (1 + b.SizeX), float32 (1 + b.SizeY), 
-            float32 depth.Min, float32 depth.Max
-        )
-
-    let create (count : int) (viewport : Box2i) (depthRange : Range1d) =
-        {
-            viewports               = Array.create count (toVkViewport viewport depthRange)
-            scissors                = [||]
-        }
-  
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module MultisampleState =
     let create (samples : int) =
         {
@@ -510,7 +489,6 @@ type PipelineDescription =
         inputAssembly           : InputAssemblyState
         rasterizerState         : RasterizerState
         colorBlendState         : ColorBlendState
-        viewportState           : ViewportState
         multisampleState        : MultisampleState
         depthState              : DepthState
         stencilState            : StencilState
@@ -635,27 +613,17 @@ type PipelineExtensions private() =
             )
 
 
-        let pViewports =
-            NativePtr.pushStackArray desc.viewportState.viewports
-
-        let pScissors =
-            NativePtr.pushStackArray (
-                desc.viewportState.scissors |> Array.map (fun b ->
-                    VkRect2D(VkOffset2D(b.Min.X, b.Min.Y), VkExtent2D(1 + b.SizeX, 1 + b.SizeY))
-                )
-            )
-
         let mutable viewportState =
-            let vp = desc.viewportState
+            let vp = desc.renderPass.ColorAttachments.Length
             VkPipelineViewportStateCreateInfo(
                 VkStructureType.PipelineViewportStateCreateInfo, 0n,
                 VkPipelineViewportStateCreateFlags.MinValue,
                 
-                uint32 vp.viewports.Length,
-                pViewports,
+                uint32 vp,
+                NativePtr.zero,
 
-                uint32 vp.scissors.Length,
-                pScissors
+                uint32 vp,
+                NativePtr.zero
             )
 
         let pSampleMasks = NativePtr.pushStackArray desc.multisampleState.sampleMask

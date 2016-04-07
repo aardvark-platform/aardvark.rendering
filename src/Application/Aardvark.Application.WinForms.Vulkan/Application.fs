@@ -100,7 +100,7 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
         member x.Time = time
 
 type VulkanApplication(appName : string, debug : bool) =
-    static let instanceDebugLayers = [ Instance.Layers.DrawState ]
+    static let instanceDebugLayers = [ Instance.Layers.DrawState; Instance.Layers.ParamChecker ]
     static let deviceDebugLayers = [ Instance.Layers.DrawState ]
 
     // create an instance
@@ -112,6 +112,9 @@ type VulkanApplication(appName : string, debug : bool) =
     // install debug output to file (and errors/warnings to console)
     do if debug then
         Log.warn "[Vulkan] debug support not implemented"
+        instance.OnDebugMessage.Add (fun msg ->
+            Log.warn "%s" msg.message
+        )
         //instance.InstallDebugFileWriter "vk.log"
 
     // choose a physical device

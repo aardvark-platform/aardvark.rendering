@@ -98,8 +98,20 @@ type InstructionContextExtensions private() =
 
     [<Extension>]
     static member DrawIndexed(this : InstructionContext, firstIndex : int, indexCount : int, firstInstance : int, instanceCount : int, vertexOffset : int) =
-        [ new Instruction(this, this.CmdDrawIndexed, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance) ]
+        [ 
+            new Instruction(this, this.CmdDrawIndexed, 
+                indexCount, instanceCount, 
+                firstIndex, vertexOffset, 
+                firstInstance
+            ) 
+        ]
             
     [<Extension>]
     static member Draw(this : InstructionContext, firstVertex : int, vertexCount : int, firstInstance : int, instanceCount : int) =
-        [ new Instruction(this, this.CmdDraw, vertexCount, instanceCount, firstVertex, firstInstance) ]
+        [ 
+            new Instruction(this, this.CmdDraw, 
+                vertexCount, instanceCount, 
+                firstVertex, firstInstance
+            ) 
+        ]
+

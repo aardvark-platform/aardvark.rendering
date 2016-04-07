@@ -97,4 +97,24 @@ type BufferCommandExtensions private() =
     static member SetScissor(this : CommandBuffer, scissorSize : V2i) =
         BufferCommandExtensions.SetScissors(this, [| Box2i(V2i.Zero, scissorSize - V2i.II) |])
 
+    [<Extension>]
+    static member SetBlendColor(this : CommandBuffer, color : C4f) =
+        VkRaw.vkCmdSetBlendConstants(this.Handle, C4f.op_Explicit color)
 
+    [<Extension>]        
+    static member SetLineWidth(this : CommandBuffer, width : float) =
+        VkRaw.vkCmdSetLineWidth(this.Handle, float32 width)
+
+    [<Extension>]        
+    static member SetDepthBias(this : CommandBuffer, constant : float, clamp : float, slope : float) =
+        VkRaw.vkCmdSetDepthBias(this.Handle, float32 constant, float32 clamp, float32 slope)        
+
+    [<Extension>]        
+    static member SetDepthBounds(this : CommandBuffer, min : float, max : float) =
+        VkRaw.vkCmdSetDepthBounds(this.Handle, float32 min, float32 max)
+
+    [<Extension>]        
+    static member SetStencil(this : CommandBuffer, compareMask : uint32, writeMask : uint32, ref : uint32) =
+        VkRaw.vkCmdSetStencilCompareMask(this.Handle, VkStencilFaceFlags.FrontBit ||| VkStencilFaceFlags.BackBit, compareMask)
+        VkRaw.vkCmdSetStencilWriteMask(this.Handle, VkStencilFaceFlags.FrontBit ||| VkStencilFaceFlags.BackBit, writeMask)
+        VkRaw.vkCmdSetStencilReference(this.Handle, VkStencilFaceFlags.FrontBit ||| VkStencilFaceFlags.BackBit, ref)

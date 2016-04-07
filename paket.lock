@@ -136,6 +136,7 @@ NUGET
       FSharp.Core
     FAKE (4.17.1) - content: none
     FSharp.Core (4.0.0.1) - content: none
+    ilmerge (2.14.1208)
     Mono.Cecil (0.9.5.4) - content: none
     Newtonsoft.Json (8.0.3) - content: none
     Paket.Core (2.52.16) - content: none
