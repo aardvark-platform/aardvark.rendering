@@ -679,6 +679,7 @@ module ResourceManager =
                             let created = ref false
                             let handle = 
                                 match current with
+                                    | null -> ref (Mod.constant Texture.empty)
                                     | :? Texture as t -> ref (Mod.constant t)
                                     | _ -> 
                                         created := true
@@ -700,6 +701,7 @@ module ResourceManager =
                               updateCPU = fun _ -> data.GetValue(self) |> ignore
                               updateGPU = fun () -> 
                                 match data.GetValue(self) with
+                                    | null -> updateTo Texture.empty
                                     | :? Texture as t -> updateTo t
                                     | :? NullTexture as t -> updateTo Texture.empty
                                     | _ -> 

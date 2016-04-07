@@ -24,7 +24,7 @@ module private ShaderProgramCounters =
         Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
 
 
-type ActiveUniform = { index : int; location : int; name : string; semantic : string; samplerState : Option<string>; size : int; uniformType : ActiveUniformType; offset : int; isRowMajor : bool } with
+type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<string>; size : int; uniformType : ActiveUniformType; offset : int; isRowMajor : bool } with
     member x.Interface =
 
         let name =
@@ -140,14 +140,14 @@ module ProgramReflector =
             if fs = 1 then yield ShaderStage.Pixel
         ]
 
-    let samplerHackRegex = System.Text.RegularExpressions.Regex("_samplerState[0-9]+$")
+    let samplerHackRegex = System.Text.RegularExpressions.Regex("_samplerState[0-9]+(\[[0-9]+\])?$")
 
-    let getActiveUniform (p : int) (index : int) =
+    let getActiveUniform (p : int) (slot : int) =
         let mutable length = 0
         let mutable size = 0
         let mutable uniformType = ActiveUniformType.Float
         let builder = System.Text.StringBuilder(1024)
-        GL.GetActiveUniform(p, index, 1024, &length, &size, &uniformType, builder)
+        GL.GetActiveUniform(p, slot, 1024, &length, &size, &uniformType, builder)
         let name = builder.ToString()
 
         GL.Check "could not get active uniform"
@@ -158,7 +158,7 @@ module ProgramReflector =
         if semantic <> name 
         then Log.warn "replaced uniform semantic value (%s -> %s), this might be an error or due to usage of lins." name semantic
 
-        { index = index; location = location; name = name; semantic = semantic; samplerState = None; size = -1; uniformType = uniformType; offset = -1; isRowMajor = false }
+        { slot = slot; index = 0; location = location; name = name; semantic = semantic; samplerState = None; size = size; uniformType = uniformType; offset = -1; isRowMajor = false }
 
     let getActiveUniformBlocks (p : int) =
         [
@@ -219,10 +219,19 @@ module ProgramReflector =
             if u.location >= 0 then
                 match u.uniformType with
                     | SamplerType  ->
-                        GL.Uniform1(u.location, !binding)
-                        GL.Check "could not set texture-location"
-                        yield { u with index = !binding }
-                        binding := !binding + 1
+                        let size = max 1 u.size
+                        let baseBinding = !binding
+                        binding := baseBinding + size
+
+                        if size = 1 then
+                            GL.Uniform1(u.location, baseBinding)
+                            GL.Check "could not set texture-location"
+                        else
+                            GL.Uniform1(u.location, size, Array.init size (fun i -> baseBinding + i))
+                            GL.Check "could not set texture-array-locations"
+
+                        for i in 0..size-1 do
+                            yield { u with slot = baseBinding + i; index = i }
                     | _ ->
                         yield u
         ]
@@ -281,13 +290,48 @@ module ProgramReflector =
 [<AutoOpen>]
 module ProgramExtensions =
     //type UniformField = Aardvark.Rendering.GL.UniformField
+    open System.Text.RegularExpressions
+    open System
 
-    let private parsePath (path : string) =
-        // TODO: really parse path here
-        Aardvark.Rendering.GL.ValuePath path
+    let private rx = Regex @"^(?<name>[a-zA-Z_0-9]+)((\[(?<index>[0-9]+)\])|(\.)|)(?<rest>.*)$"
+
+    let private parsePath path =
+        let rec parsePath (parent : Option<UniformPath>) (path : string) =
+            if path.Length = 0 then
+                match parent with
+                    | Some path -> path
+                    | _ -> ValuePath ""
+            else
+                let m = rx.Match path
+                if m.Success then
+                    let name = m.Groups.["name"].Value
+                    let rest = m.Groups.["rest"].Value
+                    let rest = if rest.StartsWith "." then rest.Substring(1) else rest
+
+                    let path =
+                        match parent with
+                            | Some p -> FieldPath(p, name)
+                            | None -> ValuePath name
+
+                    let index = m.Groups.["index"]
+                    if index.Success then
+                        let index = index.Value |> Int32.Parse
+                        parsePath (Some (IndexPath(path, index))) rest
+                    else
+                        parsePath (Some path) rest
+                
+                else
+                    failwithf "[GL] bad path: %A" path
+
+        parsePath None path
 
     let private activeUniformToField (u : ActiveUniform) =
-        { UniformField.semantic = u.semantic; UniformField.path = parsePath u.name; UniformField.offset = u.offset; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
+        let m = rx.Match u.semantic
+        let sem =
+            if m.Success then m.Groups.["name"].Value
+            else u.semantic
+
+        { UniformField.semantic = sem; UniformField.path = parsePath u.name; UniformField.offset = u.offset; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
 
     type ActiveUniform with
         member x.UniformField = activeUniformToField x

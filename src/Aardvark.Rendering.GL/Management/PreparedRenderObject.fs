@@ -232,25 +232,30 @@ type ResourceManagerExtensions private() =
 
                     match tex with
                         | Some value ->
+                            let sampler =
+                                match prog.SamplerStates.TryGetValue (Symbol.Create uniform.semantic) with
+                                    | (true, sampler) -> sampler
+                                    | _ -> 
+                                        match uniform.samplerState with
+                                            | Some sam ->
+                                                match prog.SamplerStates.TryGetValue (Symbol.Create sam) with
+                                                    | (true, sampler) -> sampler
+                                                    | _ -> SamplerStateDescription()
+                                            | None ->
+                                                SamplerStateDescription()
+                            let s = x.CreateSampler(Mod.constant sampler)
+
                             match value with
                                 | :? IMod<ITexture> as value ->
-                                    let sampler =
-                                        match prog.SamplerStates.TryGetValue (Symbol.Create uniform.semantic) with
-                                            | (true, sampler) -> sampler
-                                            | _ -> 
-                                                match uniform.samplerState with
-                                                    | Some sam ->
-                                                        match prog.SamplerStates.TryGetValue (Symbol.Create sam) with
-                                                            | (true, sampler) -> sampler
-                                                            | _ -> SamplerStateDescription()
-                                                    | None ->
-                                                        SamplerStateDescription()
-
                                     let t = x.CreateTexture(value)
-                                    let s = x.CreateSampler(Mod.constant sampler)
-                                    lastTextureSlot := uniform.index
+                                    lastTextureSlot := uniform.slot
+                                    Some (uniform.slot, (t, s))
 
-                                    Some (uniform.index, (t, s))
+                                | :? IMod<ITexture[]> as values ->
+                                    let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[uniform.index]))
+                                    lastTextureSlot := uniform.slot
+                                    Some (uniform.slot, (t, s))
+
                                 | _ ->
                                     Log.warn "unexpected texture type %s: %A" uniform.semantic value
                                     None
