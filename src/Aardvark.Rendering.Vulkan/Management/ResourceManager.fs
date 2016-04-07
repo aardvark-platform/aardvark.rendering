@@ -145,6 +145,7 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
         descriptorSetCache.Clear()
 
     member x.Context = ctx
+    member x.Runtime = runtime
 
     // buffers
 

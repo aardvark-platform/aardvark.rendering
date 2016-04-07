@@ -91,6 +91,11 @@
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Test.fs" />
+    <Compile Include="Runtime\CommandBufferExtensions.fs" />
+    <Compile Include="Runtime\InstructionExtensions.fs" />
+    <Compile Include="Runtime\RenderTaskBase.fs" />
+    <Compile Include="Runtime\RenderTask.fs" />
+    <Compile Include="Runtime\Runtime.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
