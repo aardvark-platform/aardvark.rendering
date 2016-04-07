@@ -294,3 +294,18 @@ type SynchronizationExtensions private() =
     [<Extension>]
     static member CreateSemaphore(this : Device) = Semaphore.create this
     
+    [<Extension>]
+    static member Wait(this : Queue, sem : Semaphore) =
+        let mutable semHandle = sem.Handle
+        let mutable submitInfo =
+            VkSubmitInfo(
+                VkStructureType.SubmitInfo,
+                0n, 
+                1u, &&semHandle,
+                NativePtr.zero,
+                0u, NativePtr.zero,
+                0u, NativePtr.zero
+            )
+
+        VkRaw.vkQueueSubmit(this.Handle, 1u, &&submitInfo, VkFence.Null) 
+            |> check "vkQueueWaitSemaphore"

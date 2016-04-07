@@ -72,3 +72,8 @@ type QueueCommandExtensions private() =
     [<Extension>]
     static member SubmitTask(this : Queue, cmd : CommandBuffer[]) =
         QueueCommandExtensions.Submit(this, cmd) |> Async.StartAsTask
+
+    [<Extension>]
+    static member WaitIdle(this : Queue) =
+        VkRaw.vkQueueWaitIdle(this.Handle)
+            |> check "vkQueueWaitIdle"

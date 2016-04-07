@@ -565,21 +565,21 @@ module VkFormat =
         | Int of signed : Signedness * bits : int
         | Srgb of bits : int
         | Float of bits : int
-        | Undefined
+        | Unknown
 
     let channelType =
         let s = Signed
         let u = Unsigned
         lookupTable [
-            VkFormat.Undefined, Undefined
-            VkFormat.R4g4UnormPack8, Undefined
-            VkFormat.R4g4b4a4UnormPack16, Undefined
-            VkFormat.B4g4r4a4UnormPack16, Undefined
-            VkFormat.R5g6b5UnormPack16, Undefined
-            VkFormat.B5g6r5UnormPack16, Undefined
-            VkFormat.R5g5b5a1UnormPack16, Undefined
-            VkFormat.B5g5r5a1UnormPack16, Undefined
-            VkFormat.A1r5g5b5UnormPack16, Undefined
+            VkFormat.Undefined, Unknown
+            VkFormat.R4g4UnormPack8, Unknown
+            VkFormat.R4g4b4a4UnormPack16, Unknown
+            VkFormat.B4g4r4a4UnormPack16, Unknown
+            VkFormat.R5g6b5UnormPack16, Unknown
+            VkFormat.B5g6r5UnormPack16, Unknown
+            VkFormat.R5g5b5a1UnormPack16, Unknown
+            VkFormat.B5g5r5a1UnormPack16, Unknown
+            VkFormat.A1r5g5b5UnormPack16, Unknown
             VkFormat.R8Unorm, Norm(u, 8)
             VkFormat.R8Snorm, Norm(s, 8)
             VkFormat.R8Uscaled, Scaled(u, 8)
@@ -629,18 +629,18 @@ module VkFormat =
             VkFormat.A8b8g8r8UintPack32, Int(u, 8)
             VkFormat.A8b8g8r8SintPack32, Int(s, 8)
             VkFormat.A8b8g8r8SrgbPack32, Srgb(8)
-            VkFormat.A2r10g10b10UnormPack32, Undefined
-            VkFormat.A2r10g10b10SnormPack32, Undefined
-            VkFormat.A2r10g10b10UscaledPack32, Undefined
-            VkFormat.A2r10g10b10SscaledPack32, Undefined
-            VkFormat.A2r10g10b10UintPack32, Undefined
-            VkFormat.A2r10g10b10SintPack32, Undefined
-            VkFormat.A2b10g10r10UnormPack32, Undefined
-            VkFormat.A2b10g10r10SnormPack32, Undefined
-            VkFormat.A2b10g10r10UscaledPack32, Undefined
-            VkFormat.A2b10g10r10SscaledPack32, Undefined
-            VkFormat.A2b10g10r10UintPack32, Undefined
-            VkFormat.A2b10g10r10SintPack32, Undefined
+            VkFormat.A2r10g10b10UnormPack32, Unknown
+            VkFormat.A2r10g10b10SnormPack32, Unknown
+            VkFormat.A2r10g10b10UscaledPack32, Unknown
+            VkFormat.A2r10g10b10SscaledPack32, Unknown
+            VkFormat.A2r10g10b10UintPack32, Unknown
+            VkFormat.A2r10g10b10SintPack32, Unknown
+            VkFormat.A2b10g10r10UnormPack32, Unknown
+            VkFormat.A2b10g10r10SnormPack32, Unknown
+            VkFormat.A2b10g10r10UscaledPack32, Unknown
+            VkFormat.A2b10g10r10SscaledPack32, Unknown
+            VkFormat.A2b10g10r10UintPack32, Unknown
+            VkFormat.A2b10g10r10SintPack32, Unknown
             VkFormat.R16Unorm, Norm(u, 16)
             VkFormat.R16Snorm, Norm(s, 16)
             VkFormat.R16Uscaled, Scaled(u, 16)
@@ -693,15 +693,15 @@ module VkFormat =
             VkFormat.R64g64b64a64Uint, Int(u, 64)
             VkFormat.R64g64b64a64Sint, Int(s, 64)
             VkFormat.R64g64b64a64Sfloat, Float(64)
-            VkFormat.B10g11r11UfloatPack32, Undefined
-            VkFormat.E5b9g9r9UfloatPack32, Undefined
+            VkFormat.B10g11r11UfloatPack32, Unknown
+            VkFormat.E5b9g9r9UfloatPack32, Unknown
             VkFormat.D16Unorm, Norm(u, 16)
-            VkFormat.X8D24UnormPack32, Undefined
-            VkFormat.D32Sfloat, Undefined
+            VkFormat.X8D24UnormPack32, Unknown
+            VkFormat.D32Sfloat, Unknown
             VkFormat.S8Uint, Int(u,  8)
-            VkFormat.D16UnormS8Uint, Undefined
-            VkFormat.D24UnormS8Uint, Undefined
-            VkFormat.D32SfloatS8Uint, Undefined
+            VkFormat.D16UnormS8Uint, Unknown
+            VkFormat.D24UnormS8Uint, Unknown
+            VkFormat.D32SfloatS8Uint, Unknown
 
             VkFormat.Bc1RgbUnormBlock, Norm(u, 8)
             VkFormat.Bc1RgbSrgbBlock, Srgb(8)
@@ -1427,7 +1427,7 @@ type ImageExtensions private() =
         }
 
     [<Extension>]
-    static member ToLayout(this : Image, layout : VkImageLayout) =
+    static member ToLayout(this : Image, aspect : VkImageAspectFlags, layout : VkImageLayout) =
         Command.custom (fun s ->
             let mutable s = s
             if this.Layout <> layout then 
@@ -1442,7 +1442,7 @@ type ImageExtensions private() =
                         0u,
                         0u,
                         this.Handle,
-                        VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, uint32 this.MipMapLevels, 0u, uint32 this.ArraySize)
+                        VkImageSubresourceRange(aspect, 0u, uint32 this.MipMapLevels, 0u, uint32 this.ArraySize)
                     )
 
 
@@ -1463,7 +1463,9 @@ type ImageExtensions private() =
                 s
         )
 
-
+    [<Extension>]
+    static member ToLayout(this : Image, layout : VkImageLayout) =
+        ImageExtensions.ToLayout(this, VkImageAspectFlags.ColorBit, layout)
 
     [<Extension>]
     static member UploadLevel(this : Image, level : int, src : NativeVolumeRaw, srcFormat : VkFormat) =

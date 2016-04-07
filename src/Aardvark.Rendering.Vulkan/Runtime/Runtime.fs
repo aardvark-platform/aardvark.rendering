@@ -23,6 +23,9 @@ type Runtime(device : Device) as this =
     let context = new Context(device)
     let manager = new ResourceManager(this, context)
 
+    member x.Context = context
+    member x.Manager = manager
+
     override x.Release() =
         manager.Dispose()
         context.Dispose()
