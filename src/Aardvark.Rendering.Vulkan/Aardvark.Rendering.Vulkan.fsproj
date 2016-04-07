@@ -88,6 +88,7 @@
     <Compile Include="Resources\Pipeline.fs" />
     <Compile Include="Resources\DescriptorSet.fs" />
     <Compile Include="ResourceManager.fs" />
+    <Compile Include="PreparedRenderObject.fs" />
     <Compile Include="Test.fs" />
   </ItemGroup>
   <ItemGroup>

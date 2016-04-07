@@ -14,6 +14,11 @@ open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.Rendering.Vulkan
 
+type IResource =
+    inherit IAdaptiveObject
+    inherit IDisposable
+    abstract member AddRef : unit -> unit
+    abstract member Update : IAdaptiveObject -> Command<unit>
 
 [<AbstractClass>]
 type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) =
@@ -79,8 +84,13 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) =
             | None -> 
                 ()
 
+
     interface IDisposable with 
         member x.Dispose() = x.Dispose()
+
+    interface IResource with
+        member x.AddRef() = x.AddRef()
+        member x.Update(caller) = x.Update(caller)
                 
 and ResourceCache<'h when 'h : equality>() =
     let cache = ConcurrentDictionary<list<obj>, Resource<'h>>()
@@ -106,6 +116,10 @@ and ResourceCache<'h when 'h : equality>() =
  
     
 type ResourceManager(runtime : IRuntime, ctx : Context) =
+    inherit Resource(ctx)
+
+    let descriptorPool = ctx.CreateDescriptorPool (1 <<< 20)
+
     let bufferCache = ResourceCache<Buffer>()
     let bufferViewCache = ResourceCache<BufferView>()
     let imageCache = ResourceCache<Image>()
@@ -114,8 +128,25 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
     let shaderProgramCache = ResourceCache<ShaderProgram>()
     let pipelineCache = ResourceCache<Pipeline>()
     let uniformBufferCache = ResourceCache<UniformBuffer>()
+    let descriptorSetCache = ResourceCache<DescriptorSet>()
 
-    // buffer functions
+    override x.Release() =
+
+        ctx.Delete descriptorPool
+
+        bufferCache.Clear()
+        bufferViewCache.Clear()
+        imageCache.Clear()
+        imageViewCache.Clear()
+        samplerCache.Clear()
+        shaderProgramCache.Clear()
+        pipelineCache.Clear()
+        uniformBufferCache.Clear()
+        descriptorSetCache.Clear()
+
+    member x.Context = ctx
+
+    // buffers
 
     member x.CreateBuffer(data : IMod<IBuffer>, usage : VkBufferUsageFlags) =
         bufferCache.GetOrCreate(
@@ -223,7 +254,7 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
         x.CreateBuffer(data, VkBufferUsageFlags.IndexBufferBit)
 
 
-    // image functions
+    // textures
 
     member x.CreateImage(data : IMod<ITexture>) =
         imageCache.GetOrCreate(
@@ -368,7 +399,7 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
         x.CreateSampler(Mod.constant sampler)
 
 
-    // shader/pipeline functions
+    // shaders/pipelines
 
     member x.CreateShaderProgram(pass : RenderPass, surface : IMod<ISurface>) =
         shaderProgramCache.GetOrCreate(
@@ -501,12 +532,47 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
                                 writers |> List.iter (fun (_,w) -> w.Write(x, buffer.Storage.Pointer))
                                 buffer.IsDirty <- true
                                 do! ctx.Upload(buffer)
-                                ()
                             }
 
                         buffer, update
 
                     member x.Destroy h =
                         ctx.Delete h
+                }
+        )
+
+
+    // descriptor sets
+
+    member x.CreateDescriptorSet(layout : DescriptorSetLayout,
+                                 buffers : Map<int, Resource<UniformBuffer>>, 
+                                 images : Map<int, Resource<ImageView> * Resource<Sampler>>) =
+        descriptorSetCache.GetOrCreate(
+            [layout; buffers; images],
+            fun () ->
+                { new Resource<DescriptorSet>(descriptorSetCache) with
+                    member x.Create old =
+                        let desc =
+                            match old with
+                                | Some o -> o
+                                | None -> descriptorPool.CreateDescriptorSet(layout)
+                        
+
+                        let buffers = 
+                            buffers |> Map.map (fun _ r -> 
+                                UniformBuffer(r.Handle.GetValue(x))
+                            )
+
+                        let images = 
+                            images |> Map.map (fun _ (v,s) ->
+                                SampledImage(v.Handle.GetValue(x), s.Handle.GetValue(x))
+                            )
+                        
+                        desc.Update(Map.union buffers images)
+                        desc, Command.nop
+
+
+                    member x.Destroy h =
+                        descriptorPool.Delete h
                 }
         )
