@@ -31,56 +31,41 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
     member x.Sizes = sizes :> IMod<_>
 
     member x.Screenshot(size : V2i) =
-        failwithf "implement me"
-//        let desc = x.SwapChainDescription
-//
-//        let color =
-//            context.CreateImage(
-//                VkImageType.D2d, desc.ColorFormat, V3i(size.X, size.Y, 1), 1, 1, 1, 
-//                VkImageUsageFlags.ColorAttachmentBit, VkImageLayout.TransferSrcOptimal, VkImageTiling.Optimal
-//            )
-//
-//        let depth =
-//            context.CreateImage(
-//                VkImageType.D2d, desc.DepthFormat, V3i(size.X, size.Y, 1), 1, 1, 1, 
-//                VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.DepthStencilAttachmentOptimal, VkImageTiling.Optimal
-//            )
-//
-//        let colorView = device.CreateImageView2D(color, 0, 0)
-//        let depthView = device.CreateImageView2D(depth, 0, 0)
-//
-//        let fbo = 
-//            device.CreateFramebuffer(
-//                x.RenderPass, 
-//                [ colorView; depthView ]
-//            )
-//
-//        renderTask.Run(fbo) |> ignore
-//
-//        let pi = PixImage<byte>(Col.Format.RGBA, size)
-//
-//        let buffer = device.CreateBuffer(pi.Volume.Data.Length, VkBufferUsageFlags.TransferDstBit)
-//        let copy =
-//            Command.sequence [
-//                Command.copyImageToBuffer color VkImageAspectFlags.ColorBit buffer
-//            ]
-//
-//        copy |> Command.run device
-//
-//        let ptr = device.MapMemory(buffer.Memory)
-//
-//        System.Runtime.InteropServices.Marshal.Copy(ptr, pi.Volume.Data, 0, pi.Volume.Data.Length)
-//
-//        device.UnmapMemory(buffer.Memory)
-//
-//        device.Delete fbo
-//        device.Delete depthView
-//        device.Delete colorView
-//        device.Delete color
-//        device.Delete depth
-//        device.Delete buffer
-//
-//        pi
+        let desc = x.SwapChainDescription
+
+        let color =
+            context.CreateImage(
+                VkImageType.D2d, desc.ColorFormat, V3i(size.X, size.Y, 1), 1, 1, 1, 
+                VkImageUsageFlags.ColorAttachmentBit, VkImageLayout.TransferSrcOptimal, VkImageTiling.Optimal
+            )
+
+        let depth =
+            context.CreateImage(
+                VkImageType.D2d, desc.DepthFormat, V3i(size.X, size.Y, 1), 1, 1, 1, 
+                VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.DepthStencilAttachmentOptimal, VkImageTiling.Optimal
+            )
+
+        let colorView = context.CreateImageOutputView(color, 0, 0)
+        let depthView = context.CreateImageOutputView(depth, 0, 0)
+
+        let fbo = 
+            context.CreateFramebuffer(
+                x.RenderPass, 
+                [ colorView; depthView ]
+            )
+
+        renderTask.Run(fbo) |> ignore
+
+        let image = PixImage<byte>(Col.Format.BGRA, size)
+        color.Download(image) |> context.DefaultQueue.RunSynchronously
+        
+        context.Delete fbo
+        context.Delete depthView
+        context.Delete colorView
+        context.Delete color
+        context.Delete depth
+
+        image
 
     member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
 

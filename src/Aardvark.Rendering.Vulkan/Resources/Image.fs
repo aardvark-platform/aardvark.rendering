@@ -1002,7 +1002,7 @@ module ImageSubResource =
                     let info =
                         NativeVolumeInfo(
                             V3n(channels, -dy, 1n),
-                            V3n(nativeint size.X, nativeint size.Y, nativeint size.Z),
+                            V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
@@ -1088,7 +1088,7 @@ module ImageSubResource =
             let pixelSize = targetLayout.size / uint64 (size.X * size.Y) |> nativeint
             let channelSize = dst.Info.ElementSize
             let channels = pixelSize / channelSize
-            let dy = nativeint targetLayout.rowPitch / channelSize
+            let dy = nativeint size.X * channels 
             let mem = src.Image.Memory
 
             if dstFormat = src.Image.Format && mem.IsHostVisible then
@@ -1096,7 +1096,7 @@ module ImageSubResource =
                     let info =
                         NativeVolumeInfo(
                             V3n(channels, -dy, 1n),
-                            V3n(nativeint size.X, nativeint size.Y, nativeint size.Z),
+                            V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
@@ -1150,7 +1150,7 @@ module ImageSubResource =
                         let info =
                             NativeVolumeInfo(
                                 V3n(channels, -dy, 1n),
-                                V3n(nativeint size.X, nativeint size.Y, nativeint size.Z),
+                                V3n(nativeint size.X, nativeint size.Y, channels),
                                 channelSize
                             )
 
@@ -1182,7 +1182,7 @@ module ImageSubResource =
             let info =
                 src.VolumeInfo 
                     |> NativeVolumeInfo.ofVolumeInfo
-                    |> NativeVolumeInfo.scaled (Marshal.SizeOf src.PixFormat)
+                    |> NativeVolumeInfo.scaled (Marshal.SizeOf src.PixFormat.Type)
             let volume = gc.AddrOfPinnedObject() |> NativeVolumeRaw.ofNativeInt info
 
 
@@ -1200,7 +1200,7 @@ module ImageSubResource =
             let info =
                 dst.VolumeInfo 
                     |> NativeVolumeInfo.ofVolumeInfo
-                    |> NativeVolumeInfo.scaled (Marshal.SizeOf dst.PixFormat)
+                    |> NativeVolumeInfo.scaled (Marshal.SizeOf dst.PixFormat.Type)
             let volume = gc.AddrOfPinnedObject() |> NativeVolumeRaw.ofNativeInt info
 
             

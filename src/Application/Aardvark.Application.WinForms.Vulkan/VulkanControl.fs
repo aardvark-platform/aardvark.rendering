@@ -21,13 +21,6 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
     let mutable loaded = false
     let mutable recreateSwapChain = true
 
-//    override x.CreateParams =
-//        let cp = base.CreateParams
-//
-//        cp.ClassStyle <- 0x3
-//
-//        cp
-
     member x.UpdateSamples(newSamples : int) =
 
         if loaded && samples <> newSamples then
@@ -52,8 +45,6 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
     abstract member OnRenderFrame : RenderPass * Framebuffer -> unit
     default x.OnRenderFrame(_,_) = ()
 
-//    abstract member OnLoad : RenderPass -> unit
-//    default x.OnLoad(_) = ()
 
     override x.OnResize(e) =
         base.OnResize e

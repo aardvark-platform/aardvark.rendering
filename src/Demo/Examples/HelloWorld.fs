@@ -413,8 +413,9 @@ module HelloWorld =
         Aardvark.Init()
 
         use app = new VulkanApplication()
-        let win = app.CreateSimpleRenderWindow(8)
-   
+        let win = app.CreateSimpleRenderWindow(1)
+        win.Text <- "Aardvark rocks Vulkan \\o/"
+
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
@@ -451,6 +452,15 @@ module HelloWorld =
 
         let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.ManagedOptimized, sg.RenderObjects())
+
+        win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
+            let ctrl = win.Control.Implementation |> unbox<Aardvark.Application.WinForms.VulkanRenderControl>
+
+            let pi = ctrl.Screenshot (ctrl.Sizes.GetValue())
+
+            pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.jpg"
+
+        )
 
         win.RenderTask <- RenderTask.ofList [clear; task] //|> DefaultOverlays.withStatistics
         win.Run()
