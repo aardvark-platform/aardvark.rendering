@@ -7,6 +7,7 @@ open System.Runtime.CompilerServices
 
 type CommandState = 
     { 
+        isEmpty : bool
         buffer : CommandBuffer
         cleanupActions : list<unit -> unit>
     }
@@ -29,7 +30,12 @@ type BarrierKind =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Command =
 
-    
+    let nop = 
+        {
+            new Command<unit>() with
+                member x.Run(_) = ()
+        }
+
     let ofValue (v : 'a) =
         { new Command<'a>() with
              member x.GetResult(_) = v 
@@ -90,6 +96,8 @@ module Command =
                     0u, NativePtr.zero
                 )
 
+                s <- { s with isEmpty = false }
+
         }
 
     let sync =
@@ -106,6 +114,8 @@ module Command =
                     0u, NativePtr.zero,
                     0u, NativePtr.zero
                 )
+
+                s <- { s with isEmpty = false }
 
         }
 
@@ -132,6 +142,8 @@ module Command =
                     0u, NativePtr.zero
                 )
 
+                s <- { s with isEmpty = false }
+
         }
 
     let barrier (k : BarrierKind) =
@@ -152,11 +164,9 @@ module ``Command Builder`` =
                     member x.GetResult(s) =
                         res.GetResult(s)
             }
-//
-//        member x.Bind(m : Command<unit>, f : unit -> unit -> 'b) = 
-//            Command.combine m (Command.ofFunction (fun () -> f()()))
 
         member x.Return(v : 'a) = Command.ofValue v
+
         member x.ReturnFrom(v : unit -> 'a) = 
             { new Command<'a>() with
                 member x.GetResult(s) = v()
@@ -231,28 +241,27 @@ type CommandExtensions private() =
 
     [<Extension>]
     static member Run(this : Queue, pool : CommandPool, cmd : Command<'a>) =
+        let rec clean (l : list<unit -> unit>) =
+            match l with
+                | [] -> ()
+                | h::t ->
+                    clean t
+                    h()
+
         async {
             let buffer = pool.CreateCommandBuffer()
             buffer.Begin(false)
-            let mutable state = { buffer = buffer; cleanupActions = [] }
+            let mutable state = { isEmpty = true; buffer = buffer; cleanupActions = [] }
             cmd.Run(&state)
             buffer.End()
 
-            do! this.Submit [|state.buffer|]
-           
-            VkRaw.vkQueueWaitIdle(this.Handle) |> check "vkQueueWaitIdle"
+            if not state.isEmpty then
+                do! this.Submit [|state.buffer|]
+                
+
             buffer.Dispose()
-
-            let rec clean (l : list<unit -> unit>) =
-                match l with
-                    | [] -> ()
-                    | h::t ->
-                        clean t
-                        h()
-
             clean state.cleanupActions
-            let res = cmd.GetResult(state)
-            return res
+            return cmd.GetResult(state)
         }
 
     [<Extension>]

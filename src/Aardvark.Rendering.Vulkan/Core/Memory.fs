@@ -312,11 +312,13 @@ module DevicePtr =
                 src, dst, 1u, &&copy
             )
 
+
+
             let cleanup() = 
                 VkRaw.vkDestroyBuffer(device.Handle, src, NativePtr.zero)
                 VkRaw.vkDestroyBuffer(device.Handle, dst, NativePtr.zero)
 
-            { s with cleanupActions = cleanup::s.cleanupActions }
+            { s with cleanupActions = cleanup::s.cleanupActions; isEmpty = false }
         )
 
 

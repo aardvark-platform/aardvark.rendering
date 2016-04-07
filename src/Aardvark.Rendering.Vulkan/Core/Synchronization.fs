@@ -151,7 +151,7 @@ module Event =
                     VkPipelineStageFlags.TopOfPipeBit
                 )
 
-                s
+                { s with isEmpty = false }
             )
             
         [<CompiledName("Reset")>] 
@@ -163,7 +163,7 @@ module Event =
                     VkPipelineStageFlags.TopOfPipeBit
                 )
 
-                s
+                { s with isEmpty = false }
             )
             
         [<CompiledName("WaitAll")>] 
@@ -186,7 +186,10 @@ module Event =
                         0u, NativePtr.zero
                     )
 
-                s
+                    { s with isEmpty = false }
+
+                else
+                    s
             )
             
         [<CompiledName("Wait")>] 
@@ -204,7 +207,7 @@ module Event =
                     0u, NativePtr.zero
                 )
 
-                s
+                { s with isEmpty = false }
             )
 
 

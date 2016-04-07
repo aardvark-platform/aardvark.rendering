@@ -21,6 +21,8 @@ type Buffer =
         val mutable public Flags : VkBufferUsageFlags
         member x.Device = x.Context.Device
 
+        interface IBuffer
+
         new(ctx, handle, fmt, mem, flags) = { Context = ctx; Handle = handle; Format = fmt; Memory = mem; Size = DevicePtr.size mem; Flags = flags }
     end
 
@@ -67,6 +69,10 @@ type ContextBufferExtensions private() =
                     | (true, fmt) -> fmt
                     | _ -> VkFormat.Undefined
             this.Format <- fmt  
+
+    [<Extension>]
+    static member GetVertexInputFormat(t : Type) =
+        typeFormats.[t]
 
     [<Extension>]
     static member CreateBuffer (this : Context, size : int64, flags : VkBufferUsageFlags) =

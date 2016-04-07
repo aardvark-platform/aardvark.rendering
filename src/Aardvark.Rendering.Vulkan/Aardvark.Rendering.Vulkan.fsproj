@@ -74,10 +74,10 @@
     <Compile Include="Core\CommandBuffer.fs" />
     <Compile Include="Core\Queue.fs" />
     <Compile Include="Core\Commands.fs" />
+    <Compile Include="Core\Synchronization.fs" />
     <Compile Include="Core\Memory.fs" />
     <Compile Include="Core\RenderPass.fs" />
     <Compile Include="Core\ShaderProgram.fs" />
-    <Compile Include="Core\Synchronization.fs" />
     <Compile Include="Core\Context.fs" />
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\UniformBuffer.fs" />
@@ -87,6 +87,7 @@
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\Pipeline.fs" />
     <Compile Include="Resources\DescriptorSet.fs" />
+    <Compile Include="ResourceManager.fs" />
     <Compile Include="Test.fs" />
   </ItemGroup>
   <ItemGroup>

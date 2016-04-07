@@ -792,7 +792,7 @@ module ImageSubResource =
 
             VkRaw.vkCmdCopyImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&copy)
 
-            s
+            { s with isEmpty = false }
         )
 
     let blit (filter : VkFilter) (src : ImageSubResource) (dst : ImageSubResource) =
@@ -828,7 +828,7 @@ module ImageSubResource =
                 filter
             )
 
-            s
+            { s with isEmpty = false }
         )
 
     let uploadRaw (srcFormat : VkFormat) (src : NativeVolumeRaw) (dst : ImageSubResource) =
@@ -1128,47 +1128,84 @@ module ImageSubResource =
         let checkDevil (msg : string) (b : bool) =
             if not b then failf "%s" msg
 
+        let load (src : string) : NativeVolumeRaw * VkFormat * IDisposable =
+            let handle = IL.GenImage()
+            try
+                IL.BindImage(handle)
+                IL.LoadImage(src) |> checkDevil "ilLoadImage"
+
+                let fmt = IL.GetFormat()
+                let dataType = IL.GetDataType()
+                let width = IL.GetInteger(IntName.ImageWidth) |> nativeint
+                let height = IL.GetInteger(IntName.ImageHeight) |> nativeint
+                let channels = IL.GetInteger(IntName.ImageChannels) |> nativeint
+
+                // TODO: Vulkan does not seem to support three-channel images properly atm.
+                //       so we're converting them to 4 channels currently.
+                let channels =
+                    if channels = 3n then 
+                        IL.ConvertImage(ChannelFormat.BGRA, dataType) |> checkDevil "ilConvertImage"
+                        4n
+                    else
+                        channels
+
+                let ptr = IL.GetData()
+
+                let info =
+                    NativeVolumeInfo(
+                        V3n(channels, width * channels, 1n),
+                        V3n(width, height, 1n),
+                        typeSize dataType
+                    )
+
+                let v = NativeVolumeRaw.ofNativeInt info ptr
+
+                let dataFormat = dataFormat (fmt, dataType)
+
+                let release = 
+                    { new IDisposable with
+                        member x.Dispose() =
+                            IL.BindImage(0)
+                            IL.DeleteImage(handle)
+                    }
+
+                v, dataFormat, release
+
+            finally
+                IL.BindImage(0)
+                IL.DeleteImage(handle)
+
         let upload (src : string) (dst : ImageSubResource) =
             command {
-                
-                let handle = IL.GenImage()
-                try
-                    IL.BindImage(handle)
-                    IL.LoadImage(src) |> checkDevil "ilLoadImage"
-
-                    let fmt = IL.GetFormat()
-                    let dataType = IL.GetDataType()
-                    let width = IL.GetInteger(IntName.ImageWidth) |> nativeint
-                    let height = IL.GetInteger(IntName.ImageHeight) |> nativeint
-                    let channels = IL.GetInteger(IntName.ImageChannels) |> nativeint
-
-                    // TODO: Vulkan does not seem to support three-channel images properly atm.
-                    //       so we're converting them to 4 channels currently.
-                    let channels =
-                        if channels = 3n then 
-                            IL.ConvertImage(ChannelFormat.BGRA, dataType) |> checkDevil "ilConvertImage"
-                            4n
-                        else
-                            channels
-
-                    let ptr = IL.GetData()
-
-                    let info =
-                        NativeVolumeInfo(
-                            V3n(channels, width * channels, 1n),
-                            V3n(width, height, 1n),
-                            typeSize dataType
-                        )
-
-                    let v = NativeVolumeRaw.ofNativeInt info ptr
-
-                    let dataFormat = dataFormat (fmt, dataType)
-                    do! uploadRaw dataFormat v dst
-
-                finally
-                    IL.BindImage(0)
-                    IL.DeleteImage(handle)
+                let volume, dataFormat, release = load src
+                try do! uploadRaw dataFormat volume dst
+                finally release.Dispose()
             }
+
+    let internal loadFile (file : string) =
+        try DevIL.load file
+        with _ ->
+            warnf "DevIL failed to load file %A (using PixImage)" file
+            let image = 
+                PixImage.Create(
+                    file, 
+                    PixLoadOptions.Default
+                )
+
+            let gc = GCHandle.Alloc(image.Array, GCHandleType.Pinned)
+            let volume =
+                gc.AddrOfPinnedObject()
+                    |> NativeVolumeRaw.ofNativeInt (NativeVolumeInfo.ofVolumeInfo image.VolumeInfo) 
+
+            let dataFormat = VkFormat.toUploadFormat image.PixFormat
+
+            let release =
+                { new IDisposable with
+                    member x.Dispose() =
+                        gc.Free()
+                }
+
+            volume, dataFormat, release
 
     let uploadFile (file : string) (dst : ImageSubResource) =
         if System.IO.File.Exists file then
@@ -1189,6 +1226,7 @@ module ImageSubResource =
             }
         else
             failf "cannot load image from %A" file
+
 
 [<AutoOpen>]
 module ``VkAccessFlags Extensions`` =
@@ -1384,7 +1422,7 @@ type ImageExtensions private() =
                             1u, &&barrier
                         )
 
-                        s
+                        { s with isEmpty = false }
                     )
         }
 
@@ -1420,7 +1458,7 @@ type ImageExtensions private() =
 
                 let clean() = this.Layout <- layout
 
-                { s with cleanupActions = clean :: s.cleanupActions }
+                { s with cleanupActions = clean :: s.cleanupActions; isEmpty = false }
             else
                 s
         )

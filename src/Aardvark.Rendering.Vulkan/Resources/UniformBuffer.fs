@@ -518,7 +518,7 @@ type UniformBufferExtensions private() =
             if ub.IsDirty then
                 VkRaw.vkCmdUpdateBuffer(s.buffer.Handle, ub.Handle, 0UL, uint64 ub.Storage.Size, NativePtr.ofNativeInt ub.Storage.Pointer)
                 let updated() = ub.IsDirty <- false
-                { s with cleanupActions = updated::s.cleanupActions }
+                { s with cleanupActions = updated::s.cleanupActions; isEmpty = false }
             else
                 s
         )
