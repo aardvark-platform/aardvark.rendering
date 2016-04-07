@@ -51,6 +51,7 @@ type ShaderProgram =
     class
         val mutable public Surface : BackendSurface
         val mutable public Shaders : list<Shader>
+        val mutable public RenderPass : RenderPass
         val mutable public DescriptorSetLayouts : DescriptorSetLayout[]
         val mutable public PipelineLayout : PipelineLayout
         val mutable public Inputs : Parameter[]
@@ -104,7 +105,7 @@ type ShaderProgram =
 
             Log.stop()
 
-        new(surf, shaders, dsl, pl, ip, op) = { Surface = surf; Shaders = shaders; DescriptorSetLayouts = dsl; PipelineLayout = pl; Inputs = ip; Outputs = op }
+        new(surf, shaders, pass, dsl, pl, ip, op) = { Surface = surf; Shaders = shaders; RenderPass = pass; DescriptorSetLayouts = dsl; PipelineLayout = pl; Inputs = ip; Outputs = op }
 
     end
 
@@ -351,7 +352,7 @@ type ShaderProgramExtensions private() =
         // create a pipeline layout from the given DescriptorSetLayouts
         let pipelineLayout = ShaderProgramExtensions.CreatePipelineLayout(this, descriptorSetLayouts)
 
-        ShaderProgram(BackendSurface("", Dictionary.empty), shaders, descriptorSetLayouts, pipelineLayout, inputs, outputs)
+        ShaderProgram(BackendSurface("", Dictionary.empty), shaders, renderPass, descriptorSetLayouts, pipelineLayout, inputs, outputs)
 
 
     [<Extension>]
