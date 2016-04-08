@@ -511,9 +511,9 @@ module OpenGl =
         let CullFace  = getProcAddress "glCullFace"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendFunc.xml
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendFuncSeparate.xml
         /// </summary>
-        let BlendFuncSeparate  = getProcAddress "glBlendFunc"
+        let BlendFuncSeparate  = getProcAddress "glBlendFuncSeparate"
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBlendEquationSeparate.xml
