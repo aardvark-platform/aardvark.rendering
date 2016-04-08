@@ -202,7 +202,8 @@ type Runtime(device : Device) as this =
 
         // buffers
 
-        member x.CreateMappedBuffer() = failf "not implemented"
+        member x.CreateMappedBuffer() =
+            new MappedBuffer(context) :> IMappedBuffer
 
         member x.PrepareBuffer (b) =
             context.CreateBuffer(None, b, VkBufferUsageFlags.VertexBufferBit) :> IBackendBuffer

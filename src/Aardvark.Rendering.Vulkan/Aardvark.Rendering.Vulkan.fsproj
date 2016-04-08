@@ -88,6 +88,7 @@
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\Pipeline.fs" />
     <Compile Include="Resources\DescriptorSet.fs" />
+    <Compile Include="Resources\MappedBuffer.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Test.fs" />

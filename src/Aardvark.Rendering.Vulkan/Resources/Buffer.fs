@@ -164,6 +164,30 @@ type ContextBufferExtensions private() =
             VkRaw.vkDestroyBuffer(this.Device.Handle, buffer.Handle, NativePtr.zero)
             buffer.Handle <- VkBuffer.Null
 
+    [<Extension>]
+    static member CopyTo(this : Buffer, dst : Buffer, offset : int64, size : int64) =
+        Command.custom (fun s ->
+            let mutable s = s
+
+            let mutable copy =
+                VkBufferCopy(
+                    0UL,
+                    uint64 offset,
+                    uint64 size
+                )
+
+            VkRaw.vkCmdCopyBuffer(s.buffer.Handle, this.Handle, dst.Handle, 1u, &&copy)
+
+            { s with isEmpty = false }
+        )
+
+
+    [<Extension>]
+    static member CopyTo(this : Buffer, dst : Buffer) =
+        ContextBufferExtensions.CopyTo(this, dst, 0L, min this.Size dst.Size)
+
+
+
 
     [<Extension>]
     static member Upload (this : Buffer, data : Array, start : int, count : int) =
