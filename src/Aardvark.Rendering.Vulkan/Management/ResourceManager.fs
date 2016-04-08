@@ -313,33 +313,45 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
     // textures
 
     member x.CreateImage(data : IMod<ITexture>) =
-        imageCache.GetOrCreate(
-            [data],
-            fun () ->
-                let mutable created = false
-                { new Resource<Image>(imageCache) with
-                    member x.Create old =
-                        let tex = data.GetValue(x)
+        match data with
+            | :? IOutputMod<ITexture> as o ->
+                o.Acquire()
 
-                        match tex with
-                            | :? Image as t ->
-                                if created then 
-                                    old |> Option.iter ctx.Delete
-                                    created <- false
-                                t, Command.nop
+                { new Resource<Image>(Unchecked.defaultof<_>) with
+                    member x.Create _ =
+                        let img = o.GetValue(x) |> unbox<Image>
+                        img, Command.nop
+                    member x.Destroy _ = o.Release()
+                }
 
-                            | tex ->
-                                if created then old |> Option.iter ctx.Delete
-                                else created <- true
+            | _ ->
+                imageCache.GetOrCreate(
+                    [data],
+                    fun () ->
+                        let mutable created = false
+                        { new Resource<Image>(imageCache) with
+                            member x.Create old =
+                                let tex = data.GetValue(x)
 
-                                ctx.CreateImageCommand(tex)
+                                match tex with
+                                    | :? Image as t ->
+                                        if created then 
+                                            old |> Option.iter ctx.Delete
+                                            created <- false
+                                        t, Command.nop
+
+                                    | tex ->
+                                        if created then old |> Option.iter ctx.Delete
+                                        else created <- true
+
+                                        ctx.CreateImageCommand(tex)
                                     
 
-                    member x.Destroy h =
-                        if created then ctx.Delete h
-                        created <- false
-                }
-        )
+                            member x.Destroy h =
+                                if created then ctx.Delete h
+                                created <- false
+                        }
+                )
 
     member x.CreateImageView(image : Resource<Image>) =
         imageViewCache.GetOrCreate(
