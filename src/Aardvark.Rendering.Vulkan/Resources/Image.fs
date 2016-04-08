@@ -10,45 +10,6 @@ open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 
-type Image =
-    class 
-        val mutable public Context : Context
-        val mutable public Memory : deviceptr
-        val mutable public Handle : VkImage
-
-        val mutable public ImageType : VkImageType
-        val mutable public Format : VkFormat
-
-        val mutable public Size : V3i
-        val mutable public MipMapLevels : int
-        val mutable public ArraySize : int
-        val mutable public Samples : int
-        val mutable public Usage : VkImageUsageFlags
-        val mutable public Layout : VkImageLayout
-
-        new(ctx,mem,h,t,f,s,m,a,sam,u,l) = { Context = ctx; Memory = mem; Handle = h; ImageType = t; Format = f; Size = s; MipMapLevels = m; ArraySize = a; Samples = sam; Usage = u; Layout = l }
-    end
-
-type ImageSubResource =
-    struct
-        val mutable public Image : Image
-        val mutable public MipMapLevel : int
-        val mutable public ArrayRange : Range1i
-        val mutable public Offset : V3i
-
-
-        member x.Size =
-            match x.MipMapLevel with
-                | 0 -> x.Image.Size - x.Offset
-                | l -> (x.Image.Size / (1 <<< l)) - x.Offset
-
-        new(img, mml, arr, off) = { Image = img; MipMapLevel = mml; ArrayRange = arr; Offset = off }
-        new(img, mml, off) = { Image = img; MipMapLevel = mml; ArrayRange = Range1i(0,0); Offset = off }
-        new(img, mml) = { Image = img; MipMapLevel = mml; ArrayRange = Range1i(0,0); Offset = V3i.Zero }
-        new(img, mml, arr) = { Image = img; MipMapLevel = mml; ArrayRange = arr; Offset = V3i.Zero }
-        new(img) = { Image = img; MipMapLevel = 0; ArrayRange = Range1i(0,0); Offset = V3i.Zero }
-
-    end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkFormat =
@@ -910,6 +871,76 @@ module VkFormat =
             VkFormat.Astc1212SrgbBlock, Srgb(8)
         ]
 
+
+type Image =
+    class 
+        val mutable public Context : Context
+        val mutable public Memory : deviceptr
+        val mutable public Handle : VkImage
+
+        val mutable public ImageType : VkImageType
+        val mutable public Format : VkFormat
+        val mutable public Dimension : TextureDimension
+
+        val mutable public Size : V3i
+        val mutable public MipMapLevels : int
+        val mutable public ArraySize : int
+        val mutable public Samples : int
+        val mutable public Usage : VkImageUsageFlags
+        val mutable public Layout : VkImageLayout
+
+        interface IBackendTexture with
+            member x.Count = x.ArraySize
+            member x.MipMapLevels = x.MipMapLevels
+            member x.Samples = x.Samples
+            member x.Size = x.Size
+            member x.WantMipMaps = x.MipMapLevels > 1
+            member x.Dimension =
+                match x.ImageType with
+                    | VkImageType.D1d   -> TextureDimension.Texture1D
+                    | VkImageType.D2d   -> TextureDimension.Texture2D
+                    | _                 -> TextureDimension.Texture3D
+
+            member x.Format =
+                VkFormat.toTextureFormat x.Format
+
+            member x.Handle = x.Handle :> obj
+
+        interface IFramebufferOutput with
+            member x.Format = VkFormat.toRenderbufferFormat x.Format
+            member x.Samples = x.Samples
+            member x.Size = x.Size.XY
+
+        interface IRenderbuffer with
+            member x.Handle = x.Handle :> obj
+
+        new(ctx,mem,h,t,f, dim,s,m,a,sam,u,l) = { Context = ctx; Memory = mem; Handle = h; ImageType = t; Format = f; Dimension = dim; Size = s; MipMapLevels = m; ArraySize = a; Samples = sam; Usage = u; Layout = l }
+    end
+
+type ImageSubResource =
+    struct
+        val mutable public Image : Image
+        val mutable public MipMapLevel : int
+        val mutable public ArrayRange : Range1i
+        val mutable public Offset : V3i
+
+
+        member x.Size =
+            match x.MipMapLevel with
+                | 0 -> x.Image.Size - x.Offset
+                | l -> (x.Image.Size / (1 <<< l)) - x.Offset
+
+        new(img, mml, arr, off) = { Image = img; MipMapLevel = mml; ArrayRange = arr; Offset = off }
+        new(img, mml, off) = { Image = img; MipMapLevel = mml; ArrayRange = Range1i(0,img.ArraySize-1); Offset = off }
+        new(img, mml) = { Image = img; MipMapLevel = mml; ArrayRange = Range1i(0,img.ArraySize-1); Offset = V3i.Zero }
+        new(img, mml, arr) = { Image = img; MipMapLevel = mml; ArrayRange = arr; Offset = V3i.Zero }
+        new(img) = { Image = img; MipMapLevel = 0; ArrayRange = Range1i(0,img.ArraySize-1); Offset = V3i.Zero }
+
+    end
+
+
+
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ImageSubResource =
 
@@ -1056,6 +1087,7 @@ module ImageSubResource =
                         ctx, mem, tmp, 
                         VkImageType.D2d, 
                         srcFormat,
+                        TextureDimension.Texture2D,
                         size, 1, 1, 1, 
                         VkImageUsageFlags.TransferSrcBit,
                         VkImageLayout.General
@@ -1138,6 +1170,7 @@ module ImageSubResource =
                         ctx, mem, tmp, 
                         VkImageType.D2d, 
                         dstFormat,
+                        TextureDimension.Texture2D,
                         size, 1, 1, 1, 
                         VkImageUsageFlags.TransferDstBit,
                         VkImageLayout.General
@@ -1465,7 +1498,7 @@ type ImageSubResourceExtensions private() =
 type ImageExtensions private() =
     
     [<Extension>]
-    static member CreateImage(this : Context, imageType : VkImageType, format : VkFormat, 
+    static member CreateImage(this : Context, imageType : VkImageType, format : VkFormat, dim : TextureDimension,
                               size : V3i, mipLevels : int, arraySize : int, samples : int, 
                               usage : VkImageUsageFlags, layout : VkImageLayout, tiling : VkImageTiling) =
 
@@ -1499,7 +1532,155 @@ type ImageExtensions private() =
         VkRaw.vkBindImageMemoryPtr(this.Device.Handle, img, mem)
             |> check "vkBindImageMemory"
 
-        Image(this, mem, img, imageType, format, size, mipLevels, arraySize, samples, usage, layout)
+        Image(this, mem, img, imageType, format, dim, size, mipLevels, arraySize, samples, usage, layout)
+
+    [<Extension>]
+    static member CreateImageCommand(this : Context, tex : ITexture) =
+        match tex with
+            | :? Image as t ->
+                failf "cannot prepare Image"
+
+            | :? FileTexture as ft ->
+                let vol, fmt, release = ImageSubResource.loadFile ft.FileName
+                                    
+                let size = V2i(int vol.Info.Size.X, int vol.Info.Size.Y)
+                let levels =
+                    if ft.TextureParams.wantMipMaps then 
+                        Fun.Log2(max size.X size.Y |> float) |> ceil |> int
+                    else 
+                        1
+
+                if ft.TextureParams.wantSrgb || ft.TextureParams.wantCompressed then
+                    warnf "compressed / srgb textures not implemented atm."
+
+        
+                let img =
+                    ImageExtensions.CreateImage2D(
+                        this,
+                        fmt,
+                        size,
+                        levels,
+                        VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit
+                    )
+
+                let update =
+                    command {
+                        do! ImageSubResource(img).Upload(vol, fmt)
+                        do! Command.barrier MemoryTransfer
+
+                        if ft.TextureParams.wantMipMaps then
+                            do! ImageExtensions.GenerateMipMaps(img)
+                            
+                        do! Command.barrier MemoryTransfer
+                        do! ImageExtensions.ToLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
+                    }
+
+                img, update
+
+            | :? PixTexture2d as pt ->
+
+                let data = pt.PixImageMipMap
+                let l0 = data.[0]
+
+                let generate, levels =
+                    if pt.TextureParams.wantMipMaps then
+                        if data.LevelCount > 1 then 
+                            false, data.LevelCount
+                        else 
+                            true, Fun.Log2(max l0.Size.X l0.Size.Y |> float) |> ceil |> int
+                    else 
+                        false, 1
+
+                let format =
+                    VkFormat.ofPixFormat l0.PixFormat pt.TextureParams
+
+                let img =
+                    ImageExtensions.CreateImage2D(
+                        this,
+                        format,
+                        l0.Size,
+                        levels,
+                        VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit
+                    )
+
+                let update =
+                    command {
+                        do! ImageExtensions.UploadLevel(img, 0, l0)
+
+                        if generate then
+                            do! Command.barrier MemoryTransfer
+                            do! ImageExtensions.GenerateMipMaps(img)
+                        else
+                            for l in 1 .. data.LevelCount-1 do
+                                do! ImageExtensions.UploadLevel(img, l, data.[l])
+
+                        do! Command.barrier MemoryTransfer
+                        do! ImageExtensions.ToLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
+                    }
+
+          
+                img, update
+
+            | :? PixTextureCube as pt ->
+                
+                let data = pt.PixImageCube
+                let x = data.[CubeSide.PositiveX]
+                let l0 = x.[0]
+
+                let generate, levels =
+                    if pt.TextureParams.wantMipMaps then
+                        if x.LevelCount > 1 then 
+                            false, x.LevelCount
+                        else 
+                            true, Fun.Log2(max l0.Size.X l0.Size.Y |> float) |> ceil |> int
+                    else 
+                        false, 1
+
+                let format =
+                    VkFormat.ofPixFormat l0.PixFormat pt.TextureParams
+
+                let img =
+                    ImageExtensions.CreateImageCube(
+                        this,
+                        format,
+                        l0.Size,
+                        levels,
+                        VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit
+                    )
+
+                let update =
+                    command {
+                        for fi in 0..5 do
+                            
+                            let face = unbox<CubeSide> fi
+                            let faceData = data.[face]
+
+                            do! ImageExtensions.UploadLevel(img, 0, faceData.[0])
+
+                            if not generate then
+                                for l in 1 .. faceData.LevelCount-1 do
+                                    do! ImageExtensions.UploadLevel(img, l, faceData.[l])
+
+                        if generate then
+                            do! Command.barrier MemoryTransfer
+                            do! ImageExtensions.GenerateMipMaps(img)
+
+                        do! Command.barrier MemoryTransfer
+                        do! ImageExtensions.ToLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
+                    }
+
+          
+                img, update
+
+            | t ->
+                failf "unknown texture type: %A" t
+
+    [<Extension>]
+    static member CreateImage(this : Context, tex : ITexture) =
+        let img, update = ImageExtensions.CreateImageCommand(this, tex)
+        update.RunSynchronously this.DefaultQueue
+        img
+
 
     [<Extension>]
     static member Delete(this : Context, img : Image) =
@@ -1514,6 +1695,7 @@ type ImageExtensions private() =
             this,
             VkImageType.D2d,
             format,
+            TextureDimension.Texture2D,
             V3i(size.X, size.Y, 1),
             mipLevels,
             1, 1, 
@@ -1528,6 +1710,7 @@ type ImageExtensions private() =
             this,
             VkImageType.D3d,
             format,
+            TextureDimension.Texture3D,
             size,
             mipLevels,
             1, 1, 
@@ -1535,6 +1718,22 @@ type ImageExtensions private() =
             VkImageLayout.ShaderReadOnlyOptimal,
             VkImageTiling.Optimal
         )
+ 
+    [<Extension>]
+    static member CreateImageCube(this : Context, format : VkFormat, size : V2i, mipLevels : int, usage : VkImageUsageFlags) =
+        ImageExtensions.CreateImage(
+            this,
+            VkImageType.D3d,
+            format,
+            TextureDimension.TextureCube,
+            V3i(size.X, size.Y, 1),
+            mipLevels,
+            6, 1, 
+            usage,
+            VkImageLayout.ShaderReadOnlyOptimal,
+            VkImageTiling.Optimal
+        )
+    
     
     [<Extension>]
     static member GenerateMipMaps(this : Image) =

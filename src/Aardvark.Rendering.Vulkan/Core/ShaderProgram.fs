@@ -57,6 +57,26 @@ type ShaderProgram =
         val mutable public Inputs : Parameter[]
         val mutable public Outputs : Parameter[]
 
+        interface IBackendSurface with
+            member x.Handle = null
+            member x.Uniforms = 
+                x.DescriptorSetLayouts 
+                    |> Seq.collect (fun a -> a.Descriptors) 
+                    |> Seq.collect(fun d ->
+                        match d.Parameter.paramType with
+                            | ShaderType.Ptr(_, ShaderType.Struct(a,fields)) ->
+                                fields |> Seq.map (fun (t,n,_) ->
+                                    n, ShaderType.toType t
+                                )
+                            | _ ->
+                                Seq.empty
+                       )
+                    |> Seq.toList
+            member x.Inputs = x.Inputs |> Array.toList |> List.map (fun p -> p.paramName, ShaderType.toType p.paramType)
+            member x.Outputs = x.Outputs |> Array.toList |> List.map (fun p -> p.paramName, ShaderType.toType p.paramType)
+            member x.SamplerStates = x.Surface.SamplerStates
+            member x.UniformGetters = x.Surface.Uniforms |> SymDict.map (fun _ a -> a :> obj)
+
         member x.PrintSignature() =
             
             Log.start "program layout"

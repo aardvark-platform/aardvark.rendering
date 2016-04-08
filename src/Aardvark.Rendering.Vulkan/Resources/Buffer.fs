@@ -21,7 +21,9 @@ type Buffer =
         val mutable public Flags : VkBufferUsageFlags
         member x.Device = x.Context.Device
 
-        interface IBuffer
+        interface IBackendBuffer with
+            member x.Handle = x.Handle :> obj
+
 
         new(ctx, handle, fmt, mem, flags) = { Context = ctx; Handle = handle; Format = fmt; Memory = mem; Size = DevicePtr.size mem; Flags = flags }
     end
@@ -108,6 +110,52 @@ type ContextBufferExtensions private() =
             |> check "vkBindBufferMemory"
 
         Buffer(this, buffer, VkFormat.Undefined, memory, flags)
+
+    [<Extension>]
+    static member CreateBufferCommand (this : Context, old : Option<Buffer>, content : IBuffer, usage : VkBufferUsageFlags) =
+        match content with
+            | :? ArrayBuffer as ab ->
+                let data = ab.Data
+                let es = Marshal.SizeOf (data.GetType().GetElementType())
+                let size = data.Length * es |> int64
+                                            
+                match old with
+                    | Some old when old.Size = size ->
+                        old, ContextBufferExtensions.Upload(old, data, 0, data.Length)
+
+                    | _ ->
+                        old |> Option.iter (fun b -> ContextBufferExtensions.Delete(this, b))
+
+                        let b = ContextBufferExtensions.CreateBuffer(this, size, usage)
+                        b, ContextBufferExtensions.Upload(b, data, 0, data.Length)
+                                
+            | :? INativeBuffer as nb ->
+                let size = nb.SizeInBytes |> int64
+
+                let upload (b : Buffer) =
+                    command {
+                        let ptr = nb.Pin()
+                        try do! ContextBufferExtensions.Upload(b, ptr, size)
+                        finally nb.Unpin()
+                    }
+
+                match old with
+                    | Some old when old.Size = size ->   
+                        old, upload old
+
+                    | _ ->
+                        old |> Option.iter (fun b -> ContextBufferExtensions.Delete(this, b))
+
+                        let b = ContextBufferExtensions.CreateBuffer(this, size, usage)
+                        b, upload b
+            | _ ->
+                failf "unknown buffer type: %A" content
+
+    [<Extension>]
+    static member CreateBuffer (this : Context, old : Option<Buffer>, content : IBuffer, usage : VkBufferUsageFlags) =
+        let b, cmd = ContextBufferExtensions.CreateBufferCommand(this, old, content, usage)
+        cmd.RunSynchronously this.DefaultQueue
+        b
 
     [<Extension>]
     static member Delete (this : Context, buffer : Buffer) =

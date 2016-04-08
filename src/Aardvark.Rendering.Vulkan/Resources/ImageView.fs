@@ -264,13 +264,18 @@ type ImageViewExtensions private() =
     [<Extension>]
     static member CreateImageView(this : Context, image : Image) =
         let viewType =
-            match image.ImageType with
-                | VkImageType.D1d ->
+            match image.Dimension with
+                | TextureDimension.Texture1D ->
                     if image.ArraySize > 1 then VkImageViewType.D1dArray
                     else VkImageViewType.D1d
-                | VkImageType.D2d ->
+
+                | TextureDimension.Texture2D ->
                     if image.ArraySize > 1 then VkImageViewType.D2dArray
                     else VkImageViewType.D2d
+
+                | TextureDimension.TextureCube ->
+                    if image.ArraySize > 6 then VkImageViewType.CubeArray
+                    else VkImageViewType.Cube
 
                 | _ ->
                     VkImageViewType.D3d

@@ -145,6 +145,7 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
     let pipelineCache = ResourceCache<Pipeline>(ctx)
     let uniformBufferCache = ResourceCache<UniformBuffer>(ctx)
     let descriptorSetCache = ResourceCache<DescriptorSet>(ctx)
+    let renderPassCache = ResourceCache<RenderPass>(ctx)
 
     override x.Release() =
 
@@ -162,6 +163,49 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
 
     member x.Context = ctx
     member x.Runtime = runtime
+
+    // render passes
+
+    member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
+        renderPassCache.GetOrCreate(
+            [signature], 
+            fun self ->
+                let r = ref 0
+
+                let signature, depth =
+                    match Map.tryFind DefaultSemantic.Depth signature with
+                        | Some d -> (Map.remove DefaultSemantic.Depth signature), Some d
+                        | _ -> signature, None
+
+                { new Resource<RenderPass>(renderPassCache) with
+                    member x.Create _ = 
+                        
+                        let attachments =
+                            signature
+                                |> Map.toSeq
+                                |> Seq.map (fun (sem, a) ->
+                                    sem, {
+                                        format = VkFormat.ofRenderbufferFormat a.format
+                                        samples = a.samples
+                                        clearMask = ClearMask.None
+                                    }
+                                )
+                                |> Seq.toArray
+
+                        let depth =
+                            match depth with
+                                | Some d -> Some { format = VkFormat.ofRenderbufferFormat d.format; samples = d.samples; clearMask = ClearMask.None }
+                                | _ -> None
+
+                        match depth with
+                            | Some d -> ctx.Device.CreateRenderPass(attachments, d), Command.nop
+                            | None -> ctx.Device.CreateRenderPass(attachments), Command.nop
+
+                    member x.Destroy h =
+                        ctx.Device.Delete(h)
+                }
+        )
+
 
     // buffers
 
@@ -182,48 +226,13 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
 
                                 b, Command.nop
 
-                            | :? ArrayBuffer as ab ->
-                                let data = ab.Data
-                                let es = Marshal.SizeOf (data.GetType().GetElementType())
-                                let size = data.Length * es |> int64
-                                            
-                                match old with
-                                    | Some old when created && old.Size = size ->
-                                        old, old.Upload(data, 0, data.Length)
-
-                                    | _ ->
-                                        if created then old |> Option.iter ctx.Delete
-                                        else created <- true
-
-                                        let b = ctx.CreateBuffer(size, usage)
-                                        b, b.Upload(data, 0, data.Length)
-                                
-                            | :? INativeBuffer as nb ->
-                                let size = nb.SizeInBytes |> int64
-
-                                let upload (b : Buffer) =
-                                    command {
-                                        let ptr = nb.Pin()
-                                        try do! b.Upload(ptr, size)
-                                        finally nb.Unpin()
-                                    }
-
-                                match old with
-                                    | Some old when created && old.Size = size ->   
-                                        old, upload old
-
-                                    | _ ->
-                                        if created then old |> Option.iter ctx.Delete
-                                        else created <- true
-
-                                        let b = ctx.CreateBuffer(size, usage)
-                                        b, upload b
-                                                     
-                            | b ->
-                                failf "unsupported buffer type: %A" b
+                            | content ->
+                                let old = if created then old else None
+                                created <- true
+                                ctx.CreateBufferCommand(old, content, usage)
 
                     member x.Destroy(h) =
-                        ctx.Delete h
+                        if created then ctx.Delete h
                         created <- false
                 }
 
@@ -289,91 +298,15 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
                                     created <- false
                                 t, Command.nop
 
-                            | :? FileTexture as ft ->
+                            | tex ->
                                 if created then old |> Option.iter ctx.Delete
                                 else created <- true
 
-                                let vol, fmt, release = ImageSubResource.loadFile ft.FileName
+                                ctx.CreateImageCommand(tex)
                                     
-                                let size = V2i(int vol.Info.Size.X, int vol.Info.Size.Y)
-                                let levels =
-                                    if ft.TextureParams.wantMipMaps then 
-                                        Fun.Log2(max size.X size.Y |> float) |> ceil |> int
-                                    else 
-                                        1
-
-                                if ft.TextureParams.wantSrgb || ft.TextureParams.wantCompressed then
-                                    warnf "compressed / srgb textures not implemented atm."
-
-        
-                                let img =
-                                    ctx.CreateImage2D(
-                                        fmt,
-                                        size,
-                                        levels,
-                                        VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit
-                                    )
-
-                                let update =
-                                    command {
-                                        do! img.UploadLevel(0, vol, fmt)
-                                        do! Command.barrier MemoryTransfer
-
-                                        if ft.TextureParams.wantMipMaps then
-                                            do! img.GenerateMipMaps()
-
-                                        do! img.ToLayout(VkImageLayout.ShaderReadOnlyOptimal)
-                                    }
-
-                                img, update
-
-                            | :? PixTexture2d as pt ->
-                                if created then old |> Option.iter ctx.Delete
-                                else created <- true
-
-                                let data = pt.PixImageMipMap
-                                let l0 = data.[0]
-
-                                let generate, levels =
-                                    if pt.TextureParams.wantMipMaps then
-                                        if data.LevelCount > 1 then 
-                                            false, data.LevelCount
-                                        else 
-                                            true, Fun.Log2(max l0.Size.X l0.Size.Y |> float) |> ceil |> int
-                                    else 
-                                        false, 1
-
-                                let format =
-                                    VkFormat.ofPixFormat l0.PixFormat pt.TextureParams
-
-                                let img =
-                                    ctx.CreateImage2D(
-                                        format,
-                                        l0.Size,
-                                        levels,
-                                        VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit
-                                    )
-
-                                let update =
-                                    command {
-                                        do! img.UploadLevel(0, l0)
-
-                                        if generate then
-                                            do! img.GenerateMipMaps()
-                                        else
-                                            for l in 1 .. data.LevelCount-1 do
-                                                do! img.UploadLevel(l, data.[l])
-
-                                        do! img.ToLayout(VkImageLayout.ShaderReadOnlyOptimal)
-                                    }
-
-                                img, update
-
-                            | t ->
-                                failf "unknown texture type: %A" t
 
                     member x.Destroy h =
-                        ctx.Delete h
+                        if created then ctx.Delete h
                         created <- false
                 }
         )

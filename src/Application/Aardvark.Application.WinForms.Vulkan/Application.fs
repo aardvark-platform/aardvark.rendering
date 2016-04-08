@@ -35,13 +35,13 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
 
         let color =
             context.CreateImage(
-                VkImageType.D2d, desc.ColorFormat, V3i(size.X, size.Y, 1), 1, 1, 1, 
+                VkImageType.D2d, desc.ColorFormat, TextureDimension.Texture2D, V3i(size.X, size.Y, 1), 1, 1, 1, 
                 VkImageUsageFlags.ColorAttachmentBit, VkImageLayout.TransferSrcOptimal, VkImageTiling.Optimal
             )
 
         let depth =
             context.CreateImage(
-                VkImageType.D2d, desc.DepthFormat, V3i(size.X, size.Y, 1), 1, 1, 1, 
+                VkImageType.D2d, desc.DepthFormat, TextureDimension.Texture2D, V3i(size.X, size.Y, 1), 1, 1, 1, 
                 VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.DepthStencilAttachmentOptimal, VkImageTiling.Optimal
             )
 

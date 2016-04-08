@@ -1,5 +1,8 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+
+
+open Aardvark.Base
 open SpirV
 open FShade.SpirV
 
@@ -152,6 +155,39 @@ module ShaderType =
     let DoubleMat2x4 = ShaderType.Matrix(DoubleVec2, 4)
     let DoubleMat3x4 = ShaderType.Matrix(DoubleVec3, 4)
     let DoubleMat4x4 = ShaderType.Matrix(DoubleVec4, 4)
+
+
+    let toType =
+        lookupTable [
+            Bool,               typeof<bool>
+            
+            Int,                typeof<int32>
+            UnsignedInt,        typeof<uint32>
+            //Half,               typeof<float16>
+            Float,              typeof<float32>
+            Double,             typeof<float>
+            IntVec2,            typeof<V2i>
+            IntVec3,            typeof<V3i>
+            IntVec4,            typeof<V4i>
+            FloatVec2,          typeof<V2f>
+            FloatVec3,          typeof<V3f>
+            FloatVec4,          typeof<V4f>
+            DoubleVec2,         typeof<V2d>
+            DoubleVec3,         typeof<V3d>
+            DoubleVec4,         typeof<V4d>
+            
+            FloatMat2,          typeof<M22f>
+            FloatMat3,          typeof<M33f>
+            FloatMat3x4,        typeof<M34f>
+            FloatMat4,          typeof<M44f>
+            DoubleMat2,         typeof<M22d>
+            DoubleMat3,         typeof<M33d>
+            DoubleMat3x4,       typeof<M34d>
+            DoubleMat4,         typeof<M44d>
+
+
+        ]
+
 
 type Parameter = 
     { 
