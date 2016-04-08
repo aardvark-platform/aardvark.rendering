@@ -50,6 +50,8 @@ module Translations =
             | ABlendOperation.Add -> GLBlendOperation.Add |> int
             | ABlendOperation.Subtract -> GLBlendOperation.Subtract |> int
             | ABlendOperation.ReverseSubtract -> GLBlendOperation.ReverseSubtract |> int
+            | ABlendOperation.Minimum -> GLBlendOperation.Minimum |> int
+            | ABlendOperation.Maximum -> GLBlendOperation.Maximum |> int
             | _ -> failwithf "unknown blend operation %A" f
 
     let toGLComparison (f : DepthTestMode) =

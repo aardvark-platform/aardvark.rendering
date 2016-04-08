@@ -142,6 +142,8 @@ module OpenGl =
         type BlendOperation = Add = 0x8006
                             | Subtract = 0x800A
                             | ReverseSubtract = 0x800B
+                            | Minimum = 0x8007
+                            | Maximum = 0x8008
 
         type StencilOperation = Keep = 0x1E00
                               | Zero = 0

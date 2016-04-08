@@ -35,7 +35,7 @@ module Render2TexturePrimitiveFloat =
 
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
-    let size = V2i(1024,768)
+    let size = V2i(256,256)
     let color = runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1)
     let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
@@ -63,7 +63,7 @@ module Render2TexturePrimitiveFloat =
             Enabled = true,
             AlphaOperation = BlendOperation.Add,
             DestinationAlphaFactor = BlendFactor.Zero,
-            SourceAlphaFactor = BlendFactor.One,
+            SourceAlphaFactor = BlendFactor.Zero,
             DestinationFactor = BlendFactor.One,
             SourceFactor = BlendFactor.One,
             Operation = BlendOperation.Add
@@ -99,7 +99,7 @@ module Render2TexturePrimitiveFloat =
 
      
 
-        let pi = PixImage<float32>(Col.Format.BGRA, size) 
+        let pi = PixImage<float32>(Col.Format.RGBA, size) 
         
         runtime.Download(color, 0, 0, pi)
 
