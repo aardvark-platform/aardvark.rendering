@@ -115,3 +115,26 @@ type InstructionContextExtensions private() =
             ) 
         ]
 
+    [<Extension>]
+    static member DrawIndexedIndirect(this : InstructionContext, buffer : VkBuffer, offset : uint64, drawCount : int, stride : int) =
+        [
+            new Instruction(this,
+                this.CmdDrawIndexedIndirect,
+                buffer,
+                offset, 
+                uint32 drawCount,
+                uint32 stride
+            )
+        ]
+
+    [<Extension>]
+    static member DrawIndirect(this : InstructionContext, buffer : VkBuffer, offset : uint64, drawCount : int, stride : int) =
+        [
+            new Instruction(this,
+                this.CmdDrawIndirect,
+                buffer,
+                offset, 
+                uint32 drawCount,
+                uint32 stride
+            )
+        ]

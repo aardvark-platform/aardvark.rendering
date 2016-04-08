@@ -26,6 +26,42 @@ module private Compiler =
         new Instruction(ctx, ptr, args)
 
 
+    let draw (ctx : InstructionContext) (index : Option<Resource<Buffer>>) (drawCalls : IMod<list<DrawCallInfo>>) =
+        [
+            match index with
+                | Some ib ->
+                    yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
+
+                    yield drawCalls |> Mod.map (
+                        List.collect (fun draw ->
+                            ctx.DrawIndexed(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount, 0)
+                        )
+                    )
+
+                | _ ->
+                    yield drawCalls |> Mod.map (
+                        List.collect (fun draw ->
+                            ctx.Draw(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount)
+                        )
+                    )
+        ]
+
+    let drawIndirect (ctx : InstructionContext) (index : Option<Resource<Buffer>>) (indirect : Resource<IndirectBuffer>) =
+        [
+            match index with
+                | Some ib ->
+                    yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
+
+                    yield indirect.Handle |> Mod.map (fun i ->
+                        ctx.DrawIndexedIndirect(i.Buffer.Handle, 0UL, i.Count, sizeof<VkDrawIndexedIndirectCommand>)
+                    )
+
+                | _ ->
+                    yield indirect.Handle |> Mod.map (fun i ->
+                        ctx.DrawIndirect(i.Buffer.Handle, 0UL, i.Count, sizeof<VkDrawIndirectCommand>)
+                    )
+        ]
+
     let compile (ctx : InstructionContext) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =
         let code =
             [
@@ -42,17 +78,9 @@ module private Compiler =
                             ctx.BindVertexBuffers(Seq.toArray handles, self.vertexBuffers |> Array.map snd, 0)
                         )
 
-                        match self.indexBuffer with
-                            | Some ib ->
-                                yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
-                                yield self.DrawCallInfos |> Mod.map (List.collect (fun draw ->
-                                    //ctx.DrawIndexed(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount)
-                                    ctx.DrawIndexed(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount, 0)
-                                ))
-                            | _ ->
-                                yield self.DrawCallInfos |> Mod.map (List.collect (fun draw ->
-                                    ctx.Draw(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount)
-                                ))
+                        match self.indirect with
+                            | Some i -> yield! drawIndirect ctx self.indexBuffer i
+                            | None -> yield! draw ctx self.indexBuffer self.DrawCallInfos
 
                     | Some prev ->
                         if prev.pipeline <> self.pipeline then
@@ -62,21 +90,16 @@ module private Compiler =
                             yield self.descriptorSets |> List.map (fun d -> d.Handle) |> Mod.mapN (fun handles ->
                                 ctx.BindDescriptorSets(prog.PipelineLayout, Seq.toArray handles, 0)
                             )
+
                         if prev.vertexBuffers <> self.vertexBuffers then
                             yield self.vertexBuffers |> Array.map (fun (v,_) -> v.Handle) |> Mod.mapN (fun handles ->
                                 ctx.BindVertexBuffers(Seq.toArray handles, self.vertexBuffers |> Array.map snd, 0)
                             )
 
-                        match self.indexBuffer with
-                            | Some ib ->
-                                yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
-                                yield self.DrawCallInfos |> Mod.map (List.collect (fun draw ->
-                                    ctx.DrawIndexed(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount, 0)
-                                ))
-                            | _ ->
-                                yield self.DrawCallInfos |> Mod.map (List.collect (fun draw ->
-                                    ctx.Draw(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount)
-                                ))
+                        match self.indirect with
+                            | Some i -> yield! drawIndirect ctx self.indexBuffer i
+                            | None -> yield! draw ctx self.indexBuffer self.DrawCallInfos
+
             ]
 
         new AdaptiveCode<Instruction>(code) :> IAdaptiveCode<_>

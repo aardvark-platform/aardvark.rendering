@@ -137,6 +137,7 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
     let descriptorPool = ctx.CreateDescriptorPool (1 <<< 20)
 
     let bufferCache = ResourceCache<Buffer>(ctx)
+    let indirectBufferCache = ResourceCache<IndirectBuffer>(ctx)
     let bufferViewCache = ResourceCache<BufferView>(ctx)
     let imageCache = ResourceCache<Image>(ctx)
     let imageViewCache = ResourceCache<ImageView>(ctx)
@@ -279,6 +280,35 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
     member x.CreateIndexBuffer(data : IMod<IBuffer>) =
         x.CreateBuffer(data, VkBufferUsageFlags.IndexBufferBit)
 
+
+    member x.CreateIndirectBuffer(data : IMod<IBuffer>, indexed : bool) =
+        indirectBufferCache.GetOrCreate(
+            [data; indexed],
+            fun () ->
+                let mutable created = false
+                { new Resource<IndirectBuffer>(indirectBufferCache) with
+                    member x.Create(old) =
+                        let input = data.GetValue(x)
+
+                        match input with
+                            | :? IndirectBuffer as b ->
+                                if created then 
+                                    old |> Option.iter ctx.Delete
+                                    created <- false
+
+                                b, Command.nop
+
+                            | content ->
+                                let old = if created then old else None
+                                created <- true
+                                ctx.CreateIndirectBufferCommand(old, content, indexed)
+
+                    member x.Destroy(h) =
+                        if created then ctx.Delete h
+                        created <- false
+                }
+
+        )  
 
     // textures
 

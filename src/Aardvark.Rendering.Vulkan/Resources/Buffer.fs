@@ -257,3 +257,74 @@ type ContextBufferViewExtensions private() =
             VkRaw.vkDestroyBufferView(x.Device.Handle, view.Handle, NativePtr.zero)
             view.Handle <- VkBufferView.Null
 
+
+type IndirectBuffer =
+    class
+        val mutable public Buffer : Buffer
+        val mutable public Count : int
+        val mutable public Indexed : bool
+
+        new(b,c,i) = { Buffer = b; Count = c; Indexed = i }
+    end
+
+[<AbstractClass; Sealed; Extension>]
+type ContextBufferIndirectExtensions private() =
+    
+    static let (|DrawCallBuffer|_|) (b : IBuffer) =
+        match b with
+            | :? ArrayBuffer as b ->
+                match b.Data with
+                    | :? array<DrawCallInfo> as arr -> Some arr
+                    | _ -> None
+            | _ ->
+                None
+
+    [<Extension>]
+    static member CreateIndirectBufferCommand (this : Context, old : Option<IndirectBuffer>, content : IBuffer, indexed : bool) =
+        match content with
+            | DrawCallBuffer data ->
+
+                let indirectData =
+                    if indexed then
+                        data |> Array.map (fun dc ->
+                            VkDrawIndexedIndirectCommand(
+                                uint32 dc.FaceVertexCount,
+                                uint32 dc.InstanceCount,
+                                uint32 dc.FirstIndex,
+                                dc.BaseVertex,
+                                uint32 dc.FirstInstance
+                            )
+                        ) :> Array
+                    else
+                        data |> Array.map (fun dc ->
+                            VkDrawIndirectCommand(
+                                uint32 dc.FaceVertexCount,
+                                uint32 dc.InstanceCount,
+                                uint32 dc.FirstIndex,
+                                uint32 dc.FirstInstance
+                            )
+                        ) :> Array
+
+                let oldBuffer =
+                    match old with
+                        | Some o -> Some o.Buffer
+                        | None -> None
+
+                let newBuffer, cmd = this.CreateBufferCommand(oldBuffer, ArrayBuffer(indirectData), VkBufferUsageFlags.IndirectBufferBit)
+
+                let res = IndirectBuffer(newBuffer, data.Length, indexed)
+
+                res, cmd
+
+            | _ ->
+                failf "unsupported IndirectBuffer: %A" content
+
+    [<Extension>]
+    static member CreateIndirectBuffer(this : Context, old : Option<IndirectBuffer>, content : IBuffer, indexed : bool) =
+        let buffer, cmd = ContextBufferIndirectExtensions.CreateIndirectBufferCommand(this, old, content, indexed)
+        cmd.RunSynchronously this.DefaultQueue
+        buffer
+
+    [<Extension>]
+    static member Delete(this : Context, b : IndirectBuffer) =
+        this.Delete(b.Buffer)

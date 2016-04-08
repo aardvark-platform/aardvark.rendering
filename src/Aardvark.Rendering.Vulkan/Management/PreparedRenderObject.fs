@@ -19,6 +19,7 @@ type PreparedRenderObject =
     {
         ctx : Context
         original : RenderObject
+        indirect : Option<Resource<IndirectBuffer>>
         geometryMode : IMod<IndexedGeometryMode>
         program : Resource<ShaderProgram>
         descriptorResources : list<IResource>
@@ -41,6 +42,10 @@ type PreparedRenderObject =
 
         for (b,_) in x.vertexBuffers do b.Dispose()
 
+        match x.indirect with
+            | Some i -> i.Dispose()
+            | None -> ()
+
         match x.indexBuffer with
             | Some ib -> ib.Dispose()
             | None -> ()
@@ -55,10 +60,15 @@ type PreparedRenderObject =
             for r in x.descriptorSets do do! r.Update(caller)
             for (b,_) in x.vertexBuffers do do! b.Update(caller)
 
+            match x.indirect with
+                | Some b -> do! b.Update(caller)
+                | None -> ()
+
             match x.indexBuffer with
                 | Some b -> do! b.Update(caller)
                 | None -> ()
         }
+
     member x.IncrementReferenceCount() =
         //x.geometryMode.IncrementReferenceCount()
         x.program.AddRef()
@@ -67,6 +77,10 @@ type PreparedRenderObject =
         for r in x.descriptorResources do r.AddRef()
         for r in x.descriptorSets do r.AddRef()
         for (b,_) in x.vertexBuffers do b.AddRef()
+
+        match x.indirect with
+            | Some ib -> ib.AddRef()
+            | None -> ()
 
         match x.indexBuffer with
             | Some ib -> ib.AddRef()
@@ -243,11 +257,21 @@ type ResourceMangerExtensions private() =
                     match ro.Indices with
                         | null -> None
                         | indices -> x.CreateBuffer(ro.Indices, VkBufferUsageFlags.IndexBufferBit) |> Some
+
+
+                let indirect =
+                    match ro.IndirectBuffer with
+                        | null -> None
+                        | indirect -> 
+                            let hasIndex = Option.isNone indexBuffer
+                            x.CreateIndirectBuffer(ro.IndirectBuffer, hasIndex) |> Some
+
                 let res =
                     {
                         ctx = x.Context
                         original = ro
                         geometryMode = geometryMode
+                        indirect = indirect
                         program = program
                         descriptorResources = descriptorResources
                         descriptorSets = descriptorSets

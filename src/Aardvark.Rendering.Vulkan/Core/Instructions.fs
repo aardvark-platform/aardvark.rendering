@@ -10,7 +10,6 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 #nowarn "51"
 
-
 type Instruction(ctx : InstructionContext, ptr : nativeint, [<ParamArray>] args : obj[]) =
         
     member x.FunctionPointer = ptr
@@ -29,6 +28,9 @@ type Instruction(ctx : InstructionContext, ptr : nativeint, [<ParamArray>] args 
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
+
+
+
 
 and InstructionContext(d : Device) =
 
@@ -53,6 +55,8 @@ and InstructionContext(d : Device) =
     let vkCmdBindIndexBuffer = getAndCheckAddress(d.Handle, "vkCmdBindIndexBuffer") // 4 args
     let vkCmdDrawIndexed = getAndCheckAddress(d.Handle, "vkCmdDrawIndexed") // 6 args
     let vkCmdDraw = getAndCheckAddress(d.Handle, "vkCmdDraw") // 5 args
+    let vkCmdDrawIndexedIndirect = getAndCheckAddress(d.Handle, "vkCmdDrawIndexedIndirect") // 5 args
+    let vkCmdDrawIndirect = getAndCheckAddress(d.Handle, "vkCmdDrawIndirect") // 5 args
 
     member x.CmdSetViewport = vkCmdSetViewport
     member x.CmdSetScissor = vkCmdSetScissor
@@ -69,6 +73,8 @@ and InstructionContext(d : Device) =
     member x.CmdBindIndexBuffer = vkCmdBindIndexBuffer
     member x.CmdDrawIndexed = vkCmdDrawIndexed
     member x.CmdDraw = vkCmdDraw
+    member x.CmdDrawIndexedIndirect = vkCmdDrawIndexedIndirect
+    member x.CmdDrawIndirect = vkCmdDrawIndirect
 
     member x.Run(i : Instruction, cmd : VkCommandBuffer) =
         let ptr = i.FunctionPointer
