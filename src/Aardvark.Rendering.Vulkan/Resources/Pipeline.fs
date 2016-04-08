@@ -116,8 +116,9 @@ module VertexInputState =
             typeof<V3d>, VkFormat.R64g64b64Sfloat
             typeof<V4d>, VkFormat.R64g64b64a64Sfloat
 
-            typeof<C3b>, VkFormat.R8g8b8Unorm
-            typeof<C4b>, VkFormat.R8g8b8a8Unorm
+            // TODO: is that really correct here???
+            typeof<C3b>, VkFormat.B8g8r8Unorm
+            typeof<C4b>, VkFormat.B8g8r8a8Unorm
 
             typeof<C3us>, VkFormat.R16g16b16Unorm
             typeof<C4us>, VkFormat.R16g16b16a16Unorm

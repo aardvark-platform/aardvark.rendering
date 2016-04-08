@@ -98,12 +98,26 @@ type MappedBuffer(ctx : Context) =
                     ()
 
                 | Some h -> 
-                    unmap h
+                    let copySize = min (int h.Size) capacity
                     let mem, newBuffer = createBuffer capacity
-                    h.CopyTo(newBuffer, 0L, min h.Size newBuffer.Size) |> ctx.DefaultQueue.RunSynchronously
+                    let newPointer = map newBuffer
+                    Marshal.Copy(pointer, newPointer, copySize)
+                    unmap h
+
+                    let mutable range =
+                        VkMappedMemoryRange(
+                            VkStructureType.MappedMemoryRange, 0n,
+                            mem, 
+                            0UL,
+                            uint64 copySize
+                        )
+
+                    VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&range)
+                        |> check "vkFlushMappedMemoryRanges"
+
                     memory <- mem
                     handle <- Some newBuffer
-                    pointer <- map newBuffer
+                    pointer <- newPointer
                     releaseBuffer h
 
                 | None ->
@@ -130,25 +144,29 @@ type MappedBuffer(ctx : Context) =
     member x.Resize(size : int) =
         let o = Interlocked.Exchange(&capacity, size)
         if o <> size then
+            create()
             transact (fun () -> x.MarkOutdated())
-             
+        
     member x.Write(ptr : nativeint, offset : int, sizeInBytes : int) =
-        create()
-        Marshal.Copy(ptr, pointer + nativeint offset, sizeInBytes)
-        let mutable range = 
-            VkMappedMemoryRange(
-                VkStructureType.MappedMemoryRange, 0n,
-                memory,
-                uint64 offset,
-                uint64 sizeInBytes
-            )
+        lock x (fun () ->
+            create()
+            Marshal.Copy(ptr, pointer + nativeint offset, sizeInBytes)
+            let mutable range = 
+                VkMappedMemoryRange(
+                    VkStructureType.MappedMemoryRange, 0n,
+                    memory,
+                    uint64 offset,
+                    uint64 sizeInBytes
+                )
 
-        VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&range)
-            |> check "vkFlushMappedMemoryRanges"
-
+            VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&range)
+                |> check "vkFlushMappedMemoryRanges"
+        )
     member x.Read(ptr : nativeint, offset : int, sizeInBytes : int) =
-        create()
-        Marshal.Copy(pointer + nativeint offset, ptr, sizeInBytes)
+        lock x (fun () ->
+            create()
+            Marshal.Copy(pointer + nativeint offset, ptr, sizeInBytes)
+        )
 
     member x.OnDispose = onDispose :> IObservable<_>
 

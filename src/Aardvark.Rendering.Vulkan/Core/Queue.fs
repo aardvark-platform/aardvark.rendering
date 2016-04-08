@@ -6,6 +6,7 @@
 open System
 open System.Threading
 open System.Runtime.CompilerServices
+open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 
@@ -15,6 +16,30 @@ type Queue(device : Device, cmdPool : ThreadLocal<CommandPool>, family : Physica
     member x.Family = family
     member x.Handle = handle
     member x.QueueIndex = index
+
+type QueuePool(family : PhysicalQueueFamily, queues : Queue[]) =
+    let availableCount = new SemaphoreSlim(queues.Length)
+    let available = ConcurrentQueue<Queue> queues
+
+    member x.Family = family
+
+    member x.Acquire() =
+        availableCount.Wait()
+        match available.TryDequeue() with
+            | (true, q) -> q
+            | _ -> failf "could not acquire a Queue"
+
+    member x.AcquireAsync() =
+        async {
+            let! _ = Async.AwaitIAsyncResult (availableCount.WaitAsync())
+            match available.TryDequeue() with
+                | (true, q) -> return q
+                | _ -> return failf "could not acquire a Queue"
+        }
+
+    member x.Release(q : Queue) =
+        available.Enqueue(q)
+        availableCount.Release() |> ignore
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -77,3 +102,24 @@ type QueueCommandExtensions private() =
     static member WaitIdle(this : Queue) =
         VkRaw.vkQueueWaitIdle(this.Handle)
             |> check "vkQueueWaitIdle"
+
+
+[<AbstractClass; Sealed; Extension>]
+type QueuePoolCommandExtensions private() =
+
+    [<Extension>]
+    static member Submit(this : QueuePool, buffers : CommandBuffer[]) =
+        async {
+            let! q = this.AcquireAsync()
+            try do! q.Submit(buffers)
+            finally this.Release(q)
+        }
+       
+    [<Extension>]
+    static member SubmitAndWait(this : QueuePool, cmd : CommandBuffer[]) =
+        QueuePoolCommandExtensions.Submit(this, cmd) |> Async.RunSynchronously
+
+    [<Extension>]
+    static member SubmitTask(this : QueuePool, cmd : CommandBuffer[]) =
+        QueuePoolCommandExtensions.Submit(this, cmd) |> Async.StartAsTask
+ 

@@ -172,8 +172,8 @@ type VulkanSwapChainMS( real : VulkanSwapChain, samples : int ) =
             1,
             1,
             samples,
-            VkImageUsageFlags.ColorAttachmentBit,
-            VkImageLayout.TransferSrcOptimal,
+            VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.ColorAttachmentBit,
+            VkImageLayout.ColorAttachmentOptimal,
             VkImageTiling.Optimal
         )
 

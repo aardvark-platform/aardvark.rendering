@@ -58,7 +58,7 @@ type ContextBufferExtensions private() =
             typeof<uint32>, VkFormat.R32Uint
             typeof<uint16>, VkFormat.R16Uint
             typeof<uint8>, VkFormat.R8Uint
-            typeof<C4b>, VkFormat.R8g8b8a8Unorm
+            typeof<C4b>, VkFormat.B8g8r8a8Unorm
             typeof<C4us>, VkFormat.R16g16b16a16Unorm
             typeof<C4ui>, VkFormat.R32g32b32a32Uint
             typeof<C4f>, VkFormat.R32g32b32a32Sfloat

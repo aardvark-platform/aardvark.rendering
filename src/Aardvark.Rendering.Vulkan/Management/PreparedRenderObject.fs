@@ -27,6 +27,7 @@ type PreparedRenderObject =
         pipeline : Resource<Pipeline>
         vertexBuffers : array<Resource<Buffer> * int>
         indexBuffer : Option<Resource<Buffer>>
+        activation : IDisposable
     }
 
     member x.DrawCallInfos = x.original.DrawCallInfos
@@ -35,6 +36,7 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         //x.geometryMode.Dispose()
+        x.activation.Dispose()
         x.program.Dispose()
         x.pipeline.Dispose()
         for r in x.descriptorResources do r.Dispose()
@@ -278,6 +280,7 @@ type ResourceMangerExtensions private() =
                         pipeline = pipeline
                         vertexBuffers = buffers
                         indexBuffer = indexBuffer
+                        activation = ro.Activate()
                     }
                 
                 res.Update(null) |> x.Context.DefaultQueue.RunSynchronously

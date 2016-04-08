@@ -7,7 +7,7 @@ open Aardvark.Rendering.Vulkan
 
 type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as this =
     inherit UserControl()
-    let queue = context.DefaultQueue
+    let queuePool = context.DefaultQueue
 
     do base.SetStyle(ControlStyles.UserPaint, true)
        base.SetStyle(ControlStyles.DoubleBuffer, false)
@@ -69,12 +69,18 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
                 recreateSwapChain <- false
                 swapChain <- x.CreateVulkanSwapChain(swapChainDescription)
 
-            swapChain.BeginFrame queue
+            let queue = queuePool.Acquire()
+            try
+                swapChain.BeginFrame queue
 
-            let fbo = swapChain.Framebuffer
-            x.OnRenderFrame(renderPass, fbo)
+                let fbo = swapChain.Framebuffer
+                Aardvark.Base.Incremental.EvaluationUtilities.evaluateTopLevel (fun () ->
+                    x.OnRenderFrame(renderPass, fbo)
+                )
 
-            swapChain.EndFrame queue
+                swapChain.EndFrame queue
+            finally
+                queuePool.Release(queue)
 
     override x.Dispose(d) =
         base.Dispose(d)

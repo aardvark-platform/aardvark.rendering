@@ -240,6 +240,23 @@ type CommandExtensions private() =
 
 
     [<Extension>]
+    static member RunSynchronously(this : Command<'a>, queue : QueuePool) =
+        CommandExtensions.RunSynchronously(queue, this)
+
+    [<Extension>]
+    static member StartAsTask(this : Command<'a>, queue : QueuePool) =
+        CommandExtensions.StartAsTask(queue, this)
+
+    [<Extension>]
+    static member Run(this : Command<'a>, queue : QueuePool) =
+        CommandExtensions.Run(queue, this)
+
+    [<Extension>]
+    static member Start(this : Command<'a>, queue : QueuePool) =
+        CommandExtensions.Start(queue, this)
+
+
+    [<Extension>]
     static member Run(this : Queue, pool : CommandPool, cmd : Command<'a>) =
         let rec clean (l : list<unit -> unit>) =
             match l with
@@ -264,18 +281,50 @@ type CommandExtensions private() =
             return cmd.GetResult(state)
         }
 
+
+
+    [<Extension>]
+    static member Run(this : QueuePool, cmd : Command<'a>) =
+        async {
+            let! q = this.AcquireAsync()
+            try return! CommandExtensions.Run(q, cmd)
+            finally this.Release(q)
+        }
+
     [<Extension>]
     static member RunSynchronously(this : Queue, pool : CommandPool, cmd : Command<'a>) =
         CommandExtensions.Run(this, pool, cmd) |> Async.RunSynchronously
 
     [<Extension>]
+    static member Start(this : Queue, pool : CommandPool, cmd : Command<'a>) =
+        CommandExtensions.Run(this, pool, cmd) |> Async.Ignore |> Async.Start
+
+    [<Extension>]
+    static member Start(this : QueuePool, cmd : Command<'a>) =
+        CommandExtensions.Run(this, cmd) |> Async.Ignore |> Async.Start
+
+
+    [<Extension>]
     static member StartAsTask(this : Queue, pool : CommandPool, cmd : Command<'a>) =
         CommandExtensions.Run(this, pool, cmd) |> Async.StartAsTask
+
+    [<Extension>]
+    static member RunSynchronously(this : QueuePool, cmd : Command<'a>) =
+        CommandExtensions.Run(this, cmd) |> Async.RunSynchronously
+
+    [<Extension>]
+    static member StartAsTask(this : QueuePool, cmd : Command<'a>) =
+        CommandExtensions.Run(this, cmd) |> Async.StartAsTask
+
+    [<Extension>]
+    static member Start(this : Queue, cmd : Command<'a>) =
+        CommandExtensions.Run(this, cmd) |> Async.Ignore |> Async.Start
 
 
     [<Extension>]
     static member Run(this : Queue, cmd : Command<'a>) =
         CommandExtensions.Run(this, this.CommandPool, cmd)
+
 
     [<Extension>]
     static member RunSynchronously(this : Queue, cmd : Command<'a>) =

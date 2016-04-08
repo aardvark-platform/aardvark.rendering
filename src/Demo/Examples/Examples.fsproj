@@ -74,6 +74,7 @@
     <Compile Include="Polygons.fs" />
     <Compile Include="AssimpInterop.fs" />
     <Compile Include="HelloWorld.fs" />
+    <Compile Include="Vulkan.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />

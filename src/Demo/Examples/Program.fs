@@ -5,8 +5,11 @@ open Rendering.Examples
 
 [<EntryPoint>]
 [<STAThread>]
-let main args =  
-    HelloWorld.run() |> ignore
+let main args =
+    Vulkan.Lod.run()  
+    //Vulkan.Simple.run()  
+
+    //HelloWorld.run() |> ignore
 
     //Examples.Tutorial.run()
     //Examples.Render2TexturePrimitive.run()

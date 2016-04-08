@@ -228,7 +228,7 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
         let defaultQueue =
             let families = physical.QueueFamilies
             if families.Length = 1 then
-                Map.ofList [families.[0], 1]
+                Map.ofList [families.[0], min families.[0].QueueCount Environment.ProcessorCount]
             else
                 failf "could not determine a default queue for device: %A" physical
 

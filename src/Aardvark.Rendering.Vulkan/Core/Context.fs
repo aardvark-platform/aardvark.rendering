@@ -41,14 +41,14 @@ type Context (device : Device) =
 
     let defaultQueue =
         lazy (
-            queues.Value 
-                |> Map.toSeq
-                |> Seq.maxBy (fun (q : PhysicalQueueFamily,_) ->
-                        (if q.Graphics then 2 else 0) +
-                        (if q.Compute then 1 else 0)
-                   )
-                |> snd
-                |> Array.item 0
+            let family, queues = 
+                queues.Value 
+                    |> Map.toSeq
+                    |> Seq.maxBy (fun (q : PhysicalQueueFamily,_) ->
+                            (if q.Graphics then 2 else 0) +
+                            (if q.Compute then 1 else 0)
+                       )
+            QueuePool(family, queues)
         )
 
     let instructionCtx = InstructionContext(device)

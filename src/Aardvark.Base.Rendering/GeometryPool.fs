@@ -197,6 +197,7 @@ type GeometryPool(runtime : IRuntime, asyncWrite : bool) =
         if !isNew then
             ReaderWriterLock.read buffersRW (fun () ->
                 for (KeyValue(sem, buffer)) in buffers do
+
                     write g sem ptr buffer
             )
             
