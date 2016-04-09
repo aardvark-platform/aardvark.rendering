@@ -69,6 +69,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MessageLoop.fs" />
     <Compile Include="SwapChain.fs" />
     <Compile Include="VulkanControl.fs" />
     <Compile Include="Application.fs" />

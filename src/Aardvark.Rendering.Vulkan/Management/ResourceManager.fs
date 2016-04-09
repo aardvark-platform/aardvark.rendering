@@ -24,16 +24,15 @@ type IResource =
 type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
     inherit AdaptiveObject()
 
-
-    let handle = Mod.init None
-    let h = 
+    let mutable currentHandle = None
+    let handleMod = 
         Mod.custom (fun self ->
-            match handle.Value with
+            match currentHandle with
                 | Some h -> h
                 | None ->
                     let cmd = this.Update(null)
                     cache.Context.DefaultQueue.RunSynchronously cmd
-                    handle.Value.Value
+                    currentHandle.Value
         )
     
     let mutable refCount = 0
@@ -44,7 +43,7 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
     abstract member Create  : Option<'h> -> 'h * Command<unit>
     abstract member Destroy : 'h -> unit
    
-    member x.Handle = h
+    member x.Handle = handleMod
 
     member x.Key
         with get() = key
@@ -63,7 +62,7 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
             if refCount <= 0 then
                 failf "cannot update disposed resource"
 
-            let old = handle.Value
+            let old = currentHandle
             let h, update = x.Create old
 
             match old with
@@ -74,12 +73,14 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
                     command {
                         try do! update
                         finally
-                            transact (fun () -> handle.Value <- Some h)
+                            currentHandle <- Some h
+                            transact (fun () -> handleMod.MarkOutdated())
                             x.Destroy o
                     }
                     
                 | None ->
-                    transact (fun () -> handle.Value <- Some h)
+                    currentHandle <- Some h
+                    transact (fun () -> handleMod.MarkOutdated())
                     update
 
 
@@ -90,9 +91,10 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
     member internal x.Kill() =
         refCount <- 0
         key <- []
-        match handle.Value with
+        match currentHandle with
             | Some h -> 
-                transact (fun () -> handle.Value <- None)
+                currentHandle <- None
+                transact (fun () -> handleMod.MarkOutdated())
                 x.Destroy h
 
             | None -> 

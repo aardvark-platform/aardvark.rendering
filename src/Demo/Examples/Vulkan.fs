@@ -15,6 +15,8 @@ type App() =
     static let emptySg = Sg.set ASet.empty
 
     do Aardvark.Init()
+//       for l in Aardvark.Rendering.Vulkan.Instance.AvailableLayers do
+//        printfn "layer: %A" l.layerName.Value
 
     let mutable initialized = 0
     let app = new VulkanApplication()
@@ -91,6 +93,8 @@ module Simple =
         let tex = PixTexture2d(PixImageMipMap [|red :> PixImage|], true) :> ITexture
 
 
+        let mode = Mod.init FillMode.Fill
+
         let sg =
             quadGeometry
                 |> Sg.ofIndexedGeometry
@@ -101,6 +105,18 @@ module Simple =
                     DefaultSurfaces.vertexColor |> toEffect
                     //DefaultSurfaces.simpleLighting |> toEffect
                    ]
+                |> Sg.fillMode mode
+
+        app.Control.Keyboard.KeyDown(Keys.X).Values.Add(fun _ ->   
+            let newMode = 
+                match mode.Value with
+                    | FillMode.Fill -> FillMode.Line
+                    | FillMode.Line -> FillMode.Point
+                    | _ -> FillMode.Fill
+
+            Log.line "mode = %A" newMode
+            transact (fun () -> mode.Value <- newMode)
+        )
 
 
         app.SceneGraph <- sg

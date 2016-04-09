@@ -293,7 +293,26 @@ type CommandExtensions private() =
 
     [<Extension>]
     static member RunSynchronously(this : Queue, pool : CommandPool, cmd : Command<'a>) =
-        CommandExtensions.Run(this, pool, cmd) |> Async.RunSynchronously
+        let rec clean (l : list<unit -> unit>) =
+            match l with
+                | [] -> ()
+                | h::t ->
+                    clean t
+                    h()
+
+        let buffer = pool.CreateCommandBuffer()
+        buffer.Begin(false)
+        let mutable state = { isEmpty = true; buffer = buffer; cleanupActions = [] }
+        cmd.Run(&state)
+        buffer.End()
+
+        if not state.isEmpty then
+            this.SubmitAndWait [|state.buffer|]
+                
+
+        buffer.Dispose()
+        clean state.cleanupActions
+        cmd.GetResult(state)
 
     [<Extension>]
     static member Start(this : Queue, pool : CommandPool, cmd : Command<'a>) =
@@ -310,7 +329,9 @@ type CommandExtensions private() =
 
     [<Extension>]
     static member RunSynchronously(this : QueuePool, cmd : Command<'a>) =
-        CommandExtensions.Run(this, cmd) |> Async.RunSynchronously
+        let q = this.Acquire()
+        try CommandExtensions.RunSynchronously(q, cmd)
+        finally this.Release(q)
 
     [<Extension>]
     static member StartAsTask(this : QueuePool, cmd : Command<'a>) =

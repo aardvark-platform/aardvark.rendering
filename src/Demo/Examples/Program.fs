@@ -15,7 +15,7 @@ let main args =
     //Examples.Render2TexturePrimitive.run()
     //Examples.Render2TextureComposable.run()
     //Examples.Render2TexturePrimiviteChangeableSize.run()
-    Examples.Render2TexturePrimitiveFloat.run()
+    //Examples.Render2TexturePrimitiveFloat.run()
     //Examples.PostProcessing.run()
     //Examples.Shadows.run()
     //Examples.GeometrySet.run()

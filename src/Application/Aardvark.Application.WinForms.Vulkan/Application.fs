@@ -9,21 +9,27 @@ open Aardvark.Base.Incremental.Operators
 
 type VulkanRenderControl(runtime : Runtime, samples : int) as this =
     inherit Aardvark.Application.WinForms.VulkanControl(runtime.Context, VkFormat.D32Sfloat, samples)
+    
+    static let messageLoop = MessageLoop()
+    static do messageLoop.Start()
 
     let context = runtime.Context
     let mutable renderTask : IRenderTask = Unchecked.defaultof<_>
+    let mutable taskSubscription : IDisposable = null
     let mutable sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
+    let mutable needsRedraw = false
 
     let time = Mod.custom(fun _ -> DateTime.Now)
 
     override x.OnRenderFrame(pass, fbo) =
+        needsRedraw <- false
         let s = V2i(x.ClientSize.Width, x.ClientSize.Height)
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
 
         renderTask.Run(fbo) |> ignore
 
-        x.Invalidate()
+        //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
 
 
@@ -69,9 +75,33 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
 
     member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
 
+    member private x.ForceRedraw() =
+        messageLoop.Draw(x)
+
     member x.RenderTask
         with get() = renderTask
-        and set t = renderTask <- t
+        and set t = 
+            if not (isNull taskSubscription) then 
+                taskSubscription.Dispose()
+                renderTask.Dispose()
+
+            renderTask <- t
+            taskSubscription <- t.AddMarkingCallback x.ForceRedraw
+
+    interface IControl with
+        member x.IsInvalid = needsRedraw
+        member x.Invalidate() =
+            if not needsRedraw then
+                needsRedraw <- true
+                x.Invalidate()
+
+        member x.Paint() =
+            use g = x.CreateGraphics()
+            use e = new System.Windows.Forms.PaintEventArgs(g, x.ClientRectangle)
+            x.InvokePaint(x, e)
+
+        member x.Invoke f =
+            base.Invoke (new System.Action(f)) |> ignore
 
     interface IRenderTarget with
         member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
@@ -85,8 +115,11 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
         member x.Time = time
 
 type VulkanApplication(appName : string, debug : bool) =
-    static let instanceDebugLayers = [ Instance.Layers.DrawState; Instance.Layers.ParamChecker ]
-    static let deviceDebugLayers = [ Instance.Layers.DrawState ]
+    static let instanceDebugLayers = [ "VK_LAYER_LUNARG_api_dump"; Instance.Layers.DrawState; Instance.Layers.ParamChecker; Instance.Layers.Threading; Instance.Layers.SwapChain; Instance.Layers.MemTracker ]
+    static let deviceDebugLayers = instanceDebugLayers
+
+
+
 
     // create an instance
     let enabledLayers = if debug then instanceDebugLayers else []

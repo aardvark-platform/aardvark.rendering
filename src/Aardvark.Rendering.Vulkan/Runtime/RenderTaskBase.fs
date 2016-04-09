@@ -151,16 +151,19 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
 
         let dirtyResources = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
         if dirtyResources.Count > 0 then
-            let update = 
-                command {
-                    for d in dirtyResources do
-                        Monitor.Enter d
-                        if d.OutOfDate then
-                            do! d.Update(x)
-                        else
-                            d.Outputs.Add x |> ignore
-                        Monitor.Exit d
-                }
+            let commands = 
+                dirtyResources 
+                    |> Seq.toList
+                    |> List.choose (fun d ->
+                        lock d (fun () ->
+                            if d.OutOfDate then
+                                d.Update(x) |> Some
+                            else
+                                d.Outputs.Add x |> ignore
+                                None
+                        )
+                    )
+            let update = commands |> Command.ofSeq
             update |> context.DefaultQueue.RunSynchronously
   
 

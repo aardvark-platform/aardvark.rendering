@@ -7,7 +7,9 @@ open Aardvark.Rendering.Vulkan
 
 type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as this =
     inherit UserControl()
+
     let queuePool = context.DefaultQueue
+
 
     do base.SetStyle(ControlStyles.UserPaint, true)
        base.SetStyle(ControlStyles.DoubleBuffer, false)

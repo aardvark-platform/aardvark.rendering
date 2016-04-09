@@ -161,11 +161,16 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
         if queues.Length = 0 then
             failf "cannot create a device without any queues"
 
+
+        let queueCount = queues |> Array.sumBy (fun (_,c) -> c)
+        let priorities = NativePtr.pushStackArray (Array.create queueCount 1.0f)
         for i in 0..queues.Length-1 do
             let (family, count) = queues.[i]
 
             if count > family.QueueCount then
                 failf "cannot allocate %d queues in family: %A" count family
+
+
 
             let info = 
                 VkDeviceQueueCreateInfo(
@@ -173,7 +178,7 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
                     0n, VkDeviceQueueCreateFlags.MinValue,
                     uint32 family.Index,
                     uint32 count, 
-                    NativePtr.zero
+                    priorities
                 )  
             NativePtr.set queueInfos i info
 
@@ -597,3 +602,6 @@ module Instance =
     module Layers =
         let DrawState = "VK_LAYER_LUNARG_draw_state"
         let ParamChecker = "VK_LAYER_LUNARG_param_checker"
+        let Threading = "VK_LAYER_GOOGLE_threading"
+        let SwapChain = "VK_LAYER_LUNARG_swapchain"
+        let MemTracker = "VK_LAYER_LUNARG_mem_tracker"
