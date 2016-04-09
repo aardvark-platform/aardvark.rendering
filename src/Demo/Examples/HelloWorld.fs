@@ -412,37 +412,57 @@ module HelloWorld =
         Ag.initialize()
         Aardvark.Init()
 
-        use app = new OpenGlApplication()
-        let win = app.CreateGameWindow()
-   
+        use app = new VulkanApplication()
+        let win = app.CreateSimpleRenderWindow(1)
+        win.Text <- "Aardvark rocks Vulkan \\o/"
+
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 10.0 (float s.X / float s.Y))
+              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
 
         let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
 
         let quadSg =
             let quad =
-                let index = [|0;1;2; 0;2;3|]
-                let positions = [|V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |]
-
-                IndexedGeometry(IndexedGeometryMode.TriangleList, index, SymDict.ofList [DefaultSemantic.Positions, positions :> Array], SymDict.empty)
-
+                IndexedGeometry(
+                    Mode = IndexedGeometryMode.TriangleList,
+                    IndexArray = ([|0;1;2; 0;2;3|] :> Array),
+                    IndexedAttributes =
+                        SymDict.ofList [
+                            DefaultSemantic.Positions,                  [| V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |] :> Array
+                            DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
+                            DefaultSemantic.DiffuseColorCoordinates,    [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] :> Array
+                        ]
+                )
+                
             quad |> Sg.ofIndexedGeometry
 
         let sg =
-            quadSg |> Sg.effect [
+            quadSg 
+                |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect
-                    DefaultSurfaces.constantColor C4f.White |> toEffect
+                    DefaultSurfaces.diffuseTexture |> toEffect
+                    DefaultSurfaces.simpleLighting |> toEffect
                   ]
+               |> Sg.diffuseFileTexture' @"E:\Development\WorkDirectory\DataSVN\pattern.jpg" true
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
+        let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.ManagedOptimized, sg.RenderObjects())
 
-        win.RenderTask <- task //|> DefaultOverlays.withStatistics
+        win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
+            let ctrl = win.Control.Implementation |> unbox<Aardvark.Application.WinForms.VulkanRenderControl>
+
+            let pi = ctrl.Screenshot (ctrl.Sizes.GetValue())
+
+            pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.jpg"
+
+        )
+
+        win.RenderTask <- RenderTask.ofList [clear; task] //|> DefaultOverlays.withStatistics
         win.Run()
         0
 

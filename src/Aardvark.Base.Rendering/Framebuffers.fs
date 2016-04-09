@@ -85,6 +85,10 @@ type RenderbufferFormat =
     | Rgb10A2ui = 36975
 
 type TextureFormat =
+    | Bgr8 = 1234
+    | Bgra8 = 1235
+
+
     | DepthComponent = 6402
     | Alpha = 6406
     | Rgb = 6407

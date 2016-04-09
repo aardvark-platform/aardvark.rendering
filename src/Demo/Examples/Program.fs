@@ -5,7 +5,10 @@ open Rendering.Examples
 
 [<EntryPoint>]
 [<STAThread>]
-let main args =  
+let main args =
+    Vulkan.Lod.run()  
+    //Vulkan.Simple.run()  
+
     //HelloWorld.run() |> ignore
 
     //Examples.Tutorial.run()

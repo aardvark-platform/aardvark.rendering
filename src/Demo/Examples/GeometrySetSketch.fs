@@ -76,6 +76,8 @@ type cbuffer(sizeInBytes : nativeint, release : cbuffer -> unit) =
             member x.SizeInBytes = int capacity
             member x.Use (f : nativeint -> 'a) =
                 ReaderWriterLock.read ptrLock (fun () -> f ptr )
+            member x.Pin() = ptr
+            member x.Unpin() = ()
         }
 
     member x.AdjustToSize(capacityInBytes : nativeint) =

@@ -45,9 +45,12 @@ type INativeBuffer =
     inherit IBuffer
     abstract member SizeInBytes : int
     abstract member Use : (nativeint -> 'a) -> 'a
+    abstract member Pin : unit -> nativeint
+    abstract member Unpin : unit -> unit
 
 type ArrayBuffer(data : Array) =
     let elementType = data.GetType().GetElementType()
+    let mutable gchandle = Unchecked.defaultof<_>
 
     interface IBuffer
     member x.Data = data
@@ -60,6 +63,15 @@ type ArrayBuffer(data : Array) =
             try f (gc.AddrOfPinnedObject())
             finally gc.Free()
 
+        member x.Pin() =
+            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+            gchandle <- gc
+            gc.AddrOfPinnedObject()
+
+        member x.Unpin() =
+            gchandle.Free()
+            gchandle <- Unchecked.defaultof<_>
+
     override x.GetHashCode() = data.GetHashCode()
     override x.Equals o =
         match o with
@@ -70,6 +82,8 @@ type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
     interface INativeBuffer with
         member x.SizeInBytes = sizeInBytes
         member x.Use f = f ptr
+        member x.Pin() = ptr
+        member x.Unpin() = ()
 
     member x.Ptr = ptr
     member x.SizeInBytes = sizeInBytes

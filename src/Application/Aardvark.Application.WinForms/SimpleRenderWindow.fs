@@ -15,6 +15,7 @@ type SimpleRenderWindow() =
         base.ClientSize <- System.Drawing.Size(1024, 768)
         ctrl.Dock <- DockStyle.Fill
         base.Controls.Add ctrl
+        base.Text <- "Aardvark rocks \\o/"
 
     member x.Control = ctrl
 
@@ -58,7 +59,7 @@ type WinFormsApplicationExtensions private() =
     [<Extension>]
     static member CreateSimpleRenderWindow(this : IApplication, samples : int) =
         let w = new SimpleRenderWindow()
-        this.Initialize(w.Control)
+        this.Initialize(w.Control, samples)
         w
 
     [<Extension>]

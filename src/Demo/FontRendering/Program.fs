@@ -47,10 +47,14 @@ type CameraMode =
 
 [<EntryPoint>]
 let main argv = 
+    Aardvark.Init()
+
+    Aardvark.Rendering.Vulkan.Test.run()
+    System.Environment.Exit 0
+
     use app = new OpenGlApplication()
     use win = app.CreateSimpleRenderWindow()
-
-    Aardvark.Init()
+    
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
     let proj = CameraProjectionPerspective(60.0, 0.1, 1000.0, float win.Width / float win.Height)
