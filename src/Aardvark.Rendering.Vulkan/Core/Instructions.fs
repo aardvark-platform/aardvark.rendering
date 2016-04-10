@@ -185,6 +185,23 @@ and InstructionContext(d : Device) =
                 uint32 (unbox<int> i.Arguments.[2]),
                 uint32 (unbox<int> i.Arguments.[3])
             )
+        elif ptr = vkCmdDrawIndirect then
+            VkRaw.vkCmdDrawIndirect(
+                cmd,
+                unbox<_> i.Arguments.[0],
+                unbox<_> i.Arguments.[1],
+                unbox<_> i.Arguments.[2],
+                unbox<_> i.Arguments.[3]
+            )
+        elif ptr = vkCmdDrawIndexedIndirect then
+            VkRaw.vkCmdDrawIndexedIndirect(
+                cmd,
+                unbox<_> i.Arguments.[0],
+                unbox<_> i.Arguments.[1],
+                unbox<_> i.Arguments.[2],
+                unbox<_> i.Arguments.[3]
+            )
+
         else
             failwith "unknown instruction"
 
@@ -266,5 +283,17 @@ and InstructionContext(d : Device) =
             let c = (unbox<int> i.Arguments.[2])
             let d = (unbox<int> i.Arguments.[3])
             sprintf "vkCmdDraw(%A,%A,%A,%A)" a b c d
+        elif ptr = vkCmdDrawIndirect then
+            let a = (unbox<VkBuffer> i.Arguments.[0])
+            let b = (unbox<VkDeviceSize> i.Arguments.[1])
+            let c = (unbox<uint32> i.Arguments.[2])
+            let d = (unbox<uint32> i.Arguments.[3])
+            sprintf "vkCmdDrawIndirect(%A,%A,%A,%A)" a b c d
+        elif ptr = vkCmdDrawIndexedIndirect then
+            let a = (unbox<VkBuffer> i.Arguments.[0])
+            let b = (unbox<VkDeviceSize> i.Arguments.[1])
+            let c = (unbox<uint32> i.Arguments.[2])
+            let d = (unbox<uint32> i.Arguments.[3])
+            sprintf "vkCmdDrawIndexedIndirect(%A,%A,%A,%A)" a b c d
         else
             failwith "unknown instruction"

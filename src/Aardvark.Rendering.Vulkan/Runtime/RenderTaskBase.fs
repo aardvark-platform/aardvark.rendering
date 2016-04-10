@@ -149,31 +149,31 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
         let counts = Dictionary<ResourceKind, ref<int>>()
 
 
-        let dirtyResources = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
-        if dirtyResources.Count > 0 then
-            let commands = 
-                dirtyResources 
-                    |> Seq.toList
-                    |> List.choose (fun d ->
-                        lock d (fun () ->
-                            if d.OutOfDate then
-                                d.Update(x) |> Some
-                            else
-                                d.Outputs.Add x |> ignore
-                                None
-                        )
-                    )
-            let update = commands |> Command.ofSeq
-            update |> context.DefaultQueue.RunSynchronously
+        let dirty = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
+        if dirty.Count > 0 then
+            dirty 
+                |> Seq.toList
+                |> List.map (fun d -> d.Update(x))
+                |> Command.ofSeq 
+                |> context.DefaultQueue.RunSynchronously
   
 
-        let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
+            let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
 
-        { stats with
-            ResourceUpdateCount = stats.ResourceUpdateCount + float count
-            ResourceUpdateCounts = counts
-            ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
-        }
+            let own = 
+                { stats with
+                    ResourceUpdateCount = stats.ResourceUpdateCount + float count
+                    ResourceUpdateCounts = counts
+                    ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
+                }
+
+            if dirtyResources.Count > 0 then
+                Log.line "nested shit"
+                x.UpdateDirtyResources() + own
+            else
+                own
+        else
+            FrameStatistics.Zero
 
     member x.GetStats() =
         let res = oneTimeStatistics + frameStatistics

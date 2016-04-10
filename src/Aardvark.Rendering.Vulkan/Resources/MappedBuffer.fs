@@ -46,8 +46,9 @@ type MappedBuffer(ctx : Context) =
             | _ -> failf "asdasdsadasd"
 
     let releaseBuffer(b : Buffer) =
-        b.Memory.Dispose()
-        VkRaw.vkDestroyBuffer(device.Handle, b.Handle, NativePtr.zero)
+        if b.Handle.IsValid then
+            b.Memory.Dispose()
+            VkRaw.vkDestroyBuffer(device.Handle, b.Handle, NativePtr.zero)
 
     let map(b : Buffer) =
         let mutable ptr = 0n
@@ -69,11 +70,12 @@ type MappedBuffer(ctx : Context) =
         ptr
 
     let unmap(b : Buffer) =
-        match b.Memory.Pointer with
-            | Null -> ()
-            | Real(m,_) -> VkRaw.vkUnmapMemory(device.Handle, m.Handle)
-            | View(m,_,_) -> VkRaw.vkUnmapMemory(device.Handle, m.Handle)
-            | Managed(_,b,_) -> VkRaw.vkUnmapMemory(device.Handle, b.Memory.Handle)
+        if b.Handle.IsValid then
+            match b.Memory.Pointer with
+                | Null -> ()
+                | Real(m,_) -> VkRaw.vkUnmapMemory(device.Handle, m.Handle)
+                | View(m,_,_) -> VkRaw.vkUnmapMemory(device.Handle, m.Handle)
+                | Managed(_,b,_) -> VkRaw.vkUnmapMemory(device.Handle, b.Memory.Handle)
 
 
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
@@ -82,49 +84,42 @@ type MappedBuffer(ctx : Context) =
     let mutable handle : Option<Buffer> = None
     let mutable capacity = 0
 
+    let deleteBuffers = System.Collections.Generic.List<Buffer>()
+
     let create () =
-        if capacity = 0 then
-            match handle with
-                | Some h -> 
-                    unmap h
-                    pointer <- 0n
-                    releaseBuffer h
-                    handle <- None
-                | _ -> 
-                    ()
-        else
-            match handle with
-                | Some h when h.Size = int64 capacity ->
-                    ()
+//        if capacity = 0 then
+//            match handle with
+//                | Some h -> 
+//                    unmap h
+//                    pointer <- 0n
+//                    releaseBuffer h
+//                    handle <- None
+//                | _ -> 
+//                    ()
+//        else
+        match handle with
+            | Some h when h.Size = int64 capacity ->
+                ()
 
-                | Some h -> 
-                    let copySize = min (int h.Size) capacity
-                    let mem, newBuffer = createBuffer capacity
-                    let newPointer = map newBuffer
-                    Marshal.Copy(pointer, newPointer, copySize)
-                    unmap h
+            | Some h -> 
+                let copySize = min (int h.Size) capacity
+                let mem, newBuffer = createBuffer capacity
+                let newPointer = map newBuffer
 
-                    let mutable range =
-                        VkMappedMemoryRange(
-                            VkStructureType.MappedMemoryRange, 0n,
-                            mem, 
-                            0UL,
-                            uint64 copySize
-                        )
+                unmap h
+                if copySize > 0 then
+                    h.CopyTo(newBuffer, 0L, int64 copySize) |> ctx.DefaultQueue.RunSynchronously
 
-                    VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&range)
-                        |> check "vkFlushMappedMemoryRanges"
+                memory <- mem
+                handle <- Some newBuffer
+                pointer <- newPointer
+                deleteBuffers.Add h
 
-                    memory <- mem
-                    handle <- Some newBuffer
-                    pointer <- newPointer
-                    releaseBuffer h
-
-                | None ->
-                    let mem, newBuffer = createBuffer capacity 
-                    memory <- mem
-                    handle <- Some newBuffer
-                    pointer <- map newBuffer
+            | None ->
+                let mem, newBuffer = createBuffer capacity 
+                memory <- mem
+                handle <- Some newBuffer
+                pointer <- map newBuffer
 
     member x.Dispose() =
         match handle with
@@ -148,7 +143,7 @@ type MappedBuffer(ctx : Context) =
             transact (fun () -> x.MarkOutdated())
         
     member x.Write(ptr : nativeint, offset : int, sizeInBytes : int) =
-        lock x (fun () ->
+        if sizeInBytes > 0 then 
             create()
             Marshal.Copy(ptr, pointer + nativeint offset, sizeInBytes)
             let mutable range = 
@@ -161,12 +156,11 @@ type MappedBuffer(ctx : Context) =
 
             VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&range)
                 |> check "vkFlushMappedMemoryRanges"
-        )
+
     member x.Read(ptr : nativeint, offset : int, sizeInBytes : int) =
-        lock x (fun () ->
-            create()
-            Marshal.Copy(pointer + nativeint offset, ptr, sizeInBytes)
-        )
+        create()
+        Marshal.Copy(pointer + nativeint offset, ptr, sizeInBytes)
+
 
     member x.OnDispose = onDispose :> IObservable<_>
 
@@ -180,5 +174,11 @@ type MappedBuffer(ctx : Context) =
 
     override x.Compute() =
         create()
+
+        for r in deleteBuffers do
+            releaseBuffer r
+
+        deleteBuffers.Clear()
+
         handle.Value :> IBuffer
 

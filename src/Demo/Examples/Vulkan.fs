@@ -40,7 +40,7 @@ type App() =
                     |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
                     |> Sg.uniform "ViewportSize" win.Sizes
 
-            clear <- app.Runtime.CompileClear(win.FramebufferSignature, ~~C4f.Gray, ~~1.0)
+            clear <- app.Runtime.CompileClear(win.FramebufferSignature, ~~C4f.Black, ~~1.0)
             render <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
     
             let task = RenderTask.ofList [clear; render]
@@ -107,15 +107,16 @@ module Simple =
                    ]
                 |> Sg.fillMode mode
 
-        app.Control.Keyboard.KeyDown(Keys.X).Values.Add(fun _ ->   
-            let newMode = 
-                match mode.Value with
-                    | FillMode.Fill -> FillMode.Line
-                    | FillMode.Line -> FillMode.Point
-                    | _ -> FillMode.Fill
+        app.Control.Keyboard.DownWithRepeats.Values.Add(fun k ->  
+            if k = Keys.X then 
+                let newMode = 
+                    match mode.Value with
+                        | FillMode.Fill -> FillMode.Line
+                        | FillMode.Line -> FillMode.Point
+                        | _ -> FillMode.Fill
 
-            Log.line "mode = %A" newMode
-            transact (fun () -> mode.Value <- newMode)
+                Log.line "mode = %A" newMode
+                transact (fun () -> mode.Value <- newMode)
         )
 
 

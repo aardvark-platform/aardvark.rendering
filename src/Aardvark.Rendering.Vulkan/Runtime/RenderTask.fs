@@ -53,12 +53,12 @@ module private Compiler =
                     yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
 
                     yield indirect.Handle |> Mod.map (fun i ->
-                        ctx.DrawIndexedIndirect(i.Buffer.Handle, 0UL, i.Count, sizeof<VkDrawIndexedIndirectCommand>)
+                        ctx.DrawIndexedIndirect(i.Buffer.Handle, 0UL, i.Count, 0)
                     )
 
                 | _ ->
                     yield indirect.Handle |> Mod.map (fun i ->
-                        ctx.DrawIndirect(i.Buffer.Handle, 0UL, i.Count, sizeof<VkDrawIndirectCommand>)
+                        ctx.DrawIndirect(i.Buffer.Handle, 0UL, i.Count, 0)
                     )
         ]
 
@@ -219,6 +219,12 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
 
             for d in prep.descriptorSets do
                 yield d :> IResource
+
+
+            match prep.indirect with
+                | Some ib -> yield ib :> IResource
+                | _ -> ()
+
 
             match prep.indexBuffer with
                 | Some ib -> yield ib :> IResource
