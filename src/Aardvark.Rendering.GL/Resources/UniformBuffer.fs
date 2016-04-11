@@ -67,7 +67,7 @@ type UniformPath =
     | FieldPath of UniformPath * string
 
 type UniformField = 
-    { semantic : string; path : UniformPath; offset : int; uniformType : ActiveUniformType; count : int } with
+    { semantic : string; path : UniformPath; offset : int; arrayStride : int; uniformType : ActiveUniformType; count : int } with
     member x.UniformName =
         let rec name (p : UniformPath) =
             match p with
@@ -434,7 +434,7 @@ module UnmanagedUniformWriters =
                                                 tWriter.GetConstructor [|tMod; typeof<int>; typeof<int>; typeof<int>; converter.GetType()|]
 
                                         fun (m : IAdaptiveObject) ->
-                                            ctor.Invoke [|m; f.count; f.offset; 0; converter|] |> unbox<IWriter>
+                                            ctor.Invoke [|m; f.count; f.offset; f.arrayStride; converter|] |> unbox<IWriter>
 
                                     else
                                         failwithf "cannot write non-enumerable value to uniform-array: %A" f

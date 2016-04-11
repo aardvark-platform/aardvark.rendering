@@ -24,7 +24,7 @@ module private ShaderProgramCounters =
         Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
 
 
-type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<string>; size : int; uniformType : ActiveUniformType; offset : int; isRowMajor : bool } with
+type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<string>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
     member x.Interface =
 
         let name =
@@ -150,6 +150,10 @@ module ProgramReflector =
         GL.GetActiveUniform(p, slot, 1024, &length, &size, &uniformType, builder)
         let name = builder.ToString()
 
+        let mutable slot = slot
+        let mutable stride = 0
+        GL.GetActiveUniforms(p, 1, &slot, ActiveUniformParameter.UniformArrayStride, &stride)
+
         GL.Check "could not get active uniform"
 
         let location = GL.GetUniformLocation(p, name)
@@ -158,7 +162,7 @@ module ProgramReflector =
         if semantic <> name 
         then Log.warn "replaced uniform semantic value (%s -> %s), this might be an error or due to usage of lins." name semantic
 
-        { slot = slot; index = 0; location = location; name = name; semantic = semantic; samplerState = None; size = size; uniformType = uniformType; offset = -1; isRowMajor = false }
+        { slot = slot; index = 0; location = location; name = name; semantic = semantic; samplerState = None; size = size; uniformType = uniformType; offset = -1; arrayStride = stride; isRowMajor = false }
 
     let getActiveUniformBlocks (p : int) =
         [
@@ -189,6 +193,10 @@ module ProgramReflector =
                 let offsets = Array.create fieldCount -1
                 GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformOffset, offsets);
                 GL.Check "could not get field offsets for uniform block"
+                
+                let strides = Array.create fieldCount 0
+                GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformArrayStride, strides)
+                GL.Check "could not get field array-strides for uniform block"
 
                 let sizes = Array.create fieldCount -1
                 GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformSize, sizes);
@@ -199,7 +207,7 @@ module ProgramReflector =
                 GL.Check "could not get field majorities for uniform block"
 
                 for i in 0..fields.Length-1 do
-                    fields.[i] <- { fields.[i] with offset = offsets.[i]; size = sizes.[i]; isRowMajor = (rowMajor.[i] = 1) }
+                    fields.[i] <- { fields.[i] with offset = offsets.[i]; arrayStride = strides.[i]; size = sizes.[i]; isRowMajor = (rowMajor.[i] = 1) }
 
                 GL.UniformBlockBinding(p, b, b)
                 GL.Check "could not set uniform buffer binding"
@@ -331,7 +339,7 @@ module ProgramExtensions =
             if m.Success then m.Groups.["name"].Value
             else u.semantic
 
-        { UniformField.semantic = sem; UniformField.path = parsePath u.name; UniformField.offset = u.offset; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
+        { UniformField.semantic = sem; UniformField.path = parsePath u.name; UniformField.offset = u.offset; arrayStride = u.arrayStride; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
 
     type ActiveUniform with
         member x.UniformField = activeUniformToField x
