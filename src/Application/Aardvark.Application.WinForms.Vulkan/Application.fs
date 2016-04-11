@@ -127,6 +127,26 @@ type VulkanApplication(appName : string, debug : bool) =
     
     let instance = new Instance(appName, Version(1,0,0), enabledLayers, enabledExtensions)
 
+    do
+        Log.start "Vulkan info"
+        let mutable index = 0
+        for d in instance.PhysicalDevices do
+            Log.line "device %d: %A %s" index d.Vendor d.Name
+            index <- index + 1
+
+        Log.start "layers"
+        for l in Instance.AvailableLayers do
+            Log.line "%s" l.layerName.Value
+        Log.stop()
+
+        Log.start "extensions"
+        for l in Instance.AvailableExtensions do
+            Log.line "%s" l.extensionName.Value
+        Log.stop()
+
+        Log.stop()
+
+
     // install debug output to file (and errors/warnings to console)
     do if debug then
         Log.warn "[Vulkan] debug support not implemented"

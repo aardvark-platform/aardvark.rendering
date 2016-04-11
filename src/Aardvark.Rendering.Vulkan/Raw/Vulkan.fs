@@ -441,7 +441,6 @@ type VkSamplerAddressMode =
     | MirroredRepeat = 1
     | ClampToEdge = 2
     | ClampToBorder = 3
-    | MirrorClampToEdge = 4
 
 type VkCompareOp = 
     | Never = 0
@@ -3247,7 +3246,7 @@ module WSIEnums =
         static member Win32SurfaceCreateInfo = unbox<VkStructureType> 1000009000
 module VkRaw = 
     [<Literal>]
-    let lib = "vulkan-1-1-0-5-0.dll"
+    let lib = "vulkan-1-1-0-8-0.dll"
 
     [<DllImport(lib)>]
     extern VkResult vkCreateInstance(VkInstanceCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkInstance* pInstance)

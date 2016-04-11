@@ -678,7 +678,7 @@ module FSharpWriter =
     let commands (l : list<Command>) =
         printfn "module VkRaw = "
         printfn "    [<Literal>]"
-        printfn "    let lib = \"vulkan-1-1-0-5-0.dll\""
+        printfn "    let lib = \"vulkan-1-1-0-8-0.dll\""
         printfn ""
         for c in l do
             let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
@@ -688,7 +688,7 @@ module FSharpWriter =
 
 
 let run () = 
-    let vk = XElement.Load(@"C:\VulkanSDK\1.0.5.0\vk.xml")
+    let vk = XElement.Load(@"C:\VulkanSDK\1.0.8.0\vk.xml")
     
     let defines = XmlReader.defines vk
     let enums = XmlReader.enums vk
@@ -787,5 +787,4 @@ module PCI =
         let file = Path.Combine(__SOURCE_DIRECTORY__, "PCI.fs")
         File.WriteAllText(file, str)
 
-do  PCI.run()
-    run()
+do run()

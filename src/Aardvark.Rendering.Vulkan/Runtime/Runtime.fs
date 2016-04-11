@@ -21,6 +21,8 @@ type private FramebufferSignature(runtime : IRuntime, res : Resource<RenderPass>
 
     let signature = lazy ( res.Handle.GetValue() :> IFramebufferSignature )
     
+    member x.RenderPass = signature.Value |> unbox<RenderPass>
+
     member x.Dispose() = res.Dispose()
 
     interface IDisposable with
@@ -69,7 +71,13 @@ type Runtime(device : Device) as this =
 
 
     member x.CompileRender(fbo : IFramebufferSignature, config : BackendConfiguration, renderObjects : aset<IRenderObject>) =
-        new RenderTask(manager, unbox fbo, renderObjects, config) :> IRenderTask
+        let pass =
+            match fbo with
+                | :? RenderPass as pass -> pass
+                | :? FramebufferSignature as fb -> fb.RenderPass
+                | _ -> failf "unexpected FramebufferSignature: %A" fbo
+
+        new RenderTask(manager, pass, renderObjects, config) :> IRenderTask
 
     member x.CompileClear(fbo : IFramebufferSignature, clearColors : IMod<Map<Symbol, C4f>>, clearDepth : IMod<Option<double>>) =
         let colors = 
@@ -234,31 +242,32 @@ type Runtime(device : Device) as this =
         // framebuffers
 
         member x.CreateFramebuffer (signature, attachments) = 
-            match signature with
-                | :? RenderPass as pass ->
+            let pass = 
+                match signature with
+                    | :? FramebufferSignature as fb -> fb.RenderPass
+                    | :? RenderPass as pass -> pass
+                    | _ -> failf "unexpected FramebufferSignature: %A" signature
                     
-                    let createView (o : IFramebufferOutput) =
-                        match o with
-                            | :? Image as img -> context.CreateImageOutputView(img)
-                            | :? BackendTextureOutputView as view ->
-                                match view.texture with
-                                    | :? Image as img -> context.CreateImageOutputView(img, view.level, view.slice)
-                                    | t -> failf "unexpected BackendTexture: %A" t
-                            | v -> failf "unexpected FramebufferOutput: %A" v
+            let createView (o : IFramebufferOutput) =
+                match o with
+                    | :? Image as img -> context.CreateImageOutputView(img)
+                    | :? BackendTextureOutputView as view ->
+                        match view.texture with
+                            | :? Image as img -> context.CreateImageOutputView(img, view.level, view.slice)
+                            | t -> failf "unexpected BackendTexture: %A" t
+                    | v -> failf "unexpected FramebufferOutput: %A" v
 
-                    let views =
-                        pass.ColorAttachments 
-                            |> Seq.map (fun (sem, att) -> createView attachments.[sem])
-                            |> Seq.toList
+            let views =
+                pass.ColorAttachments 
+                    |> Seq.map (fun (sem, att) -> createView attachments.[sem])
+                    |> Seq.toList
 
-                    let depthView =
-                        pass.DepthAttachment
-                            |> Option.map (fun att -> createView attachments.[DefaultSemantic.Depth])
+            let depthView =
+                pass.DepthAttachment
+                    |> Option.map (fun att -> createView attachments.[DefaultSemantic.Depth])
 
-                    context.CreateFramebuffer(pass, views @ Option.toList depthView) :> IFramebuffer
+            context.CreateFramebuffer(pass, views @ Option.toList depthView) :> IFramebuffer
 
-                | _ -> 
-                    failf "unexpected FramebufferSignature: %A" signature
 
         member x.DeleteFramebuffer(fbo) = 
             match fbo with

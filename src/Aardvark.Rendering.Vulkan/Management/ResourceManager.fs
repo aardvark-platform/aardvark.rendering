@@ -475,6 +475,8 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
 
                 { new Resource<Pipeline>(pipelineCache) with
                     member x.Create old =
+                        old |> Option.iter ctx.Delete
+
                         let pipeline =
                             ctx.CreateGraphicsPipeline {
                                 renderPass              = pass

@@ -944,6 +944,9 @@ type ImageSubResource =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ImageSubResource =
 
+    [<Literal>]
+    let private flipY = false
+
     let ofImage (img : Image) = ImageSubResource(img)
      
     let ofImageLevel (level : int) (img : Image) = ImageSubResource(img, level)
@@ -1032,12 +1035,15 @@ module ImageSubResource =
                 DevicePtr.map mem (fun ptr ->
                     let info =
                         NativeVolumeInfo(
-                            V3n(channels, -dy, 1n),
+                            V3n(channels, (if flipY then -dy else dy), 1n),
                             V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
-                    let ptr = ptr + dy * nativeint (size.Y - 1)
+                    let ptr = 
+                        if flipY then ptr + dy * nativeint (size.Y - 1)
+                        else ptr
+
                     let volume = NativeVolumeRaw.ofNativeInt info ptr
                     NativeVolumeRaw.copy src volume
                 )
@@ -1072,12 +1078,15 @@ module ImageSubResource =
                 DevicePtr.map mem (fun ptr ->
                     let info =
                         NativeVolumeInfo(
-                            V3n(channels, -dy, 1n),
+                            V3n(channels, (if flipY then -dy else dy), 1n),
                             V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
-                    let ptr1 = ptr + dy * nativeint (size.Y - 1)
+                    let ptr1 = 
+                        if flipY then ptr + dy * nativeint (size.Y - 1)
+                        else ptr
+
                     let volume = NativeVolumeRaw.ofNativeInt info ptr1
                     NativeVolumeRaw.copy src volume
                 )
@@ -1127,12 +1136,14 @@ module ImageSubResource =
                 DevicePtr.map mem (fun ptr ->
                     let info =
                         NativeVolumeInfo(
-                            V3n(channels, -dy, 1n),
+                            V3n(channels, (if flipY then -dy else dy), 1n),
                             V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
-                    let ptr = ptr + dy * nativeint (size.Y - 1)
+                    let ptr = 
+                        if flipY then ptr + dy * nativeint (size.Y - 1)
+                        else ptr
                     let volume = NativeVolumeRaw.ofNativeInt info ptr
                     NativeVolumeRaw.copy volume dst
                 )
@@ -1182,12 +1193,15 @@ module ImageSubResource =
                     DevicePtr.map mem (fun ptr ->
                         let info =
                             NativeVolumeInfo(
-                                V3n(channels, -dy, 1n),
+                                V3n(channels, (if flipY then -dy else dy), 1n),
                                 V3n(nativeint size.X, nativeint size.Y, channels),
                                 channelSize
                             )
 
-                        let ptr = ptr + dy * nativeint (size.Y - 1)
+                        let ptr = 
+                            if flipY then ptr + dy * nativeint (size.Y - 1)
+                            else ptr
+
                         let volume = NativeVolumeRaw.ofNativeInt info ptr
                         NativeVolumeRaw.copy volume dst
                     )

@@ -11,13 +11,15 @@ open Aardvark.SceneGraph
 open Aardvark.Base.Incremental.Operators
 
 
-type App() =
+type App private() =
     static let emptySg = Sg.set ASet.empty
+    
+    static let mutable instance = None
+
+
+
 
     do Aardvark.Init()
-//       for l in Aardvark.Rendering.Vulkan.Instance.AvailableLayers do
-//        printfn "layer: %A" l.layerName.Value
-
     let mutable initialized = 0
     let app = new VulkanApplication()
     let win = app.CreateSimpleRenderWindow()
@@ -47,6 +49,14 @@ type App() =
             win.RenderTask <- task
             win.Show()
 
+    static member Instance =
+        match instance with
+            | Some i -> i
+            | None ->
+                let i = new App()
+                instance <- Some i
+                i
+
     member x.Control = win :> IRenderControl
 
     member x.Clear() =
@@ -64,6 +74,8 @@ type App() =
 //            win.Dispose()
 //            (app :> IDisposable).Dispose()
        
+
+
     member x.Run() =
         win.Run()
         
@@ -73,7 +85,7 @@ type App() =
 
 module Simple = 
     let run() =
-        use app = new App()
+        let app = App.Instance
         let quadGeometry =
             IndexedGeometry(
                 Mode = IndexedGeometryMode.TriangleList,
@@ -276,7 +288,7 @@ module Lod =
                 |> Sg.trafo invViewProj
 
     
-    let app = new App()
+    let app = App.Instance
     let win = app.Control
 
     type DummyDataProvider(root : Box3d) =

@@ -52,6 +52,11 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
         let globalExtensions = globalExtensions.Value |> List.map (fun l -> l.extensionName.Value) |> Set.ofList
 
         [|
+            yield "VK_KHR_surface"
+            match Environment.OSVersion.Platform with
+                | PlatformID.MacOSX | PlatformID.Unix -> ()
+                | _  -> yield "VK_KHR_win32_surface"
+
             for requested in extensions do
                 if Set.contains requested globalExtensions then
                     yield requested
@@ -71,8 +76,8 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
                     appNameC,
                     appVersion.UInt32,
                     engineNameC,
-                    Version(1,0,0).UInt32,
-                    Version(1, 0, 1).UInt32
+                    Version(1,0,5).UInt32,
+                    Version(1, 0, 5).UInt32
                 )
 
             let pLayers = CStr.sallocMany layers

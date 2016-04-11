@@ -53,12 +53,12 @@ module private Compiler =
                     yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
 
                     yield indirect.Handle |> Mod.map (fun i ->
-                        ctx.DrawIndexedIndirect(i.Buffer.Handle, 0UL, i.Count, 0)
+                        ctx.DrawIndexedIndirect(i.Buffer.Handle, 0UL, i.Count, sizeof<VkDrawIndexedIndirectCommand>)
                     )
 
                 | _ ->
                     yield indirect.Handle |> Mod.map (fun i ->
-                        ctx.DrawIndirect(i.Buffer.Handle, 0UL, i.Count, 0)
+                        ctx.DrawIndirect(i.Buffer.Handle, 0UL, i.Count, sizeof<VkDrawIndirectCommand>)
                     )
         ]
 
@@ -209,6 +209,8 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
         member x.FramebufferSignature = renderPass :> _
         member x.Runtime = Some manager.Runtime
 
+
+
 type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : aset<IRenderObject>, config : BackendConfiguration) as this =
     inherit AbstractRenderTaskWithResources(
         manager,
@@ -346,6 +348,7 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
                     | Some o -> pool.Delete(o)
                     | None -> ()
 
+                old <- Some cmd
                 cmd
             )
         )
