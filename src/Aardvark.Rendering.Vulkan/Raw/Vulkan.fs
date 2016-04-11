@@ -3247,7 +3247,7 @@ module WSIEnums =
         static member Win32SurfaceCreateInfo = unbox<VkStructureType> 1000009000
 module VkRaw = 
     [<Literal>]
-    let lib = "vulkan-1-1-0-5-0.dll"
+    let lib = "vulkan-1.dll"
 
     [<DllImport(lib)>]
     extern VkResult vkCreateInstance(VkInstanceCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkInstance* pInstance)
