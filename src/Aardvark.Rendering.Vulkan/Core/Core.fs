@@ -237,10 +237,11 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
     member x.CreateDevice(physical : PhysicalDevice, layers : list<string>, extensions : list<string>) =
         let defaultQueue =
             let families = physical.QueueFamilies
-            if families.Length = 1 then
-                Map.ofList [families.[0], min families.[0].QueueCount Environment.ProcessorCount]
-            else
-                failf "could not determine a default queue for device: %A" physical
+            let graphicsFamilies = families |> Array.filter (fun s -> s.Graphics)
+            if graphicsFamilies.Length = 0 then failf "could not find queue with graphics bit set. available families: %A" families 
+            let score (f : PhysicalQueueFamily) = if f.Compute then 1 else 0 // todo: better score
+            let preferred = graphicsFamilies |> Array.maxBy score
+            Map.ofList [preferred, min preferred.QueueCount Environment.ProcessorCount]
 
         x.CreateDevice(physical, defaultQueue, layers, extensions)
 
@@ -511,6 +512,7 @@ and PhysicalQueueFamily(device : PhysicalDevice, index : int, properties : VkQue
     member x.Compute = properties.queueFlags.HasFlag(VkQueueFlags.ComputeBit)
     member x.Graphics = properties.queueFlags.HasFlag(VkQueueFlags.GraphicsBit)
     member x.QueueCount = int properties.queueCount
+    member x.Flags = properties.queueFlags
 
     override x.ToString() =
         sprintf "PhysicalQueueFamily { Index = %A; Flags = %A; Count = %A }" index properties.queueFlags properties.queueCount
