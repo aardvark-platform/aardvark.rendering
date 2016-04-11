@@ -24,6 +24,8 @@ type IResource =
 type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
     inherit AdaptiveObject()
 
+    static let resName = typeof<'h> |> ReflectionHelpers.getPrettyName
+
     let mutable currentHandle = None
     let handleMod = 
         Mod.custom (fun self ->
@@ -67,18 +69,23 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
 
             match old with
                 | Some o when o = h -> 
+                    infof "in-place update of %s" resName
                     update
 
                 | Some o ->
+                    infof "recreation of %s" resName
+                    currentHandle <- Some h
                     command {
-                        try do! update
+                        try 
+                            do! update
                         finally
-                            currentHandle <- Some h
+                            infof "handle change of %s" resName
                             transact (fun () -> handleMod.MarkOutdated())
                             x.Destroy o
                     }
                     
                 | None ->
+                    infof "initial creation of %s" resName
                     currentHandle <- Some h
                     transact (fun () -> handleMod.MarkOutdated())
                     update

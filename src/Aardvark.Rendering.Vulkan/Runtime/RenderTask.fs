@@ -62,7 +62,7 @@ module private Compiler =
                     )
         ]
 
-    let compile (ctx : InstructionContext) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =
+    let compileInt (ctx : InstructionContext) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =
         let code =
             [
                 let prog = self.program.Handle.GetValue()
@@ -103,6 +103,15 @@ module private Compiler =
             ]
 
         new AdaptiveCode<Instruction>(code) :> IAdaptiveCode<_>
+
+    let compile ctx prev self =
+        let res = compileInt ctx prev self
+//
+//        Log.start "compiled"
+//        res.Content |> List.collect Mod.force |> List.iter (infof "%A")
+//        Log.stop()
+
+        res
 
 
 type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors : list<IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) as this =
@@ -302,10 +311,12 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
          
     let getOrCreateCommandBuffer (pass : RenderPass) (fbo : Framebuffer) =
         commandBufferCache.GetOrCreate(fbo, fun fbo ->
-            let cmd = pool.CreateCommandBuffer(true)
+            let mutable old = None
             Mod.custom (fun self ->
+                Log.start "updating command buffer"
                 program.Update(self) |> ignore
 
+                let cmd = pool.CreateCommandBuffer(true)
                 cmd.Begin(true)
                 cmd.BeginPass(pass, fbo)
 
@@ -320,13 +331,20 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
                     
                 let sw = System.Diagnostics.Stopwatch()
                 sw.Start()
+                Log.start "run"
                 program.Run(cmd.Handle)
+                Log.stop()
                 Log.line "updated cmd buffer: %.3fms" sw.Elapsed.TotalMilliseconds
 
                 cmd.EndPass()
                 cmd.End()
                 sw.Stop()
 
+                Log.stop()
+
+                match old with
+                    | Some o -> pool.Delete(o)
+                    | None -> ()
 
                 cmd
             )
@@ -354,7 +372,7 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
         if hasProgram then
             let fbo = outputs.framebuffer |> unbox<Framebuffer>
             let cmd = getOrCreateCommandBuffer pass fbo
-            ctx.DefaultQueue.SubmitAndWait [| Mod.force cmd |]
+            ctx.DefaultQueue.SubmitAndWait [| cmd.GetValue(x) |]
 
         executionTime.Stop()
 

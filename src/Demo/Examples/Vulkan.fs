@@ -442,11 +442,11 @@ module Lod =
                     //DefaultSurfaces.pointSprite  |> toEffect     
                     //DefaultSurfaces.pointSpriteFragment  |> toEffect 
                 ]
-            Helpers.frustum gridCam gridProj
-
-            data.BoundingBox.EnlargedByRelativeEps(0.005)
-                |> Helpers.wireBox C4b.VRVisGreen
-                |> Sg.ofIndexedGeometry
+//            Helpers.frustum gridCam gridProj
+//
+//            data.BoundingBox.EnlargedByRelativeEps(0.005)
+//                |> Helpers.wireBox C4b.VRVisGreen
+//                |> Sg.ofIndexedGeometry
         ]
 
     let final =

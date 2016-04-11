@@ -144,36 +144,43 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
 
 
     member x.UpdateDirtyResources() =
-        let mutable stats = FrameStatistics.Zero
-        let mutable count = 0 
-        let counts = Dictionary<ResourceKind, ref<int>>()
+        let rec recurse() =
+            let mutable stats = FrameStatistics.Zero
+            let mutable count = 0 
+            let counts = Dictionary<ResourceKind, ref<int>>()
 
 
-        let dirty = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
-        if dirty.Count > 0 then
-            dirty 
-                |> Seq.toList
-                |> List.map (fun d -> d.Update(x))
-                |> Command.ofSeq 
-                |> context.DefaultQueue.RunSynchronously
+            let dirty = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
+            if dirty.Count > 0 then
+                dirty 
+                    |> Seq.toList
+                    |> List.map (fun d -> d.Update(x))
+                    |> Command.ofSeq 
+                    |> context.DefaultQueue.RunSynchronously
   
 
-            let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
+                let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
 
-            let own = 
-                { stats with
-                    ResourceUpdateCount = stats.ResourceUpdateCount + float count
-                    ResourceUpdateCounts = counts
-                    ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
-                }
+                let own = 
+                    { stats with
+                        ResourceUpdateCount = stats.ResourceUpdateCount + float count
+                        ResourceUpdateCounts = counts
+                        ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
+                    }
 
-            if dirtyResources.Count > 0 then
-                Log.line "nested shit"
-                x.UpdateDirtyResources() + own
+                if dirtyResources.Count > 0 then
+                    Log.line "nested shit"
+                    x.UpdateDirtyResources() + own
+                else
+                    own
             else
-                own
-        else
-            FrameStatistics.Zero
+                FrameStatistics.Zero
+        
+
+        Log.start "resource update"
+        let res = lock dirtyLock recurse
+        Log.stop()
+        res
 
     member x.GetStats() =
         let res = oneTimeStatistics + frameStatistics

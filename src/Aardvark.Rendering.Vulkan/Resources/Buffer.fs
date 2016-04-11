@@ -265,6 +265,18 @@ type IndirectBuffer =
         val mutable public Indexed : bool
 
         new(b,c,i) = { Buffer = b; Count = c; Indexed = i }
+
+        override x.GetHashCode() =
+            HashCode.Combine(x.Buffer.GetHashCode(), x.Count.GetHashCode(), x.Indexed.GetHashCode())
+
+        override x.Equals o =
+            match o with
+                | :? IndirectBuffer as o ->
+                    x.Buffer = o.Buffer && x.Count = o.Count && x.Indexed = o.Indexed
+                | _ ->
+                    false
+
+
     end
 
 [<AbstractClass; Sealed; Extension>]
@@ -312,8 +324,8 @@ type ContextBufferIndirectExtensions private() =
 
                 let newBuffer, cmd = this.CreateBufferCommand(oldBuffer, ArrayBuffer(indirectData), VkBufferUsageFlags.IndirectBufferBit)
 
-                let res = IndirectBuffer(newBuffer, data.Length, indexed)
 
+                let res = IndirectBuffer(newBuffer, data.Length, indexed)
                 res, cmd
 
             | _ ->
