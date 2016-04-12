@@ -114,54 +114,131 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
         member x.Sizes = sizes :> IMod<_>
         member x.Time = time
 
-type VulkanApplication(appName : string, debug : bool) =
+
+type VulkanApplication(appName : string, debug : bool, chooseDevice : PhysicalDevice -> bool) =
     static let instanceDebugLayers = [ "VK_LAYER_LUNARG_api_dump"; Instance.Layers.DrawState; Instance.Layers.ParamChecker; Instance.Layers.Threading; Instance.Layers.SwapChain; Instance.Layers.MemTracker ]
     static let deviceDebugLayers = instanceDebugLayers
 
+    let requestedExtensions =
+        [
+            yield Instance.Extensions.Surface
+            yield Instance.Extensions.SwapChain
+            yield Instance.Extensions.Win32Surface
+            yield Instance.Extensions.XcbSurface
+            yield Instance.Extensions.XlibSurface
 
+            if debug then
+                yield Instance.Extensions.DebugReport
+        ]
 
+    let requestedLayers =
+        [
+            yield Instance.Layers.SwapChain
+            if debug then
+                yield Instance.Layers.DrawState
+                yield Instance.Layers.ParamChecker
+                yield Instance.Layers.StandardValidation
+        ]
 
-    // create an instance
-    let enabledLayers = if debug then instanceDebugLayers else []
-    let enabledExtensions = if debug then [Instance.Extensions.DebugReport] else []
+    let instance = 
+        let availableExtensions =
+            Instance.AvailableExtensions |> Seq.map (fun e -> e.extensionName.Value) |> Set.ofSeq
+
+        let availableLayers =
+            Instance.AvailableLayers |> Seq.map (fun l -> l.layerName.Value) |> Set.ofSeq
+
+        // create an instance
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableExtensions)
     
-    let instance = new Instance(appName, Version(1,0,0), enabledLayers, enabledExtensions)
-
-    do
-        Log.start "Vulkan info"
-        let mutable index = 0
-        for d in instance.PhysicalDevices do
-            Log.line "device %d: %A %s" index d.Vendor d.Name
-            index <- index + 1
-
-        Log.start "layers"
-        for l in Instance.AvailableLayers do
-            Log.line "%s" l.layerName.Value
-        Log.stop()
-
-        Log.start "extensions"
-        for l in Instance.AvailableExtensions do
-            Log.line "%s" l.extensionName.Value
-        Log.stop()
-
-        Log.stop()
-
+        new Instance(appName, Version(1,0,0), enabledLayers, enabledExtensions)
 
     // install debug output to file (and errors/warnings to console)
     do if debug then
-        Log.warn "[Vulkan] debug support not implemented"
         instance.OnDebugMessage.Add (fun msg ->
             Log.warn "%s" msg.message
         )
-        //instance.InstallDebugFileWriter "vk.log"
+
 
     // choose a physical device
-    let physicalDevice = instance.PhysicalDevices |> List.head
+    let physicalDevice = 
+        match instance.PhysicalDevices |> List.tryFind chooseDevice with
+            | Some device -> device
+            | _ -> failwithf "[Vulkan] could not choose device (see info for available ones)"
 
     // create a device
-    let enabledDeviceLayers = if debug then deviceDebugLayers else []
-    let enabledDeviceExtensions = [ ]
-    let device = instance.CreateDevice(physicalDevice, enabledDeviceLayers, enabledDeviceExtensions)
+    let device = 
+        let availableExtensions =
+            physicalDevice.Extensions |> Seq.map (fun e -> e.extensionName.Value) |> Set.ofSeq
+
+        let availableLayers =
+            physicalDevice.Layers |> Seq.map (fun l -> l.layerName.Value) |> Set.ofSeq
+
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableExtensions)
+        
+        instance.CreateDevice(physicalDevice, enabledLayers, enabledExtensions)
+
+    let printInfo() =
+        
+        Log.start "vulkan"
+
+        do  Log.start "instance"
+
+            do  Log.start "layers"
+                for l in Instance.AvailableLayers do
+                    let layerName = l.layerName.Value
+                    let version = l.implementationVersion |> Version.FromUInt32
+                    if instance.Layers |> Array.exists (fun li -> li = layerName) then
+                        Log.line "* %s (v%A)" layerName version
+                    else
+                        Log.line "  %s (v%A)" layerName version
+                Log.stop()
+
+            do  Log.start "extensions"
+                for e in Instance.AvailableExtensions do
+                    let extName = e.extensionName.Value
+                    let version = e.specVersion |> Version.FromUInt32
+                    if instance.Extensions |> Array.exists (fun ei -> ei = extName) then
+                        Log.line "* %s (v%A)" extName version
+                    else
+                        Log.line "  %s (v%A)" extName version
+                Log.stop()
+
+            Log.stop()
+
+        do  Log.start "device"
+            Log.line "kind:   %A" physicalDevice.DeviceType
+            Log.line "vendor: %A" physicalDevice.Vendor
+            Log.line "name:   %s" physicalDevice.Name
+
+            do  Log.start "layers"
+                for l in physicalDevice.Layers do
+                    let layerName = l.layerName.Value
+                    let version = l.implementationVersion |> Version.FromUInt32
+                    if device.Layers |> List.exists (fun li -> li = layerName) then
+                        Log.line "* %s (v%A)" layerName version
+                    else
+                        Log.line "  %s (v%A)" layerName version
+                Log.stop()
+
+            do  Log.start "extensions"
+                for e in physicalDevice.Extensions do
+                    let extName = e.extensionName.Value
+                    let version = e.specVersion |> Version.FromUInt32
+                    if device.Extensions |> List.exists (fun ei -> ei = extName) then
+                        Log.line "* %s (v%A)" extName version
+                    else
+                        Log.line "  %s (v%A)" extName version
+                Log.stop()
+            
+            Log.stop()
+
+        Log.stop()  
+
+
+    do printInfo()
+
 
     // create a runtime
     let runtime = new Runtime(device)
@@ -199,5 +276,7 @@ type VulkanApplication(appName : string, debug : bool) =
             instance.Dispose()
 
 
+    new(appName, debug) = new VulkanApplication(appName, debug, fun _ -> true)
     new(appName) = new VulkanApplication(appName, false)
+    new(debug) = new VulkanApplication("Aardvark", debug)
     new() = new VulkanApplication("Aardvark", false)

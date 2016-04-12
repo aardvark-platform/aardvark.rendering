@@ -265,7 +265,7 @@ type ResourceMangerExtensions private() =
                     match ro.IndirectBuffer with
                         | null -> None
                         | indirect -> 
-                            let hasIndex = Option.isNone indexBuffer
+                            let hasIndex = Option.isSome indexBuffer
                             x.CreateIndirectBuffer(ro.IndirectBuffer, hasIndex) |> Some
 
                 let res =

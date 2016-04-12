@@ -16,104 +16,6 @@ open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.Runtime
 
-[<AutoOpen>]
-module private Compiler = 
-
-    let instructionToCall (i : Instruction) : NativeCall =
-        i.FunctionPointer, i.Arguments
-
-    let callToInstruction (ctx : InstructionContext) (ptr : nativeint, args : obj[]) : Instruction =
-        new Instruction(ctx, ptr, args)
-
-
-    let draw (ctx : InstructionContext) (index : Option<Resource<Buffer>>) (drawCalls : IMod<list<DrawCallInfo>>) =
-        [
-            match index with
-                | Some ib ->
-                    yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
-
-                    yield drawCalls |> Mod.map (
-                        List.collect (fun draw ->
-                            ctx.DrawIndexed(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount, 0)
-                        )
-                    )
-
-                | _ ->
-                    yield drawCalls |> Mod.map (
-                        List.collect (fun draw ->
-                            ctx.Draw(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount)
-                        )
-                    )
-        ]
-
-    let drawIndirect (ctx : InstructionContext) (index : Option<Resource<Buffer>>) (indirect : Resource<IndirectBuffer>) =
-        [
-            match index with
-                | Some ib ->
-                    yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
-
-                    yield indirect.Handle |> Mod.map (fun i ->
-                        ctx.DrawIndexedIndirect(i.Buffer.Handle, 0UL, i.Count, sizeof<VkDrawIndexedIndirectCommand>)
-                    )
-
-                | _ ->
-                    yield indirect.Handle |> Mod.map (fun i ->
-                        ctx.DrawIndirect(i.Buffer.Handle, 0UL, i.Count, sizeof<VkDrawIndirectCommand>)
-                    )
-        ]
-
-    let compileInt (ctx : InstructionContext) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =
-        let code =
-            [
-                let prog = self.program.Handle.GetValue()
-                match prev with
-                    | None ->
-                        yield self.pipeline.Handle |> Mod.map (ctx.BindPipeline)
-
-                        yield self.descriptorSets |> List.map (fun d -> d.Handle) |> Mod.mapN (fun handles ->
-                            ctx.BindDescriptorSets(prog.PipelineLayout, Seq.toArray handles, 0)
-                        )
-
-                        yield self.vertexBuffers |> Array.map (fun (v,_) -> v.Handle) |> Mod.mapN (fun handles ->
-                            ctx.BindVertexBuffers(Seq.toArray handles, self.vertexBuffers |> Array.map snd, 0)
-                        )
-
-                        match self.indirect with
-                            | Some i -> yield! drawIndirect ctx self.indexBuffer i
-                            | None -> yield! draw ctx self.indexBuffer self.DrawCallInfos
-
-                    | Some prev ->
-                        if prev.pipeline <> self.pipeline then
-                            yield self.pipeline.Handle |> Mod.map (ctx.BindPipeline)
-
-                        if prev.descriptorSets <> self.descriptorSets then
-                            yield self.descriptorSets |> List.map (fun d -> d.Handle) |> Mod.mapN (fun handles ->
-                                ctx.BindDescriptorSets(prog.PipelineLayout, Seq.toArray handles, 0)
-                            )
-
-                        if prev.vertexBuffers <> self.vertexBuffers then
-                            yield self.vertexBuffers |> Array.map (fun (v,_) -> v.Handle) |> Mod.mapN (fun handles ->
-                                ctx.BindVertexBuffers(Seq.toArray handles, self.vertexBuffers |> Array.map snd, 0)
-                            )
-
-                        match self.indirect with
-                            | Some i -> yield! drawIndirect ctx self.indexBuffer i
-                            | None -> yield! draw ctx self.indexBuffer self.DrawCallInfos
-
-            ]
-
-        new AdaptiveCode<Instruction>(code) :> IAdaptiveCode<_>
-
-    let compile ctx prev self =
-        let res = compileInt ctx prev self
-//
-//        Log.start "compiled"
-//        res.Content |> List.collect Mod.force |> List.iter (infof "%A")
-//        Log.stop()
-
-        res
-
-
 type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors : list<IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) as this =
     inherit AdaptiveObject()
     let context = manager.Context
@@ -289,21 +191,10 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
 
     let mutable hasProgram = true
     let executionTime = System.Diagnostics.Stopwatch()
-
-
-
-    let program : IAdaptiveProgram<VkCommandBuffer> = 
-        let handler = 
-            FragmentHandler.warpDifferential 
-                instructionToCall 
-                (callToInstruction ictx)
-                (compile ictx)
-                (FragmentHandler.native 8) // at most 8 args (vkBindDescriptorSets)
-
-        AdaptiveProgram.custom 
-            Comparer<_>.Default 
-            handler 
-            preparedObjects
+    let program = 
+        match config.execution with
+            //| ExecutionEngine.Native -> new NativeCommandBufferProgram(ctx, preparedObjects) :> ICommandBufferProgram
+            | _ ->  new ManagedCommandBufferProgram(ctx, preparedObjects) :> ICommandBufferProgram
 
 
               
@@ -333,9 +224,7 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
                     
                 let sw = System.Diagnostics.Stopwatch()
                 sw.Start()
-                Log.start "run"
-                program.Run(cmd.Handle)
-                Log.stop()
+                program.Run(cmd)
                 Log.line "updated cmd buffer: %.3fms" sw.Elapsed.TotalMilliseconds
 
                 cmd.EndPass()

@@ -204,6 +204,10 @@ type ContextBufferExtensions private() =
         this.Memory.Upload(data, size)
 
     [<Extension>]
+    static member Upload (this : Buffer, bufferOffset : int64, data : nativeint, size : int64) =
+        this.Memory.Skip(bufferOffset).Upload(data, size)
+
+    [<Extension>]
     static member Download (this : Buffer, target : Array, start : int, count : int) =
         this.Memory.Download(target, start, count)
 
@@ -214,6 +218,11 @@ type ContextBufferExtensions private() =
     [<Extension>]
     static member Download<'a> (this : Buffer) : Command<'a[]> =
         this.Memory.Download()
+
+    [<Extension>]
+    static member Download (this : Buffer, bufferOffset : int64, data : nativeint, size : int64) =
+        this.Memory.Skip(bufferOffset).Download(data, size)
+
 
 [<AbstractClass; Sealed; Extension>]
 type ContextBufferViewExtensions private() =

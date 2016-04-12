@@ -177,9 +177,7 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
                 FrameStatistics.Zero
         
 
-        Log.start "resource update"
         let res = lock dirtyLock recurse
-        Log.stop()
         res
 
     member x.GetStats() =

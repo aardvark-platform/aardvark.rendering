@@ -12,7 +12,6 @@ open Microsoft.FSharp.NativeInterop
 type InstructionContextExtensions private() =
     
     static let ret (i : list<Instruction>) = 
-        for i in i do infof "%A" i
         i
 
     [<Extension>]

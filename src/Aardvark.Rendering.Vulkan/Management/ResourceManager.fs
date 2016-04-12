@@ -69,23 +69,19 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
 
             match old with
                 | Some o when o = h -> 
-                    infof "in-place update of %s" resName
                     update
 
                 | Some o ->
-                    infof "recreation of %s" resName
                     currentHandle <- Some h
                     command {
                         try 
                             do! update
                         finally
-                            infof "handle change of %s" resName
                             transact (fun () -> handleMod.MarkOutdated())
                             x.Destroy o
                     }
                     
                 | None ->
-                    infof "initial creation of %s" resName
                     currentHandle <- Some h
                     transact (fun () -> handleMod.MarkOutdated())
                     update
@@ -308,13 +304,12 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
                                 b, Command.nop
 
                             | content ->
-                                let old = if created then old else None
+                                let old1 = if created then old else None
                                 created <- true
-                                ctx.CreateIndirectBufferCommand(old, content, indexed)
+                                ctx.CreateIndirectBufferCommand(old1, content, indexed)
 
                     member x.Destroy(h) =
                         if created then ctx.Delete h
-                        created <- false
                 }
 
         )  

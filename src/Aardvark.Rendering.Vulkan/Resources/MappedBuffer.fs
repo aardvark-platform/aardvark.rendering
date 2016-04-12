@@ -13,7 +13,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering.Vulkan
 
 
-type MappedBuffer(ctx : Context) =
+type MappedBufferOld(ctx : Context) =
     inherit Mod.AbstractMod<IBuffer>()
     static let flags = VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit
     let device = ctx.Device
@@ -87,16 +87,6 @@ type MappedBuffer(ctx : Context) =
     let deleteBuffers = System.Collections.Generic.List<Buffer>()
 
     let create () =
-//        if capacity = 0 then
-//            match handle with
-//                | Some h -> 
-//                    unmap h
-//                    pointer <- 0n
-//                    releaseBuffer h
-//                    handle <- None
-//                | _ -> 
-//                    ()
-//        else
         match handle with
             | Some h when h.Size = int64 capacity ->
                 ()
@@ -182,3 +172,70 @@ type MappedBuffer(ctx : Context) =
 
         handle.Value :> IBuffer
 
+
+type MappedBuffer(ctx : Context) =
+    inherit Mod.AbstractMod<IBuffer>()
+
+    let mutable capacity = 0
+    //let rw = new ReaderWriterLockSlim()
+
+    let mutable disp = []
+    let mutable buffer = ctx.CreateBuffer(0L, VkBufferUsageFlags.VertexBufferBit)
+    
+
+    let onDispose = new System.Reactive.Subjects.Subject<unit>()
+
+    member private x.Realloc() = 
+        let cap = int64 capacity
+        if cap <> buffer.Size then
+            let newBuffer = ctx.CreateBuffer(cap, VkBufferUsageFlags.VertexBufferBit)
+            buffer.CopyTo(newBuffer, 0L, min buffer.Size newBuffer.Size) |> ctx.DefaultQueue.RunSynchronously
+            transact (fun () -> x.MarkOutdated())
+            disp <- buffer::disp
+            buffer <- newBuffer
+
+
+    member x.Capacity = capacity
+
+    member x.Resize (size : int) =
+        capacity <- size
+        //ReaderWriterLock.write rw (fun () ->
+        x.Realloc()
+        //)
+            
+    member x.Write(data : nativeint, offset : int, size : int) =
+        assert(size >= 0 && offset >= 0 && offset + size <= capacity)
+        //ReaderWriterLock.read rw (fun () ->
+        buffer.Upload(int64 offset, data, int64 size)
+            |> ctx.DefaultQueue.RunSynchronously
+        //)
+
+    member x.Read(data : nativeint, offset : int, size : int) =
+        assert(size >= 0 && offset >= 0 && offset + size <= capacity)
+        //ReaderWriterLock.read rw (fun () ->
+        buffer.Download(int64 offset, data, int64 size)
+            |> ctx.DefaultQueue.RunSynchronously
+        //)
+
+    member x.OnDispose = onDispose :> IObservable<_>
+
+    member x.Dispose() =
+        let old = Interlocked.Exchange(&disp, [])
+        for o in old do ctx.Delete o
+        capacity <- 0
+        ctx.Delete buffer
+        buffer <- ctx.CreateBuffer(0L, VkBufferUsageFlags.VertexBufferBit)
+
+    override x.Compute() =
+        let old = Interlocked.Exchange(&disp, [])
+        for o in old do ctx.Delete o
+
+        buffer :> IBuffer
+
+    interface IMappedBuffer with
+        member x.Dispose() = x.Dispose()
+        member x.Write(ptr, off, size) = x.Write(ptr, off, size)
+        member x.Read(ptr, off, size) = x.Read(ptr, off, size)
+        member x.Resize(size) = x.Resize(size)
+        member x.Capacity = x.Capacity
+        member x.OnDispose = x.OnDispose
