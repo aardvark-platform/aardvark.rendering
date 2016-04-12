@@ -246,6 +246,51 @@ module InstanceSwapExtensions =
                 ) |> check "vkCreateWin32SurfaceKHR"
 
                 surface
+
+            | Linux ->
+                
+                let xp = Type.GetType("System.Windows.Forms.XplatUIX11, System.Windows.Forms")
+                if isNull xp then failwithf "XplatUIX11"
+
+                let (?) (t : Type) (name : string) =
+                    let prop = t.GetProperty(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+                    let field = t.GetField(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+                    if isNull prop then 
+                        if isNull field then failwithf "cannot get XplatUIX11.%s" name
+                        else field.GetValue(null) |> unbox<'a>
+                    else
+                        prop.GetValue(null) |> unbox<'a>
+
+                let display = xp?DisplayHandle
+                let rootWindow = xp?RootWindow
+
+
+                let dpy = NativePtr.alloc 1
+                NativePtr.write dpy display
+                let window = rootWindow
+
+
+
+                let mutable info =
+                    VkXlibSurfaceCreateInfoKHR(
+                        VkStructureType.XLibSurfaceCreateInfo, 0n,
+                        VkXlibSurfaceCreateFlagsKHR.MinValue,
+                        dpy, window
+                    )
+
+
+                let proc = VkRaw.vkGetInstanceProcAddr(instance.Handle, "vkCreateXlibSurfaceKHR")
+                printfn "vkCreateXlibSurfaceKHR = %A" proc
+                let mutable surface = VkSurfaceKHR.Null
+                VkRaw.vkCreateXlibSurfaceKHR(
+                    instance.Handle,
+                    &&info,
+                    NativePtr.zero, 
+                    &&surface
+                ) |> check "vkCreateXlibSurfaceKHR"
+                
+                surface
+
             | _ ->
                 failwith "not implemented"
 

@@ -98,6 +98,9 @@
     <Compile Include="Runtime\CommandBufferProgram.fs" />
     <Compile Include="Runtime\RenderTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />
+    <None Include="Aardvark.Rendering.Vulkan.dll.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

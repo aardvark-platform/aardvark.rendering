@@ -80,8 +80,10 @@ module ``Rendering Tests`` =
 
         let test = runtime.Download(tex)
         
-        checkerBoardImage.SaveAsImage @"C:\Users\schorsch\Desktop\in.jpg"
-        test.SaveAsImage @"C:\Users\schorsch\Desktop\test.jpg"
+        let desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
+
+        checkerBoardImage.SaveAsImage (Path.Combine(desktop, "in.jpg"))
+        test.SaveAsImage (Path.Combine(desktop, "test.jpg"))
         match test with
             | :? PixImage<byte> as test ->
                 let eq = test.Volume.InnerProduct(checkerBoardImage.Volume, (=), true, (&&))
