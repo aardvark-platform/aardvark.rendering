@@ -76,6 +76,10 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     let mutable threadStealing : StopStealing = 
         { new StopStealing with member x.StopStealing () = { new IDisposable with member x.Dispose() = () } }
 
+    member x.ContextHandle = contextHandle
+
+    member val OnPaintRender = true with get, set
+
     member x.DisableThreadStealing  
         with get () = threadStealing 
         and set v = threadStealing <- v
@@ -133,8 +137,8 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
         base.OnHandleCreated(e)
         loaded <- true
         base.MakeCurrent()
-            
-    override x.OnPaint(e) =
+         
+    member x.Render() = 
         if loaded then
             needsRedraw <- false
             if isNull contextHandle || contextHandle.Handle.IsDisposed then
@@ -172,10 +176,13 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
 //                        while sw.Elapsed.TotalMilliseconds < 10.0 do 1;
 
 
-
+                        
                         x.SwapBuffers()
                         //System.Threading.Thread.Sleep(200)
                         sw.Stop()
+
+                        //Report.Line("{0:0.00}ms", sw.Elapsed.TotalMilliseconds)
+
                         if not first then
                             avgFrameTime.Add(sw.Elapsed.TotalSeconds)
 
@@ -200,6 +207,10 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                         transact (fun () -> Mod.change sizes size)
 
                     needsRedraw <- false
+
+    override x.OnPaint(e) =
+        if x.OnPaintRender then
+            x.Render()
                     
 //    override x.OnResize(e) =
 //        base.OnResize(e)
