@@ -181,7 +181,7 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : PhysicalDe
 
     let printInfo() =
         
-        Log.start "vulkan"
+        Log.start "VulkanApplication"
 
         do  Log.start "instance"
 
@@ -207,10 +207,21 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : PhysicalDe
 
             Log.stop()
 
-        do  Log.start "device"
-            Log.line "kind:   %A" physicalDevice.DeviceType
-            Log.line "vendor: %A" physicalDevice.Vendor
-            Log.line "name:   %s" physicalDevice.Name
+        do  Log.start "%A %s" physicalDevice.Vendor physicalDevice.Name
+
+            Log.line "kind:    %A" physicalDevice.DeviceType
+            Log.line "API:     v%A" (Version.FromUInt32(physicalDevice.Properties.apiVersion))
+            Log.line "driver:  v%A" (Version.FromUInt32(physicalDevice.Properties.driverVersion))
+
+            do  Log.start "memory"
+                for m in physicalDevice.MemoryHeaps do
+                    let suffix =
+                        if m.IsDeviceLocal then " (device)"
+                        else ""
+
+                    Log.line "memory %d: %A%s" m.HeapIndex m.Size suffix
+
+                Log.stop()
 
             do  Log.start "layers"
                 for l in physicalDevice.Layers do
