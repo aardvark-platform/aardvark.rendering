@@ -114,11 +114,82 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
         member x.Sizes = sizes :> IMod<_>
         member x.Time = time
 
+module VisualDeviceChooser =
+    open System.IO
+    open System.Reflection
+    open System.Windows.Forms
+    open Aardvark.Application
 
-type VulkanApplication(appName : string, debug : bool, chooseDevice : PhysicalDevice -> bool) =
-    static let instanceDebugLayers = [ "VK_LAYER_LUNARG_api_dump"; Instance.Layers.DrawState; Instance.Layers.ParamChecker; Instance.Layers.Threading; Instance.Layers.SwapChain; Instance.Layers.MemTracker ]
-    static let deviceDebugLayers = instanceDebugLayers
+    let private md5 = System.Security.Cryptography.MD5.Create()
 
+    let private newHash() =
+        Guid.NewGuid().ToByteArray() |> Convert.ToBase64String
+
+    let private appHash =
+        try
+            let ass = Assembly.GetEntryAssembly()
+            if isNull ass || String.IsNullOrWhiteSpace ass.Location then newHash()
+            else
+                ass.Location 
+                    |> System.Text.Encoding.Unicode.GetBytes
+                    |> md5.ComputeHash
+                    |> Convert.ToBase64String
+                   
+        with _ ->
+            newHash()
+               
+    let private configFile =
+        let configDir = Path.Combine(Path.GetTempPath(), "vulkan")
+
+        if not (Directory.Exists configDir) then
+            Directory.CreateDirectory configDir |> ignore
+
+
+        let fileName = appHash.Replace('/', '_')
+        Path.Combine(configDir, sprintf "%s.vkconfig" fileName)
+
+    let run(devices : list<PhysicalDevice>) =
+        match devices with
+            | [single] -> single
+            | _ -> 
+                let allIds = devices |> List.map (fun d -> string d.DeviceId) |> String.concat ";"
+
+                let choose() =
+                    let chosen = 
+                        devices
+                            |> List.mapi (fun i d -> 
+                                let name = sprintf "%d: %A %s" i d.Vendor d.Name
+                                name, d
+                               )
+                            |> ChooseForm.run
+                    match chosen with
+                        | Some d -> 
+                            File.WriteAllLines(configFile, [ allIds; string d.DeviceId ])
+                            d
+                        | None -> 
+                            Log.warn "no vulkan device chosen => stopping Application"
+                            Environment.Exit 0
+                            failwith ""
+
+                if File.Exists configFile && Control.ModifierKeys <> Keys.Alt then
+                    let cache = File.ReadAllLines configFile
+                    match cache with
+                        | [| fAll; fcache |] when fAll = allIds ->
+                    
+                            let did = UInt32.Parse(fcache)
+
+                            match devices |> List.tryFind (fun d -> d.DeviceId = did) with
+                                | Some d -> d
+                                | _ -> choose()
+
+                        | _ ->
+                            choose()
+                else
+                    choose()
+
+
+
+type VulkanApplication(appName : string, debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
     let requestedExtensions =
         [
             yield Instance.Extensions.Surface
@@ -162,9 +233,9 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : PhysicalDe
 
     // choose a physical device
     let physicalDevice = 
-        match instance.PhysicalDevices |> List.tryFind chooseDevice with
-            | Some device -> device
-            | _ -> failwithf "[Vulkan] could not choose device (see info for available ones)"
+        match instance.PhysicalDevices with
+            | [] -> failwithf "[Vulkan] could not get vulkan devices"
+            | l -> chooseDevice l
 
     // create a device
     let device = 
@@ -287,7 +358,7 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : PhysicalDe
             instance.Dispose()
 
 
-    new(appName, debug) = new VulkanApplication(appName, debug, fun _ -> true)
+    new(appName, debug) = new VulkanApplication(appName, debug, VisualDeviceChooser.run)
     new(appName) = new VulkanApplication(appName, false)
     new(debug) = new VulkanApplication("Aardvark", debug)
     new() = new VulkanApplication("Aardvark", false)
