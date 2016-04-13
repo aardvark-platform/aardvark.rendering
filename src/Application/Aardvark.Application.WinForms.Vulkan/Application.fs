@@ -97,11 +97,15 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
 
     let requestedLayers =
         [
-            yield Instance.Layers.SwapChain
             if debug then
+                yield Instance.Layers.SwapChain
                 yield Instance.Layers.DrawState
                 yield Instance.Layers.ParamChecker
                 yield Instance.Layers.StandardValidation
+                yield Instance.Layers.DeviceLimits
+                yield Instance.Layers.CoreValidation
+                yield Instance.Layers.ParameterValidation
+
         ]
 
     let instance = 
@@ -113,7 +117,7 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
 
         // create an instance
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
     
         new Instance(appName, Version(1,0,0), enabledLayers, enabledExtensions)
 
@@ -139,7 +143,7 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
             physicalDevice.Layers |> Seq.map (fun l -> l.layerName.Value) |> Set.ofSeq
 
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
         
         instance.CreateDevice(physicalDevice, enabledLayers, enabledExtensions)
 

@@ -169,6 +169,24 @@ type IGeneratedSurface =
 
     abstract member Generate : IRuntime * IFramebufferSignature -> BackendSurface
 
+type BinaryShader private(content : Lazy<byte[]>) =
+    member x.Content = content.Value
+
+    new(arr : byte[]) = 
+        BinaryShader(lazy(arr))
+
+    new(file : string) = 
+        if not (System.IO.File.Exists file) then failwithf "could not load surface from file %A" file
+        BinaryShader(lazy(System.IO.File.ReadAllBytes file))
+
+type BinarySurface(shaders : Map<ShaderStage, BinaryShader>) =
+    interface ISurface
+
+    member x.Shaders = shaders
+
+    new(l) = BinarySurface(Map.ofList l)
+    new() = BinarySurface(Map.empty)
+
 
 type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<OutputDescription>) =
     inherit Mod.AbstractMod<RenderingResult>()

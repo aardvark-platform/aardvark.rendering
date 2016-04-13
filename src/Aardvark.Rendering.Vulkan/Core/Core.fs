@@ -628,7 +628,9 @@ module Instance =
         let StandardValidation  = "VK_LAYER_LUNARG_standard_validation"
         let Threading           = "VK_LAYER_GOOGLE_threading"
         let UniqueObjects       = "VK_LAYER_GOOGLE_unique_objects"
-        let Trave               = "VK_LAYER_LUNARG_vktrace"
+        let Trace               = "VK_LAYER_LUNARG_vktrace"
+        let ParameterValidation = "VK_LAYER_LUNARG_parameter_validation"
+        let CoreValidation      = "VK_LAYER_LUNARG_core_validation"
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PhysicalDevice =

@@ -65,7 +65,8 @@ module private EnumExtensions =
         static member SwapChainCreateInfoKHR = enumValue VK_EXT_KHR_DEVICE_SWAPCHAIN_EXTENSION_NUMBER 0 |> unbox<VkStructureType>
         static member PresentInfoKHR = enumValue VK_EXT_KHR_DEVICE_SWAPCHAIN_EXTENSION_NUMBER 1 |> unbox<VkStructureType>
 
-
+    type VkImageLayout with
+        static member PresentSrcKhr = unbox<VkImageLayout> 1000001002
 
 type VulkanSwapChain(desc : VulkanSwapChainDescription,
                      colorImages : Image[], colorViews : VkImageView[], 
@@ -107,6 +108,9 @@ type VulkanSwapChain(desc : VulkanSwapChainDescription,
         presentSemaphore <- device.CreateSemaphore()
         VkRaw.vkAcquireNextImageKHR(device.Handle, swapChain, ~~~0UL, presentSemaphore.Handle, VkFence.Null, &&currentBuffer) |> check "vkAcquireNextImageKHR"
         
+        colorImages.[int currentBuffer].ToLayout(VkImageLayout.ColorAttachmentOptimal)
+            |> q.RunSynchronously
+
         q.Wait(presentSemaphore)
         
     member x.Color =
@@ -127,6 +131,38 @@ type VulkanSwapChain(desc : VulkanSwapChainDescription,
                 &&currentBuffer,
                 &&result
             )
+
+        let img = colorImages.[int currentBuffer]
+
+        q.RunSynchronously (
+            Command.custom (fun s ->
+                let mutable prePresentBarrier =
+                    VkImageMemoryBarrier(
+                        VkStructureType.ImageMemoryBarrier, 0n, 
+                        VkAccessFlags.ColorAttachmentWriteBit,
+                        VkAccessFlags.MemoryReadBit,
+                        VkImageLayout.ColorAttachmentOptimal,
+                        VkImageLayout.PresentSrcKhr,
+                        uint32 q.Family.Index,
+                        uint32 q.Family.Index,
+                        img.Handle,
+                        VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
+                    )
+
+                VkRaw.vkCmdPipelineBarrier(
+                    s.buffer.Handle,
+                    VkPipelineStageFlags.AllCommandsBit, 
+                    VkPipelineStageFlags.BottomOfPipeBit, 
+                    VkDependencyFlags.None, 
+                    0u, NativePtr.zero, 
+                    0u, NativePtr.zero, 
+                    1u, &&prePresentBarrier
+                )
+
+                { s with isEmpty = false }
+            )
+        )
+        img.Layout <- VkImageLayout.PresentSrcKhr
 
         VkRaw.vkQueuePresentKHR(q.Handle, &&info) |> check "vkQueuePresentKHR"
 
@@ -225,81 +261,97 @@ module InstanceSwapExtensions =
     extern nativeint private XGetXCBConnection(nativeint xdisplay)
 
     let private createSurface (instance : Instance) (ctrl : Control) : VkSurfaceKHR =
-        match Environment.OSVersion with
-            | Windows -> 
-                let hwnd = ctrl.Handle
-                let hinstance = Marshal.GetHINSTANCE(Assembly.GetEntryAssembly().GetModules().[0])
+        Log.start "VkSurface"
+        try
+            match Environment.OSVersion with
+                | Windows -> 
+                    Log.line "running on Win32"
 
-                let mutable info =
-                    VkWin32SurfaceCreateInfoKHR(
-                        VkStructureType.Win32SurfaceCreateInfo,
-                        0n,
-                        0u,
-                        hinstance,
-                        hwnd
-                    )
+                    let hwnd = ctrl.Handle
+                    let hinstance = Marshal.GetHINSTANCE(Assembly.GetEntryAssembly().GetModules().[0])
 
-                let mutable surface = VkSurfaceKHR.Null
-                VkRaw.vkCreateWin32SurfaceKHR(
-                    instance.Handle,
-                    &&info,
-                    NativePtr.zero, 
-                    &&surface
-                ) |> check "vkCreateWin32SurfaceKHR"
-
-                surface
-
-            | Linux ->
+                    Log.line "HWND: 0x%016X" hwnd
+                    Log.line "HINSTANCE: 0x%016X" hinstance
                 
-                let xp = Type.GetType("System.Windows.Forms.XplatUIX11, System.Windows.Forms")
-                if isNull xp then failwithf "XplatUIX11"
 
-                let (?) (t : Type) (name : string) =
-                    let prop = t.GetProperty(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
-                    if isNull prop then 
-                        let field = t.GetField(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
-                        if isNull field then failwithf "cannot get XplatUIX11.%s" name
-                        else field.GetValue(null) |> unbox<'a>
-                    else
-                        prop.GetValue(null) |> unbox<'a>
+                    let mutable info =
+                        VkWin32SurfaceCreateInfoKHR(
+                            VkStructureType.Win32SurfaceCreateInfo,
+                            0n,
+                            0u,
+                            hinstance,
+                            hwnd
+                        )
 
-                let display = xp?DisplayHandle
-                let connection = XGetXCBConnection(display)
-                let dpy = NativePtr.alloc 1
-                NativePtr.write dpy connection
+                    let mutable surface = VkSurfaceKHR.Null
+                    VkRaw.vkCreateWin32SurfaceKHR(
+                        instance.Handle,
+                        &&info,
+                        NativePtr.zero, 
+                        &&surface
+                    ) |> check "vkCreateWin32SurfaceKHR"
 
-                let window = ctrl.Handle
+                    surface
 
-
-
-                let mutable info =
-                    VkXcbSurfaceCreateInfoKHR(
-                        VkStructureType.XcbSurfaceCreateInfo, 0n,
-                        VkXcbSurfaceCreateFlagsKHR.MinValue,
-                        dpy, window
-                    )
-
-
-                let mutable surface = VkSurfaceKHR.Null
-                VkRaw.vkCreateXcbSurfaceKHR(
-                    instance.Handle,
-                    &&info,
-                    NativePtr.zero, 
-                    &&surface
-                ) |> check "vkCreateXcbSurfaceKHR"
+                | Linux ->
                 
-                surface
+                    Log.line "running on Linux"
 
-            | _ ->
-                failwith "not implemented"
+                    let xp = Type.GetType("System.Windows.Forms.XplatUIX11, System.Windows.Forms")
+                    if isNull xp then failwithf "could not get System.Windows.Forms.XplatUIX11"
 
+                    let (?) (t : Type) (name : string) =
+                        let prop = t.GetProperty(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+                        if isNull prop then 
+                            let field = t.GetField(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+                            if isNull field then failwithf "cannot get XplatUIX11.%s" name
+                            else field.GetValue(null) |> unbox<'a>
+                        else
+                            prop.GetValue(null) |> unbox<'a>
+
+                    let display = xp?DisplayHandle
+                    let connection = XGetXCBConnection(display)
+                    let window = ctrl.Handle
+
+                    Log.line "xcb_connection: 0x%016X" connection
+                    Log.line "xcb_window:     0x%016X" window
+
+                    let dpy = NativePtr.alloc 1
+                    NativePtr.write dpy connection
+
+
+
+
+                    let mutable info =
+                        VkXcbSurfaceCreateInfoKHR(
+                            VkStructureType.XcbSurfaceCreateInfo, 0n,
+                            VkXcbSurfaceCreateFlagsKHR.MinValue,
+                            dpy, window
+                        )
+
+
+                    let mutable surface = VkSurfaceKHR.Null
+                    VkRaw.vkCreateXcbSurfaceKHR(
+                        instance.Handle,
+                        &&info,
+                        NativePtr.zero, 
+                        &&surface
+                    ) |> check "vkCreateXcbSurfaceKHR"
+                
+                    surface
+
+                | _ ->
+                    failwith "not implemented"
+        finally
+            Log.stop()
+    
     let createRawSwapChain (ctrl : Control) (desc : VulkanSwapChainDescription) (usageFlags : VkImageUsageFlags) (layout : VkImageLayout) =
         let size = V2i(ctrl.ClientSize.Width, ctrl.ClientSize.Height)
         let swapChainExtent = VkExtent2D(uint32 ctrl.ClientSize.Width, uint32 ctrl.ClientSize.Height)
         let device = desc.Device
         let context = desc.Context
 
-        let mutable surface = createSurface desc.Instance ctrl
+        let mutable surface = desc.Surface //createSurface desc.Instance ctrl
 
         let mutable swapChainCreateInfo =
             VkSwapchainCreateInfoKHR(
@@ -316,7 +368,7 @@ module InstanceSwapExtensions =
                 0u,
                 NativePtr.zero,
                 desc.PreTransform,
-                VkCompositeAlphaFlagBitsKHR.None,
+                VkCompositeAlphaFlagBitsKHR.VkCompositeAlphaOpaqueBitKhr,
                 desc.PresentMode,
                 0u,
                 VkSwapchainKHR.Null
@@ -352,13 +404,18 @@ module InstanceSwapExtensions =
             let instance = device.Instance
             let physical = device.Physical.Handle
 
+            Log.start "SwapChain"
+
             let surface = createSurface device.Instance x
 
-            let queueIndex = 0
 
+            let queueIndex = context.DefaultQueue.Family.Index
             let mutable supported = 0u
             VkRaw.vkGetPhysicalDeviceSurfaceSupportKHR(physical, uint32 queueIndex, surface, &&supported) |> check "vkGetPhysicalDeviceSurfaceSupportKHR"
             let supported = supported = 1u
+
+            if supported then Log.line "queue family %d supports SwapChains" queueIndex
+            else Log.warn "queue family %d supports SwapChains" queueIndex
 
             //printfn "[KHR] using queue %d: { wsi = %A }" queueIndex supported
 
@@ -371,14 +428,17 @@ module InstanceSwapExtensions =
             VkRaw.vkGetPhysicalDeviceSurfaceFormatsKHR(physical, surface, &&formatCount, formats) |> check "vkGetSurfaceFormatsKHR"
 
             if formatCount < 1u then
-                failwith "could not find valid format"
+                Log.warn "could not find a valid SwapChain format"
+                failwith "could not find a valid SwapChain format"
 
             let surfFormat = NativePtr.get formats 0
             let format =
                 if formatCount = 1u && surfFormat.format = VkFormat.Undefined then
+                    Log.warn "using fallback format %A" VkFormat.B8g8r8a8Unorm
                     //printfn "[KHR] format fallback"
                     VkFormat.B8g8r8a8Unorm
                 else
+                    Log.line "using format: %A" surfFormat.format
                     //printfn "[KHR] formats: %A" (Array.init (int formatCount) (fun i -> (NativePtr.get formats i)))
                     surfFormat.format
 
@@ -397,10 +457,15 @@ module InstanceSwapExtensions =
 
             //printfn "[KHR] extent: [%d,%d]" swapChainExtent.width swapChainExtent.height
 
+            let presentModes = List.init (int presentModeCount) (fun i -> NativePtr.get presentModes i) 
+
+            Log.line "available presentModes: %A" presentModes
+
             let swapChainPresentMode =
-                List.init (int presentModeCount) (fun i -> NativePtr.get presentModes i) 
-                    |> List.minBy(function | VkPresentModeKHR.VkPresentModeMailboxKhr -> 0 | VkPresentModeKHR.VkPresentModeImmediateKhr -> 1 | _ -> 2)
+                presentModes
+                    |> List.minBy(function | VkPresentModeKHR.VkPresentModeMailboxKhr -> 0 | VkPresentModeKHR.VkPresentModeFifoKhr -> 1 | VkPresentModeKHR.VkPresentModeImmediateKhr -> 2 | _ -> 3)
         
+            Log.line "using presentMode: %A" swapChainPresentMode
             //let swapChainPresentMode = VkPresentModeKHR.Fifo
 
             //printfn "[KHR] present mode: %A" swapChainPresentMode
@@ -412,6 +477,8 @@ module InstanceSwapExtensions =
                 else
                     desired
 
+            Log.line "buffers: %A" desiredNumberOfSwapChainImages
+
             let supported = unbox<VkSurfaceTransformFlagBitsKHR> (int surfaceProperties.supportedTransforms)
             let preTransform =
                 if supported &&& VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformIdentityBitKhr <> VkSurfaceTransformFlagBitsKHR.None then
@@ -419,11 +486,15 @@ module InstanceSwapExtensions =
                 else
                     supported
 
+            Log.line "using preTransform: %A" preTransform
+            Log.stop()
+
             new VulkanSwapChainDescription(context, format, depthFormat, samples, swapChainPresentMode, preTransform, surfFormat.colorSpace, int desiredNumberOfSwapChainImages, surface)
 
         member x.CreateVulkanSwapChain(desc : VulkanSwapChainDescription) =
-            
             let size = V2i(x.ClientSize.Width, x.ClientSize.Height)
+            Log.line "creating SwapChain for size: %A" size
+
             let swapChainExtent = VkExtent2D(uint32 x.ClientSize.Width, uint32 x.ClientSize.Height)
             let device = desc.Device
             let context = desc.Context
@@ -477,7 +548,7 @@ module InstanceSwapExtensions =
                         VkSharingMode.Exclusive,
                         0u,
                         NativePtr.zero,
-                        VkImageLayout.DepthStencilAttachmentOptimal
+                        VkImageLayout.Undefined
                     )
 
                 let mutable mem_alloc =

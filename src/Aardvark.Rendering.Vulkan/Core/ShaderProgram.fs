@@ -159,6 +159,9 @@ type ShaderProgramExtensions private() =
     static member CreateGLSLShader(this : Device, code : string, shaderStage : AStage) =
         match GLSLang.GLSLang.tryCompileSpirVBinary (toGLSLangStage shaderStage) code with
             | Success spirvBinary -> 
+//                let fileName = sprintf @"C:\Users\Schorsch\Desktop\%A.spv" shaderStage
+//                File.writeAllBytes fileName spirvBinary
+
                 let vkStage = toVkStage shaderStage
                 let m =
                     use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(spirvBinary))
@@ -401,12 +404,14 @@ type ShaderProgramExtensions private() =
     static member CreateShaderProgram(this : Device, runtime : IRuntime, s : ISurface, renderPass : RenderPass) =
         match s with
             | :? BackendSurface as s ->
-                    
-                printfn "%s" s.Code
+
                 let shaders = 
                     s.EntryPoints 
                         |> Dictionary.toList
                         |> List.map (fun (stage, entry) ->
+                                
+
+
                                 let define =
                                     match stage with
                                         | ShaderStage.Vertex -> "Vertex"
@@ -428,6 +433,18 @@ type ShaderProgramExtensions private() =
                 let res = ShaderProgramExtensions.CreateShaderProgram(this, shaders, renderPass)
                 res.Surface <- s
 
+
+                res
+            | :? BinarySurface as s ->
+                let shaders =
+                    s.Shaders
+                        |> Map.toList
+                        |> List.map (fun (stage, code) ->
+                            ShaderProgramExtensions.CreateSpriVShader(this, code.Content, stage)
+                        )
+
+                let res = ShaderProgramExtensions.CreateShaderProgram(this, shaders, renderPass)
+                res.Surface <- BackendSurface("SPIRV", Dictionary.empty)
 
                 res
 

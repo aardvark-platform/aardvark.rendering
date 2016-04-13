@@ -49,6 +49,8 @@ type App private() =
             win.RenderTask <- task
             win.Show()
 
+    do init()
+
     static member Instance =
         match instance with
             | Some i -> i
@@ -66,7 +68,6 @@ type App private() =
         with get () = sg.Value
         and set (v : ISg) = 
             transact (fun () -> sg.Value <- v)
-            init()
 
     member x.Dispose() = ()
 //        if Interlocked.Exchange(&initialized, 0) = 1 then
@@ -106,12 +107,20 @@ module Simple =
 
         let mode = Mod.init FillMode.Fill
 
+
+        let surf =
+            BinarySurface [
+                ShaderStage.Vertex, BinaryShader "Vertex.spv"
+                ShaderStage.Pixel, BinaryShader "Pixel.spv"
+            ]
+
         let sg =
             quadGeometry
                 |> Sg.ofIndexedGeometry
                 //|> Sg.diffuseTexture ~~tex
+                //|> Sg.surface (surf :> ISurface |> Mod.constant)
                 |> Sg.effect [
-                    DefaultSurfaces.trafo |> toEffect
+                    //DefaultSurfaces.trafo |> toEffect
                     //DefaultSurfaces.diffuseTexture |> toEffect
                     DefaultSurfaces.constantColor C4f.Red |> toEffect
                     //DefaultSurfaces.simpleLighting |> toEffect
