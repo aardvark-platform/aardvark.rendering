@@ -221,6 +221,8 @@ module InstanceSwapExtensions =
     open System.Runtime.InteropServices
     open System.Reflection
 
+    [<DllImport("X11-xcb")>]
+    extern nativeint private XGetXCBConnection(nativeint xdisplay)
 
     let private createSurface (instance : Instance) (ctrl : Control) : VkSurfaceKHR =
         match Environment.OSVersion with
@@ -254,47 +256,44 @@ module InstanceSwapExtensions =
 
                 let (?) (t : Type) (name : string) =
                     let prop = t.GetProperty(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
-                    let field = t.GetField(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
                     if isNull prop then 
+                        let field = t.GetField(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
                         if isNull field then failwithf "cannot get XplatUIX11.%s" name
                         else field.GetValue(null) |> unbox<'a>
                     else
                         prop.GetValue(null) |> unbox<'a>
 
                 let display = xp?DisplayHandle
-                let rootWindow = xp?RootWindow
-
-
+                let connection = XGetXCBConnection(display)
                 let dpy = NativePtr.alloc 1
-                NativePtr.write dpy display
-                let window = rootWindow
+                NativePtr.write dpy connection
+
+                let window = ctrl.Handle
 
 
 
                 let mutable info =
-                    VkXlibSurfaceCreateInfoKHR(
-                        VkStructureType.XLibSurfaceCreateInfo, 0n,
-                        VkXlibSurfaceCreateFlagsKHR.MinValue,
+                    VkXcbSurfaceCreateInfoKHR(
+                        VkStructureType.XcbSurfaceCreateInfo, 0n,
+                        VkXcbSurfaceCreateFlagsKHR.MinValue,
                         dpy, window
                     )
 
 
-                let proc = VkRaw.vkGetInstanceProcAddr(instance.Handle, "vkCreateXlibSurfaceKHR")
-                printfn "vkCreateXlibSurfaceKHR = %A" proc
                 let mutable surface = VkSurfaceKHR.Null
-                VkRaw.vkCreateXlibSurfaceKHR(
+                VkRaw.vkCreateXcbSurfaceKHR(
                     instance.Handle,
                     &&info,
                     NativePtr.zero, 
                     &&surface
-                ) |> check "vkCreateXlibSurfaceKHR"
+                ) |> check "vkCreateXcbSurfaceKHR"
                 
                 surface
 
             | _ ->
                 failwith "not implemented"
 
-    let private createRawSwapChain (ctrl : Control) (desc : VulkanSwapChainDescription) (usageFlags : VkImageUsageFlags) (layout : VkImageLayout) =
+    let createRawSwapChain (ctrl : Control) (desc : VulkanSwapChainDescription) (usageFlags : VkImageUsageFlags) (layout : VkImageLayout) =
         let size = V2i(ctrl.ClientSize.Width, ctrl.ClientSize.Height)
         let swapChainExtent = VkExtent2D(uint32 ctrl.ClientSize.Width, uint32 ctrl.ClientSize.Height)
         let device = desc.Device

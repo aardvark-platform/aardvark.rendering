@@ -42,7 +42,7 @@ type App private() =
                     |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
                     |> Sg.uniform "ViewportSize" win.Sizes
 
-            clear <- app.Runtime.CompileClear(win.FramebufferSignature, ~~C4f.Black, ~~1.0)
+            clear <- app.Runtime.CompileClear(win.FramebufferSignature, ~~C4f.Green, ~~1.0)
             render <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
     
             let task = RenderTask.ofList [clear; render]
@@ -99,10 +99,9 @@ module Simple =
                     ]
             )
 
-        let red = PixImage<byte>(Col.Format.RGBA, V2i(128,128))
-        red.GetMatrix<C4b>().Set(C4b.Red) |> ignore
-
-        let tex = PixTexture2d(PixImageMipMap [|red :> PixImage|], true) :> ITexture
+//        let red = PixImage<byte>(Col.Format.RGBA, V2i(128,128))
+//        red.GetMatrix<C4b>().Set(C4b.Red) |> ignore
+        //let tex = PixTexture2d(PixImageMipMap [|red :> PixImage|], true) :> ITexture
 
 
         let mode = Mod.init FillMode.Fill
@@ -110,14 +109,15 @@ module Simple =
         let sg =
             quadGeometry
                 |> Sg.ofIndexedGeometry
-                |> Sg.diffuseTexture ~~tex
+                //|> Sg.diffuseTexture ~~tex
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect
                     //DefaultSurfaces.diffuseTexture |> toEffect
-                    DefaultSurfaces.vertexColor |> toEffect
+                    DefaultSurfaces.constantColor C4f.Red |> toEffect
                     //DefaultSurfaces.simpleLighting |> toEffect
                    ]
-                |> Sg.fillMode mode
+                |> Sg.depthTest (Mod.constant DepthTestMode.None)
+                //|> Sg.fillMode mode
 
         app.Control.Keyboard.DownWithRepeats.Values.Add(fun k ->  
             if k = Keys.X then 

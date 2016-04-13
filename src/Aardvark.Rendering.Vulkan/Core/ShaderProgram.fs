@@ -160,7 +160,13 @@ type ShaderProgramExtensions private() =
         match GLSLang.GLSLang.tryCompileSpirVBinary (toGLSLangStage shaderStage) code with
             | Success spirvBinary -> 
                 let vkStage = toVkStage shaderStage
-                let iface = SpirVReflector.ofBinary spirvBinary
+                let m =
+                    use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(spirvBinary))
+                    reader |> SpirV.Serializer.read
+
+                //FShade.SpirV.InstructionPrinter.toString m.instructions |> printfn "%s"
+
+                let iface = SpirVReflector.ofModule m
 
                 let binary =
                     Array.concat [
@@ -396,6 +402,7 @@ type ShaderProgramExtensions private() =
         match s with
             | :? BackendSurface as s ->
                     
+                printfn "%s" s.Code
                 let shaders = 
                     s.EntryPoints 
                         |> Dictionary.toList
@@ -426,7 +433,7 @@ type ShaderProgramExtensions private() =
 
 //            | :? Aardvark.SceneGraph.FShadeSceneGraph.FShadeSurface as f ->
 //                let needed = renderPass.ColorAttachments |> Array.toList |> List.map (fun (s,a) -> s.ToString(), typeof<V4d>) |> Map.ofList
-//                let result = f.Effect |> Aardvark.Rendering.SpirV.SpirVCompiler.compileEffect needed
+//                let result = f.Effect |> FShade.SpirV.New.SpirVCompiler.compileEffect needed
 //
 //                match result with
 //                    | Success result ->
@@ -434,7 +441,7 @@ type ShaderProgramExtensions private() =
 //                            result.modules
 //                                |> Map.toList
 //                                |> List.map (fun (s,cs) ->
-//                                    let m = cs.spirvModule
+//                                    let m = cs
 //                                    let stage =
 //                                        match s with
 //                                            | FShade.Types.ShaderType.Vertex -> AStage.Vertex
@@ -446,14 +453,16 @@ type ShaderProgramExtensions private() =
 //
 //
 //
-//                                    let code = Aardvark.Rendering.SpirV.InstructionPrinter.toString m.instructions
+//                                    let code = FShade.SpirV.New.InstructionPrinter.toString m.instructions
 //                                    printfn "%s" code
 //
-//                                    x.CreateSpirVShader(cs, stage)
+//                                    use bytes = new System.IO.MemoryStream()
+//                                    SpirV.Serializer.write cs (new System.IO.BinaryWriter(bytes))
+//                                    ShaderProgramExtensions.CreateSpriVShader(this, bytes.ToArray(), stage)
 //
 //                                )
 //
-//                        let res = x.CreateShaderProgram(shaders, renderPass)
+//                        let res = ShaderProgramExtensions.CreateShaderProgram(this, shaders, renderPass)
 //
 //                        let semanticMap = SymDict.empty
 //                        let samplerStates = SymDict.empty
@@ -470,7 +479,7 @@ type ShaderProgramExtensions private() =
 //
 //
 //                            entries.[stage] <- "main"
-//                            for (u,v) in cs.uniforms do
+//                            for (u,v) in f.uni do
 //                                match u with
 //                                    | FShade.Parameters.Uniforms.SamplerUniform(t,sem,name,state) ->
 //                                        let sem = Symbol.Create sem
@@ -491,7 +500,7 @@ type ShaderProgramExtensions private() =
 //                        res
 //                    | Error e ->
 //                        failwith e
-
+//
 
 
 

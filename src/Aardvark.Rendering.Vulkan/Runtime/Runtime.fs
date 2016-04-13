@@ -62,6 +62,8 @@ type Runtime(device : Device) as this =
     let context = new Context(device)
     let manager = new ResourceManager(this, context)
 
+    member x.Device = device
+    member x.Instance = device.Instance
     member x.Context = context
     member x.Manager = manager
 

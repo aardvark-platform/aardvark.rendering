@@ -215,11 +215,11 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
 
                 cmd.SetViewport(fbo.Size)
                 cmd.SetScissor(fbo.Size)
-                cmd.SetBlendColor(C4f.White)
-                cmd.SetLineWidth(1.0)
-                cmd.SetDepthBias(0.0, 1.0, 0.0)
-                cmd.SetDepthBounds(0.0, 1.0)
-                cmd.SetStencil(0xffu, 0xffu, 0u)
+                //cmd.SetBlendColor(C4f.White)
+                //cmd.SetLineWidth(1.0)
+                //cmd.SetDepthBias(0.0, 1.0, 0.0)
+                //cmd.SetDepthBounds(0.0, 1.0)
+                //cmd.SetStencil(0xffu, 0xffu, 0u)
 
                     
                 let sw = System.Diagnostics.Stopwatch()

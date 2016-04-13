@@ -1105,6 +1105,151 @@ module private ``XCB Interop`` =
 type VulkanGameWindowXcb(r : Runtime) =
     
     let window = Xcb.createWindow "GameWindow" 1024 768
+    let mutable samples = 1
+    let depthFormat = VkFormat.D24UnormS8Uint
+
+    let createSurface () =
+        let connection = NativePtr.alloc 1
+        NativePtr.write connection window.Connection
+
+        let mutable info = 
+            VkXcbSurfaceCreateInfoKHR(
+                VkStructureType.XcbSurfaceCreateInfo, 0n,
+                VkXcbSurfaceCreateFlagsKHR.MinValue,
+                connection,
+                nativeint window.Id
+            )
+
+        let mutable surf = VkSurfaceKHR.Null
+        VkRaw.vkCreateXcbSurfaceKHR(r.Instance.Handle, &&info, NativePtr.zero, &&surf)
+            |> check "vkCreateXcbSurfaceKHR"
+
+        surf
+
+    let createSwapChainDescription(surface : VkSurfaceKHR, depthFormat : VkFormat) =
+        let device = r.Device
+        let instance = device.Instance
+        let physical = device.Physical.Handle
+        let queueIndex = 0
+
+        let mutable supported = 0u
+        VkRaw.vkGetPhysicalDeviceSurfaceSupportKHR(physical, uint32 queueIndex, surface, &&supported) |> check "vkGetPhysicalDeviceSurfaceSupportKHR"
+        let supported = supported = 1u
+
+        //printfn "[KHR] using queue %d: { wsi = %A }" queueIndex supported
+
+        let mutable formatCount = 0u
+        VkRaw.vkGetPhysicalDeviceSurfaceFormatsKHR(physical, surface, &&formatCount, NativePtr.zero) |> check "vkGetSurfaceFormatsKHR"
+
+        //printfn "[KHR] format count: %A" formatCount
+
+        let formats = NativePtr.stackalloc (int formatCount)
+        VkRaw.vkGetPhysicalDeviceSurfaceFormatsKHR(physical, surface, &&formatCount, formats) |> check "vkGetSurfaceFormatsKHR"
+
+        if formatCount < 1u then
+            failwith "could not find valid format"
+
+        let surfFormat = NativePtr.get formats 0
+        let format =
+            if formatCount = 1u && surfFormat.format = VkFormat.Undefined then
+                //printfn "[KHR] format fallback"
+                VkFormat.B8g8r8a8Unorm
+            else
+                //printfn "[KHR] formats: %A" (Array.init (int formatCount) (fun i -> (NativePtr.get formats i)))
+                surfFormat.format
+
+        //printfn "[KHR] using format: %A" surfFormat
+
+        let mutable surfaceProperties = VkSurfaceCapabilitiesKHR()
+        VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical, surface, &&surfaceProperties) |> check "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"
+        //printfn "[KHR] current extent: [%d,%d]" surfaceProperties.currentExtent.width surfaceProperties.currentExtent.height 
+
+
+        let mutable presentModeCount = 0u
+        VkRaw.vkGetPhysicalDeviceSurfacePresentModesKHR(physical, surface, &&presentModeCount, NativePtr.zero) |> check "vkGetSurfacePresentModesKHR"
+        let presentModes = NativePtr.stackalloc (int presentModeCount)
+        VkRaw.vkGetPhysicalDeviceSurfacePresentModesKHR(physical, surface, &&presentModeCount, presentModes) |> check "vkGetSurfacePresentModesKHR"
+
+
+        //printfn "[KHR] extent: [%d,%d]" swapChainExtent.width swapChainExtent.height
+
+        let swapChainPresentMode =
+            List.init (int presentModeCount) (fun i -> NativePtr.get presentModes i) 
+                |> List.minBy(function | VkPresentModeKHR.VkPresentModeMailboxKhr -> 0 | VkPresentModeKHR.VkPresentModeImmediateKhr -> 1 | _ -> 2)
+        
+        //let swapChainPresentMode = VkPresentModeKHR.Fifo
+
+        //printfn "[KHR] present mode: %A" swapChainPresentMode
+
+        let desiredNumberOfSwapChainImages =
+            let desired = surfaceProperties.minImageCount + 1u
+            if surfaceProperties.maxImageCount > 0u then
+                min surfaceProperties.maxImageCount desired
+            else
+                desired
+
+        let supported = unbox<VkSurfaceTransformFlagBitsKHR> (int surfaceProperties.supportedTransforms)
+        let preTransform =
+            if supported &&& VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformIdentityBitKhr <> VkSurfaceTransformFlagBitsKHR.None then
+                VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformIdentityBitKhr
+            else
+                supported
+
+        new VulkanSwapChainDescription(r.Context, format, depthFormat, 1, swapChainPresentMode, preTransform, surfFormat.colorSpace, int desiredNumberOfSwapChainImages, surface)
+
+    let createRawSwapChain(depthFormat : VkFormat, size : V2i, usageFlags : VkImageUsageFlags, layout : VkImageLayout) =
+        let surface = createSurface()
+        let desc = createSwapChainDescription(surface, depthFormat)
+        let swapChainExtent = VkExtent2D(uint32 size.X, uint32 size.Y)
+        let device = desc.Device
+        let context = desc.Context
+
+        let mutable swapChainCreateInfo =
+            VkSwapchainCreateInfoKHR(
+                VkStructureType.SwapChainCreateInfoKHR,
+                0n, VkSwapchainCreateFlagsKHR.MinValue,
+                desc.Surface,
+                uint32 desc.BufferCount,
+                desc.ColorFormat,
+                desc.ColorSpace,
+                swapChainExtent,
+                1u,
+                usageFlags,
+                VkSharingMode.Exclusive,
+                0u,
+                NativePtr.zero,
+                desc.PreTransform,
+                VkCompositeAlphaFlagBitsKHR.None,
+                desc.PresentMode,
+                0u,
+                VkSwapchainKHR.Null
+            )
+
+        let mutable swapChain = VkSwapchainKHR.Null
+        VkRaw.vkCreateSwapchainKHR(device.Handle, &&swapChainCreateInfo, NativePtr.zero, &&swapChain) |> check "vkCreateSwapChainKHR"
+        
+            
+        let mutable imageCount = 0u
+        VkRaw.vkGetSwapchainImagesKHR(device.Handle, swapChain, &&imageCount, NativePtr.zero) |> check "vkGetSwapChainImagesKHR"
+        let mutable swapChainImages = NativePtr.stackalloc (int imageCount)
+        VkRaw.vkGetSwapchainImagesKHR(device.Handle, swapChain, &&imageCount, swapChainImages) |> check "vkGetSwapChainImagesKHR"
+
+
+
+        let colorImages : Image[] =
+            Array.init (int imageCount) (fun i ->
+                let image = NativePtr.get swapChainImages i
+
+                let img = Image(context, Unchecked.defaultof<_>, image, VkImageType.D2d, desc.ColorFormat, TextureDimension.Texture2D, V3i(size.X, size.Y, 1), 1, 1, 1, usageFlags, VkImageLayout.Undefined)
+                img.ToLayout(layout) |> context.DefaultQueue.RunSynchronously
+                img
+            )
+
+
+        swapChain, colorImages
+
+//    let createSwapChain(depthFormat : VkFormat) =
+//        if samples = 1 then createRawSwapChain(depthFormat, window.)
 
 
 
