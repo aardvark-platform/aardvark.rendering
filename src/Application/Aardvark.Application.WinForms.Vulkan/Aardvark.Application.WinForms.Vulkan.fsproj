@@ -72,6 +72,9 @@
     <Compile Include="MessageLoop.fs" />
     <Compile Include="SwapChain.fs" />
     <Compile Include="VulkanControl.fs" />
+    <Compile Include="GameWindow\IGameWindow.fs" />
+    <Compile Include="GameWindow\GameWindowWin32.fs" />
+    <Compile Include="GameWindow\GameWindowXcb.fs" />
     <Compile Include="Application.fs" />
   </ItemGroup>
   <PropertyGroup>

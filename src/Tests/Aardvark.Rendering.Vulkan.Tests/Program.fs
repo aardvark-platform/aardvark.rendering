@@ -4,5 +4,6 @@ open Aardvark.Rendering.Vulkan.Tests
 
 [<EntryPoint>]
 let main argv = 
+    Aardvark.Base.Ag.initialize()
     ``Rendering Tests``.``[Vulkan] textures working``()
     0 // return an integer exit code
