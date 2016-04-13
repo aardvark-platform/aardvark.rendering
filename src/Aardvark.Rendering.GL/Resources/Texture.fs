@@ -284,7 +284,7 @@ module TextureExtensions =
                 GL.Check "could not bind pixel buffer"
                 GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
                 GL.Check "could not allocate pixel buffer"
-
+            
                 let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
                 GL.Check "could not map pixel buffer"
                 try

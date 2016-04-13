@@ -131,8 +131,13 @@ module SamplerExtensions =
         GL.SamplerParameter(handle, SamplerParameterName.TextureMagFilter, magFilter d.Filter.Mag)
         GL.Check "could not set MagFilter for sampler"
 
-        GL.SamplerParameter(handle, SamplerParameterName.TextureCompareFunc, compareFunc d.ComparisonFunction)
-        GL.Check "could not set CompareFunc for sampler"
+        if d.ComparisonFunction <> SamplerComparisonFunction.None then
+            GL.SamplerParameter(handle, SamplerParameterName.TextureCompareMode, OpenTK.Graphics.TextureCompareMode.CompareRefToTexture |> int)
+            GL.Check "could not set comparison mode for sampler"
+
+            GL.SamplerParameter(handle, SamplerParameterName.TextureCompareFunc, compareFunc d.ComparisonFunction)
+            GL.Check "could not set CompareFunc for sampler"
+
 
     type Context with
 
