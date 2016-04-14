@@ -279,33 +279,41 @@ module TextureFormat =
 
 
     let ofPixFormat = 
-        let rgb = 
+        
+        let buildLookup = fun (norm, snorm) ->
             lookupTable [
-                    TextureParams.empty, TextureFormat.Rgb8
-                    { TextureParams.empty with wantSrgb = true}, TextureFormat.Srgb8
-                    { TextureParams.empty with wantMipMaps = true }, TextureFormat.Rgb8
-                    { TextureParams.empty with wantSrgb = true; wantMipMaps = true}, TextureFormat.Srgb8
-                ]
-        let rgba = 
-            lookupTable [
-                    TextureParams.empty, TextureFormat.Rgba8
-                    { TextureParams.empty with wantSrgb = true}, TextureFormat.Srgb8Alpha8
-                    { TextureParams.empty with wantMipMaps = true }, TextureFormat.Rgba8
-                    { TextureParams.empty with wantSrgb = true; wantMipMaps = true }, TextureFormat.Srgb8Alpha8
+                    TextureParams.empty, norm
+                    { TextureParams.empty with wantSrgb = true}, snorm
+                    { TextureParams.empty with wantMipMaps = true }, norm
+                    { TextureParams.empty with wantSrgb = true; wantMipMaps = true}, snorm
                 ]
 
+        let rgb8 = buildLookup(TextureFormat.Rgb8, TextureFormat.Srgb8)
+        let rgba8 = buildLookup(TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8)
+        let r8 = buildLookup(TextureFormat.R8, TextureFormat.R8Snorm)
+        
         lookupTable [
-            PixFormat.ByteBGR  ,  rgb
-            PixFormat.ByteBGRA , rgba
-            PixFormat.ByteBGRP , rgba
-            PixFormat.ByteRGB  ,  rgb
-            PixFormat.ByteRGBA , rgba
-            PixFormat.ByteRGBP , rgba
+            PixFormat.ByteBGR  , rgb8
+            PixFormat.ByteBGRA , rgba8
+            PixFormat.ByteBGRP , rgba8
+            PixFormat.ByteRGB  , rgb8
+            PixFormat.ByteRGBA , rgba8
+            PixFormat.ByteRGBP , rgba8
+            PixFormat.ByteGray , r8
+
+            PixFormat.UShortRGB ,  (fun _ -> TextureFormat.Rgb16)
+            PixFormat.UShortRGBA ,  (fun _ -> TextureFormat.Rgba16)
+            PixFormat.UShortRGBP ,  (fun _ -> TextureFormat.Rgba16)
+            PixFormat.UShortBGR  ,  (fun _ -> TextureFormat.Rgb16)
+            PixFormat.UShortBGRA ,  (fun _ -> TextureFormat.Rgba16)
+            PixFormat.UShortBGRP ,  (fun _ -> TextureFormat.Rgba16)
+            PixFormat.UShortGray ,  (fun _ -> TextureFormat.R16)
 
             PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
             
             PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)   
-
+            PixFormat(typeof<float32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32f)
+            PixFormat(typeof<float32>, Col.Format.Gray), (fun _ -> TextureFormat.R32f)
         ]
         
     let toDownloadFormat =
