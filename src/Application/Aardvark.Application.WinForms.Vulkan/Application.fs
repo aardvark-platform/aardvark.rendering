@@ -105,7 +105,9 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
                 yield Instance.Layers.DeviceLimits
                 yield Instance.Layers.CoreValidation
                 yield Instance.Layers.ParameterValidation
-
+                yield Instance.Layers.ObjectTracker
+                yield Instance.Layers.Threading
+                yield Instance.Layers.UniqueObjects
         ]
 
     let instance = 
@@ -124,7 +126,21 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
     // install debug output to file (and errors/warnings to console)
     do if debug then
         instance.OnDebugMessage.Add (fun msg ->
-            Log.warn "%s" msg.message
+            
+            let str = sprintf "[%s] %s" msg.layerPrefix msg.message
+
+            match msg.messageFlags with
+                | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
+                    Log.error "%s" str
+
+                | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt | VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt ->
+                    Log.warn "%s" str
+
+                | VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt ->
+                    Report.Line(4, "{0}", str)
+
+                | _ -> ()
+
         )
 
 

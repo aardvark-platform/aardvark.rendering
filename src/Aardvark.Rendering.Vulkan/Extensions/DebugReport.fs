@@ -106,7 +106,7 @@ module DebugReport =
                 let mutable info =
                     VkDebugReportCallbackCreateInfoEXT(
                         unbox 1000011000, 0n,
-                        VkDebugReportFlagsEXT.MinValue,
+                        uint32 flags,
                         ptr,
                         0n
                     )

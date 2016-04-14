@@ -21,7 +21,7 @@ type App private() =
 
     do Aardvark.Init()
     let mutable initialized = 0
-    let app = new VulkanApplication()
+    let app = new VulkanApplication(true)
     let win = app.CreateSimpleRenderWindow()
     let sg = Mod.init emptySg
     let mutable clear = Unchecked.defaultof<IRenderTask>
@@ -108,11 +108,11 @@ module Simple =
         let mode = Mod.init FillMode.Fill
 
 
-        let surf =
-            BinarySurface [
-                ShaderStage.Vertex, BinaryShader "Vertex.spv"
-                ShaderStage.Pixel, BinaryShader "Pixel.spv"
-            ]
+//        let surf =
+//            BinarySurface [
+//                ShaderStage.Vertex, BinaryShader "Vertex.spv"
+//                ShaderStage.Pixel, BinaryShader "Pixel.spv"
+//            ]
 
         let sg =
             quadGeometry
