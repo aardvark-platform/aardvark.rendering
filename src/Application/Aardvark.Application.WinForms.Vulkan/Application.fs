@@ -108,6 +108,7 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
                 yield Instance.Layers.ObjectTracker
                 yield Instance.Layers.Threading
                 yield Instance.Layers.UniqueObjects
+                yield Instance.Layers.Image
         ]
 
     let instance = 

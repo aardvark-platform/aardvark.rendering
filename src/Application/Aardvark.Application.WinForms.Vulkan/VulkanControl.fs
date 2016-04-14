@@ -19,7 +19,8 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
        base.SetStyle(ControlStyles.DoubleBuffer, false)
        base.SetStyle(ControlStyles.AllPaintingInWmPaint, true)
        base.SetStyle(ControlStyles.Opaque, true)
-       
+       base.SetStyle(ControlStyles.ResizeRedraw, true)
+
     let mutable samples = samples
     let mutable swapChainDescription : VulkanSwapChainDescription = Unchecked.defaultof<_>
     let mutable swapChain : IVulkanSwapChain = Unchecked.defaultof<_>
@@ -55,8 +56,8 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
     override x.OnResize(e) =
         base.OnResize e
         if loaded then
-            if not recreateSwapChain then
-                swapChain.Dispose()
+//            if not recreateSwapChain then
+//                swapChain.Dispose()
             recreateSwapChain <- true
         
     override x.OnHandleCreated(e) =
@@ -73,6 +74,7 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
         if loaded then
             if recreateSwapChain then
                 recreateSwapChain <- false
+                if Unchecked.notNull swapChain then swapChain.Dispose()
                 swapChain <- x.CreateVulkanSwapChain(swapChainDescription)
 
             let queue = queuePool.Acquire()
@@ -97,7 +99,7 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
             swapChainDescription.Dispose()
 
 type VulkanRenderControl(runtime : Runtime, samples : int) as this =
-    inherit VulkanControl(runtime.Context, VkFormat.D24UnormS8Uint, samples)
+    inherit VulkanControl(runtime.Context, VkFormat.D16Unorm, samples)
     
     static let messageLoop = MessageLoop()
     static do messageLoop.Start()
