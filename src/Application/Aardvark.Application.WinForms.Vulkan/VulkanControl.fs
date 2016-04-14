@@ -97,7 +97,7 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
             swapChainDescription.Dispose()
 
 type VulkanRenderControl(runtime : Runtime, samples : int) as this =
-    inherit VulkanControl(runtime.Context, VkFormat.D32Sfloat, samples)
+    inherit VulkanControl(runtime.Context, VkFormat.D24UnormS8Uint, samples)
     
     static let messageLoop = MessageLoop()
     static do messageLoop.Start()

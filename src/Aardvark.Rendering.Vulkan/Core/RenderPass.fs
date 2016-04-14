@@ -96,7 +96,7 @@ type RenderPassExtensions private() =
                 | None ->
                     VkAttachmentReference(
                         ~~~0u, // VK_ATTACHMENT_UNUSED
-                        VkImageLayout.Undefined
+                        VkImageLayout.DepthStencilAttachmentOptimal
                     )
 
         let pColorAttachmentReferences = NativePtr.pushStackArray colorAttachmentReferences
@@ -134,8 +134,8 @@ type RenderPassExtensions private() =
                     VkAttachmentLoadOp.DontCare,
                     VkAttachmentStoreOp.DontCare,
 
-                    VkImageLayout.General,
-                    VkImageLayout.General
+                    VkImageLayout.ColorAttachmentOptimal,
+                    VkImageLayout.ColorAttachmentOptimal
                 )
             ) 
 
@@ -177,8 +177,8 @@ type RenderPassExtensions private() =
                             stencilLoadOp,
                             stencilStoreOp,
 
-                            VkImageLayout.General,
-                            VkImageLayout.General
+                            VkImageLayout.DepthStencilAttachmentOptimal,
+                            VkImageLayout.DepthStencilAttachmentOptimal
                         )
 
                     Some desc

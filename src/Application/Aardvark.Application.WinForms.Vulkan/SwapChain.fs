@@ -61,9 +61,9 @@ module private EnumExtensions =
 
 
     type VkStructureType with
-        static member SurfaceDescriptionWindowKHR  = enumValue VK_EXT_KHR_SWAPCHAIN_EXTENSION_NUMBER 0 |> unbox<VkStructureType>
-        static member SwapChainCreateInfoKHR = enumValue VK_EXT_KHR_DEVICE_SWAPCHAIN_EXTENSION_NUMBER 0 |> unbox<VkStructureType>
-        static member PresentInfoKHR = enumValue VK_EXT_KHR_DEVICE_SWAPCHAIN_EXTENSION_NUMBER 1 |> unbox<VkStructureType>
+        //static member SurfaceDescriptionWindowKHR  = enumValue VK_EXT_KHR_SWAPCHAIN_EXTENSION_NUMBER 0 |> unbox<VkStructureType>
+        static member SwapChainCreateInfoKHR = 1000001000 |> unbox<VkStructureType>
+        static member PresentInfoKHR = 1000001001 |> unbox<VkStructureType>
 
     type VkImageLayout with
         static member PresentSrcKhr = unbox<VkImageLayout> 1000001002
@@ -370,7 +370,7 @@ module InstanceSwapExtensions =
                 desc.PreTransform,
                 VkCompositeAlphaFlagBitsKHR.VkCompositeAlphaOpaqueBitKhr,
                 desc.PresentMode,
-                0u,
+                1u,
                 VkSwapchainKHR.Null
             )
 
@@ -601,7 +601,7 @@ module InstanceSwapExtensions =
 
 
                 let img = Image(context, Unchecked.defaultof<_>, depthImage, VkImageType.D2d, desc.DepthFormat, TextureDimension.Texture2D, V3i(size.X, size.Y, 1), 1, 1, 1, VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.Undefined)
-                img.ToLayout(VkImageAspectFlags.DepthBit, VkImageLayout.DepthStencilAttachmentOptimal)
+                img.ToLayout(VkImageLayout.DepthStencilAttachmentOptimal)
                     |> context.DefaultQueue.RunSynchronously
 
                 depthView

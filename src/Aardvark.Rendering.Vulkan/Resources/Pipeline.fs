@@ -699,7 +699,7 @@ type PipelineExtensions private() =
                 &&vertexInputState,
                 &&inputAssemblyState,
                 NativePtr.zero,
-                NativePtr.zero, //&&viewportState,
+                &&viewportState,
                 &&rasterizerState,
                 &&multisampleState,
                 &&depthStencilState,

@@ -56,6 +56,22 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
             | Some cd -> cd.AddOutput this
             | _ -> ()
 
+    let clearImage (image : Image) (cmd : CommandBuffer) (real : CommandBuffer -> unit) =
+        let old = image.Layout
+        let clear =
+            command {
+                do! image.ToLayout(VkImageLayout.TransferDstOptimal)
+                image.Layout <- VkImageLayout.TransferDstOptimal
+                do! Command.custom (fun s ->
+                        real s.buffer
+                        s
+                    )
+                do! image.ToLayout(old)
+            }
+        let mutable state = { isEmpty = false; buffer = cmd; cleanupActions = [] }
+        clear.Run(&state)
+        image.Layout <- old
+
     member x.Run(caller : IAdaptiveObject, outputs : OutputDescription) =
         x.EvaluateAlways caller (fun () ->
             let fbo = unbox<Framebuffer> outputs.framebuffer
@@ -84,22 +100,29 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
 
                             let mutable clearValue = value
                             let mutable range = VkImageSubresourceRange(aspect, 0u, 1u, 0u, 1u)
-                            VkRaw.vkCmdClearDepthStencilImage(
-                                cmd.Handle, image.Handle, image.Layout, &&clearValue, 1u, &&range
+                            clearImage image cmd (fun cmd ->
+                                VkRaw.vkCmdClearDepthStencilImage(
+                                    cmd.Handle, image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range
+                                )
                             )
                         | None ->
                             ()
                 else
                     let mutable clearValue = clearColors.[i].GetValue()
                     let mutable range = VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
-                    VkRaw.vkCmdClearColorImage(
-                        cmd.Handle, image.Handle, image.Layout, &&clearValue, 1u, &&range
+                    clearImage image cmd (fun cmd ->
+                        VkRaw.vkCmdClearColorImage(
+                            cmd.Handle, image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range
+                        )
                     )
 
             //cmd.EndPass()
             cmd.End()
 
-            context.DefaultQueue.SubmitAndWait [| cmd |]
+            let q = context.DefaultQueue.Acquire()
+            q.SubmitAndWait [| cmd |]
+            q.WaitIdle()
+            context.DefaultQueue.Release q
 
             RenderingResult(fbo, FrameStatistics.Zero)
         )
@@ -264,7 +287,10 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
         if hasProgram then
             let fbo = outputs.framebuffer |> unbox<Framebuffer>
             let cmd = getOrCreateCommandBuffer pass fbo
-            ctx.DefaultQueue.SubmitAndWait [| cmd.GetValue(x) |]
+            let q = ctx.DefaultQueue.Acquire()
+            q.SubmitAndWait [| cmd.GetValue(x) |]
+            q.WaitIdle()
+            ctx.DefaultQueue.Release q
 
         executionTime.Stop()
 
