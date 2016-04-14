@@ -222,14 +222,14 @@ module LoD =
                     //let points = Helpers.randomPoints cell.bounds 1000
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
 //                  
-                    //do! Async.Sleep(1000)
+                    //do! Async.Sleep(2000)
                     let mutable a = 0
 
 //                    for i in 0..(1 <<< 20) do a <- a + 1
 //
 //                    let a = 
 //                        let mutable a = 0
-//                        for i in 0..(1 <<< 20) do a <- a + 1
+//                        for i in 0..(1 <<< 28) do a <- a + 1
 //                        a
 
                     return IndexedGeometry(Mode = unbox a, IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
