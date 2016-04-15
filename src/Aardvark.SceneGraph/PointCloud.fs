@@ -244,7 +244,7 @@ module PointCloudRenderObjectSemantics =
                     let validGeometry = Choice2Of2 geometry
 
                     let ch = Interlocked.Exchange(loadResult,validGeometry)
-                    if ch = uninitialized (*&& !isNew*) then
+                    if (not <| Unchecked.equals ch Unchecked.defaultof<_>) && ch = uninitialized (*&& !isNew*) then
                         activate geometry
                     else Log.line "cancelled, not activating: %A" ch
                 | _ -> ()
