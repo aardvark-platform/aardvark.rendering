@@ -144,7 +144,7 @@ module PointCloudRenderObjectSemantics =
         let load (data : ILodData) (node : LodDataNode) (pool : GeometryPool) = 
             async {
                 let! geometry = data.GetData(node)
-                do! Async.OnCancel(fun () -> pool.Remove geometry |> ignore) |> Async.Ignore
+                do! Async.OnCancel(fun () -> Log.line "rollback, remove from pool."; pool.Remove geometry |> ignore) |> Async.Ignore
                 let range = pool.Add(geometry) 
                     
                 return { node = node; geometry = geometry; range = range }
@@ -182,6 +182,8 @@ module PointCloudRenderObjectSemantics =
 
         member x.Kill cont = result |> Option.iter cont
 
+    type LoadResult = ref<Choice<CancellationTokenSource,GeometryRef>>
+
     type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, runtime : IRuntime) =
         let cancel = new System.Threading.CancellationTokenSource()
 
@@ -193,8 +195,8 @@ module PointCloudRenderObjectSemantics =
         let mutable activeCount = 0
         let mutable desiredCount = 0
 
-        let geometriesRW = new ReaderWriterLockSlim()
-        let geometries = Dict<LodDataNode, _>()
+        let mutable pendingRemoves = 0
+        let geometries = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode, LoadResult>()
 
         let activate (n : GeometryRef) =
             let size = n.range.Size
@@ -221,34 +223,40 @@ module PointCloudRenderObjectSemantics =
         member x.Add(n : LodDataNode) =
             Interlocked.Increment(&desiredCount) |> ignore
             let isNew = ref false
-            let result = 
-                ReaderWriterLock.write geometriesRW (fun () ->
-                    geometries.GetOrCreate(n, fun n ->
-                        isNew := true
-                        let ref = LoadIntoPool.load node.Data n pool |> Async.RunSynchronously
-                        ref
-                    )
-                )
 
-            activate result
+            let cts = new System.Threading.CancellationTokenSource()
+            let uninitialized = Choice1Of2 cts
+            let loadResult = ref uninitialized
+            let result = geometries.GetOrAdd(n, System.Func<LodDataNode,LoadResult>(fun _ ->
+                isNew := true
+                loadResult
+            ))
+            let geometry = Async.RunSynchronously(LoadIntoPool.load node.Data n pool, cancellationToken = cts.Token)
+            let validGeometry = Choice2Of2 geometry
+
+            let ch = Interlocked.Exchange(loadResult,validGeometry)
+            if ch = uninitialized (*&& !isNew*) then
+                activate geometry
+            else Log.line "cancelled, not activating: %A" ch
 
             result
 
-        member x.Remove(n : LodDataNode) =
-            Interlocked.Decrement(&desiredCount) |> ignore
-            ReaderWriterLock.read geometriesRW (fun () ->
-                match geometries.TryGetValue n with
-                    | (true, t) -> 
-                        
-                        deactivate t
 
-                        match geometries.TryRemove t.node with
-                            | (true, v) ->
-                                pool.Remove v.geometry |> ignore
-                            | _ ->
-                                Log.warn "failed to remove node: %A" t.node.id
-                    | _ -> ()
-            )
+        member x.Remove(n : LodDataNode) =
+            match geometries.TryRemove n with
+                | (true,v) ->
+                    Interlocked.Decrement(&desiredCount) |> ignore
+                    match Interlocked.Exchange(v,Unchecked.defaultof<_>) with
+                        | Choice1Of2 ct -> 
+                            Log.line "cancelling import."
+                            ct.Cancel()
+                        | Choice2Of2 g -> 
+                            deactivate g
+                    true
+                | _ -> 
+                    Log.warn "failed to find node for removal: %A" n.id
+                    false
+
 
 
         member x.Activate() =
@@ -280,18 +288,13 @@ module PointCloudRenderObjectSemantics =
 
             let deltas = ConcurrentDeltaQueue.ofASet content
 
-            let deltaProcessing =
-                async {
-                    do! Async.SwitchToNewThread()
-                    while true do
-                        let! op = deltas.DequeueAsync()
+            let deltaProcessing () =
+                while true do
+                    let op = deltas.Dequeue()
 
-                        match op with
-                            | Add n -> x.Add n |> ignore
-                            | Rem n -> x.Remove n |> ignore
-
-
-                }
+                    match op with
+                        | Add n -> x.Add n |> ignore
+                        | Rem n -> x.Remove n |> ignore
 
       
             let pruning =
@@ -307,21 +310,16 @@ module PointCloudRenderObjectSemantics =
                             else
                                 false
 
-                        ReaderWriterLock.write geometriesRW (fun () ->
-                            while shouldContinue () do
-                                match inactive.TryDequeue() with
-                                    | (true, v) ->
-                                            match geometries.TryRemove v.node with
-                                                | (true, v) ->
-                                                    pool.Remove v.geometry |> ignore
-                                                    cnt <- cnt + 1
-                                                | _ ->
-                                                    Log.warn "failed to remove node: %A" v.node.id
-                                    | _ ->
-                                        Log.warn "inactive: %A / count : %A" inactiveSize inactive.Count 
-                                        inactiveSize <- 0L
+                        while shouldContinue () do
+                            match inactive.TryDequeue() with
+                                | (true, v) ->
+                                    pool.Remove v.geometry |> ignore
+                                    cnt <- cnt + 1
+                                | _ ->
+                                    Log.warn "inactive: %A / count : %A" inactiveSize inactive.Count 
+                                    inactiveSize <- 0L
                                
-                        )
+
                             
                         do! Async.Sleep node.Config.pruneInterval
                 }
@@ -330,14 +328,20 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "%A / %A / %A" activeCount desiredCount geometries.Count
+                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A" activeCount desiredCount geometries.Count inactive.Count inactiveSize
                         ()
                 }
 
 
-            for i in 1..8 do
-                Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
-            //Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
+            let t = 
+                [| for i in 0 .. 8 do 
+                    let t = System.Threading.Thread(ThreadStart(deltaProcessing))   // todo cancell
+                    t.Priority <- ThreadPriority.BelowNormal
+                    t.Start()
+                |]
+//            for i in 1..8 do
+//                Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
+            Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
 
             { new IDisposable with member x.Dispose() = () }
@@ -385,7 +389,6 @@ module PointCloudRenderObjectSemantics =
             let calls = h.DrawCallInfos
 
             obj.IndirectBuffer <- calls |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
-            //obj.DrawCallInfos <- calls |> Mod.map Array.toList
             obj.Activate <- h.Activate
             obj.VertexAttributes <- h.Attributes
             obj.Mode <- Mod.constant IndexedGeometryMode.PointList

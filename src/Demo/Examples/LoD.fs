@@ -183,7 +183,7 @@ module LoD =
                 let rec traverse (level : int) (b : Box3d) =
                     let box = b
                     let n = 100.0
-                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n) }
+                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n);  }
 
                     if f node then
                         let center = b.Center
@@ -223,13 +223,15 @@ module LoD =
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
 //                  
                     //do! Async.Sleep(2000)
+                    let total = 1 <<< 20
                     let mutable a = 0
 
-//                    for i in 0..(1 <<< 20) do a <- a + 1
+                    let! _ = Async.OnCancel(fun () -> printfn "cancelled in computation at percentage: %f" (float a / float total))
+                    for i in 0..total do a <- a + 1
 //
 //                    let a = 
 //                        let mutable a = 0
-//                        for i in 0..(1 <<< 28) do a <- a + 1
+//                        for i in 0..(1 <<< 25) do a <- a + 1
 //                        a
 
                     return IndexedGeometry(Mode = unbox a, IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
