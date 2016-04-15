@@ -231,15 +231,23 @@ module PointCloudRenderObjectSemantics =
                 isNew := true
                 loadResult
             ))
-            let geometry = Async.RunSynchronously(LoadIntoPool.load node.Data n pool, cancellationToken = cts.Token)
-            let validGeometry = Choice2Of2 geometry
+            let geometry = 
+                try 
+                    Some <| Async.RunSynchronously(LoadIntoPool.load node.Data n pool, cancellationToken = cts.Token)
+                with 
+                    | :? OperationCanceledException as e -> 
+                        Log.line "op cancelled."
+                        None
+                        
+            match geometry with
+                | Some geometry ->
+                    let validGeometry = Choice2Of2 geometry
 
-            let ch = Interlocked.Exchange(loadResult,validGeometry)
-            if ch = uninitialized (*&& !isNew*) then
-                activate geometry
-            else Log.line "cancelled, not activating: %A" ch
-
-            result
+                    let ch = Interlocked.Exchange(loadResult,validGeometry)
+                    if ch = uninitialized (*&& !isNew*) then
+                        activate geometry
+                    else Log.line "cancelled, not activating: %A" ch
+                | _ -> ()
 
 
         member x.Remove(n : LodDataNode) =
@@ -288,13 +296,16 @@ module PointCloudRenderObjectSemantics =
 
             let deltas = ConcurrentDeltaQueue.ofASet content
 
-            let deltaProcessing () =
-                while true do
-                    let op = deltas.Dequeue()
+            let deltaProcessing =    
+                async {
+                    do! Async.SwitchToNewThread()
+                    while true do
+                        let op = deltas.Dequeue()
 
-                    match op with
-                        | Add n -> x.Add n |> ignore
-                        | Rem n -> x.Remove n |> ignore
+                        match op with
+                            | Add n -> x.Add n |> ignore
+                            | Rem n -> x.Remove n |> ignore
+                }
 
       
             let pruning =
@@ -333,14 +344,14 @@ module PointCloudRenderObjectSemantics =
                 }
 
 
-            let t = 
-                [| for i in 0 .. 8 do 
-                    let t = System.Threading.Thread(ThreadStart(deltaProcessing))   // todo cancell
-                    t.Priority <- ThreadPriority.BelowNormal
-                    t.Start()
-                |]
-//            for i in 1..8 do
-//                Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
+//            let t = 
+//                [| for i in 0 .. 8 do 
+//                    let t = System.Threading.Thread(ThreadStart(deltaProcessing))   // todo cancell
+//                    t.Priority <- ThreadPriority.BelowNormal
+//                    t.Start()
+//                |]
+            for i in 1..4 do
+                Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
 
