@@ -76,6 +76,7 @@
     <Compile Include="AssimpInterop.fs" />
     <Compile Include="HelloWorld.fs" />
     <Compile Include="Vulkan.fs" />
+    <Compile Include="Fonts.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
