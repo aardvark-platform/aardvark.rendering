@@ -5,6 +5,12 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 
+type Progress =
+    {   
+        ActiveNodeCount     : int ref
+        ExpectedNodeCount   : int ref
+    }
+
 type PointCloudInfo =
     {
         /// the element-types for all available attributes
@@ -184,7 +190,7 @@ module PointCloudRenderObjectSemantics =
 
     type LoadResult = ref<Choice<CancellationTokenSource,GeometryRef>>
 
-    type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, runtime : IRuntime) =
+    type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, progress : Progress, runtime : IRuntime) =
         let cancel = new System.Threading.CancellationTokenSource()
 
         let pool = GeometryPool.createAsync runtime
@@ -192,8 +198,6 @@ module PointCloudRenderObjectSemantics =
         let inactive = ConcurrentHashQueue<GeometryRef>()
         let mutable inactiveSize = 0L
         let mutable activeSize = 0L
-        let mutable activeCount = 0
-        let mutable desiredCount = 0
 
         let mutable pendingRemoves = 0
         let geometries = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode, LoadResult>()
@@ -206,7 +210,7 @@ module PointCloudRenderObjectSemantics =
 
             if calls.Add n.range then
                 Interlocked.Add(&activeSize, int64 size) |> ignore
-                Interlocked.Increment(&activeCount) |> ignore
+                Interlocked.Increment(progress.ActiveNodeCount) |> ignore
 
 
         let deactivate (n : GeometryRef) =
@@ -217,11 +221,11 @@ module PointCloudRenderObjectSemantics =
 
             if calls.Remove n.range then
                 Interlocked.Add(&activeSize, -size) |> ignore
-                Interlocked.Decrement(&activeCount) |> ignore
+                Interlocked.Decrement(progress.ActiveNodeCount) |> ignore
 
 
         member x.Add(n : LodDataNode) =
-            Interlocked.Increment(&desiredCount) |> ignore
+            Interlocked.Increment(progress.ExpectedNodeCount) |> ignore
             let isNew = ref false
 
             let cts = new System.Threading.CancellationTokenSource()
@@ -253,7 +257,7 @@ module PointCloudRenderObjectSemantics =
         member x.Remove(n : LodDataNode) =
             match geometries.TryRemove n with
                 | (true,v) ->
-                    Interlocked.Decrement(&desiredCount) |> ignore
+                    Interlocked.Decrement(progress.ExpectedNodeCount) |> ignore
                     match Interlocked.Exchange(v,Unchecked.defaultof<_>) with
                         | Choice1Of2 ct -> 
                             Log.line "cancelling import."
@@ -329,8 +333,6 @@ module PointCloudRenderObjectSemantics =
                                 | _ ->
                                     Log.warn "inactive: %A / count : %A" inactiveSize inactive.Count 
                                     inactiveSize <- 0L
-                               
-
                             
                         do! Async.Sleep node.Config.pruneInterval
                 }
@@ -339,7 +341,7 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A" activeCount desiredCount geometries.Count inactive.Count inactiveSize
+                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A" progress.ActiveNodeCount progress.ExpectedNodeCount geometries.Count inactive.Count inactiveSize
                         ()
                 }
 
@@ -395,7 +397,7 @@ module PointCloudRenderObjectSemantics =
                     | Some (:? IMod<V2i> as vs) -> vs
                     | _ -> failwith "[PointCloud] could not get viewport size (please apply to scenegraph)"
 
-            let h = PointCloudHandler(l, view, proj, viewportSize, l.Runtime)
+            let h = PointCloudHandler(l, view, proj, viewportSize, { ActiveNodeCount = ref 0; ExpectedNodeCount = ref 0 }, l.Runtime)
 
             let calls = h.DrawCallInfos
 
