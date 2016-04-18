@@ -223,11 +223,11 @@ module LoD =
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
 //                  
                     //do! Async.Sleep(2000)
-                    let total = 1 <<< 20
                     let mutable a = 0
-
-                    let! _ = Async.OnCancel(fun () -> printfn "cancelled in computation at percentage: %f" (float a / float total))
-                    for i in 0..total do a <- a + 1
+//                    let total = 1 <<< 20
+//
+//                    let! _ = Async.OnCancel(fun () -> printfn "cancelled in computation at percentage: %f" (float a / float total))
+//                    for i in 0..total do a <- a + 1
 //
 //                    let a = 
 //                        let mutable a = 0
