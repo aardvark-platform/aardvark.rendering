@@ -79,7 +79,9 @@ module ``Move To Base`` =
                     []
 
                 | [d;k] -> 
-                    [-d / k]
+                    let r = -d / k
+                    if valid r then [r]
+                    else []
 
                 | [c;b;a] -> 
                     let tup = Polynomial.RealRootsOf(a,b,c)
@@ -131,7 +133,7 @@ module ``Move To Base`` =
 
                     let newton (f : float -> float) (f' : float -> float)  =
                         let rec recurse (depth : int) (lastValue : float) (t : float) (damping : float) =
-                            if depth > 500 then
+                            if depth > 1000 then
                                 if Fun.IsTiny(lastValue, eps) then t
                                 else nan
                             else
@@ -143,7 +145,7 @@ module ``Move To Base`` =
                                 if Fun.IsTiny(v, eps) then
                                     t
                                 else
-                                    recurse (depth + 1) v better damping
+                                    recurse (depth + 1) v better (0.9 * damping)
 
                         let guess = 
                             match Double.IsInfinity min , Double.IsInfinity max with
@@ -227,7 +229,7 @@ module ``Move To Base`` =
 
 
                     let mutable t = nan
-
+//
 //                    // brent's method
 //                    if Double.IsNaN t then
 //                        match Double.IsInfinity min, Double.IsInfinity max with
@@ -235,11 +237,6 @@ module ``Move To Base`` =
 //                                t <- brent x.Evaluate -0.1 1.1
 //                            | _ ->
 //                                ()
-
-//                    // bisect
-//                    if Double.IsNaN t then
-//                        t <- bisect x.Evaluate
-
                     // newton
                     if Double.IsNaN t then
                         let x' = x.Derivative
@@ -252,6 +249,11 @@ module ``Move To Base`` =
                     
                         
                         t <- tn
+
+
+//                    // bisect
+//                    if Double.IsNaN t then
+//                        t <- bisect x.Evaluate
 
 
                     if Double.IsNaN t then 
@@ -278,7 +280,11 @@ module ``Move To Base`` =
 
         member private x.ComputeExtremaCandidates(min : float, max : float) =
             let derivative = x.Derivative
-            let derivativeRoots = derivative.ComputeRealRoots(min, max, 1.0E-5)
+            let eps = 1.0E-6
+            let derivativeRoots = 
+                derivative.ComputeRealRoots(eps)
+                    |> List.filter (fun t -> t >= min-eps && t <= max+eps)
+   
             match Double.IsInfinity min, Double.IsInfinity max with
                 | true,  true  -> derivativeRoots
                 | false, true  -> min::derivativeRoots
@@ -708,6 +714,9 @@ type PathComponent =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PathComponent =
+    let minT = -0.0000
+    let maxT =  1.0000
+
     let getDistanceAndT (point : V2d) (comp : PathComponent) =
         match comp with
             | Line(p0,p1) ->
@@ -728,6 +737,38 @@ module PathComponent =
                 else
                     let d = p.Evaluate(t) - point |> Vec.length
                     d, t
+
+    let inside (point : V2d) (path : list<PathComponent>) =
+        let mutable left = 0
+        let mutable right = 0
+        let mutable up = 0
+        let mutable down = 0
+
+        for c in path do
+            
+            let poly= 
+                match c with
+                    | Line(p0,p1) -> Polynomial2d [|p0; p1 - p0|]
+                    | Poly(_,p) -> p
+
+
+            let p = poly - point
+            let px = p.X
+            let py = p.Y
+
+            let xRoots = px.ComputeRealRoots(0.0, 1.0, 1.0E-8)
+            for r in xRoots do
+                let pp = py.Evaluate r
+                if pp > 0.0 then up <- up + 1
+                elif pp < 0.0 then down <- down + 1
+
+            let yRoots = py.ComputeRealRoots(0.0, 1.0, 1.0E-8)
+            for r in yRoots do
+                let pp = px.Evaluate r
+                if pp > 0.0 then right <- right + 1
+                elif pp < 0.0 then left <- left + 1
+
+        left % 2 <> 0 || right % 2 <> 0 || up % 2 <> 0 || down % 2 <> 0
 
     let getPoint (t : float) (comp : PathComponent) =
         match comp with
@@ -769,6 +810,7 @@ module PathComponent =
 
 
 type Glyph = { path : list<PathComponent>; bounds : Box2d }
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Glyph =
@@ -837,7 +879,8 @@ module Glyph =
                     ()
 
             if close then
-                components.Add(PathComponent.line p start)
+                if not (V2d.ApproxEqual(p, start)) then
+                    components.Add(PathComponent.line p start)
 
                 currentPoints.Clear()
                 start <- V2d.NaN
@@ -853,9 +896,349 @@ module Glyph =
 
         { path = components |> CSharpList.toList; bounds = Box2d(V2d.Zero, V2d.II) }
 
+    type Segment =
+        | Straight of V2d * V2d
+        | Bezier2 of V2d * V2d * V2d
+        | Bezier3 of V2d * V2d * V2d * V2d
+
+
+
+    let geometry (f : Font) (c : char) : IndexedGeometry =
+        use path = new GraphicsPath()
+        let size = 1.0f
+
+        path.AddString(String(c, 1), f.FontFamily, int f.Style, size, PointF(0.0f, 0.0f), StringFormat.GenericDefault)
+
+        
+
+        let types = path.PathTypes
+        let points = path.PathPoints |> Array.map (fun p -> V2d(p.X, p.Y))
+
+        let otherTriangles = List<bool * Triangle2d>()
+        let otherTexCoords = List<V3d>()
+
+        let mutable start = V2d.NaN
+        let currentPoints = List<V2d>()
+        let innerPoints = List<List<V2d>>()
+
+        let lines = List<Line2d>()
+
+        let last() = innerPoints.[innerPoints.Count-1]
+        
+        // http://www.msr-waypoint.net/en-us/um/people/cloop/LoopBlinn05.pdf
+        let texCoords(p0 : V2d, p1 : V2d, p2 : V2d, p3 : V2d) =
+            let p0 = V3d(p0, 1.0)
+            let p1 = V3d(p1, 1.0)
+            let p2 = V3d(p2, 1.0)
+            let p3 = V3d(p3, 1.0)
+
+            let M3 =
+                M44d(
+                     +1.0,   0.0,  0.0,  0.0,
+                     -3.0,   3.0,  0.0,  0.0,
+                     +3.0,  -6.0,  3.0,  0.0,
+                     -1.0,   3.0, -3.0,  1.0
+                )
+
+            let M3Inverse = M3.Inverse
+//                M44d(
+//                     1.0,   0.0,        0.0,        0.0,
+//                     1.0,   1.0/3.0,    0.0,        0.0,
+//                     1.0,   2.0/3.0,    1.0/3.0,    0.0,
+//                     1.0,   1.0,        1.0,        1.0
+//                )
+
+            let v0 =  1.0*p0
+            let v1 = -3.0*p0 + 3.0*p1 
+            let v2 =  3.0*p0 - 6.0*p1 + 3.0*p2
+            let v3 = -1.0*p0 + 3.0*p1 - 3.0*p2 + 1.0*p3
+
+            let det (r0 : V3d) (r1 : V3d) (r2 : V3d) =
+                M33d.FromRows(r0, r1, r2).Det
+
+            let d0 =  (det v3 v2 v1)
+            let d1 = -(det v3 v2 v0)
+            let d2 =  (det v3 v1 v0)
+            let d3 = -(det v2 v1 v0)
+
+
+            let O(a : V3d,b : V3d,c : V3d,d : V3d) =
+                V3d(-a.X, -a.Y, a.Z),
+                V3d(-b.X, -b.Y, b.Z),
+                V3d(-c.X, -c.Y, c.Z),
+                V3d(-d.X, -d.Y, d.Z)
+
+
+
+            let zero v = Fun.IsTiny(v, 1.0E-5)
+            let nonzero v = Fun.IsTiny(v, 1.0E-5) |> not
+
+            let v = 3.0 * d2 * d2 - 4.0*d1*d3
+            let d1z = zero d1
+            let d1nz = d1z |> not
+
+
+            // 1. The Serpentine
+            // 3a. Cusp with inflection at infinity
+            if d1nz && v >= 0.0 then
+                // serpentine
+                // Cusp with inflection at infinity
+
+                let r = sqrt((3.0*d2*d2 - 4.0*d1*d3) / 3.0)
+                let tl = d2 + r
+                let sl = 2.0 * d1
+                let tm = d2 - r
+                let sm = sl
+
+
+                let F =
+                    M44d(
+                         tl * tm,            tl * tl * tl,           tm * tm * tm,       1.0,
+                        -sm*tl - sl*tm,     -3.0*sl*tl*tl,          -3.0*sm*tm*tm,       0.0,
+                         sl*sm,              3.0*sl*sl*tl,           3.0*sm*sm*tm,       0.0,
+                         0.0,               -sl*sl*sl,              -sm*sm*sm,           0.0
+                    )
+
+                let weights = M3Inverse * F
+
+                let w0 = weights.R0.XYZ
+                let w1 = weights.R1.XYZ
+                let w2 = weights.R2.XYZ
+                let w3 = weights.R3.XYZ
+
+                let res = w0, w1, w2, w3
+                if d1 < 0.0 then O res
+                else res
+
+            // 2. The Loop
+            elif d1nz && v < 0.0 then
+                // loop
+
+                let r = sqrt(4.0 * d1 * d3 - 3.0*d2*d2)
+
+                let td = d2 + r
+                let sd = 2.0*d1
+
+                let te = d2 - r
+                let se = sd
+
+
+                let F =
+                    M44d(
+                         td*te,               td*td*te,                   td*te*te,                       1.0,
+                        -se*td - sd*te,      -se*td*td - 2.0*sd*te*td,   -sd*te*te - 2.0*se*td*te,        0.0,
+                         sd * se,             te*sd*sd + 2.0*se*td*sd,    td*se*se + 2.0*sd*te*se,        0.0,
+                         0.0,                -sd*sd*se,                  -sd*se*se,                       0.0
+                    )
+
+                let weights = M3Inverse * F
+
+                let w0 = weights.R0.XYZ
+                let w1 = weights.R1.XYZ
+                let w2 = weights.R2.XYZ
+                let w3 = weights.R3.XYZ
+
+                let res = w0, w1, w2, w3
+                if d1 < 0.0 then O res
+                else res
+
+            // 4. Quadratic
+            elif zero d1 && zero d2 && nonzero d3 then
+                let w0 = V3d(0.0,0.0,0.0)
+                let w1 = V3d(1.0/3.0,0.0,1.0/3.0)
+                let w2 = V3d(2.0/3.0,1.0/3.0,2.0/3.0)
+                let w3 = V3d(1.0,1.0,1.0)
+
+
+                let res = w0,w1,w2,w3
+                if d3 < 0.0 then O res
+                else res
+
+            // 3b. Cusp with cusp at infinity
+            elif d1z && zero v then
+                let tl = d3
+                let sl = 3.0*d2
+                let tm = 1.0
+                let sm = 0.0
+
+
+                let F =
+                    M44d(
+                         tl,     tl*tl*tl,       1.0, 1.0,
+                        -sl,    -3.0*sl*tl*tl,   0.0, 0.0,
+                        0.0,     3.0*sl*sl*tl,   0.0, 0.0,
+                        0.0,    -sl*sl*sl,       0.0, 0.0
+                    )
+
+                let weights = M3Inverse * F
+                let w0 = weights.R0.XYZ
+                let w1 = weights.R1.XYZ
+                let w2 = weights.R2.XYZ
+                let w3 = weights.R3.XYZ
+
+                w0, w1, w2, w3
+
+
+            elif Fun.IsTiny d1 && Fun.IsTiny d2 && Fun.IsTiny d3 then
+                failwith "line or point"
+
+
+            else
+                failwith "not possible"
+
+
+        
+
+
+        for (p, t) in Array.zip points types do
+            let t = t |> unbox<PathPointType>
+
+            let close = t &&& PathPointType.CloseSubpath <> PathPointType.Start
+
+
+
+            match t &&& PathPointType.PathTypeMask with
+                | PathPointType.Line ->
+                    if currentPoints.Count > 0 then
+                        let last = currentPoints.[currentPoints.Count - 1]
+                        currentPoints.Clear()
+                        lines.Add(Line2d(last, p))
+
+                    currentPoints.Add p
+                    last().Add(p)
+
+
+
+                | PathPointType.Bezier ->
+                    currentPoints.Add p
+                    if currentPoints.Count >= 4 then
+                        let p0 = currentPoints.[0]
+                        let p1 = currentPoints.[1]
+                        let p2 = currentPoints.[2]
+                        let p3 = currentPoints.[3]
+
+
+                        let w0,w1,w2,w3 = texCoords(p0, p1, p2, p3)
+
+                        last().Add(p0)
+                        let p1Inside = p1.PosLeftOfLineValue(p0, p3) > 0.0
+                        let p2Inside = p2.PosLeftOfLineValue(p0, p3) > 0.0
+
+                        if p1Inside && p2Inside then 
+                            last().Add(p1); 
+                            last().Add(p2)
+
+                            lines.Add(Line2d(p0, p1))
+                            lines.Add(Line2d(p1, p2))
+                            lines.Add(Line2d(p2, p3))
+                        else
+                            lines.Add(Line2d(p0, p3))
+
+                        otherTriangles.Add(p1Inside, Triangle2d(p0, p1, p2))
+                        otherTexCoords.AddRange [w0; w1; w2]
+
+                        otherTriangles.Add(p2Inside, Triangle2d(p0, p2, p3))
+                        otherTexCoords.AddRange [w0; w2; w3]
+
+                        last().Add(p3)
+
+                        currentPoints.Clear()
+                        currentPoints.Add p3
+
+                | PathPointType.Start | _ ->
+                    currentPoints.Add p
+                    innerPoints.Add(List())
+                    last().Add p
+                    start <- p
+                    ()
+
+            if close then
+                if start <> p then
+                    last().Add(start)
+                    lines.Add(Line2d(p, start))
+
+                currentPoints.Clear()
+                start <- V2d.NaN
+                        
+
+
+            printfn "%A: %A" t p
+
+            ()
+
+        let mutable count = 0
+        let polygons = List<Polygon2d>()
+        let innerPoints = innerPoints |> CSharpList.map CSharpList.toArray
+        
+        for i in 0..innerPoints.Count-1 do
+            let p = Aardvark.Base.Polygon2d(innerPoints.[i])
+            let p = p.WithoutMultiplePoints()
+
+            let w = p.ComputeWindingNumber()
+    
+            if w < 0 then
+                let last = polygons.[polygons.Count-1]
+                if p.IsFullyContainedInside(last) then
+                    let pts = Seq.concat [last.Points; p.Points]
+                    polygons.[polygons.Count-1] <- Polygon2d(pts)
+                    ()
+                else
+                    polygons.Add p
+                ()
+            else
+                polygons.Add(p)
+
+        
+
+
+        let p = [||]
+//        let first = first |> Seq.toArray
+//        let normals = normals |> Seq.toArray
+//        let points = res |> Seq.toArray
+//        let indices = points.ComputeTriangulationOfConcavePolygons(count, normals, first, Array.init points.Length id, 1.0E-5)
+//            indices |> Array.map (fun i -> 0, points.[i])
+//            res
+//                |> CSharpList.toArray
+//                |> Array.collect (fun v -> 
+//                    let p = v.ToPolygon3d(fun v -> V3d(v,0.0))
+//                    let pi = p.ComputeTriangulationOfConcavePolygon(1.0E-7)
+//                    let points = p.Points |> Seq.toArray
+//                    pi |> Array.map (fun i -> 0, points.[i])
+//                ) 
+
+        let t = otherTriangles |> Seq.collect (fun (i,t) -> [ i,t.P0; i,t.P1; i,t.P2 ]) |> Seq.map (fun (i,v) -> 1, V3d(v.X, v.Y, 0.0)) |> Seq.toArray
+        let tc = otherTexCoords |> Seq.toArray
+
+        let pos = Array.append p t
+        let tex = Array.append (Array.create p.Length V3d.Zero) tc
+
+
+        let positions = pos |> Array.map snd |> Array.map V3f.op_Explicit
+        let texCoords = tex |> Array.map V3f.op_Explicit
+        let colors = pos |> Array.map (fst >> float32)
+        
+        IndexedGeometry(
+            Mode = IndexedGeometryMode.TriangleList,
+            IndexedAttributes =
+                SymDict.ofList [
+                    DefaultSemantic.Positions, positions :> Array
+                    Symbol.Create "KLMN", texCoords :> Array
+                    Symbol.Create "TriangleKind", colors :> Array
+                ]
+            )
+            
+        
+
 
 
 module PathComponentTest =
+    open Aardvark.Application
+    open Aardvark.Application.WinForms
+    open Aardvark.Base.Incremental
+    open Aardvark.SceneGraph
+    open FShade
+
+
     let draw (path : list<PathComponent>) =
         let image = PixImage<float32>(Col.Format.RGB, V2i.II * 1024)
         let mat = image.GetMatrix<C3f>()
@@ -892,64 +1275,98 @@ module PathComponentTest =
 
         image.ToPixImage<byte>(Col.Format.RGBA).SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
 
-    let drawGlyph (c : char) =
-        use font = new Font("Times New Roman", 1.0f)
+
+    let drawDistance (size : V2i) (path : list<PathComponent>) =
+
+        let floatImage = PixImage<float32>(Col.Format.RGB, size)
+        let mutable mat = floatImage.GetMatrix<C3f>()
+
+        mat.ForeachIndex(fun (x : int64) (y : int64) (i : int64) ->
+            let c = V2l(x,y)
+            let coord = (V2d(c) + V2d.Half) / V2d(mat.Size)
+
+            let mutable cnt = 0
+
+            
+            let crease = 10.0
+            let dirEquals (a : V2d) (b : V2d) = 
+                let angle = a.Dot(b)  |> acos
+                if angle * Constant.DegreesPerRadian < crease then
+                    true
+                else
+                    false
+
+            let rec assignColors (lastNormal : V2d) (currentColor : int) (path : list<PathComponent>) =
+                match path with
+                    | [] -> []
+                    | h::rest ->
+                        let start = PathComponent.getNormal 0.0 h
+                        let color = 
+                            if dirEquals start lastNormal then currentColor
+                            else (currentColor + 1) % 3
+
+                        (color, h) :: assignColors (PathComponent.getNormal 1.0 h) color rest
+
+
+            let mutable used = Set.empty
+            let mutable result = V3d.Zero
+            let mutable distance = 1.0
+
+            let inside = PathComponent.inside coord path
+            let mutable cnt = 0
+
+            let mutable closest = Map.empty //System.Collections.Generic.SortedList<float, bool * int * PathComponent>()
+
+            for (color, c) in assignColors V2d.Zero 0 path do
+                let (d,t) = c |> PathComponent.getDistanceAndT coord
+                let d = d / 0.08
+                let d = clamp 0.0 1.0 d
+
+                let n = c |> PathComponent.getNormal t
+                let p = c |> PathComponent.getPoint t
+
+                let left = Vec.dot n (coord - p) > 0.0
+
+                closest <- 
+                    match Map.tryFind d closest with
+                        | Some v -> Map.add d ((left, color, c) :: v) closest
+                        | None -> Map.add d [(left, color, c)] closest
+
+
+            
+            let mutable used = Set.empty
+            let mutable result = V3d.Zero
+
+
+            let rec fill (result : V3d) (entries : list<float * (bool * int * PathComponent)>) (used : Set<int>) =
+                match entries with
+                    | [] -> 
+                        result
+
+                    | (d, (left, color, c))::rest ->
+                        if Set.contains color used || (left && not inside) then
+                            fill result rest used
+                        else
+                            let mutable r = result
+                            r.[color] <- if left then 0.5 + 0.5*d else 0.5 - 0.5*d
+                            fill r rest (Set.add color used)
+
+            let result = fill V3d.III (closest |> Seq.collect (fun (KeyValue(k,v)) -> v |> Seq.map (fun v -> k,v)) |> Seq.toList) Set.empty
+
+            mat.[i] <- C3f result
+
+        )
+
+
+
+        floatImage.ToPixImage<byte>(Col.Format.RGBA)
+
+    let drawGlyph (size : V2i) (c : char) =
+        use font = new Font("Consolas", 1.0f)
         let g = Glyph.ofChar font c
 
-        let image = PixImage<float32>(Col.Format.RGB, V2i.II * 256)
-        let mat = image.GetMatrix<C3f>()
+        drawDistance size g.path
 
-        Log.startTimed "rasterizer"
-        Log.line "size: %A" image.Size
-        mat.SetByCoordParallelX(fun (x : int64) (y : int64) ->
-            let c = V2l(x,y)
-            let coord = (V2d(c) + V2d.Half) / V2d(image.Size)
-
-            let colors = [| C3f.Red; C3f.Green; C3f.Blue |]
-
-            let (value, (c, t)) = 
-                g.path |> List.mapi (fun i  v ->
-                            let (d,t) = PathComponent.getDistanceAndT coord v
-                            d, (v, t)
-                        )
-                     |> List.minBy fst
-
-            let n = PathComponent.getNormal t c
-            let p = PathComponent.getPoint t c
-            let s = Vec.dot (coord - p) n
-
-            let value = 
-                let value = value / 0.05
-                let v = clamp 0.0 1.0 value
-                if s > 0.0 then 
-                    0.5 * v + 0.5
-                else
-                    0.5 - 0.5 * v
-
-
-            //let value = pow value (1.0 / 3.0)
-            
-            
-            
-            C3f.White * value
-        ) |> ignore
-
-        Log.stop()
-
-//        let rand = Random()
-//        let randomColor() = C3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
-//        for comp in g.path do
-//            let s = V2d(mat.Size)
-//            let mutable last = s * PathComponent.getPoint 0.0 comp
-//            let color = randomColor()
-//            for i in 1..100 do
-//                let t = float i / 100.0
-//
-//                let p1 = s * PathComponent.getPoint t comp
-//                mat.SetLine(last, p1, color)
-//                last <- p1
-
-        image.ToPixImage<byte>(Col.Format.RGBA).SaveAsImage @"C:\Users\schorsch\Desktop\glyph.png"
 
 
     let testRoots() =
@@ -959,7 +1376,7 @@ module PathComponentTest =
             let roots = List.init 5 (fun _ -> rand.NextDouble()) |> List.sort
             let poly = roots |> List.map (fun v -> (Polynomial([|0.0; 1.0|]) - v)) |> List.fold (*) Polynomial.One
 
-            let eps = 1.0E-5
+            let eps = 1.0E-7
             let found = poly.ComputeRealRoots(0.0, 1.0, eps)
 
             let rec check (real : list<float>) (found : list<float>) =
@@ -981,20 +1398,94 @@ module PathComponentTest =
         for i in 1..1000 do
             iter()
 
-    let test() =
+    module Shader = 
+        type Vertex =
+            {
+                [<Position>] p : V4d
+                [<Semantic("KLMN")>] tc : V3d
+                [<Semantic("TriangleKind")>] kind : float
+            }
 
-        drawGlyph '&'
-//
-//        let path =
-//            let min = 0.2
-//            let max = 0.8
-//            [
-//                PathComponent.line      (V2d(min, min))     (V2d(max, min))
-//                PathComponent.line      (V2d(max, min))     (V2d(max, max))
-//                PathComponent.bezier3   (V2d(max, max))     (V2d(min, max))     (V2d(max, min))     (V2d(min,min))
-//            ]
-//
-//        draw path
+        let sdf (v : Vertex) =
+            fragment {
+                
+                if v.kind = 0.0 then
+                    return V4d.IIII
+                else
+                    let k = v.tc.X
+                    let l = v.tc.Y
+                    let m = v.tc.Z
+
+                    if pow k 3.0 > l*m then
+                        return V4d.OOOO
+                    else
+                        return V4d.IIII
+
+
+            }
+
+    let test() =
+        Ag.initialize()
+        Aardvark.Init()
+
+        use app = new OpenGlApplication()
+        let win = app.CreateSimpleRenderWindow(1)
+        win.Text <- "Aardvark rocks \\o/"
+
+        let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
+        let perspective = 
+            win.Sizes 
+              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+
+
+        let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
+
+        let quadSg =
+            let quad =
+                IndexedGeometry(
+                    Mode = IndexedGeometryMode.TriangleList,
+                    IndexArray = ([|0;1;2; 0;2;3|] :> Array),
+                    IndexedAttributes =
+                        SymDict.ofList [
+                            DefaultSemantic.Positions,                  [| V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |] :> Array
+                            DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
+                            DefaultSemantic.DiffuseColorCoordinates,    [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] :> Array
+                        ]
+                )
+                
+            quad |> Sg.ofIndexedGeometry
+
+
+        use font = new Font("Georgia", 1.0f)
+
+
+
+        let showMask = Mod.init true
+
+
+        let sg =
+            Glyph.geometry font '&' 
+                |> Sg.ofIndexedGeometry
+                |> Sg.effect [
+                    DefaultSurfaces.trafo |> toEffect
+                    Shader.sdf |> toEffect
+                  ]
+               //|> Sg.diffuseTexture' (PixTexture2d(PixImageMipMap [|image :> PixImage|], true))
+               |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
+               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+               |> Sg.fillMode (showMask |> Mod.map (fun v -> if v then Aardvark.Base.Rendering.FillMode.Fill else Aardvark.Base.Rendering.FillMode.Line))
+               |> Sg.trafo (Trafo3d.Scale(-1.0, 1.0, 1.0) |> Mod.constant)
+        win.Keyboard.KeyDown(Keys.R).Values.Add(fun _ ->
+            transact (fun () ->
+                showMask.Value <- not showMask.Value
+            )
+        )
+
+
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
+        win.RenderTask <- task 
+        win.Run()
+
 
 
 

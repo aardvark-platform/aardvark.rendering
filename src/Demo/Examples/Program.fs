@@ -6,8 +6,9 @@ open Rendering.Examples
 [<EntryPoint>]
 [<STAThread>]
 let main args =
+    Fonts.PathComponentTest.test()
     //Vulkan.Lod.run()  
-    Vulkan.Simple.run()  
+    //Vulkan.Simple.run()  
 
     //HelloWorld.run() |> ignore
 
