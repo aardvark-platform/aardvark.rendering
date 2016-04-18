@@ -162,6 +162,16 @@ module TextureExtensions =
             Col.Format.NormalUV, PixelFormat.Rg
         ]
 
+    let internal toUntypedPixelFormat =
+        lookupTable [
+            TextureFormat.DepthComponent16, PixelFormat.DepthComponent
+            TextureFormat.DepthComponent32, PixelFormat.DepthComponent
+            TextureFormat.DepthComponent32f, PixelFormat.DepthComponent
+            TextureFormat.Rgba8, PixelFormat.Rgba
+            TextureFormat.Rgba32f, PixelFormat.Rgba
+            TextureFormat.Rgb8, PixelFormat.Rgb
+            TextureFormat.R8, PixelFormat.Red
+        ]
 
     [<AutoOpen>]
     module private Uploads =
@@ -534,7 +544,7 @@ module TextureExtensions =
             GL.Check "could not bind texture"
 
             let pixelType, pixelFormat =
-                match toPixelType format.Type, toPixelFormat format.Format with
+                match toPixelType format.Type, toUntypedPixelFormat t.Format with
                     | Some t, Some f -> (t,f)
                     | _ ->
                         failwith "conversion not implemented"
