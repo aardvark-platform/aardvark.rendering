@@ -116,7 +116,7 @@ module private TypedBuffers =
 
             let arr = GCHandle.Alloc(data,GCHandleType.Pinned)
             try 
-                ReaderWriterLock.read lockObj (fun () ->
+                ReaderWriterLock.read lockObj (fun () ->   // why is here read? it works
                     buffer.Write(arr.AddrOfPinnedObject(), int offsetInBytes, int sizeInBytes)
                 )
             finally 
@@ -195,7 +195,7 @@ type GeometryPool(runtime : IRuntime, asyncWrite : bool) =
             )
 
         if !isNew then
-            ReaderWriterLock.read buffersRW (fun () ->
+            ReaderWriterLock.write buffersRW (fun () ->
                 for (KeyValue(sem, buffer)) in buffers do
 
                     write g sem ptr buffer
