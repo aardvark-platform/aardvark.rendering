@@ -79,7 +79,11 @@ module VertexArrayObjectExtensions =
                             | PerInstances s -> GL.VertexAttribDivisor(id, s)
                     GL.Check "could not set vertex attribute frequency"
 
-                    let attType = glTypes.[att.BaseType]
+                    let attType = 
+                        match glTypes.TryGetValue att.BaseType with
+                            | (true,v) -> v
+                            | _ -> failwithf "[Aardvark.Rendering.GL] no GL type for given attribute type registered. Attribute has type: %A" att.BaseType.FullName
+                    
                     if att.Type = typeof<C4b> then
                         GL.VertexAttribPointer(id, 0x80E1, attType, true, att.Stride, att.Offset)
                     else
