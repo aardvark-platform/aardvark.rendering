@@ -34,21 +34,24 @@ type PointCloudInfo =
 
         /// the time interval for the pruning process in ms
         pruneInterval : int
-
     }
 
 [<AutoOpen>]
 module ``PointCloud Sg Extensions`` =
 
     module Sg = 
-        type PointCloud(data : ILodData, config : PointCloudInfo) =
+        type PointCloud(data : ILodData, config : PointCloudInfo, progress : Progress) =
             interface ISg
 
             member x.Data = data
             member x.Config = config
+            member x.Progress = progress
 
         let pointCloud (data : ILodData) (info : PointCloudInfo) =
-            PointCloud(data, info) :> ISg
+            PointCloud(data, info, { ActiveNodeCount = ref 0; ExpectedNodeCount = ref 0 }) :> ISg
+
+        let pointCloud' (data : ILodData) (info : PointCloudInfo) (progress : Progress) =
+            PointCloud(data, info, progress) :> ISg
             
 
 namespace Aardvark.SceneGraph.Semantics
@@ -397,7 +400,7 @@ module PointCloudRenderObjectSemantics =
                     | Some (:? IMod<V2i> as vs) -> vs
                     | _ -> failwith "[PointCloud] could not get viewport size (please apply to scenegraph)"
 
-            let h = PointCloudHandler(l, view, proj, viewportSize, { ActiveNodeCount = ref 0; ExpectedNodeCount = ref 0 }, l.Runtime)
+            let h = PointCloudHandler(l, view, proj, viewportSize, l.Progress, l.Runtime)
 
             let calls = h.DrawCallInfos
 
