@@ -154,7 +154,7 @@ type GeometryPool(runtime : IRuntime, asyncWrite : bool) =
             g.IndexArray.Length
 
     let write (g : IndexedGeometry) (sem : Symbol) (ptr : managedptr) (buffer : ITypedBuffer) =
-        buffer.AdjustToCount(nativeint manager.Capacity)
+        
         match g.IndexedAttributes.TryGetValue sem with
             | (true, array) -> 
                 if isNull g.IndexArray then
@@ -178,28 +178,36 @@ type GeometryPool(runtime : IRuntime, asyncWrite : bool) =
 
         if !isNew then
             ReaderWriterLock.read pointersRW (fun () ->
+                result.AdjustToCount(nativeint manager.Capacity)
                 for (KeyValue(g,ptr)) in pointers do
                     write g sem ptr result
             )
         result.Buffer
 
     member x.Add(g : IndexedGeometry) =
-        let isNew = ref false
+        //let isNew = ref false
         let ptr = 
             ReaderWriterLock.write pointersRW (fun () ->
                 pointers.GetOrCreate(g, fun g ->
                     let count = faceVertexCount g
-                    isNew := true
-                    manager.Alloc count
+                    //isNew := true
+                    let ptr = manager.Alloc count
+
+                    ReaderWriterLock.read buffersRW (fun () ->
+                        for (KeyValue(sem, buffer)) in buffers do
+                            buffer.AdjustToCount(nativeint manager.Capacity)
+                            write g sem ptr buffer
+                    )
+                    ptr
                 )
             )
 
-        if !isNew then
-            ReaderWriterLock.read buffersRW (fun () ->
-                for (KeyValue(sem, buffer)) in buffers do
-
-                    write g sem ptr buffer
-            )
+//        if !isNew then
+//            ReaderWriterLock.read buffersRW (fun () ->
+//                for (KeyValue(sem, buffer)) in buffers do
+//                    buffer.AdjustToCount(nativeint manager.Capacity)
+//                    write g sem ptr buffer
+//            )
             
         Range.ofPtr ptr
 
