@@ -2247,12 +2247,8 @@ module PathComponentTest =
 //        c.AddFontFile(@"StarJedi.ttf")
 //        let font = new Font(c.Families.[0], 1.0f)
 
-        
-        use font = new Font("Times New Roman", 1.0f)
 
-
-        let test = Rewrite.Font("Times New Roman")
-        test.GetKerning('W', 'A') |> printfn "WA = %A"
+        let test = Rewrite.Font("Consolas")
 //        let str = Mod.init "hi."
 //        let chars =
 //            str |> Mod.map (fun str ->
@@ -2264,11 +2260,6 @@ module PathComponentTest =
 //        
 
         let filled = Mod.init true
-
-
-
-        let char = Mod.init 'a'
-        let g = char |> Mod.map (Glyph.geometry font)
         let text = Mod.init "hi"
 
         let sg =
