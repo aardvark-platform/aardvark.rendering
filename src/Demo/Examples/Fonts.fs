@@ -903,12 +903,14 @@ module Glyph =
 
 
 
+
+
     let geometry (f : Font) (c : char) : IndexedGeometry =
         use path = new GraphicsPath()
         let size = 1.0f
 
         path.AddString(String(c, 1), f.FontFamily, int f.Style, size, PointF(0.0f, 0.0f), StringFormat.GenericDefault)
-
+        
         
 
         let types = path.PathTypes
@@ -920,7 +922,6 @@ module Glyph =
         let mutable start = V2d.NaN
         let currentPoints = List<V2d>()
         let innerPoints = List<List<V2d>>()
-
         let lines = List<Line2d>()
 
         let last() = innerPoints.[innerPoints.Count-1]
@@ -1154,9 +1155,9 @@ module Glyph =
 
             if close then
                 if start <> p then
-                    last().Add(start)
                     lines.Add(Line2d(p, start))
 
+                last().Add(start)
                 currentPoints.Clear()
                 start <- V2d.NaN
                         
@@ -1166,51 +1167,85 @@ module Glyph =
 
             ()
 
-        let mutable count = 0
-        let polygons = List<Polygon2d>()
+
+
+
+
         let innerPoints = innerPoints |> CSharpList.map CSharpList.toArray
-        
-        for i in 0..innerPoints.Count-1 do
-            let p = Aardvark.Base.Polygon2d(innerPoints.[i])
-            let p = p.WithoutMultiplePoints()
 
+
+
+//        let a = [|V2d(0.0, 0.0); V2d(1.0,0.0); V2d(1.0,1.0); V2d(0.0,1.0); V2d(0.0,0.0)|]
+//        let b = [|V2d(0.9,0.9); V2d(0.9,0.1); V2d(0.1,0.1); V2d(0.1,0.9); V2d(0.9,0.9)|]
+//        
+        let mergePolys(a : V2d[]) (b : V2d[]) =
+
+            let distances =
+                seq {
+                    for i in 0..a.Length-1 do
+                        for j in 0..b.Length-1 do
+                            let a = a.[i]
+                            let b = b.[j]
+                            yield V2d.Distance(a,b), (i,j)
+                }
+
+            let (i,j) = distances |> Seq.minBy fst |> snd
+
+            let bperm =
+                if j = 0 then b
+                else Array.append (Array.skip j b) (Array.sub b 1 j)
+
+
+
+            match i with
+                | 0 -> 
+                    // a0 ... an,a0, b0 ... bn,b0, a0
+                    Array.concat [ a; bperm; [|a.[0]|] ]
+                | i -> 
+                    // a0 ... ai, b0 ... bn, b0, ai ... an, a0
+                    Array.concat [ Array.take (i+1) a; bperm; Array.skip i a; [|a.[0]|] ]
+//
+//            let pt = a.[a.Length-1]
+//            let closest = b |> Seq.mapi (fun i v -> i,V2d.Distance(v,pt)) |> Seq.minBy snd |> fst
+//            let b = 
+//                if closest = 0 then
+//                    Array.append b [|a.[0]|]
+//                else
+//                    let start = Array.skip closest b
+//                    let rest = Array.sub b 1 closest
+//                    Array.concat [ [|rest.[rest.Length-1]|]; start; rest; [|a.[0]|] ]
+//
+//            Array.append a b
+
+        let polygons = List<V2d[]>()
+        for points in innerPoints do
+            let p = Polygon2d points
             let w = p.ComputeWindingNumber()
-    
-            if w < 0 then
+
+            if polygons.Count > 0 && p.IsFullyContainedInside(Polygon2d polygons.[polygons.Count-1]) then
                 let last = polygons.[polygons.Count-1]
-                if p.IsFullyContainedInside(last) then
-                    let pts = Seq.concat [last.Points; p.Points]
-                    polygons.[polygons.Count-1] <- Polygon2d(pts)
-                    ()
-                else
-                    polygons.Add p
-                ()
+                polygons.[polygons.Count-1] <- mergePolys last points
             else
-                polygons.Add(p)
-
-        
+                polygons.Add(points)
 
 
-        let p = [||]
-//        let first = first |> Seq.toArray
-//        let normals = normals |> Seq.toArray
-//        let points = res |> Seq.toArray
-//        let indices = points.ComputeTriangulationOfConcavePolygons(count, normals, first, Array.init points.Length id, 1.0E-5)
-//            indices |> Array.map (fun i -> 0, points.[i])
-//            res
-//                |> CSharpList.toArray
-//                |> Array.collect (fun v -> 
-//                    let p = v.ToPolygon3d(fun v -> V3d(v,0.0))
-//                    let pi = p.ComputeTriangulationOfConcavePolygon(1.0E-7)
-//                    let points = p.Points |> Seq.toArray
-//                    pi |> Array.map (fun i -> 0, points.[i])
-//                ) 
+        let insidePoints =
+            polygons 
+            |> CSharpList.toArray
+            |> Array.collect (fun p ->
+                let poly = Polygon3d(p |> Array.map (fun v -> V3d(v, 0.0)))
+                let poly = poly.WithoutMultiplePoints()
+                let index = poly.ComputeTriangulationOfConcavePolygon(1.0E-7)
+                
+
+                index |> Array.map (fun i -> 0, poly.[i])
+            )
 
         let t = otherTriangles |> Seq.collect (fun (i,t) -> [ i,t.P0; i,t.P1; i,t.P2 ]) |> Seq.map (fun (i,v) -> 1, V3d(v.X, v.Y, 0.0)) |> Seq.toArray
         let tc = otherTexCoords |> Seq.toArray
 
-        let pos = Array.append p t
-        let tex = Array.append (Array.create p.Length V3d.Zero) tc
+        let pos = Array.append insidePoints t
+        let tex = Array.append (Array.create insidePoints.Length V3d.Zero) tc
 
 
         let positions = pos |> Array.map snd |> Array.map V3f.op_Explicit
@@ -1456,7 +1491,7 @@ module PathComponentTest =
             quad |> Sg.ofIndexedGeometry
 
 
-        use font = new Font("Georgia", 1.0f)
+        use font = new Font("Times New Roman", 1.0f)
 
 
 
@@ -1464,7 +1499,7 @@ module PathComponentTest =
 
 
         let sg =
-            Glyph.geometry font '&' 
+            Glyph.geometry font '@' 
                 |> Sg.ofIndexedGeometry
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect
