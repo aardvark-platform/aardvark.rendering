@@ -313,6 +313,8 @@ module Lod =
                         ()
                 traverse 0 root
 
+            member x.Dependencies = []
+
             member x.GetData (cell : LodDataNode) =
                 async {
                     //do! Async.SwitchToThreadPool()

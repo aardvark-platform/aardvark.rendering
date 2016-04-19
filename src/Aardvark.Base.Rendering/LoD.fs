@@ -2,6 +2,7 @@
 
 open System.Collections.Generic
 open Aardvark.Base
+open Aardvark.Base.Incremental
 
 [<CustomEquality; NoComparison>]
 type LodDataNode =
@@ -22,6 +23,7 @@ type LodDataNode =
 type ILodData =
     abstract member BoundingBox : Box3d
     abstract member Traverse : (LodDataNode -> bool) -> unit
+    abstract member Dependencies : list<IMod>
     abstract member GetData : node : LodDataNode -> Async<IndexedGeometry>
 
 [<AutoOpen>]

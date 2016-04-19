@@ -219,7 +219,8 @@ module PointCloudRenderObjectSemantics =
                     let view = view.GetValue self
                     let proj = proj.GetValue self
                     let wantedNearPlaneDistance = wantedNearPlaneDistance.GetValue self
-
+                    
+                    for a in node.Data.Dependencies do a.GetValue self |> ignore
                     let set = node.Data.Rasterize(view, proj, wantedNearPlaneDistance)
 
                     let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
