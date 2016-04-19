@@ -253,14 +253,15 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
         let innerStats = 
             if myDirtyResources.Count > 0 then
                 if level > 0 then Report.Line("nested resource udpate")
-                System.Threading.Tasks.Parallel.ForEach(myDirtyResources, fun (d : IChangeableResource) ->
+                for d in myDirtyResources do
+                //System.Threading.Tasks.Parallel.ForEach(myDirtyResources, fun (d : IChangeableResource) ->
                     lock d (fun () ->
                         if d.OutOfDate then
                             d.UpdateCPU(x)
                         else
                             d.Outputs.Add x |> ignore
                     )
-                ) |> ignore
+                //) |> ignore
   
                 let mutable cc = Unchecked.defaultof<_>
                 for d in myDirtyResources do

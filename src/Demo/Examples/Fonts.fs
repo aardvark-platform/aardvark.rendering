@@ -11,6 +11,8 @@ open System.Drawing
 open System.Drawing.Drawing2D
 open Aardvark.Base
 
+#nowarn "9"
+
 [<AutoOpen>]
 module ``Move To Base`` =
     let inline private until (cond : unit -> bool) (body : unit -> unit) =
@@ -842,7 +844,7 @@ module Glyph =
         let size = 1.0f
         path.AddString(String(c, 1), f.FontFamily, int f.Style, size, PointF(0.0f, 0.0f), StringFormat.GenericDefault)
 
-
+        
         // calculates the (k,l,m) coordinates for a given bezier-segment as
         // shown by Blinn 2003: http://www.msr-waypoint.net/en-us/um/people/cloop/LoopBlinn05.pdf
         // returns the (k,l,m) triples for the four control-points
@@ -1118,9 +1120,19 @@ module Glyph =
                 if polygons.Count > 0 then Some polygons.[polygons.Count-1]
                 else None
 
+            let w = polygon.ComputeWindingNumber()
+
             match last with
                 | Some last when polygon.IsFullyContainedInside last ->
                     polygons.[polygons.Count-1] <- mergePolys last polygon
+//
+//                | Some last when last.IsFullyContainedInside polygon ->
+//                    polygons.[polygons.Count-1] <- mergePolys polygon last
+//                    
+//                | Some last when w < 0 ->
+//                    polygons.[polygons.Count-1] <- mergePolys last polygon
+                    
+
                 | _ ->
                     polygons.Add polygon
 
@@ -1342,11 +1354,21 @@ module Rewrite =
     type Path =
         {
             outline         : PathSegment[]
+            bounds          : Box2d
         }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Path =
         open System.Collections.Generic
+
+
+        module Attributes = 
+            let KLMKind = Symbol.Create "KLMKind"
+            let PathOffset = Symbol.Create "PathOffset"
+
+
+        type KLMKindAttribute() = inherit FShade.Parameters.SemanticAttribute(Attributes.KLMKind |> string)
+        type PathOffsetAttribute() = inherit FShade.Parameters.SemanticAttribute(Attributes.PathOffset |> string)
 
 
         let ofChar (font : System.Drawing.Font) (c : char) =
@@ -1368,9 +1390,8 @@ module Rewrite =
             let currentPoints = List<V2d>()
             let segments = List<PathSegment>()
 
-
             for (p, t) in Array.zip points types do
-                let t = t |> unbox<PathPointType>
+                let t = t |> int |> unbox<PathPointType>
 
                 let close = t &&& PathPointType.CloseSubpath <> PathPointType.Start
 
@@ -1407,20 +1428,26 @@ module Rewrite =
                     currentPoints.Clear()
                     start <- V2d.NaN
 
+            //use f = new Font(font.FontFamily, 2000.0f, font.Style, GraphicsUnit.Point, font.GdiCharSet, font.GdiVerticalFont)
+            use g = Graphics.FromHwnd(0n)
+            g.PageUnit <- font.Unit
 
-            { outline = CSharpList.toArray segments }
+            let size = 
+                let sf = g.MeasureString(String(c, 1), font)
+                V2d(sf.Width, sf.Height)
+            { outline = CSharpList.toArray segments; bounds = Box2d.FromMinAndSize(0.0, 0.0, size.X, size.Y) }
 
         let single (seg : PathSegment) =
-            { outline = [| seg |] }
+            { outline = [| seg |]; bounds = Box2d.Invalid }
 
         let ofSeq (segments : seq<PathSegment>) =
-            { outline = Seq.toArray segments }
+            { outline = Seq.toArray segments; bounds = Box2d.Invalid }
 
         let ofList (segments : list<PathSegment>) =
-            { outline = List.toArray segments }
+            { outline = List.toArray segments; bounds = Box2d.Invalid }
 
         let ofArray (segments : PathSegment[]) =
-            { outline = Array.copy segments }
+            { outline = Array.copy segments; bounds = Box2d.Invalid }
 
         let toSeq (p : Path) =
             p.outline :> seq<_>
@@ -1432,13 +1459,13 @@ module Rewrite =
             p.outline |> Array.copy
 
         let append (l : Path) (r : Path) =
-            { outline = Array.append l.outline r.outline }
+            { outline = Array.append l.outline r.outline; bounds = Box2d.Invalid }
 
         let concat (l : seq<Path>) =
-            { outline = l |> Seq.toArray |> Array.collect toArray }
+            { outline = l |> Seq.toArray |> Array.collect toArray; bounds = Box2d.Invalid }
 
         let reverse (p : Path) =
-            { outline = p.outline |> Array.map PathSegment.reverse |> Array.rev }
+            { outline = p.outline |> Array.map PathSegment.reverse |> Array.rev; bounds = Box2d.Invalid }
 
         let bounds (p : Path) =
             p.outline |> Seq.map PathSegment.bounds |> Box2d
@@ -1450,7 +1477,7 @@ module Rewrite =
             p.outline.[i]
 
         let transform (f : V2d -> V2d) (p : Path) =
-            { outline = Array.map (PathSegment.transform f) p.outline }
+            { outline = Array.map (PathSegment.transform f) p.outline; bounds = Box2d.Invalid }
 
     
         let toGeometry (p : Path) =
@@ -1619,34 +1646,45 @@ module Rewrite =
                     failwith "not possible"
 
 
-            let inside = List<V2d>()
+            let innerPoints = List<List<V2d>>()
             let boundaryTriangles = List<V2d>()
             let boundaryCoords = List<V3d>()
             let mutable current = V2d.NaN
 
+            let start (p : V2d) =
+                if current <> p then
+                    innerPoints.Add(List())
+                    current <- V2d.NaN
+
             let add p =
                 if current <> p then 
-                    inside.Add p
+                    innerPoints.[innerPoints.Count-1].Add p
                     current <- p
 
             for seg in p.outline do
                 match seg with
                     | Line(p0, p1) ->
+                        start p0
                         add p0
 
-                        inside.Add(p1)
+                        add p1
                         current <- p1
 
                     | Bezier2(p0, p1, p2) ->
+                        start p0
                         add p0
 
                         let p1Inside = p1.PosLeftOfLineValue(p0, p2) > 0.0
                         if p1Inside then add p1
 
+                        boundaryTriangles.AddRange [p0; p1; p2]
+                        boundaryCoords.AddRange [V3d(0,0,0); V3d(0.5, 0.0, 0.5); V3d(1,1,1)]
+
                         add p2
                         current <- p2
 
                     | Bezier3(p0, p1, p2, p3) ->
+                        start p0
                         add p0
 
                         let p1Inside = p1.PosLeftOfLineValue(p0, p3) > 0.0
@@ -1655,11 +1693,304 @@ module Rewrite =
                             add p1
                             add p2
 
+                        let w0,w1,w2,w3 = texCoords(p0, p1, p2, p3)
+                        boundaryTriangles.AddRange [p0; p1; p2]
+                        boundaryCoords.AddRange [w0; w1; w2]
+                        boundaryTriangles.AddRange [p0; p2; p3]
+                        boundaryCoords.AddRange [w0; w2; w3]
+
                         add p3
                         current <- p3
 
+            // merge the interior polygons (respecting holes)
+            let innerPoints = innerPoints |> Seq.map (CSharpList.toArray >> Polygon2d) |> Seq.toList
 
-            failwith ""
+            let mergePolys(a : Polygon2d) (b : Polygon2d) =
+
+                let distances =
+                    seq {
+                        for i in 0..a.PointCount-1 do
+                            for j in 0..b.PointCount-1 do
+                                let a = a.[i]
+                                let b = b.[j]
+                                yield (i,j), V2d.Distance(a,b)
+                    }
+
+                let (i,j) = distances |> Seq.minBy snd |> fst
+
+
+                let rot (i : int) (points : V2d[]) =
+                    if i = 0 then points
+                    else Array.append (Array.skip i points) (Array.sub points 1 i)
+
+                let aperm = a.GetPointArray() |> rot i
+                let bperm = b.GetPointArray() |> rot j
+
+                // a0 ... an,a0, b0 ... bn,b0, a0
+                Array.concat [ aperm; bperm; [|aperm.[0]|] ] |> Polygon2d
+
+            let polygons = List<Polygon2d>()
+            for polygon in innerPoints do
+                let last =
+                    if polygons.Count > 0 then Some polygons.[polygons.Count-1]
+                    else None
+
+                let w = polygon.ComputeWindingNumber()
+
+                match last with
+                    | Some last when polygon.IsFullyContainedInside last ->
+                        polygons.[polygons.Count-1] <- mergePolys last polygon
+
+                    | _ ->
+                        polygons.Add polygon
+
+            // triangulate the interior polygons (marking all vertices as interior ones => fst = 0)
+            let interiorTriangles =
+                polygons 
+                |> CSharpList.toArray
+                |> Array.collect (fun p ->
+                    let poly = p.ToPolygon3d (fun v -> V3d(v, 0.0))
+                    let poly = poly.WithoutMultiplePoints()
+                    let index = poly.ComputeTriangulationOfConcavePolygon(1.0E-7)
+                
+
+                    index |> Array.map (fun i -> poly.[i])
+                )
+
+            // union the interior with the bounary triangles
+            let boundaryTriangles = boundaryTriangles |> Seq.map (fun v -> V3d(v.X, v.Y, 0.0)) |> Seq.toArray
+            let boundaryCoords = boundaryCoords |> CSharpList.toArray |> Array.map (fun v -> V4d(v, 1.0))
+            let pos = Array.append interiorTriangles boundaryTriangles
+            let tex = Array.append (Array.create interiorTriangles.Length V4d.Zero) boundaryCoords
+
+
+            // use the merged vertex-data for creating the final geometry
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.TriangleList,
+                IndexedAttributes =
+                    SymDict.ofList [
+                        DefaultSemantic.Positions,  pos |> Array.map (V3f.op_Explicit) :> Array
+                        Attributes.KLMKind,         tex |> Array.map (V4f.op_Explicit) :> Array
+                    ]
+            )
+
+    
+    open System.Collections.Generic
+    open System.Collections.Concurrent
+    open System.Threading
+    open Aardvark.Base.Rendering
+
+    module GDI =
+        open System.Runtime.InteropServices
+        open Microsoft.FSharp.NativeInterop
+        open System.Collections.Generic
+
+        type KerningPair =
+            struct
+                val mutable public first : uint16
+                val mutable public second : uint16
+                val mutable public amount : int
+            end
+
+        [<DllImport("gdi32.dll")>]
+        extern int GetKerningPairs(nativeint hdc, int count, KerningPair* pairs)
+
+        [<DllImport("gdi32.dll")>]
+        extern nativeint SelectObject(nativeint hdc,nativeint hFont)
+
+
+        let pairs (f : Font) =
+            use f = new System.Drawing.Font(f.FontFamily, 2000.0f, f.Style, GraphicsUnit.Pixel, f.GdiCharSet, f.GdiVerticalFont)
+            use g = Graphics.FromHwnd(0n)
+            g.PageUnit <- GraphicsUnit.Point
+
+            let hdc = g.GetHdc()
+            let hFont = f.ToHfont()
+            let old = SelectObject(hdc, hFont)
+
+            let cnt = GetKerningPairs(hdc, 0, NativePtr.zero)
+            let ptr = NativePtr.stackalloc cnt
+            GetKerningPairs(hdc, cnt, ptr) |> ignore
+
+            let res = Dictionary<char * char, float>()
+            for i in 0..cnt-1 do
+                let pair = NativePtr.get ptr i
+                let c0 = pair.first |> char
+                let c1 = pair.second |> char
+                res.[(c0,c1)] <- float pair.amount / 2000.0
+
+            res
+
+    type FontCache(r : IRuntime, f : Font) =
+        let pool = Aardvark.Base.Rendering.GeometryPool.createAsync r
+        let ranges = ConcurrentDictionary<char, Range1i>()
+
+        let types =
+            Map.ofList [
+                DefaultSemantic.Positions, typeof<V3f>
+                Path.Attributes.KLMKind, typeof<V4f>
+            ]
+
+        let vertexBuffers =
+            { new IAttributeProvider with
+                member x.TryGetAttribute(sem) =
+                    match Map.tryFind sem types with    
+                        | Some t -> BufferView(pool.GetBuffer sem, t) |> Some
+                        | _ -> None
+
+                member x.All = Seq.empty
+                member x.Dispose() = ()
+            }
+
+        member x.VertexBuffers = vertexBuffers
+
+        member x.GetBufferRange(c : char) =
+            ranges.GetOrAdd(c, fun c ->
+                let geometry = f.GetGlyph(c)
+                let range = pool.Add(geometry)
+                range
+            )
+
+        member x.Dispose() =
+            pool.Dispose()
+            ranges.Clear()
+
+    and Font private(f : System.Drawing.Font) =
+        let kerning = GDI.pairs f
+        let glyphs = ConcurrentDictionary<char, Box2d * IndexedGeometry>()
+
+        let cache = ConcurrentDictionary<IRuntime, FontCache>()
+
+
+
+        let getKerning (l : char) (r : char) =
+            match kerning.TryGetValue((l,r)) with
+                | (true, v) -> v
+                | _ -> 0.0
+
+        let getGlyph (c : char) =
+            glyphs.GetOrAdd(c, fun c ->
+                let path = Path.ofChar f c
+                let bounds = path.bounds
+                let geometry = Path.toGeometry path
+                (bounds, geometry)
+            )
+
+        member x.GetOrCreateCache(r : IRuntime) =
+            cache.GetOrAdd(r, fun r ->
+                new FontCache(r, x)
+            )
+
+        member x.GetKerning(l : char, r : char) =
+            getKerning l r
+
+        member x.GetGlyph(c : char) =
+            getGlyph c |> snd
+
+        member x.GetBounds(c : char) =
+            getGlyph c |> fst
+
+        member x.Dispose() =
+            cache.Values |> Seq.toList |> List.iter (fun c -> c.Dispose())
+            cache.Clear()
+            f.Dispose()
+            kerning.Clear()
+            glyphs.Clear()
+
+        member x.Layout (str : string) =
+            let mutable cx = 0.0
+            let mutable cy = 0.0
+            let mutable last = '\n'
+            let arr = Array.zeroCreate str.Length
+            for i in 0..str.Length-1 do
+                let c = str.[i]
+                let bounds = x.GetBounds c
+                let kerning = 
+                    if i > 0 then x.GetKerning(str.[i-1], c)
+                    else 0.0
+
+                arr.[i] <- V2d(cx, cy)
+                cx <- cx + (bounds.SizeX + kerning) * 0.75
+            arr
+
+        new(family : string, style : FontStyle) =
+            let f = new System.Drawing.Font(family, 1.0f, style, GraphicsUnit.Point)
+            Font(f)
+
+        new(family : string) = Font(family, FontStyle.Regular)
+
+
+
+    module Sg =
+        open Aardvark.Base.Ag
+        open Aardvark.Base.Incremental
+        open Aardvark.SceneGraph
+        open Aardvark.SceneGraph.Semantics
+
+        type Text(f : Font, content : IMod<string>) =
+            interface ISg
+            member x.Font = f
+            member x.Content = content 
+
+        [<Semantic>]
+        type TextSem() =
+            
+            member x.RenderObjects(t : Text) =
+                let font = t.Font
+                let content = t.Content
+                let cache = font.GetOrCreateCache(t.Runtime)
+                let ro = RenderObject.create()
+                
+                let indirectAndOffsets =
+                    content |> Mod.map (fun str ->
+                        let indirectBuffer = 
+                            str.ToCharArray() 
+                                |> Array.map cache.GetBufferRange
+                                |> Array.mapi (fun i r ->
+                                    DrawCallInfo(
+                                        FirstIndex = r.Min,
+                                        FaceVertexCount = r.Size + 1,
+                                        FirstInstance = i,
+                                        InstanceCount = 1,
+                                        BaseVertex = 0
+                                    )
+                                   )
+                                |> ArrayBuffer
+                                :> IBuffer
+
+                        let offsets = 
+                            font.Layout(str)
+                                |> Array.map V2f.op_Explicit
+                                |> ArrayBuffer
+                                :> IBuffer
+
+                        indirectBuffer, offsets
+                    )
+
+                let offsets = BufferView(Mod.map snd indirectAndOffsets, typeof<V2f>)
+
+                let instanceAttributes =
+                    let old = ro.InstanceAttributes
+                    { new IAttributeProvider with
+                        member x.TryGetAttribute sem =
+                            if sem = Path.Attributes.PathOffset then offsets |> Some
+                            else old.TryGetAttribute sem
+                        member x.All = old.All
+                        member x.Dispose() = old.Dispose()
+                    }
+
+                ro.VertexAttributes <- cache.VertexBuffers
+                ro.IndirectBuffer <- indirectAndOffsets |> Mod.map fst
+                ro.InstanceAttributes <- instanceAttributes
+                ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+
+                ASet.single (ro :> IRenderObject)
+
+
+
+
+
+
 
 
 module PathComponentTest =
@@ -1832,27 +2163,30 @@ module PathComponentTest =
     module Shader = 
         type Vertex =
             {
-                [<Glyph.KLM>] klm : V3d
-                [<Glyph.TriangleKind>] kind : float
+                [<Position>] p : V4d
+                [<Rewrite.Path.KLMKind>] klm : V4d
+                [<Rewrite.Path.PathOffset>] offset : V2d
             }
 
-        let sdf (v : Vertex) =
-            fragment {
-                let s : bool = uniform?Filled
+        let pathVertex (v : Vertex) =
+            vertex {
+                let p = V4d(v.p.X + v.offset.X, v.p.Y + v.offset.Y, v.p.Z, v.p.W)
+                return { v with p = p }
+            }
 
-                if v.kind = 0.0 then
+        let pathFragment (v : Vertex) =
+            fragment {
+                let kind = v.klm.W
+                if kind = 0.0 then
                     return V4d.IIII
                 else
                     let k = v.klm.X
                     let l = v.klm.Y
                     let m = v.klm.Z
-                    if s then
-                        if pow k 3.0 > l*m then
-                            return V4d.OOOO
-                        else
-                            return V4d.IIII
+                    if k*k*k > l*m then
+                        return V4d.OOOO
                     else
-                        return V4d.IOOI
+                        return V4d.IIII
 
 
             }
@@ -1862,13 +2196,13 @@ module PathComponentTest =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateSimpleRenderWindow(1)
-        win.Text <- "Aardvark rocks \\o/"
+        let win = app.CreateGameWindow(8)
+        //win.Text <- "Aardvark rocks \\o/"
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
-              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+              |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 500.0 (float s.X / float s.Y))
 
 
         let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
@@ -1899,6 +2233,8 @@ module PathComponentTest =
             fmt.SetMeasurableCharacterRanges (Array.init str.Length (fun i -> new CharacterRange(i, 1)))
             let regions = g.MeasureCharacterRanges(str, f, RectangleF(0.0f, 0.0f, 100000.0f, 100000.0f), fmt)
 
+       
+
             [|
                 for i in 0..regions.Length-1 do
                     let c = str.[i]
@@ -1907,35 +2243,70 @@ module PathComponentTest =
                     yield c, box
             |]
 
+//        let c = new System.Drawing.Text.PrivateFontCollection()
+//        c.AddFontFile(@"StarJedi.ttf")
+//        let font = new Font(c.Families.[0], 1.0f)
+
+        
         use font = new Font("Times New Roman", 1.0f)
 
-        let str = "sepp hugo"
-        let characters = layout font str
+
+        let test = Rewrite.Font("Times New Roman")
+        test.GetKerning('W', 'A') |> printfn "WA = %A"
+//        let str = Mod.init "hi."
+//        let chars =
+//            str |> Mod.map (fun str ->
+//                let characters = layout font str
+//                characters 
+//                    |> Array.map (fun (c,b) -> Sg.ofIndexedGeometry (Glyph.geometry font c) |> Sg.trafo (Trafo3d.Translation(b.Min.X, b.Min.Y, 0.0) |> Mod.constant))
+//                    |> Sg.group'
+//            )
+//        
 
         let filled = Mod.init true
 
 
+
+        let char = Mod.init 'a'
+        let g = char |> Mod.map (Glyph.geometry font)
+        let text = Mod.init "hi"
+
         let sg =
-            Glyph.geometry font '§' 
-                |> Sg.ofIndexedGeometry
+            Rewrite.Sg.Text(test, text)
+//            char 
+//                |> Mod.map (Rewrite.Path.ofChar font >> Rewrite.Path.toGeometry >> Sg.ofIndexedGeometry)
+//                |> Sg.dynamic
                 |> Sg.effect [
+                    Shader.pathVertex |> toEffect
                     DefaultSurfaces.trafo |> toEffect
-                    Shader.sdf |> toEffect
+                    //DefaultSurfaces.constantColor C4f.White |> toEffect
+                    Shader.pathFragment |> toEffect
                   ]
+               
                //|> Sg.diffuseTexture' (PixTexture2d(PixImageMipMap [|image :> PixImage|], true))
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
                |> Sg.fillMode (filled |> Mod.map (fun v -> if v then Aardvark.Base.Rendering.FillMode.Fill else Aardvark.Base.Rendering.FillMode.Line))
                |> Sg.uniform "Filled" filled
-               |> Sg.trafo (Trafo3d.Scale(-1.0, 1.0, 1.0) |> Mod.constant)
-        win.Keyboard.KeyDown(Keys.R).Values.Add(fun _ ->
+               |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(-V3d.IOO, -V3d.OOI, -V3d.OIO)  |> Mod.constant)
+        
+        
+        
+        win.Keyboard.KeyDown(Keys.K).Values.Add(fun _ ->
             transact (fun () ->
                 filled.Value <- not filled.Value
             )
         )
 
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
+        win.Keyboard.Press.Values.Add (fun c ->
+            transact (fun () -> text.Value <- sprintf "%s%c" text.Value c)
+        )
+
+
+
+        let config = { BackendConfiguration.ManagedOptimized with useDebugOutput = true }
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, config, sg)
         win.RenderTask <- task 
         win.Run()
 
