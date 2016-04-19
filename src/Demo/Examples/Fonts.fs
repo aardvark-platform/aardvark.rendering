@@ -1443,18 +1443,21 @@ module PathComponentTest =
 
         let sdf (v : Vertex) =
             fragment {
-                
+                let s : bool = uniform?Filled
+
                 if v.kind = 0.0 then
                     return V4d.IIII
                 else
                     let k = v.tc.X
                     let l = v.tc.Y
                     let m = v.tc.Z
-
-                    if pow k 3.0 > l*m then
-                        return V4d.OOOO
+                    if s then
+                        if pow k 3.0 > l*m then
+                            return V4d.OOOO
+                        else
+                            return V4d.IIII
                     else
-                        return V4d.IIII
+                        return V4d.IOOI
 
 
             }
@@ -1495,11 +1498,11 @@ module PathComponentTest =
 
 
 
-        let showMask = Mod.init true
+        let filled = Mod.init true
 
 
         let sg =
-            Glyph.geometry font '@' 
+            Glyph.geometry font '§' 
                 |> Sg.ofIndexedGeometry
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect
@@ -1508,11 +1511,12 @@ module PathComponentTest =
                //|> Sg.diffuseTexture' (PixTexture2d(PixImageMipMap [|image :> PixImage|], true))
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
-               |> Sg.fillMode (showMask |> Mod.map (fun v -> if v then Aardvark.Base.Rendering.FillMode.Fill else Aardvark.Base.Rendering.FillMode.Line))
+               |> Sg.fillMode (filled |> Mod.map (fun v -> if v then Aardvark.Base.Rendering.FillMode.Fill else Aardvark.Base.Rendering.FillMode.Line))
+               |> Sg.uniform "Filled" filled
                |> Sg.trafo (Trafo3d.Scale(-1.0, 1.0, 1.0) |> Mod.constant)
         win.Keyboard.KeyDown(Keys.R).Values.Add(fun _ ->
             transact (fun () ->
-                showMask.Value <- not showMask.Value
+                filled.Value <- not filled.Value
             )
         )
 
