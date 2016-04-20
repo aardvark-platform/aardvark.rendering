@@ -10,6 +10,7 @@ open System
 open System.Drawing
 open System.Drawing.Drawing2D
 open Aardvark.Base
+open Aardvark.Base.Rendering
 
 #nowarn "9"
 #nowarn "51"
@@ -1864,47 +1865,33 @@ module Rewrite =
                 | Linux -> failwithf "[Font] implement character sizes for Linux"
                 | Mac -> failwithf "[Font] implement character sizes for Mac OS"
 
+    
+    type HorizontalAlign =
+        | Left
+        | Right
+        | Center
+        | Block of float
 
-    type FontCache(r : IRuntime, f : Font) =
-        let pool = Aardvark.Base.Rendering.GeometryPool.createAsync r
-        let ranges = ConcurrentDictionary<char, Range1i>()
+    type VerticalAlign =
+        | Top
+        | Bottom
+        | Middle
+        
 
-        let types =
-            Map.ofList [
-                DefaultSemantic.Positions, typeof<V3f>
-                Path.Attributes.KLMKind, typeof<V4f>
-            ]
+    type TextLayout =
+        {
+            horizontal      : HorizontalAlign
+            vertical        : VerticalAlign
+            lineSpacing     : float
+            letterSpacing   : float
+        }
 
-        let vertexBuffers =
-            { new IAttributeProvider with
-                member x.TryGetAttribute(sem) =
-                    match Map.tryFind sem types with    
-                        | Some t -> BufferView(pool.GetBuffer sem, t) |> Some
-                        | _ -> None
 
-                member x.All = Seq.empty
-                member x.Dispose() = ()
-            }
-
-        member x.VertexBuffers = vertexBuffers
-
-        member x.GetBufferRange(c : char) =
-            ranges.GetOrAdd(c, fun c ->
-                let geometry = f.GetGlyph(c)
-                let range = pool.Add(geometry)
-                range
-            )
-
-        member x.Dispose() =
-            pool.Dispose()
-            ranges.Clear()
-
-    and Font private(f : System.Drawing.Font) =
+    type Font private(f : System.Drawing.Font) =
         let glyphs = ConcurrentDictionary<char, IndexedGeometry>()
         let sizesABC = ConcurrentDictionary<char, V3d>()
 
-        let largeScale = 2000.0
-        let largeScaleFont = new System.Drawing.Font(f.FontFamily, float32 largeScale, f.Style, f.Unit, f.GdiCharSet, f.GdiVerticalFont)
+        let largeScaleFont = new System.Drawing.Font(f.FontFamily, 2000.0f, f.Style, f.Unit, f.GdiCharSet, f.GdiVerticalFont)
         let graphics = Graphics.FromHwnd(0n, PageUnit = f.Unit)
         let kerning = FontInfo.getKerningPairs graphics largeScaleFont
 
@@ -1958,6 +1945,8 @@ module Rewrite =
 
             let arr = List<V2d * char>()
 
+            let mutable bounds = Box2d.Invalid
+
             for i in 0..str.Length-1 do
                 let c = str.[i]
 
@@ -1978,7 +1967,7 @@ module Rewrite =
                             arr.Add(V2d(cx + before * spacing, cy), c)
 
                         cx <- cx + width * spacing
-
+                        bounds.ExtendBy(V2d(cx, cy + 1.0))
             arr.ToArray()
 
         new(family : string, style : FontStyle) =
@@ -1986,6 +1975,40 @@ module Rewrite =
             Font(f)
 
         new(family : string) = Font(family, FontStyle.Regular)
+
+    and FontCache(r : IRuntime, f : Font) =
+        let pool = Aardvark.Base.Rendering.GeometryPool.createAsync r
+        let ranges = ConcurrentDictionary<char, Range1i>()
+
+        let types =
+            Map.ofList [
+                DefaultSemantic.Positions, typeof<V3f>
+                Path.Attributes.KLMKind, typeof<V4f>
+            ]
+
+        let vertexBuffers =
+            { new IAttributeProvider with
+                member x.TryGetAttribute(sem) =
+                    match Map.tryFind sem types with    
+                        | Some t -> BufferView(pool.GetBuffer sem, t) |> Some
+                        | _ -> None
+
+                member x.All = Seq.empty
+                member x.Dispose() = ()
+            }
+
+        member x.VertexBuffers = vertexBuffers
+
+        member x.GetBufferRange(c : char) =
+            ranges.GetOrAdd(c, fun c ->
+                let geometry = f.GetGlyph(c)
+                let range = pool.Add(geometry)
+                range
+            )
+
+        member x.Dispose() =
+            pool.Dispose()
+            ranges.Clear()
 
 
 
@@ -2229,6 +2252,10 @@ module PathComponentTest =
             iter()
 
     module Shader = 
+        type UniformScope with
+            member x.FillGlyphs : bool = uniform?FillGlyphs
+            member x.Antialias : bool = uniform?Antialias
+
         type Vertex =
             {
                 [<Position>] p : V4d
@@ -2245,16 +2272,35 @@ module PathComponentTest =
         let pathFragment (v : Vertex) =
             fragment {
                 let kind = v.klm.W
-                if kind = 0.0 then
+                if kind < 0.5 then
                     return V4d.IIII
-                else
-                    let k = v.klm.X
-                    let l = v.klm.Y
-                    let m = v.klm.Z
-                    if k*k*k > l*m then
-                        return V4d.OOOO
+                else    
+                    if uniform.FillGlyphs then
+                        let klm = v.klm.XYZ
+ 
+                        if uniform.Antialias then
+                            let dx = ddx(klm)
+                            let dy = ddy(klm)
+                            let f = pow klm.X 3.0 - klm.Y*klm.Z
+                            let fx = 3.0*klm.X*klm.X*dx.X - klm.Y*dx.Z - klm.Z*dx.Y
+                            let fy = 3.0*klm.X*klm.X*dy.X - klm.Y*dy.Z - klm.Z*dy.Y
+
+                            let sd = f / sqrt (fx*fx + fy*fy)
+                            let alpha = 0.5 - sd
+
+                            if alpha > 1.0 then
+                                return V4d.IIII
+                            elif alpha < 0.0 then
+                                return V4d.OOOI
+                            else
+                                return V4d(alpha, alpha, alpha, 1.0)
+                        else
+                            if pow klm.X 3.0 > klm.Y*klm.Z then
+                                return V4d.OOOI
+                            else
+                                return V4d.IIII
                     else
-                        return V4d.IIII
+                        return V4d.IOOI
 
 
             }
@@ -2264,7 +2310,7 @@ module PathComponentTest =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow(8)
+        let win = app.CreateSimpleRenderWindow(4)
         //win.Text <- "Aardvark rocks \\o/"
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
@@ -2316,7 +2362,7 @@ module PathComponentTest =
 //        let font = new Font(c.Families.[0], 1.0f)
 
 
-        let test = Rewrite.Font("Consolas", FontStyle.Regular)
+        let test = Rewrite.Font("Times New Roman", FontStyle.Italic)
 //        let str = Mod.init "hi."
 //        let chars =
 //            str |> Mod.map (fun str ->
@@ -2327,10 +2373,13 @@ module PathComponentTest =
 //            )
 //        
 
-        let filled = Mod.init true
+        let fillMode = Mod.init Aardvark.Base.Rendering.FillMode.Fill
+        let aa = Mod.init true
         let text = Mod.init """font"""
 
-        let size = 0.15
+
+
+        let size = 0.5
         let sg =
             Rewrite.Sg.Text(test, text)
 //            char 
@@ -2348,16 +2397,26 @@ module PathComponentTest =
 //               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
 
-               |> Sg.fillMode (filled |> Mod.map (fun v -> if v then Aardvark.Base.Rendering.FillMode.Fill else Aardvark.Base.Rendering.FillMode.Line))
-               |> Sg.uniform "Filled" filled
+               |> Sg.fillMode fillMode
                |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(V3d.IOO, -V3d.OIO, -V3d.OOI)  |> Mod.constant)
                |> Sg.trafo (win.Sizes |> Mod.map (fun s -> Trafo3d.Scale((float s.Y / float s.X), 1.0, 1.0) * Trafo3d.Scale(size, size, 1.0)))        
                |> Sg.trafo (Trafo3d.Translation(-1.0 + size, 1.0 - size, 0.0) |> Mod.constant)
+               |> Sg.uniform "FillGlyphs" (fillMode |> Mod.map (fun f -> f = FillMode.Fill))
+               |> Sg.uniform "Antialias" aa
         
-        
-        win.Keyboard.KeyDown(Keys.K).Values.Add(fun _ ->
+        win.Keyboard.KeyDown(Keys.F8).Values.Add(fun _ ->
             transact (fun () ->
-                filled.Value <- not filled.Value
+                let newMode = 
+                    match fillMode.Value with
+                        | FillMode.Fill -> FillMode.Line
+                        | _ -> FillMode.Fill
+                fillMode.Value <- newMode
+            )
+        )
+
+        win.Keyboard.KeyDown(Keys.F9).Values.Add(fun _ ->
+            transact (fun () ->
+                aa.Value <- not aa.Value
             )
         )
 
@@ -2371,7 +2430,8 @@ module PathComponentTest =
         )
 
         win.Keyboard.Press.Values.Add (fun c ->
-            transact (fun () -> text.Value <- sprintf "%s%c" text.Value c)
+            if int c <> 8 then // backspace
+                transact (fun () -> text.Value <- sprintf "%s%c" text.Value c)
         )
 
 
