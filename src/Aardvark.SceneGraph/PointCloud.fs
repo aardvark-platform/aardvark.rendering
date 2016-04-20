@@ -262,7 +262,7 @@ module PointCloudRenderObjectSemantics =
                     return geometry,Unchecked.defaultof<_>
                 }
 
-            let undoLoad (geo,ref) = Log.line "rollback, undo load data"
+            let undoLoad (geo,ref) = () //Log.line "rollback, undo load data"
 
             let addToPool (ig,r) =
                 async {
@@ -271,7 +271,7 @@ module PointCloudRenderObjectSemantics =
                 }
 
             let removeFromPool (ig,r) = 
-                Log.line "rollback, remove from pool."; 
+                //Log.line "rollback, remove from pool."; 
                 pool.Remove ig |> ignore
 
             let addToRender (ig,r) =
@@ -292,7 +292,9 @@ module PointCloudRenderObjectSemantics =
             let cts = new System.Threading.CancellationTokenSource()
             let result = ref Unchecked.defaultof<_>
             let r = geometriesNew.GetOrAdd(n, (cts, result))
-            Async.RunSynchronously(LoadIntoPool.runWithCompensations result effects, cancellationToken= cts.Token)
+            try
+                Async.RunSynchronously(LoadIntoPool.runWithCompensations result effects, cancellationToken= cts.Token)
+            with | :? OperationCanceledException as o -> ()
             r
                     
         member x.Remove(n : LodDataNode) =
