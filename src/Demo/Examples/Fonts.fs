@@ -12,6 +12,7 @@ open System.Drawing.Drawing2D
 open Aardvark.Base
 
 #nowarn "9"
+#nowarn "51"
 
 [<AutoOpen>]
 module ``Move To Base`` =
@@ -1354,7 +1355,6 @@ module Rewrite =
     type Path =
         {
             outline         : PathSegment[]
-            bounds          : Box2d
         }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -1379,75 +1379,69 @@ module Rewrite =
             path.AddString(String(c, 1), font.FontFamily, int font.Style, size, PointF(0.0f, 0.0f), StringFormat.GenericDefault)
 
 
+            if path.PointCount = 0 then
+                { outline = [||] }
+            else
+                // build the interior polygon and boundary triangles using the 
+                // given GraphicsPath
+                let types = path.PathTypes
+                let points = path.PathPoints |> Array.map (fun p -> V2d(p.X, p.Y))
+
+                let mutable start = V2d.NaN
+                let currentPoints = List<V2d>()
+                let segments = List<PathSegment>()
+
+                for (p, t) in Array.zip points types do
+                    let t = t |> int |> unbox<PathPointType>
+
+                    let close = t &&& PathPointType.CloseSubpath <> PathPointType.Start
 
 
-            // build the interior polygon and boundary triangles using the 
-            // given GraphicsPath
-            let types = path.PathTypes
-            let points = path.PathPoints |> Array.map (fun p -> V2d(p.X, p.Y))
-
-            let mutable start = V2d.NaN
-            let currentPoints = List<V2d>()
-            let segments = List<PathSegment>()
-
-            for (p, t) in Array.zip points types do
-                let t = t |> int |> unbox<PathPointType>
-
-                let close = t &&& PathPointType.CloseSubpath <> PathPointType.Start
-
-
-                match t &&& PathPointType.PathTypeMask with
-                    | PathPointType.Line ->
-                        if currentPoints.Count > 0 then
-                            let last = currentPoints.[currentPoints.Count - 1]
-                            segments.Add(Line(last, p))
-                            currentPoints.Clear()
-                        currentPoints.Add p
+                    match t &&& PathPointType.PathTypeMask with
+                        | PathPointType.Line ->
+                            if currentPoints.Count > 0 then
+                                let last = currentPoints.[currentPoints.Count - 1]
+                                segments.Add(Line(last, p))
+                                currentPoints.Clear()
+                            currentPoints.Add p
                         
 
 
-                    | PathPointType.Bezier ->
-                        currentPoints.Add p
-                        if currentPoints.Count >= 4 then
-                            let p0 = currentPoints.[0]
-                            let p1 = currentPoints.[1]
-                            let p2 = currentPoints.[2]
-                            let p3 = currentPoints.[3]
-                            segments.Add(Bezier3(p0, p1, p2, p3))
-                            currentPoints.Clear()
-                            currentPoints.Add p3
+                        | PathPointType.Bezier ->
+                            currentPoints.Add p
+                            if currentPoints.Count >= 4 then
+                                let p0 = currentPoints.[0]
+                                let p1 = currentPoints.[1]
+                                let p2 = currentPoints.[2]
+                                let p3 = currentPoints.[3]
+                                segments.Add(Bezier3(p0, p1, p2, p3))
+                                currentPoints.Clear()
+                                currentPoints.Add p3
 
-                    | PathPointType.Start | _ ->
-                        currentPoints.Add p
-                        start <- p
-                        ()
+                        | PathPointType.Start | _ ->
+                            currentPoints.Add p
+                            start <- p
+                            ()
 
-                if close then
-                    if not start.IsNaN && p <> start then
-                        segments.Add(Line(p, start))
-                    currentPoints.Clear()
-                    start <- V2d.NaN
+                    if close then
+                        if not start.IsNaN && p <> start then
+                            segments.Add(Line(p, start))
+                        currentPoints.Clear()
+                        start <- V2d.NaN
 
-            //use f = new Font(font.FontFamily, 2000.0f, font.Style, GraphicsUnit.Point, font.GdiCharSet, font.GdiVerticalFont)
-            use g = Graphics.FromHwnd(0n)
-            g.PageUnit <- font.Unit
-
-            let size = 
-                let sf = g.MeasureString(String(c, 1), font)
-                V2d(sf.Width, sf.Height)
-            { outline = CSharpList.toArray segments; bounds = Box2d.FromMinAndSize(0.0, 0.0, size.X, size.Y) }
+                { outline = CSharpList.toArray segments }
 
         let single (seg : PathSegment) =
-            { outline = [| seg |]; bounds = Box2d.Invalid }
+            { outline = [| seg |] }
 
         let ofSeq (segments : seq<PathSegment>) =
-            { outline = Seq.toArray segments; bounds = Box2d.Invalid }
+            { outline = Seq.toArray segments }
 
         let ofList (segments : list<PathSegment>) =
-            { outline = List.toArray segments; bounds = Box2d.Invalid }
+            { outline = List.toArray segments }
 
         let ofArray (segments : PathSegment[]) =
-            { outline = Array.copy segments; bounds = Box2d.Invalid }
+            { outline = Array.copy segments }
 
         let toSeq (p : Path) =
             p.outline :> seq<_>
@@ -1459,13 +1453,13 @@ module Rewrite =
             p.outline |> Array.copy
 
         let append (l : Path) (r : Path) =
-            { outline = Array.append l.outline r.outline; bounds = Box2d.Invalid }
+            { outline = Array.append l.outline r.outline }
 
         let concat (l : seq<Path>) =
-            { outline = l |> Seq.toArray |> Array.collect toArray; bounds = Box2d.Invalid }
+            { outline = l |> Seq.toArray |> Array.collect toArray }
 
         let reverse (p : Path) =
-            { outline = p.outline |> Array.map PathSegment.reverse |> Array.rev; bounds = Box2d.Invalid }
+            { outline = p.outline |> Array.map PathSegment.reverse |> Array.rev }
 
         let bounds (p : Path) =
             p.outline |> Seq.map PathSegment.bounds |> Box2d
@@ -1477,7 +1471,7 @@ module Rewrite =
             p.outline.[i]
 
         let transform (f : V2d -> V2d) (p : Path) =
-            { outline = Array.map (PathSegment.transform f) p.outline; bounds = Box2d.Invalid }
+            { outline = Array.map (PathSegment.transform f) p.outline }
 
     
         let toGeometry (p : Path) =
@@ -1780,46 +1774,96 @@ module Rewrite =
     open System.Threading
     open Aardvark.Base.Rendering
 
-    module GDI =
+    module GDI32 =
         open System.Runtime.InteropServices
         open Microsoft.FSharp.NativeInterop
         open System.Collections.Generic
 
-        type KerningPair =
-            struct
-                val mutable public first : uint16
-                val mutable public second : uint16
-                val mutable public amount : int
-            end
 
-        [<DllImport("gdi32.dll")>]
-        extern int GetKerningPairs(nativeint hdc, int count, KerningPair* pairs)
+        [<AutoOpen>]
+        module private Wrappers = 
+            [<StructLayout(LayoutKind.Sequential)>]
+            type KerningPair =
+                struct
+                    val mutable public first : uint16
+                    val mutable public second : uint16
+                    val mutable public amount : int
+                end
 
-        [<DllImport("gdi32.dll")>]
-        extern nativeint SelectObject(nativeint hdc,nativeint hFont)
+            [<StructLayout(LayoutKind.Sequential)>]
+            type ABC =
+                struct
+                    val mutable public A : float32
+                    val mutable public B : float32
+                    val mutable public C : float32
+                end
+
+            [<DllImport("gdi32.dll")>]
+            extern int GetKerningPairs(nativeint hdc, int count, KerningPair* pairs)
+
+            [<DllImport("gdi32.dll")>]
+            extern nativeint SelectObject(nativeint hdc,nativeint hFont)
+
+            [<DllImport("gdi32.dll")>]
+            extern bool GetCharABCWidthsFloat(nativeint hdc, uint32 first, uint32 last, ABC* pxBuffer)
+
+            [<DllImport("gdi32.dll")>]
+            extern bool GetCharWidthFloat(nativeint hdc, uint32 first, uint32 last, float32* pxBuffer)
 
 
-        let pairs (f : Font) =
-            use f = new System.Drawing.Font(f.FontFamily, 2000.0f, f.Style, GraphicsUnit.Pixel, f.GdiCharSet, f.GdiVerticalFont)
-            use g = Graphics.FromHwnd(0n)
-            g.PageUnit <- GraphicsUnit.Point
-
+        let getKerningPairs (g : Graphics) (f : Font) =
             let hdc = g.GetHdc()
             let hFont = f.ToHfont()
             let old = SelectObject(hdc, hFont)
+            try
+                let cnt = GetKerningPairs(hdc, 0, NativePtr.zero)
+                let ptr = NativePtr.stackalloc cnt
+                GetKerningPairs(hdc, cnt, ptr) |> ignore
 
-            let cnt = GetKerningPairs(hdc, 0, NativePtr.zero)
-            let ptr = NativePtr.stackalloc cnt
-            GetKerningPairs(hdc, cnt, ptr) |> ignore
+                let res = Dictionary<char * char, float>()
+                for i in 0..cnt-1 do
+                    let pair = NativePtr.get ptr i
+                    let c0 = pair.first |> char
+                    let c1 = pair.second |> char
+                    res.[(c0,c1)] <- float pair.amount / float f.Size
 
-            let res = Dictionary<char * char, float>()
-            for i in 0..cnt-1 do
-                let pair = NativePtr.get ptr i
-                let c0 = pair.first |> char
-                let c1 = pair.second |> char
-                res.[(c0,c1)] <- float pair.amount / 2000.0
+                res
+            finally
+                SelectObject(hdc, old) |> ignore
+                g.ReleaseHdc(hdc)
 
-            res
+        let getCharWidths (g : Graphics) (f : Font) (c : char) =
+            let hdc = g.GetHdc()
+
+            let old = SelectObject(hdc, f.ToHfont())
+            try
+                let mutable size = ABC()
+                if GetCharABCWidthsFloat(hdc, uint32 c, uint32 c, &&size) then
+                    V3d(size.A, size.B, size.C) / float f.Size
+                else
+                    let mutable size = 0.0f
+                    if GetCharWidthFloat(hdc, uint32 c, uint32 c, &&size) then
+                        V3d(0.0, float size, 0.0) / float f.Size
+                    else
+                        Log.warn "no width for: '%c'" c
+                        V3d.Zero
+            finally
+                SelectObject(hdc, old) |> ignore
+                g.ReleaseHdc(hdc)
+
+    module FontInfo =
+        let getKerningPairs (g : Graphics) (f : Font) =
+            match Environment.OSVersion with
+                | Windows -> GDI32.getKerningPairs g f
+                | Linux -> failwithf "[Font] implement kerning for Linux"
+                | Mac -> failwithf "[Font] implement kerning for Mac OS"
+
+        let getCharWidths (g : Graphics) (f : Font) (c : char) =
+            match Environment.OSVersion with
+                | Windows -> GDI32.getCharWidths g f c
+                | Linux -> failwithf "[Font] implement character sizes for Linux"
+                | Mac -> failwithf "[Font] implement character sizes for Mac OS"
+
 
     type FontCache(r : IRuntime, f : Font) =
         let pool = Aardvark.Base.Rendering.GeometryPool.createAsync r
@@ -1856,9 +1900,13 @@ module Rewrite =
             ranges.Clear()
 
     and Font private(f : System.Drawing.Font) =
-        let kerning = GDI.pairs f
         let glyphs = ConcurrentDictionary<char, IndexedGeometry>()
-        let sizes = ConcurrentDictionary<char, V2d>()
+        let sizesABC = ConcurrentDictionary<char, V3d>()
+
+        let largeScale = 2000.0
+        let largeScaleFont = new System.Drawing.Font(f.FontFamily, float32 largeScale, f.Style, f.Unit, f.GdiCharSet, f.GdiVerticalFont)
+        let graphics = Graphics.FromHwnd(0n, PageUnit = f.Unit)
+        let kerning = FontInfo.getKerningPairs graphics largeScaleFont
 
         let cache = ConcurrentDictionary<IRuntime, FontCache>()
 
@@ -1868,11 +1916,10 @@ module Rewrite =
                 | (true, v) -> v
                 | _ -> 0.0
 
-        let getGlyphSize (c : char) =
-            sizes.GetOrAdd(c, fun c ->
-                use g = Graphics.FromHwnd(0n)
-                let s = g.MeasureString(String(c,1), f)
-                V2d(s.Width, s.Height)
+        let getGlyphSizes (c : char) =
+            sizesABC.GetOrAdd(c, fun c ->
+                let abc = FontInfo.getCharWidths graphics largeScaleFont c
+                abc
             )
 
         let getGlyph (c : char) =
@@ -1893,8 +1940,8 @@ module Rewrite =
         member x.GetGlyph(c : char) =
             getGlyph c
 
-        member x.GetSize(c : char) =
-            getGlyphSize c 
+        member x.GetSizes(c : char) =
+            getGlyphSizes c 
 
         member x.Dispose() =
             cache.Values |> Seq.toList |> List.iter (fun c -> c.Dispose())
@@ -1902,22 +1949,37 @@ module Rewrite =
             f.Dispose()
             kerning.Clear()
             glyphs.Clear()
+            largeScaleFont.Dispose()
+            graphics.Dispose()
 
-        member x.Layout (str : string) =
+        member x.Layout (str : string, spacing : float) =
             let mutable cx = 0.0
             let mutable cy = 0.0
-            let mutable last = '\n'
-            let arr = Array.zeroCreate str.Length
+
+            let arr = List<V2d * char>()
+
             for i in 0..str.Length-1 do
                 let c = str.[i]
-                let size = x.GetSize c
-                let kerning = 
-                    if i > 0 then x.GetKerning(str.[i-1], c)
-                    else 0.0
 
-                arr.[i] <- V2d(cx, cy)
-                cx <- cx + (size.X + kerning) * 0.75
-            arr
+                match c with
+                    | '\r' -> cx <- 0.0
+                    | '\n' -> cy <- cy + 1.2
+                    | _ ->
+                        let sizes = getGlyphSizes c
+                        let kerning = 
+                            if i > 0 then x.GetKerning(str.[i-1], c)
+                            else 0.0
+
+
+                        let before = kerning
+                        let width = sizes.X + sizes.Y + sizes.Z
+
+                        if not (c.IsWhiteSpace()) then
+                            arr.Add(V2d(cx + before * spacing, cy), c)
+
+                        cx <- cx + width * spacing
+
+            arr.ToArray()
 
         new(family : string, style : FontStyle) =
             let f = new System.Drawing.Font(family, 1.0f, style, GraphicsUnit.Point)
@@ -1949,9 +2011,10 @@ module Rewrite =
                 
                 let indirectAndOffsets =
                     content |> Mod.map (fun str ->
+                        let arr = font.Layout(str, 1.00)
+
                         let indirectBuffer = 
-                            str.ToCharArray() 
-                                |> Array.map cache.GetBufferRange
+                            arr |> Array.map (snd >> cache.GetBufferRange)
                                 |> Array.mapi (fun i r ->
                                     DrawCallInfo(
                                         FirstIndex = r.Min,
@@ -1965,8 +2028,7 @@ module Rewrite =
                                 :> IBuffer
 
                         let offsets = 
-                            font.Layout(str)
-                                |> Array.map V2f.op_Explicit
+                            arr |> Array.map (fst >> V2f.op_Explicit)
                                 |> ArrayBuffer
                                 :> IBuffer
 
@@ -2254,7 +2316,7 @@ module PathComponentTest =
 //        let font = new Font(c.Families.[0], 1.0f)
 
 
-        let test = Rewrite.Font("Consolas")
+        let test = Rewrite.Font("Consolas", FontStyle.Regular)
 //        let str = Mod.init "hi."
 //        let chars =
 //            str |> Mod.map (fun str ->
@@ -2266,8 +2328,9 @@ module PathComponentTest =
 //        
 
         let filled = Mod.init true
-        let text = Mod.init "hi"
+        let text = Mod.init """font"""
 
+        let size = 0.15
         let sg =
             Rewrite.Sg.Text(test, text)
 //            char 
@@ -2281,12 +2344,15 @@ module PathComponentTest =
                   ]
                
                //|> Sg.diffuseTexture' (PixTexture2d(PixImageMipMap [|image :> PixImage|], true))
-               |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
-               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+//               |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
+//               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+
+
                |> Sg.fillMode (filled |> Mod.map (fun v -> if v then Aardvark.Base.Rendering.FillMode.Fill else Aardvark.Base.Rendering.FillMode.Line))
                |> Sg.uniform "Filled" filled
-               |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(-V3d.IOO, -V3d.OOI, -V3d.OIO)  |> Mod.constant)
-        
+               |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(V3d.IOO, -V3d.OIO, -V3d.OOI)  |> Mod.constant)
+               |> Sg.trafo (win.Sizes |> Mod.map (fun s -> Trafo3d.Scale((float s.Y / float s.X), 1.0, 1.0) * Trafo3d.Scale(size, size, 1.0)))        
+               |> Sg.trafo (Trafo3d.Translation(-1.0 + size, 1.0 - size, 0.0) |> Mod.constant)
         
         
         win.Keyboard.KeyDown(Keys.K).Values.Add(fun _ ->
@@ -2295,6 +2361,14 @@ module PathComponentTest =
             )
         )
 
+
+        win.Keyboard.DownWithRepeats.Values.Add(fun c ->
+            if c = Keys.Return then
+                transact (fun () -> text.Value <- sprintf "%s\r\n" text.Value)
+            elif c = Keys.Back then
+                if text.Value.Length > 0 then
+                    transact (fun () -> text.Value <- text.Value.Substring(0, text.Value.Length-1))
+        )
 
         win.Keyboard.Press.Values.Add (fun c ->
             transact (fun () -> text.Value <- sprintf "%s%c" text.Value c)
