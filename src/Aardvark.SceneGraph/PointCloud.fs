@@ -5,6 +5,12 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 
+type Progress =
+    {   
+        ActiveNodeCount     : int ref
+        ExpectedNodeCount   : int ref
+    }
+
 type PointCloudInfo =
     {
         /// the element-types for all available attributes
@@ -28,21 +34,24 @@ type PointCloudInfo =
 
         /// the time interval for the pruning process in ms
         pruneInterval : int
-
     }
 
 [<AutoOpen>]
 module ``PointCloud Sg Extensions`` =
 
     module Sg = 
-        type PointCloud(data : ILodData, config : PointCloudInfo) =
+        type PointCloud(data : ILodData, config : PointCloudInfo, progress : Progress) =
             interface ISg
 
             member x.Data = data
             member x.Config = config
+            member x.Progress = progress
 
         let pointCloud (data : ILodData) (info : PointCloudInfo) =
-            PointCloud(data, info) :> ISg
+            PointCloud(data, info, { ActiveNodeCount = ref 0; ExpectedNodeCount = ref 0 }) :> ISg
+
+        let pointCloud' (data : ILodData) (info : PointCloudInfo) (progress : Progress) =
+            PointCloud(data, info, progress) :> ISg
             
 
 namespace Aardvark.SceneGraph.Semantics
@@ -78,6 +87,8 @@ module PointCloudRenderObjectSemantics =
         let task =
             let runner = 
                 async {
+                    do! Async.Sleep 0
+
                     let! geometry = data.GetData(node)
                     do! Async.OnCancel(fun () -> pool.Remove geometry |> ignore) |> Async.Ignore
                    
@@ -104,6 +115,18 @@ module PointCloudRenderObjectSemantics =
                     if task.IsCanceled |> not then
                         deactivate task.Result
 
+                    false
+                else
+                    match task.Status with
+                        | TaskStatus.WaitingForActivation | TaskStatus.WaitingToRun ->
+                            printfn "aborting the evil that men do"
+                            cancel.Cancel()
+                            true
+                        | _ ->
+                            false
+            else
+                false
+
 
         member x.Activate() =
             if killed = 1 then failwith "cannot active killed LoadTask"
@@ -125,37 +148,88 @@ module PointCloudRenderObjectSemantics =
                 if task.IsCompleted then cont task.Result
                 else task.ContinueWith killNow |> ignore
 
+    module LoadIntoPool =
+        
+        let runWithCompensations (outRef : ref<'a>) (xs : list<('a -> Async<'a>) * ('a -> unit) >) =  
+            let rec doWork xs disposables =
+                async {
+                    match xs with
+                        | (m,comp)::xs ->
+                                let resultValue = ref None
+                                let! d = 
+                                    Async.OnCancel(fun () -> 
+                                        let r = !resultValue
+                                        match r with
+                                            | Some (v,(d:IDisposable)) -> 
+                                                comp v
+                                                d.Dispose()
+                                            | None -> ()
+                                    )
+                                let! r = m !outRef
+                                do resultValue := Some (r,d); outRef := r
+                                return! doWork xs (d :: disposables)
+                        | [] -> return () 
+                }
+            doWork xs []
 
+        let load (data : ILodData) (node : LodDataNode) (pool : GeometryPool) = 
+            async {
+                let! geometry = data.GetData(node)
+                do! Async.OnCancel(fun () -> Log.line "rollback, remove from pool."; pool.Remove geometry |> ignore) |> Async.Ignore
+                let range = pool.Add(geometry) 
+                    
+                return { node = node; geometry = geometry; range = range }
+            }
 
-    type LoadTaskasdasd(factory : TaskFactory, run : Async<GeometryRef>, ct : CancellationToken, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
-        let r = Async.RunSynchronously run
-        do activate r
+    type LoadTaskasdasd(data : ILodData, node : LodDataNode, ct : CancellationToken, pool : GeometryPool, activate : GeometryRef -> unit, deactivate : GeometryRef -> unit) =
+        let mutable result = None
         let mutable refCnt = 1
+
+        let run =
+            async {
+                let! geometry = data.GetData(node)
+                do! Async.OnCancel(fun () -> pool.Remove geometry |> ignore) |> Async.Ignore
+                let range = pool.Add(geometry) 
+                    
+                return { node = node; geometry = geometry; range = range }
+            }
+
+        member x.Run() =
+            let r = Async.RunSynchronously run
+            result <- Some r
+            activate r
+
         member x.Deactivate() = 
             if Interlocked.Decrement(&refCnt) = 0 then
-                deactivate r
+                match result with
+                    | None -> ()
+                    | Some v -> deactivate v
 
         member x.Activate() = 
             if Interlocked.Increment(&refCnt) = 1 then
-                activate r
+                match result with
+                    | Some r -> activate r
+                    | None -> failwith ""
 
-        member x.Kill cont = cont r
+        member x.Kill cont = result |> Option.iter cont
 
-    type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, runtime : IRuntime) =
+    type LoadResult = ref<Choice<CancellationTokenSource,GeometryRef>>
+    type LoadResultNew = CancellationTokenSource * ref<IndexedGeometry * GeometryRef>
+
+    type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, progress : Progress, runtime : IRuntime) =
         let cancel = new System.Threading.CancellationTokenSource()
 
         let pool = GeometryPool.createAsync runtime
-        let calls = DrawCallSet(true)
+        let calls = DrawCallSet(false)
         let inactive = ConcurrentHashQueue<GeometryRef>()
         let mutable inactiveSize = 0L
         let mutable activeSize = 0L
-        let mutable activeCount = 0
-        let mutable desiredCount = 0
-        let scheduler = new Aardvark.Base.CustomTaskScheduler(8, ThreadPriority.AboveNormal)
-        let factory = new TaskFactory(scheduler)
 
-        let geometriesRW = new ReaderWriterLockSlim()
-        let geometries = Dict<LodDataNode, LoadTask>()
+        let mutable pendingRemoves = 0
+        let geometries = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode, LoadResult>()
+        let geometriesNew = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode, LoadResultNew>()
+
+
 
         let activate (n : GeometryRef) =
             let size = n.range.Size
@@ -165,7 +239,8 @@ module PointCloudRenderObjectSemantics =
 
             if calls.Add n.range then
                 Interlocked.Add(&activeSize, int64 size) |> ignore
-                Interlocked.Increment(&activeCount) |> ignore
+                Interlocked.Increment(progress.ActiveNodeCount) |> ignore
+
 
         let deactivate (n : GeometryRef) =
             let size = int64 n.range.Size
@@ -175,32 +250,74 @@ module PointCloudRenderObjectSemantics =
 
             if calls.Remove n.range then
                 Interlocked.Add(&activeSize, -size) |> ignore
-                Interlocked.Decrement(&activeCount) |> ignore
+                Interlocked.Decrement(progress.ActiveNodeCount) |> ignore
+
 
         member x.Add(n : LodDataNode) =
-            Interlocked.Increment(&desiredCount) |> ignore
-            let isNew = ref false
-            let result = 
-                ReaderWriterLock.write geometriesRW (fun () ->
-                    geometries.GetOrCreate(n, fun n ->
-                        isNew := true
-                        new LoadTask(factory, node.Data, n, cancel.Token, pool, activate, deactivate)
-                    )
-                )
+            Interlocked.Increment(progress.ExpectedNodeCount) |> ignore
 
-            if not !isNew then
-                result.Activate()
+            let loadData _ =
+                async {
+                    let! geometry = node.Data.GetData(n)
+                    return geometry,Unchecked.defaultof<_>
+                }
 
-            result
+            let undoLoad (geo,ref) = () //Log.line "rollback, undo load data"
 
+            let addToPool (ig,r) =
+                async {
+                    let range = pool.Add ig
+                    return ig, { node = n; geometry = ig; range = range }
+                }
+
+            let removeFromPool (ig,r) = 
+                //Log.line "rollback, remove from pool."; 
+                pool.Remove ig |> ignore
+
+            let addToRender (ig,r) =
+                async { 
+                    do activate r
+                    return ig,r
+                }
+
+            let removeFromRender (ig,r) = deactivate r
+
+            let effects =
+                [
+                    loadData,    undoLoad
+                    addToPool,   removeFromPool
+                    addToRender, removeFromRender
+                ]
+
+            let cts = new System.Threading.CancellationTokenSource()
+            let result = ref Unchecked.defaultof<_>
+            let r = geometriesNew.GetOrAdd(n, (cts, result))
+            try
+                Async.RunSynchronously(LoadIntoPool.runWithCompensations result effects, cancellationToken= cts.Token)
+            with | :? OperationCanceledException as o -> ()
+            r
+                    
         member x.Remove(n : LodDataNode) =
-            Interlocked.Decrement(&desiredCount) |> ignore
-            ReaderWriterLock.read geometriesRW (fun () ->
-                match geometries.TryGetValue n with
-                    | (true, t) -> 
-                        t.Deactivate() 
-                    | _ -> ()
-            )
+              match geometriesNew.TryRemove n with
+                | (true,(cts,r)) ->
+                    Interlocked.Decrement(progress.ExpectedNodeCount) |> ignore
+                    cts.Cancel()
+                    cts.Dispose()
+                | _ -> printfn "wtf"
+//            match geometries.TryRemove n with
+//                | (true,v) ->
+//                    Interlocked.Decrement(&desiredCount) |> ignore
+//                    match Interlocked.Exchange(v,Unchecked.defaultof<_>) with
+//                        | Choice1Of2 ct -> 
+//                            Log.line "cancelling import."
+//                            ct.Cancel()
+//                        | Choice2Of2 g -> 
+//                            deactivate g
+//                    true
+//                | _ -> 
+//                    Log.warn "failed to find node for removal: %A" n.id
+//                    false
+
 
 
         member x.Activate() =
@@ -233,18 +350,18 @@ module PointCloudRenderObjectSemantics =
 
             let deltas = ConcurrentDeltaQueue.ofASet content
 
-            let deltaProcessing =
+            let deltaProcessing =    
                 async {
+                    do! Async.SwitchToNewThread()
                     while true do
-                        let! op = deltas.DequeueAsync()
+                        let op = deltas.Dequeue()
 
                         match op with
                             | Add n -> x.Add n |> ignore
                             | Rem n -> x.Remove n |> ignore
-
-
                 }
 
+      
             let pruning =
                 async {
                     while true do
@@ -258,23 +375,14 @@ module PointCloudRenderObjectSemantics =
                             else
                                 false
 
-                        ReaderWriterLock.write geometriesRW (fun () ->
-                            while shouldContinue () do
-                                match inactive.TryDequeue() with
-                                    | (true, v) ->
-                                            match geometries.TryRemove v.node with
-                                                | (true, v) ->
-                                                    v.Kill (fun v ->
-                                                        let r = pool.Remove v.geometry
-                                                        Interlocked.Add(&inactiveSize, int64 -v.range.Size) |> ignore
-                                                    )
-                                                    cnt <- cnt + 1
-                                                | _ ->
-                                                    Log.warn "failed to remove node: %A" v.node.id
-                                    | _ ->
-                                        Log.warn "inactive: %A / count : %A" inactiveSize inactive.Count 
-                               
-                        )
+                        while shouldContinue () do
+                            match inactive.TryDequeue() with
+                                | (true, v) ->
+                                    pool.Remove v.geometry |> ignore
+                                    cnt <- cnt + 1
+                                | _ ->
+                                    Log.warn "inactive: %A / count : %A" inactiveSize inactive.Count 
+                                    inactiveSize <- 0L
                             
                         do! Async.Sleep node.Config.pruneInterval
                 }
@@ -283,12 +391,19 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "%A / %A / %A" activeCount desiredCount geometries.Count
+                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A" progress.ActiveNodeCount progress.ExpectedNodeCount geometries.Count inactive.Count inactiveSize
                         ()
                 }
 
 
-            Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
+//            let t = 
+//                [| for i in 0 .. 8 do 
+//                    let t = System.Threading.Thread(ThreadStart(deltaProcessing))   // todo cancell
+//                    t.Priority <- ThreadPriority.BelowNormal
+//                    t.Start()
+//                |]
+            for i in 1..4 do
+                Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
 
@@ -332,12 +447,11 @@ module PointCloudRenderObjectSemantics =
                     | Some (:? IMod<V2i> as vs) -> vs
                     | _ -> failwith "[PointCloud] could not get viewport size (please apply to scenegraph)"
 
-            let h = PointCloudHandler(l, view, proj, viewportSize, l.Runtime)
+            let h = PointCloudHandler(l, view, proj, viewportSize, l.Progress, l.Runtime)
 
             let calls = h.DrawCallInfos
 
             obj.IndirectBuffer <- calls |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
-            //obj.DrawCallInfos <- calls |> Mod.map Array.toList
             obj.Activate <- h.Activate
             obj.VertexAttributes <- h.Attributes
             obj.Mode <- Mod.constant IndexedGeometryMode.PointList
