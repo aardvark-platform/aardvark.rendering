@@ -150,6 +150,28 @@ module PointCloudRenderObjectSemantics =
 
     module LoadIntoPool =
         
+        let runWithCompensations (outRef : ref<'a>) (xs : list<('a -> Async<'a>) * ('a -> unit) >) =  
+            let rec doWork xs disposables =
+                async {
+                    match xs with
+                        | (m,comp)::xs ->
+                                let resultValue = ref None
+                                let! d = 
+                                    Async.OnCancel(fun () -> 
+                                        let r = !resultValue
+                                        match r with
+                                            | Some (v,(d:IDisposable)) -> 
+                                                comp v
+                                                d.Dispose()
+                                            | None -> ()
+                                    )
+                                let! r = m !outRef
+                                do resultValue := Some (r,d); outRef := r
+                                return! doWork xs (d :: disposables)
+                        | [] -> return () 
+                }
+            doWork xs []
+
         let load (data : ILodData) (node : LodDataNode) (pool : GeometryPool) = 
             async {
                 let! geometry = data.GetData(node)
@@ -192,6 +214,7 @@ module PointCloudRenderObjectSemantics =
         member x.Kill cont = result |> Option.iter cont
 
     type LoadResult = ref<Choice<CancellationTokenSource,GeometryRef>>
+    type LoadResultNew = CancellationTokenSource * ref<IndexedGeometry * GeometryRef>
 
     type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, progress : Progress, runtime : IRuntime) =
         let cancel = new System.Threading.CancellationTokenSource()
@@ -204,6 +227,9 @@ module PointCloudRenderObjectSemantics =
 
         let mutable pendingRemoves = 0
         let geometries = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode, LoadResult>()
+        let geometriesNew = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode, LoadResultNew>()
+
+
 
         let activate (n : GeometryRef) =
             let size = n.range.Size
@@ -229,48 +255,66 @@ module PointCloudRenderObjectSemantics =
 
         member x.Add(n : LodDataNode) =
             Interlocked.Increment(progress.ExpectedNodeCount) |> ignore
-            let isNew = ref false
+
+            let loadData _ =
+                async {
+                    let! geometry = node.Data.GetData(n)
+                    return geometry,Unchecked.defaultof<_>
+                }
+
+            let undoLoad (geo,ref) = Log.line "rollback, undo load data"
+
+            let addToPool (ig,r) =
+                async {
+                    let range = pool.Add ig
+                    return ig, { node = n; geometry = ig; range = range }
+                }
+
+            let removeFromPool (ig,r) = 
+                Log.line "rollback, remove from pool."; 
+                pool.Remove ig |> ignore
+
+            let addToRender (ig,r) =
+                async { 
+                    do activate r
+                    return ig,r
+                }
+
+            let removeFromRender (ig,r) = deactivate r
+
+            let effects =
+                [
+                    loadData,    undoLoad
+                    addToPool,   removeFromPool
+                    addToRender, removeFromRender
+                ]
 
             let cts = new System.Threading.CancellationTokenSource()
-            let uninitialized = Choice1Of2 cts
-            let loadResult = ref uninitialized
-            let result = geometries.GetOrAdd(n, System.Func<LodDataNode,LoadResult>(fun _ ->
-                isNew := true
-                loadResult
-            ))
-            let geometry = 
-                try 
-                    Some <| Async.RunSynchronously(LoadIntoPool.load node.Data n pool, cancellationToken = cts.Token)
-                with 
-                    | :? OperationCanceledException as e -> 
-                        Log.line "op cancelled."
-                        None
-                        
-            match geometry with
-                | Some geometry ->
-                    let validGeometry = Choice2Of2 geometry
-
-                    let ch = Interlocked.Exchange(loadResult,validGeometry)
-                    if System.Object.ReferenceEquals(ch,uninitialized) |> not (*&& !isNew*) then
-                        activate geometry
-                    else Log.line "cancelled, not activating: %A" ch
-                | _ -> ()
-
-
+            let result = ref Unchecked.defaultof<_>
+            let r = geometriesNew.GetOrAdd(n, (cts, result))
+            Async.RunSynchronously(LoadIntoPool.runWithCompensations result effects, cancellationToken= cts.Token)
+            r
+                    
         member x.Remove(n : LodDataNode) =
-            match geometries.TryRemove n with
-                | (true,v) ->
+              match geometriesNew.TryRemove n with
+                | (true,(cts,r)) ->
                     Interlocked.Decrement(progress.ExpectedNodeCount) |> ignore
-                    match Interlocked.Exchange(v,Unchecked.defaultof<_>) with
-                        | Choice1Of2 ct -> 
-                            Log.line "cancelling import."
-                            ct.Cancel()
-                        | Choice2Of2 g -> 
-                            deactivate g
-                    true
-                | _ -> 
-                    Log.warn "failed to find node for removal: %A" n.id
-                    false
+                    cts.Cancel()
+                    cts.Dispose()
+                | _ -> printfn "wtf"
+//            match geometries.TryRemove n with
+//                | (true,v) ->
+//                    Interlocked.Decrement(&desiredCount) |> ignore
+//                    match Interlocked.Exchange(v,Unchecked.defaultof<_>) with
+//                        | Choice1Of2 ct -> 
+//                            Log.line "cancelling import."
+//                            ct.Cancel()
+//                        | Choice2Of2 g -> 
+//                            deactivate g
+//                    true
+//                | _ -> 
+//                    Log.warn "failed to find node for removal: %A" n.id
+//                    false
 
 
 
