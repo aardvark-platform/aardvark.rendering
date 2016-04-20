@@ -844,7 +844,13 @@ module Glyph =
         // create a GraphicsPath containing the desired glyph
         use path = new GraphicsPath()
         let size = 1.0f
-        path.AddString(String(c, 1), f.FontFamily, int f.Style, size, PointF(0.0f, 0.0f), StringFormat.GenericDefault)
+
+        use fmt = new StringFormat()
+        fmt.Alignment <- StringAlignment.Near
+        fmt.LineAlignment <- StringAlignment.Near
+        fmt.Trimming <- StringTrimming.None
+        fmt.FormatFlags <- StringFormatFlags.FitBlackBox ||| StringFormatFlags.NoClip ||| StringFormatFlags.NoWrap
+        path.AddString(String(c, 1), f.FontFamily, int f.Style, size, RectangleF(0.0f, 0.0f, 1.0f, 1.0f), fmt)
 
         
         // calculates the (k,l,m) coordinates for a given bezier-segment as
@@ -1377,7 +1383,10 @@ module Rewrite =
             // create a GraphicsPath containing the desired glyph
             use path = new GraphicsPath()
             let size = 1.0f
-            path.AddString(String(c, 1), font.FontFamily, int font.Style, size, PointF(0.0f, 0.0f), StringFormat.GenericDefault)
+            use fmt = new System.Drawing.StringFormat()
+            fmt.Trimming <- StringTrimming.None
+            fmt.FormatFlags <- StringFormatFlags.FitBlackBox ||| StringFormatFlags.NoClip ||| StringFormatFlags.NoWrap 
+            path.AddString(String(c, 1), font.FontFamily, int font.Style, size, PointF(0.0f, 0.0f), fmt)
 
 
             if path.PointCount = 0 then
@@ -1429,6 +1438,9 @@ module Rewrite =
                             segments.Add(Line(p, start))
                         currentPoints.Clear()
                         start <- V2d.NaN
+
+                let bounds = segments |> Seq.map PathSegment.bounds |> Box2d
+                Log.warn "bounds(%c) = %A / %A" c bounds.Min bounds.Size
 
                 { outline = CSharpList.toArray segments }
 
@@ -1826,6 +1838,7 @@ module Rewrite =
                     let pair = NativePtr.get ptr i
                     let c0 = pair.first |> char
                     let c1 = pair.second |> char
+                    Log.warn "(%c,%c) -> %g" c0 c1 (float pair.amount / float f.Size)
                     res.[(c0,c1)] <- float pair.amount / float f.Size
 
                 res
@@ -1942,6 +1955,7 @@ module Rewrite =
         member x.Layout (str : string, spacing : float) =
             let mutable cx = 0.0
             let mutable cy = 0.0
+            let spacing = 1.0
 
             let arr = List<V2d * char>()
 
@@ -1954,13 +1968,13 @@ module Rewrite =
                     | '\r' -> cx <- 0.0
                     | '\n' -> cy <- cy + 1.2
                     | _ ->
-                        let sizes = getGlyphSizes c
-                        let kerning = 
-                            if i > 0 then x.GetKerning(str.[i-1], c)
+                        let sizes = 0.75 * getGlyphSizes c
+                        let kerning =
+                            if i > 0 then 0.25 * x.GetKerning(str.[i-1], c)
                             else 0.0
 
-
-                        let before = kerning
+                        //printfn "%c: %A / %A" c kerning sizes
+                        let before = -0.1666 + kerning
                         let width = sizes.X + sizes.Y + sizes.Z
 
                         if not (c.IsWhiteSpace()) then
@@ -2310,7 +2324,7 @@ module PathComponentTest =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateSimpleRenderWindow(4)
+        let win = app.CreateGameWindow(4)
         //win.Text <- "Aardvark rocks \\o/"
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
@@ -2362,7 +2376,7 @@ module PathComponentTest =
 //        let font = new Font(c.Families.[0], 1.0f)
 
 
-        let test = Rewrite.Font("Times New Roman", FontStyle.Italic)
+        let test = Rewrite.Font("Consolas", FontStyle.Regular)
 //        let str = Mod.init "hi."
 //        let chars =
 //            str |> Mod.map (fun str ->
@@ -2375,7 +2389,7 @@ module PathComponentTest =
 
         let fillMode = Mod.init Aardvark.Base.Rendering.FillMode.Fill
         let aa = Mod.init true
-        let text = Mod.init """font"""
+        let text = Mod.init "Maybe"
 
 
 
@@ -2393,14 +2407,17 @@ module PathComponentTest =
                   ]
                
                //|> Sg.diffuseTexture' (PixTexture2d(PixImageMipMap [|image :> PixImage|], true))
-//               |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
-//               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+               |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, V3d.OIO)  |> Mod.constant)
+               |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
+               |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
 
                |> Sg.fillMode fillMode
+
                |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(V3d.IOO, -V3d.OIO, -V3d.OOI)  |> Mod.constant)
-               |> Sg.trafo (win.Sizes |> Mod.map (fun s -> Trafo3d.Scale((float s.Y / float s.X), 1.0, 1.0) * Trafo3d.Scale(size, size, 1.0)))        
-               |> Sg.trafo (Trafo3d.Translation(-1.0 + size, 1.0 - size, 0.0) |> Mod.constant)
+               //|> Sg.trafo (win.Sizes |> Mod.map (fun s -> Trafo3d.Scale((float s.Y / float s.X), 1.0, 1.0) * Trafo3d.Scale(size, size, 1.0)))        
+               //|> Sg.trafo (Trafo3d.Translation(-1.0 + size, 1.0 - size, 0.0) |> Mod.constant)
+
                |> Sg.uniform "FillGlyphs" (fillMode |> Mod.map (fun f -> f = FillMode.Fill))
                |> Sg.uniform "Antialias" aa
         
