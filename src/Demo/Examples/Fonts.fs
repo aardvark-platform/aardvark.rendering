@@ -711,538 +711,6 @@ module ``Move To Base`` =
         let inline evaluate (t : float) (p : Polynomial2d) = p.Evaluate t
         let inline derivative (p : Polynomial2d) = p.Derivative
 
-             
-type PathComponent =
-    | Line of V2d * V2d
-    | Poly of Box2d * Polynomial2d
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module PathComponent =
-    let minT = -0.0000
-    let maxT =  1.0000
-
-    let getDistanceAndT (point : V2d) (comp : PathComponent) =
-        match comp with
-            | Line(p0,p1) ->
-                let mutable t = 0.0
-                let p = Line2d(p0, p1).GetClosestPointOn(point, &t)
-                let d = V2d.Distance(point, p)
-                d, t
-
-            
-            | Poly(_,p) ->
-                let d2 =
-                    let d = p - point
-                    d.Dot(d)
-
-                let t = d2.ComputeMinimum(0.0, 1.0)
-                if Double.IsNaN t then
-                    infinity, 0.0
-                else
-                    let d = p.Evaluate(t) - point |> Vec.length
-                    d, t
-
-    let inside (point : V2d) (path : list<PathComponent>) =
-        let mutable left = 0
-        let mutable right = 0
-        let mutable up = 0
-        let mutable down = 0
-
-        for c in path do
-            
-            let poly= 
-                match c with
-                    | Line(p0,p1) -> Polynomial2d [|p0; p1 - p0|]
-                    | Poly(_,p) -> p
-
-
-            let p = poly - point
-            let px = p.X
-            let py = p.Y
-
-            let xRoots = px.ComputeRealRoots(0.0, 1.0, 1.0E-8)
-            for r in xRoots do
-                let pp = py.Evaluate r
-                if pp > 0.0 then up <- up + 1
-                elif pp < 0.0 then down <- down + 1
-
-            let yRoots = py.ComputeRealRoots(0.0, 1.0, 1.0E-8)
-            for r in yRoots do
-                let pp = px.Evaluate r
-                if pp > 0.0 then right <- right + 1
-                elif pp < 0.0 then left <- left + 1
-
-        left % 2 <> 0 || right % 2 <> 0 || up % 2 <> 0 || down % 2 <> 0
-
-    let getPoint (t : float) (comp : PathComponent) =
-        match comp with
-            | Line(p0, p1) -> 
-                (1.0 - t) * p0 + t * p1
-
-            | Poly(_,p) -> 
-                p.Evaluate(t)
-
-    let getTangent (t : float) (comp : PathComponent) =
-        match comp with
-            | Line(p0, p1) -> 
-                p1 - p0 |> Vec.normalize
-
-            | Poly(_,p) ->
-                p.Derivative.Evaluate(t) |> Vec.normalize
-               
-    let getNormal (t : float) (comp : PathComponent) =
-        let t = getTangent t comp
-        V2d(-t.Y, t.X)
-
-
-    let line (p0 : V2d) (p1 : V2d) =
-        Line(p0, p1)
-
-    let bezier2 (p0 : V2d) (p1 : V2d) (p2 : V2d) =
-        let u = p1 - p0 |> Vec.normalize
-        let v = p2 - p1 |> Vec.normalize
-
-        if Vec.dot u v > 0.999 then
-            Line(p0, p2)
-        else
-            let bounds = Box2d(p0, p1, p2)
-            Poly(bounds, Polynomial2d.Bezier2(p0, p1, p2))
-
-    let bezier3 (p0 : V2d) (p1 : V2d) (p2 : V2d) (p3 : V2d) =
-        let bounds = Box2d(p0, p1, p2, p3)
-        Poly(bounds, Polynomial2d.Bezier3(p0, p1, p2, p3))
-
-
-type Glyph = { path : list<PathComponent>; bounds : Box2d }
-
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Glyph =
-    open System.Drawing
-    open System.Drawing.Drawing2D
-    open System.Collections.Generic
-
-    module Attributes = 
-        let KLM = Symbol.Create "KLM"
-        let TriangleKind = Symbol.Create "TriangleKind"
-
-    [<Flags>]
-    type PathPointType =
-        | Start           = 0uy
-        | Line            = 1uy
-        | Bezier          = 3uy
-        | PathTypeMask    = 0x07uy
-        | DashMode        = 0x10uy
-        | PathMarker      = 0x20uy
-        | CloseSubpath    = 0x80uy
-
-    type KLMAttribute() = inherit FShade.Parameters.SemanticAttribute(Attributes.KLM |> string)
-    type TriangleKindAttribute() = inherit FShade.Parameters.SemanticAttribute(Attributes.TriangleKind |> string)
-
-    let geometry (f : Font) (c : char) : IndexedGeometry =
-
-        // create a GraphicsPath containing the desired glyph
-        use path = new GraphicsPath()
-        let size = 1.0f
-
-        use fmt = new StringFormat()
-        fmt.Alignment <- StringAlignment.Near
-        fmt.LineAlignment <- StringAlignment.Near
-        fmt.Trimming <- StringTrimming.None
-        fmt.FormatFlags <- StringFormatFlags.FitBlackBox ||| StringFormatFlags.NoClip ||| StringFormatFlags.NoWrap
-        path.AddString(String(c, 1), f.FontFamily, int f.Style, size, RectangleF(0.0f, 0.0f, 1.0f, 1.0f), fmt)
-
-        
-        // calculates the (k,l,m) coordinates for a given bezier-segment as
-        // shown by Blinn 2003: http://www.msr-waypoint.net/en-us/um/people/cloop/LoopBlinn05.pdf
-        // returns the (k,l,m) triples for the four control-points
-        let texCoords(p0 : V2d, p1 : V2d, p2 : V2d, p3 : V2d) =
-            let p0 = V3d(p0, 1.0)
-            let p1 = V3d(p1, 1.0)
-            let p2 = V3d(p2, 1.0)
-            let p3 = V3d(p3, 1.0)
-
-            let M3 =
-                M44d(
-                     +1.0,   0.0,  0.0,  0.0,
-                     -3.0,   3.0,  0.0,  0.0,
-                     +3.0,  -6.0,  3.0,  0.0,
-                     -1.0,   3.0, -3.0,  1.0
-                )
-
-            let M3Inverse = M3.Inverse
-//                M44d(
-//                     1.0,   0.0,        0.0,        0.0,
-//                     1.0,   1.0/3.0,    0.0,        0.0,
-//                     1.0,   2.0/3.0,    1.0/3.0,    0.0,
-//                     1.0,   1.0,        1.0,        1.0
-//                )
-
-            let v0 =  1.0*p0
-            let v1 = -3.0*p0 + 3.0*p1 
-            let v2 =  3.0*p0 - 6.0*p1 + 3.0*p2
-            let v3 = -1.0*p0 + 3.0*p1 - 3.0*p2 + 1.0*p3
-
-            let det (r0 : V3d) (r1 : V3d) (r2 : V3d) =
-                M33d.FromRows(r0, r1, r2).Det
-
-            let d0 =  (det v3 v2 v1)
-            let d1 = -(det v3 v2 v0)
-            let d2 =  (det v3 v1 v0)
-            let d3 = -(det v2 v1 v0)
-
-
-            let O(a : V3d,b : V3d,c : V3d,d : V3d) =
-                V3d(-a.X, -a.Y, a.Z),
-                V3d(-b.X, -b.Y, b.Z),
-                V3d(-c.X, -c.Y, c.Z),
-                V3d(-d.X, -d.Y, d.Z)
-
-
-
-            let zero v = Fun.IsTiny(v, 1.0E-5)
-            let nonzero v = Fun.IsTiny(v, 1.0E-5) |> not
-
-            let v = 3.0 * d2 * d2 - 4.0*d1*d3
-            let d1z = zero d1
-            let d1nz = d1z |> not
-
-
-            // 1. The Serpentine
-            // 3a. Cusp with inflection at infinity
-            if d1nz && v >= 0.0 then
-                // serpentine
-                // Cusp with inflection at infinity
-
-                let r = sqrt((3.0*d2*d2 - 4.0*d1*d3) / 3.0)
-                let tl = d2 + r
-                let sl = 2.0 * d1
-                let tm = d2 - r
-                let sm = sl
-
-
-                let F =
-                    M44d(
-                         tl * tm,            tl * tl * tl,           tm * tm * tm,       1.0,
-                        -sm*tl - sl*tm,     -3.0*sl*tl*tl,          -3.0*sm*tm*tm,       0.0,
-                         sl*sm,              3.0*sl*sl*tl,           3.0*sm*sm*tm,       0.0,
-                         0.0,               -sl*sl*sl,              -sm*sm*sm,           0.0
-                    )
-
-                let weights = M3Inverse * F
-
-                let w0 = weights.R0.XYZ
-                let w1 = weights.R1.XYZ
-                let w2 = weights.R2.XYZ
-                let w3 = weights.R3.XYZ
-
-                let res = w0, w1, w2, w3
-                if d1 < 0.0 then O res
-                else res
-
-            // 2. The Loop
-            elif d1nz && v < 0.0 then
-                // loop
-
-                let r = sqrt(4.0 * d1 * d3 - 3.0*d2*d2)
-
-                let td = d2 + r
-                let sd = 2.0*d1
-
-                let te = d2 - r
-                let se = sd
-
-
-                let F =
-                    M44d(
-                         td*te,               td*td*te,                   td*te*te,                       1.0,
-                        -se*td - sd*te,      -se*td*td - 2.0*sd*te*td,   -sd*te*te - 2.0*se*td*te,        0.0,
-                         sd * se,             te*sd*sd + 2.0*se*td*sd,    td*se*se + 2.0*sd*te*se,        0.0,
-                         0.0,                -sd*sd*se,                  -sd*se*se,                       0.0
-                    )
-
-                let weights = M3Inverse * F
-
-                let w0 = weights.R0.XYZ
-                let w1 = weights.R1.XYZ
-                let w2 = weights.R2.XYZ
-                let w3 = weights.R3.XYZ
-
-                let res = w0, w1, w2, w3
-                if d1 < 0.0 then O res
-                else res
-
-            // 4. Quadratic
-            elif zero d1 && zero d2 && nonzero d3 then
-                let w0 = V3d(0.0,0.0,0.0)
-                let w1 = V3d(1.0/3.0,0.0,1.0/3.0)
-                let w2 = V3d(2.0/3.0,1.0/3.0,2.0/3.0)
-                let w3 = V3d(1.0,1.0,1.0)
-
-
-                let res = w0,w1,w2,w3
-                if d3 < 0.0 then O res
-                else res
-
-            // 3b. Cusp with cusp at infinity
-            elif d1z && zero v then
-                let tl = d3
-                let sl = 3.0*d2
-                let tm = 1.0
-                let sm = 0.0
-
-
-                let F =
-                    M44d(
-                         tl,     tl*tl*tl,       1.0, 1.0,
-                        -sl,    -3.0*sl*tl*tl,   0.0, 0.0,
-                        0.0,     3.0*sl*sl*tl,   0.0, 0.0,
-                        0.0,    -sl*sl*sl,       0.0, 0.0
-                    )
-
-                let weights = M3Inverse * F
-                let w0 = weights.R0.XYZ
-                let w1 = weights.R1.XYZ
-                let w2 = weights.R2.XYZ
-                let w3 = weights.R3.XYZ
-
-                w0, w1, w2, w3
-
-
-            elif Fun.IsTiny d1 && Fun.IsTiny d2 && Fun.IsTiny d3 then
-                failwith "line or point"
-
-
-            else
-                failwith "not possible"
-
-
-        // build the interior polygon and boundary triangles using the 
-        // given GraphicsPath
-        let types = path.PathTypes
-        let points = path.PathPoints |> Array.map (fun p -> V2d(p.X, p.Y))
-
-        let mutable start = V2d.NaN
-        let currentPoints = List<V2d>()
-        let innerPoints = List<List<V2d>>()
-        let boundaryTriangles = List<V2d>()
-        let boundaryCoords = List<V3d>()
-        let last() = innerPoints.[innerPoints.Count-1]
-
-        for (p, t) in Array.zip points types do
-            let t = t |> unbox<PathPointType>
-
-            let close = t &&& PathPointType.CloseSubpath <> PathPointType.Start
-
-
-            match t &&& PathPointType.PathTypeMask with
-                | PathPointType.Line ->
-                    if currentPoints.Count > 0 then
-                        let last = currentPoints.[currentPoints.Count - 1]
-                        currentPoints.Clear()
-
-                    currentPoints.Add p
-                    last().Add(p)
-
-
-
-                | PathPointType.Bezier ->
-                    currentPoints.Add p
-                    if currentPoints.Count >= 4 then
-                        let p0 = currentPoints.[0]
-                        let p1 = currentPoints.[1]
-                        let p2 = currentPoints.[2]
-                        let p3 = currentPoints.[3]
-
-
-                        let w0,w1,w2,w3 = texCoords(p0, p1, p2, p3)
-
-                        last().Add(p0)
-                        let p1Inside = p1.PosLeftOfLineValue(p0, p3) > 0.0
-                        let p2Inside = p2.PosLeftOfLineValue(p0, p3) > 0.0
-
-                        if p1Inside && p2Inside then 
-                            last().Add(p1); 
-                            last().Add(p2)
-
-                        boundaryTriangles.AddRange [p0; p1; p2]
-                        boundaryCoords.AddRange [w0; w1; w2]
-
-                        boundaryTriangles.AddRange [p0; p2; p3]
-                        boundaryCoords.AddRange [w0; w2; w3]
-
-                        last().Add(p3)
-
-                        currentPoints.Clear()
-                        currentPoints.Add p3
-
-                | PathPointType.Start | _ ->
-                    currentPoints.Add p
-                    innerPoints.Add(List())
-                    last().Add p
-                    start <- p
-                    ()
-
-            if close then
-                last().Add(start)
-                currentPoints.Clear()
-                start <- V2d.NaN
-                        
-
-
-            ()
-
-
-
-
-        // merge the interior polygons (respecting holes)
-        let innerPoints = innerPoints |> Seq.map (CSharpList.toArray >> Polygon2d) |> Seq.toList
-
-        let mergePolys(a : Polygon2d) (b : Polygon2d) =
-
-            let distances =
-                seq {
-                    for i in 0..a.PointCount-1 do
-                        for j in 0..b.PointCount-1 do
-                            let a = a.[i]
-                            let b = b.[j]
-                            yield (i,j), V2d.Distance(a,b)
-                }
-
-            let (i,j) = distances |> Seq.minBy snd |> fst
-
-
-            let rot (i : int) (points : V2d[]) =
-                if i = 0 then points
-                else Array.append (Array.skip i points) (Array.sub points 1 i)
-
-            let aperm = a.GetPointArray() |> rot i
-            let bperm = b.GetPointArray() |> rot j
-
-            // a0 ... an,a0, b0 ... bn,b0, a0
-            Array.concat [ aperm; bperm; [|aperm.[0]|] ] |> Polygon2d
-
-        let polygons = List<Polygon2d>()
-        for polygon in innerPoints do
-            let last =
-                if polygons.Count > 0 then Some polygons.[polygons.Count-1]
-                else None
-
-            let w = polygon.ComputeWindingNumber()
-
-            match last with
-                | Some last when polygon.IsFullyContainedInside last ->
-                    polygons.[polygons.Count-1] <- mergePolys last polygon
-//
-//                | Some last when last.IsFullyContainedInside polygon ->
-//                    polygons.[polygons.Count-1] <- mergePolys polygon last
-//                    
-//                | Some last when w < 0 ->
-//                    polygons.[polygons.Count-1] <- mergePolys last polygon
-                    
-
-                | _ ->
-                    polygons.Add polygon
-
-        // triangulate the interior polygons (marking all vertices as interior ones => fst = 0)
-        let interiorTriangles =
-            polygons 
-            |> CSharpList.toArray
-            |> Array.collect (fun p ->
-                let poly = p.ToPolygon3d (fun v -> V3d(v, 0.0))
-                let poly = poly.WithoutMultiplePoints()
-                let index = poly.ComputeTriangulationOfConcavePolygon(1.0E-7)
-                
-
-                index |> Array.map (fun i -> 0, poly.[i])
-            )
-
-        // union the interior with the bounary triangles
-        let boundaryTriangles = boundaryTriangles |> Seq.map (fun v -> 1, V3d(v.X, v.Y, 0.0)) |> Seq.toArray
-        let boundaryCoords = boundaryCoords |> CSharpList.toArray
-        let pos = Array.append interiorTriangles boundaryTriangles
-        let tex = Array.append (Array.create interiorTriangles.Length V3d.Zero) boundaryCoords
-
-
-        // use the merged vertex-data for creating the final geometry
-        IndexedGeometry(
-            Mode = IndexedGeometryMode.TriangleList,
-            IndexedAttributes =
-                SymDict.ofList [
-                    DefaultSemantic.Positions,  pos |> Array.map (snd >> V3f.op_Explicit) :> Array
-                    Attributes.TriangleKind,    pos |> Array.map (fst >> float32) :> Array
-                    Attributes.KLM,             tex |> Array.map (V3f.op_Explicit) :> Array
-                ]
-            )
-
-    let ofChar (f : Font) (c : char) : Glyph =
-        use p = new GraphicsPath()
-        let size = 1000.0f
-
-        p.AddString(String(c, 1), f.FontFamily, int f.Style, size, PointF(0.0f, 0.0f), StringFormat.GenericDefault)
-
-        let types = p.PathTypes
-        let points = p.PathPoints |> Array.map (fun p -> 0.8 * (V2d(p.X, p.Y) / (float size)) + 0.1)
-
-        
-        let mutable start = V2d.NaN
-        let currentPoints = List<V2d>()
-        let components = List<PathComponent>()
-
-        let bounds = Box2d(points)
-
-        for (p, t) in Array.zip points types do
-            let t = t |> unbox<PathPointType>
-
-            let close = t &&& PathPointType.CloseSubpath <> PathPointType.Start
-
-
-
-            match t &&& PathPointType.PathTypeMask with
-                | PathPointType.Line ->
-                    if currentPoints.Count > 0 then
-                        let last = currentPoints.[currentPoints.Count - 1]
-                        components.Add(PathComponent.line last p)
-                        currentPoints.Clear()
-
-                    currentPoints.Add p
-
-
-
-                | PathPointType.Bezier ->
-                    currentPoints.Add p
-                    if currentPoints.Count >= 4 then
-                        let p0 = currentPoints.[0]
-                        let p1 = currentPoints.[1]
-                        let p2 = currentPoints.[2]
-                        let p3 = currentPoints.[3]
-                        components.Add(PathComponent.bezier3 p0 p1 p2 p3)
-                        currentPoints.Clear()
-                        currentPoints.Add p3
-
-                | PathPointType.Start | _ ->
-                    currentPoints.Add p
-                    start <- p
-                    ()
-
-            if close then
-                if not (V2d.ApproxEqual(p, start)) then
-                    components.Add(PathComponent.line p start)
-
-                currentPoints.Clear()
-                start <- V2d.NaN
-                        
-
-
-            printfn "%A: %A" t p
-
-            ()
-
-
-        
-
-        { path = components |> CSharpList.toList; bounds = Box2d(V2d.Zero, V2d.II) }
-
 
 module Rewrite =
     type PathSegment =
@@ -1668,16 +1136,33 @@ module Rewrite =
                     innerPoints.[innerPoints.Count-1].Add p
                     current <- p
 
-            for seg in p.outline do
-                match seg with
-                    | Line(p0, p1) ->
+
+            let overlap (q0 : Polygon2d) (q1 : Polygon2d) =
+                let realIntersections =
+                    seq {
+                        for u in q0.EdgeLines do
+                            for v in q1.EdgeLines do
+                                let mutable t = nan
+                                match u.Ray2d.Intersects(v, &t) with
+                                    | true when t > 0.1 && t < 0.9 -> yield true
+                                    | _ -> ()
+                    }
+                realIntersections |> Seq.isEmpty |> not
+
+                    
+            let allSplines = p.outline |> Array.choose (function Bezier3(p0, p1, p2, p3) -> Some(Polygon2d(p0, p1, p2, p3)) | _ -> None)
+
+            let rec run (l : list<PathSegment>) =
+                match l with
+                    | Line(p0, p1) :: rest ->
                         start p0
                         add p0
 
                         add p1
                         current <- p1
+                        run rest
 
-                    | Bezier2(p0, p1, p2) ->
+                    | Bezier2(p0, p1, p2) :: rest ->
                         start p0
                         add p0
 
@@ -1689,31 +1174,59 @@ module Rewrite =
 
                         add p2
                         current <- p2
+                        run rest
 
-                    | Bezier3(p0, p1, p2, p3) ->
-                        start p0
-                        add p0
+                    | (Bezier3(p0, p1, p2, p3) as s) :: rest ->
+                        
 
+                        let q = Polygon2d(p0, p1, p2, p3)
                         let p1Inside = p1.PosLeftOfLineValue(p0, p3) > 0.0
                         let p2Inside = p2.PosLeftOfLineValue(p0, p3) > 0.0
-                        if p1Inside && p2Inside then
-                            add p1
-                            add p2
 
-                        let w0,w1,w2,w3 = texCoords(p0, p1, p2, p3)
-                        boundaryTriangles.AddRange [p0; p1; p2]
-                        boundaryCoords.AddRange [w0; w1; w2]
-                        boundaryTriangles.AddRange [p0; p2; p3]
-                        boundaryCoords.AddRange [w0; w2; w3]
+                        let overlapping = allSplines |> Seq.exists (overlap q)
+                        if overlapping && not (p1Inside || p2Inside) then
 
-                        add p3
-                        current <- p3
+                            let m0 = 0.5 * (p1 + p0)
+                            let m1 = 0.5 * (p1 + p2)
+                            let m2 = 0.5 * (p2 + p3)
+                            let q0 = 0.5 * (m0 + m1)
+                            let q1 = 0.5 * (m1 + m2)
+                            let p = 0.5 * (q0 + q1)
+
+                            let s0 = Bezier3(p0, m0, q0, p)
+                            let s1 = Bezier3(p, q1, m2, p3)
+
+                            run (s0::s1::rest)
+
+                        else
+                            start p0
+                            add p0
+
+                            if p1Inside && p2Inside then
+                                add p1
+                                add p2
+
+                            let w0,w1,w2,w3 = texCoords(p0, p1, p2, p3)
+                            boundaryTriangles.AddRange [p0; p1; p2]
+                            boundaryCoords.AddRange [w0; w1; w2]
+                            boundaryTriangles.AddRange [p0; p2; p3]
+                            boundaryCoords.AddRange [w0; w2; w3]
+
+                            add p3
+                            current <- p3
+
+                            run rest
+
+
+                    | [] -> ()
+
+            run (Array.toList p.outline)
 
             // merge the interior polygons (respecting holes)
             let innerPoints = innerPoints |> Seq.map (CSharpList.toArray >> Polygon2d) |> Seq.toList
 
             let mergePolys(a : Polygon2d) (b : Polygon2d) =
-
+                
                 let distances =
                     seq {
                         for i in 0..a.PointCount-1 do
@@ -1726,7 +1239,8 @@ module Rewrite =
                 let (i,j) = distances |> Seq.minBy snd |> fst
 
 
-                let rot (i : int) (points : V2d[]) =
+                let rot (i : int) (points : 'a[]) =
+                    let i = i % (points.Length-1)
                     if i = 0 then points
                     else Array.append (Array.skip i points) (Array.sub points 1 i)
 
@@ -1744,12 +1258,21 @@ module Rewrite =
 
                 let w = polygon.ComputeWindingNumber()
 
+
                 match last with
                     | Some last when polygon.IsFullyContainedInside last ->
                         polygons.[polygons.Count-1] <- mergePolys last polygon
 
+                    
+                    | Some last when last.IsFullyContainedInside polygon ->
+                        polygons.[polygons.Count-1] <- mergePolys polygon last
+
                     | _ ->
                         polygons.Add polygon
+
+            for p in polygons do
+                let str = p.GetPointArray() |> Array.map (fun v -> sprintf "V3f(%gf,%gf, 0.0f)}" v.X v.Y) |> String.concat "; " |> sprintf "[| %s |] :> Array"
+                str |> File.writeAllText @"C:\Users\schorsch\Desktop\outline.fs"
 
             // triangulate the interior polygons (marking all vertices as interior ones => fst = 0)
             let interiorTriangles =
@@ -1757,11 +1280,20 @@ module Rewrite =
                 |> CSharpList.toArray
                 |> Array.collect (fun p ->
                     let poly = p.ToPolygon3d (fun v -> V3d(v, 0.0))
-                    let poly = poly.WithoutMultiplePoints()
-                    let index = poly.ComputeTriangulationOfConcavePolygon(1.0E-7)
-                
+                    let sub = p.ComputeNonConcaveSubPolygons(Constant.PositiveTinyValue)
+                    let test = 
+                        sub |> Seq.collect (fun i ->
+                            let p = Polygon2d(i |> Array.map (fun i -> p.[i])).ToPolygon3d(fun v -> V3d(v, 0.0))
 
-                    index |> Array.map (fun i -> poly.[i])
+                            let idx = p.ComputeTriangulationOfConcavePolygon(Constant.PositiveTinyValue)
+
+                            idx |> Array.map (fun i -> p.[i])
+                        )
+//                    let index = poly.ComputeTriangulationOfConcavePolygon(Constant.PositiveTinyValue)
+//                
+//
+//                    index |> Array.map (fun i -> poly.[i])
+                    test |> Seq.toArray
                 )
 
             // union the interior with the bounary triangles
@@ -2105,137 +1637,6 @@ module PathComponentTest =
     open Aardvark.SceneGraph
     open FShade
 
-
-    let draw (path : list<PathComponent>) =
-        let image = PixImage<float32>(Col.Format.RGB, V2i.II * 1024)
-        let mat = image.GetMatrix<C3f>()
-
-        Log.startTimed "rasterizer"
-        Log.line "size: %A" image.Size
-        mat.SetByCoordParallelX(fun (x : int64) (y : int64) ->
-            let c = V2l(x,y)
-            let coord = (V2d(c) + V2d.Half) / V2d(image.Size)
-            let (value, _) = 
-                path |> List.map (fun v ->
-                            let (d,t) = PathComponent.getDistanceAndT coord v
-                            d, (v, t)
-                        )
-                     |> List.minBy fst
-
-            
-            let value = pow value (1.0 / 3.0) |> clamp 0.0 1.0
-            C3f(value, value, value)
-        ) |> ignore
-
-        Log.stop()
-
-
-        for comp in path do
-            let s = V2d(mat.Size)
-            let mutable last = s * PathComponent.getPoint 0.0 comp
-            for i in 1..50 do
-                let t = float i / 50.0
-
-                let p1 = s * PathComponent.getPoint t comp
-                mat.SetLine(last, p1, C3f.Red)
-                last <- p1
-
-        image.ToPixImage<byte>(Col.Format.RGBA).SaveAsImage @"C:\Users\schorsch\Desktop\test.png"
-
-
-    let drawDistance (size : V2i) (path : list<PathComponent>) =
-
-        let floatImage = PixImage<float32>(Col.Format.RGB, size)
-        let mutable mat = floatImage.GetMatrix<C3f>()
-
-        mat.ForeachIndex(fun (x : int64) (y : int64) (i : int64) ->
-            let c = V2l(x,y)
-            let coord = (V2d(c) + V2d.Half) / V2d(mat.Size)
-
-            let mutable cnt = 0
-
-            
-            let crease = 10.0
-            let dirEquals (a : V2d) (b : V2d) = 
-                let angle = a.Dot(b)  |> acos
-                if angle * Constant.DegreesPerRadian < crease then
-                    true
-                else
-                    false
-
-            let rec assignColors (lastNormal : V2d) (currentColor : int) (path : list<PathComponent>) =
-                match path with
-                    | [] -> []
-                    | h::rest ->
-                        let start = PathComponent.getNormal 0.0 h
-                        let color = 
-                            if dirEquals start lastNormal then currentColor
-                            else (currentColor + 1) % 3
-
-                        (color, h) :: assignColors (PathComponent.getNormal 1.0 h) color rest
-
-
-            let mutable used = Set.empty
-            let mutable result = V3d.Zero
-            let mutable distance = 1.0
-
-            let inside = PathComponent.inside coord path
-            let mutable cnt = 0
-
-            let mutable closest = Map.empty //System.Collections.Generic.SortedList<float, bool * int * PathComponent>()
-
-            for (color, c) in assignColors V2d.Zero 0 path do
-                let (d,t) = c |> PathComponent.getDistanceAndT coord
-                let d = d / 0.08
-                let d = clamp 0.0 1.0 d
-
-                let n = c |> PathComponent.getNormal t
-                let p = c |> PathComponent.getPoint t
-
-                let left = Vec.dot n (coord - p) > 0.0
-
-                closest <- 
-                    match Map.tryFind d closest with
-                        | Some v -> Map.add d ((left, color, c) :: v) closest
-                        | None -> Map.add d [(left, color, c)] closest
-
-
-            
-            let mutable used = Set.empty
-            let mutable result = V3d.Zero
-
-
-            let rec fill (result : V3d) (entries : list<float * (bool * int * PathComponent)>) (used : Set<int>) =
-                match entries with
-                    | [] -> 
-                        result
-
-                    | (d, (left, color, c))::rest ->
-                        if Set.contains color used || (left && not inside) then
-                            fill result rest used
-                        else
-                            let mutable r = result
-                            r.[color] <- if left then 0.5 + 0.5*d else 0.5 - 0.5*d
-                            fill r rest (Set.add color used)
-
-            let result = fill V3d.III (closest |> Seq.collect (fun (KeyValue(k,v)) -> v |> Seq.map (fun v -> k,v)) |> Seq.toList) Set.empty
-
-            mat.[i] <- C3f result
-
-        )
-
-
-
-        floatImage.ToPixImage<byte>(Col.Format.RGBA)
-
-    let drawGlyph (size : V2i) (c : char) =
-        use font = new Font("Consolas", 1.0f)
-        let g = Glyph.ofChar font c
-
-        drawDistance size g.path
-
-
-
     let testRoots() =
         let rand = Random()
 
@@ -2327,7 +1728,7 @@ module PathComponentTest =
         let win = app.CreateGameWindow(4)
         //win.Text <- "Aardvark rocks \\o/"
 
-        let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
+        let view = CameraView.LookAt(V3d(-2.0,-2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
             win.Sizes 
               |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 500.0 (float s.X / float s.Y))
@@ -2376,7 +1777,7 @@ module PathComponentTest =
 //        let font = new Font(c.Families.[0], 1.0f)
 
 
-        let test = Rewrite.Font("Consolas", FontStyle.Regular)
+        let test = Rewrite.Font("Comic Sans", FontStyle.Regular)
 //        let str = Mod.init "hi."
 //        let chars =
 //            str |> Mod.map (fun str ->
@@ -2389,7 +1790,24 @@ module PathComponentTest =
 
         let fillMode = Mod.init Aardvark.Base.Rendering.FillMode.Fill
         let aa = Mod.init true
-        let text = Mod.init "Maybe"
+        let text = Mod.init "b"
+
+
+        let outline =
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.LineStrip,
+                IndexedAttributes =
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, [| V3f(0.32666f,0.46582f, 0.0f); V3f(0.474609f,0.39209f, 0.0f); V3f(0.631836f,0.464111f, 0.0f); V3f(0.6875f,0.658691f, 0.0f); V3f(0.625244f,0.860107f, 0.0f); V3f(0.468262f,0.934082f, 0.0f); V3f(0.32666f,0.881836f, 0.0f); V3f(0.32666f,0.921875f, 0.0f); V3f(0.234375f,0.921875f, 0.0f); V3f(0.234375f,0.206055f, 0.0f); V3f(0.32666f,0.206055f, 0.0f); V3f(0.32666f,0.46582f, 0.0f); V3f(0.368652f,0.49349f, 0.0f); V3f(0.32666f,0.552734f, 0.0f); V3f(0.32666f,0.798828f, 0.0f); V3f(0.366048f,0.84082f, 0.0f); V3f(0.411296f,0.861816f, 0.0f); V3f(0.462402f,0.861816f, 0.0f); V3f(0.502116f,0.861816f, 0.0f); V3f(0.533691f,0.844808f, 0.0f); V3f(0.557129f,0.810791f, 0.0f); V3f(0.580566f,0.776774f, 0.0f); V3f(0.592285f,0.726074f, 0.0f); V3f(0.592285f,0.658691f, 0.0f); V3f(0.592285f,0.594889f, 0.0f); V3f(0.581217f,0.546468f, 0.0f); V3f(0.559082f,0.513428f, 0.0f); V3f(0.536947f,0.480387f, 0.0f); V3f(0.506022f,0.463867f, 0.0f); V3f(0.466309f,0.463867f, 0.0f); V3f(0.415202f,0.463867f, 0.0f); V3f(0.368652f,0.49349f, 0.0f); V3f(0.32666f,0.46582f, 0.0f) |] :> Array
+
+                    ]
+            )
+
+
+        let osg = 
+            outline
+                |> Sg.ofIndexedGeometry
+                |> Sg.effect [DefaultSurfaces.constantColor C4f.Green |> toEffect]
 
 
 
@@ -2405,12 +1823,13 @@ module PathComponentTest =
                     //DefaultSurfaces.constantColor C4f.White |> toEffect
                     Shader.pathFragment |> toEffect
                   ]
+
                
                //|> Sg.diffuseTexture' (PixTexture2d(PixImageMipMap [|image :> PixImage|], true))
                |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, V3d.OIO)  |> Mod.constant)
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
-
+               |> Sg.andAlso osg
 
                |> Sg.fillMode fillMode
 
