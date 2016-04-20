@@ -1857,10 +1857,10 @@ module Rewrite =
 
     and Font private(f : System.Drawing.Font) =
         let kerning = GDI.pairs f
-        let glyphs = ConcurrentDictionary<char, Box2d * IndexedGeometry>()
+        let glyphs = ConcurrentDictionary<char, IndexedGeometry>()
+        let sizes = ConcurrentDictionary<char, V2d>()
 
         let cache = ConcurrentDictionary<IRuntime, FontCache>()
-
 
 
         let getKerning (l : char) (r : char) =
@@ -1868,12 +1868,18 @@ module Rewrite =
                 | (true, v) -> v
                 | _ -> 0.0
 
+        let getGlyphSize (c : char) =
+            sizes.GetOrAdd(c, fun c ->
+                use g = Graphics.FromHwnd(0n)
+                let s = g.MeasureString(String(c,1), f)
+                V2d(s.Width, s.Height)
+            )
+
         let getGlyph (c : char) =
             glyphs.GetOrAdd(c, fun c ->
                 let path = Path.ofChar f c
-                let bounds = path.bounds
                 let geometry = Path.toGeometry path
-                (bounds, geometry)
+                geometry
             )
 
         member x.GetOrCreateCache(r : IRuntime) =
@@ -1885,10 +1891,10 @@ module Rewrite =
             getKerning l r
 
         member x.GetGlyph(c : char) =
-            getGlyph c |> snd
+            getGlyph c
 
-        member x.GetBounds(c : char) =
-            getGlyph c |> fst
+        member x.GetSize(c : char) =
+            getGlyphSize c 
 
         member x.Dispose() =
             cache.Values |> Seq.toList |> List.iter (fun c -> c.Dispose())
@@ -1904,13 +1910,13 @@ module Rewrite =
             let arr = Array.zeroCreate str.Length
             for i in 0..str.Length-1 do
                 let c = str.[i]
-                let bounds = x.GetBounds c
+                let size = x.GetSize c
                 let kerning = 
                     if i > 0 then x.GetKerning(str.[i-1], c)
                     else 0.0
 
                 arr.[i] <- V2d(cx, cy)
-                cx <- cx + (bounds.SizeX + kerning) * 0.75
+                cx <- cx + (size.X + kerning) * 0.75
             arr
 
         new(family : string, style : FontStyle) =
