@@ -733,9 +733,42 @@ module Rewrite =
             else 
                 Bezier2Seg(p0, p1, p2)
 
-        let bezier3 p0 p1 p2 p3 = 
-            // TODO: check if the segment is actually cubic
-            Bezier3Seg(p0, p1, p2, p3)
+        let inline private (.*) a b = Vec.dot a b
+
+        let bezier3 (p0 : V2d) (p1 : V2d) (p2 : V2d) (p3 : V2d) =
+            // check if the cubic spline is actually quadratic
+            // in order to do so let's start by getting the potential control-point by setting the difference
+            // of both curves to zero:
+            //   p0*(1-t)^3 + 3*p1*(1-t)^2*t + 3*p2*(1-t)*t^2 + p3*t^3 - p0*(1-t)^2 - 2*(1-t)*t*pc - p3*t^2 = 0
+
+            // so let's insert "t = 0.5" :
+            //   p0*0.5^3 + 3*p1*0.5^3 + 3*p2*0.5^3 + p3*0.5^3 - p0*0.5^2 - 2*0.5^2*pc - p3*0.5^2 = 0  
+            //   p0*0.5^2 + 3*p1*0.5^2 + 3*p2*0.5^2 + p3*0.5^2 - p0*0.5 - 2*0.5*pc - p3*0.5 = 0  
+            //   p0*(0.5^2 - 0.5) + p1*(3*0.5^2) + p2*(3*0.5^2) + p3*(0.5^2 - 0.5) - pc = 0
+            //   pc = -p0/4 + p1*(3/4) + p2*(3/4) - p3/4
+
+
+            // in order to determine the quality of the approximation we use the distance function:
+            // distance(t) = cubic(t) - approximatedquadratic(t)
+            //   distance(t) = p0*(1-t)^3 + 3*p1*(1-t)^2*t + 3*p2*(1-t)*t^2 + p3*t^3 - p0*(1-t)^2 - 2*t*(1-t)*(-p0/4 + p1*(3/4) + p2*(3/4) - p3/4) - p3*t^2 = 0
+            // since distance might erase itself (negative values, etc.) we want to calculate the area between both curves and
+            // therefore use the formula:
+            //   F = integrate [ distance(t)^2; 0; 1] = 0      
+            // which can be integrated using Wolframalpha and yields the simple forumla:
+            // http://www.wolframalpha.com/input/?i=integrate+(p0*(1-t)%5E3+%2B+3*p1*(1-t)%5E2*t+%2B+3*p2*(1-t)*t%5E2+%2B+p3*t%5E3+-+p0*(1-t)%5E2+-+2*t*(1-t)*(-p0%2F4+%2B+p1*(3%2F4)+%2B+p2*(3%2F4)+-+p3%2F4)+-+p3*t%5E2)%5E2+from+0+to+1
+            //   F = (1 / 840) * (p0 - 3*p1 + 3*p2 - p3)^2 
+            // finally (in order to get the area) we need to compute the sqrt of F
+            let areaBetween = 
+                sqrt(
+                    let vec = p0 - 3.0*p1 + 3.0*p2 - p3 
+                    Vec.dot vec vec / 840.0
+                )
+
+            if Fun.IsTiny(areaBetween, 1.0E-6) then
+                let pc = (3.0*(p1 + p2) - p0 - p3)/4.0
+                Bezier2Seg(p0, pc, p3)
+            else
+                Bezier3Seg(p0, p1, p2, p3)
 
         let point (t : float) (seg : PathSegment) =
             let t = clamp 0.0 1.0 t
@@ -1150,7 +1183,13 @@ module Rewrite =
                 realIntersections |> Seq.isEmpty |> not
 
                     
-            let allSplines = p.outline |> Array.choose (function Bezier3(p0, p1, p2, p3) -> Some(Polygon2d(p0, p1, p2, p3)) | _ -> None)
+            let allSplines = 
+                p.outline |> Array.choose (fun s ->
+                    match s with
+                        | Bezier3(p0, p1, p2, p3) -> Some(Polygon2d(p0, p1, p2, p3))
+                        | Bezier2(p0, p1, p2) -> Some(Polygon2d(p0, p1, p2))
+                        | _ -> None
+                )
 
             let rec run (l : list<PathSegment>) =
                 match l with
@@ -1163,18 +1202,33 @@ module Rewrite =
                         run rest
 
                     | Bezier2(p0, p1, p2) :: rest ->
-                        start p0
-                        add p0
-
+                        let q = Polygon2d(p0, p1, p2)
                         let p1Inside = p1.PosLeftOfLineValue(p0, p2) > 0.0
-                        if p1Inside then add p1
 
-                        boundaryTriangles.AddRange [p0; p1; p2]
-                        boundaryCoords.AddRange [V3d(0,0,0); V3d(0.5, 0.0, 0.5); V3d(1,1,1)]
+                        let overlapping = allSplines |> Seq.exists (overlap q)
+                        if overlapping && not p1Inside then
 
-                        add p2
-                        current <- p2
-                        run rest
+                            let m0 = 0.5 * (p0 + p1)
+                            let m1 = 0.5 * (p1 + p2)
+                            let pp = 0.5 * (m0 + m1)
+
+                            run (Bezier2(p0,m0,pp)::Bezier2(pp, m1, p2)::rest)
+
+                        else
+                            start p0
+                            add p0
+
+                            if p1Inside then add p1
+
+                            boundaryTriangles.AddRange [p0; p1; p2]
+                            if p1Inside then
+                                boundaryCoords.AddRange [V3d(0,0,0); V3d(-0.5, 0.0, -0.5); V3d(-1,1,-1)]
+                            else
+                                boundaryCoords.AddRange [V3d(0,0,0); V3d(0.5, 0.0, 0.5); V3d(1,1,1)]
+
+                            add p2
+                            current <- p2
+                            run rest
 
                     | (Bezier3(p0, p1, p2, p3) as s) :: rest ->
                         
@@ -1256,16 +1310,35 @@ module Rewrite =
                     if polygons.Count > 0 then Some polygons.[polygons.Count-1]
                     else None
 
-                let w = polygon.ComputeWindingNumber()
+                let containing =
+                    polygons 
+                        |> Seq.indexed 
+                        |> Seq.tryFind (fun (i,p) -> p.IsFullyContainedInside polygon || polygon.IsFullyContainedInside p)
+      
 
 
-                match last with
-                    | Some last when polygon.IsFullyContainedInside last ->
-                        polygons.[polygons.Count-1] <- mergePolys last polygon
+                // p0, p1, p2, p3
+
+
+                // p0*(1-t)^3 + 3*p1*(1-t)^2*t + 3*p2*(1-t)*t^2 + p3*t^3 - p0*(1-t)^2 - 2*t*pc - p3*t^2 = 0
+
+                // t = 0.5 :
+                // p0*0.5^3 + 3*p1*0.5^3 + 3*p2*0.5^3 + p3*0.5^3 - p0*0.5^2 - 2*0.5*pc - p3*0.5^2 = 0  
+                // p0*0.5^2 + 3*p1*0.5^2 + 3*p2*0.5^2 + p3*0.5^2 - p0*0.5 - 2*pc - p3*0.5 = 0  
+                //-p0/4 + p1*(3/4) + p2*(3/4) - p3/4 = 2*pc
+                //-p0/8 + p1*(3/8) + p2*(3/8) - p3/8 = pc
+
+                match containing with
+                    | Some (i, other) ->
+                        polygons.[i] <- mergePolys other polygon
 
                     
-                    | Some last when last.IsFullyContainedInside polygon ->
-                        polygons.[polygons.Count-1] <- mergePolys polygon last
+//                    | Some last when polygon.IsFullyContainedInside last ->
+//                        polygons.[polygons.Count-1] <- mergePolys last polygon
+//
+//                    
+//                    | Some last when last.IsFullyContainedInside polygon ->
+//                        polygons.[polygons.Count-1] <- mergePolys polygon last
 
                     | _ ->
                         polygons.Add polygon
@@ -1777,7 +1850,7 @@ module PathComponentTest =
 //        let font = new Font(c.Families.[0], 1.0f)
 
 
-        let test = Rewrite.Font("Comic Sans", FontStyle.Regular)
+        let test = Rewrite.Font("Times New Roman", FontStyle.Regular)
 //        let str = Mod.init "hi."
 //        let chars =
 //            str |> Mod.map (fun str ->
@@ -1790,24 +1863,7 @@ module PathComponentTest =
 
         let fillMode = Mod.init Aardvark.Base.Rendering.FillMode.Fill
         let aa = Mod.init true
-        let text = Mod.init "b"
-
-
-        let outline =
-            IndexedGeometry(
-                Mode = IndexedGeometryMode.LineStrip,
-                IndexedAttributes =
-                    SymDict.ofList [
-                        DefaultSemantic.Positions, [| V3f(0.32666f,0.46582f, 0.0f); V3f(0.474609f,0.39209f, 0.0f); V3f(0.631836f,0.464111f, 0.0f); V3f(0.6875f,0.658691f, 0.0f); V3f(0.625244f,0.860107f, 0.0f); V3f(0.468262f,0.934082f, 0.0f); V3f(0.32666f,0.881836f, 0.0f); V3f(0.32666f,0.921875f, 0.0f); V3f(0.234375f,0.921875f, 0.0f); V3f(0.234375f,0.206055f, 0.0f); V3f(0.32666f,0.206055f, 0.0f); V3f(0.32666f,0.46582f, 0.0f); V3f(0.368652f,0.49349f, 0.0f); V3f(0.32666f,0.552734f, 0.0f); V3f(0.32666f,0.798828f, 0.0f); V3f(0.366048f,0.84082f, 0.0f); V3f(0.411296f,0.861816f, 0.0f); V3f(0.462402f,0.861816f, 0.0f); V3f(0.502116f,0.861816f, 0.0f); V3f(0.533691f,0.844808f, 0.0f); V3f(0.557129f,0.810791f, 0.0f); V3f(0.580566f,0.776774f, 0.0f); V3f(0.592285f,0.726074f, 0.0f); V3f(0.592285f,0.658691f, 0.0f); V3f(0.592285f,0.594889f, 0.0f); V3f(0.581217f,0.546468f, 0.0f); V3f(0.559082f,0.513428f, 0.0f); V3f(0.536947f,0.480387f, 0.0f); V3f(0.506022f,0.463867f, 0.0f); V3f(0.466309f,0.463867f, 0.0f); V3f(0.415202f,0.463867f, 0.0f); V3f(0.368652f,0.49349f, 0.0f); V3f(0.32666f,0.46582f, 0.0f) |] :> Array
-
-                    ]
-            )
-
-
-        let osg = 
-            outline
-                |> Sg.ofIndexedGeometry
-                |> Sg.effect [DefaultSurfaces.constantColor C4f.Green |> toEffect]
+        let text = Mod.init "A"
 
 
 
@@ -1829,8 +1885,7 @@ module PathComponentTest =
                |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, V3d.OIO)  |> Mod.constant)
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
-               |> Sg.andAlso osg
-
+         
                |> Sg.fillMode fillMode
 
                |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(V3d.IOO, -V3d.OIO, -V3d.OOI)  |> Mod.constant)
