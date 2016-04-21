@@ -1177,7 +1177,7 @@ module Rewrite =
                             for v in q1.EdgeLines do
                                 let mutable t = nan
                                 match u.Ray2d.Intersects(v, &t) with
-                                    | true when t > 0.1 && t < 0.9 -> yield true
+                                    | true when t > 0.001 && t < 0.999 -> yield true
                                     | _ -> ()
                     }
                 realIntersections |> Seq.isEmpty |> not
@@ -1206,7 +1206,7 @@ module Rewrite =
                         let p1Inside = p1.PosLeftOfLineValue(p0, p2) > 0.0
 
                         let overlapping = allSplines |> Seq.exists (overlap q)
-                        if overlapping && not p1Inside then
+                        if overlapping then
 
                             let m0 = 0.5 * (p0 + p1)
                             let m1 = 0.5 * (p1 + p2)
@@ -1238,7 +1238,7 @@ module Rewrite =
                         let p2Inside = p2.PosLeftOfLineValue(p0, p3) > 0.0
 
                         let overlapping = allSplines |> Seq.exists (overlap q)
-                        if overlapping && not (p1Inside || p2Inside) then
+                        if overlapping then
 
                             let m0 = 0.5 * (p1 + p0)
                             let m1 = 0.5 * (p1 + p2)
@@ -1277,10 +1277,14 @@ module Rewrite =
             run (Array.toList p.outline)
 
             // merge the interior polygons (respecting holes)
-            let innerPoints = innerPoints |> Seq.map (CSharpList.toArray >> Polygon2d) |> Seq.toList
+            let innerPoints = innerPoints |> CSharpList.map (CSharpList.toArray >> Polygon2d)
+
+
 
             let mergePolys(a : Polygon2d) (b : Polygon2d) =
-                
+
+                //let b = b.Reversed
+
                 let distances =
                     seq {
                         for i in 0..a.PointCount-1 do
@@ -1301,72 +1305,67 @@ module Rewrite =
                 let aperm = a.GetPointArray() |> rot i
                 let bperm = b.GetPointArray() |> rot j
 
+
+
                 // a0 ... an,a0, b0 ... bn,b0, a0
                 Array.concat [ aperm; bperm; [|aperm.[0]|] ] |> Polygon2d
 
             let polygons = List<Polygon2d>()
+
+            //innerPoints.[0] <- innerPoints.[0].Reversed
+
             for polygon in innerPoints do
                 let last =
                     if polygons.Count > 0 then Some polygons.[polygons.Count-1]
                     else None
 
-                let containing =
-                    polygons 
-                        |> Seq.indexed 
-                        |> Seq.tryFind (fun (i,p) -> p.IsFullyContainedInside polygon || polygon.IsFullyContainedInside p)
-      
-
-
-                // p0, p1, p2, p3
-
-
-                // p0*(1-t)^3 + 3*p1*(1-t)^2*t + 3*p2*(1-t)*t^2 + p3*t^3 - p0*(1-t)^2 - 2*t*pc - p3*t^2 = 0
-
-                // t = 0.5 :
-                // p0*0.5^3 + 3*p1*0.5^3 + 3*p2*0.5^3 + p3*0.5^3 - p0*0.5^2 - 2*0.5*pc - p3*0.5^2 = 0  
-                // p0*0.5^2 + 3*p1*0.5^2 + 3*p2*0.5^2 + p3*0.5^2 - p0*0.5 - 2*pc - p3*0.5 = 0  
-                //-p0/4 + p1*(3/4) + p2*(3/4) - p3/4 = 2*pc
-                //-p0/8 + p1*(3/8) + p2*(3/8) - p3/8 = pc
-
-                match containing with
-                    | Some (i, other) ->
-                        polygons.[i] <- mergePolys other polygon
-
-                    
-//                    | Some last when polygon.IsFullyContainedInside last ->
-//                        polygons.[polygons.Count-1] <- mergePolys last polygon
+//                let containing =
+//                    polygons 
+//                        |> Seq.indexed 
+//                        |> Seq.tryFind (fun (i,p) -> p.IsFullyContainedInside polygon || polygon.IsFullyContainedInside p)
+//      
+                
+                match last with
+//                    | Some (i, other) ->
+//                        polygons.[i] <- mergePolys other polygon
 //
 //                    
-//                    | Some last when last.IsFullyContainedInside polygon ->
-//                        polygons.[polygons.Count-1] <- mergePolys polygon last
+                    | Some last when polygon.IsFullyContainedInside last ->
+                        
+                        polygons.[polygons.Count-1] <- mergePolys last polygon
+
+                    
+                    | Some last when last.IsFullyContainedInside polygon ->
+                        polygons.[polygons.Count-1] <- mergePolys polygon last
 
                     | _ ->
                         polygons.Add polygon
 
-            for p in polygons do
-                let str = p.GetPointArray() |> Array.map (fun v -> sprintf "V3f(%gf,%gf, 0.0f)}" v.X v.Y) |> String.concat "; " |> sprintf "[| %s |] :> Array"
-                str |> File.writeAllText @"C:\Users\schorsch\Desktop\outline.fs"
-
             // triangulate the interior polygons (marking all vertices as interior ones => fst = 0)
             let interiorTriangles =
-                polygons 
+                polygons
                 |> CSharpList.toArray
                 |> Array.collect (fun p ->
+                    let p = Polygon2d(p.GetPointArray() |> Array.take (p.PointCount-1))
                     let poly = p.ToPolygon3d (fun v -> V3d(v, 0.0))
-                    let sub = p.ComputeNonConcaveSubPolygons(Constant.PositiveTinyValue)
-                    let test = 
-                        sub |> Seq.collect (fun i ->
-                            let p = Polygon2d(i |> Array.map (fun i -> p.[i])).ToPolygon3d(fun v -> V3d(v, 0.0))
+                    
+                    let idx = poly.ComputeTriangulationOfConcavePolygon(1.0E-6)
+                    idx |> Array.map (fun i -> poly.[i])
 
-                            let idx = p.ComputeTriangulationOfConcavePolygon(Constant.PositiveTinyValue)
-
-                            idx |> Array.map (fun i -> p.[i])
-                        )
+//                    let sub = p.ComputeNonConcaveSubPolygons(1.0E-6)
+//                    let test = 
+//                        sub |> Seq.collect (fun i ->
+//                            let p = Polygon2d(i |> Array.map (fun i -> p.[i])).ToPolygon3d(fun v -> V3d(v, 0.0))
+//
+//                            let idx = p.ComputeTriangulationOfConcavePolygon(1.0E-6)
+//
+//                            idx |> Array.map (fun i -> p.[i])
+//                        )
 //                    let index = poly.ComputeTriangulationOfConcavePolygon(Constant.PositiveTinyValue)
 //                
 //
 //                    index |> Array.map (fun i -> poly.[i])
-                    test |> Seq.toArray
+                    //test |> Seq.toArray
                 )
 
             // union the interior with the bounary triangles
@@ -1850,7 +1849,7 @@ module PathComponentTest =
 //        let font = new Font(c.Families.[0], 1.0f)
 
 
-        let test = Rewrite.Font("Times New Roman", FontStyle.Regular)
+        let test = Rewrite.Font("Consolas", FontStyle.Regular)
 //        let str = Mod.init "hi."
 //        let chars =
 //            str |> Mod.map (fun str ->
@@ -1863,9 +1862,40 @@ module PathComponentTest =
 
         let fillMode = Mod.init Aardvark.Base.Rendering.FillMode.Fill
         let aa = Mod.init true
-        let text = Mod.init "A"
+        
+        let all = "abcdefghijklmnopqrstuvwxyz\r\nABCDEFGHIJKLMNOPQRSTUVWXYZ\r\n1234567890 ?ß\\\r\n^°!\"§$%&/()=?´`@+*~#'<>|,;.:-_€"
+        
+        let text = Mod.init all
 
+        let osg =
+            let outline = 
+                [| 
+                    V2d(0.34326171875, 0.51708984375); V2d(0.26220703125, 0.4599609375); V2d(0.23583984375, 0.37109375); V2d(0.2919921875, 0.23974609375); V2d(0.44140625, 0.1865234375); V2d(0.59228515625, 0.240966796875); V2d(0.6494140625, 0.37353515625); V2d(0.623291015625, 0.460205078125); V2d(0.5439453125, 0.51708984375); V2d(0.644287109375, 0.58642578125); V2d(0.6787109375, 0.70068359375); V2d(0.61376953125, 0.85498046875); V2d(0.44287109375, 0.91748046875); V2d(0.27197265625, 0.854736328125); V2d(0.20703125, 0.6982421875); V2d(0.242431640625, 0.581298828125); V2d(0.34326171875, 0.51708984375); V2d(0.391113251447678, 0.483398482203484); V2d(0.443359375, 0.4833984375); V2d(0.494140602648258, 0.483398489654064); V2d(0.526611328125, 0.451416015625); V2d(0.559081956744194, 0.419433623552322); V2d(0.55908203125, 0.373046875); V2d(0.559081971645355, 0.32470703125); V2d(0.525634765625, 0.291748046875); V2d(0.492187470197678, 0.2587890625); V2d(0.4423828125, 0.2587890625); V2d(0.392089828848839, 0.2587890625); V2d(0.35888671875, 0.291015625); V2d(0.325683578848839, 0.323242217302322); V2d(0.32568359375, 0.3681640625); V2d(0.325683586299419, 0.418945349752903); V2d(0.3583984375, 0.451171875); V2d(0.391113251447678, 0.483398482203484); V2d(0.34326171875, 0.51708984375); V2d(0.378906227648258, 0.55517578125); V2d(0.338134765625, 0.59619140625); V2d(0.297363273799419, 0.63720703125); V2d(0.29736328125, 0.69873046875); V2d(0.297363266348839, 0.736328095197678); V2d(0.315185546875, 0.771484375); V2d(0.333007805049419, 0.806640610098839); V2d(0.3681640625, 0.825927734375); V2d(0.403320297598839, 0.845214813947678); V2d(0.44384765625, 0.84521484375); V2d(0.5068359375, 0.845214813947678); V2d(0.5478515625, 0.8046875); V2d(0.5888671875, 0.764160111546516); V2d(0.5888671875, 0.70166015625); V2d(0.588867172598839, 0.638183549046516); V2d(0.546630859375, 0.5966796875); V2d(0.504394486546516, 0.555175796151161); V2d(0.44091796875, 0.55517578125); V2d(0.378906227648258, 0.55517578125)
+                |]
 
+            let p = Polygon2d outline
+
+            let rand = Random()
+            let lines = 
+                p.ComputeNonConcaveSubPolygons(1.0E-6)
+                    |> Seq.toArray
+                    |> Array.map (fun idx ->
+                        let arr = idx |> Array.map (fun i -> p.[i])
+                        let positions = arr.PairChainWrap() |> Seq.toArray |> Array.collect (fun p -> [|p.E0; p.E1|])
+                        let colors = Array.create positions.Length (C4b(rand.Next(255), rand.Next(255), rand.Next(255), 255))
+                        positions, colors
+                    )
+
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.LineList,
+                IndexedAttributes = 
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, lines |> Array.collect (fst >> Array.map V2f.op_Explicit) :> Array
+                        DefaultSemantic.Colors, lines |> Array.collect snd :> Array
+                    ]
+            )
+            |> Sg.ofIndexedGeometry
+            |> Sg.effect [DefaultSurfaces.vertexColor |> toEffect]
 
         let size = 0.5
         let sg =
@@ -1887,6 +1917,7 @@ module PathComponentTest =
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
          
                |> Sg.fillMode fillMode
+               //|> Sg.andAlso osg
 
                |> Sg.trafo (Trafo3d.FromOrthoNormalBasis(V3d.IOO, -V3d.OIO, -V3d.OOI)  |> Mod.constant)
                //|> Sg.trafo (win.Sizes |> Mod.map (fun s -> Trafo3d.Scale((float s.Y / float s.X), 1.0, 1.0) * Trafo3d.Scale(size, size, 1.0)))        
