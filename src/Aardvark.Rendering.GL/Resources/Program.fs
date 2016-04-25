@@ -257,9 +257,10 @@ module ProgramReflector =
             GL.GetActiveAttrib(p, a, 1024, &length, &size, &t, builder)
             let name = builder.ToString()
             
-            let location = GL.GetAttribLocation(p, name)
 
-            yield { attributeIndex = location; size = size; name = name; semantic = name; attributeType = t }
+            let location = GL.GetAttribLocation(p, name)
+            if location >= 0 then
+                yield { attributeIndex = location; size = size; name = name; semantic = name; attributeType = t }
         ]
 
     let getActiveOutputs (p : int) =
