@@ -69,6 +69,7 @@ NUGET
     NUnit.Extension.NUnitV2ResultWriter (3.2)
     NUnit.Extension.VSProjectLoader (3.2)
     OpenHardwareMonitor (0.7.1)
+    Poly2Tri (1.0.1)
     Rx-Core (2.2.5)
       Rx-Interfaces (>= 2.2.5)
     Rx-Interfaces (2.2.5)

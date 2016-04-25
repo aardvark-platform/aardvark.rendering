@@ -711,6 +711,33 @@ module ``Move To Base`` =
         let inline evaluate (t : float) (p : Polynomial2d) = p.Evaluate t
         let inline derivative (p : Polynomial2d) = p.Derivative
 
+module Poly2Tri =
+    open Poly2Tri
+    open Poly2Tri.Triangulation
+    open Poly2Tri.Triangulation.Polygon
+
+    let private toInternal (p : Polygon2d) =
+        Polygon(p.Points |> Seq.map (fun v -> PolygonPoint(v.X, v.Y)) |> Seq.toArray)
+
+    let triangulate (polygon : Polygon2d) (holes : seq<Polygon2d>) =
+        let p = toInternal polygon
+
+        for h in holes do
+            p.AddHole(toInternal h)
+        
+        P2T.Triangulate [p]
+
+
+        p.Triangles
+            |> Seq.map (fun t -> 
+                let p0 = t.Points.[0]
+                let p1 = t.Points.[1]
+                let p2 = t.Points.[2]
+                Triangle2d(V2d(p0.X, p0.Y), V2d(p1.X, p1.Y), V2d(p2.X, p2.Y))
+               )
+            |> Seq.toList
+            
+
 
 module Rewrite =
     type PathSegment =
@@ -1310,7 +1337,9 @@ module Rewrite =
                 // a0 ... an,a0, b0 ... bn,b0, a0
                 Array.concat [ aperm; bperm; [|aperm.[0]|] ] |> Polygon2d
 
-            let polygons = List<Polygon2d>()
+            let polygons = List<Polygon2d * List<Polygon2d>>()
+
+  
 
             //innerPoints.[0] <- innerPoints.[0].Reversed
 
@@ -1330,27 +1359,35 @@ module Rewrite =
 //                        polygons.[i] <- mergePolys other polygon
 //
 //                    
-                    | Some last when polygon.IsFullyContainedInside last ->
-                        
-                        polygons.[polygons.Count-1] <- mergePolys last polygon
+                    | Some (last, holes) when polygon.IsFullyContainedInside last ->
+                        holes.Add(polygon)
+                        //polygons.[polygons.Count-1] <- mergePolys last polygon
 
                     
-                    | Some last when last.IsFullyContainedInside polygon ->
-                        polygons.[polygons.Count-1] <- mergePolys polygon last
+                    | Some (last, holes) when last.IsFullyContainedInside polygon ->
+                        assert (holes.Count = 0)
+                        polygons.[polygons.Count-1] <- (polygon, List [last])
 
                     | _ ->
-                        polygons.Add polygon
+                        polygons.Add (polygon, List())
 
             // triangulate the interior polygons (marking all vertices as interior ones => fst = 0)
             let interiorTriangles =
                 polygons
                 |> CSharpList.toArray
-                |> Array.collect (fun p ->
-                    let p = Polygon2d(p.GetPointArray() |> Array.take (p.PointCount-1))
-                    let poly = p.ToPolygon3d (fun v -> V3d(v, 0.0))
-                    
-                    let idx = poly.ComputeTriangulationOfConcavePolygon(1.0E-6)
-                    idx |> Array.map (fun i -> poly.[i])
+                |> Array.collect (fun (p, holes) ->
+                    let triangles = Poly2Tri.triangulate p holes
+
+                    triangles 
+                        |> List.collect (fun t -> [t.P0; t.P1; t.P2]) 
+                        |> List.map (fun v -> V3d(v, 0.0))
+                        |> List.toArray
+
+//                    let p = Polygon2d(p.GetPointArray() |> Array.take (p.PointCount-1))
+//                    let poly = p.ToPolygon3d (fun v -> V3d(v, 0.0))
+//                    
+//                    let idx = poly.ComputeTriangulationOfConcavePolygon(1.0E-6)
+//                    idx |> Array.map (fun i -> poly.[i])
 
 //                    let sub = p.ComputeNonConcaveSubPolygons(1.0E-6)
 //                    let test = 
@@ -1593,6 +1630,17 @@ module Rewrite =
             Font(f)
 
         new(family : string) = Font(family, FontStyle.Regular)
+
+
+        static member FromFile (path : string, style : FontStyle) =
+            let coll = new System.Drawing.Text.PrivateFontCollection()
+            coll.AddFontFile(path)
+            let family = coll.Families.[0]
+            let f = new System.Drawing.Font(family, 1.0f, style, GraphicsUnit.Point)
+            Font(f)
+
+        static member FromFile (path : string) =
+            Font.FromFile(path, FontStyle.Regular)
 
     and FontCache(r : IRuntime, f : Font) =
         let pool = Aardvark.Base.Rendering.GeometryPool.createAsync r
@@ -1844,12 +1892,9 @@ module PathComponentTest =
                     yield c, box
             |]
 
-//        let c = new System.Drawing.Text.PrivateFontCollection()
-//        c.AddFontFile(@"StarJedi.ttf")
-//        let font = new Font(c.Families.[0], 1.0f)
 
 
-        let test = Rewrite.Font("Consolas", FontStyle.Regular)
+        let test = Rewrite.Font("Consolas", FontStyle.Italic)
 //        let str = Mod.init "hi."
 //        let chars =
 //            str |> Mod.map (fun str ->
