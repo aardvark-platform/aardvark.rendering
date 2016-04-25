@@ -212,14 +212,15 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
             dirtyPoolIds <- Array.init (1 + ctx.MaxUniformBufferPoolId) (fun _ -> ref [])
 
         if dirtyBufferViews.Count > 0 then
-            System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
+            for d in dirtyBufferViews do
+            //System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, fun (d : ChangeableResource<UniformBufferView>) ->
                 d.UpdateCPU(x)
                 d.UpdateGPU(x) |> ignore
 
                 let view = d.Resource.GetValue()
                 System.Threading.Interlocked.Change(dirtyPoolIds.[view.Pool.PoolId], fun l -> view::l) |> ignore
                 System.Threading.Interlocked.Increment &viewUpdateCount |> ignore
-            ) |> ignore
+            //) |> ignore
 
         updateCPUTime.Stop()
 
@@ -256,14 +257,15 @@ type RenderTask(runtime : IRuntime, fboSignature : IFramebufferSignature, ctx : 
             
         let dirtyResources = System.Threading.Interlocked.Exchange(&dirtyResources, HashSet())
         if dirtyResources.Count > 0 then
-            System.Threading.Tasks.Parallel.ForEach(dirtyResources, fun (d : IChangeableResource) ->
+            for d in dirtyResources do
+            //System.Threading.Tasks.Parallel.ForEach(dirtyResources, fun (d : IChangeableResource) ->
                 lock d (fun () ->
                     if d.OutOfDate then
                         d.UpdateCPU(x)
                     else
                         d.Outputs.Add x |> ignore
                 )
-            ) |> ignore
+            //) |> ignore
   
             let mutable cc = Unchecked.defaultof<_>
             for d in dirtyResources do

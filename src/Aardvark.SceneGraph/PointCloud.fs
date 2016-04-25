@@ -5,6 +5,13 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 
+open System.Threading
+open System.Collections.Concurrent
+
+
+
+
+
 type Progress =
     {   
         ActiveNodeCount     : int ref
@@ -331,24 +338,111 @@ module PointCloudRenderObjectSemantics =
                     2.0 * float wantedPixelDistance / float size
                 )
 
-            let content =
-                ASet.custom (fun self ->
-                    let view = view.GetValue self
-                    let proj = proj.GetValue self
-                    let wantedNearPlaneDistance = wantedNearPlaneDistance.GetValue self
+
+    
+//            let queue =
+//                let queue = new ConcurrentDeltaQueue<'a>()
+//
+////                let a = 
+////                    { new AdaptiveObject() with
+////                        member x.Run() = 
+////                            let v = view.GetValue ()
+////                            let p = proj.GetValue ()
+////                            let wantedNearPlaneDistance = wantedNearPlaneDistance.GetValue self
+////                    
+////                            for a in node.Data.Dependencies do a.GetValue self |> ignore
+////                            System.Threading.Thread.Sleep(100)
+////                            let set = node.Data.Rasterize(v, p, wantedNearPlaneDistance)
+////
+////                            let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
+////                            let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+////
+////                            let res = Seq.append add rem |> Seq.toList
+////                    
+////                            view.Outputs.Add self |> ignore
+////                            proj.Outputs.Add self |> ignore
+////
+////                    
+////                            res
+////                    }
+//
+//                let pull =
+//                    async {
+//                        do! Async.SwitchToNewThread()
+//                        while true do
+//                            let! deltas = reader.GetDeltaAsync(null)
+//                            for d in deltas do queue.Enqueue d
+//                    }
+//
+//                let cancel = new CancellationTokenSource()
+//                let task = Async.StartAsTask(pull, cancellationToken = cancel.Token)
+//
+//                let disposable =
+//                    { new IDisposable with
+//                        member x.Dispose() =
+//                            cancel.Cancel()
+//                            reader.Dispose()
+//                    }
+//
+//                queue.Subscription <- disposable
+//                queue
+//
+//            let content =
+//                ASet.custom (fun self ->
+//                    let v = view.GetValue ()
+//                    let p = proj.GetValue ()
+//                    let wantedNearPlaneDistance = wantedNearPlaneDistance.GetValue self
+//                    
+//                    for a in node.Data.Dependencies do a.GetValue self |> ignore
+//                    System.Threading.Thread.Sleep(100)
+//                    let set = node.Data.Rasterize(v, p, wantedNearPlaneDistance)
+//
+//                    let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
+//                    let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+//
+//                    let res = Seq.append add rem |> Seq.toList
+//                    
+//                    res
+//                )
+
+
+
+
+            let deltas = new ConcurrentDeltaQueue<_>()
+            let r = MVar<_>()
+
+            let run =
+                let content = System.Collections.Generic.HashSet<_>()
+                async {
+                    do! Async.SwitchToNewThread()
+                    while true do
+                        
+                        let v = view.GetValue ()
+                        let p = proj.GetValue ()
+                        let wantedNearPlaneDistance = wantedNearPlaneDistance.GetValue ()
                     
-                    for a in node.Data.Dependencies do a.GetValue self |> ignore
-                    let set = node.Data.Rasterize(view, proj, wantedNearPlaneDistance)
+                        for a in node.Data.Dependencies do a.GetValue () |> ignore
 
-                    let add = set |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add
-                    let rem = self.Content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+                        //System.Threading.Thread.Sleep(100)
+                        let set = node.Data.Rasterize(v, p, wantedNearPlaneDistance)
 
-                    let res = Seq.append add rem |> Seq.toList
-                    res
-                )
+                        let add = set |> Seq.filter (content.Contains >> not) |> Seq.map Add
+                        let rem = content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
 
+                        let res = Seq.append add rem |> Seq.toList
+                    
+                        for r in res do 
+                            deltas.Enqueue r
+                            match r with 
+                                | Add v -> content.Add v |> ignore
+                                | Rem v -> content.Remove v |> ignore
+                }
 
-            let deltas = ConcurrentDeltaQueue.ofASet content
+            view.AddMarkingCallback (fun () -> r.Put ()) |> ignore
+            proj.AddMarkingCallback (fun () -> r.Put ()) |> ignore
+            wantedNearPlaneDistance.AddMarkingCallback (fun () -> r.Put ()) |> ignore
+
+            r.Put()
 
             let deltaProcessing =    
                 async {
@@ -406,6 +500,8 @@ module PointCloudRenderObjectSemantics =
                 Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
+            Async.StartAsTask(run, cancellationToken = cancel.Token) |> ignore
+            
 
             { new IDisposable with member x.Dispose() = () }
 
