@@ -74,6 +74,7 @@
     <Compile Include="GeometryPool.fs" />
     <Compile Include="DrawCallSet.fs" />
     <Compile Include="LoD.fs" />
+    <Compile Include="ResourceManagement.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
