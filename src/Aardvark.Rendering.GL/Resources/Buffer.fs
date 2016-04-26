@@ -488,7 +488,7 @@ module BufferExtensions =
 module IndirectBufferExtensions =
 
     [<StructLayout(LayoutKind.Sequential)>]
-    type private DrawArraysIndirectCommand =
+    type DrawArraysIndirectCommand =
         struct
             val mutable public count : uint32
             val mutable public instanceCount : uint32
@@ -505,7 +505,7 @@ module IndirectBufferExtensions =
         end
 
     [<StructLayout(LayoutKind.Sequential)>]
-    type private DrawElementsIndirectCommand =
+    type DrawElementsIndirectCommand =
         struct
             val mutable public count : uint32
             val mutable public instanceCount : uint32

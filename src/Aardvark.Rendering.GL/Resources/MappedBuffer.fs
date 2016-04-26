@@ -107,6 +107,22 @@ type MappedBuffer(ctx : Context) =
             resize x newCapacity
         )
 
+    member x.Use(offset : nativeint, size : nativeint, f : nativeint -> 'a) =
+        if size + offset > buffer.SizeInBytes then failwith "insufficient buffer size"
+        let res = f (mappedPtr + offset)
+
+        using ctx.ResourceLock (fun _ ->
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
+            GL.Check "[MappedBuffer] could bind buffer"
+
+            GL.FlushMappedBufferRange(BufferTarget.CopyWriteBuffer, offset, size)
+            GL.Check "[MappedBuffer] could flush buffer"
+
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+            GL.Check "[MappedBuffer] could unbind buffer"
+        )
+        res
+
     override x.Compute() =
         let delete = Interlocked.Exchange(&oldBuffers, [])
         if not (List.isEmpty delete) then
