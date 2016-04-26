@@ -83,7 +83,7 @@ module Sharing =
                 x.Handle <- 0
 
 
-    type BufferManager(ctx : Context) =
+    type BufferManager(ctx : Context, active : bool) =
         let cache = ConcurrentDictionary<IBuffer, RefCountedBuffer>()
 
         let get (b : IBuffer) =
@@ -96,31 +96,41 @@ module Sharing =
             )
 
         member x.Create(data : IBuffer) =
-            let shared = get data
-            shared.Acquire()
-            shared :> Buffer
+            if active then
+                let shared = get data
+                shared.Acquire()
+                shared :> Buffer
+            else
+                ctx.CreateBuffer data
 
         member x.Update(b : Buffer, data : IBuffer) : Buffer =
-            match b with
-                | :? RefCountedBuffer as b ->
+            if active then
+                match b with
+                    | :? RefCountedBuffer as b ->
                     
-                    let newShared = get data
-                    if newShared = b then
-                        b :> Buffer
-                    else
-                        newShared.Acquire()
-                        b.Release()
-                        newShared :> Buffer
-                | _ ->
-                    ctx.Upload(b, data)
-                    b
+                        let newShared = get data
+                        if newShared = b then
+                            b :> Buffer
+                        else
+                            newShared.Acquire()
+                            b.Release()
+                            newShared :> Buffer
+                    | _ ->
+                        ctx.Upload(b, data)
+                        b
+            else
+                ctx.Upload(b, data)
+                b
 
         member x.Delete(b : Buffer) =
-            match b with
-                | :? RefCountedBuffer as b -> b.Release()
-                | _ -> ctx.Delete b
+            if active then
+                match b with
+                    | :? RefCountedBuffer as b -> b.Release()
+                    | _ -> ctx.Delete b
+            else
+                ctx.Delete b
 
-    type ArrayBufferManager(ctx : Context) =
+    type ArrayBufferManager(ctx : Context, active : bool) =
         let cache = ConcurrentDictionary<Array, RefCountedBuffer>()
 
         let get (b : Array) =
@@ -133,66 +143,86 @@ module Sharing =
             )
 
         member x.Create(data : Array) =
-            let shared = get data
-            shared.Acquire()
-            shared :> Buffer
+            if active then
+                let shared = get data
+                shared.Acquire()
+                shared :> Buffer
+            else
+                ctx.CreateBuffer data
 
         member x.Update(b : Buffer, data : Array) : Buffer =
-            match b with
-                | :? RefCountedBuffer as b ->
+            if active then
+                match b with
+                    | :? RefCountedBuffer as b ->
                     
-                    let newShared = get data
-                    if newShared = b then
-                        b :> Buffer
-                    else
-                        newShared.Acquire()
-                        b.Release()
-                        newShared :> Buffer
-                | _ ->
-                    ctx.Upload(b, data)
-                    b
+                        let newShared = get data
+                        if newShared = b then
+                            b :> Buffer
+                        else
+                            newShared.Acquire()
+                            b.Release()
+                            newShared :> Buffer
+                    | _ ->
+                        ctx.Upload(b, data)
+                        b
+            else
+                ctx.Upload(b, data)
+                b
 
         member x.Delete(b : Buffer) =
-            match b with
-                | :? RefCountedBuffer as b -> b.Release()
-                | _ -> ctx.Delete b
+            if active then
+                match b with
+                    | :? RefCountedBuffer as b -> b.Release()
+                    | _ -> ctx.Delete b
+            else
+                ctx.Delete b
 
-    type TextureManager(ctx : Context) =
+    type TextureManager(ctx : Context, active : bool) =
         let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
 
         let get (b : ITexture) =
             cache.GetOrAdd(b, fun v -> 
                 RefCountedTexture(
                     ctx,
-                    (fun () -> printfn "created texture"; ctx.CreateTexture b),
-                    (fun () -> printfn "destroyed texture"; cache.TryRemove b |> ignore)
+                    (fun () -> ctx.CreateTexture b),
+                    (fun () -> cache.TryRemove b |> ignore)
                 )
             )
 
         member x.Create(data : ITexture) =
-            let shared = get data
-            shared.Acquire()
-            shared :> Texture
+            if active then
+                let shared = get data
+                shared.Acquire()
+                shared :> Texture
+            else
+                ctx.CreateTexture data
 
         member x.Update(b : Texture, data : ITexture) : Texture =
-            match b with
-                | :? RefCountedTexture as b ->
+            if active then
+                match b with
+                    | :? RefCountedTexture as b ->
                     
-                    let newShared = get data
-                    if newShared = b then
-                        b :> Texture
-                    else
-                        newShared.Acquire()
-                        b.Release()
-                        newShared :> Texture
-                | _ ->
-                    ctx.Upload(b, data)
-                    b
+                        let newShared = get data
+                        if newShared = b then
+                            b :> Texture
+                        else
+                            newShared.Acquire()
+                            b.Release()
+                            newShared :> Texture
+                    | _ ->
+                        ctx.Upload(b, data)
+                        b
+            else
+                ctx.Upload(b, data)
+                b
 
         member x.Delete(b : Texture) =
-            match b with
-                | :? RefCountedTexture as b -> b.Release()
-                | _ -> ctx.Delete b
+            if active then
+                match b with
+                    | :? RefCountedTexture as b -> b.Release()
+                    | _ -> ctx.Delete b
+            else
+                ctx.Delete b
 
 
 
@@ -283,23 +313,42 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
     static let vaoUpdateStats = updateStats ResourceKind.VertexArrayObject
     static let uniformLocationUpdateStats = updateStats ResourceKind.UniformLocation
 
-    let bufferManager = Sharing.BufferManager(ctx)
-    let arrayBufferManager = Sharing.ArrayBufferManager(ctx)
-    let textureManager = Sharing.TextureManager(ctx)
+    let newCache (f : ResourceManager -> ResourceCache<'a>) =
+        match parent with
+            | Some p -> f p
+            | None -> ResourceCache<'a>()
 
-    let arrayBufferCache = ResourceCache<Buffer>()
-    let bufferCache = ResourceCache<Buffer>()
-    let textureCache = ResourceCache<Texture>()
-    let indirectBufferCache = ResourceCache<IndirectBuffer>()
-    let programCache = ResourceCache<Program>()
-    let samplerCache = ResourceCache<Sampler>()
-    let vaoCache = ResourceCache<VertexArrayObject>()
-    let uniformLocationCache = ResourceCache<UniformLocation>()
+    let bufferManager           = Sharing.BufferManager(ctx, shareBuffers)
+    let arrayBufferManager      = Sharing.ArrayBufferManager(ctx, shareBuffers)
+    let textureManager          = Sharing.TextureManager(ctx, shareTextures)
 
-    let uniformBufferManagers = ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
+    let arrayBufferCache        : ResourceCache<Buffer>                 = newCache (fun r -> r.ArrayBufferCache)
+    let bufferCache             : ResourceCache<Buffer>                 = newCache (fun r -> r.BufferCache)
+    let textureCache            : ResourceCache<Texture>                = newCache (fun r -> r.TextureCache)
+    let indirectBufferCache     : ResourceCache<IndirectBuffer>         = newCache (fun r -> r.IndirectBufferCache)
+    let programCache            : ResourceCache<Program>                = newCache (fun r -> r.ProgramCache)
+    let samplerCache            : ResourceCache<Sampler>                = newCache (fun r -> r.SamplerCache)
+    let vaoCache                : ResourceCache<VertexArrayObject>      = newCache (fun r -> r.VAOCache)
+    let uniformLocationCache    : ResourceCache<UniformLocation>        = newCache (fun r -> r.UniformLocationCache)
+
+    let uniformBufferManagers = 
+        match parent with
+            | Some p -> p.UniformBufferManagers
+            | _ -> ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
 
     new(parent, ctx, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, shareTextures, shareBuffers)
     new(ctx, shareTextures, shareBuffers) = ResourceManager(None, ctx, shareTextures, shareBuffers)
+
+    member private x.ArrayBufferCache = arrayBufferCache
+    member private x.BufferCache = bufferCache
+    member private x.TextureCache = textureCache
+    member private x.IndirectBufferCache = indirectBufferCache
+    member private x.ProgramCache = programCache
+    member private x.SamplerCache = samplerCache
+    member private x.VAOCache = vaoCache
+    member private x.UniformLocationCache = uniformLocationCache
+    member private x.UniformBufferManagers = uniformBufferManagers
+
 
     member x.Context = ctx
 
@@ -370,7 +419,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
         let create (s : ISurface) =
             match SurfaceCompilers.compile ctx signature s with
                 | Success program -> program
-                | Error e -> failwithf "[GL] surface compilation failed: %s" e
+                | Error e -> 
+                    Log.error "[GL] surface compilation failed: %s" e
+                    failwithf "[GL] surface compilation failed: %s" e
 
         programCache.GetOrCreate<ISurface>(surface, {
             create = fun b      -> create b
