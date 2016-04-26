@@ -35,33 +35,165 @@ type RefCountedResource<'h>(create : unit -> 'h, delete : 'h -> unit) =
 // 1) Buffer/Texture sharing
 // 2) NullBuffers
 // 3) NullTextures
-type BufferSharing(ctx : Context) =
-    let cache = ConcurrentDictionary<IBuffer, RefCountedResource<Buffer>>()
 
-    let get (b : IBuffer) =
-        cache.GetOrAdd(b, fun v -> 
-            RefCountedResource<_>(
-                (fun () -> ctx.CreateBuffer b),
-                (ctx.Delete)
+module Sharing =
+    
+    type RefCountedBuffer(ctx, create : unit -> Buffer, destroy : unit -> unit) =
+        inherit Buffer(ctx, 0n, 0)
+
+        let mutable refCount = 0
+
+
+
+        member x.Acquire() =
+            if Interlocked.Increment &refCount = 1 then
+                let b = using ctx.ResourceLock (fun _ -> create())
+                x.Handle <- b.Handle
+                x.SizeInBytes <- b.SizeInBytes
+
+        member x.Release() =
+            if Interlocked.Decrement &refCount = 0 then
+                destroy()
+                using ctx.ResourceLock (fun _ -> ctx.Delete x)
+                x.Handle <- 0
+                x.SizeInBytes <- 0n
+
+    type RefCountedTexture(ctx, create : unit -> Texture, destroy : unit -> unit) =
+        inherit Texture(ctx, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, 0, TextureFormat.Rgba, 0L, true)
+
+        let mutable refCount = 0
+
+        member x.Acquire() =
+            if Interlocked.Increment &refCount = 1 then
+                let b = using ctx.ResourceLock (fun _ -> create())
+                x.Handle <- b.Handle
+                x.Dimension <- b.Dimension
+                x.Multisamples <- b.Multisamples
+                x.Size <- b.Size
+                x.Count <- b.Count
+                x.Format <- b.Format
+                x.MipMapLevels <- b.MipMapLevels
+                x.SizeInBytes <- b.SizeInBytes
+                x.ImmutableFormat <- b.ImmutableFormat
+
+        member x.Release() =
+            if Interlocked.Decrement &refCount = 0 then
+                destroy()
+                using ctx.ResourceLock (fun _ -> ctx.Delete x)
+                x.Handle <- 0
+
+
+    type BufferManager(ctx : Context) =
+        let cache = ConcurrentDictionary<IBuffer, RefCountedBuffer>()
+
+        let get (b : IBuffer) =
+            cache.GetOrAdd(b, fun v -> 
+                RefCountedBuffer(
+                    ctx,
+                    (fun () -> ctx.CreateBuffer b),
+                    (fun () -> cache.TryRemove b |> ignore)
+                )
             )
-        )
 
-    member x.Create(data : IBuffer) : RefCountedResource<Buffer> =
-        let shared = get data
-        shared.Acquire()
-        shared
+        member x.Create(data : IBuffer) =
+            let shared = get data
+            shared.Acquire()
+            shared :> Buffer
 
-    member x.Update(b : RefCountedResource<Buffer>, data : IBuffer) : RefCountedResource<Buffer> =
-        let newShared = get data
-        if newShared = b then
-            b
-        else
-            newShared.Acquire()
-            b.Release()
-            newShared
+        member x.Update(b : Buffer, data : IBuffer) : Buffer =
+            match b with
+                | :? RefCountedBuffer as b ->
+                    
+                    let newShared = get data
+                    if newShared = b then
+                        b :> Buffer
+                    else
+                        newShared.Acquire()
+                        b.Release()
+                        newShared :> Buffer
+                | _ ->
+                    ctx.Upload(b, data)
+                    b
 
-    member x.Delete(b : RefCountedResource<Buffer>) =
-        b.Release()
+        member x.Delete(b : Buffer) =
+            match b with
+                | :? RefCountedBuffer as b -> b.Release()
+                | _ -> ctx.Delete b
+
+    type ArrayBufferManager(ctx : Context) =
+        let cache = ConcurrentDictionary<Array, RefCountedBuffer>()
+
+        let get (b : Array) =
+            cache.GetOrAdd(b, fun v -> 
+                RefCountedBuffer(
+                    ctx,
+                    (fun () -> ctx.CreateBuffer b),
+                    (fun () -> cache.TryRemove b |> ignore)
+                )
+            )
+
+        member x.Create(data : Array) =
+            let shared = get data
+            shared.Acquire()
+            shared :> Buffer
+
+        member x.Update(b : Buffer, data : Array) : Buffer =
+            match b with
+                | :? RefCountedBuffer as b ->
+                    
+                    let newShared = get data
+                    if newShared = b then
+                        b :> Buffer
+                    else
+                        newShared.Acquire()
+                        b.Release()
+                        newShared :> Buffer
+                | _ ->
+                    ctx.Upload(b, data)
+                    b
+
+        member x.Delete(b : Buffer) =
+            match b with
+                | :? RefCountedBuffer as b -> b.Release()
+                | _ -> ctx.Delete b
+
+    type TextureManager(ctx : Context) =
+        let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
+
+        let get (b : ITexture) =
+            cache.GetOrAdd(b, fun v -> 
+                RefCountedTexture(
+                    ctx,
+                    (fun () -> printfn "created texture"; ctx.CreateTexture b),
+                    (fun () -> printfn "destroyed texture"; cache.TryRemove b |> ignore)
+                )
+            )
+
+        member x.Create(data : ITexture) =
+            let shared = get data
+            shared.Acquire()
+            shared :> Texture
+
+        member x.Update(b : Texture, data : ITexture) : Texture =
+            match b with
+                | :? RefCountedTexture as b ->
+                    
+                    let newShared = get data
+                    if newShared = b then
+                        b :> Texture
+                    else
+                        newShared.Acquire()
+                        b.Release()
+                        newShared :> Texture
+                | _ ->
+                    ctx.Upload(b, data)
+                    b
+
+        member x.Delete(b : Texture) =
+            match b with
+                | :? RefCountedTexture as b -> b.Release()
+                | _ -> ctx.Delete b
+
 
 
 type UniformBufferView =
@@ -151,6 +283,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
     static let vaoUpdateStats = updateStats ResourceKind.VertexArrayObject
     static let uniformLocationUpdateStats = updateStats ResourceKind.UniformLocation
 
+    let bufferManager = Sharing.BufferManager(ctx)
+    let arrayBufferManager = Sharing.ArrayBufferManager(ctx)
+    let textureManager = Sharing.TextureManager(ctx)
+
     let arrayBufferCache = ResourceCache<Buffer>()
     let bufferCache = ResourceCache<Buffer>()
     let textureCache = ResourceCache<Texture>()
@@ -169,13 +305,12 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
 
     member x.CreateBuffer(data : IMod<Array>) =
         bufferCache.GetOrCreate<Array>(data, {
-            create = fun b      -> ctx.CreateBuffer b
-            update = fun h b    -> ctx.Upload(h, b); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> arrayBufferManager.Create b
+            update = fun h b    -> arrayBufferManager.Update(h, b)
+            delete = fun h      -> arrayBufferManager.Delete h
             stats  = bufferUpdateStats
             kind = ResourceKind.Buffer
         })
-
 
     member x.CreateBuffer(data : IMod<IBuffer>) =
         match data with
@@ -206,18 +341,18 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
 
             | _ ->
                 bufferCache.GetOrCreate<IBuffer>(data, {
-                    create = fun b      -> ctx.CreateBuffer b
-                    update = fun h b    -> ctx.Upload(h, b); h
-                    delete = fun h      -> ctx.Delete h
+                    create = fun b      -> bufferManager.Create b
+                    update = fun h b    -> bufferManager.Update(h, b)
+                    delete = fun h      -> bufferManager.Delete h
                     stats  = bufferUpdateStats
                     kind = ResourceKind.Buffer
                 })
 
     member x.CreateTexture(data : IMod<ITexture>) =
         textureCache.GetOrCreate<ITexture>(data, {
-            create = fun b      -> ctx.CreateTexture b
-            update = fun h b    -> ctx.Upload(h, b); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> textureManager.Create b
+            update = fun h b    -> textureManager.Update(h, b)
+            delete = fun h      -> textureManager.Delete h
             stats  = textureUpdateStats
             kind = ResourceKind.Texture
         })
