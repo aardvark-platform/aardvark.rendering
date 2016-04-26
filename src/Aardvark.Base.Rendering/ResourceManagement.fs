@@ -14,6 +14,7 @@ type IResource =
     abstract member AddRef : unit -> unit
     abstract member RemoveRef : unit -> unit
     abstract member Update : caller : IAdaptiveObject -> FrameStatistics
+    abstract member Kind : ResourceKind
 
 type IResource<'h when 'h : equality> =
     inherit IResource
@@ -26,10 +27,11 @@ type ResourceDescription<'d, 'h when 'h : equality> =
         update : 'h -> 'd -> 'h
         delete : 'h -> unit
         stats : FrameStatistics
+        kind : ResourceKind
     }
 
 [<AbstractClass>]
-type Resource<'h when 'h : equality>() =
+type Resource<'h when 'h : equality>(kind : ResourceKind) =
     inherit AdaptiveObject()
 
     let mutable current = None
@@ -41,12 +43,13 @@ type Resource<'h when 'h : equality>() =
     abstract member Create : Option<'h> -> 'h * FrameStatistics
     abstract member Destroy : 'h -> unit
 
+    member x.Kind = kind
 
     member internal x.OnDispose = onDispose :> IObservable<_>
 
     member x.AddRef() =
         if Interlocked.Increment(&refCount) = 1 then
-            let (h,_) = x.Create None
+            let (h,_) = x.EvaluateAlways null (fun () -> x.Create None)
             current <- Some h
             transact (fun () -> handle.Value <- h)
 
@@ -81,6 +84,7 @@ type Resource<'h when 'h : equality>() =
         member x.Dispose() = x.RemoveRef()
 
     interface IResource<'h> with
+        member x.Kind = kind
         member x.AddRef() = x.AddRef()
         member x.RemoveRef() = x.RemoveRef()
         member x.Handle = x.Handle
@@ -124,7 +128,7 @@ and ResourceCache<'h when 'h : equality>() =
             store.GetOrAdd(key, fun _ -> 
                 let mutable ownsHandle = false
 
-                { new Resource<'h>() with
+                { new Resource<'h>(desc.kind) with
                     member x.Create(old : Option<'h>) =
                         acquire old dataMod
                         let data = dataMod.GetValue x
@@ -194,17 +198,25 @@ type ResourceInputSet() =
             | _ ->
                 ()
 
+    member x.Count = all.Count
+
     member x.Add (r : IResource) =
         lock all (fun () ->
             if all.Add r then
                 lock r (fun () ->
-                    if r.OutOfDate then dirty.Add r |> ignore
+                    if r.OutOfDate then 
+                        Log.warn "the impossible happened"
+                        r.Update(x) |> ignore
+                    else 
+                        r.Outputs.Add x |> ignore
                 )
+                //transact (fun () -> x.MarkOutdated())
                
         )
 
     member x.Remove (r : IResource) =
         lock all (fun () ->
+
             if all.Remove r then
                 dirty.Remove r |> ignore
                 lock r (fun () -> r.Outputs.Remove x |> ignore)
@@ -213,7 +225,7 @@ type ResourceInputSet() =
 
     member x.Update (caller : IAdaptiveObject) =
         x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () ->
-            let rec run(stats : FrameStatistics) = 
+            let rec run (level : int) (stats : FrameStatistics) = 
                 let dirty = 
                     lock all (fun () ->
                         let d = dirty
@@ -221,16 +233,19 @@ type ResourceInputSet() =
                         d
                     )
 
+                if level > 0 && dirty.Count > 0 then
+                    Log.warn "nested shit"
+
                 let mutable stats = stats
                 if dirty.Count > 0 then
                     for d in dirty do
                         stats <- stats + d.Update x
 
-                    run stats
+                    run (level + 1) stats
                 else
                     stats
 
-            run FrameStatistics.Zero
+            run 0 FrameStatistics.Zero
 
         )
 

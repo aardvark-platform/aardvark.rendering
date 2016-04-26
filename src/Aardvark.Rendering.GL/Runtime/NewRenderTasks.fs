@@ -5,6 +5,7 @@ open System.Linq
 open System.Threading
 open System.Collections.Generic
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Base.Runtime
 open Aardvark.Base.Incremental
 open OpenTK.Graphics.OpenGL4
@@ -134,6 +135,7 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
         member x.Run(caller, fbo) = x.Run(caller, fbo)
         member x.FrameId = frameId
 
+
 [<AbstractClass>]
 type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : IFramebufferSignature, debug : bool) as this =
     inherit AbstractRenderTask(manager.Context, fboSignature, debug)
@@ -141,14 +143,15 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
     let ctx = manager.Context
 
     let dirtyLock = obj()
-    let mutable dirtyUniformViews = HashSet<ChangeableResource<UniformBufferView>>()
-    let mutable dirtyResources = HashSet<IChangeableResource>()
-    let mutable dirtyPoolIds = Array.empty
-    let inputSet = RenderTaskInputSet(this) 
+    let resources = new Aardvark.Base.Rendering.ResourceInputSet()
+    let inputSet = InputSet(this) 
+
+//    let mutable dirtyUniformViews = HashSet<ChangeableResource<UniformBufferView>>()
+//    let mutable dirtyResources = HashSet<IChangeableResource>()
+//    let mutable dirtyPoolIds = Array.empty
     let currentContext = Mod.init Unchecked.defaultof<ContextHandle>
 
-    let updateCPUTime = System.Diagnostics.Stopwatch()
-    let updateGPUTime = System.Diagnostics.Stopwatch()
+    let updateResourceTime = System.Diagnostics.Stopwatch()
     let executionTime = System.Diagnostics.Stopwatch()
 
     let mutable frameStatistics = FrameStatistics.Zero
@@ -160,10 +163,14 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
     member x.Manager = manager
 
     member x.AddInput(i : IAdaptiveObject) =
-        inputSet.Add i
+        match i with
+            | :? IResource as r -> resources.Add r
+            | _ -> inputSet.Add i
 
     member x.RemoveInput(i : IAdaptiveObject) =
-        inputSet.Remove i
+        match i with
+            | :? IResource as r -> resources.Remove r
+            | _ -> inputSet.Remove i
 
     member x.AddOneTimeStats (f : FrameStatistics) =
         oneTimeStatistics <- oneTimeStatistics + f
@@ -174,131 +181,27 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
     member x.RemoveStats (f : FrameStatistics) = 
         frameStatistics <- frameStatistics - f
 
-    override x.InputChanged(o : IAdaptiveObject) =
-        match o with
-            | :? ChangeableResource<UniformBufferView> as o ->
-                lock dirtyLock (fun () ->
-                    dirtyUniformViews.Add(o) |> ignore
-                )
-
-            | :? IChangeableResource as o ->
-                lock dirtyLock (fun () ->
-                    dirtyResources.Add(o) |> ignore
-                )
-            | _ -> ()
-
-    member x.UpdateDirtyUniformBufferViews() =
-        let dirtyBufferViews = System.Threading.Interlocked.Exchange(&dirtyUniformViews, HashSet())
-        let mutable viewUpdateCount = 0
-        updateCPUTime.Restart()
-                
-        
-        let totalPoolCount = 1 + ctx.MaxUniformBufferPoolId
-        if dirtyPoolIds.Length <> totalPoolCount then
-            dirtyPoolIds <- Array.init (1 + ctx.MaxUniformBufferPoolId) (fun _ -> ref [])
-
-        if dirtyBufferViews.Count > 0 then
-            System.Threading.Tasks.Parallel.ForEach(dirtyBufferViews, threadOpts,fun (d : ChangeableResource<UniformBufferView>) ->
-                d.UpdateCPU(x)
-                d.UpdateGPU(x) |> ignore
-
-                let view = d.Resource.GetValue()
-                System.Threading.Interlocked.Change(dirtyPoolIds.[view.Pool.PoolId], fun l -> view::l) |> ignore
-                System.Threading.Interlocked.Increment &viewUpdateCount |> ignore
-            ) |> ignore
-
-        updateCPUTime.Stop()
-
-        updateGPUTime.Restart()
-
-        let mutable dirtyPoolCount = 0
-        for pool in inputSet.AllPools do
-            let r = dirtyPoolIds.[pool.PoolId]
-            match !r with
-                | [] -> ()
-                | dirty ->
-                    pool.Upload (List.toArray dirty)
-                    dirtyPoolCount <- dirtyPoolCount + 1
-                    r := []
-
-        updateGPUTime.Stop()
- 
-            
-        let time = updateCPUTime.Elapsed + updateGPUTime.Elapsed
-
-        { FrameStatistics.Zero with 
-            ResourceUpdateCount = float (dirtyPoolCount + viewUpdateCount)
-            ResourceUpdateTime = time
-            ResourceUpdateCounts = 
-                Map.ofList [
-                    ResourceKind.UniformBufferView, float viewUpdateCount
-                    ResourceKind.UniformBuffer, float dirtyPoolCount
-            ]
-        }
-
     member x.UpdateDirtyResources(level : int) =
-        let mutable stats = FrameStatistics.Zero
-        let mutable count = 0 
-        let counts = Dictionary<ResourceKind, ref<int>>()
 
-        let myDirtyResources =
-            lock dirtyLock (fun () ->
-                let current = dirtyResources
-                dirtyResources <- HashSet()
-                current
-            )
+        updateResourceTime.Restart()
+        let stats = resources.Update(x)
 
-        myDirtyResources.IntersectWith(inputSet.Resources)
-
-        let innerStats = 
-            if myDirtyResources.Count > 0 then
-                if level > 0 then Report.Line("nested resource udpate")
-                System.Threading.Tasks.Parallel.ForEach(myDirtyResources, fun (d : IChangeableResource) ->
-                    lock d (fun () ->
-                        if d.OutOfDate then
-                            d.UpdateCPU(x)
-                        else
-                            d.Outputs.Add x |> ignore
-                    )
-                ) |> ignore
-  
-                let mutable cc = Unchecked.defaultof<_>
-                for d in myDirtyResources do
-                    lock d (fun () ->
-                        if d.OutOfDate then
-                            count <- count + 1
-                            if counts.TryGetValue(d.Kind, &cc) then
-                                cc := !cc + 1
-                            else
-                                counts.[d.Kind] <- ref 1
-
-                            stats <- stats + d.UpdateGPU(x)
-                    )
-
-                x.UpdateDirtyResources(level + 1)
-
-            else
-                FrameStatistics.Zero
-
-        let counts = counts |> Dictionary.toSeq |> Seq.map (fun (k,v) -> k,float !v) |> Map.ofSeq
-
-        if level = 0 && Config.SyncUploadsAndFrames && count > 0 then
+     
+        if level = 0 && Config.SyncUploadsAndFrames && stats.ResourceUpdateCount > 0.0 then
             OpenTK.Graphics.OpenGL4.GL.Sync()
 
-        let myStats =
-            { stats with
-                ResourceUpdateCount = stats.ResourceUpdateCount + float count
-                ResourceUpdateCounts = counts
-                ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
-            }
+        updateResourceTime.Stop()
 
-        myStats + innerStats
+        { stats with
+            ResourceUpdateTime = updateResourceTime.Elapsed
+        }
+
 
     member x.GetStats() =
         let res = oneTimeStatistics + frameStatistics
         oneTimeStatistics <- FrameStatistics.Zero
         { res with
-            ResourceCount = float inputSet.Resources.Count 
+            ResourceCount = float resources.Count 
         }
 
 module private RenderTaskUtilities =
@@ -610,11 +513,13 @@ module GroupedRenderTask =
                 init x
                 hasProgram <- true
 
-            let mutable stats = x.UpdateDirtyResources(0)
+            let mutable stats = FrameStatistics.Zero
+
+            stats <- stats + x.UpdateDirtyResources(0)
 
             if hasProgram then
                 let programUpdateStats = program.Update x
-                stats <- { 
+                stats <- stats + { 
                     stats with 
                         AddedRenderObjects = float programUpdateStats.AddedFragmentCount
                         RemovedRenderObjects = float programUpdateStats.RemovedFragmentCount
@@ -624,8 +529,6 @@ module GroupedRenderTask =
                             programUpdateStats.WriteTime +
                             programUpdateStats.CompileTime
                 }
-
-            stats <- stats + x.UpdateDirtyUniformBufferViews()
 
             executionTime.Restart()
             if hasProgram then
@@ -793,8 +696,7 @@ module SortedRenderTask =
             current.Update x
             current.Link x
 
-            
-            stats <- stats + x.UpdateDirtyUniformBufferViews()
+      
             stats <- stats + x.GetStats()
 
             let mutable vmStats = VMStats()

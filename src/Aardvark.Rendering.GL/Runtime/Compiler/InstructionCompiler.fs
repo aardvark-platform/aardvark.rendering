@@ -83,23 +83,26 @@ module Instructions =
                 [ Instruction.Disable(int OpenGl.Enums.State.StencilTest) ]
         )
 
-    let bindProgram (p : ChangeableResource<Program>) =
-        p.Resource |> Mod.map (fun r -> Instruction.BindProgram(r.Handle))
+    let bindProgram (p : IResource<Program>) =
+        p.Handle |> Mod.map (fun r -> Instruction.BindProgram(r.Handle))
 
-    let bindUniformBuffer (index : int) (u : ChangeableResource<UniformBuffer>) =   
-        u.Resource |> Mod.map (fun r -> 
+    let bindUniformBuffer (index : int) (u : IResource<UniformBuffer>) =   
+        u.Handle |> Mod.map (fun r -> 
             //ExecutionContext.bindUniformBuffer index r
             Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index r.Handle 0n (nativeint r.Size)
         )
 
-    let bindUniformBufferView (index : int) (u : ChangeableResource<UniformBufferView>) =   
-        u.Resource |> Mod.map (fun r -> 
-            //ExecutionContext.bindUniformBuffer index r
-            Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index r.Handle r.Offset (nativeint r.Size)
+    let bindUniformBufferView (index : int) (u : IResource<UniformBufferView>) =   
+        u.Handle |> Mod.bind (fun r ->
+            r.Buffer |> Mod.map (fun b ->
+                let b = unbox<Buffer> b
+                //ExecutionContext.bindUniformBuffer index r
+                Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index b.Handle r.Offset (nativeint r.Size)
+            )
         )
 
-    let bindIndirectBuffer (u : ChangeableResource<IndirectBuffer>) =   
-        u.Resource |> Mod.map (fun r -> 
+    let bindIndirectBuffer (u : IResource<IndirectBuffer>) =   
+        u.Handle |> Mod.map (fun r -> 
             //ExecutionContext.bindUniformBuffer index r
             Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer) r.Buffer.Handle
         )
@@ -109,11 +112,11 @@ module Instructions =
     let setActiveTexture (index : int) =
         Instruction.ActiveTexture ((int OpenGl.Enums.TextureUnit.Texture0) + index)
 
-    let bindSampler (index : int) (sampler : ChangeableResource<Sampler>) =
+    let bindSampler (index : int) (sampler : IResource<Sampler>) =
         if ExecutionContext.samplersSupported then
-            sampler.Resource |> Mod.map (fun r -> [Instruction.BindSampler index r.Handle])
+            sampler.Handle |> Mod.map (fun r -> [Instruction.BindSampler index r.Handle])
         else
-            let s = sampler.Resource.GetValue().Description
+            let s = sampler.Handle.GetValue().Description
             let target = int OpenGl.Enums.TextureTarget.Texture2D
             let unit = int OpenGl.Enums.TextureUnit.Texture0 + index 
             Mod.constant [
@@ -130,20 +133,20 @@ module Instructions =
 //                Instruction.TexParameterf target (int TextureParameterName.TextureMaxLod) (s.MaxLod)
             ]
 
-    let bindTexture (tex : ChangeableResource<Texture>) =
-        tex.Resource |> Mod.map(fun r -> 
+    let bindTexture (tex : IResource<Texture>) =
+        tex.Handle |> Mod.map(fun r -> 
             let target = Translations.toGLTarget r.Dimension r.IsArray r.Multisamples
             [ Instruction.BindTexture target r.Handle ]
         )
 
-    let bindVertexArray (vao : ChangeableResource<VertexArrayObject>) =
+    let bindVertexArray (vao : IResource<VertexArrayObject>) =
         if ExecutionContext.vertexArrayObjectsSupported then
-            vao.Resource |> Mod.map (fun r -> 
+            vao.Handle |> Mod.map (fun r -> 
                 fun (ctx : ContextHandle) -> 
                     [Instruction.BindVertexArray(r.Handle)]
             )
         else
-            vao.Resource |> Mod.map (fun r -> 
+            vao.Handle |> Mod.map (fun r -> 
                 fun (ctx : ContextHandle) ->
                     [
                         for (i,b) in r.Bindings do
@@ -168,7 +171,7 @@ module Instructions =
                 | _ -> []
         )
 
-    let drawIndirect (program : Program) (indexArray : IMod<System.Array>) (buffer : ChangeableResource<IndirectBuffer>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
+    let drawIndirect (program : Program) (indexArray : IMod<System.Array>) (buffer : IResource<IndirectBuffer>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
         let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
         let indexType = 
@@ -186,7 +189,7 @@ module Instructions =
 
         let instruction  =
             adaptive {
-                let! buffer = buffer.Resource
+                let! buffer = buffer.Handle
                 let! igMode = mode
                 let! (indexed, indexType) = indexType
                 let count = NativePtr.toNativeInt buffer.Count

@@ -12,7 +12,7 @@ type CompilerState =
 
         useResources : bool
 
-        resources : list<IChangeableResource>
+        resources : list<IResource>
         instructions : list<MetaInstruction>
 
         resourceCreateTime : System.Diagnostics.Stopwatch
@@ -32,7 +32,7 @@ module ``Compiled Builder`` =
 
         member x.Bind(r : 'a, f : 'a -> Compiled<'b>) =
             { runCompile = fun s ->
-                (f r).runCompile { s with resources = (r :> IChangeableResource)::s.resources }
+                (f r).runCompile { s with resources = (r :> IResource)::s.resources }
             }
 
         member x.Yield(i : MetaInstruction) =

@@ -108,7 +108,7 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<ActiveUniform
                 let writers = UnmanagedUniformWriters.writers true uniformFields values
      
                 let mutable block = Unchecked.defaultof<_>
-                { new Resource<UniformBufferView>() with
+                { new Resource<UniformBufferView>(ResourceKind.UniformBufferView) with
                     member x.Create old =
                         let handle = 
                             match old with
@@ -139,8 +139,8 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<ActiveUniform
         buffer.Dispose()
         manager.Dispose()
 
-
-type ResourceManagerNew(ctx : Context) =
+[<AllowNullLiteral>]
+type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, shareTextures : bool, shareBuffers : bool) =
     static let updateStats (kind : ResourceKind) =
         { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
 
@@ -151,7 +151,7 @@ type ResourceManagerNew(ctx : Context) =
     static let vaoUpdateStats = updateStats ResourceKind.VertexArrayObject
     static let uniformLocationUpdateStats = updateStats ResourceKind.UniformLocation
 
-
+    let arrayBufferCache = ResourceCache<Buffer>()
     let bufferCache = ResourceCache<Buffer>()
     let textureCache = ResourceCache<Texture>()
     let indirectBufferCache = ResourceCache<IndirectBuffer>()
@@ -162,6 +162,19 @@ type ResourceManagerNew(ctx : Context) =
 
     let uniformBufferManagers = ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
 
+    new(parent, ctx, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, shareTextures, shareBuffers)
+    new(ctx, shareTextures, shareBuffers) = ResourceManager(None, ctx, shareTextures, shareBuffers)
+
+    member x.Context = ctx
+
+    member x.CreateBuffer(data : IMod<Array>) =
+        bufferCache.GetOrCreate<Array>(data, {
+            create = fun b      -> ctx.CreateBuffer b
+            update = fun h b    -> ctx.Upload(h, b); h
+            delete = fun h      -> ctx.Delete h
+            stats  = bufferUpdateStats
+            kind = ResourceKind.Buffer
+        })
 
 
     member x.CreateBuffer(data : IMod<IBuffer>) =
@@ -171,7 +184,7 @@ type ResourceManagerNew(ctx : Context) =
                     [data :> obj],
                     fun () ->
                         let mutable r = Unchecked.defaultof<_>
-                        { new Resource<Buffer>() with
+                        { new Resource<Buffer>(ResourceKind.Buffer) with
                             member x.Create (old : Option<Buffer>) =
                                 match old with
                                     | None ->
@@ -197,6 +210,7 @@ type ResourceManagerNew(ctx : Context) =
                     update = fun h b    -> ctx.Upload(h, b); h
                     delete = fun h      -> ctx.Delete h
                     stats  = bufferUpdateStats
+                    kind = ResourceKind.Buffer
                 })
 
     member x.CreateTexture(data : IMod<ITexture>) =
@@ -205,6 +219,7 @@ type ResourceManagerNew(ctx : Context) =
             update = fun h b    -> ctx.Upload(h, b); h
             delete = fun h      -> ctx.Delete h
             stats  = textureUpdateStats
+            kind = ResourceKind.Texture
         })
 
     member x.CreateIndirectBuffer(indexed : bool, data : IMod<IBuffer>) =
@@ -213,6 +228,7 @@ type ResourceManagerNew(ctx : Context) =
             update = fun h b    -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h      -> ctx.Delete h
             stats  = bufferUpdateStats
+            kind = ResourceKind.Buffer
         })
 
     member x.CreateSurface(signature : IFramebufferSignature, surface : IMod<ISurface>) =
@@ -226,6 +242,7 @@ type ResourceManagerNew(ctx : Context) =
             update = fun h b    -> ctx.Delete(h); create b
             delete = fun h      -> ctx.Delete h
             stats  = programUpdateStats
+            kind = ResourceKind.ShaderProgram
         })
 
     member x.CreateSampler (sam : IMod<SamplerStateDescription>) =
@@ -234,6 +251,7 @@ type ResourceManagerNew(ctx : Context) =
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
             stats  = samplerUpdateStats
+            kind = ResourceKind.SamplerState
         })
 
     member x.CreateVertexArrayObject( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer>>, index : Option<IResource<Buffer>>) =
@@ -250,25 +268,21 @@ type ResourceManagerNew(ctx : Context) =
         vaoCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
-                { new Resource<VertexArrayObject>() with
+                { new Resource<VertexArrayObject>(ResourceKind.VertexArrayObject) with
                     member x.Create (old : Option<VertexArrayObject>) =
                         let attributes = bindings |> List.map (createView x)
                         let index = match index with | Some i -> i.Handle.GetValue x |> Some | _ -> None
                         
                         match old with
-                            | Some old ->
-                                match index with
-                                    | Some i -> ctx.Update(old, i, attributes)
-                                    | None -> ctx.Update(old, attributes)
-                                old, vaoUpdateStats
+                            | Some old -> ctx.Delete old
+                            | None -> ()
 
-                            | None ->
-                                let handle = 
-                                    match index with
-                                        | Some i -> ctx.CreateVertexArrayObject(i, attributes)
-                                        | None -> ctx.CreateVertexArrayObject(attributes)
+                        let handle = 
+                            match index with
+                                | Some i -> ctx.CreateVertexArrayObject(i, attributes)
+                                | None -> ctx.CreateVertexArrayObject(attributes)
 
-                                handle, vaoUpdateStats
+                        handle, vaoUpdateStats
                         
                     member x.Destroy vao =
                         ctx.Delete vao
@@ -284,7 +298,7 @@ type ResourceManagerNew(ctx : Context) =
                         let inputs = Map.ofList [Symbol.Create uniform.semantic, v :> IAdaptiveObject]
                         let _,writer = UnmanagedUniformWriters.writers false [uniform.UniformField] inputs |> List.head
      
-                        { new Resource<UniformLocation>() with
+                        { new Resource<UniformLocation>(ResourceKind.UniformLocation) with
                             member x.Create old =
                                 let handle =
                                     match old with 

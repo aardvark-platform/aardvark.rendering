@@ -3,7 +3,7 @@
 /// <summary>
 /// IResource represents the base interface for all OpenGL resources
 /// </summary>
-type IResource =
+type IContextChild =
     
     /// <summary>
     /// The context which the resource was

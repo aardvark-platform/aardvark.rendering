@@ -36,7 +36,7 @@ type Texture =
         member x.Size2D = x.Size.XY
         member x.Size3D = x.Size
 
-        interface IResource with
+        interface IContextChild with
             member x.Context = x.Context
             member x.Handle = x.Handle
 

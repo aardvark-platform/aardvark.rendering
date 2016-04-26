@@ -8,15 +8,14 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
-
 type DebugProgram(parent : IRenderTask,
                   manager : ResourceManager, 
                   inputSet : InputSet) =
 
     do inputSet.Add AdaptiveObject.Time
 
-    let mutable allResources = HashSet<IChangeableResource>()
-    let mutable usedResources = HashSet<IChangeableResource>()
+    let mutable allResources = HashSet<IResource>()
+    let mutable usedResources = HashSet<IResource>()
     let renderObjects = HashSet<IRenderObject>()
 
     member x.Add (rj : IRenderObject) =
@@ -31,8 +30,7 @@ type DebugProgram(parent : IRenderTask,
 
         for r in allResources do
             if r.OutOfDate then
-                r.UpdateCPU(parent)
-                stats <- stats + r.UpdateGPU(parent)
+                stats <- stats + r.Update(parent)
 
         for rj in renderObjects do
             let prep, own =

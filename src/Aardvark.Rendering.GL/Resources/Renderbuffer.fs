@@ -20,7 +20,7 @@ type Renderbuffer =
         val mutable public Samples : int
         val mutable public SizeInBytes : int64
 
-        interface IResource with
+        interface IContextChild with
             member x.Context = x.Context
             member x.Handle = x.Handle
 

@@ -5,7 +5,8 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
-type AdaptiveCode(instructions : list<MetaInstruction>, resources : list<IChangeableResource>) =
+
+type AdaptiveCode(instructions : list<MetaInstruction>, resources : list<IResource>) =
     member x.Instructions = instructions
     member x.Resources = resources
 
@@ -44,23 +45,23 @@ module DeltaCompiler =
 
             | [] -> true
 
-    let useResource (r : IChangeableResource) : Compiled<unit> =
+    let useResource (r : IResource) : Compiled<unit> =
         { runCompile = 
             fun s -> 
                 if s.useResources then
-                    r.IncrementRefCount () |> ignore
+                    r.AddRef ()
                     { s with resources = r :: s.resources }, ()
                 else
                     s, ()
         }
 
 
-    let useResources (resources : seq<ChangeableResource<'a>>) : Compiled<unit> =
+    let useResources (resources : seq<IResource<'a>>) : Compiled<unit> =
         { runCompile = 
             fun s -> 
                 if s.useResources then
                     for r in resources do
-                        r.IncrementRefCount () |> ignore
+                        r.AddRef ()
                     { s with resources = (resources |> Seq.cast |> Seq.toList) @ s.resources }, ()
                 else
                     s, ()
@@ -98,15 +99,6 @@ module DeltaCompiler =
                         // the same UniformBuffer has already been bound
                         ()
                     | _ -> 
-                        yield Instructions.bindUniformBuffer id ub
-
-            for (id,ub) in Map.toSeq me.UniformBufferViews do
-                do! useResource ub
-                match Map.tryFind id prev.UniformBufferViews with
-                    | Some old when old = ub -> 
-                        // the same UniformBuffer has already been bound
-                        ()
-                    | _ -> 
                         yield Instructions.bindUniformBufferView id ub
 
             // bind all textures/samplers (if needed)
@@ -137,7 +129,7 @@ module DeltaCompiler =
                     | Some old when old = u -> ()
                     | _ ->
                         // TODO: UniformLocations cannot change structurally atm.
-                        yield ExecutionContext.bindUniformLocation id (u.Resource.GetValue())
+                        yield ExecutionContext.bindUniformLocation id (u.Handle.GetValue())
 
             do! me.Buffers |> List.map (fun (_,_,_,b) -> b) |> useResources
             do! useResource me.VertexArray
@@ -155,7 +147,7 @@ module DeltaCompiler =
 
             // draw the thing
             // TODO: surface assumed to be constant here
-            let prog = me.Program.Resource.GetValue()
+            let prog = me.Program.Handle.GetValue()
 
             match me.IndirectBuffer with
                 | Some ib ->

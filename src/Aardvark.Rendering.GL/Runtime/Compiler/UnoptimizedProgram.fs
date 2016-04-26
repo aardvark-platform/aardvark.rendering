@@ -21,9 +21,9 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
 
     let recompile() =
         match lastPrev with
-            | Some (s,p) when s = prev.RenderObject && p = rj.Program.Resource.GetValue() -> FrameStatistics.Zero
+            | Some (s,p) when s = prev.RenderObject && p = rj.Program.Handle.GetValue() -> FrameStatistics.Zero
             | _ ->
-                lastPrev <- Some (prev.RenderObject, rj.Program.Resource.GetValue())
+                lastPrev <- Some (prev.RenderObject, rj.Program.Handle.GetValue())
                 match frag with
                     | null -> frag <- ctx.handler.Create []
                     | _ -> frag.Clear()

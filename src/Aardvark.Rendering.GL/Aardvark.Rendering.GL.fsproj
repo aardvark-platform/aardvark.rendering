@@ -77,9 +77,8 @@
     <Compile Include="Resources\StreamingTexture.fs" />
     <Compile Include="Resources\MappedBuffer.fs" />
     <Compile Include="Management\SurfaceCompilers.fs" />
-    <Compile Include="Management\ResourceManager.fs" />
-    <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Management\NewResourceManager.fs" />
+    <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\IFragment.fs" />
     <Compile Include="Runtime\Sorting.fs" />
