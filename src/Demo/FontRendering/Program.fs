@@ -153,10 +153,10 @@ let main argv =
 //    r.GetDelta() |> List.length |> printfn "got %d deltas"
 
 
-    let all = "WAT"
-           
+    let all = "abcdefghijklmnopqrstuvwxyz\r\nABCDEFGHIJKLMNOPQRSTUVWXYZ\r\n1234567890 ?ß\\\r\n^°!\"§$%&/()=?´`@+*~#'<>|,;.:-_µ"
+            
     let mode = Mod.init FillMode.Fill
-    let font = new Font("Times New Roman")
+    let font = new Font("Comic Sans")
     let sg = 
         Sg.text font (Mod.constant all)
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)

@@ -80,16 +80,10 @@
       <HintPath>..\..\..\lib\Release\OpenTK.GLControl.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
-    <Reference Include="SharpFont">
-      <HintPath>..\..\..\lib\Release\SharpFont.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Numerics" />
-    <Reference Include="System.Numerics.Vectors">
-      <HintPath>..\..\..\lib\Release\System.Numerics.Vectors.dll</HintPath>
-    </Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
