@@ -68,6 +68,7 @@ module Sg =
             ro.IndirectBuffer <- indirectAndOffsets |> Mod.map fst
             ro.InstanceAttributes <- instanceAttributes
             ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+            ro.Surface <- Mod.constant cache.Surface
 
             ASet.single (ro :> IRenderObject)
 
@@ -77,11 +78,6 @@ module Sg =
 
     let text (f : Font) (content : IMod<string>) =
         Text(f, content)
-            |> Sg.effect [
-                    Path.Shader.pathVertex |> toEffect
-                    DefaultSurfaces.trafo |> toEffect
-                    Path.Shader.pathFragment |> toEffect
-               ]
             |> Sg.uniform "Antialias" (Mod.constant true)
 
 
