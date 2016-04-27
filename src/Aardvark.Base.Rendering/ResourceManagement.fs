@@ -26,7 +26,6 @@ type ResourceDescription<'d, 'h when 'h : equality> =
         create : 'd -> 'h
         update : 'h -> 'd -> 'h
         delete : 'h -> unit
-        stats : FrameStatistics
         kind : ResourceKind
     }
 
@@ -39,6 +38,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
     let mutable refCount = 0
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
+    let updateStats = { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
 
     abstract member Create : Option<'h> -> 'h * FrameStatistics
     abstract member Destroy : 'h -> unit
@@ -67,13 +67,13 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
             let (h, stats) = x.Create current
             match current with
-                | Some old when old = h -> stats
+                | Some old when old = h -> updateStats + stats
                 | _ -> 
                     current <- Some h
                     if h <> handle.Value then
                         transact (fun () -> handle.Value <- h)
 
-                    stats
+                    updateStats + stats
         )
     
     member x.Handle = handle :> IMod<_>
@@ -127,12 +127,12 @@ and ResourceCache<'h when 'h : equality>() =
         let resource = 
             store.GetOrAdd(key, fun _ -> 
                 let mutable ownsHandle = false
-
+                
                 { new Resource<'h>(desc.kind) with
                     member x.Create(old : Option<'h>) =
                         acquire old dataMod
                         let data = dataMod.GetValue x
-                        let stats = stats dataMod + desc.stats
+                        let stats = stats dataMod
 
                         match old with
                             | Some old ->

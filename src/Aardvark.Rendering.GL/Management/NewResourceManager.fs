@@ -12,30 +12,6 @@ open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
-type RefCountedResource<'h>(create : unit -> 'h, delete : 'h -> unit) =
-    let mutable refCount = 0
-    let mutable handle = Unchecked.defaultof<'h>
-
-    member x.Acquire() = 
-        if Interlocked.Increment &refCount = 1 then
-            handle <- create()
-
-    member x.Release() = 
-        if Interlocked.Decrement &refCount = 0 then
-            delete handle
-            handle <- Unchecked.defaultof<_>
-
-    member x.Handle =
-        if refCount <= 0 then 
-            failwith "[RefCountedResource] ref count zero"
-
-        handle
-
-// TODO:
-// 1) Buffer/Texture sharing
-// 2) NullBuffers
-// 3) NullTextures
-
 module Sharing =
     
     type RefCountedBuffer(ctx, create : unit -> Buffer, destroy : unit -> unit) =
@@ -239,22 +215,8 @@ module Sharing =
                 else
                     ctx.Delete b
 
-
-
-type UniformBufferView =
-    class
-        val mutable public Buffer : IMod<IBuffer>
-        val mutable public Offset : nativeint
-        val mutable public Size : nativeint
-
-        new(b,o,s) = { Buffer = b; Offset = o; Size = s }
-
-    end
-
 type UniformBufferManager(ctx : Context, size : int, fields : list<ActiveUniform>) =
-  
-    static let singleStats = { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [ResourceKind.UniformBufferView, 1.0] }
-    
+
     let alignedSize = (size + 255) &&& ~~~255
 
     let buffer = new MappedBuffer(ctx)
@@ -302,7 +264,7 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<ActiveUniform
                                 for (_,w) in writers do w.Write(x, ptr)
                             )
                         )
-                        handle, singleStats
+                        handle, FrameStatistics.Zero
 
                     member x.Destroy h =
                         manager.Free block
@@ -316,53 +278,45 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<ActiveUniform
         buffer.Dispose()
         manager.Dispose()
 
+
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, shareTextures : bool, shareBuffers : bool) =
-    static let updateStats (kind : ResourceKind) =
-        { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
-
-    static let bufferUpdateStats = updateStats ResourceKind.Buffer
-    static let textureUpdateStats = updateStats ResourceKind.Texture
-    static let programUpdateStats = updateStats ResourceKind.ShaderProgram
-    static let samplerUpdateStats = updateStats ResourceKind.SamplerState
-    static let vaoUpdateStats = updateStats ResourceKind.VertexArrayObject
-    static let uniformLocationUpdateStats = updateStats ResourceKind.UniformLocation
-
-    let newCache (f : ResourceManager -> ResourceCache<'a>) =
+    let cache (f : ResourceManager -> ResourceCache<'a>) =
         match parent with
             | Some p -> f p
             | None -> ResourceCache<'a>()
 
+   
     let bufferManager           = Sharing.BufferManager(ctx, shareBuffers)
     let arrayBufferManager      = Sharing.ArrayBufferManager(ctx, shareBuffers)
     let textureManager          = Sharing.TextureManager(ctx, shareTextures)
 
-    let arrayBufferCache        : ResourceCache<Buffer>                 = newCache (fun r -> r.ArrayBufferCache)
-    let bufferCache             : ResourceCache<Buffer>                 = newCache (fun r -> r.BufferCache)
-    let textureCache            : ResourceCache<Texture>                = newCache (fun r -> r.TextureCache)
-    let indirectBufferCache     : ResourceCache<IndirectBuffer>         = newCache (fun r -> r.IndirectBufferCache)
-    let programCache            : ResourceCache<Program>                = newCache (fun r -> r.ProgramCache)
-    let samplerCache            : ResourceCache<Sampler>                = newCache (fun r -> r.SamplerCache)
-    let vaoCache                : ResourceCache<VertexArrayObject>      = newCache (fun r -> r.VAOCache)
-    let uniformLocationCache    : ResourceCache<UniformLocation>        = newCache (fun r -> r.UniformLocationCache)
+    let arrayBufferCache        = cache (fun m -> m.ArrayBufferCache)
+    let bufferCache             = cache (fun m -> m.BufferCache)
+    let textureCache            = cache (fun m -> m.TextureCache)
+    let indirectBufferCache     = cache (fun m -> m.IndirectBufferCache)
+    let programCache            = cache (fun m -> m.ProgramCache)
+    let samplerCache            = cache (fun m -> m.SamplerCache)
+    let vaoCache                = cache (fun m -> m.VAOCache)
+    let uniformLocationCache    = cache (fun m -> m.UniformLocationCache)
 
     let uniformBufferManagers = 
         match parent with
             | Some p -> p.UniformBufferManagers
             | _ -> ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
 
+    member private x.ArrayBufferCache       : ResourceCache<Buffer>             = arrayBufferCache
+    member private x.BufferCache            : ResourceCache<Buffer>             = bufferCache
+    member private x.TextureCache           : ResourceCache<Texture>            = textureCache
+    member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer>     = indirectBufferCache
+    member private x.ProgramCache           : ResourceCache<Program>            = programCache
+    member private x.SamplerCache           : ResourceCache<Sampler>            = samplerCache
+    member private x.VAOCache               : ResourceCache<VertexArrayObject>  = vaoCache
+    member private x.UniformLocationCache   : ResourceCache<UniformLocation>    = uniformLocationCache
+    member private x.UniformBufferManagers                                      = uniformBufferManagers
+
     new(parent, ctx, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, shareTextures, shareBuffers)
     new(ctx, shareTextures, shareBuffers) = ResourceManager(None, ctx, shareTextures, shareBuffers)
-
-    member private x.ArrayBufferCache = arrayBufferCache
-    member private x.BufferCache = bufferCache
-    member private x.TextureCache = textureCache
-    member private x.IndirectBufferCache = indirectBufferCache
-    member private x.ProgramCache = programCache
-    member private x.SamplerCache = samplerCache
-    member private x.VAOCache = vaoCache
-    member private x.UniformLocationCache = uniformLocationCache
-    member private x.UniformBufferManagers = uniformBufferManagers
 
 
     member x.Context = ctx
@@ -372,7 +326,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
             create = fun b      -> arrayBufferManager.Create b
             update = fun h b    -> arrayBufferManager.Update(h, b)
             delete = fun h      -> arrayBufferManager.Delete h
-            stats  = bufferUpdateStats
             kind = ResourceKind.Buffer
         })
 
@@ -389,13 +342,13 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
                                     | None ->
                                         r <- data.GetReader()
                                         let (nb, _) = r.GetDirtyRanges(x)
-                                        ctx.CreateBuffer(nb), bufferUpdateStats
+                                        ctx.CreateBuffer(nb), FrameStatistics.Zero
                                     | Some old ->
                                         let (nb, ranges) = r.GetDirtyRanges(x)
                                         nb.Use (fun ptr ->
                                             ctx.UploadRanges(old, ptr, ranges)
                                         )
-                                        old, bufferUpdateStats
+                                        old, FrameStatistics.Zero
 
                             member x.Destroy(b : Buffer) =
                                 ctx.Delete b
@@ -408,7 +361,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
                     create = fun b      -> bufferManager.Create b
                     update = fun h b    -> bufferManager.Update(h, b)
                     delete = fun h      -> bufferManager.Delete h
-                    stats  = bufferUpdateStats
                     kind = ResourceKind.Buffer
                 })
 
@@ -417,7 +369,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
             delete = fun h      -> textureManager.Delete h
-            stats  = textureUpdateStats
             kind = ResourceKind.Texture
         })
 
@@ -426,7 +377,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
             create = fun b      -> ctx.CreateIndirect(indexed, b)
             update = fun h b    -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h      -> ctx.Delete h
-            stats  = bufferUpdateStats
             kind = ResourceKind.Buffer
         })
 
@@ -442,7 +392,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
             create = fun b      -> create b
             update = fun h b    -> ctx.Delete(h); create b
             delete = fun h      -> ctx.Delete h
-            stats  = programUpdateStats
             kind = ResourceKind.ShaderProgram
         })
 
@@ -451,7 +400,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
             create = fun b      -> ctx.CreateSampler b
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
-            stats  = samplerUpdateStats
             kind = ResourceKind.SamplerState
         })
 
@@ -483,7 +431,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
                                 | Some i -> ctx.CreateVertexArrayObject(i, attributes)
                                 | None -> ctx.CreateVertexArrayObject(attributes)
 
-                        handle, vaoUpdateStats
+                        handle, FrameStatistics.Zero
                         
                     member x.Destroy vao =
                         ctx.Delete vao
@@ -507,7 +455,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
                                         | None -> ctx.CreateUniformLocation(uniform.uniformType.SizeInBytes, uniform.uniformType)
                                 
                                 writer.Write(x, handle.Data)
-                                handle, uniformLocationUpdateStats
+                                handle, FrameStatistics.Zero
 
                             member x.Destroy h =
                                 ctx.Delete h
