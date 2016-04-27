@@ -21,7 +21,7 @@ type MappedBuffer(ctx : Context) =
     let mutable mappedPtr = 0n
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
 
-    let mutable oldBuffers = []
+    let mutable oldBuffers : int list = []
 
     let unmap () =
         GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
@@ -31,6 +31,15 @@ type MappedBuffer(ctx : Context) =
         GL.BindBuffer(BufferTarget.CopyReadBuffer,0)
         GL.Check "[MappedBuffer] could unbind buffer"
         mappedPtr <- 0n
+
+    let deleteOldBuffers () =
+        let delete = Interlocked.Exchange(&oldBuffers, [])
+        if not (List.isEmpty delete) then
+            using ctx.ResourceLock (fun _ ->
+                for d in delete do 
+                    GL.DeleteBuffer(d)
+                    GL.Check "[MappedBuffer] could delete old buffer"
+            )
 
     let resize (self : MappedBuffer) (newCapacity : int) =
         if nativeint newCapacity <> buffer.SizeInBytes then
@@ -81,7 +90,6 @@ type MappedBuffer(ctx : Context) =
 
             if oldBuffer <> 0 then
                 Interlocked.Change(&oldBuffers, fun o -> oldBuffer::o) |> ignore
-                
 
     member x.Write(sourcePtr, offset, size) =   
         if size + offset > int buffer.SizeInBytes then failwith "insufficient buffer size"
@@ -124,13 +132,7 @@ type MappedBuffer(ctx : Context) =
         res
 
     override x.Compute() =
-        let delete = Interlocked.Exchange(&oldBuffers, [])
-        if not (List.isEmpty delete) then
-            using ctx.ResourceLock (fun _ ->
-                for d in delete do 
-                    GL.DeleteBuffer(d)
-                    GL.Check "[MappedBuffer] could delete old buffer"
-            )
+        deleteOldBuffers()
 
         buffer :> IBuffer
 
