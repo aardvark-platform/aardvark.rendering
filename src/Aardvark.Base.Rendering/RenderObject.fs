@@ -11,6 +11,11 @@ open Microsoft.FSharp.NativeInterop
 [<AllowNullLiteral>]
 type ISurface = interface end
 
+[<AllowNullLiteral>]
+type IDisposableSurface =
+    inherit ISurface
+    inherit IDisposable
+
 
 [<AllowNullLiteral>]
 type IAttributeProvider =

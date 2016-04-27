@@ -315,6 +315,12 @@ type FShadeRuntimeExtensions private() =
         )
 
     [<Extension>]
+    static member PrepareEffect (this : IRuntime, l : list<FShadeEffect>) =
+        this.PrepareSurface(
+            toSurface l
+        )
+
+    [<Extension>]
     static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : IMod<list<FShadeEffect>>) =
         let mutable current = None
         l |> Mod.map (fun l ->
