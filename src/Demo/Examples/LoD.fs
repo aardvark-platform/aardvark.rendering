@@ -224,7 +224,7 @@ module LoD =
                     //let points = Helpers.randomPoints cell.bounds 1000
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
 //                  
-                    //do! Async.Sleep(1000)
+                    do! Async.Sleep(100)
                     let mutable a = 0
 
 //                    for i in 0..(1 <<< 20) do a <- a + 1
@@ -310,7 +310,37 @@ module LoD =
                     | Test -> return! gridProj
             }
 
+    module Instanced =
+        open FShade
+        open Aardvark.SceneGraph.Semantics
+        type Vertex = { 
+                [<Position>] pos : V4d 
+                [<Color>] col : V4d
+                [<Semantic("ZZZInstanceTrafo")>] trafo : M44d
+            }
 
+        let trafo (v : Vertex) =
+            vertex {
+                return { 
+                    pos = uniform.ViewProjTrafo * v.trafo * v.pos
+                    col = v.col
+                    trafo = v.trafo
+                }
+            }
+            
+    let eff =
+        let effects = [
+            Instanced.trafo |> toEffect           
+            DefaultSurfaces.vertexColor  |> toEffect         
+        ]
+        let e = FShade.SequentialComposition.compose effects
+        FShadeSurface(e) :> ISurface 
+
+    let surf = 
+        win.Runtime.PrepareSurface(
+            win.FramebufferSignature,
+            eff
+        ) :> ISurface |> Mod.constant
 
     let cloud =
         Sg.pointCloud data {
@@ -326,10 +356,9 @@ module LoD =
                     DefaultSemantic.Colors, typeof<C4b>
                     DefaultSemantic.Normals, typeof<V3f>
                 ]
-
-        }
-
-                                    
+            boundingBoxSurface      = Some surf
+        } 
+                     
     let sg = 
         Sg.group' [
             cloud

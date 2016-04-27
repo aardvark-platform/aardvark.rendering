@@ -12,6 +12,17 @@ open System.Collections.Concurrent
 
 module LodProgress =
 
+    [<CustomEquality; NoComparison>]
+    type GeometryRef = { node : LodDataNode; geometry : IndexedGeometry; range : Range1i } with
+
+        override x.GetHashCode() = HashCode.Combine(x.node.GetHashCode(), x.range.GetHashCode())
+        override x.Equals o =
+            match o with
+                | :? GeometryRef as o -> 
+                    x.node.Equals(o.node) && x.range = o.range
+                | _ -> false
+
+
     type Progress =
         {   
             activeNodeCount     : ref<int>
@@ -58,6 +69,10 @@ type PointCloudInfo =
 
         /// the time interval for the pruning process in ms
         pruneInterval : int
+
+        /// optional surface for bounding boxes of cells that are not loaded yet
+        /// shader vertex must have ZZZInstancedTrafo semantic
+        boundingBoxSurface : Option<IMod<ISurface>>
     }
 
 [<AutoOpen>]
@@ -107,6 +122,48 @@ module CancellationUtilities =
 
 namespace Aardvark.SceneGraph.Semantics
 
+module Helper =
+
+    open System
+    open System.Threading
+    open System.Threading.Tasks
+    open Aardvark.Base
+    open Aardvark.Base.Ag
+    open Aardvark.Base.Rendering
+    open Aardvark.Base.Incremental
+    open Aardvark.SceneGraph
+    open Aardvark.SceneGraph.Semantics
+    open LodProgress
+
+    let ig ( box : Box3d ) : IndexedGeometry =
+        
+        let pa = [|
+            V3f(box.Min.X, box.Min.Y, box.Min.Z);
+            V3f(box.Max.X, box.Min.Y, box.Min.Z);
+            V3f(box.Max.X, box.Max.Y, box.Min.Z);
+            V3f(box.Min.X, box.Max.Y, box.Min.Z);
+            V3f(box.Min.X, box.Min.Y, box.Max.Z);
+            V3f(box.Max.X, box.Min.Y, box.Max.Z);
+            V3f(box.Max.X, box.Max.Y, box.Max.Z);
+            V3f(box.Min.X, box.Max.Y, box.Max.Z);
+            |]
+
+        let pos = [|
+                pa.[0]; pa.[1]; pa.[1]; pa.[2]; pa.[2]; pa.[3]; pa.[3]; pa.[0];
+                pa.[4]; pa.[5]; pa.[5]; pa.[6]; pa.[6]; pa.[7]; pa.[7]; pa.[4];
+                pa.[0]; pa.[4]; pa.[1]; pa.[5]; pa.[2]; pa.[6]; pa.[3]; pa.[7];
+                |]
+        
+        let attrs = [
+                        (DefaultSemantic.Positions, pos :> Array)
+                        (DefaultSemantic.Colors, (C4b.Red |> Array.replicate (pos |> Array.length)) :> Array)
+                    ] |> SymDict.ofList
+            
+        
+        IndexedGeometry(
+                    Mode = IndexedGeometryMode.LineList,
+                    IndexedAttributes = attrs
+                )
 
 module PointCloudRenderObjectSemantics = 
 
@@ -121,17 +178,6 @@ module PointCloudRenderObjectSemantics =
     open LodProgress
 
 
-    [<CustomEquality; NoComparison>]
-    type GeometryRef = { node : LodDataNode; geometry : IndexedGeometry; range : Range1i } with
-
-        override x.GetHashCode() = HashCode.Combine(x.node.GetHashCode(), x.range.GetHashCode())
-        override x.Equals o =
-            match o with
-                | :? GeometryRef as o -> 
-                    x.node.Equals(o.node) && x.range = o.range
-                | _ -> false
-
-
     type LoadResult = CancellationTokenSource * ref<IndexedGeometry * GeometryRef>
 
     type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, progress : LodProgress.Progress, runtime : IRuntime) =
@@ -142,6 +188,8 @@ module PointCloudRenderObjectSemantics =
         let inactive = ConcurrentHashQueue<GeometryRef>()
         let mutable inactiveSize = 0L
         let mutable activeSize = 0L
+
+        let workingSets = CSet.empty
 
         let mutable pendingRemoves = 0
         let geometries = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode, LoadResult>()
@@ -168,12 +216,12 @@ module PointCloudRenderObjectSemantics =
                 Interlocked.Add(&activeSize, -size) |> ignore
                 Interlocked.Decrement(progress.activeNodeCount) |> ignore
 
-
         member x.Add(n : LodDataNode) =
             Interlocked.Increment(progress.expectedNodeCount) |> ignore
 
             let loadData _ =
                 async {
+                    let bound = n.bounds |> Helper.ig 
                     let! geometry = node.Data.GetData(n)
                     return geometry,Unchecked.defaultof<_>
                 }
@@ -192,6 +240,7 @@ module PointCloudRenderObjectSemantics =
             let addToRender (ig,r) =
                 async { 
                     do activate r
+                    do transact ( fun () -> CSet.remove r.node workingSets |> ignore )
                     return ig,r
                 }
 
@@ -220,6 +269,8 @@ module PointCloudRenderObjectSemantics =
                     //cts.Dispose()
                 | _ -> Log.warn "could not remove lod node"
 
+        member x.WorkingSet = 
+            workingSets :> aset<_>
 
         member x.Activate() =
                 
@@ -261,8 +312,12 @@ module PointCloudRenderObjectSemantics =
                         for r in res do 
                             deltas.Enqueue r
                             match r with 
-                                | Add v -> content.Add v |> ignore
-                                | Rem v -> content.Remove v |> ignore
+                                | Add v -> 
+                                    content.Add v |> ignore
+                                    transact ( fun () -> CSet.add v workingSets |> ignore )
+                                | Rem v -> 
+                                    content.Remove v |> ignore
+                                    transact ( fun () -> CSet.remove v workingSets |> ignore )
                 }
 
             view.AddMarkingCallback (fun () -> r.Put ()) |> ignore
@@ -345,6 +400,7 @@ module PointCloudRenderObjectSemantics =
         member x.DrawCallInfos =
             calls |> DrawCallSet.toMod
 
+        
     [<Semantic>]
     type PointCloudSemantics() =
         member x.RenderObjects(l : Sg.PointCloud) =
@@ -373,6 +429,33 @@ module PointCloudRenderObjectSemantics =
             obj.Activate <- h.Activate
             obj.VertexAttributes <- h.Attributes
             obj.Mode <- Mod.constant IndexedGeometryMode.PointList
+            obj.Surface <- l.Surface
 
-            ASet.single (obj :> IRenderObject)
+            match l.Config.boundingBoxSurface with
+                | None -> ASet.single (obj :> IRenderObject)
+                | Some surf ->
+                    let trafos = 
+                        h.WorkingSet 
+                            |> ASet.toMod 
+                            |> Mod.map ( fun a -> a |> Seq.toArray |> Array.map ( fun v -> 
+                                let box = v.bounds
+                                let shift = Trafo3d.Translation(box.Center)
+                                let bias = Trafo3d.Translation(-V3d.III * 0.5)
+                                let scale = Trafo3d.Scale( box.SizeX, box.SizeY, box.SizeZ )
+                                bias*scale*shift ))
+                    
+                    let unitbox = (Box3d.Unit |> Helper.ig)
+
+                    let iSg = 
+                        unitbox |> Sg.instancedGeometry trafos 
+                                |> Sg.surface surf
+
+                    let ros = Semantics.RenderObjectSemantics.Semantic.renderObjects iSg
+
+                    aset {
+                        yield obj :> IRenderObject
+                        yield! ros
+                    }
+
+            
 

@@ -65,8 +65,8 @@
     <Compile Include="Semantics\AsyncLoad.fs" />
     <Compile Include="HighLevelSceneGraph\Lod.fs" />
     <Compile Include="HighLevelSceneGraph\Culling.fs" />
-    <Compile Include="PointCloud.fs" />
     <Compile Include="SgFSharp.fs" />
+    <Compile Include="PointCloud.fs" />
     <Compile Include="FShadeSceneGraph.fs" />
     <Compile Include="SgCSharp.fs" />
     <Compile Include="DefaultSurfaces.fs" />

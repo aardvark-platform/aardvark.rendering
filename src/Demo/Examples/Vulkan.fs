@@ -415,6 +415,20 @@ module Lod =
                     | Test -> return! gridProj
             }
 
+    
+    let eff =
+        let effects = [
+            DefaultSurfaces.trafo |> toEffect                  
+            DefaultSurfaces.vertexColor  |> toEffect         
+        ]
+        let e = FShade.SequentialComposition.compose effects
+        FShadeSurface(e) :> ISurface 
+
+    let surf = 
+        win.Runtime.PrepareSurface(
+            win.FramebufferSignature,
+            eff
+        ) :> ISurface |> Mod.constant
 
 
     let cloud =
@@ -431,7 +445,7 @@ module Lod =
                     DefaultSemantic.Colors, typeof<C4b>
                     DefaultSemantic.Normals, typeof<V3f>
                 ]
-
+            boundingBoxSurface      = None
         }
 
                                     
