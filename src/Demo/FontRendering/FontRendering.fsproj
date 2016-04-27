@@ -80,10 +80,16 @@
       <HintPath>..\..\..\lib\Release\OpenTK.GLControl.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
+    <Reference Include="SharpFont">
+      <HintPath>..\..\..\lib\Release\SharpFont.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Numerics" />
+    <Reference Include="System.Numerics.Vectors">
+      <HintPath>..\..\..\lib\Release\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
@@ -101,6 +107,11 @@
     <ProjectReference Include="..\..\Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj">
       <Name>Aardvark.Rendering.NanoVg</Name>
       <Project>{054df582-d549-4da0-b74b-762ab2585d3f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj">
+      <Name>Aardvark.Rendering.Text</Name>
+      <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">

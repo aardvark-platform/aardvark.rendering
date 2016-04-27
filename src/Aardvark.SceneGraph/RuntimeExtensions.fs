@@ -5,39 +5,12 @@ open Aardvark.SceneGraph.Semantics
 open System
 open System.Runtime.CompilerServices
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Base.Ag
 open Aardvark.Base.Incremental
 
 [<AbstractClass; Sealed; Extension>]
 type SceneGraphRuntimeExtensions private() =
-
-    static let toSurface (l : list<FShadeEffect>) =
-        match l with
-            | [s] -> FShadeSurface s
-            | l -> FShadeSurface (FShade.SequentialComposition.compose l)
-
-    [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : list<FShadeEffect>) =
-        this.PrepareSurface(
-            signature,
-            toSurface l
-        )
-
-    [<Extension>]
-    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : IMod<list<FShadeEffect>>) =
-        let mutable current = None
-        l |> Mod.map (fun l ->
-            let newPrep = 
-                this.PrepareSurface(
-                    signature,
-                    toSurface l
-                )
-            match current with
-                | Some c -> this.DeleteSurface c
-                | None -> ()
-            current <- Some newPrep
-            newPrep :> ISurface
-        )
 
 
 
