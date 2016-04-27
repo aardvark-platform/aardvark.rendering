@@ -167,10 +167,26 @@ module TextureExtensions =
             TextureFormat.DepthComponent16, PixelFormat.DepthComponent
             TextureFormat.DepthComponent32, PixelFormat.DepthComponent
             TextureFormat.DepthComponent32f, PixelFormat.DepthComponent
+
             TextureFormat.Rgba8, PixelFormat.Rgba
+            TextureFormat.Rgba16, PixelFormat.Rgba
+            TextureFormat.Rgba16f, PixelFormat.Rgba
             TextureFormat.Rgba32f, PixelFormat.Rgba
+
             TextureFormat.Rgb8, PixelFormat.Rgb
+            TextureFormat.Rgb16, PixelFormat.Rgb
+            TextureFormat.Rgb16f, PixelFormat.Rgb
+            TextureFormat.Rgb32f, PixelFormat.Rgb
+
+            TextureFormat.Rg8, PixelFormat.Rg
+            TextureFormat.Rg16, PixelFormat.Rg
+            TextureFormat.Rg16f, PixelFormat.Rg
+            TextureFormat.Rg32f, PixelFormat.Rg
+
             TextureFormat.R8, PixelFormat.Red
+            TextureFormat.R16, PixelFormat.Red
+            TextureFormat.R16f, PixelFormat.Red
+            TextureFormat.R32f, PixelFormat.Red
         ]
 
     [<AutoOpen>]

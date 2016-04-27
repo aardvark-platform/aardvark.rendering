@@ -323,6 +323,7 @@ module TextureFormat =
             TextureFormat.CompressedRgb, PixFormat.ByteRGB
             TextureFormat.CompressedRgba, PixFormat.ByteRGBA
             TextureFormat.R32f, PixFormat.FloatGray
+            TextureFormat.Rgb32f, PixFormat.FloatRGB
             TextureFormat.Rgba32f, PixFormat.FloatRGBA
             TextureFormat.DepthComponent32, PixFormat.UIntGray
             TextureFormat.DepthComponent32f, PixFormat.FloatGray
