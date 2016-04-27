@@ -37,7 +37,7 @@ type MappedBuffer(ctx : Context) =
         if not (List.isEmpty delete) then
             using ctx.ResourceLock (fun _ ->
                 for d in delete do 
-                    GL.DeleteBuffer(d)   // repeated impossible happended leads to dead here.
+                    //GL.DeleteBuffer(d)   // repeated impossible happended leads to dead here.
                     GL.Check "[MappedBuffer] could delete old buffer"
             )
 

@@ -97,7 +97,7 @@ module ``PointCloud Sg Extensions`` =
 
 module CancellationUtilities =
         
-    let runWithCompensations (outRef : ref<'a>) (xs : list<('a -> Async<'a>) * ('a -> unit) >) =  
+    let runWithCompensations (outRef : ref<'a>) (xs : list<('a -> 'a) * ('a -> unit) >) =  
         let rec doWork xs disposables =
             async {
                 match xs with
@@ -112,7 +112,7 @@ module CancellationUtilities =
                                             d.Dispose()
                                         | None -> ()
                                 )
-                            let! r = m !outRef
+                            let r = m !outRef
                             do resultValue := Some (r,d); outRef := r
                             return! doWork xs (d :: disposables)
                     | [] -> return () 
@@ -215,34 +215,35 @@ module PointCloudRenderObjectSemantics =
             if calls.Remove n.range then
                 Interlocked.Add(&activeSize, -size) |> ignore
                 Interlocked.Decrement(progress.activeNodeCount) |> ignore
+            else printfn "could not remove calls"
 
         member x.Add(n : LodDataNode) =
             Interlocked.Increment(progress.expectedNodeCount) |> ignore
 
+            let cts = new System.Threading.CancellationTokenSource()
             let loadData _ =
-                async {
-                    let bound = n.bounds |> Helper.ig 
-                    let! geometry = node.Data.GetData(n)
-                    return geometry,Unchecked.defaultof<_>
-                }
+//                async {
+                    let geometry = Async.RunSynchronously(node.Data.GetData(n), cancellationToken = cts.Token)
+                    geometry,Unchecked.defaultof<_>
+//                }
 
             let undoLoad (geo,ref) = () 
 
             let addToPool (ig,r) =
-                async {
+//                async {
                     let range = pool.Add ig
-                    return ig, { node = n; geometry = ig; range = range }
-                }
+                    ig, { node = n; geometry = ig; range = range }
+//                }
 
             let removeFromPool (ig,r) = 
                 pool.Remove ig |> ignore
 
             let addToRender (ig,r) =
-                async { 
+//                async { 
                     do activate r
                     do transact ( fun () -> CSet.remove r.node workingSets |> ignore )
-                    return ig,r
-                }
+                    ig,r
+//                }
 
             let removeFromRender (ig,r) = deactivate r
 
@@ -253,21 +254,23 @@ module PointCloudRenderObjectSemantics =
                     addToRender, removeFromRender
                 ]
 
-            let cts = new System.Threading.CancellationTokenSource()
             let result = ref Unchecked.defaultof<_>
-            let r = geometries.GetOrAdd(n, (cts, result))
+            let r = lock geometries (fun _ -> geometries.GetOrAdd(n, (cts, result)))
             try
                 Async.RunSynchronously(CancellationUtilities.runWithCompensations result effects, cancellationToken = cts.Token)
             with | :? OperationCanceledException as o -> ()
             r
                     
         member x.Remove(n : LodDataNode) =
-              match geometries.TryRemove n with
-                | (true,(cts,r)) ->
-                    Interlocked.Decrement(progress.expectedNodeCount) |> ignore
-                    cts.Cancel()
-                    //cts.Dispose()
-                | _ -> Log.warn "could not remove lod node"
+            lock geometries (fun _ -> 
+                  match geometries.TryRemove n with
+                    | (true,(cts,r)) ->
+                        Interlocked.Decrement(progress.expectedNodeCount) |> ignore
+                        cts.Cancel()
+                        //cts.Dispose()
+                    | _ -> 
+                        Log.warn "could not remove lod node"
+                  )
 
         member x.WorkingSet = 
             workingSets :> aset<_>
@@ -304,12 +307,19 @@ module PointCloudRenderObjectSemantics =
                             node.Data.Rasterize(v, p, wantedNearPlaneDistance)
                         ) 
 
-                        let add = set |> Seq.filter (content.Contains >> not) |> Seq.map Add
-                        let rem = content |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (content.Contains >> not)  )
+                        let rem = System.Collections.Generic.HashSet<_>( content |> Seq.filter (set.Contains >> not)      )
 
-                        let res = Seq.append add rem |> Seq.toList
+                        // prune deltas manually
+                        let result = System.Collections.Generic.List()
+                        for a in add do
+                            if rem.Contains a then ()
+                            else result.Add (Add a)
+                        for r in rem do
+                            if add.Contains r then ()
+                            else result.Add (Rem r)
                     
-                        for r in res do 
+                        for r in result do 
                             deltas.Enqueue r
                             match r with 
                                 | Add v -> 
@@ -334,8 +344,8 @@ module PointCloudRenderObjectSemantics =
                         let op = deltas.Dequeue()
 
                         match op with
-                            | Add n -> x.Add n |> ignore
-                            | Rem n -> x.Remove n |> ignore
+                            | Add n -> lock n (fun _ -> x.Add n |> ignore)
+                            | Rem n -> lock n (fun _ -> x.Remove n |> ignore)
                 }
 
       
@@ -375,7 +385,7 @@ module PointCloudRenderObjectSemantics =
 
             for i in 1..4 do
                 Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
-            Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
+            //Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(run, cancellationToken = cancel.Token) |> ignore
             
