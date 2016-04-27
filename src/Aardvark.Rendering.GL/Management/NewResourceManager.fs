@@ -95,43 +95,50 @@ module Sharing =
                 )
             )
 
+        let nullBuffer = Buffer(ctx, 0n, 0)
+
         member x.Create(data : IBuffer) =
-            if active then
-                let shared = get data
-                shared.Acquire()
-                shared :> Buffer
-            else
-                ctx.CreateBuffer data
+            match data with
+                | :? NullBuffer as nb ->nullBuffer
+                | _ ->
+                    if active then
+                        let shared = get data
+                        shared.Acquire()
+                        shared :> Buffer
+                    else
+                        ctx.CreateBuffer data
 
         member x.Update(b : Buffer, data : IBuffer) : Buffer =
-            if active then
-                match b with
-                    | :? RefCountedBuffer as b ->
+            match b with
+                | :? RefCountedBuffer as b when active ->
                     
-                        let newShared = get data
-                        if newShared = b then
-                            b :> Buffer
-                        else
-                            newShared.Acquire()
-                            b.Release()
-                            newShared :> Buffer
-                    | _ ->
+                    let newShared = get data
+                    if newShared = b then
+                        b :> Buffer
+                    else
+                        newShared.Acquire()
+                        b.Release()
+                        newShared :> Buffer
+                | _ ->
+                    if b.Handle = 0 then
+                        x.Create(data)
+                    else
                         ctx.Upload(b, data)
                         b
-            else
-                ctx.Upload(b, data)
-                b
 
         member x.Delete(b : Buffer) =
-            if active then
-                match b with
-                    | :? RefCountedBuffer as b -> b.Release()
-                    | _ -> ctx.Delete b
-            else
-                ctx.Delete b
+            if b.Handle <> 0 then
+                if active then
+                    match b with
+                        | :? RefCountedBuffer as b -> b.Release()
+                        | _ -> ctx.Delete b
+                else
+                    ctx.Delete b
 
     type ArrayBufferManager(ctx : Context, active : bool) =
         let cache = ConcurrentDictionary<Array, RefCountedBuffer>()
+        
+        let nullBuffer = Buffer(ctx, 0n, 0)
 
         let get (b : Array) =
             cache.GetOrAdd(b, fun v -> 
@@ -143,42 +150,47 @@ module Sharing =
             )
 
         member x.Create(data : Array) =
-            if active then
-                let shared = get data
-                shared.Acquire()
-                shared :> Buffer
+            if isNull data then
+                nullBuffer
             else
-                ctx.CreateBuffer data
+                if active then
+                    let shared = get data
+                    shared.Acquire()
+                    shared :> Buffer
+                else
+                    ctx.CreateBuffer data
 
         member x.Update(b : Buffer, data : Array) : Buffer =
-            if active then
-                match b with
-                    | :? RefCountedBuffer as b ->
+            match b with
+                | :? RefCountedBuffer as b when active ->
                     
-                        let newShared = get data
-                        if newShared = b then
-                            b :> Buffer
-                        else
-                            newShared.Acquire()
-                            b.Release()
-                            newShared :> Buffer
-                    | _ ->
+                    let newShared = get data
+                    if newShared = b then
+                        b :> Buffer
+                    else
+                        newShared.Acquire()
+                        b.Release()
+                        newShared :> Buffer
+                | _ ->
+                    if b.Handle = 0 then
+                        x.Create data
+                    else
                         ctx.Upload(b, data)
                         b
-            else
-                ctx.Upload(b, data)
-                b
 
         member x.Delete(b : Buffer) =
-            if active then
-                match b with
-                    | :? RefCountedBuffer as b -> b.Release()
-                    | _ -> ctx.Delete b
-            else
-                ctx.Delete b
+            if b.Handle <> 0 then
+                if active then
+                    match b with
+                        | :? RefCountedBuffer as b -> b.Release()
+                        | _ -> ctx.Delete b
+                else
+                    ctx.Delete b
 
     type TextureManager(ctx : Context, active : bool) =
         let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
+
+        let nullTex = Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.Zero, 1, TextureFormat.Rgba, 0L, true)
 
         let get (b : ITexture) =
             cache.GetOrAdd(b, fun v -> 
@@ -190,39 +202,42 @@ module Sharing =
             )
 
         member x.Create(data : ITexture) =
-            if active then
-                let shared = get data
-                shared.Acquire()
-                shared :> Texture
-            else
-                ctx.CreateTexture data
+            match data with
+                | :? NullTexture as t -> nullTex
+                | _ ->
+                    if active then
+                        let shared = get data
+                        shared.Acquire()
+                        shared :> Texture
+                    else
+                        ctx.CreateTexture data
 
         member x.Update(b : Texture, data : ITexture) : Texture =
-            if active then
-                match b with
-                    | :? RefCountedTexture as b ->
+            match b with
+                | :? RefCountedTexture as b when active ->
                     
-                        let newShared = get data
-                        if newShared = b then
-                            b :> Texture
-                        else
-                            newShared.Acquire()
-                            b.Release()
-                            newShared :> Texture
-                    | _ ->
+                    let newShared = get data
+                    if newShared = b then
+                        b :> Texture
+                    else
+                        newShared.Acquire()
+                        b.Release()
+                        newShared :> Texture
+                | _ ->
+                    if b.Handle = 0 then
+                        x.Create(data)
+                    else
                         ctx.Upload(b, data)
                         b
-            else
-                ctx.Upload(b, data)
-                b
 
         member x.Delete(b : Texture) =
-            if active then
-                match b with
-                    | :? RefCountedTexture as b -> b.Release()
-                    | _ -> ctx.Delete b
-            else
-                ctx.Delete b
+            if b.Handle <> 0 then
+                if active then
+                    match b with
+                        | :? RefCountedTexture as b -> b.Release()
+                        | _ -> ctx.Delete b
+                else
+                    ctx.Delete b
 
 
 
