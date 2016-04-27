@@ -6,3 +6,7 @@ description
 files
     ..\..\bin\Release\Aardvark.Rendering.Text.dll ==> lib\net45
     ..\..\bin\Release\Aardvark.Rendering.Text.pdb ==> lib\net45
+	..\..\lib\Release\SharpFont.dll ==> lib\net45
+	..\..\lib\Release\SharpFont.pdb ==> lib\net45
+	..\..\lib\Release\System.Numerics.Vectors.dll ==> lib\net45
+	..\..\lib\Release\System.Numerics.Vectors.pdb ==> lib\net45

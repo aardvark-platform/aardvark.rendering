@@ -16,6 +16,8 @@ nuget DockPanelSuite                     ~> 2.10.0
 nuget DockPanelSuite.ThemeVS2012Light    ~> 2.10.0
 nuget DockPanelSuite.ThemeVS2013Blue     ~> 2.10.0
 
+nuget Poly2Tri                           ~> 1.0.1
+
 nuget FsUnit                             ~> 2.1.0
 nuget NUnit                              ~> 3.2.0
 
