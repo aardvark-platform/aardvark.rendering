@@ -62,6 +62,7 @@
     <Compile Include="Path.fs" />
     <Compile Include="Font.fs" />
     <Compile Include="Text.fs" />
+    <Compile Include="Markdown.fs" />
     <Compile Include="SceneGraph.fs" />
   </ItemGroup>
   <PropertyGroup>

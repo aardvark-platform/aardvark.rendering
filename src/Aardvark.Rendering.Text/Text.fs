@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Rendering.Text
 
-#nowarn "9"
-#nowarn "51"
 
 open System
 open System.Linq
