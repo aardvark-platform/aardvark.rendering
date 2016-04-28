@@ -154,11 +154,20 @@ let main argv =
 
 
     let all = "abcdefghijklmnopqrstuvwxyz\r\nABCDEFGHIJKLMNOPQRSTUVWXYZ\r\n1234567890 ?ß\\\r\n^°!\"§$%&/()=?´`@+*~#'<>|,;.:-_µ"
+       
+    let md = 
+        "# Heading1\r\n" +
+        "## Heading2\r\n" + 
+        "\r\n" +
+        "This is ***markdown*** code being parsed by *CommonMark.Net*  \r\n" +
+        "It seems to work quite **well**\r\n" +
+        "*italic* **bold** ***bold/italic***\r\n"
             
     let mode = Mod.init FillMode.Fill
     let font = new Font("Comic Sans")
     let sg = 
-        Sg.label font C4b.White (Mod.constant all)
+        Sg.markdown (Mod.constant md)
+        //Sg.label font C4b.White (Mod.constant all)
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.fillMode mode
