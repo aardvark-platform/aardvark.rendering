@@ -11,24 +11,24 @@ open Aardvark.Rendering.Text
 module Sg =
     open Aardvark.SceneGraph.Semantics
 
-    type Text(content : IMod<RenderText>) =
+    type Shape(content : IMod<ShapeList>) =
         interface ISg
 
         member x.Content = content
 
 
     [<Ag.Semantic>]
-    type TextSem() =
+    type ShapeSem() =
 
-        member x.RenderObjects(t : Text) : aset<IRenderObject> =
+        member x.RenderObjects(t : Shape) : aset<IRenderObject> =
             let content = t.Content
-            let cache = Font.GetOrCreateCache(t.Runtime)
+            let cache = ShapeCache.GetOrCreateCache(t.Runtime)
             let ro = RenderObject.create()
                 
             let indirectAndOffsets =
                 content |> Mod.map (fun renderText ->
                     let indirectBuffer = 
-                        renderText.glyphs 
+                        renderText.shapes 
                             |> Array.map cache.GetBufferRange
                             |> Array.mapi (fun i r ->
                                 DrawCallInfo(
@@ -84,14 +84,14 @@ module Sg =
             let mode = s.FillMode
             mode |> Mod.map (fun m -> m = FillMode.Fill)
 
-    let text (content : IMod<RenderText>) =
-        Text(content)
+    let shape (content : IMod<ShapeList>) =
+        Shape(content)
             |> Sg.uniform "Antialias" (Mod.constant true)
 
-    let label (f : Font) (color : C4b) (content : IMod<string>) =
+    let text (f : Font) (color : C4b) (content : IMod<string>) =
         content 
             |> Mod.map (fun c -> Text.Layout(f, color, c)) 
-            |> text
+            |> shape
 
 
 

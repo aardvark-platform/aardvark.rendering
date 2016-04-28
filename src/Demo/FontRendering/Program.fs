@@ -54,7 +54,7 @@ let main argv =
 
 
     use app = new OpenGlApplication()
-    use win = app.CreateSimpleRenderWindow(4)
+    use win = app.CreateSimpleRenderWindow(8)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -161,8 +161,22 @@ let main argv =
         "\r\n" +
         "This is ***markdown*** code being parsed by *CommonMark.Net*  \r\n" +
         "It seems to work quite **well**\r\n" +
-        "*italic* **bold** ***bold/italic***\r\n"
-            
+        "*italic* **bold** ***bold/italic***\r\n" +
+        "\r\n" +
+        "    type A(a : int) = \r\n" + 
+        "        member x.A = a\r\n" +
+        "\r\n" + 
+        "regular Text again\r\n"+
+        "\r\n" +
+        "-----------------------------\r\n" +
+        "is there a ruler???\r\n" + 
+        "1) First *item*\r\n" + 
+        "2) second *item*\r\n" +
+        "\r\n"+
+        "* First *item*  \r\n" + 
+        "with multiple lines\r\n" + 
+        "* second *item*\r\n" 
+
     let mode = Mod.init FillMode.Fill
     let font = new Font("Comic Sans")
     let sg = 

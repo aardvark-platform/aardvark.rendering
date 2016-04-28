@@ -10,19 +10,14 @@ open Aardvark.Base.Rendering
 
 
 [<ReferenceEquality; NoComparison>]
-[<StructuredFormatDisplay("{AsString}")>]
-type RenderText =
+type ShapeList =
     {
         offsets     : V2d[]
         scales      : V2d[]
         colors      : C4b[]
-        glyphs      : Glyph[]
+        shapes      : Shape[]
     }
 
-    override x.ToString() =
-        x.glyphs |> Array.map Glyph.char |> String
-        
-    member private x.AsString = x.ToString()
 
 
 type TextAlignment =
@@ -41,7 +36,7 @@ type Text private() =
         let offsets = List<V2d>()
         let scales = List<V2d>()
         let colors = List<C4b>()
-        let glyphs = List<Glyph>()
+        let glyphs = List<Shape>()
 
         let mutable cy = 0.0
         let allLines = lineBreak.Split content
@@ -86,7 +81,7 @@ type Text private() =
             offsets     = offsets.ToArray()
             scales      = scales.ToArray()
             colors      = colors.ToArray()
-            glyphs      = glyphs.ToArray()
+            shapes      = glyphs.ToArray()
         }
 
     [<Extension>]

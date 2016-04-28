@@ -14,10 +14,31 @@ module Markdown =
 
     type TextState =
         {
-            strong : bool
-            emph : bool
-            code : bool
+            scale   : V2d
+            strong  : bool
+            emph    : bool
+            code    : bool
         }
+
+        static member empty = { scale = V2d.II; strong = false; emph = false; code = false }
+
+    type LayoutState = 
+        {
+            x           : float
+            y           : float
+            indent      : float
+            textState   : TextState
+            color       : C4b
+
+            shapes      : list<Shape>
+            offsets     : list<V2d>
+            scales      : list<V2d>
+            colors      : list<C4b>
+
+        }
+
+        static member empty = { x = 0.0; y = 0.0; indent = 0.0; textState = TextState.empty; color = C4b.White; shapes = []; offsets = []; scales = []; colors = [] }
+
 
     module Patterns = 
         let inline private startFrom< ^a when ^a : (member NextSibling : ^a) and ^a : null > (b : ^a) =
@@ -49,8 +70,6 @@ module Markdown =
 
             ]
 
-        let private emptyState = { strong = false; emph = false; code = false }
-
         /// The root element that represents the document itself. There should only be one in the tree.
         let (|Document|_|) (b : Block) =
             if b.Tag = BlockTag.Document then
@@ -63,7 +82,7 @@ module Markdown =
             if b.Tag = BlockTag.Paragraph then
                 b.InlineContent 
                     |> startFrom 
-                    |> List.collect (getAll emptyState) 
+                    |> List.collect (getAll TextState.empty) 
                     |> Some
             else
                 None
@@ -74,7 +93,7 @@ module Markdown =
                 let content = 
                     b.InlineContent 
                         |> startFrom 
-                        |> List.collect (getAll emptyState) 
+                        |> List.collect (getAll TextState.empty) 
                 Some(int b.Heading.Level, content)
             else
                 None
@@ -96,7 +115,7 @@ module Markdown =
             if b.Tag = BlockTag.BlockQuote then
                 b.InlineContent 
                     |> startFrom 
-                    |> List.collect (getAll emptyState) 
+                    |> List.collect (getAll TextState.empty) 
                     |> Some
             else
                 None
@@ -109,20 +128,14 @@ module Markdown =
         /// A code block element that was formatted with fences (for example, <c>~~~\nfoo\n~~~</c>).
         let (|FencedCode|_|) (b : Block) =
             if b.Tag = BlockTag.FencedCode then
-                b.InlineContent 
-                    |> startFrom 
-                    |> List.collect (getAll { emptyState with code = true }) 
-                    |> Some
+                b.StringContent.ToString() |> Some
             else 
                 None
 
         /// A code block element that was formatted by indenting the lines with at least 4 spaces.
         let (|IndentedCode|_|) (b : Block) =
             if b.Tag = BlockTag.IndentedCode then
-                b.InlineContent 
-                    |> startFrom 
-                    |> List.collect (getAll { emptyState with code = true }) 
-                    |> Some
+                b.StringContent.ToString() |> Some
             else 
                 None
 
@@ -130,71 +143,101 @@ module Markdown =
         open Patterns
 
 
-        type LayoutState = 
-            {
-                x           : float
-                y           : float
-                scale       : float
-                color       : C4b
+        [<AutoOpen>]
+        module StateHelpers = 
+            let moveX (v : float) =
+                modifyState (fun s -> { s with x = s.x + v * s.textState.scale.X })
 
-                glyphs      : list<Glyph>
-                offsets     : list<V2d>
-                scales      : list<V2d>
-                colors      : list<C4b>
+            let moveY (v : float) =
+                modifyState (fun s -> { s with y = s.y - v * s.textState.scale.Y })
 
-            }
+            let indent (v : float) =
+                modifyState (fun s -> 
+                    let nx = s.indent + v * s.textState.scale.X
+                    { s with indent = nx; x = nx }
+                )
 
-        let moveX (v : float) =
-            modifyState (fun s -> { s with x = s.x + v * s.scale })
-
-        let moveY (v : float) =
-            modifyState (fun s -> { s with x = s.y + v * s.scale })
-    
-        let lineBreak =
-            state {
-                let! s = getState
-                do! putState { s with x = 0.0; y = s.y - s.scale}
-            }
-
-        let setX (x : float) =
-            modifyState (fun s -> { s with x = x })
-
-        let setScale (scale : float) =
-            state {
-                let! s = getState
-                do! putState { s with scale = scale }
-                return s.scale
-            }
-
-
-        let pos = 
-            state {
-                let! s = getState
-                return V2d(s.x, s.y)
-            }
-
-        let emit (g : Glyph) =
-            modifyState (fun (s : LayoutState) ->
-                { s with
-                    glyphs = g::s.glyphs
-                    offsets = V2d(s.x, s.y)::s.offsets
-                    scales = V2d(s.scale, s.scale)::s.scales
-                    colors = s.color::s.colors
+            let pushColor (c : C4b) =
+                state {
+                    let! s = getState
+                    do! putState { s with color = c}
+                    return s.color
                 }
-            )
+      
+            let lineBreak =
+                state {
+                    let! s = getState
+                    do! putState { s with x = s.indent; y = s.y - s.textState.scale.Y}
+                }
+
+            let withTextState (ts : TextState) (f : unit -> State<LayoutState, 'a>) =
+                state {
+                    let! s = getState
+                    let old = s.textState
+
+                    let nts = 
+                        { 
+                            strong      = old.strong || ts.strong
+                            emph        = old.emph || ts.emph
+                            code        = old.code || ts.code
+                            scale       = old.scale * ts.scale
+                        }
+
+                    do! putState { s with textState = nts }
+                    let! res = f()
+                    do! modifyState (fun s -> { s with textState = old })
+                    return res
+                }
+
+            
+
+            let pos = 
+                state {
+                    let! s = getState
+                    return V2d(s.x, s.y)
+                }
+
+            let emit (g : Shape) =
+                modifyState (fun (s : LayoutState) ->
+                    { s with
+                        shapes = g::s.shapes
+                        offsets = V2d(s.x, s.y)::s.offsets
+                        scales = s.textState.scale::s.scales
+                        colors = s.color::s.colors
+                    }
+                )
 
 
-        let private regular         = new Font("Times New Roman", FontStyle.Regular)
-        let private bold            = new Font("Times New Roman", FontStyle.Bold)
-        let private italic          = new Font("Times New Roman", FontStyle.Italic)
-        let private boldItalic      = new Font("Times New Roman", FontStyle.Italic ||| FontStyle.Bold)
+            module Paragraph = 
+                let fontName        = "Times New Roman"
+                let regular         = new Font(fontName, FontStyle.Regular)
+                let bold            = new Font(fontName, FontStyle.Bold)
+                let italic          = new Font(fontName, FontStyle.Italic)
+                let boldItalic      = new Font(fontName, FontStyle.Italic ||| FontStyle.Bold)
 
-        let private getFont (s : TextState) =
-            match s.strong, s.emph with
-                | false, false  -> regular
-                | true, false   -> bold
-                | false, true   -> italic
-                | true, true    -> boldItalic
+            module Code = 
+                let fontName        = "Consolas"
+                let regular         = new Font(fontName, FontStyle.Regular)
+                let bold            = new Font(fontName, FontStyle.Bold)
+                let italic          = new Font(fontName, FontStyle.Italic)
+                let boldItalic      = new Font(fontName, FontStyle.Italic ||| FontStyle.Bold)
+
+
+            let getFont =
+                state {
+                    let! s = getState
+                    let ts = s.textState
+                    match ts.strong, ts.emph, ts.code with
+                        | false,    false,      false   -> return Paragraph.regular
+                        | false,    false,      true    -> return Code.regular
+                        | false,    true,       false   -> return Paragraph.italic
+                        | false,    true,       true    -> return Code.italic
+                        | true,     false,      false   -> return Paragraph.bold
+                        | true,     false,      true    -> return Code.bold
+                        | true,     true,       false   -> return Paragraph.boldItalic
+                        | true,     true,       true    -> return Code.boldItalic
+
+                }
 
         let layout (str : string) =
             let ast = CommonMarkConverter.Parse(str)
@@ -203,37 +246,43 @@ module Markdown =
                 state {
                     for (props, text) in parts do
                         if not (isNull text) then
-                            let font = getFont props
+                            do! withTextState props (fun () ->
+                                state {
+                                    let! font = getFont
+                                    let mutable last = '\n'
+                                    for c in text do
+                                        match c with
+                                            | ' ' -> do! moveX 0.5
+                                            | '\t' -> do! moveX 2.0
+                                            | '\n' -> do! lineBreak
+                                            | '\r' -> ()
+                                            | _ ->
+                                                let! s = getState
+                                                let g = font.GetGlyph c
+                                                let kerning = font.GetKerning(last, c)
+                                                let before = g.Before + kerning
+                                                let after = g.Advance - before
 
-                            let mutable last = '\n'
-                            for c in text do
-                                match c with
-                                    | ' ' -> do! moveX 0.5
-                                    | '\t' -> do! moveX 2.0
-                                    | '\n' -> do! lineBreak
-                                    | '\r' -> ()
-                                    | _ ->
-                                        let! s = getState
-                                        let g = font.GetGlyph c
-                                        let kerning = font.GetKerning(last, c)
-                                        let before = g.Before + kerning
-                                        let after = g.Advance - before
+                                                do! moveX before
+                                                do! emit g
+                                                do! moveX after
+                                        last <- c
 
-                                        do! moveX before
-                                        do! emit g
-                                        do! moveX after
-                                last <- c
+                                }
+                            )
 
                         else
                             Log.warn "bad text: %A" text
                 }
 
-            let scales =
+            let headingStyles =
                 Map.ofList [
-                    1, 3.0
-                    2, 2.0
-                    3, 1.5
-                    4, 1.2
+                    1, { scale = V2d.II * 3.0; emph = false; strong = true; code = false }
+                    2, { scale = V2d.II * 2.5; emph = false; strong = true; code = false }
+                    3, { scale = V2d.II * 2.0; emph = false; strong = true; code = false }
+                    4, { scale = V2d.II * 1.5; emph = false; strong = true; code = false }
+                    5, { scale = V2d.II * 1.2; emph = false; strong = true; code = false }
+                    6, { scale = V2d.II * 1.1; emph = false; strong = true; code = false }
                 ]
 
             let rec layout (b : Block) =
@@ -248,14 +297,57 @@ module Markdown =
                             do! lineBreak
 
                         | Heading(level, parts) ->  
-                            let scale = scales.[level]
-                            let! old = setScale scale
+                            let style = headingStyles.[level]
+                            do! withTextState style (fun () ->
+                                state {
+                                    do! layoutParts parts
+                                    do! lineBreak
+                                }
+                            )
 
-                            do! layoutParts parts
+                        | IndentedCode content | FencedCode content ->
+                            
+                            do! moveY 1.0
+                            do! indent 1.0
+                            do! layoutParts [{ TextState.empty with code = true }, content]
+                            do! indent -1.0
                             do! lineBreak
+                            
+                        | HorizontalRuler ->
+                            let h = 0.05
+                            let w = 20.0
+                            do! moveY -(0.4 + h/2.0)
+                            do! withTextState { TextState.empty with scale = V2d(w, h) } (fun () ->
+                                state {
+                                    do! emit Shape.Quad
+                                }
+                            )
+                            do! moveY (0.4 + h/2.0)
+                            do! lineBreak
+                        
+                        | List(kind, items) ->
+                            do! moveY 0.4
 
-                            let! _ = setScale old
-                            ()
+                            let! font = getFont
+                            let mutable index = 1
+                            for b in items do
+                                do! moveX 0.5
+                                let prefix =
+                                    match kind with
+                                        | ListType.Bullet -> "•"
+                                        | _ -> sprintf "%d." index
+
+                                do! layoutParts [TextState.empty, prefix]
+                                //do! moveX 0.6
+                                let! p = pos
+                                let nextMul4 = ceil (p.X / 1.5) * 1.5
+
+                                do! indent nextMul4
+                                for inner in b do do! layout inner
+                                do! indent -nextMul4
+                                index <- index + 1
+
+                            do! moveY 0.4
 
                         | _ ->
                             return failwithf "unknown block: %A" b.Tag
@@ -266,22 +358,15 @@ module Markdown =
 
             let ((), s) = 
                 run.runState {
-                    x           = 0.0
-                    y           = 0.0
-                    scale       = 1.0
-                    color       = C4b.White
-                         
-                    glyphs      = []
-                    offsets     = []
-                    scales      = []
-                    colors      = []
+                    LayoutState.empty with
+                        color       = C4b.White   
                 }
 
             {
-                RenderText.glyphs   = List.toArray s.glyphs
-                RenderText.offsets  = List.toArray s.offsets
-                RenderText.scales   = List.toArray s.scales
-                RenderText.colors   = List.toArray s.colors
+                ShapeList.shapes   = List.toArray s.shapes
+                ShapeList.offsets  = List.toArray s.offsets
+                ShapeList.scales   = List.toArray s.scales
+                ShapeList.colors   = List.toArray s.colors
             }
 
 
@@ -294,4 +379,4 @@ module ``Markdown Sg Extensions`` =
         let markdown (code : IMod<string>) =
             code
                 |> Mod.map Markdown.layout
-                |> Sg.text
+                |> Sg.shape

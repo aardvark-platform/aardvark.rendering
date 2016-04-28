@@ -414,7 +414,7 @@ module ProgramExtensions =
                                     | "lines" | "lines_adjacency" ->
                                         [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
                                     | "triangles" | "triangles_adjacency" ->
-                                        [IndexedGeometryMode.TriangleStrip; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
+                                        [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
                                     | v ->
                                        failwithf "unknown geometry shader input topology: %A" v 
                             else
