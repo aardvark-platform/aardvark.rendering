@@ -54,7 +54,7 @@ let main argv =
 
 
     use app = new OpenGlApplication()
-    use win = app.CreateSimpleRenderWindow()
+    use win = app.CreateSimpleRenderWindow(4)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)

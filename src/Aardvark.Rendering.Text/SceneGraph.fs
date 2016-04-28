@@ -11,27 +11,25 @@ open Aardvark.Rendering.Text
 module Sg =
     open Aardvark.SceneGraph.Semantics
 
-    type Text(font : Font, content : IMod<string>) =
+    type Text(content : IMod<RenderText>) =
         interface ISg
 
-        member x.Font = font
         member x.Content = content
 
 
     [<Ag.Semantic>]
     type TextSem() =
+
         member x.RenderObjects(t : Text) : aset<IRenderObject> =
-            let font = t.Font
             let content = t.Content
-            let cache = font.GetOrCreateCache(t.Runtime)
+            let cache = Font.GetOrCreateCache(t.Runtime)
             let ro = RenderObject.create()
                 
             let indirectAndOffsets =
-                content |> Mod.map (fun str ->
-                    let arr = Text.layout font TextAlignment.Left (Box2d(0.0, 0.0, 100000.0, 100000.0)) str
-
+                content |> Mod.map (fun renderText ->
                     let indirectBuffer = 
-                        arr |> Array.map (snd >> cache.GetBufferRange)
+                        renderText.glyphs 
+                            |> Array.map cache.GetBufferRange
                             |> Array.mapi (fun i r ->
                                 DrawCallInfo(
                                     FirstIndex = r.Min,
@@ -45,27 +43,37 @@ module Sg =
                             :> IBuffer
 
                     let offsets = 
-                        arr |> Array.map (fst >> V2f.op_Explicit)
+                        Array.zip renderText.offsets renderText.scales
+                            |> Array.map (fun (o,s) -> V4f.op_Explicit (V4d(o.X, o.Y, s.X, s.Y)))
                             |> ArrayBuffer
                             :> IBuffer
 
-                    indirectBuffer, offsets
+                    let colors = 
+                        renderText.colors
+                            |> ArrayBuffer
+                            :> IBuffer
+
+                    indirectBuffer, offsets, colors
                 )
 
-            let offsets = BufferView(Mod.map snd indirectAndOffsets, typeof<V2f>)
+            let offsets = BufferView(Mod.map (fun (_,o,_) -> o) indirectAndOffsets, typeof<V4f>)
+            let colors = BufferView(Mod.map (fun (_,_,c) -> c) indirectAndOffsets, typeof<C4b>)
 
             let instanceAttributes =
                 let old = ro.InstanceAttributes
                 { new IAttributeProvider with
                     member x.TryGetAttribute sem =
-                        if sem = Path.Attributes.PathOffset then offsets |> Some
+                        if sem = Path.Attributes.PathOffsetAndScale then offsets |> Some
+                        elif sem = Path.Attributes.PathColor then colors |> Some
                         else old.TryGetAttribute sem
                     member x.All = old.All
                     member x.Dispose() = old.Dispose()
                 }
 
+            ro.RenderPass <- 100UL
+            ro.BlendMode <- Mod.constant BlendMode.Blend
             ro.VertexAttributes <- cache.VertexBuffers
-            ro.IndirectBuffer <- indirectAndOffsets |> Mod.map fst
+            ro.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
             ro.InstanceAttributes <- instanceAttributes
             ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
             ro.Surface <- Mod.constant cache.Surface
@@ -76,10 +84,14 @@ module Sg =
             let mode = s.FillMode
             mode |> Mod.map (fun m -> m = FillMode.Fill)
 
-    let text (f : Font) (content : IMod<string>) =
-        Text(f, content)
+    let text (content : IMod<RenderText>) =
+        Text(content)
             |> Sg.uniform "Antialias" (Mod.constant true)
 
+    let label (f : Font) (content : IMod<string>) =
+        content 
+            |> Mod.map (fun c -> Text.Layout(f, c)) 
+            |> text
 
 
 
