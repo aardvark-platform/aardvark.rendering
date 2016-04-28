@@ -88,9 +88,9 @@ module Sg =
         Text(content)
             |> Sg.uniform "Antialias" (Mod.constant true)
 
-    let label (f : Font) (content : IMod<string>) =
+    let label (f : Font) (color : C4b) (content : IMod<string>) =
         content 
-            |> Mod.map (fun c -> Text.Layout(f, c)) 
+            |> Mod.map (fun c -> Text.Layout(f, color, c)) 
             |> text
 
 

@@ -158,7 +158,7 @@ let main argv =
     let mode = Mod.init FillMode.Fill
     let font = new Font("Comic Sans")
     let sg = 
-        Sg.label font (Mod.constant all)
+        Sg.label font C4b.White (Mod.constant all)
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo proj.ProjectionTrafos.Mod
             |> Sg.fillMode mode
