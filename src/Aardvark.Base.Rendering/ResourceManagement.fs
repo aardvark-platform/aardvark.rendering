@@ -90,97 +90,127 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
         member x.Handle = x.Handle
         member x.Update caller = x.Update caller
 
-and ResourceCache<'h when 'h : equality>() =
+and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, renderTaskLock : Option<RenderTaskLock>) =
     let store = ConcurrentDictionary<list<obj>, Resource<'h>>()
 
-    static let acquire (old : Option<'h>) (m : IMod<'a>) =
+    let acquire (old : Option<'h>) (m : IMod<'a>) =
         match old with
             | None ->
                 match m with
                     | :? IOutputMod<'a> as om -> om.Acquire()
                     | _ -> ()
+
+                match renderTaskLock, m with
+                    | Some l, (:? ILockedResource as r) -> r.AddLock l
+                    | _ -> ()
+
             | _ ->
                 ()
 
-    static let release  (m : IMod<'a>) =
+    let release  (m : IMod<'a>) =
         match m with
             | :? IOutputMod<'a> as om -> om.Release()
             | _ -> ()
 
-    static let stats (m : IMod<'a>) =
+        match renderTaskLock, m with
+            | Some l, (:? ILockedResource as r) -> r.RemoveLock l
+            | _ -> ()
+
+    let stats (m : IMod<'a>) =
         match m with
             | :? IOutputMod<'a> as om -> om.LastStatistics
             | _ -> FrameStatistics.Zero
 
+    let tryGetParent (key : list<obj>) =
+        match parent with
+            | Some v -> v.TryGet key
+            | None -> None
+
+    member x.TryGet(key : list<obj>) =
+        match store.TryGetValue(key) with
+            | (true,v) -> Some v
+            | _ -> None
+     
     member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h>) =
-        let resource = 
-            store.GetOrAdd(key, fun _ -> 
-                let res = create()
-                res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
-                res
-            )
+        let resource =
+            match tryGetParent key with
+                | Some r -> r
+                | None ->
+                     store.GetOrAdd(key, fun _ -> 
+                        let res = create()
+                        res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
+                        res
+                     )
         resource.AddRef()
         resource :> IResource<_>
 
     member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
         let key = [dataMod :> obj]
         let resource = 
-            store.GetOrAdd(key, fun _ -> 
-                let mutable ownsHandle = false
+            match tryGetParent key with
+                | Some v -> 
+                    match dataMod with
+                        | :? ILockedResource as r ->
+                            { new Resource<'h>(v.Kind) with
+                                member x.Create(old : Option<'h>) =
+                                    acquire old dataMod
+                                    v.Create old
+                                member x.Destroy(h : 'h) =
+                                    release dataMod
+                                    v.Destroy h 
+                            }
+                        | _ -> v 
+                | None ->
+                    store.GetOrAdd(key, fun _ -> 
+                        let mutable ownsHandle = false
                 
-                { new Resource<'h>(desc.kind) with
-                    member x.Create(old : Option<'h>) =
-                        acquire old dataMod
-                        let data = dataMod.GetValue x
-                        let stats = stats dataMod
+                        { new Resource<'h>(desc.kind) with
+                            member x.Create(old : Option<'h>) =
+                                acquire old dataMod
+                                let data = dataMod.GetValue x
+                                let stats = stats dataMod
 
-                        match old with
-                            | Some old ->
-                                match data :> obj with
-                                    | :? 'h as handle ->
-                                        if ownsHandle then desc.delete old
-                                        ownsHandle <- false
-                                        handle, stats
+                                match old with
+                                    | Some old ->
+                                        match data :> obj with
+                                            | :? 'h as handle ->
+                                                if ownsHandle then desc.delete old
+                                                ownsHandle <- false
+                                                handle, stats
 
-                                    | _ ->
-                                        if ownsHandle then
-                                            let newHandle = desc.update old data
-                                            newHandle, stats
-                                        else
-                                            let newHandle = desc.create data
-                                            ownsHandle <- true
-                                            newHandle, stats
+                                            | _ ->
+                                                if ownsHandle then
+                                                    let newHandle = desc.update old data
+                                                    newHandle, stats
+                                                else
+                                                    let newHandle = desc.create data
+                                                    ownsHandle <- true
+                                                    newHandle, stats
 
-                            | None -> 
+                                    | None -> 
 
 
-                                match data :> obj with
-                                    | :? 'h as handle -> 
-                                        ownsHandle <- false
-                                        handle, stats
-                                    | _ ->
-                                        let handle = desc.create data
-                                        ownsHandle <- true
-                                        handle, stats
+                                        match data :> obj with
+                                            | :? 'h as handle -> 
+                                                ownsHandle <- false
+                                                handle, stats
+                                            | _ ->
+                                                let handle = desc.create data
+                                                ownsHandle <- true
+                                                handle, stats
 
-                    member x.Destroy(h : 'h) =
-                        release dataMod
-                        if ownsHandle then
-                            ownsHandle <- false
-                            desc.delete h
-                }
-            )
+                            member x.Destroy(h : 'h) =
+                                release dataMod
+                                if ownsHandle then
+                                    ownsHandle <- false
+                                    desc.delete h
+                        }
+                    )
         resource.AddRef()
         resource :> IResource<_>
 
     member x.Count = store.Count
     member x.Clear() = store.Clear()
-
-
-
-
-
-
 
 
 type ResourceInputSet() =

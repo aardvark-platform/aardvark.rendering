@@ -62,7 +62,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
 
     let mutable ctx = ctx
-    let mutable manager = if ctx <> null then ResourceManager(ctx, shareTextures, shareBuffers) else null
+    let mutable manager = if ctx <> null then ResourceManager(ctx, None, shareTextures, shareBuffers) else null
 
     new(ctx) = new Runtime(ctx, false, false)
 
@@ -73,7 +73,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         with get() = ctx
         and set c = 
             ctx <- c
-            manager <- ResourceManager(ctx, shareTextures, shareBuffers)
+            manager <- ResourceManager(ctx, None, shareTextures, shareBuffers)
             //compiler <- Compiler.Compiler(x, c)
             //currentRuntime <- Some (x :> IRuntime)
 
@@ -210,7 +210,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
-        let man = ResourceManager(manager, ctx, shareTextures, shareBuffers)
+        let renderTaskLock = RenderTaskLock()
+        let man = ResourceManager(manager, ctx, Some renderTaskLock, shareTextures, shareBuffers)
 
         match eng.sorting with
             | Grouping _ -> 

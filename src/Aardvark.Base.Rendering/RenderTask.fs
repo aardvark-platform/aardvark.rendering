@@ -168,6 +168,10 @@ type IOutputMod<'a> =
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit
 
+type ILockedResource =
+    abstract member AddLock     : RenderTaskLock -> unit
+    abstract member RemoveLock  : RenderTaskLock -> unit
+
 [<AutoOpen>]
 module private RefCountedResources = 
     type ChangeableFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =

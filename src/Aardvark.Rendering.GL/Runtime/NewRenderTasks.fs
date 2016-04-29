@@ -13,7 +13,7 @@ open Aardvark.Rendering.GL.Compiler
 open System.Runtime.CompilerServices
 
 [<AbstractClass>]
-type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, debug : bool) =
+type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, renderTaskLock : RenderTaskLock, debug : bool) =
     inherit AdaptiveObject()
     let currentContext = Mod.init Unchecked.defaultof<ContextHandle>
 
@@ -105,8 +105,9 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
             let debugState = pushDebugOutput()
             let fboState = pushFbo desc
 
-
-            let stats = x.Run fbo
+            let stats = renderTaskLock.Run (fun () -> 
+                x.Run fbo
+            )
 
             popFbo fboState
             popDebugOutput debugState
@@ -137,8 +138,8 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, deb
 
 
 [<AbstractClass>]
-type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : IFramebufferSignature, debug : bool) as this =
-    inherit AbstractRenderTask(manager.Context, fboSignature, debug)
+type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : IFramebufferSignature, renderTaskLock : RenderTaskLock, debug : bool) as this =
+    inherit AbstractRenderTask(manager.Context, fboSignature, renderTaskLock, debug)
 
     let ctx = manager.Context
 
@@ -403,6 +404,7 @@ module GroupedRenderTask =
         inherit AbstractRenderTaskWithResources(
             manager,
             fboSignature, 
+            manager.RenderTaskLock.Value,       // manager for tasks requires 
             config.GetValue().useDebugOutput
         )
 
@@ -607,7 +609,7 @@ module SortedRenderTask =
         end
 
     type RenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) as this =
-        inherit AbstractRenderTaskWithResources(manager, fboSignature, config.useDebugOutput)
+        inherit AbstractRenderTaskWithResources(manager, fboSignature, manager.RenderTaskLock.Value, config.useDebugOutput) // manager needs resourcelock
 
         let mutable anyScope = Ag.emptyScope
 

@@ -119,6 +119,13 @@ and OutputDescription =
         stencilMaskBack : uint32
     }
 
+open System.Threading
+type RenderTaskLock() =
+    let rw = new ReaderWriterLockSlim()
+    member x.Run f = ReaderWriterLock.write rw f
+    member x.Update f = 
+        ReaderWriterLock.read rw f
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module OutputDescription =
 

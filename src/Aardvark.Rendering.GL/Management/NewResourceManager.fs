@@ -215,14 +215,15 @@ module Sharing =
                 else
                     ctx.Delete b
 
-type UniformBufferManager(ctx : Context, size : int, fields : list<ActiveUniform>) =
+type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>, size : int, fields : list<ActiveUniform>) =
 
     let alignedSize = (size + 255) &&& ~~~255
 
     let buffer = new MappedBuffer(ctx)
+    do renderTaskLock |> Option.iter buffer.AddLock
     let manager = MemoryManager.createNop()
 
-    let viewCache = ResourceCache<UniformBufferView>()
+    let viewCache = ResourceCache<UniformBufferView>(None, renderTaskLock)
     let rw = new ReaderWriterLockSlim()
 
     member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<obj>) : IResource<UniformBufferView> =
@@ -280,25 +281,24 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<ActiveUniform
 
 
 [<AllowNullLiteral>]
-type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, shareTextures : bool, shareBuffers : bool) =
-    let cache (f : ResourceManager -> ResourceCache<'a>) =
-        match parent with
-            | Some p -> f p
-            | None -> ResourceCache<'a>()
+type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskLock : Option<RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
+    
+    let derivedCache (f : ResourceManager -> ResourceCache<'a>) =
+        ResourceCache<'a>(Option.map f parent, renderTaskLock)
 
    
     let bufferManager           = Sharing.BufferManager(ctx, shareBuffers)
     let arrayBufferManager      = Sharing.ArrayBufferManager(ctx, shareBuffers)
     let textureManager          = Sharing.TextureManager(ctx, shareTextures)
 
-    let arrayBufferCache        = cache (fun m -> m.ArrayBufferCache)
-    let bufferCache             = cache (fun m -> m.BufferCache)
-    let textureCache            = cache (fun m -> m.TextureCache)
-    let indirectBufferCache     = cache (fun m -> m.IndirectBufferCache)
-    let programCache            = cache (fun m -> m.ProgramCache)
-    let samplerCache            = cache (fun m -> m.SamplerCache)
-    let vaoCache                = cache (fun m -> m.VAOCache)
-    let uniformLocationCache    = cache (fun m -> m.UniformLocationCache)
+    let arrayBufferCache        = derivedCache (fun m -> m.ArrayBufferCache)
+    let bufferCache             = derivedCache (fun m -> m.BufferCache)
+    let textureCache            = derivedCache (fun m -> m.TextureCache)
+    let indirectBufferCache     = derivedCache (fun m -> m.IndirectBufferCache)
+    let programCache            = derivedCache (fun m -> m.ProgramCache)
+    let samplerCache            = derivedCache (fun m -> m.SamplerCache)
+    let vaoCache                = derivedCache (fun m -> m.VAOCache)
+    let uniformLocationCache    = derivedCache (fun m -> m.UniformLocationCache)
 
     let uniformBufferManagers = 
         match parent with
@@ -315,8 +315,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
     member private x.UniformLocationCache   : ResourceCache<UniformLocation>    = uniformLocationCache
     member private x.UniformBufferManagers                                      = uniformBufferManagers
 
-    new(parent, ctx, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, shareTextures, shareBuffers)
-    new(ctx, shareTextures, shareBuffers) = ResourceManager(None, ctx, shareTextures, shareBuffers)
+    member x.RenderTaskLock = renderTaskLock
+
+    new(parent, ctx, lock, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, lock, shareTextures, shareBuffers)
+    new(ctx, lock, shareTextures, shareBuffers) = ResourceManager(None, ctx, lock, shareTextures, shareBuffers)
 
 
     member x.Context = ctx
@@ -468,7 +470,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, s
      
     member x.CreateUniformBuffer(scope : Ag.Scope, layout : UniformBlock, program : Program, u : IUniformProvider) =
         let manager = 
-            uniformBufferManagers.GetOrAdd((layout.size, layout.fields), fun (s,f) -> new UniformBufferManager(ctx, s, f))
+            uniformBufferManagers.GetOrAdd((layout.size, layout.fields), fun (s,f) -> new UniformBufferManager(ctx, renderTaskLock, s, f))
 
         manager.CreateUniformBuffer(scope, u, program.UniformGetters)
       

@@ -17,11 +17,21 @@ open Aardvark.Rendering.GL
 type MappedBuffer(ctx : Context) =
     inherit Mod.AbstractMod<IBuffer>()
 
+    let locks = ReferenceCountingSet<RenderTaskLock>()
+
     let mutable buffer = Buffer(ctx, 0n, 0)
     let mutable mappedPtr = 0n
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
 
     let mutable oldBuffers : int list = []
+
+    let resourceLocked f =
+        let rec run (locks  : list<RenderTaskLock>) () =
+            match locks with
+                | x::xs -> x.Update (run xs)
+                | [] -> f ()
+        let locks = lock locks (fun () -> locks |> Seq.toList)
+        run locks ()
 
     let unmap () =
         GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
@@ -37,7 +47,7 @@ type MappedBuffer(ctx : Context) =
         if not (List.isEmpty delete) then
             using ctx.ResourceLock (fun _ ->
                 for d in delete do 
-                    //GL.DeleteBuffer(d)   // repeated impossible happended leads to dead here.
+                    GL.DeleteBuffer(d)   // repeated impossible happended leads to dead here.
                     GL.Check "[MappedBuffer] could delete old buffer"
             )
 
@@ -92,18 +102,20 @@ type MappedBuffer(ctx : Context) =
                 Interlocked.Change(&oldBuffers, fun o -> oldBuffer::o) |> ignore
 
     member x.Write(sourcePtr, offset, size) =   
-        if size + offset > int buffer.SizeInBytes then failwith "insufficient buffer size"
-        Marshal.Copy(sourcePtr, mappedPtr + nativeint offset, size)
+        resourceLocked (fun () -> 
+            if size + offset > int buffer.SizeInBytes then failwith "insufficient buffer size"
+            Marshal.Copy(sourcePtr, mappedPtr + nativeint offset, size)
 
-        using ctx.ResourceLock (fun _ ->
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
-            GL.Check "[MappedBuffer] could bind buffer"
+            using ctx.ResourceLock (fun _ ->
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
+                GL.Check "[MappedBuffer] could bind buffer"
 
-            GL.FlushMappedBufferRange(BufferTarget.CopyWriteBuffer, nativeint offset, nativeint size)
-            GL.Check "[MappedBuffer] could flush buffer"
+                GL.FlushMappedBufferRange(BufferTarget.CopyWriteBuffer, nativeint offset, nativeint size)
+                GL.Check "[MappedBuffer] could flush buffer"
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            GL.Check "[MappedBuffer] could unbind buffer"
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                GL.Check "[MappedBuffer] could unbind buffer"
+            )
         )
 
     member x.Read(targetPtr, offset, size) =   
@@ -111,25 +123,29 @@ type MappedBuffer(ctx : Context) =
 
     member x.Capacity = int buffer.SizeInBytes
     member x.Resize(newCapacity) =
-        using ctx.ResourceLock (fun _ ->
-            resize x newCapacity
+        resourceLocked (fun () -> 
+            using ctx.ResourceLock (fun _ ->
+                resize x newCapacity
+            )
         )
 
     member x.Use(offset : nativeint, size : nativeint, f : nativeint -> 'a) =
-        if size + offset > buffer.SizeInBytes then failwith "insufficient buffer size"
-        let res = f (mappedPtr + offset)
+        resourceLocked (fun () -> 
+            if size + offset > buffer.SizeInBytes then failwith "insufficient buffer size"
+            let res = f (mappedPtr + offset)
 
-        using ctx.ResourceLock (fun _ ->
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
-            GL.Check "[MappedBuffer] could bind buffer"
+            using ctx.ResourceLock (fun _ ->
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
+                GL.Check "[MappedBuffer] could bind buffer"
 
-            GL.FlushMappedBufferRange(BufferTarget.CopyWriteBuffer, offset, size)
-            GL.Check "[MappedBuffer] could flush buffer"
+                GL.FlushMappedBufferRange(BufferTarget.CopyWriteBuffer, offset, size)
+                GL.Check "[MappedBuffer] could flush buffer"
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            GL.Check "[MappedBuffer] could unbind buffer"
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                GL.Check "[MappedBuffer] could unbind buffer"
+            )
+            res
         )
-        res
 
     override x.Compute() =
         deleteOldBuffers()
@@ -145,6 +161,16 @@ type MappedBuffer(ctx : Context) =
             onDispose.OnNext()
             onDispose.Dispose()
 
+    member x.AddLock (r : RenderTaskLock) =
+        lock locks (fun () ->
+            locks.Add r |> ignore
+        )
+
+    member x.RemoveLock (r : RenderTaskLock) =
+        lock locks (fun () ->
+            locks.Remove r |> ignore
+        )
+
     interface IMappedBuffer with
         member x.Write(sourcePtr, offset, size) = x.Write(sourcePtr,offset,size)
         member x.Read(targetPtr, offset, size) = x.Read(targetPtr,offset,size)
@@ -152,5 +178,9 @@ type MappedBuffer(ctx : Context) =
         member x.Resize(newCapacity) = x.Resize(newCapacity)
         member x.Dispose() = x.Dispose()
         member x.OnDispose = onDispose :> IObservable<_>
+
+    interface ILockedResource with
+        member x.AddLock (r : RenderTaskLock) = x.AddLock r
+        member x.RemoveLock (r : RenderTaskLock) = x.RemoveLock r
 
 
