@@ -39,6 +39,7 @@ NUGET
   specs:
     AssimpNet (3.3.1)
     BruTile (0.12)
+    CommonMark.NET (0.12)
     DevILSharp (0.0.13)
     DockPanelSuite (2.10.0-beta2)
     DockPanelSuite.ThemeVS2012Light (2.10.0-beta2)
@@ -58,6 +59,7 @@ NUGET
     Newtonsoft.Json (8.0.3)
     NUnit (3.2)
     OpenHardwareMonitor (0.7.1)
+    Poly2Tri (1.0.1)
     Rx-Core (2.2.5)
       Rx-Interfaces (>= 2.2.5)
     Rx-Interfaces (2.2.5)
@@ -146,7 +148,7 @@ NUGET
 GITHUB
   remote: vrvis/Aardvark.Fake
   specs:
-    FULLPROJECT (69ff5fe3a1ade81c7f155d39e8aafcdbedb4c73a)
+    FULLPROJECT (760eb77f331745ee0681bb1a112303b27e28baa1)
       FAKE (>= 4.17 < 4.18)
       Mono.Cecil (>= 0.9.5.4 < 0.9.6)
       Paket.Core (>= 2.60.1 < 2.61)

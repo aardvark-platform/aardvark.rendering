@@ -59,7 +59,7 @@ module Config =
     /// <summary>
     /// The number of bits used for the depth buffer in default contexts
     /// </summary>
-    let DepthBits = 32
+    let DepthBits = 24
 
     /// <summary>
     /// The number of bits used for the stencil buffer in default contexts

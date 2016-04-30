@@ -10,6 +10,7 @@ FShade from within C# ;)
 
 using System;
 using Aardvark.Base;
+using Aardvark.Base.Rendering;
 using Aardvark.Base.Incremental.CSharp;
 using Aardvark.SceneGraph;
 using Aardvark.SceneGraph.CSharp;
@@ -209,8 +210,8 @@ namespace CSharpDemo
             var sg =
                 quadSg
                 .WithEffects(new[] {
-                        FShadeSceneGraph.toEffect(FSharpFuncUtil.Create(trafo)),
-                        FShadeSceneGraph.toEffect(FSharpFuncUtil.Create(whiteShader)),
+                        Aardvark.Base.Rendering.FShadeInterop.toEffect(FSharpFuncUtil.Create(trafo)),
+                        Aardvark.Base.Rendering.FShadeInterop.toEffect(FSharpFuncUtil.Create(whiteShader)),
                 })
                 .ViewTrafo(viewTrafo.Select(t => t.ViewTrafo))
                 .ProjTrafo(perspective.Select(t => t.ProjTrafo()));

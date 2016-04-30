@@ -51,6 +51,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan.T
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.Vulkan", "Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj", "{BE9C26C3-B846-4356-923D-12E7D88AB309}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Text", "Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj", "{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -141,6 +143,10 @@ Global
 		{BE9C26C3-B846-4356-923D-12E7D88AB309}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BE9C26C3-B846-4356-923D-12E7D88AB309}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BE9C26C3-B846-4356-923D-12E7D88AB309}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

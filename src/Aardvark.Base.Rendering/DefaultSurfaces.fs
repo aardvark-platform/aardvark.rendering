@@ -1,4 +1,4 @@
-﻿namespace Aardvark.SceneGraph
+﻿namespace Aardvark.Base.Rendering
 
 open Aardvark.Base
 open Aardvark.Base.Incremental

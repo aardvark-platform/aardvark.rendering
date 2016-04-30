@@ -4,6 +4,7 @@
 open System
 open FShade
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.Rendering
 open Aardvark.Rendering.NanoVg
@@ -14,7 +15,7 @@ open Aardvark.SceneGraph.Semantics
 open System.Windows.Media
 open System.Windows
 open FontRendering
-
+open Aardvark.Rendering.Text
 
 module Shader =
     type Vertex = { 
@@ -45,15 +46,15 @@ type CameraMode =
     | Fly
     | Rotate
 
+
+
 [<EntryPoint>]
 let main argv = 
     Aardvark.Init()
 
-    Aardvark.Rendering.Vulkan.Test.run()
-    System.Environment.Exit 0
 
     use app = new OpenGlApplication()
-    use win = app.CreateSimpleRenderWindow()
+    use win = app.CreateSimpleRenderWindow(16)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -146,90 +147,56 @@ let main argv =
     //let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
     let cam = cam |> AFun.integrate (controller resetPos resetDir)
 
-    win.Mouse.Click.Values.Subscribe(printfn "click %A") |> ignore
-    win.Mouse.DoubleClick.Values.Subscribe(printfn "double click %A") |> ignore
-
-    let e = FShade.SequentialComposition.compose [toEffect Shader.trafo; toEffect Shader.white]
-    let s = FShadeSurface(e) :> ISurface
-    let compiled = app.Runtime.PrepareSurface(win.FramebufferSignature, s) :> ISurface
-
-    let sg =
-        geometry 
-            |> Sg.instancedGeometry trafos
-            |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo proj.ProjectionTrafos.Mod
-            |> Sg.surface (Mod.constant compiled)
-
-    let g = Sg.ofIndexedGeometry geometry
-    let tex = FileTexture(@"E:\Development\WorkDirectory\DataSVN\pattern.jpg", true) :> ITexture
-
-    let textures = System.Collections.Generic.List<ModRef<ITexture>>()
-
-    let sgs = 
-        Sg.group' [
-            for x in -4..4 do 
-                for y in -4..4 do
-                    let trafo = Trafo3d.Translation(2.0 * float x - 0.5, 2.0 * float y - 0.5, 0.0)
-
-                    let tex = Mod.init tex
-                    textures.Add tex
-                    yield g |> Sg.trafo (Mod.constant trafo)
-                            |> Sg.texture DefaultSemantic.DiffuseColorTexture tex
-        ]
         
 //    let test = sgs |> ASet.map id
 //    let r = test.GetReader()
 //    r.GetDelta() |> List.length |> printfn "got %d deltas"
 
 
+    let all = "abcdefghijklmnopqrstuvwxyz\r\nABCDEFGHIJKLMNOPQRSTUVWXYZ\r\n1234567890 ?ß\\\r\n^°!\"§$%&/()=?´`@+*~#'<>|,;.:-_µ"
+       
+    let md = 
+        "# Heading1\r\n" +
+        "## Heading2\r\n" + 
+        "\r\n" +
+        "This is ***markdown*** code being parsed by *CommonMark.Net*  \r\n" +
+        "It seems to work quite **well**\r\n" +
+        "*italic* **bold** ***bold/italic***\r\n" +
+        "\r\n" +
+        "    type A(a : int) = \r\n" + 
+        "        member x.A = a\r\n" +
+        "\r\n" + 
+        "regular Text again\r\n"+
+        "\r\n" +
+        "-----------------------------\r\n" +
+        "is there a ruler???\r\n" + 
+        "1) First *item*\r\n" + 
+        "2) second *item*\r\n" +
+        "\r\n"+
+        "* First *item*  \r\n" + 
+        "with multiple lines\r\n" + 
+        "* second *item*\r\n" 
+
+    let mode = Mod.init FillMode.Fill
+    let font = new Font("Comic Sans")
     let sg = 
-        sgs
+        Sg.markdown MarkdownConfig.light (Mod.constant md)
+        //Sg.label font C4b.White (Mod.constant all)
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo proj.ProjectionTrafos.Mod
-            |> Sg.effect [toEffect DefaultSurfaces.trafo; toEffect DefaultSurfaces.diffuseTexture]
+            |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
+            |> Sg.fillMode mode
 
-    let main = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.UnmanagedRuntime, sg) // |> DefaultOverlays.withStatistics
-
-    let r = Random()
-    win.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun () ->
-        let index = r.Next(textures.Count)
-        let t = textures.[index]
-        textures.RemoveAt index
-
+    win.Keyboard.KeyDown(Keys.F8).Values.Add (fun _ ->
         transact (fun () ->
-            Mod.change t (FileTexture(@"E:\Development\WorkDirectory\DataSVN\sand_color.jpg", true) :> ITexture)
+            match mode.Value with
+                | FillMode.Fill -> mode.Value <- FillMode.Line
+                | _ -> mode.Value <- FillMode.Fill
         )
+    )
 
-    ) |> ignore
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) // |> DefaultOverlays.withStatistics
+    let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.White)
 
-    win.Keyboard.KeyDown(Keys.I).Values.Subscribe(fun () ->
-        transact (fun () -> Mod.change mode Fly)
-    ) |> ignore
-
-    win.Keyboard.KeyDown(Keys.O).Values.Subscribe(fun () ->
-        transact (fun () -> Mod.change mode Orbit)
-    ) |> ignore
-
-    win.Keyboard.KeyDown(Keys.R).Values.Subscribe(fun () ->
-        transact (fun () -> Mod.change resetDir (DateTime.Now + TimeSpan.FromSeconds 1.0, V3d.III * 12.0))
-    ) |> ignore
-
-
-    win.Keyboard.KeyDown(Keys.Space).Values.Subscribe(fun () ->
-        transact (fun () -> Mod.change controllerActive (not controllerActive.Value))
-    ) |> ignore
-
-
-    win.Keyboard.KeyDown(Keys.G).Values.Subscribe(fun () ->
-        System.GC.AddMemoryPressure(100000000L)
-        Log.startTimed "GC"
-        System.GC.Collect()
-        System.GC.WaitForFullGCComplete() |> ignore
-        Log.stop()
-        System.GC.RemoveMemoryPressure(100000000L)
-
-    ) |> ignore
-
-    win.RenderTask <- RenderTask.ofList [main]
+    win.RenderTask <- RenderTask.ofList [clear; main]
     win.Run()
     0 

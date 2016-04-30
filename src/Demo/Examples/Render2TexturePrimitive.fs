@@ -17,6 +17,7 @@ namespace Examples
 
 open System
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
 open Aardvark.Base.Incremental

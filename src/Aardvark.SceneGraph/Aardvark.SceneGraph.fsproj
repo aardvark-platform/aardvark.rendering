@@ -69,7 +69,6 @@
     <Compile Include="PointCloud.fs" />
     <Compile Include="FShadeSceneGraph.fs" />
     <Compile Include="SgCSharp.fs" />
-    <Compile Include="DefaultSurfaces.fs" />
     <Compile Include="RuntimeExtensions.fs" />
     <Compile Include="RenderTaskExtensions.fs" />
   </ItemGroup>
