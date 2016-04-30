@@ -5,17 +5,13 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
+type MetaInstruction = IMod<list<Instruction>>
+
 type CompilerState =
     {
-        currentContext : IMod<ContextHandle>
-        manager : ResourceManager
-
-        useResources : bool
-
-        resources : list<IResource>
-        instructions : list<MetaInstruction>
-
-        resourceCreateTime : System.Diagnostics.Stopwatch
+        manager             : ResourceManager
+        currentContext      : IMod<ContextHandle>
+        instructions        : list<MetaInstruction>
     }
 
 type Compiled<'a> = { runCompile : CompilerState -> CompilerState * 'a }
@@ -30,31 +26,25 @@ module ``Compiled Builder`` =
                 (f v).runCompile s
             }
 
-        member x.Bind(r : 'a, f : 'a -> Compiled<'b>) =
-            { runCompile = fun s ->
-                (f r).runCompile { s with resources = (r :> IResource)::s.resources }
-            }
 
         member x.Yield(i : MetaInstruction) =
             { runCompile = fun s -> {s with instructions = s.instructions @ [i]}, ()}
 
-        member x.Yield(m : IMod<list<Instruction>>) =
-            m |> MetaInstruction.ofModList |> x.Yield
 
         member x.Yield(m : list<Instruction>) =
-            m |> MetaInstruction.ofList |> x.Yield
+            m |> Mod.constant |> x.Yield
 
         member x.Yield(m : IMod<ContextHandle -> list<Instruction>>) =
             { runCompile = fun s ->
-                let i = Mod.map2 (fun f ctx -> f ctx) m s.currentContext |> MetaInstruction.ofModList
+                let i = Mod.map2 (fun f ctx -> f ctx) m s.currentContext
                 { s with instructions = s.instructions @ [i] }, ()
             }
 
         member x.Yield(m : IMod<Instruction>) =
-            m |> MetaInstruction.ofMod |> x.Yield
+            m |> Mod.map (fun i -> [i]) |> x.Yield
 
         member x.Yield(m : Instruction) =
-            m |> MetaInstruction.single |> x.Yield
+            [m] |> Mod.constant |> x.Yield
 
         member x.Return(u : unit) =
             { runCompile = fun s ->
@@ -63,7 +53,7 @@ module ``Compiled Builder`` =
 
         member x.Yield(m : IMod<ContextHandle -> Instruction>) =
             { runCompile = fun s ->
-                let i = Mod.map2 (fun f ctx -> f ctx) m s.currentContext |> MetaInstruction.ofMod
+                let i = Mod.map2 (fun f ctx -> [f ctx]) m s.currentContext
                 { s with instructions = s.instructions @ [i] }, ()
             }
 

@@ -205,34 +205,31 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : I
             ResourceCount = float resources.Count 
         }
 
+
 module private RenderTaskUtilities =
     
     let compileDelta (this : AbstractRenderTaskWithResources) (left : Option<PreparedRenderObject>) (right : PreparedRenderObject) =
         
-        let code, createStats =
+        let code =
             match left with
                 | Some left -> Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileDelta this.Manager this.CurrentContext left right
                 | None -> Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileFull this.Manager this.CurrentContext right
-
-//        for r in code.Resources do
-//            this.AddInput r
-
-        this.AddOneTimeStats createStats
 
         let mutable stats = FrameStatistics.Zero
 
         let calls =
             code.Instructions
                 |> List.map (fun i ->
-                    match i with
-                        | FixedInstruction i -> 
+                    match i.IsConstant with
+                        | true -> 
+                            let i = i.GetValue()
                             let dStats = List.sumBy InstructionStatistics.toStats i
                             stats <- stats + dStats
                             this.AddStats dStats
 
                             Mod.constant i
 
-                        | AdaptiveInstruction i -> 
+                        | false -> 
                             let mutable oldStats = FrameStatistics.Zero
                             i |> Mod.map (fun i -> 
                                 let newStats = List.sumBy InstructionStatistics.toStats i
@@ -249,15 +246,9 @@ module private RenderTaskUtilities =
         { new Aardvark.Base.Runtime.IAdaptiveCode<Instruction> with
             member x.Content = calls
             member x.Dispose() =    
-                for i in code.Instructions do
-                    match i with 
-                     | AdaptiveInstruction(xs) -> 
-                        for i in xs.Inputs do
-                          i.RemoveOutput xs
-                     | _ -> ()
-//                for r in code.Resources do
-//                    this.RemoveInput r
-//                    r.Dispose()
+                for o in code.Instructions do
+                    for i in o.Inputs do
+                        i.RemoveOutput o
 
                 this.RemoveStats stats
 
@@ -400,6 +391,7 @@ module GroupedRenderTask =
         let managedUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
             { managedOptimized (fun _ v -> compile v) () with compileNeedsPrev = false }
 
+
     type RenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) as this =
         inherit AbstractRenderTaskWithResources(
             manager,
@@ -528,7 +520,6 @@ module GroupedRenderTask =
             let c = config.GetValue(x)
             if not hasProgram || c <> currentConfig then 
                 init x
-                hasProgram <- true
 
             let mutable stats = FrameStatistics.Zero
 

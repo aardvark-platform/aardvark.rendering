@@ -125,12 +125,9 @@ module Instructions =
                 Instruction.TexParameteri target (int TextureParameterName.TextureWrapR) (SamplerStateHelpers.wrapMode s.AddressW)
                 Instruction.TexParameteri target (int TextureParameterName.TextureMinFilter) (SamplerStateHelpers.minFilter s.Filter.Min s.Filter.Mip)
                 Instruction.TexParameteri target (int TextureParameterName.TextureMagFilter) (SamplerStateHelpers.magFilter s.Filter.Mag)
-
-                // TODO: set all sampler state parameters. (float args needed for that)
-
-//                Instruction.TexParameterf target (int TextureParameterName.TextureLodBias) (s.MipLodBias)
-//                Instruction.TexParameterf target (int TextureParameterName.TextureMinLod) (s.MinLod)
-//                Instruction.TexParameterf target (int TextureParameterName.TextureMaxLod) (s.MaxLod)
+                Instruction.TexParameterf target (int TextureParameterName.TextureLodBias) (s.MipLodBias)
+                Instruction.TexParameterf target (int TextureParameterName.TextureMinLod) (s.MinLod)
+                Instruction.TexParameterf target (int TextureParameterName.TextureMaxLod) (s.MaxLod)
             ]
 
     let bindTexture (tex : IResource<Texture>) =

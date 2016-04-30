@@ -6,26 +6,8 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
 
-type AdaptiveCode(instructions : list<MetaInstruction>, resources : list<IResource>) =
+type AdaptiveCode(instructions : list<MetaInstruction>) =
     member x.Instructions = instructions
-    member x.Resources = resources
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module AdaptiveCode =
-    
-    let writeTo (c : AdaptiveCode) (f : IDynamicFragment<'f>) =
-        let changers = 
-            c.Instructions |> List.choose (fun i ->
-                let c = MetaInstruction.appendTo i f
-                if c.IsConstant then None
-                else Some c
-            )  
-            
-        if List.isEmpty changers then
-            Mod.constant FrameStatistics.Zero
-        else
-            changers |> Mod.mapN (fun _ -> FrameStatistics.Zero)  
-    
 
 module DeltaCompiler =
 
@@ -45,28 +27,6 @@ module DeltaCompiler =
 
             | [] -> true
 
-    let useResource (r : IResource) : Compiled<unit> =
-        { runCompile = 
-            fun s -> 
-                if s.useResources then
-                    r.AddRef ()
-                    { s with resources = r :: s.resources }, ()
-                else
-                    s, ()
-        }
-
-
-    let useResources (resources : seq<IResource<'a>>) : Compiled<unit> =
-        { runCompile = 
-            fun s -> 
-                if s.useResources then
-                    for r in resources do
-                        r.AddRef ()
-                    { s with resources = (resources |> Seq.cast |> Seq.toList) @ s.resources }, ()
-                else
-                    s, ()
-        }
-
     let internal compileDeltaInternal (prev : PreparedRenderObject) (me : PreparedRenderObject) =
         compiled {
             //set all modes if needed
@@ -84,8 +44,6 @@ module DeltaCompiler =
 
             if prev.StencilMode <> me.StencilMode && me.StencilMode <> null then
                 yield Instructions.setStencilMode me.StencilMode
-        
-            do! useResource me.Program
 
             // bind the program (if needed)
             if prev.Program <> me.Program then
@@ -93,7 +51,6 @@ module DeltaCompiler =
 
             // bind all uniform-buffers (if needed)
             for (id,ub) in Map.toSeq me.UniformBuffers do
-                do! useResource ub
                 match Map.tryFind id prev.UniformBuffers with
                     | Some old when old = ub -> 
                         // the same UniformBuffer has already been bound
@@ -104,8 +61,6 @@ module DeltaCompiler =
             // bind all textures/samplers (if needed)
             let latestSlot = ref prev.LastTextureSlot
             for (id,(tex,sam)) in Map.toSeq me.Textures do
-                do! useResource tex
-                do! useResource sam
                 let texEqual, samEqual =
                     match Map.tryFind id prev.Textures with
                         | Some (ot, os) -> (ot = tex), (os = sam)
@@ -124,15 +79,12 @@ module DeltaCompiler =
 
             // bind all top-level uniforms (if needed)
             for (id,u) in Map.toSeq me.Uniforms do
-                do! useResource u
                 match Map.tryFind id prev.Uniforms with
                     | Some old when old = u -> ()
                     | _ ->
                         // TODO: UniformLocations cannot change structurally atm.
                         yield ExecutionContext.bindUniformLocation id (u.Handle.GetValue())
 
-            do! me.Buffers |> List.map (fun (_,_,_,b) -> b) |> useResources
-            do! useResource me.VertexArray
 
             // bind the VAO (if needed)
             if prev.VertexArray <> me.VertexArray then
@@ -151,8 +103,6 @@ module DeltaCompiler =
 
             match me.IndirectBuffer with
                 | Some ib ->
-                    do! useResource ib
-                    
                     yield Instructions.bindIndirectBuffer ib
                     yield Instructions.drawIndirect prog me.Original.Indices ib me.Mode me.IsActive
                 | _ ->
@@ -161,12 +111,6 @@ module DeltaCompiler =
         }   
 
 
-    let private stateToStats (s : CompilerState) = 
-        { FrameStatistics.Zero with 
-            ResourceUpdateTime = s.resourceCreateTime.Elapsed
-            ResourceUpdateCounts = 
-                 s.resources |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k,float v) |> Map.ofSeq 
-        }
 
     /// <summary>
     /// compileDelta compiles all instructions needed to render [rj] 
@@ -180,13 +124,10 @@ module DeltaCompiler =
             c.runCompile {
                 currentContext = currentContext
                 manager = manager
-                useResources = true
                 instructions = []
-                resources = []
-                resourceCreateTime = System.Diagnostics.Stopwatch()
             }
 
-        AdaptiveCode(s.instructions, s.resources), stateToStats s
+        AdaptiveCode(s.instructions)
 
     /// <summary>
     /// compileFull compiles all instructions needed to render [rj] 
@@ -199,13 +140,10 @@ module DeltaCompiler =
             c.runCompile {
                 currentContext = currentContext
                 manager = manager
-                useResources = true
                 instructions = []
-                resources = []
-                resourceCreateTime = System.Diagnostics.Stopwatch()
             }
 
-        AdaptiveCode(s.instructions, s.resources), stateToStats s
+        AdaptiveCode(s.instructions)
 
 
 module internal DeltaCompilerDebug =
@@ -217,17 +155,10 @@ module internal DeltaCompilerDebug =
             c.runCompile {
                 currentContext = currentContext
                 manager = manager
-                useResources = false
                 instructions = []
-                resources = []
-                resourceCreateTime = System.Diagnostics.Stopwatch()
             }
 
-        s.instructions |> List.collect (fun mi ->
-            match mi with
-                | FixedInstruction l -> l
-                | AdaptiveInstruction l -> l.GetValue()
-        )
+        s.instructions |> List.collect (fun mi -> mi.GetValue())
 
     let compileFullDebugNoResources (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
         let c = compileDeltaInternal PreparedRenderObject.empty rj
@@ -236,14 +167,8 @@ module internal DeltaCompilerDebug =
             c.runCompile {
                 currentContext = currentContext
                 manager = manager
-                useResources = false
                 instructions = []
-                resources = []
-                resourceCreateTime = System.Diagnostics.Stopwatch()
             }
 
-        s.instructions |> List.collect (fun mi ->
-            match mi with
-                | FixedInstruction l -> l
-                | AdaptiveInstruction l -> l.GetValue()
-        )
+        
+        s.instructions |> List.collect (fun mi -> mi.GetValue())
