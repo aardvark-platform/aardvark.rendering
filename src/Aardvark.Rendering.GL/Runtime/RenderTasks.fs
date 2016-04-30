@@ -423,7 +423,8 @@ module GroupedRenderTask =
                     manager.Prepare(fboSignature, r) |> add
 
                 | :? PreparedRenderObject as prep ->
-                    prep |> add
+                    prep |> PreparedRenderObject.clone |> add
+
                 | _ ->
                     failwithf "[RenderTask] unsupported IRenderObject: %A" ro
 

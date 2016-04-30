@@ -1119,7 +1119,7 @@ let main args =
     //let sg = sg |> Sg.loadAsync
 
 
-    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, BackendConfiguration.NativeOptimized, sg)
+    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, engine, sg?RenderObjects())
 
     //let task = RenderTask.cache task
 

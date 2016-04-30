@@ -12,6 +12,7 @@ type PreparedRenderObject =
     {
         mutable Activation : IDisposable
         Context : Context
+        Parent : Option<PreparedRenderObject>
         Original : RenderObject
         FramebufferSignature : IFramebufferSignature
         LastTextureSlot : int
@@ -126,6 +127,7 @@ type PreparedRenderObject =
             x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
             x.Program.Dispose() 
             x.VertexArray <- Unchecked.defaultof<_>
+            
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -152,6 +154,7 @@ module PreparedRenderObject =
             Activation = { new IDisposable with member x.Dispose() = () }
             Context = Unchecked.defaultof<_>
             Original = RenderObject.Empty
+            Parent = None
             FramebufferSignature = null
             LastTextureSlot = -1
             Program = Unchecked.defaultof<_>
@@ -165,6 +168,33 @@ module PreparedRenderObject =
             VertexAttributeValues = Map.empty
             IsDisposed = false
         }  
+
+    let clone (o : PreparedRenderObject) =
+        let res = 
+            {
+                Activation = { new IDisposable with member x.Dispose() = () }
+                Context = o.Context
+                Original = o.Original
+                Parent = Some o
+                FramebufferSignature = o.FramebufferSignature
+                LastTextureSlot = o.LastTextureSlot
+                Program = o.Program
+                UniformBuffers = o.UniformBuffers
+                Uniforms = o.Uniforms
+                Textures = o.Textures
+                Buffers = o.Buffers
+                IndexBuffer = o.IndexBuffer
+                IndirectBuffer = o.IndirectBuffer
+                VertexArray = o.VertexArray
+                VertexAttributeValues = o.VertexAttributeValues
+                IsDisposed = o.IsDisposed
+            }  
+
+        for r in res.Resources do
+            r.AddRef()
+
+        res
+
 
 
 [<Extension; AbstractClass; Sealed>]
@@ -304,6 +334,7 @@ type ResourceManagerExtensions private() =
             Activation = activation
             Context = x.Context
             Original = rj
+            Parent = None
             FramebufferSignature = fboSignature
             LastTextureSlot = !lastTextureSlot
             Program = program
