@@ -54,7 +54,7 @@ let main argv =
 
 
     use app = new OpenGlApplication()
-    use win = app.CreateSimpleRenderWindow(8)
+    use win = app.CreateSimpleRenderWindow(16)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -180,10 +180,10 @@ let main argv =
     let mode = Mod.init FillMode.Fill
     let font = new Font("Comic Sans")
     let sg = 
-        Sg.markdown (Mod.constant md)
+        Sg.markdown MarkdownConfig.light (Mod.constant md)
         //Sg.label font C4b.White (Mod.constant all)
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo proj.ProjectionTrafos.Mod
+            |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
             |> Sg.fillMode mode
 
     win.Keyboard.KeyDown(Keys.F8).Values.Add (fun _ ->
@@ -195,8 +195,8 @@ let main argv =
     )
 
     let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) // |> DefaultOverlays.withStatistics
+    let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.White)
 
-
-    win.RenderTask <- RenderTask.ofList [main]
+    win.RenderTask <- RenderTask.ofList [clear; main]
     win.Run()
     0 

@@ -7,27 +7,61 @@ open Aardvark.SceneGraph
 open CommonMark
 open CommonMark.Syntax
     
+type TextStyle =
+    {
+        scale   : V2d
+        strong  : bool
+        emph    : bool
+        code    : bool
+    }
+
+type MarkdownConfig =
+    {
+        color               : C4b
+        lineSpacing         : float
+        characterSpacing    : float
+        headingStyles       : Map<int, TextStyle>
+
+    }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module TextStyle =
+    
+    let empty = { scale = V2d.II; strong = false; emph = false; code = false }
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module MarkdownConfig =
+    
+    let light =
+        {
+            color                   = C4b(51uy, 51uy, 51uy, 255uy)
+            lineSpacing             = 1.5
+            characterSpacing        = 1.0
+
+            headingStyles =
+                Map.ofList [
+                    1, { scale = V2d.II * 3.0; emph = false; strong = true; code = false }
+                    2, { scale = V2d.II * 2.5; emph = false; strong = true; code = false }
+                    3, { scale = V2d.II * 2.0; emph = false; strong = true; code = false }
+                    4, { scale = V2d.II * 1.5; emph = false; strong = true; code = false }
+                    5, { scale = V2d.II * 1.2; emph = false; strong = true; code = false }
+                    6, { scale = V2d.II * 1.1; emph = false; strong = true; code = false }
+                ]  
+        }
+
 
 module Markdown =
     open Aardvark.Base.Monads
     open Aardvark.Base.Monads.State
-
-    type TextState =
-        {
-            scale   : V2d
-            strong  : bool
-            emph    : bool
-            code    : bool
-        }
-
-        static member empty = { scale = V2d.II; strong = false; emph = false; code = false }
 
     type LayoutState = 
         {
             x           : float
             y           : float
             indent      : float
-            textState   : TextState
+            textState   : TextStyle
+            config      : MarkdownConfig
             color       : C4b
 
             shapes      : list<Shape>
@@ -37,8 +71,19 @@ module Markdown =
 
         }
 
-        static member empty = { x = 0.0; y = 0.0; indent = 0.0; textState = TextState.empty; color = C4b.White; shapes = []; offsets = []; scales = []; colors = [] }
-
+        static member empty = 
+            { 
+                x = 0.0
+                y = 0.0
+                indent = 0.0
+                textState = TextStyle.empty
+                config = MarkdownConfig.light
+                color = C4b.White
+                shapes = []
+                offsets = []
+                scales = []
+                colors = [] 
+            }
 
     module Patterns = 
         let inline private startFrom< ^a when ^a : (member NextSibling : ^a) and ^a : null > (b : ^a) =
@@ -49,7 +94,7 @@ module Markdown =
                     c <- (^a : (member NextSibling : ^a) (c))
             ]
 
-        let rec private getAll (state : TextState) (i : Inline) =
+        let rec private getAll (state : TextStyle) (i : Inline) =
             [
                 if isNull i.FirstChild then 
                     if i.Tag = InlineTag.LineBreak || i.Tag = InlineTag.SoftBreak then
@@ -82,7 +127,7 @@ module Markdown =
             if b.Tag = BlockTag.Paragraph then
                 b.InlineContent 
                     |> startFrom 
-                    |> List.collect (getAll TextState.empty) 
+                    |> List.collect (getAll TextStyle.empty) 
                     |> Some
             else
                 None
@@ -93,7 +138,7 @@ module Markdown =
                 let content = 
                     b.InlineContent 
                         |> startFrom 
-                        |> List.collect (getAll TextState.empty) 
+                        |> List.collect (getAll TextStyle.empty) 
                 Some(int b.Heading.Level, content)
             else
                 None
@@ -115,7 +160,7 @@ module Markdown =
             if b.Tag = BlockTag.BlockQuote then
                 b.InlineContent 
                     |> startFrom 
-                    |> List.collect (getAll TextState.empty) 
+                    |> List.collect (getAll TextStyle.empty) 
                     |> Some
             else
                 None
@@ -146,31 +191,31 @@ module Markdown =
         [<AutoOpen>]
         module StateHelpers = 
             let moveX (v : float) =
-                modifyState (fun s -> { s with x = s.x + v * s.textState.scale.X })
+                modifyState (fun s -> { s with x = s.x + v * s.textState.scale.X * s.config.characterSpacing })
 
             let moveY (v : float) =
-                modifyState (fun s -> { s with y = s.y - v * s.textState.scale.Y })
+                modifyState (fun s -> { s with y = s.y - v * s.textState.scale.Y * s.config.lineSpacing })
 
             let indent (v : float) =
                 modifyState (fun s -> 
-                    let nx = s.indent + v * s.textState.scale.X
+                    let nx = s.indent + v * s.textState.scale.X * s.config.characterSpacing
                     { s with indent = nx; x = nx }
                 )
 
             let pushColor (c : C4b) =
                 state {
                     let! s = getState
-                    do! putState { s with color = c}
+                    do! putState { s with LayoutState.color = c}
                     return s.color
                 }
       
             let lineBreak =
                 state {
                     let! s = getState
-                    do! putState { s with x = s.indent; y = s.y - s.textState.scale.Y}
+                    do! putState { s with x = s.indent; y = s.y - s.textState.scale.Y * s.config.lineSpacing }
                 }
 
-            let withTextState (ts : TextState) (f : unit -> State<LayoutState, 'a>) =
+            let withTextState (ts : TextStyle) (f : unit -> State<LayoutState, 'a>) =
                 state {
                     let! s = getState
                     let old = s.textState
@@ -209,7 +254,7 @@ module Markdown =
 
 
             module Paragraph = 
-                let fontName        = "Times New Roman"
+                let fontName        = "Arial"
                 let regular         = new Font(fontName, FontStyle.Regular)
                 let bold            = new Font(fontName, FontStyle.Bold)
                 let italic          = new Font(fontName, FontStyle.Italic)
@@ -239,10 +284,10 @@ module Markdown =
 
                 }
 
-        let layout (str : string) =
+        let layout (config : MarkdownConfig) (str : string) =
             let ast = CommonMarkConverter.Parse(str)
 
-            let layoutParts (parts : list<TextState * string>) =
+            let layoutParts (parts : list<TextStyle * string>) =
                 state {
                     for (props, text) in parts do
                         if not (isNull text) then
@@ -275,18 +320,12 @@ module Markdown =
                             Log.warn "bad text: %A" text
                 }
 
-            let headingStyles =
-                Map.ofList [
-                    1, { scale = V2d.II * 3.0; emph = false; strong = true; code = false }
-                    2, { scale = V2d.II * 2.5; emph = false; strong = true; code = false }
-                    3, { scale = V2d.II * 2.0; emph = false; strong = true; code = false }
-                    4, { scale = V2d.II * 1.5; emph = false; strong = true; code = false }
-                    5, { scale = V2d.II * 1.2; emph = false; strong = true; code = false }
-                    6, { scale = V2d.II * 1.1; emph = false; strong = true; code = false }
-                ]
 
             let rec layout (b : Block) =
                 state {
+                    let! s = getState
+                    let config = s.config
+
                     match b with
                         | Document children ->
                             for c in children do
@@ -297,7 +336,7 @@ module Markdown =
                             do! lineBreak
 
                         | Heading(level, parts) ->  
-                            let style = headingStyles.[level]
+                            let style = config.headingStyles.[level]
                             do! withTextState style (fun () ->
                                 state {
                                     do! layoutParts parts
@@ -309,7 +348,7 @@ module Markdown =
                             
                             do! moveY 1.0
                             do! indent 1.0
-                            do! layoutParts [{ TextState.empty with code = true }, content]
+                            do! layoutParts [{ TextStyle.empty with code = true }, content]
                             do! indent -1.0
                             do! lineBreak
                             
@@ -317,7 +356,7 @@ module Markdown =
                             let h = 0.05
                             let w = 20.0
                             do! moveY -(0.4 + h/2.0)
-                            do! withTextState { TextState.empty with scale = V2d(w, h) } (fun () ->
+                            do! withTextState { TextStyle.empty with scale = V2d(w, h) } (fun () ->
                                 state {
                                     do! emit Shape.Quad
                                 }
@@ -337,7 +376,7 @@ module Markdown =
                                         | ListType.Bullet -> "•"
                                         | _ -> sprintf "%d." index
 
-                                do! layoutParts [TextState.empty, prefix]
+                                do! layoutParts [TextStyle.empty, prefix]
                                 //do! moveX 0.6
                                 let! p = pos
                                 let nextMul4 = ceil (p.X / 1.5) * 1.5
@@ -359,7 +398,8 @@ module Markdown =
             let ((), s) = 
                 run.runState {
                     LayoutState.empty with
-                        color       = C4b.White   
+                        color       = config.color 
+                        config      = config
                 }
 
             {
@@ -370,13 +410,13 @@ module Markdown =
             }
 
 
-    let layout (code : string) =
-        Layouter.layout code
+    let layout (config : MarkdownConfig) (code : string) =
+        Layouter.layout config code
 
 [<AutoOpen>]
 module ``Markdown Sg Extensions`` =
     module Sg =
-        let markdown (code : IMod<string>) =
+        let markdown (config : MarkdownConfig) (code : IMod<string>) =
             code
-                |> Mod.map Markdown.layout
+                |> Mod.map (Markdown.layout config)
                 |> Sg.shape
