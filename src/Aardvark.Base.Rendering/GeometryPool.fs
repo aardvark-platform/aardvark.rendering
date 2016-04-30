@@ -139,7 +139,7 @@ module private TypedBuffers =
             member x.Buffer = buffer :> IMod<IBuffer>
 
 type GeometryPool(runtime : IRuntime, asyncWrite : bool) =
-    let manager = MemoryManager.createNop()
+    let mutable manager = MemoryManager.createNop()
     let pointers = Dict<IndexedGeometry, managedptr>()
     let buffers = SymbolDict<ITypedBuffer>()
         
@@ -221,10 +221,20 @@ type GeometryPool(runtime : IRuntime, asyncWrite : bool) =
 
     member x.Count = pointers.Count
 
+    member x.Dispose() =
+        buffers.Values |> Seq.toList |> List.iter (fun b -> b.Dispose())
+        manager.Dispose()
+        pointers.Clear()
+        buffers.Clear()
+        manager <- MemoryManager.createNop()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module GeometryPool =
-    let inline create runtime = GeometryPool(runtime, false)
-    let inline createAsync runtime = GeometryPool(runtime, true)
+    let inline create runtime = new GeometryPool(runtime, false)
+    let inline createAsync runtime = new GeometryPool(runtime, true)
 
 
     let inline getBuffer (sem : Symbol) (pool : GeometryPool) =

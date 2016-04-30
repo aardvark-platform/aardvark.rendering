@@ -71,8 +71,8 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
                     appNameC,
                     appVersion.UInt32,
                     engineNameC,
-                    Version(1,0,0).UInt32,
-                    Version(1, 0, 1).UInt32
+                    Version(1,0,5).UInt32,
+                    Version(1, 0, 5).UInt32
                 )
 
             let pLayers = CStr.sallocMany layers
@@ -224,7 +224,7 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
         
         VkRaw.vkCreateDevice(physical.Handle, &&createInfo, NativePtr.zero, &&device) |> check "vkCreateDevice"
 
-        new Device(x, physical, device, requestedQueues)
+        new Device(x, physical, device, requestedQueues, Array.toList layers, Array.toList extensions)
 
     member x.CreateDevice(physical : PhysicalDevice, queues : Map<PhysicalQueueFamily, int>) =
         x.CreateDevice(physical, queues, [], [])
@@ -534,7 +534,7 @@ and PhysicalQueueFamily(device : PhysicalDevice, index : int, properties : VkQue
 
 /// Device represents a logical vulkan device which can be created using the instance.
 /// It's the central thing in vulkan which is needed for all resource-creations and commands.
-and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice, queueFamilies : Map<PhysicalQueueFamily, int>) as this =
+and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice, queueFamilies : Map<PhysicalQueueFamily, int>, layers : list<string>, extensions : list<string>) as this =
     inherit Resource(instance)
 
     let memories : Lazy<DeviceMemory[]> =
@@ -575,6 +575,9 @@ and Device(instance : Instance, physical : PhysicalDevice, handle : VkDevice, qu
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+
+    member x.Layers = layers
+    member x.Extensions = extensions
     member x.QueueFamilies = queueFamilies
     member x.Handle = handle
     member x.Physical = physical
@@ -599,11 +602,37 @@ and DeviceMemory(device : Device, physical : PhysicalMemory, heap : PhysicalHeap
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Instance =
     module Extensions =
-        let DebugReport = "VK_EXT_debug_report"
-    
+        let DebugReport         = "VK_EXT_debug_report"
+        let Surface             = "VK_KHR_surface"
+        let SwapChain           = "VK_KHR_swapchain"
+        let Display             = "VK_KHR_display"
+        let DisplaySwapChain    = "VK_KHR_display_swapchain"
+
+        let AndroidSurface      = "VK_KHR_android_surface"
+        let MirSurface          = "VK_KHR_mir_surface"
+        let WaylandSurface      = "VK_KHR_wayland_surface"
+        let Win32Surface        = "VK_KHR_win32_surface"
+        let XcbSurface          = "VK_KHR_xcb_surface"
+        let XlibSurface         = "VK_KHR_xlib_surface"
+
     module Layers =
-        let DrawState = "VK_LAYER_LUNARG_draw_state"
-        let ParamChecker = "VK_LAYER_LUNARG_param_checker"
-        let Threading = "VK_LAYER_GOOGLE_threading"
-        let SwapChain = "VK_LAYER_LUNARG_swapchain"
-        let MemTracker = "VK_LAYER_LUNARG_mem_tracker"
+        let ApiDump             = "VK_LAYER_LUNARG_api_dump"
+        let DeviceLimits        = "VK_LAYER_LUNARG_device_limits"
+        let DrawState           = "VK_LAYER_LUNARG_draw_state"
+        let Image               = "VK_LAYER_LUNARG_image"
+        let MemTracker          = "VK_LAYER_LUNARG_mem_tracker"
+        let ObjectTracker       = "VK_LAYER_LUNARG_object_tracker"
+        let ParamChecker        = "VK_LAYER_LUNARG_param_checker"
+        let Screenshot          = "VK_LAYER_LUNARG_screenshot"
+        let SwapChain           = "VK_LAYER_LUNARG_swapchain"
+        let StandardValidation  = "VK_LAYER_LUNARG_standard_validation"
+        let Threading           = "VK_LAYER_GOOGLE_threading"
+        let UniqueObjects       = "VK_LAYER_GOOGLE_unique_objects"
+        let Trace               = "VK_LAYER_LUNARG_vktrace"
+        let ParameterValidation = "VK_LAYER_LUNARG_parameter_validation"
+        let CoreValidation      = "VK_LAYER_LUNARG_core_validation"
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module PhysicalDevice =
+    module Extensions =
+        let SwapChain = "VK_KHR_swapchain"

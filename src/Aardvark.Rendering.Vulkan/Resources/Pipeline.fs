@@ -343,7 +343,7 @@ module RasterizerState =
     let create (cull : CullMode) (fill : FillMode) =
         {
             depthClampEnable        = false
-            rasterizerDiscardEnable = true
+            rasterizerDiscardEnable = false
             polygonMode             = toVkPolygonMode fill
             cullMode                = toVkCullMode cull
             frontFace               = VkFrontFace.Clockwise
@@ -566,7 +566,7 @@ type PipelineExtensions private() =
                 VkPipelineInputAssemblyStateCreateFlags.MinValue,
 
                 desc.inputAssembly.topology,
-                0u // vkbool desc.inputAssembly.restartEnable
+                vkbool desc.inputAssembly.restartEnable
             )
         
         let mutable rasterizerState =

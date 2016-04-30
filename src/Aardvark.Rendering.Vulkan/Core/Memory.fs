@@ -426,6 +426,7 @@ type DevicePtrExtensions private() =
     [<Extension>]
     static member Upload(this : deviceptr, data : nativeint, size : int64) =
         DevicePtr.uploadPtr data this size
+  
    
     [<Extension>]
     static member Upload(this : deviceptr, data : 'a[]) =

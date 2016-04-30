@@ -412,9 +412,9 @@ module HelloWorld =
         Ag.initialize()
         Aardvark.Init()
 
-        use app = new VulkanApplication()
+        use app = new OpenGlApplication()
         let win = app.CreateSimpleRenderWindow(1)
-        win.Text <- "Aardvark rocks Vulkan \\o/"
+        win.Text <- "Aardvark rocks \\o/"
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
@@ -450,7 +450,6 @@ module HelloWorld =
                |> Sg.viewTrafo (viewTrafo   |> Mod.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
-        let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.ManagedOptimized, sg.RenderObjects())
 
         win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
@@ -462,7 +461,7 @@ module HelloWorld =
 
         )
 
-        win.RenderTask <- RenderTask.ofList [clear; task] //|> DefaultOverlays.withStatistics
+        win.RenderTask <- task //|> DefaultOverlays.withStatistics
         win.Run()
         0
 

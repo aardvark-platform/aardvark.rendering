@@ -944,6 +944,9 @@ type ImageSubResource =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ImageSubResource =
 
+    [<Literal>]
+    let private flipY = false
+
     let ofImage (img : Image) = ImageSubResource(img)
      
     let ofImageLevel (level : int) (img : Image) = ImageSubResource(img, level)
@@ -1032,12 +1035,15 @@ module ImageSubResource =
                 DevicePtr.map mem (fun ptr ->
                     let info =
                         NativeVolumeInfo(
-                            V3n(channels, -dy, 1n),
+                            V3n(channels, (if flipY then -dy else dy), 1n),
                             V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
-                    let ptr = ptr + dy * nativeint (size.Y - 1)
+                    let ptr = 
+                        if flipY then ptr + dy * nativeint (size.Y - 1)
+                        else ptr
+
                     let volume = NativeVolumeRaw.ofNativeInt info ptr
                     NativeVolumeRaw.copy src volume
                 )
@@ -1072,12 +1078,15 @@ module ImageSubResource =
                 DevicePtr.map mem (fun ptr ->
                     let info =
                         NativeVolumeInfo(
-                            V3n(channels, -dy, 1n),
+                            V3n(channels, (if flipY then -dy else dy), 1n),
                             V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
-                    let ptr1 = ptr + dy * nativeint (size.Y - 1)
+                    let ptr1 = 
+                        if flipY then ptr + dy * nativeint (size.Y - 1)
+                        else ptr
+
                     let volume = NativeVolumeRaw.ofNativeInt info ptr1
                     NativeVolumeRaw.copy src volume
                 )
@@ -1127,12 +1136,14 @@ module ImageSubResource =
                 DevicePtr.map mem (fun ptr ->
                     let info =
                         NativeVolumeInfo(
-                            V3n(channels, -dy, 1n),
+                            V3n(channels, (if flipY then -dy else dy), 1n),
                             V3n(nativeint size.X, nativeint size.Y, channels),
                             channelSize
                         )
 
-                    let ptr = ptr + dy * nativeint (size.Y - 1)
+                    let ptr = 
+                        if flipY then ptr + dy * nativeint (size.Y - 1)
+                        else ptr
                     let volume = NativeVolumeRaw.ofNativeInt info ptr
                     NativeVolumeRaw.copy volume dst
                 )
@@ -1182,12 +1193,15 @@ module ImageSubResource =
                     DevicePtr.map mem (fun ptr ->
                         let info =
                             NativeVolumeInfo(
-                                V3n(channels, -dy, 1n),
+                                V3n(channels, (if flipY then -dy else dy), 1n),
                                 V3n(nativeint size.X, nativeint size.Y, channels),
                                 channelSize
                             )
 
-                        let ptr = ptr + dy * nativeint (size.Y - 1)
+                        let ptr = 
+                            if flipY then ptr + dy * nativeint (size.Y - 1)
+                            else ptr
+
                         let volume = NativeVolumeRaw.ofNativeInt info ptr
                         NativeVolumeRaw.copy volume dst
                     )
@@ -1778,12 +1792,31 @@ type ImageExtensions private() =
         Command.custom (fun s ->
             let mutable s = s
             if this.Layout <> layout then 
+
+                let dst =
+                    if layout = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                    elif layout = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                    elif layout = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                    elif layout = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit ||| VkAccessFlags.InputAttachmentReadBit
+                    else VkAccessFlags.None
+
+                let src =
+                    if this.Layout = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                    elif this.Layout = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                    elif this.Layout = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                    else VkAccessFlags.None
+
+//                let src =
+//                    if this.Layout = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+//                    elif this.Layout = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+//                    else VkAccessFlags.None
+
                 let mutable barrier =
                     VkImageMemoryBarrier(
                         VkStructureType.ImageMemoryBarrier,
                         0n,
-                        VkAccessFlags.None,
-                        VkAccessFlags.None,
+                        src,
+                        dst,
                         this.Layout,
                         layout,
                         0u,
@@ -1812,7 +1845,24 @@ type ImageExtensions private() =
 
     [<Extension>]
     static member ToLayout(this : Image, layout : VkImageLayout) =
-        ImageExtensions.ToLayout(this, VkImageAspectFlags.ColorBit, layout)
+        let isDepth, hasStencil =
+            match this.Format with
+                | VkFormat.D16Unorm -> true, false
+                | VkFormat.D16UnormS8Uint -> true, true
+                | VkFormat.D24UnormS8Uint -> true, true
+                | VkFormat.D32Sfloat -> true, false
+                | VkFormat.D32SfloatS8Uint -> true, true
+                | VkFormat.X8D24UnormPack32 -> true, false
+                | _ -> false, false
+
+        let aspect =
+            if isDepth then
+                if hasStencil then VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit
+                else VkImageAspectFlags.DepthBit
+            else
+                VkImageAspectFlags.ColorBit
+
+        ImageExtensions.ToLayout(this, aspect, layout)
 
     [<Extension>]
     static member UploadLevel(this : Image, level : int, src : NativeVolumeRaw, srcFormat : VkFormat) =

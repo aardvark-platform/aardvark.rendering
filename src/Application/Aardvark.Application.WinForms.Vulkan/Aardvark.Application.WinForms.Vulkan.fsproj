@@ -72,6 +72,9 @@
     <Compile Include="MessageLoop.fs" />
     <Compile Include="SwapChain.fs" />
     <Compile Include="VulkanControl.fs" />
+    <Compile Include="GameWindow\IGameWindow.fs" />
+    <Compile Include="GameWindow\GameWindowWin32.fs" />
+    <Compile Include="GameWindow\GameWindowXcb.fs" />
     <Compile Include="Application.fs" />
   </ItemGroup>
   <PropertyGroup>
@@ -143,6 +146,17 @@
       <ItemGroup>
         <Reference Include="Aardvark.Base.Incremental">
           <HintPath>..\..\..\packages\Aardvark.Base.Incremental\lib\net45\Aardvark.Base.Incremental.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And ($(TargetFrameworkVersion) == 'v4.5' Or $(TargetFrameworkVersion) == 'v4.5.1' Or $(TargetFrameworkVersion) == 'v4.5.2' Or $(TargetFrameworkVersion) == 'v4.5.3' Or $(TargetFrameworkVersion) == 'v4.6' Or $(TargetFrameworkVersion) == 'v4.6.1')">
+      <ItemGroup>
+        <Reference Include="Aardvark.Base.Runtime">
+          <HintPath>..\..\..\packages\Aardvark.Base.Runtime\lib\net45\Aardvark.Base.Runtime.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>

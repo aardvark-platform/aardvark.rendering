@@ -62,8 +62,7 @@
     <Compile Include="ModExtensions.fs" />
     <Compile Include="DefaultCameraController.fs" />
     <Compile Include="Screenshots.fs" />
-    <None Include="Scripts\load-references.fsx" />
-    <None Include="Scripts\load-project.fsx" />
+    <Compile Include="ChooseForm.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

@@ -11,15 +11,17 @@ open Aardvark.SceneGraph
 open Aardvark.Base.Incremental.Operators
 
 
-type App() =
+type App private() =
     static let emptySg = Sg.set ASet.empty
+    
+    static let mutable instance = None
+
+
+
 
     do Aardvark.Init()
-//       for l in Aardvark.Rendering.Vulkan.Instance.AvailableLayers do
-//        printfn "layer: %A" l.layerName.Value
-
     let mutable initialized = 0
-    let app = new VulkanApplication()
+    let app = new VulkanApplication(true)
     let win = app.CreateSimpleRenderWindow()
     let sg = Mod.init emptySg
     let mutable clear = Unchecked.defaultof<IRenderTask>
@@ -40,12 +42,22 @@ type App() =
                     |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
                     |> Sg.uniform "ViewportSize" win.Sizes
 
-            clear <- app.Runtime.CompileClear(win.FramebufferSignature, ~~C4f.Black, ~~1.0)
+            clear <- app.Runtime.CompileClear(win.FramebufferSignature, ~~C4f.Gray30, ~~1.0)
             render <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
     
             let task = RenderTask.ofList [clear; render]
             win.RenderTask <- task
             win.Show()
+
+    do init()
+
+    static member Instance =
+        match instance with
+            | Some i -> i
+            | None ->
+                let i = new App()
+                instance <- Some i
+                i
 
     member x.Control = win :> IRenderControl
 
@@ -56,7 +68,6 @@ type App() =
         with get () = sg.Value
         and set (v : ISg) = 
             transact (fun () -> sg.Value <- v)
-            init()
 
     member x.Dispose() = ()
 //        if Interlocked.Exchange(&initialized, 0) = 1 then
@@ -64,6 +75,8 @@ type App() =
 //            win.Dispose()
 //            (app :> IDisposable).Dispose()
        
+
+
     member x.Run() =
         win.Run()
         
@@ -73,7 +86,7 @@ type App() =
 
 module Simple = 
     let run() =
-        use app = new App()
+        let app = App.Instance
         let quadGeometry =
             IndexedGeometry(
                 Mode = IndexedGeometryMode.TriangleList,
@@ -87,24 +100,32 @@ module Simple =
                     ]
             )
 
-        let red = PixImage<byte>(Col.Format.RGBA, V2i(128,128))
-        red.GetMatrix<C4b>().Set(C4b.Red) |> ignore
-
-        let tex = PixTexture2d(PixImageMipMap [|red :> PixImage|], true) :> ITexture
+//        let red = PixImage<byte>(Col.Format.RGBA, V2i(128,128))
+//        red.GetMatrix<C4b>().Set(C4b.Red) |> ignore
+        //let tex = PixTexture2d(PixImageMipMap [|red :> PixImage|], true) :> ITexture
 
 
         let mode = Mod.init FillMode.Fill
 
+
+//        let surf =
+//            BinarySurface [
+//                ShaderStage.Vertex, BinaryShader "Vertex.spv"
+//                ShaderStage.Pixel, BinaryShader "Pixel.spv"
+//            ]
+
         let sg =
             quadGeometry
                 |> Sg.ofIndexedGeometry
-                |> Sg.diffuseTexture ~~tex
+                //|> Sg.diffuseTexture ~~tex
+                //|> Sg.surface (surf :> ISurface |> Mod.constant)
                 |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect
                     //DefaultSurfaces.diffuseTexture |> toEffect
-                    DefaultSurfaces.vertexColor |> toEffect
-                    //DefaultSurfaces.simpleLighting |> toEffect
+                    DefaultSurfaces.constantColor C4f.White |> toEffect
+                    DefaultSurfaces.simpleLighting |> toEffect
                    ]
+                |> Sg.depthTest (Mod.constant DepthTestMode.None)
                 |> Sg.fillMode mode
 
         app.Control.Keyboard.DownWithRepeats.Values.Add(fun k ->  
@@ -276,7 +297,7 @@ module Lod =
                 |> Sg.trafo invViewProj
 
     
-    let app = new App()
+    let app = App.Instance
     let win = app.Control
 
     type DummyDataProvider(root : Box3d) =
@@ -458,11 +479,11 @@ module Lod =
                     //DefaultSurfaces.pointSprite  |> toEffect     
                     //DefaultSurfaces.pointSpriteFragment  |> toEffect 
                 ]
-            Helpers.frustum gridCam gridProj
-
-            data.BoundingBox.EnlargedByRelativeEps(0.005)
-                |> Helpers.wireBox C4b.VRVisGreen
-                |> Sg.ofIndexedGeometry
+//            Helpers.frustum gridCam gridProj
+//
+//            data.BoundingBox.EnlargedByRelativeEps(0.005)
+//                |> Helpers.wireBox C4b.VRVisGreen
+//                |> Sg.ofIndexedGeometry
         ]
 
     let final =

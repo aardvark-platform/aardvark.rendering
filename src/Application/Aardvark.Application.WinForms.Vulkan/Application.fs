@@ -7,141 +7,234 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.Operators
 
-type VulkanRenderControl(runtime : Runtime, samples : int) as this =
-    inherit Aardvark.Application.WinForms.VulkanControl(runtime.Context, VkFormat.D32Sfloat, samples)
+module VisualDeviceChooser =
+    open System.IO
+    open System.Reflection
+    open System.Windows.Forms
+    open Aardvark.Application
+
+    let private md5 = System.Security.Cryptography.MD5.Create()
+
+    let private newHash() =
+        Guid.NewGuid().ToByteArray() |> Convert.ToBase64String
+
+    let private appHash =
+        try
+            let ass = Assembly.GetEntryAssembly()
+            if isNull ass || String.IsNullOrWhiteSpace ass.Location then newHash()
+            else
+                ass.Location 
+                    |> System.Text.Encoding.Unicode.GetBytes
+                    |> md5.ComputeHash
+                    |> Convert.ToBase64String
+                   
+        with _ ->
+            newHash()
+               
+    let private configFile =
+        let configDir = Path.Combine(Path.GetTempPath(), "vulkan")
+
+        if not (Directory.Exists configDir) then
+            Directory.CreateDirectory configDir |> ignore
+
+
+        let fileName = appHash.Replace('/', '_')
+        Path.Combine(configDir, sprintf "%s.vkconfig" fileName)
+
+    let run(devices : list<PhysicalDevice>) =
+        match devices with
+            | [single] -> single
+            | _ -> 
+                let allIds = devices |> List.map (fun d -> string d.DeviceId) |> String.concat ";"
+
+                let choose() =
+                    let chosen = 
+                        devices
+                            |> List.mapi (fun i d -> 
+                                let name = sprintf "%d: %A %s" i d.Vendor d.Name
+                                name, d
+                               )
+                            |> ChooseForm.run
+                    match chosen with
+                        | Some d -> 
+                            File.WriteAllLines(configFile, [ allIds; string d.DeviceId ])
+                            d
+                        | None -> 
+                            Log.warn "no vulkan device chosen => stopping Application"
+                            Environment.Exit 0
+                            failwith ""
+
+                if File.Exists configFile && Control.ModifierKeys <> Keys.Alt then
+                    let cache = File.ReadAllLines configFile
+                    match cache with
+                        | [| fAll; fcache |] when fAll = allIds ->
+                    
+                            let did = UInt32.Parse(fcache)
+
+                            match devices |> List.tryFind (fun d -> d.DeviceId = did) with
+                                | Some d -> d
+                                | _ -> choose()
+
+                        | _ ->
+                            choose()
+                else
+                    choose()
+
+
+
+type VulkanApplication(appName : string, debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+    let requestedExtensions =
+        [
+            yield Instance.Extensions.Surface
+            yield Instance.Extensions.SwapChain
+            yield Instance.Extensions.Win32Surface
+            yield Instance.Extensions.XcbSurface
+            yield Instance.Extensions.XlibSurface
+
+            if debug then
+                yield Instance.Extensions.DebugReport
+        ]
+
+    let requestedLayers =
+        [
+            if debug then
+                yield Instance.Layers.SwapChain
+                yield Instance.Layers.DrawState
+                yield Instance.Layers.ParamChecker
+                yield Instance.Layers.StandardValidation
+                yield Instance.Layers.DeviceLimits
+                yield Instance.Layers.CoreValidation
+                yield Instance.Layers.ParameterValidation
+                yield Instance.Layers.ObjectTracker
+                yield Instance.Layers.Threading
+                yield Instance.Layers.UniqueObjects
+                yield Instance.Layers.Image
+        ]
+
+    let instance = 
+        let availableExtensions =
+            Instance.AvailableExtensions |> Seq.map (fun e -> e.extensionName.Value) |> Set.ofSeq
+
+        let availableLayers =
+            Instance.AvailableLayers |> Seq.map (fun l -> l.layerName.Value) |> Set.ofSeq
+
+        // create an instance
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
     
-    static let messageLoop = MessageLoop()
-    static do messageLoop.Start()
-
-    let context = runtime.Context
-    let mutable renderTask : IRenderTask = Unchecked.defaultof<_>
-    let mutable taskSubscription : IDisposable = null
-    let mutable sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
-    let mutable needsRedraw = false
-
-    let time = Mod.custom(fun _ -> DateTime.Now)
-
-    override x.OnRenderFrame(pass, fbo) =
-        needsRedraw <- false
-        let s = V2i(x.ClientSize.Width, x.ClientSize.Height)
-        if s <> sizes.Value then
-            transact (fun () -> Mod.change sizes s)
-
-        renderTask.Run(fbo) |> ignore
-
-        //x.Invalidate()
-        transact (fun () -> time.MarkOutdated())
-
-
-    member x.Time = time
-    member x.Sizes = sizes :> IMod<_>
-
-    member x.Screenshot(size : V2i) =
-        let desc = x.SwapChainDescription
-
-        let color =
-            context.CreateImage(
-                VkImageType.D2d, desc.ColorFormat, TextureDimension.Texture2D, V3i(size.X, size.Y, 1), 1, 1, 1, 
-                VkImageUsageFlags.ColorAttachmentBit, VkImageLayout.TransferSrcOptimal, VkImageTiling.Optimal
-            )
-
-        let depth =
-            context.CreateImage(
-                VkImageType.D2d, desc.DepthFormat, TextureDimension.Texture2D, V3i(size.X, size.Y, 1), 1, 1, 1, 
-                VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.DepthStencilAttachmentOptimal, VkImageTiling.Optimal
-            )
-
-        let colorView = context.CreateImageOutputView(color, 0, 0)
-        let depthView = context.CreateImageOutputView(depth, 0, 0)
-
-        let fbo = 
-            context.CreateFramebuffer(
-                x.RenderPass, 
-                [ colorView; depthView ]
-            )
-
-        renderTask.Run(fbo) |> ignore
-
-        let image = PixImage<byte>(Col.Format.BGRA, size)
-        color.Download(image) |> context.DefaultQueue.RunSynchronously
-        
-        context.Delete fbo
-        context.Delete depthView
-        context.Delete colorView
-        context.Delete color
-        context.Delete depth
-
-        image
-
-    member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
-
-    member private x.ForceRedraw() =
-        messageLoop.Draw(x)
-
-    member x.RenderTask
-        with get() = renderTask
-        and set t = 
-            if not (isNull taskSubscription) then 
-                taskSubscription.Dispose()
-                renderTask.Dispose()
-
-            renderTask <- t
-            taskSubscription <- t.AddMarkingCallback x.ForceRedraw
-
-    interface IControl with
-        member x.IsInvalid = needsRedraw
-        member x.Invalidate() =
-            if not needsRedraw then
-                needsRedraw <- true
-                x.Invalidate()
-
-        member x.Paint() =
-            use g = x.CreateGraphics()
-            use e = new System.Windows.Forms.PaintEventArgs(g, x.ClientRectangle)
-            x.InvokePaint(x, e)
-
-        member x.Invoke f =
-            base.Invoke (new System.Action(f)) |> ignore
-
-    interface IRenderTarget with
-        member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
-        member x.Runtime = runtime :> IRuntime
-        member x.RenderTask
-            with get() = x.RenderTask
-            and set t = x.RenderTask <- unbox t
-
-        member x.Samples = 1
-        member x.Sizes = sizes :> IMod<_>
-        member x.Time = time
-
-type VulkanApplication(appName : string, debug : bool) =
-    static let instanceDebugLayers = [ "VK_LAYER_LUNARG_api_dump"; Instance.Layers.DrawState; Instance.Layers.ParamChecker; Instance.Layers.Threading; Instance.Layers.SwapChain; Instance.Layers.MemTracker ]
-    static let deviceDebugLayers = instanceDebugLayers
-
-
-
-
-    // create an instance
-    let enabledLayers = if debug then instanceDebugLayers else []
-    let enabledExtensions = if debug then [Instance.Extensions.DebugReport] else []
-    
-    let instance = new Instance(appName, Version(1,0,0), enabledLayers, enabledExtensions)
+        new Instance(appName, Version(1,0,0), enabledLayers, enabledExtensions)
 
     // install debug output to file (and errors/warnings to console)
     do if debug then
-        Log.warn "[Vulkan] debug support not implemented"
         instance.OnDebugMessage.Add (fun msg ->
-            Log.warn "%s" msg.message
+            
+            let str = sprintf "[%s] %s" msg.layerPrefix msg.message
+
+            match msg.messageFlags with
+                | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
+                    Log.error "%s" str
+
+                | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt | VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt ->
+                    Log.warn "%s" str
+
+                | VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt ->
+                    Report.Line(4, "{0}", str)
+
+                | _ -> ()
+
         )
-        //instance.InstallDebugFileWriter "vk.log"
+
 
     // choose a physical device
-    let physicalDevice = instance.PhysicalDevices |> List.head
+    let physicalDevice = 
+        match instance.PhysicalDevices with
+            | [] -> failwithf "[Vulkan] could not get vulkan devices"
+            | l -> chooseDevice l
 
     // create a device
-    let enabledDeviceLayers = if debug then deviceDebugLayers else []
-    let enabledDeviceExtensions = [ ]
-    let device = instance.CreateDevice(physicalDevice, enabledDeviceLayers, enabledDeviceExtensions)
+    let device = 
+        let availableExtensions =
+            physicalDevice.Extensions |> Seq.map (fun e -> e.extensionName.Value) |> Set.ofSeq
+
+        let availableLayers =
+            physicalDevice.Layers |> Seq.map (fun l -> l.layerName.Value) |> Set.ofSeq
+
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
+        
+        instance.CreateDevice(physicalDevice, enabledLayers, enabledExtensions)
+
+    let printInfo() =
+        
+        Log.start "VulkanApplication"
+
+        do  Log.start "instance"
+
+            do  Log.start "layers"
+                for l in Instance.AvailableLayers do
+                    let layerName = l.layerName.Value
+                    let version = l.implementationVersion |> Version.FromUInt32
+                    if instance.Layers |> Array.exists (fun li -> li = layerName) then
+                        Log.line "* %s (v%A)" layerName version
+                    else
+                        Log.line "  %s (v%A)" layerName version
+                Log.stop()
+
+            do  Log.start "extensions"
+                for e in Instance.AvailableExtensions do
+                    let extName = e.extensionName.Value
+                    let version = e.specVersion |> Version.FromUInt32
+                    if instance.Extensions |> Array.exists (fun ei -> ei = extName) then
+                        Log.line "* %s (v%A)" extName version
+                    else
+                        Log.line "  %s (v%A)" extName version
+                Log.stop()
+
+            Log.stop()
+
+        do  Log.start "%A %s" physicalDevice.Vendor physicalDevice.Name
+
+            Log.line "kind:    %A" physicalDevice.DeviceType
+            Log.line "API:     v%A" (Version.FromUInt32(physicalDevice.Properties.apiVersion))
+            Log.line "driver:  v%A" (Version.FromUInt32(physicalDevice.Properties.driverVersion))
+
+            do  Log.start "memory"
+                for m in physicalDevice.MemoryHeaps do
+                    let suffix =
+                        if m.IsDeviceLocal then " (device)"
+                        else ""
+
+                    Log.line "memory %d: %A%s" m.HeapIndex m.Size suffix
+
+                Log.stop()
+
+            do  Log.start "layers"
+                for l in physicalDevice.Layers do
+                    let layerName = l.layerName.Value
+                    let version = l.implementationVersion |> Version.FromUInt32
+                    if device.Layers |> List.exists (fun li -> li = layerName) then
+                        Log.line "* %s (v%A)" layerName version
+                    else
+                        Log.line "  %s (v%A)" layerName version
+                Log.stop()
+
+            do  Log.start "extensions"
+                for e in physicalDevice.Extensions do
+                    let extName = e.extensionName.Value
+                    let version = e.specVersion |> Version.FromUInt32
+                    if device.Extensions |> List.exists (fun ei -> ei = extName) then
+                        Log.line "* %s (v%A)" extName version
+                    else
+                        Log.line "  %s (v%A)" extName version
+                Log.stop()
+            
+            Log.stop()
+
+        Log.stop()  
+
+
+    do printInfo()
+
 
     // create a runtime
     let runtime = new Runtime(device)
@@ -179,5 +272,7 @@ type VulkanApplication(appName : string, debug : bool) =
             instance.Dispose()
 
 
+    new(appName, debug) = new VulkanApplication(appName, debug, VisualDeviceChooser.run)
     new(appName) = new VulkanApplication(appName, false)
+    new(debug) = new VulkanApplication("Aardvark", debug)
     new() = new VulkanApplication("Aardvark", false)

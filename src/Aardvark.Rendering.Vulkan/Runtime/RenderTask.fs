@@ -16,95 +16,6 @@ open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.Runtime
 
-[<AutoOpen>]
-module private Compiler = 
-
-    let instructionToCall (i : Instruction) : NativeCall =
-        i.FunctionPointer, i.Arguments
-
-    let callToInstruction (ctx : InstructionContext) (ptr : nativeint, args : obj[]) : Instruction =
-        new Instruction(ctx, ptr, args)
-
-
-    let draw (ctx : InstructionContext) (index : Option<Resource<Buffer>>) (drawCalls : IMod<list<DrawCallInfo>>) =
-        [
-            match index with
-                | Some ib ->
-                    yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
-
-                    yield drawCalls |> Mod.map (
-                        List.collect (fun draw ->
-                            ctx.DrawIndexed(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount, 0)
-                        )
-                    )
-
-                | _ ->
-                    yield drawCalls |> Mod.map (
-                        List.collect (fun draw ->
-                            ctx.Draw(draw.FirstIndex, draw.FaceVertexCount, draw.FirstInstance, draw.InstanceCount)
-                        )
-                    )
-        ]
-
-    let drawIndirect (ctx : InstructionContext) (index : Option<Resource<Buffer>>) (indirect : Resource<IndirectBuffer>) =
-        [
-            match index with
-                | Some ib ->
-                    yield ib.Handle |> Mod.map (fun ib -> ctx.BindIndexBuffer(ib, 0))
-
-                    yield indirect.Handle |> Mod.map (fun i ->
-                        ctx.DrawIndexedIndirect(i.Buffer.Handle, 0UL, i.Count, 0)
-                    )
-
-                | _ ->
-                    yield indirect.Handle |> Mod.map (fun i ->
-                        ctx.DrawIndirect(i.Buffer.Handle, 0UL, i.Count, 0)
-                    )
-        ]
-
-    let compile (ctx : InstructionContext) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =
-        let code =
-            [
-                let prog = self.program.Handle.GetValue()
-                match prev with
-                    | None ->
-                        yield self.pipeline.Handle |> Mod.map (ctx.BindPipeline)
-
-                        yield self.descriptorSets |> List.map (fun d -> d.Handle) |> Mod.mapN (fun handles ->
-                            ctx.BindDescriptorSets(prog.PipelineLayout, Seq.toArray handles, 0)
-                        )
-
-                        yield self.vertexBuffers |> Array.map (fun (v,_) -> v.Handle) |> Mod.mapN (fun handles ->
-                            ctx.BindVertexBuffers(Seq.toArray handles, self.vertexBuffers |> Array.map snd, 0)
-                        )
-
-                        match self.indirect with
-                            | Some i -> yield! drawIndirect ctx self.indexBuffer i
-                            | None -> yield! draw ctx self.indexBuffer self.DrawCallInfos
-
-                    | Some prev ->
-                        if prev.pipeline <> self.pipeline then
-                            yield self.pipeline.Handle |> Mod.map (ctx.BindPipeline)
-
-                        if prev.descriptorSets <> self.descriptorSets then
-                            yield self.descriptorSets |> List.map (fun d -> d.Handle) |> Mod.mapN (fun handles ->
-                                ctx.BindDescriptorSets(prog.PipelineLayout, Seq.toArray handles, 0)
-                            )
-
-                        if prev.vertexBuffers <> self.vertexBuffers then
-                            yield self.vertexBuffers |> Array.map (fun (v,_) -> v.Handle) |> Mod.mapN (fun handles ->
-                                ctx.BindVertexBuffers(Seq.toArray handles, self.vertexBuffers |> Array.map snd, 0)
-                            )
-
-                        match self.indirect with
-                            | Some i -> yield! drawIndirect ctx self.indexBuffer i
-                            | None -> yield! draw ctx self.indexBuffer self.DrawCallInfos
-
-            ]
-
-        new AdaptiveCode<Instruction>(code) :> IAdaptiveCode<_>
-
-
 type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors : list<IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) as this =
     inherit AdaptiveObject()
     let context = manager.Context
@@ -145,6 +56,22 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
             | Some cd -> cd.AddOutput this
             | _ -> ()
 
+    let clearImage (image : Image) (cmd : CommandBuffer) (real : CommandBuffer -> unit) =
+        let old = image.Layout
+        let clear =
+            command {
+                do! image.ToLayout(VkImageLayout.TransferDstOptimal)
+                image.Layout <- VkImageLayout.TransferDstOptimal
+                do! Command.custom (fun s ->
+                        real s.buffer
+                        s
+                    )
+                do! image.ToLayout(old)
+            }
+        let mutable state = { isEmpty = false; buffer = cmd; cleanupActions = [] }
+        clear.Run(&state)
+        image.Layout <- old
+
     member x.Run(caller : IAdaptiveObject, outputs : OutputDescription) =
         x.EvaluateAlways caller (fun () ->
             let fbo = unbox<Framebuffer> outputs.framebuffer
@@ -173,22 +100,29 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
 
                             let mutable clearValue = value
                             let mutable range = VkImageSubresourceRange(aspect, 0u, 1u, 0u, 1u)
-                            VkRaw.vkCmdClearDepthStencilImage(
-                                cmd.Handle, image.Handle, image.Layout, &&clearValue, 1u, &&range
+                            clearImage image cmd (fun cmd ->
+                                VkRaw.vkCmdClearDepthStencilImage(
+                                    cmd.Handle, image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range
+                                )
                             )
                         | None ->
                             ()
                 else
                     let mutable clearValue = clearColors.[i].GetValue()
                     let mutable range = VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
-                    VkRaw.vkCmdClearColorImage(
-                        cmd.Handle, image.Handle, image.Layout, &&clearValue, 1u, &&range
+                    clearImage image cmd (fun cmd ->
+                        VkRaw.vkCmdClearColorImage(
+                            cmd.Handle, image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range
+                        )
                     )
 
             //cmd.EndPass()
             cmd.End()
 
-            context.DefaultQueue.SubmitAndWait [| cmd |]
+            let q = context.DefaultQueue.Acquire()
+            q.SubmitAndWait [| cmd |]
+            q.WaitIdle()
+            context.DefaultQueue.Release q
 
             RenderingResult(fbo, FrameStatistics.Zero)
         )
@@ -199,6 +133,8 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
         member x.FrameId = 0UL
         member x.FramebufferSignature = renderPass :> _
         member x.Runtime = Some manager.Runtime
+
+
 
 type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : aset<IRenderObject>, config : BackendConfiguration) as this =
     inherit AbstractRenderTaskWithResources(
@@ -278,21 +214,10 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
 
     let mutable hasProgram = true
     let executionTime = System.Diagnostics.Stopwatch()
-
-
-
-    let program : IAdaptiveProgram<VkCommandBuffer> = 
-        let handler = 
-            FragmentHandler.warpDifferential 
-                instructionToCall 
-                (callToInstruction ictx)
-                (compile ictx)
-                (FragmentHandler.native 8) // at most 8 args (vkBindDescriptorSets)
-
-        AdaptiveProgram.custom 
-            Comparer<_>.Default 
-            handler 
-            preparedObjects
+    let program = 
+        match config.execution with
+            //| ExecutionEngine.Native -> new NativeCommandBufferProgram(ctx, preparedObjects) :> ICommandBufferProgram
+            | _ ->  new ManagedCommandBufferProgram(ctx, preparedObjects) :> ICommandBufferProgram
 
 
               
@@ -302,32 +227,40 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
          
     let getOrCreateCommandBuffer (pass : RenderPass) (fbo : Framebuffer) =
         commandBufferCache.GetOrCreate(fbo, fun fbo ->
-            let cmd = pool.CreateCommandBuffer(true)
+            let mutable old = None
             Mod.custom (fun self ->
+                Log.start "updating command buffer"
                 program.Update(self) |> ignore
 
+                let cmd = pool.CreateCommandBuffer(true)
                 cmd.Begin(true)
                 cmd.BeginPass(pass, fbo)
 
                 cmd.SetViewport(fbo.Size)
                 cmd.SetScissor(fbo.Size)
-                cmd.SetBlendColor(C4f.White)
-                cmd.SetLineWidth(1.0)
-                cmd.SetDepthBias(0.0, 1.0, 0.0)
-                cmd.SetDepthBounds(0.0, 1.0)
-                cmd.SetStencil(0xffu, 0xffu, 0u)
+                //cmd.SetBlendColor(C4f.White)
+                //cmd.SetLineWidth(1.0)
+                //cmd.SetDepthBias(0.0, 1.0, 0.0)
+                //cmd.SetDepthBounds(0.0, 1.0)
+                //cmd.SetStencil(0xffu, 0xffu, 0u)
 
                     
                 let sw = System.Diagnostics.Stopwatch()
                 sw.Start()
-                program.Run(cmd.Handle)
+                program.Run(cmd)
                 Log.line "updated cmd buffer: %.3fms" sw.Elapsed.TotalMilliseconds
 
                 cmd.EndPass()
                 cmd.End()
                 sw.Stop()
 
+                Log.stop()
 
+                match old with
+                    | Some o -> pool.Delete(o)
+                    | None -> ()
+
+                old <- Some cmd
                 cmd
             )
         )
@@ -354,7 +287,10 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
         if hasProgram then
             let fbo = outputs.framebuffer |> unbox<Framebuffer>
             let cmd = getOrCreateCommandBuffer pass fbo
-            ctx.DefaultQueue.SubmitAndWait [| Mod.force cmd |]
+            let q = ctx.DefaultQueue.Acquire()
+            q.SubmitAndWait [| cmd.GetValue(x) |]
+            q.WaitIdle()
+            ctx.DefaultQueue.Release q
 
         executionTime.Stop()
 

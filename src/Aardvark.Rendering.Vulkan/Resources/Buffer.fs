@@ -204,6 +204,10 @@ type ContextBufferExtensions private() =
         this.Memory.Upload(data, size)
 
     [<Extension>]
+    static member Upload (this : Buffer, bufferOffset : int64, data : nativeint, size : int64) =
+        this.Memory.Skip(bufferOffset).Upload(data, size)
+
+    [<Extension>]
     static member Download (this : Buffer, target : Array, start : int, count : int) =
         this.Memory.Download(target, start, count)
 
@@ -214,6 +218,11 @@ type ContextBufferExtensions private() =
     [<Extension>]
     static member Download<'a> (this : Buffer) : Command<'a[]> =
         this.Memory.Download()
+
+    [<Extension>]
+    static member Download (this : Buffer, bufferOffset : int64, data : nativeint, size : int64) =
+        this.Memory.Skip(bufferOffset).Download(data, size)
+
 
 [<AbstractClass; Sealed; Extension>]
 type ContextBufferViewExtensions private() =
@@ -265,6 +274,18 @@ type IndirectBuffer =
         val mutable public Indexed : bool
 
         new(b,c,i) = { Buffer = b; Count = c; Indexed = i }
+
+        override x.GetHashCode() =
+            HashCode.Combine(x.Buffer.GetHashCode(), x.Count.GetHashCode(), x.Indexed.GetHashCode())
+
+        override x.Equals o =
+            match o with
+                | :? IndirectBuffer as o ->
+                    x.Buffer = o.Buffer && x.Count = o.Count && x.Indexed = o.Indexed
+                | _ ->
+                    false
+
+
     end
 
 [<AbstractClass; Sealed; Extension>]
@@ -312,8 +333,8 @@ type ContextBufferIndirectExtensions private() =
 
                 let newBuffer, cmd = this.CreateBufferCommand(oldBuffer, ArrayBuffer(indirectData), VkBufferUsageFlags.IndirectBufferBit)
 
-                let res = IndirectBuffer(newBuffer, data.Length, indexed)
 
+                let res = IndirectBuffer(newBuffer, data.Length, indexed)
                 res, cmd
 
             | _ ->

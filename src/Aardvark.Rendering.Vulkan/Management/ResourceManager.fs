@@ -24,6 +24,8 @@ type IResource =
 type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
     inherit AdaptiveObject()
 
+    static let resName = typeof<'h> |> ReflectionHelpers.getPrettyName
+
     let mutable currentHandle = None
     let handleMod = 
         Mod.custom (fun self ->
@@ -70,10 +72,11 @@ type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
                     update
 
                 | Some o ->
+                    currentHandle <- Some h
                     command {
-                        try do! update
+                        try 
+                            do! update
                         finally
-                            currentHandle <- Some h
                             transact (fun () -> handleMod.MarkOutdated())
                             x.Destroy o
                     }
@@ -301,13 +304,12 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
                                 b, Command.nop
 
                             | content ->
-                                let old = if created then old else None
+                                let old1 = if created then old else None
                                 created <- true
-                                ctx.CreateIndirectBufferCommand(old, content, indexed)
+                                ctx.CreateIndirectBufferCommand(old1, content, indexed)
 
                     member x.Destroy(h) =
                         if created then ctx.Delete h
-                        created <- false
                 }
 
         )  
@@ -468,6 +470,8 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
 
                 { new Resource<Pipeline>(pipelineCache) with
                     member x.Create old =
+                        old |> Option.iter ctx.Delete
+
                         let pipeline =
                             ctx.CreateGraphicsPipeline {
                                 renderPass              = pass

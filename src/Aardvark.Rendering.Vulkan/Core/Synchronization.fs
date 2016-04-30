@@ -298,11 +298,12 @@ type SynchronizationExtensions private() =
     static member Wait(this : Queue, sem : Semaphore) =
         let mutable semHandle = sem.Handle
         let mutable submitInfo =
+            let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
             VkSubmitInfo(
                 VkStructureType.SubmitInfo,
                 0n, 
                 1u, &&semHandle,
-                NativePtr.zero,
+                &&dstStage,
                 0u, NativePtr.zero,
                 0u, NativePtr.zero
             )

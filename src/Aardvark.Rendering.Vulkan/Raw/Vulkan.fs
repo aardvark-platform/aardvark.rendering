@@ -441,7 +441,6 @@ type VkSamplerAddressMode =
     | MirroredRepeat = 1
     | ClampToEdge = 2
     | ClampToBorder = 3
-    | MirrorClampToEdge = 4
 
 type VkCompareOp = 
     | Never = 0

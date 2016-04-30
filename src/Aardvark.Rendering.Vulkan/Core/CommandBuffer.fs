@@ -91,6 +91,11 @@ type CommandPoolExtensions private() =
     static member CreateCommandBuffer(this : CommandPool) =
         CommandPoolExtensions.CreateCommandBuffers(this, 1, true).[0]
 
+    [<Extension>]
+    static member Delete(this : CommandPool, b : CommandBuffer) =
+        b.Dispose()
+
+
 [<AbstractClass; Sealed; Extension>]
 type CommandBufferExtensions private() =
     
