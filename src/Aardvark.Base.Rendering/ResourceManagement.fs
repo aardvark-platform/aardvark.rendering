@@ -219,6 +219,33 @@ type ResourceInputSet() =
     let all = ReferenceCountingSet<IResource>()
     let mutable dirty = HashSet<IResource>()
 
+    let updateDirty(x : ResourceInputSet) =
+        let rec run (level : int) (stats : FrameStatistics) = 
+            let dirty = 
+                lock all (fun () ->
+                    let d = dirty
+                    dirty <- HashSet()
+                    d
+                )
+
+            if level = 0 then
+                dirty.IntersectWith all
+
+            if level > 0 && dirty.Count > 0 then
+                Log.warn "nested shit"
+
+            let mutable stats = stats
+            if dirty.Count > 0 then
+                for d in dirty do
+                    stats <- stats + d.Update x
+
+                run (level + 1) stats
+            else
+                stats
+
+        run 0 FrameStatistics.Zero
+
+
     override x.InputChanged(i : IAdaptiveObject) =
         match i with
             | :? IResource as r ->
@@ -228,21 +255,30 @@ type ResourceInputSet() =
             | _ ->
                 ()
 
+    
+
     member x.Count = all.Count
 
     member x.Add (r : IResource) =
-        lock all (fun () ->
-            if all.Add r then
-                lock r (fun () ->
-                    if r.OutOfDate then 
-                        Log.warn "the impossible happened"
-                        r.Update(x) |> ignore
-                    else 
-                        r.Outputs.Add x |> ignore
-                )
-                //transact (fun () -> x.MarkOutdated())
-               
-        )
+        let needsUpdate =
+            lock all (fun () ->
+                if all.Add r then
+                    lock r (fun () ->
+                        if r.OutOfDate then 
+                            dirty.Add r |> ignore
+                            true
+
+                        else 
+                            r.Outputs.Add x |> ignore
+                            false
+                    )
+                else
+                    false
+            )
+
+        if needsUpdate then
+            Log.warn "adding outdated resource: %A" r.Kind
+            updateDirty x |> ignore
 
     member x.Remove (r : IResource) =
         lock all (fun () ->
@@ -255,28 +291,7 @@ type ResourceInputSet() =
 
     member x.Update (caller : IAdaptiveObject) =
         x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () ->
-            let rec run (level : int) (stats : FrameStatistics) = 
-                let dirty = 
-                    lock all (fun () ->
-                        let d = dirty
-                        dirty <- HashSet()
-                        d
-                    )
-
-                if level > 0 && dirty.Count > 0 then
-                    Log.warn "nested shit"
-
-                let mutable stats = stats
-                if dirty.Count > 0 then
-                    for d in dirty do
-                        stats <- stats + d.Update x
-
-                    run (level + 1) stats
-                else
-                    stats
-
-            run 0 FrameStatistics.Zero
-
+            updateDirty x
         )
 
     member x.Dispose () =

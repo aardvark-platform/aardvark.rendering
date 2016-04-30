@@ -10,7 +10,7 @@ open System.Runtime.CompilerServices
 [<CustomEquality;CustomComparison>]
 type PreparedRenderObject =
     {
-        Activation : IDisposable
+        mutable Activation : IDisposable
         Context : Context
         Original : RenderObject
         FramebufferSignature : IFramebufferSignature
@@ -52,6 +52,33 @@ type PreparedRenderObject =
     member x.BlendMode = x.Original.BlendMode
     member x.FillMode = x.Original.FillMode
     member x.StencilMode = x.Original.StencilMode
+
+    member x.Resources =
+        seq {
+            yield x.Program :> IResource
+            for (_,b) in Map.toSeq x.UniformBuffers do
+                yield b :> _
+
+            for (_,u) in Map.toSeq x.Uniforms do
+                yield u :> _
+
+            for (_,(t,s)) in Map.toSeq x.Textures do
+                yield t :> _
+                yield s :> _
+
+            for (_,_,_,b) in x.Buffers do
+                yield b :> _
+
+            match x.IndexBuffer with
+                | Some ib -> yield ib :> _
+                | _ -> ()
+
+            match x.IndirectBuffer with
+                | Some ib -> yield ib :> _
+                | _ -> ()
+
+            yield x.VertexArray :> _ 
+        }
 
     member x.Update(caller : IAdaptiveObject) =
         use token = x.Context.ResourceLock

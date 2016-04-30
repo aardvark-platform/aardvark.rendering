@@ -968,7 +968,6 @@ module Rewrite =
                         start <- V2d.NaN
 
                 let bounds = segments |> Seq.map PathSegment.bounds |> Box2d
-                Log.warn "bounds(%c) = %A / %A" c bounds.Min bounds.Size
 
                 { outline = CSharpList.toArray segments }
 

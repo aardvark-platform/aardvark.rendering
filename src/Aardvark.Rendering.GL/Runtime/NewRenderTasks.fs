@@ -214,8 +214,8 @@ module private RenderTaskUtilities =
                 | Some left -> Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileDelta this.Manager this.CurrentContext left right
                 | None -> Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileFull this.Manager this.CurrentContext right
 
-        for r in code.Resources do
-            this.AddInput r
+//        for r in code.Resources do
+//            this.AddInput r
 
         this.AddOneTimeStats createStats
 
@@ -255,9 +255,9 @@ module private RenderTaskUtilities =
                         for i in xs.Inputs do
                           i.RemoveOutput xs
                      | _ -> ()
-                for r in code.Resources do
-                    this.RemoveInput r
-                    r.Dispose()
+//                for r in code.Resources do
+//                    this.RemoveInput r
+//                    r.Dispose()
 
                 this.RemoveStats stats
 
@@ -400,7 +400,7 @@ module GroupedRenderTask =
         let managedUnoptimized (compile : PreparedRenderObject -> IAdaptiveCode<Instruction>) () =
             { managedOptimized (fun _ v -> compile v) () with compileNeedsPrev = false }
 
-    type RenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) =
+    type RenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) as this =
         inherit AbstractRenderTaskWithResources(
             manager,
             fboSignature, 
@@ -410,13 +410,28 @@ module GroupedRenderTask =
 
         let ctx = manager.Context
 
+
+        let add (ro : PreparedRenderObject) = 
+            let all = ro.Resources |> Seq.toList
+            for r in all do this.AddInput(r)
+
+            let old = ro.Activation
+            ro.Activation <- 
+                { new IDisposable with
+                    member x.Dispose() =
+                        old.Dispose()
+                        for r in all do this.RemoveInput(r)
+                }
+
+            ro
+
         let prepareRenderObject (ro : IRenderObject) =
             match ro with
                 | :? RenderObject as r ->
-                    manager.Prepare(fboSignature, r)
+                    manager.Prepare(fboSignature, r) |> add
 
                 | :? PreparedRenderObject as prep ->
-                    prep
+                    prep |> add
                 | _ ->
                     failwithf "[RenderTask] unsupported IRenderObject: %A" ro
 
@@ -522,7 +537,7 @@ module GroupedRenderTask =
             if hasProgram then
                 let programUpdateStats = program.Update x
                 stats <- stats + { 
-                    stats with 
+                    FrameStatistics.Zero with 
                         AddedRenderObjects = float programUpdateStats.AddedFragmentCount
                         RemovedRenderObjects = float programUpdateStats.RemovedFragmentCount
                         InstructionUpdateCount = 0.0 // TODO!!
