@@ -36,7 +36,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
     let recompile() =
         let prevRj =
             match prev with
-                | null -> PreparedRenderObject.Empty
+                | null -> PreparedRenderObject.empty
                 | _ -> prev.RenderObject
 
         match lastPrev with
@@ -198,7 +198,7 @@ type private OptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> an
         member x.Dispose() = x.Dispose()
 
     new(rj : PreparedRenderObject, ctx : CompileContext<'f>) = new OptimizedRenderObjectFragment<'f>(None, rj, ctx)
-    new(precompiled : 'f, ctx : CompileContext<'f>) = new OptimizedRenderObjectFragment<'f>(Some precompiled, PreparedRenderObject.Empty, ctx)
+    new(precompiled : 'f, ctx : CompileContext<'f>) = new OptimizedRenderObjectFragment<'f>(Some precompiled, PreparedRenderObject.empty, ctx)
 
 
 open System.Runtime.InteropServices
@@ -518,7 +518,7 @@ type OptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>
 
     member x.Disassemble() =
         let mutable fragment = prolog.Next
-        let mutable last = PreparedRenderObject.Empty
+        let mutable last = PreparedRenderObject.empty
         let result = System.Collections.Generic.List()
         while fragment <> epilog do
             let current = fragment.RenderObject

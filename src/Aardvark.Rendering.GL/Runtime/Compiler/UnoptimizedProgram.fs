@@ -178,7 +178,7 @@ type private UnoptimizedRenderObjectFragment<'f when 'f :> IDynamicFragment<'f> 
         member x.Dispose() = x.Dispose()
 
     new(rj : PreparedRenderObject, ctx : CompileContext<'f>) = new UnoptimizedRenderObjectFragment<'f>(None, rj, ctx)
-    new(precompiled : 'f, ctx : CompileContext<'f>) = new UnoptimizedRenderObjectFragment<'f>(Some precompiled, PreparedRenderObject.Empty, ctx)
+    new(precompiled : 'f, ctx : CompileContext<'f>) = new UnoptimizedRenderObjectFragment<'f>(Some precompiled, PreparedRenderObject.empty, ctx)
 
 
 type UnoptimizedProgram<'f when 'f :> IDynamicFragment<'f> and 'f : null>

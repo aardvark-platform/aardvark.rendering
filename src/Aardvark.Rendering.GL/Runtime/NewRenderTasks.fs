@@ -659,7 +659,7 @@ module SortedRenderTask =
 
         let preparedObjects = objects |> ASet.mapUse prepareRenderObject
         let reader = preparedObjects.GetReader()
-        let prolog = new Fragment(PreparedRenderObject.Empty, new AdaptiveCode<_>([]))
+        let prolog = new Fragment(PreparedRenderObject.empty, new AdaptiveCode<_>([]))
 
         let dirtyFragments = HashSet<Fragment>()
 

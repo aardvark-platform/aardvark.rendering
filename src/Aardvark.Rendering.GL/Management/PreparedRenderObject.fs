@@ -34,7 +34,7 @@ type PreparedRenderObject =
         member x.AttributeScope = x.AttributeScope
 
     interface IPreparedRenderObject with
-        member x.Update(caller) = x.Update(caller)
+        member x.Update(caller) = x.Update(caller) |> ignore
         member x.Original = Some x.Original
 
     member x.Id = x.Original.Id
@@ -83,43 +83,35 @@ type PreparedRenderObject =
     member x.Update(caller : IAdaptiveObject) =
         use token = x.Context.ResourceLock
 
-        if x.Program.OutOfDate then
-            x.Program.Update(caller) |> ignore
+        let mutable stats = FrameStatistics.Zero
+        let add s = stats <- stats + s
+
+        x.Program.Update(caller) |> add
 
         for (_,ub) in x.UniformBuffers |> Map.toSeq do
-            if ub.OutOfDate then
-                ub.Update(caller) |> ignore
+            ub.Update(caller) |> add
 
         for (_,ul) in x.Uniforms |> Map.toSeq do
-            if ul.OutOfDate then
-                ul.Update(caller) |> ignore
+            ul.Update(caller) |> add
 
         for (_,(t,s)) in x.Textures |> Map.toSeq do
-            if t.OutOfDate then
-                t.Update(caller) |> ignore
-
-            if s.OutOfDate then
-                s.Update(caller) |> ignore
+            t.Update(caller) |> add
+            s.Update(caller) |> add
 
         for (_,_,_,b) in x.Buffers  do
-            if b.OutOfDate then
-                b.Update(caller) |> ignore
+            b.Update(caller) |> add
 
         match x.IndexBuffer with
-            | Some ib ->
-                if ib.OutOfDate then
-                    ib.Update(caller) |> ignore
+            | Some ib -> ib.Update(caller) |> add
             | _ -> ()
 
         match x.IndirectBuffer with
-            | Some ib ->
-                if ib.OutOfDate then
-                    ib.Update(caller) |> ignore
+            | Some ib -> ib.Update(caller) |> add
             | _ -> ()
 
+        x.VertexArray.Update(caller) |> add
 
-        if x.VertexArray.OutOfDate then
-            x.VertexArray.Update(caller) |> ignore
+        stats
 
     member x.Dispose() =
         if not x.IsDisposed then
@@ -153,37 +145,31 @@ type PreparedRenderObject =
             | _ -> false
 
 
-[<AutoOpen>]
-module ``Prepared render object extensions`` =
-
-    let private empty = {
-                Activation = { new IDisposable with member x.Dispose() = () }
-                Context = Unchecked.defaultof<_>
-                Original = RenderObject.Empty
-                FramebufferSignature = null
-                LastTextureSlot = -1
-                Program = Unchecked.defaultof<_>
-                UniformBuffers = Map.empty
-                Uniforms = Map.empty
-                Textures = Map.empty
-                Buffers = []
-                IndexBuffer = None
-                IndirectBuffer = None
-                VertexArray = Unchecked.defaultof<_>
-                VertexAttributeValues = Map.empty
-                IsDisposed = false
-            }
-
-    type PreparedRenderObject with
-        static member Empty = empty
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module PreparedRenderObject =
+    let empty = 
+        {
+            Activation = { new IDisposable with member x.Dispose() = () }
+            Context = Unchecked.defaultof<_>
+            Original = RenderObject.Empty
+            FramebufferSignature = null
+            LastTextureSlot = -1
+            Program = Unchecked.defaultof<_>
+            UniformBuffers = Map.empty
+            Uniforms = Map.empty
+            Textures = Map.empty
+            Buffers = []
+            IndexBuffer = None
+            IndirectBuffer = None
+            VertexArray = Unchecked.defaultof<_>
+            VertexAttributeValues = Map.empty
+            IsDisposed = false
+        }  
 
 
 [<Extension; AbstractClass; Sealed>]
 type ResourceManagerExtensions private() =
   
-    static let useOwnBufferForBlock (b : UniformBlock) =
-        // TODO: find appropriate heuristic
-        false
 
     [<Extension>]
     static member Prepare (x : ResourceManager, fboSignature : IFramebufferSignature, rj : RenderObject) : PreparedRenderObject =

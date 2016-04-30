@@ -193,7 +193,7 @@ module DeltaCompiler =
     /// making no assumpltions about the previous GL state.
     /// </summary>
     let compileFull (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternal PreparedRenderObject.Empty rj
+        let c = compileDeltaInternal PreparedRenderObject.empty rj
 
         let (s,()) =
             c.runCompile {
@@ -230,7 +230,7 @@ module internal DeltaCompilerDebug =
         )
 
     let compileFullDebugNoResources (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternal PreparedRenderObject.Empty rj
+        let c = compileDeltaInternal PreparedRenderObject.empty rj
 
         let (s,()) =
             c.runCompile {
