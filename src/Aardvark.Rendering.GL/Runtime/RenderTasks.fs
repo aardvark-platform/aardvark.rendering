@@ -721,3 +721,93 @@ module SortedRenderTask =
 
             { stats with ActiveInstructionCount = stats.ActiveInstructionCount - float vmStats.RemovedInstructions }
 
+
+type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
+    inherit AdaptiveObject()
+
+    let mutable frameId = 0UL
+
+    member x.Run(caller : IAdaptiveObject, desc : OutputDescription) =
+        let fbo = desc.framebuffer
+        using ctx.ResourceLock (fun _ ->
+            x.EvaluateAlways caller (fun () ->
+
+                let old = Array.create 4 0
+                let mutable oldFbo = 0
+                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
+                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+
+                let handle = fbo.GetHandle null |> unbox<int>
+
+                if ExecutionContext.framebuffersSupported then
+                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                    GL.Check "could not bind framebuffer"
+                elif handle <> 0 then
+                    failwithf "cannot render to texture on this OpenGL driver"
+
+                GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+                GL.Check "could not bind framebuffer"
+
+                let depthValue = depth.GetValue x
+                let colorValues = color.GetValue x
+
+                match colorValues, depthValue with
+                    | [Some c], Some depth ->
+                        GL.ClearColor(c.R, c.G, c.B, c.A)
+                        GL.ClearDepth(depth)
+                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
+                        
+                    | [Some c], None ->
+                        GL.ClearColor(c.R, c.G, c.B, c.A)
+                        GL.Clear(ClearBufferMask.ColorBufferBit)
+
+                    | l, Some depth when List.forall Option.isNone l ->
+                        GL.ClearDepth(depth)
+                        GL.Clear(ClearBufferMask.DepthBufferBit)
+                    | l, d ->
+                            
+                        let mutable i = 0
+                        for c in l do
+                            match c with
+                                | Some c ->
+                                    GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
+                                    GL.ClearColor(c.R, c.G, c.B, c.A)
+                                    GL.Clear(ClearBufferMask.ColorBufferBit)
+                                | None ->
+                                    ()
+                            i <- i + 1
+
+                        match d with
+                            | Some depth -> 
+                                GL.ClearDepth(depth)
+                                GL.Clear(ClearBufferMask.DepthBufferBit)
+                            | None ->
+                                ()
+
+
+                if ExecutionContext.framebuffersSupported then
+                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+
+                GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+                GL.Check "could not bind framebuffer"
+
+                frameId <- frameId + 1UL
+
+                RenderingResult(fbo, FrameStatistics.Zero)
+            )
+        )
+
+    member x.Dispose() =
+        color.RemoveOutput x
+        depth.RemoveOutput x
+
+    interface IRenderTask with
+        member x.FramebufferSignature = fboSignature
+        member x.Runtime = runtime |> Some
+        member x.Run(caller, fbo) =
+            x.Run(caller, fbo)
+
+        member x.Dispose() =
+            x.Dispose()
+
+        member x.FrameId = frameId
