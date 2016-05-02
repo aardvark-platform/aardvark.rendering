@@ -12,20 +12,20 @@ module StepwiseProgress =
     
     type Undo = list<unit -> unit>
 
-    type CompState =
+    type StepState =
         {
             onCancel : list<unit -> unit>
             onError : list<exn -> unit>
         }
 
-    type Comp<'a> = 
+    type Stepwise<'a> = 
         | Cancelled
         | Error of exn
         | Result of 'a
-        | Continue of (CompState -> CompState * Comp<'a>)
+        | Continue of (StepState -> StepState * Stepwise<'a>)
 
     module Stepwise =
-        let rec bind (f : 'a -> Comp<'b>) (m : Comp<'a>) =
+        let rec bind (f : 'a -> Stepwise<'b>) (m : Stepwise<'a>) =
             match m with
                 | Cancelled -> Cancelled
                 | Error e -> Error e
@@ -36,7 +36,7 @@ module StepwiseProgress =
                         s, bind f v
                     )
 
-        let rec combine (l : Comp<unit>) (r : Comp<'a>) =
+        let rec combine (l : Stepwise<unit>) (r : Stepwise<'a>) =
             match l with
                 | Continue l ->
                     Continue (fun s ->
@@ -52,13 +52,13 @@ module StepwiseProgress =
         let cancel = Cancelled
 
 
-        let register (undo : unit -> unit) : Comp<unit> =
+        let register (undo : unit -> unit) : Stepwise<unit> =
             Continue (fun s ->
                 let s = { s with onCancel = undo::s.onCancel }
                 s, Result ()
             )
 
-        let step (c : Comp<'a>) (s : CompState) =
+        let step (c : Stepwise<'a>) (s : StepState) =
             match c with
                 | Cancelled -> s, Cancelled
                 | Result a -> s, Result a
@@ -70,27 +70,31 @@ module StepwiseProgress =
                 | [] -> ()
                 | h::rest -> h arg; runAll rest arg
 
-        let run (c : Comp<'a>) =
-            let rec run (c : Comp<'a>) (s : CompState) =
-                match c with
-                    | Cancelled -> 
-                        runAll s.onCancel ()
-                        None
+        let run (ct : System.Threading.CancellationToken) (c : Stepwise<unit>)=
+            let rec run (c : Stepwise<'a>) (s : StepState) =
+                if ct.IsCancellationRequested then 
+                    runAll s.onCancel ()
+                    []
+                else
+                    match c with
+                        | Cancelled -> 
+                            runAll s.onCancel ()
+                            []
 
-                    | Error e -> 
-                        runAll s.onError e
-                        None
+                        | Error e -> 
+                            runAll s.onError e
+                            []
 
-                    | Continue c -> 
-                        let (s, v) = c s
-                        run v s
+                        | Continue c -> 
+                            let (s, v) = c s
+                            run v s
 
-                    | Result a -> Some a
+                        | Result a -> s.onCancel
             
             run c { onCancel = []; onError = []; }
             
 
-        let rec stepKnot (m : Comp<'a>) (ct : System.Threading.CancellationToken)  =
+        let rec stepKnot (m : Stepwise<'a>) (ct : System.Threading.CancellationToken)  =
             let mutable s = { onCancel = []; onError = []; }
             let current = ref m
             let f () =
@@ -112,6 +116,10 @@ module StepwiseProgress =
     type StepwiseBuilder() =
         member x.Bind(m,f) = Stepwise.bind f m
         member x.Return v = Stepwise.result v
+        member x.ReturnFrom(f : Stepwise<'a>) = f
+        member x.Combine(l,r) = Stepwise.combine l r
+        member x.Delay(f) = f ()
+       
         
     let stepwise = StepwiseBuilder()
 
@@ -136,6 +144,49 @@ module StepwiseProgress =
         let r5 = proceed ()
         printfn "%A" r
         ()
+
+
+module CrazyTest =
+    open StepwiseProgress
+
+
+    let runEffects (c : ConcurrentDeltaQueue<'a>) (f : CancellationToken -> 'a -> Stepwise<unit>)  =
+        let cache = ConcurrentDictionary<'a, Stepwise<unit> * CancellationTokenSource>()
+        let working = ConcurrentHashSet<'a>()
+        let a =
+            async {
+                while true do
+                    let! d = c.DequeueAsync()
+                    let value = d.Value
+                    let ok = working.Add(value)
+
+                    if ok then
+                        match d with
+                            | Add v -> 
+                                let stepwise,cts = cache.GetOrAdd(v, fun v -> 
+                                    let cts = new CancellationTokenSource()
+                                    let s = f cts.Token v
+                                    s,cts)
+                                match Stepwise.run cts.Token stepwise with
+                                    | [] -> Log.line "cancelled something"
+                                    | undoThings -> 
+                                        cts.Token.Register(fun () -> List.iter (fun i -> i ()) undoThings) |> ignore
+                            | Rem v ->
+                                match cache.TryRemove(v) with
+                                    | (true,(stepwise,cts)) ->
+                                        cts.Cancel()
+                                    | _ -> 
+                                        Log.error "the impossible happened"
+                                        System.Diagnostics.Debugger.Break()
+                        if working.Remove value |> not then failwith "the impossible happended"
+                    else 
+                        Log.warn "hate"
+                        c.Enqueue d
+
+
+            }
+        a, (fun () -> cache.Count)
+
 
 module LodProgress =
 
@@ -303,6 +354,7 @@ module PointCloudRenderObjectSemantics =
     open Aardvark.Base.Incremental
     open Aardvark.SceneGraph
     open LodProgress
+    open StepwiseProgress
 
 
     type LoadResult = CancellationTokenSource * ref<IndexedGeometry * GeometryRef>
@@ -342,7 +394,7 @@ module PointCloudRenderObjectSemantics =
             if calls.Remove n.range then
                 Interlocked.Add(&activeSize, -size) |> ignore
                 Interlocked.Decrement(progress.activeNodeCount) |> ignore
-            else printfn "could not remove calls"
+            else Log.line "could not remove calls"
 
         member x.Add(n : LodDataNode) =
             Interlocked.Increment(progress.expectedNodeCount) |> ignore
@@ -434,27 +486,19 @@ module PointCloudRenderObjectSemantics =
                             node.Data.Rasterize(v, p, wantedNearPlaneDistance)
                         ) 
 
-                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (content.Contains >> not)  )
-                        let rem = System.Collections.Generic.HashSet<_>( content |> Seq.filter (set.Contains >> not)      )
+                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (content.Contains >> not)  |> Seq.map Add )
+                        let rem = System.Collections.Generic.HashSet<_>( content |> Seq.filter (set.Contains >> not)      |> Seq.map Rem )
 
-                        // prune deltas manually
-                        let result = System.Collections.Generic.List()
-                        for a in add do
-                            if rem.Contains a then ()
-                            else result.Add (Add a)
-                        for r in rem do
-                            if add.Contains r then ()
-                            else result.Add (Rem r)
-                    
-                        for r in result do 
+
+                        for r in Seq.concat [rem; add] do 
                             deltas.Enqueue r
                             match r with 
                                 | Add v -> 
                                     content.Add v |> ignore
-                                    transact ( fun () -> CSet.add v workingSets |> ignore )
+                                    //transact ( fun () -> CSet.add v workingSets |> ignore )
                                 | Rem v -> 
                                     content.Remove v |> ignore
-                                    transact ( fun () -> CSet.remove v workingSets |> ignore )
+                                    //transact ( fun () -> CSet.remove v workingSets |> ignore )
                 }
 
             view.AddMarkingCallback (fun () -> r.Put ()) |> ignore
@@ -464,17 +508,26 @@ module PointCloudRenderObjectSemantics =
 
             r.Put()
 
-            let deltaProcessing =    
-                async {
-                    do! Async.SwitchToNewThread()
-                    while true do
-                        let op = deltas.Dequeue()
 
-                        match op with
-                            | Add n -> lock n (fun _ -> x.Add n |> ignore)
-                            | Rem n -> lock n (fun _ -> x.Remove n |> ignore)
+            let effect (ct : CancellationToken) (n : LodDataNode) =
+                stepwise {
+                    let data =  
+                        try 
+                            Async.RunSynchronously(node.Data.GetData(n), cancellationToken = ct) |> Some
+                        with | e -> Log.warn "data got cancelled"; None
+                    match data with
+                        | Some v -> 
+                            do! Stepwise.register (fun () -> pool.Remove v |> ignore)
+                            let range = pool.Add v
+                            let gref = { geometry = v; range = range; node = n }
+                            do! Stepwise.register (fun () -> deactivate gref)
+                            activate gref
+                            return ()
+                        | None -> return! Stepwise.cancel
                 }
 
+
+            let deltaProcessing,info =  CrazyTest.runEffects deltas effect
       
             let pruning =
                 async {
@@ -505,12 +558,12 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds]" progress.activeNodeCount.Value progress.expectedNodeCount.Value geometries.Count inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond)
+                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d/%d" progress.activeNodeCount.Value progress.expectedNodeCount.Value geometries.Count inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) (info ()) pool.Count
                         ()
                 }
 
 
-            for i in 1..1 do
+            for i in 1..6 do
                 Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
             //Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore

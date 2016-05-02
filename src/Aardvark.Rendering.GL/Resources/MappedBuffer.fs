@@ -47,7 +47,7 @@ type MappedBuffer(ctx : Context) =
         if not (List.isEmpty delete) then
             using ctx.ResourceLock (fun _ ->
                 for d in delete do 
-                    GL.DeleteBuffer(d)   // repeated impossible happended leads to dead here.
+                    GL.DeleteBuffer(d) 
                     GL.Check "[MappedBuffer] could delete old buffer"
             )
 
@@ -96,10 +96,12 @@ type MappedBuffer(ctx : Context) =
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
             GL.Check "[MappedBuffer] could unbind buffer"
 
-            transact (fun () -> self.MarkOutdated())
 
             if oldBuffer <> 0 then
                 Interlocked.Change(&oldBuffers, fun o -> oldBuffer::o) |> ignore
+
+            true
+        else false
 
     member x.Write(sourcePtr, offset, size) =   
         resourceLocked (fun () -> 
@@ -123,11 +125,13 @@ type MappedBuffer(ctx : Context) =
 
     member x.Capacity = int buffer.SizeInBytes
     member x.Resize(newCapacity) =
-        resourceLocked (fun () -> 
-            using ctx.ResourceLock (fun _ ->
-                resize x newCapacity
+        let shouldMark = 
+            resourceLocked (fun () -> 
+                using ctx.ResourceLock (fun _ ->
+                    resize x newCapacity
+                )
             )
-        )
+        if shouldMark then transact (fun () -> x.MarkOutdated() )
 
     member x.Use(offset : nativeint, size : nativeint, f : nativeint -> 'a) =
         resourceLocked (fun () -> 
@@ -175,7 +179,7 @@ type MappedBuffer(ctx : Context) =
         member x.Write(sourcePtr, offset, size) = x.Write(sourcePtr,offset,size)
         member x.Read(targetPtr, offset, size) = x.Read(targetPtr,offset,size)
         member x.Capacity = x.Capacity
-        member x.Resize(newCapacity) = x.Resize(newCapacity)
+        member x.Resize(newCapacity) = x.Resize(newCapacity) 
         member x.Dispose() = x.Dispose()
         member x.OnDispose = onDispose :> IObservable<_>
 

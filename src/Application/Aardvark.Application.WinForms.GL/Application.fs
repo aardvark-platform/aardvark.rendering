@@ -53,6 +53,8 @@ type OpenGlApplication() =
                     Log.stop()
                 )
 
+    do init ctx
+
 //                glctx.MakeCurrent(null)
 //                ctx.CurrentContextHandle <- None
 //                ContextHandle.Current <- None
