@@ -8,7 +8,134 @@ open Aardvark.Base.Incremental
 open System.Threading
 open System.Collections.Concurrent
 
+module StepwiseProgress =
+    
+    type Undo = list<unit -> unit>
 
+    type CompState =
+        {
+            onCancel : list<unit -> unit>
+            onError : list<exn -> unit>
+        }
+
+    type Comp<'a> = 
+        | Cancelled
+        | Error of exn
+        | Result of 'a
+        | Continue of (CompState -> CompState * Comp<'a>)
+
+    module Stepwise =
+        let rec bind (f : 'a -> Comp<'b>) (m : Comp<'a>) =
+            match m with
+                | Cancelled -> Cancelled
+                | Error e -> Error e
+                | Result v -> f v
+                | Continue run ->
+                    Continue (fun s ->
+                        let s, v = run s
+                        s, bind f v
+                    )
+
+        let rec combine (l : Comp<unit>) (r : Comp<'a>) =
+            match l with
+                | Continue l ->
+                    Continue (fun s ->
+                        let s, cl = l s
+                        s, combine cl r
+                    )
+                | Result () -> r
+                | Error e -> Error e
+                | Cancelled -> Cancelled
+
+        let result v = Continue (fun s ->  s, Result v)
+        let error exn = Error exn
+        let cancel = Cancelled
+
+
+        let register (undo : unit -> unit) : Comp<unit> =
+            Continue (fun s ->
+                let s = { s with onCancel = undo::s.onCancel }
+                s, Result ()
+            )
+
+        let step (c : Comp<'a>) (s : CompState) =
+            match c with
+                | Cancelled -> s, Cancelled
+                | Result a -> s, Result a
+                | Error e -> s, Error e
+                | Continue c -> c s
+
+        let rec private runAll (l : list<'a -> unit>) (arg : 'a) =
+            match l with
+                | [] -> ()
+                | h::rest -> h arg; runAll rest arg
+
+        let run (c : Comp<'a>) =
+            let rec run (c : Comp<'a>) (s : CompState) =
+                match c with
+                    | Cancelled -> 
+                        runAll s.onCancel ()
+                        None
+
+                    | Error e -> 
+                        runAll s.onError e
+                        None
+
+                    | Continue c -> 
+                        let (s, v) = c s
+                        run v s
+
+                    | Result a -> Some a
+            
+            run c { onCancel = []; onError = []; }
+            
+
+        let rec stepKnot (m : Comp<'a>) (ct : System.Threading.CancellationToken)  =
+            let mutable s = { onCancel = []; onError = []; }
+            let current = ref m
+            let f () =
+                if ct.IsCancellationRequested then 
+                    match !current with
+                        | Cancelled -> !current
+                        | _ ->
+                            runAll s.onCancel ()
+                            let r = Cancelled
+                            current := r 
+                            r
+                else
+                    let (state,r) = step !current s
+                    s <- state
+                    current := r
+                    r
+            f, current
+
+    type StepwiseBuilder() =
+        member x.Bind(m,f) = Stepwise.bind f m
+        member x.Return v = Stepwise.result v
+        
+    let stepwise = StepwiseBuilder()
+
+    module Test =   
+
+        let a =
+            stepwise {
+                let! _ = Stepwise.register (fun () -> printfn "cancel 1")
+                let! a = Stepwise.result 1
+                let! _ = Stepwise.register (fun () -> printfn "cancel 2")
+                let! b = Stepwise.result 2
+                return a + b 
+            }
+
+        let cts = new System.Threading.CancellationTokenSource()
+
+        let proceed,r = Stepwise.stepKnot a cts.Token
+        let r2 = proceed ()
+        let r3 = proceed ()
+        let r4 = proceed ()
+        cts.Cancel()
+        let r5 = proceed ()
+        printfn "%A" r
+        ()
 
 module LodProgress =
 
@@ -383,7 +510,7 @@ module PointCloudRenderObjectSemantics =
                 }
 
 
-            for i in 1..4 do
+            for i in 1..1 do
                 Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
             //Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
