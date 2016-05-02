@@ -10,15 +10,33 @@ open Aardvark.Rendering.Text
 
 module Sg =
     open Aardvark.SceneGraph.Semantics
+    open Aardvark.Base.Ag
 
     type Shape(content : IMod<ShapeList>) =
         interface ISg
 
         member x.Content = content
 
+    type BillboardApplicator(child : IMod<ISg>) =
+        inherit Sg.AbstractApplicator(child)
+
 
     [<Ag.Semantic>]
     type ShapeSem() =
+
+        member x.ModelTrafoStack(b : BillboardApplicator) =
+            let view = b.ViewTrafo
+
+            let trafo =
+                b.ViewTrafo
+                    |> Mod.map (fun view ->
+                        let pos = view.Forward.TransformPosProj V3d.Zero
+                        Trafo3d.Translation(pos) * view.Inverse
+                    )
+
+
+            b.Child?ModelTrafoStack <- trafo::b.ModelTrafoStack
+
 
         member x.RenderObjects(t : Shape) : aset<IRenderObject> =
             let content = t.Content
@@ -83,6 +101,9 @@ module Sg =
         member x.FillGlyphs(s : ISg) =
             let mode = s.FillMode
             mode |> Mod.map (fun m -> m = FillMode.Fill)
+
+    let billboard (sg : ISg) =
+        sg |> Mod.constant |> BillboardApplicator :> ISg
 
     let shape (content : IMod<ShapeList>) =
         Shape(content)

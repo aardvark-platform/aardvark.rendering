@@ -177,10 +177,19 @@ let main argv =
         "with multiple lines\r\n" + 
         "* second *item*\r\n" 
 
+
+    let quad =
+        geometry
+            |> Sg.ofIndexedGeometry
+            |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect ]
+
     let mode = Mod.init FillMode.Fill
     let font = new Font("Comic Sans")
     let sg = 
         Sg.markdown MarkdownConfig.light (Mod.constant md)
+            |> Sg.trafo (Trafo3d.Scale 0.1 |> Mod.constant)
+            |> Sg.billboard
+            |> Sg.andAlso quad
         //Sg.label font C4b.White (Mod.constant all)
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))

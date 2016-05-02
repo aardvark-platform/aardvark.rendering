@@ -1,29 +1,29 @@
 NUGET
   remote: https://vrvis.myget.org/F/aardvark_public
   specs:
-    Aardvark.Base (2.0.4)
+    Aardvark.Base (2.0.5)
       DevILSharp (>= 0.0.11 < 0.1)
-    Aardvark.Base.Essentials (2.0.4)
-      Aardvark.Base (>= 2.0.4)
+    Aardvark.Base.Essentials (2.0.5)
+      Aardvark.Base (>= 2.0.5)
       Rx-Linq (>= 2.2.5 < 2.3)
       System.Collections.Immutable (>= 1.1.36 < 1.2)
-    Aardvark.Base.FSharp (2.0.4)
-      Aardvark.Base (>= 2.0.4)
+    Aardvark.Base.FSharp (2.0.5)
+      Aardvark.Base (>= 2.0.5)
       DevILSharp (>= 0.0.11 < 0.1)
       FSharp.Compiler.Service (>= 2.0.0.6 < 2.0.1)
-    Aardvark.Base.Incremental (2.0.4)
-      Aardvark.Base (>= 2.0.4)
-      Aardvark.Base.Essentials (>= 2.0.4)
-      Aardvark.Base.FSharp (>= 2.0.4)
+    Aardvark.Base.Incremental (2.0.5)
+      Aardvark.Base (>= 2.0.5)
+      Aardvark.Base.Essentials (>= 2.0.5)
+      Aardvark.Base.FSharp (>= 2.0.5)
       FsPickler.Json (>= 1.8 < 1.9)
       Rx-Core (>= 2.2.5 < 2.3)
       Rx-Linq (>= 2.2.5 < 2.3)
-    Aardvark.Base.Runtime (2.0.4)
-      Aardvark.Base (2.0.4)
-      Aardvark.Base.Essentials (2.0.4)
-      Aardvark.Base.FSharp (2.0.4)
-      Aardvark.Base.Incremental (2.0.4)
-    FShade (2.0.1)
+    Aardvark.Base.Runtime (2.0.5)
+      Aardvark.Base (2.0.5)
+      Aardvark.Base.Essentials (2.0.5)
+      Aardvark.Base.FSharp (2.0.5)
+      Aardvark.Base.Incremental (2.0.5)
+    FShade (2.0.4)
       Aardvark.Base (>= 2.0 < 2.1)
       Aardvark.Base.FSharp (>= 2.0 < 2.1)
       FSharp.Compiler.Service (>= 2.0.0.6 < 2.0.1)
@@ -151,7 +151,7 @@ NUGET
     FSharp.Core (4.0.0.1) - content: none
     Mono.Cecil (0.9.5.4) - content: none
     Newtonsoft.Json (8.0.3) - content: none
-    Paket.Core (2.60.1) - content: none
+    Paket.Core (2.60.2) - content: none
       Chessie
       FSharp.Core
       Newtonsoft.Json

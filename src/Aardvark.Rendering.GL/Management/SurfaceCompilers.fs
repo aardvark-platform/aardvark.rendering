@@ -55,7 +55,9 @@ module SurfaceCompilers =
 
     let compile (ctx : Context) (signature : IFramebufferSignature) (s : ISurface) =   
         match s with
-            | :? SignaturelessBackendSurface as s -> s.Get signature |> unbox<Program> |> Success
+            | :? SignaturelessBackendSurface as s -> 
+                s.Get signature |> unbox<Program> |> Success
+
             | _ -> 
                 match compilers |> Seq.tryPick (fun ( KeyValue(k,v) ) -> 
                     if k.IsAssignableFrom (s.GetType()) then Some <| v ctx signature s
