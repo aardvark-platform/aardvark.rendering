@@ -271,7 +271,9 @@ module ``PointCloud Sg Extensions`` =
 
         let pointCloud' (data : ILodData) (info : PointCloudInfo) (progress : Progress) =
             PointCloud(data, info, progress) :> ISg
-    
+
+
+
 
 module CancellationUtilities =
         
@@ -360,7 +362,17 @@ module PointCloudRenderObjectSemantics =
     type LoadResult = CancellationTokenSource * ref<IndexedGeometry * GeometryRef>
 
     type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, progress : LodProgress.Progress, runtime : IRuntime) =
+        let queueCount = 8
         let cancel = new System.Threading.CancellationTokenSource()
+
+        let mutable currentId = 0
+        let getId (n : LodDataNode) =
+            if n.uniqueId <> 0 then n.uniqueId
+            else 
+                let id = Interlocked.Increment(&currentId)
+                n.uniqueId <- id
+                id
+
 
         let pool = GeometryPool.createAsync runtime
         let calls = DrawCallSet(false)
@@ -466,7 +478,7 @@ module PointCloudRenderObjectSemantics =
                 )
 
 
-            let deltas = new ConcurrentDeltaQueue<_>()
+            let deltas = Array.init queueCount (fun _ -> new ConcurrentDeltaQueue<_>())
             let r = MVar<_>()
 
             let run =
@@ -486,24 +498,23 @@ module PointCloudRenderObjectSemantics =
                             node.Data.Rasterize(v, p, wantedNearPlaneDistance)
                         ) 
 
-                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (content.Contains >> not)  |> Seq.map Add )
-                        let rem = System.Collections.Generic.HashSet<_>( content |> Seq.filter (set.Contains >> not)      |> Seq.map Rem )
+                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (content.Contains >> not) )
+                        let rem = System.Collections.Generic.HashSet<_>( content |> Seq.filter (set.Contains >> not)     )
 
+                        for v in add do
+                            let id = getId v
+                            deltas.[id % queueCount].Add v
+                            content.Add v |> ignore
 
-                        for r in Seq.concat [rem; add] do 
-                            deltas.Enqueue r
-                            match r with 
-                                | Add v -> 
-                                    content.Add v |> ignore
-                                    //transact ( fun () -> CSet.add v workingSets |> ignore )
-                                | Rem v -> 
-                                    content.Remove v |> ignore
-                                    //transact ( fun () -> CSet.remove v workingSets |> ignore )
+                        for v in rem do
+                            let id = getId v
+                            deltas.[id % queueCount].Remove v
+                            content.Remove v |> ignore
                 }
 
-            view.AddMarkingCallback (fun () -> r.Put ()) |> ignore
-            proj.AddMarkingCallback (fun () -> r.Put ()) |> ignore
-            wantedNearPlaneDistance.AddMarkingCallback (fun () -> r.Put ()) |> ignore
+            let subV = view.AddMarkingCallback (fun () -> r.Put ()) 
+            let subP = proj.AddMarkingCallback (fun () -> r.Put ())
+            let subD = wantedNearPlaneDistance.AddMarkingCallback (fun () -> r.Put ())
             for a in node.Data.Dependencies do a.AddMarkingCallback (fun () -> r.Put ()) |> ignore
 
             r.Put()
@@ -527,7 +538,7 @@ module PointCloudRenderObjectSemantics =
                 }
 
 
-            let deltaProcessing,info =  CrazyTest.runEffects deltas effect
+            
       
             let pruning =
                 async {
@@ -558,19 +569,26 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d/%d" progress.activeNodeCount.Value progress.expectedNodeCount.Value geometries.Count inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) (info ()) pool.Count
+                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d" progress.activeNodeCount.Value progress.expectedNodeCount.Value geometries.Count inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count
                         ()
                 }
 
 
-            for i in 1..6 do
+            for i in 0..queueCount-1 do
+                let deltaProcessing,info =  CrazyTest.runEffects deltas.[i] effect
                 Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
             //Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(run, cancellationToken = cancel.Token) |> ignore
             
 
-            { new IDisposable with member x.Dispose() = () }
+            { new IDisposable with 
+                member x.Dispose() =
+                    cancel.Cancel()
+                    subV.Dispose()
+                    subP.Dispose()
+                    subD.Dispose()
+            }
 
 
         member x.Attributes =
@@ -647,5 +665,5 @@ module PointCloudRenderObjectSemantics =
                         yield! ros
                     }
 
-            
+
 

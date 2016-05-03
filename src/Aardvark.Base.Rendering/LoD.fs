@@ -12,6 +12,9 @@ type LodDataNode =
         bounds : Box3d
         inner : bool
         granularity : float
+
+        [<DefaultValue>]
+        mutable uniqueId : int
     }
 
     override x.GetHashCode() = x.id.GetHashCode()
@@ -35,7 +38,7 @@ module ``Lod Data Extensions`` =
             (if dir.X > 0.0 then b.Max.X else b.Min.X), 
             (if dir.Y > 0.0 then b.Max.Y else b.Min.Y), 
             (if dir.Z > 0.0 then b.Max.Z else b.Min.Z), 
-                1.0
+            1.0
         )
 
     let inline private height (plane : V4d) (b : Box3d) =

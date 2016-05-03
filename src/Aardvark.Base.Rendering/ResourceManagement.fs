@@ -231,7 +231,7 @@ type ResourceInputSet() =
             if level = 0 then
                 dirty.IntersectWith all
 
-            if level > 0 && dirty.Count > 0 then
+            if level > 4 && dirty.Count > 0 then
                 Log.warn "nested shit"
 
             let mutable stats = stats
