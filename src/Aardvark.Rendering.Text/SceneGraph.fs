@@ -12,10 +12,15 @@ module Sg =
     open Aardvark.SceneGraph.Semantics
     open Aardvark.Base.Ag
 
-    type Shape(content : IMod<ShapeList>) =
+    type Shape private(renderBoundary : bool, boundaryColor : C4b, boundaryExtent : float, content : IMod<ShapeList>) =
         interface ISg
 
+        member x.RenderBoundary = renderBoundary
+        member x.BoundaryColor = boundaryColor
+        member x.BoundaryExtent = boundaryExtent
         member x.Content = content
+        new(content) = Shape(false, C4b.Black, 0.0, content)
+        new(color, content) = Shape(true, color, 0.02, content)
 
     type BillboardApplicator(child : IMod<ISg>) =
         inherit Sg.AbstractApplicator(child)
@@ -41,12 +46,13 @@ module Sg =
         member x.RenderObjects(t : Shape) : aset<IRenderObject> =
             let content = t.Content
             let cache = ShapeCache.GetOrCreateCache(t.Runtime)
-            let ro = RenderObject.create()
+            let shapes = RenderObject.create()
                 
             let indirectAndOffsets =
                 content |> Mod.map (fun renderText ->
                     let indirectBuffer = 
                         renderText.shapes 
+                            |> List.toArray
                             |> Array.map cache.GetBufferRange
                             |> Array.mapi (fun i r ->
                                 DrawCallInfo(
@@ -61,13 +67,15 @@ module Sg =
                             :> IBuffer
 
                     let offsets = 
-                        Array.zip renderText.offsets renderText.scales
+                        List.zip renderText.offsets renderText.scales
+                            |> List.toArray
                             |> Array.map (fun (o,s) -> V4f.op_Explicit (V4d(o.X, o.Y, s.X, s.Y)))
                             |> ArrayBuffer
                             :> IBuffer
 
                     let colors = 
                         renderText.colors
+                            |> List.toArray
                             |> ArrayBuffer
                             :> IBuffer
 
@@ -78,7 +86,7 @@ module Sg =
             let colors = BufferView(Mod.map (fun (_,_,c) -> c) indirectAndOffsets, typeof<C4b>)
 
             let instanceAttributes =
-                let old = ro.InstanceAttributes
+                let old = shapes.InstanceAttributes
                 { new IAttributeProvider with
                     member x.TryGetAttribute sem =
                         if sem = Path.Attributes.PathOffsetAndScale then offsets |> Some
@@ -88,15 +96,88 @@ module Sg =
                     member x.Dispose() = old.Dispose()
                 }
 
-            ro.RenderPass <- 100UL
-            ro.BlendMode <- Mod.constant BlendMode.Blend
-            ro.VertexAttributes <- cache.VertexBuffers
-            ro.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
-            ro.InstanceAttributes <- instanceAttributes
-            ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
-            ro.Surface <- Mod.constant cache.Surface
+            shapes.RenderPass <- 100UL
+            shapes.BlendMode <- Mod.constant BlendMode.Blend
+            shapes.VertexAttributes <- cache.VertexBuffers
+            shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
+            shapes.InstanceAttributes <- instanceAttributes
+            shapes.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+            shapes.Surface <- Mod.constant cache.Surface
 
-            ASet.single (ro :> IRenderObject)
+            if not t.RenderBoundary then
+                ASet.single (shapes :> IRenderObject)
+            else
+                let boundary = RenderObject.create()
+                boundary.RenderPass <- 99UL
+                boundary.BlendMode <- Mod.constant BlendMode.Blend
+                boundary.VertexAttributes <- cache.VertexBuffers
+                let drawCall =
+                    let range = cache.GetBufferRange Shape.Quad
+                    DrawCallInfo(
+                        FirstIndex = range.Min,
+                        FaceVertexCount = range.Size + 1,
+                        FirstInstance = 0,
+                        InstanceCount = 1,
+                        BaseVertex = 0
+                    )
+
+                boundary.IndirectBuffer <- [|drawCall|] |> ArrayBuffer :> IBuffer |> Mod.constant
+                boundary.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+                boundary.Uniforms <-
+                    let old = boundary.Uniforms
+                    { new IUniformProvider with
+                        member x.TryGetUniform(scope, sem) =
+                            match string sem with
+                                | "BoundaryColor" -> t.BoundaryColor |> Mod.constant :> IMod |> Some
+                                | "ModelTrafo" -> 
+                                    let scaleTrafo = 
+                                        content |> Mod.map (fun s -> 
+                                            let bounds = s.bounds.EnlargedByRelativeEps t.BoundaryExtent
+                                            Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
+                                            Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
+                                            
+                                        )
+
+                                    match old.TryGetUniform(scope, sem) with
+                                        | Some (:? IMod<Trafo3d> as m) ->
+                                            Mod.map2 (*) scaleTrafo m :> IMod |> Some
+                                        | _ ->
+                                            scaleTrafo :> IMod |> Some
+
+                                | _ -> old.TryGetUniform(scope, sem)
+
+                        member x.Dispose() =
+                            old.Dispose()
+                    }
+                boundary.Surface <- Mod.constant cache.BoundarySurface
+
+
+                let writeStencil =
+                    StencilMode(
+                        StencilOperationFunction.Replace,
+                        StencilOperationFunction.Zero,
+                        StencilOperationFunction.Keep,
+                        StencilCompareFunction.Always,
+                        1,
+                        0xFFFFFFFFu
+                    )
+
+                let readStencil =
+                    StencilMode(
+                        StencilOperationFunction.Keep,
+                        StencilOperationFunction.Keep,
+                        StencilOperationFunction.Keep,
+                        StencilCompareFunction.Equal,
+                        1,
+                        0xFFFFFFFFu
+                    )
+
+
+                boundary.StencilMode <- Mod.constant writeStencil
+                shapes.DepthTest <- Mod.constant DepthTestMode.None
+                shapes.StencilMode <- Mod.constant readStencil
+
+                ASet.ofList [boundary :> IRenderObject; shapes :> IRenderObject]
 
         member x.FillGlyphs(s : ISg) =
             let mode = s.FillMode
@@ -107,6 +188,10 @@ module Sg =
 
     let shape (content : IMod<ShapeList>) =
         Shape(content)
+            |> Sg.uniform "Antialias" (Mod.constant true)
+
+    let shapeWithBackground (color : C4b) (content : IMod<ShapeList>) =
+        Shape(color, content)
             |> Sg.uniform "Antialias" (Mod.constant true)
 
     let text (f : Font) (color : C4b) (content : IMod<string>) =

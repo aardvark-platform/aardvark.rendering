@@ -41,13 +41,18 @@ module MarkdownConfig =
 
             headingStyles =
                 Map.ofList [
-                    1, { scale = V2d.II * 3.0; emph = false; strong = true; code = false }
-                    2, { scale = V2d.II * 2.5; emph = false; strong = true; code = false }
-                    3, { scale = V2d.II * 2.0; emph = false; strong = true; code = false }
-                    4, { scale = V2d.II * 1.5; emph = false; strong = true; code = false }
-                    5, { scale = V2d.II * 1.2; emph = false; strong = true; code = false }
-                    6, { scale = V2d.II * 1.1; emph = false; strong = true; code = false }
+                    1, { TextStyle.empty with scale = V2d.II * 3.0; strong = true }
+                    2, { TextStyle.empty with scale = V2d.II * 2.5; strong = true }
+                    3, { TextStyle.empty with scale = V2d.II * 2.0; strong = true }
+                    4, { TextStyle.empty with scale = V2d.II * 1.5; strong = true }
+                    5, { TextStyle.empty with scale = V2d.II * 1.2; strong = true }
+                    6, { TextStyle.empty with scale = V2d.II * 1.1; strong = true }
                 ]  
+        }
+
+    let dark =
+        { light with
+            color = C4b(204uy, 204uy, 204uy, 255uy)
         }
 
 
@@ -63,6 +68,8 @@ module Markdown =
             textState   : TextStyle
             config      : MarkdownConfig
             color       : C4b
+            max         : V2d
+            min         : V2d
 
             shapes      : list<Shape>
             offsets     : list<V2d>
@@ -79,6 +86,9 @@ module Markdown =
                 textState = TextStyle.empty
                 config = MarkdownConfig.light
                 color = C4b.White
+                min = V2d(0.0, 0.0)
+                max = V2d(0.0, 0.0)
+
                 shapes = []
                 offsets = []
                 scales = []
@@ -184,6 +194,7 @@ module Markdown =
             else 
                 None
 
+
     module Layouter = 
         open Patterns
 
@@ -191,15 +202,20 @@ module Markdown =
         [<AutoOpen>]
         module StateHelpers = 
             let moveX (v : float) =
-                modifyState (fun s -> { s with x = s.x + v * s.textState.scale.X * s.config.characterSpacing })
+                modifyState (fun s -> 
+                    let nx = s.x + v * s.textState.scale.X * s.config.characterSpacing
+                    { s with x = nx; max = V2d(max nx s.max.X, s.max.Y); }
+                )
 
             let moveY (v : float) =
-                modifyState (fun s -> { s with y = s.y - v * s.textState.scale.Y * s.config.lineSpacing })
+                modifyState (fun s -> 
+                    let ny = s.y - v * s.textState.scale.Y * s.config.lineSpacing
+                    { s with y = ny; min = V2d(s.min.X, min ny s.min.Y) })
 
             let indent (v : float) =
                 modifyState (fun s -> 
                     let nx = s.indent + v * s.textState.scale.X * s.config.characterSpacing
-                    { s with indent = nx; x = nx }
+                    { s with indent = nx; x = nx; max = V2d(max nx s.max.X, s.max.Y) }
                 )
 
             let pushColor (c : C4b) =
@@ -212,7 +228,8 @@ module Markdown =
             let lineBreak =
                 state {
                     let! s = getState
-                    do! putState { s with x = s.indent; y = s.y - s.textState.scale.Y * s.config.lineSpacing }
+                    let ny = s.y - s.textState.scale.Y * s.config.lineSpacing
+                    do! putState { s with x = s.indent; y = ny; min = V2d(s.min.X, min ny s.min.Y) }
                 }
 
             let withTextState (ts : TextStyle) (f : unit -> State<LayoutState, 'a>) =
@@ -245,6 +262,7 @@ module Markdown =
             let emit (g : Shape) =
                 modifyState (fun (s : LayoutState) ->
                     { s with
+                        max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
                         shapes = g::s.shapes
                         offsets = V2d(s.x, s.y)::s.offsets
                         scales = s.textState.scale::s.scales
@@ -379,7 +397,7 @@ module Markdown =
                                 do! layoutParts [TextStyle.empty, prefix]
                                 //do! moveX 0.6
                                 let! p = pos
-                                let nextMul4 = ceil (p.X / 1.5) * 1.5
+                                let nextMul4 = ceil (p.X / 1.7) * 1.7
 
                                 do! indent nextMul4
                                 for inner in b do do! layout inner
@@ -402,11 +420,14 @@ module Markdown =
                         config      = config
                 }
 
+            let bounds = Box2d.FromPoints(s.min, s.max)
+
             {
-                ShapeList.shapes   = List.toArray s.shapes
-                ShapeList.offsets  = List.toArray s.offsets
-                ShapeList.scales   = List.toArray s.scales
-                ShapeList.colors   = List.toArray s.colors
+                ShapeList.bounds   = bounds
+                ShapeList.shapes   = s.shapes
+                ShapeList.offsets  = s.offsets
+                ShapeList.scales   = s.scales
+                ShapeList.colors   = s.colors
             }
 
 
@@ -419,4 +440,4 @@ module ``Markdown Sg Extensions`` =
         let markdown (config : MarkdownConfig) (code : IMod<string>) =
             code
                 |> Mod.map (Markdown.layout config)
-                |> Sg.shape
+                |> Sg.shapeWithBackground (C4b(255uy, 255uy, 255uy, 120uy))

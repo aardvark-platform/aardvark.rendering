@@ -747,7 +747,7 @@ type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color :
                     | [Some c], Some depth ->
                         GL.ClearColor(c.R, c.G, c.B, c.A)
                         GL.ClearDepth(depth)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
+                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
                         
                     | [Some c], None ->
                         GL.ClearColor(c.R, c.G, c.B, c.A)
@@ -755,7 +755,7 @@ type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color :
 
                     | l, Some depth when List.forall Option.isNone l ->
                         GL.ClearDepth(depth)
-                        GL.Clear(ClearBufferMask.DepthBufferBit)
+                        GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
                     | l, d ->
                             
                         let mutable i = 0
@@ -772,7 +772,7 @@ type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color :
                         match d with
                             | Some depth -> 
                                 GL.ClearDepth(depth)
-                                GL.Clear(ClearBufferMask.DepthBufferBit)
+                                GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
                             | None ->
                                 ()
 

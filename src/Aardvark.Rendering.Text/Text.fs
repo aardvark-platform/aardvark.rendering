@@ -12,10 +12,11 @@ open Aardvark.Base.Rendering
 [<ReferenceEquality; NoComparison>]
 type ShapeList =
     {
-        offsets     : V2d[]
-        scales      : V2d[]
-        colors      : C4b[]
-        shapes      : Shape[]
+        bounds      : Box2d
+        offsets     : list<V2d>
+        scales      : list<V2d>
+        colors      : list<C4b>
+        shapes      : list<Shape>
     }
 
 
@@ -78,10 +79,11 @@ type Text private() =
             cy <- cy - font.LineHeight
 
         {
-            offsets     = offsets.ToArray()
-            scales      = scales.ToArray()
-            colors      = colors.ToArray()
-            shapes      = glyphs.ToArray()
+            bounds      = bounds
+            offsets     = offsets |> CSharpList.toList
+            scales      = scales |> CSharpList.toList
+            colors      = colors |> CSharpList.toList
+            shapes      = glyphs |> CSharpList.toList
         }
 
     [<Extension>]

@@ -204,7 +204,7 @@ let main argv =
     )
 
     let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) // |> DefaultOverlays.withStatistics
-    let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.White)
+    let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
 
     win.RenderTask <- RenderTask.ofList [clear; main]
     win.Run()
