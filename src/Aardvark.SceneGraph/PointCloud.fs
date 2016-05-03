@@ -10,7 +10,6 @@ open System.Collections.Concurrent
 
 module StepwiseProgress =
     
-    type Undo = list<unit -> unit>
 
     type StepState =
         {
@@ -57,6 +56,12 @@ module StepwiseProgress =
                 let s = { s with onCancel = undo::s.onCancel }
                 s, Result ()
             )
+
+//        let finalize (finallyActions : unit -> unit) : Stepwise<'a> =
+//            Continue (fun s ->
+//                let s = { s with finallyActions = finallyActions::s.finallyActions }
+//                s, Result ()
+//            )
 
         let step (c : Stepwise<'a>) (s : StepState) =
             match c with
@@ -119,6 +124,7 @@ module StepwiseProgress =
         member x.ReturnFrom(f : Stepwise<'a>) = f
         member x.Combine(l,r) = Stepwise.combine l r
         member x.Delay(f) = f ()
+        member x.Zero() = ()
        
         
     let stepwise = StepwiseBuilder()
@@ -128,7 +134,7 @@ module StepwiseProgress =
         let a =
             stepwise {
                 let! _ = Stepwise.register (fun () -> printfn "cancel 1")
-                let! a = Stepwise.result 1
+                let! a = stepwise { return 10 }
                 let! _ = Stepwise.register (fun () -> printfn "cancel 2")
                 let! b = Stepwise.result 2
                 return a + b 
@@ -249,9 +255,11 @@ type PointCloudInfo =
         /// the time interval for the pruning process in ms
         pruneInterval : int
 
-        /// optional surface for bounding boxes of cells that are not loaded yet
-        /// shader vertex must have ZZZInstancedTrafo semantic
+        /// optional surface for bounding boxes of cells that are load in progress.
+        // the surface should properly transform instances by using DefaultSemantic.InstanceTrafo
         boundingBoxSurface : Option<IMod<ISurface>>
+
+
     }
 
 [<AutoOpen>]
@@ -377,13 +385,15 @@ module PointCloudRenderObjectSemantics =
 
         let pool = GeometryPool.createAsync runtime
         let calls = DrawCallSet(false)
-        let workingSets = CSet.empty
-
         let mutable activeSize = 0L
+
 
         let pruning = false
         let inactive = ConcurrentHashQueue<GeometryRef>()
         let mutable inactiveSize = 0L
+
+        let workingSet = CSet.empty
+
 
         let activate (n : GeometryRef) =
             let size = n.range.Size
@@ -409,8 +419,14 @@ module PointCloudRenderObjectSemantics =
                 Interlocked.Decrement(progress.activeNodeCount) |> ignore
             else Log.line "could not remove calls"
 
+        let removeFromWorkingSet n = 
+            if node.Config.boundingBoxSurface.IsSome  then
+                lock workingSet (fun () -> 
+                    transact (fun () -> workingSet.Remove n |> ignore)
+                )
+
         member x.WorkingSet = 
-            workingSets :> aset<_>
+            workingSet :> aset<_>
 
         member x.Activate() =
                 
@@ -450,12 +466,20 @@ module PointCloudRenderObjectSemantics =
                         for v in add do
                             let id = getId v
                             deltas.[id % queueCount].Add v
-                            content.Add v |> ignore
+                            if content.Add v && node.Config.boundingBoxSurface.IsSome  then
+                                lock workingSet (fun () ->  
+                                    if not <| workingSet.Contains v then
+                                        transact (fun () -> CSet.add v workingSet |> ignore)
+                                )
 
                         for v in rem do
                             let id = getId v
                             deltas.[id % queueCount].Remove v
                             content.Remove v |> ignore
+                            lock workingSet (fun () ->  
+                                if workingSet.Contains v then
+                                    transact (fun () -> CSet.remove v workingSet |> ignore)
+                            )
                 }
 
             let subV = view.AddMarkingCallback (fun () -> r.Put ()) 
@@ -468,17 +492,22 @@ module PointCloudRenderObjectSemantics =
 
             let effect (ct : CancellationToken) (n : LodDataNode) =
                 stepwise {
+                    do! Stepwise.register (fun () -> removeFromWorkingSet n) // also if cancelled remove
                     let data =  
                         try 
                             Async.RunSynchronously(node.Data.GetData(n), cancellationToken = ct) |> Some
-                        with | e -> Log.warn "data got cancelled"; None
+                        with | e -> 
+                            removeFromWorkingSet n
+                            Log.warn "data got cancelled"; 
+                            None
                     match data with
-                        | Some v -> 
+                        | Some v ->    
                             do! Stepwise.register (fun () -> pool.Remove v |> ignore)
                             let range = pool.Add v
                             let gref = { geometry = v; range = range; node = n }
                             do! Stepwise.register (fun () -> deactivate gref)
                             activate gref
+                            removeFromWorkingSet n
                             return ()
                         | None -> return! Stepwise.cancel
                 }
@@ -515,7 +544,7 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d" progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count
+                        printfn "active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
                         ()
                 }
 
