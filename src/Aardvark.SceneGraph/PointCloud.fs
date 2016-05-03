@@ -146,7 +146,7 @@ module StepwiseProgress =
         ()
 
 
-module CrazyTest =
+module StepwiseQueueExection =
     open StepwiseProgress
 
 
@@ -158,6 +158,7 @@ module CrazyTest =
                 while true do
                     let! d = c.DequeueAsync()
                     let value = d.Value
+                    
                     let ok = working.Add(value)
 
                     if ok then
@@ -376,21 +377,20 @@ module PointCloudRenderObjectSemantics =
 
         let pool = GeometryPool.createAsync runtime
         let calls = DrawCallSet(false)
-        let inactive = ConcurrentHashQueue<GeometryRef>()
-        let mutable inactiveSize = 0L
-        let mutable activeSize = 0L
-
         let workingSets = CSet.empty
 
-        let mutable pendingRemoves = 0
-        let geometries = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode, LoadResult>()
+        let mutable activeSize = 0L
 
+        let pruning = false
+        let inactive = ConcurrentHashQueue<GeometryRef>()
+        let mutable inactiveSize = 0L
 
         let activate (n : GeometryRef) =
             let size = n.range.Size
 
-            if inactive.Remove n then
-                Interlocked.Add(&inactiveSize, int64 -size) |> ignore
+            if pruning then
+                if inactive.Remove n then
+                    Interlocked.Add(&inactiveSize, int64 -size) |> ignore
 
             if calls.Add n.range then
                 Interlocked.Add(&activeSize, int64 size) |> ignore
@@ -400,68 +400,14 @@ module PointCloudRenderObjectSemantics =
         let deactivate (n : GeometryRef) =
             let size = int64 n.range.Size
 
-            if inactive.Enqueue n then
-                Interlocked.Add(&inactiveSize, size) |> ignore
+            if pruning then
+                if inactive.Enqueue n then
+                    Interlocked.Add(&inactiveSize, size) |> ignore
 
             if calls.Remove n.range then
                 Interlocked.Add(&activeSize, -size) |> ignore
                 Interlocked.Decrement(progress.activeNodeCount) |> ignore
             else Log.line "could not remove calls"
-
-        member x.Add(n : LodDataNode) =
-            Interlocked.Increment(progress.expectedNodeCount) |> ignore
-
-            let cts = new System.Threading.CancellationTokenSource()
-            let loadData _ =
-//                async {
-                    let geometry = Async.RunSynchronously(node.Data.GetData(n), cancellationToken = cts.Token)
-                    geometry,Unchecked.defaultof<_>
-//                }
-
-            let undoLoad (geo,ref) = () 
-
-            let addToPool (ig,r) =
-//                async {
-                    let range = pool.Add ig
-                    ig, { node = n; geometry = ig; range = range }
-//                }
-
-            let removeFromPool (ig,r) = 
-                pool.Remove ig |> ignore
-
-            let addToRender (ig,r) =
-//                async { 
-                    do activate r
-                    do transact ( fun () -> CSet.remove r.node workingSets |> ignore )
-                    ig,r
-//                }
-
-            let removeFromRender (ig,r) = deactivate r
-
-            let effects =
-                [
-                    loadData,    undoLoad
-                    addToPool,   removeFromPool
-                    addToRender, removeFromRender
-                ]
-
-            let result = ref Unchecked.defaultof<_>
-            let r = lock geometries (fun _ -> geometries.GetOrAdd(n, (cts, result)))
-            try
-                Async.RunSynchronously(CancellationUtilities.runWithCompensations result effects, cancellationToken = cts.Token)
-            with | :? OperationCanceledException as o -> ()
-            r
-                    
-        member x.Remove(n : LodDataNode) =
-            lock geometries (fun _ -> 
-                  match geometries.TryRemove n with
-                    | (true,(cts,r)) ->
-                        Interlocked.Decrement(progress.expectedNodeCount) |> ignore
-                        cts.Cancel()
-                        //cts.Dispose()
-                    | _ -> 
-                        Log.warn "could not remove lod node"
-                  )
 
         member x.WorkingSet = 
             workingSets :> aset<_>
@@ -540,7 +486,7 @@ module PointCloudRenderObjectSemantics =
 
             
       
-            let pruning =
+            let pruningTask =
                 async {
                     while true do
                         let mutable cnt = 0
@@ -569,15 +515,16 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "active = %A / desired = %A / count = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d" progress.activeNodeCount.Value progress.expectedNodeCount.Value geometries.Count inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count
+                        printfn "active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d" progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count
                         ()
                 }
 
 
             for i in 0..queueCount-1 do
-                let deltaProcessing,info =  CrazyTest.runEffects deltas.[i] effect
+                let deltaProcessing,info =  StepwiseQueueExection.runEffects deltas.[i] effect
                 Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
-            //Async.StartAsTask(pruning, cancellationToken = cancel.Token) |> ignore
+            
+            if pruning then Async.StartAsTask(pruningTask, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(run, cancellationToken = cancel.Token) |> ignore
             
