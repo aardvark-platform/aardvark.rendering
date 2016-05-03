@@ -177,13 +177,13 @@ module PostProcessing =
     // we can also render it directly to the screen.
     let final =
         let overlayRelativeSize = 0.3
-
+        let overlayPass = RenderPass.main |> RenderPass.after "overlay" RenderPassOrder.Arbitrary
         let overlayOriginal =
             fullscreenQuad
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
                 |> Sg.texture DefaultSemantic.DiffuseColorTexture mainResult
                 |> Sg.trafo ~~(Trafo3d.Scale(overlayRelativeSize) * Trafo3d.Translation(-1.0 + overlayRelativeSize, 1.0 - overlayRelativeSize, 0.0))
-                |> Sg.pass 2UL
+                |> Sg.pass overlayPass
                 |> Sg.blendMode ~~BlendMode.Blend
 
         let overlayBox =

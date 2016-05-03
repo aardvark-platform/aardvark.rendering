@@ -23,6 +23,7 @@ static PFNGLBLENDCOLORPROC				glBlendColor;
 static PFNGLBINDVERTEXARRAYPROC		glBindVertexArray;
 static PFNGLUSEPROGRAMPROC				glUseProgram;
 static PFNGLBINDSAMPLERPROC			glBindSampler;
+static PFNGLBINDBUFFERPROC			glBindBuffer;
 static PFNGLBINDBUFFERBASEPROC			glBindBufferBase;
 static PFNGLBINDBUFFERRANGEPROC		glBindBufferRange;
 static PFNGLBINDFRAMEBUFFERPROC		glBindFramebuffer;

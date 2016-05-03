@@ -7,6 +7,7 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
 open Aardvark.Rendering
+open Aardvark.Rendering.Vulkan
 
 #nowarn "9"
 #nowarn "51"

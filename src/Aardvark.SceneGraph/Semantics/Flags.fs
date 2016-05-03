@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
@@ -12,11 +13,11 @@ module ActiveSemantics =
 
     type ISg with
         member x.IsActive : IMod<bool> = x?IsActive
-        member x.RenderPass : uint64 = x?RenderPass
+        member x.RenderPass : RenderPass = x?RenderPass
 
     module Semantic =
         let isActive (s : ISg) : IMod<bool> = s?IsActive
-        let renderPass (s : ISg) : uint64 = s?RenderPass
+        let renderPass (s : ISg) : RenderPass = s?RenderPass
 
     [<Semantic>]
     type ActiveSemantics() =
@@ -39,7 +40,7 @@ module ActiveSemantics =
     [<Semantic>]
     type PassSemantics() =
 
-        let defaultPass = 0UL
+        let defaultPass = RenderPass.main
         
         member x.RenderPass(e : Root<ISg>) =
             e.Child?RenderPass <- defaultPass

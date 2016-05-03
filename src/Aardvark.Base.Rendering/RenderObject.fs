@@ -40,7 +40,7 @@ module private RenderObjectHelpers =
     let nopActivate () = nopDisposable
 
 type IRenderObject =
-    abstract member RenderPass : uint64
+    abstract member RenderPass : RenderPass
     abstract member AttributeScope : Ag.Scope
 
 [<CustomEquality>]
@@ -51,7 +51,7 @@ type RenderObject =
         mutable AttributeScope : Ag.Scope
                 
         mutable IsActive            : IMod<bool>
-        mutable RenderPass          : uint64
+        mutable RenderPass          : RenderPass
                 
         mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
         mutable IndirectBuffer      : IMod<IBuffer>
@@ -88,7 +88,7 @@ type RenderObject =
         { Id = RenderObjectIds.newId()
           AttributeScope = Ag.emptyScope
           IsActive = null
-          RenderPass = 0UL
+          RenderPass = RenderPass.main
           DrawCallInfos = null
           IndirectBuffer = null
 
@@ -141,7 +141,7 @@ module RenderObjectExtensions =
         { Id = -1
           AttributeScope = Ag.emptyScope
           IsActive = null
-          RenderPass = 0UL
+          RenderPass = RenderPass.main
           DrawCallInfos = null
           IndirectBuffer = null
           Mode = null
@@ -165,6 +165,21 @@ module RenderObjectExtensions =
 
         member x.IsValid =
             x.Id >= 0
+
+
+type MultiRenderObject(children : list<IRenderObject>) =
+    let first = 
+        lazy ( 
+            match children with
+                | [] -> failwith "[MultiRenderObject] cannot be empty"
+                | h::_ -> h
+        )
+
+    member x.Children = children
+
+    interface IRenderObject with
+        member x.RenderPass = first.Value.RenderPass
+        member x.AttributeScope = first.Value.AttributeScope
 
 
 type IAdaptiveBufferReader =

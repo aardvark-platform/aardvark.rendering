@@ -110,7 +110,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | :? Program as p -> x.DeleteSurface p
                 | _ -> failwithf "unsupported program-type: %A" s
 
-        member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj) :> _
+        member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj)
 
         member x.PrepareTexture (t : ITexture) = x.PrepareTexture t :> IBackendTexture
         member x.DeleteTexture (t : IBackendTexture) =
@@ -215,18 +215,30 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         match eng.sorting with
             | Grouping _ -> 
-                new GroupedRenderTask.RenderTask(set, man, fboSignature, engine) :> IRenderTask
+                new YetAnotherRenderTaskImpl.RenderTask(man, fboSignature, set, engine) :> IRenderTask
 
             | Dynamic _ -> 
-                new SortedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
+                failwith "[SortedRenderTask] not available atm."
+                //new SortedRenderTask.RenderTask(set, man, fboSignature, eng) :> IRenderTask
 
             | Static _ -> 
                 failwith "[GL] static sorting not implemented"
 
-    member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
+    member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         match rj with
-             | :? RenderObject as rj -> manager.Prepare(fboSignature, rj)
-             | :? PreparedRenderObject -> failwith "tried to prepare prepared render object"
+             | :? RenderObject as rj -> manager.Prepare(fboSignature, rj) :> IPreparedRenderObject
+             | :? MultiRenderObject as rj -> 
+                let all = 
+                    rj.Children 
+                        |> List.map (fun ro -> x.PrepareRenderObject(fboSignature, ro))
+                        |> List.collect (fun o ->
+                            match o with
+                                | :? PreparedMultiRenderObject as s -> s.Children
+                                | _ -> [unbox<PreparedRenderObject> o]
+                        )
+                new PreparedMultiRenderObject(all) :> IPreparedRenderObject
+
+             | :? PreparedRenderObject | :? PreparedMultiRenderObject -> failwith "tried to prepare prepared render object"
              | _ -> failwith "unknown render object type"
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : IMod<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =

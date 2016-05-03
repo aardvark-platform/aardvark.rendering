@@ -6,6 +6,7 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Rendering.Vulkan
 
 #nowarn "9"
 #nowarn "51"

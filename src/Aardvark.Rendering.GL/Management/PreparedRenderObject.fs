@@ -196,6 +196,39 @@ module PreparedRenderObject =
         res
 
 
+type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
+    let first =
+        match children with
+            | [] -> failwith "PreparedMultiRenderObject cannot be empty"
+            | h::_ -> h
+
+    let last = children |> List.last
+
+    member x.Children = children
+
+    member x.Dispose() =
+        children |> List.iter (fun c -> c.Dispose())
+
+    member x.Update(caller : IAdaptiveObject) =
+        children |> List.sumBy (fun c -> c.Update(caller))
+        
+
+    member x.RenderPass = first.RenderPass
+    member x.Original = first.Original
+
+    member x.First = first
+    member x.Last = last
+
+    interface IRenderObject with
+        member x.AttributeScope = first.AttributeScope
+        member x.RenderPass = first.RenderPass
+
+    interface IPreparedRenderObject with
+        member x.Original = Some first.Original
+        member x.Update caller = x.Update caller |> ignore
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 [<Extension; AbstractClass; Sealed>]
 type ResourceManagerExtensions private() =

@@ -31,6 +31,17 @@ module SgFSharp =
         let projTrafo (m : IMod<Trafo3d>) (sg : ISg) =
             Sg.ProjectionTrafoApplicator(m, sg) :> ISg
 
+        let scale (s : float) (sg : ISg) =
+            sg |> trafo (s |> Trafo3d.Scale |> Mod.constant)
+
+        let translate (x : float) (y : float) (z : float) (sg : ISg) =
+            sg |> trafo (Trafo3d.Translation(x,y,z) |> Mod.constant)
+
+        let transform (t : Trafo3d) (sg : ISg) =
+            sg |> trafo (t |> Mod.constant)
+
+
+
         let camera (cam : IMod<Camera>) (sg : ISg) =
             sg |> viewTrafo (cam |> Mod.map Camera.viewTrafo) |> projTrafo (cam |> Mod.map Camera.projTrafo)
 
@@ -43,8 +54,20 @@ module SgFSharp =
         let group' (s : #seq<ISg>) =
             Sg.Group s :> ISg
 
+
         let set (set : aset<ISg>) =
             Sg.Set(set) :> ISg
+
+        let ofSeq (s : seq<#ISg>) =
+            s |> Seq.cast<ISg> |> ASet.ofSeq |> Sg.Set :> ISg
+
+        let ofList (l : list<#ISg>) =
+            l |> ofSeq
+
+        let ofArray (arr : array<#ISg>) =
+            arr |> ofSeq
+
+
 
         let andAlso (sg : ISg) (andSg : ISg) = 
             group [sg;andSg] :> ISg
@@ -330,7 +353,7 @@ module SgFSharp =
 
             Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
 
-        let pass (pass : uint64) (sg : ISg) = Sg.PassApplicator(pass, sg) :> ISg
+        let pass (pass : RenderPass) (sg : ISg) = Sg.PassApplicator(pass, sg) :> ISg
 
         let normalizeToAdaptive (box : Box3d) (this : ISg) =
 

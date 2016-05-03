@@ -4,10 +4,10 @@ open System
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open System.Windows.Forms
-open Aardvark.Rendering.Vulkan
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
+open Aardvark.Rendering.Vulkan
 
 type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as this =
     inherit UserControl()

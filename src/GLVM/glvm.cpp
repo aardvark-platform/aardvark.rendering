@@ -51,6 +51,7 @@ DllExport(void) vmInit()
 	glBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)getProc("glBindVertexArray");
 	glUseProgram = (PFNGLUSEPROGRAMPROC)getProc("glUseProgram");
 	glBindSampler = (PFNGLBINDSAMPLERPROC)getProc("glBindSampler");
+	glBindBuffer = (PFNGLBINDBUFFERPROC)getProc("glBindBuffer");
 	glBindBufferBase = (PFNGLBINDBUFFERBASEPROC)getProc("glBindBufferBase");
 	glBindBufferRange = (PFNGLBINDBUFFERRANGEPROC)getProc("glBindBufferRange");
 	glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)getProc("glBindFramebuffer");
@@ -294,11 +295,14 @@ void runInstruction(Instruction* i)
 	case VertexAttrib4f:
 		glVertexAttrib4f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2), *((GLfloat*)&i->Arg3), *((GLfloat*)&i->Arg4));
 		break;
+	case BindBuffer:
+		glBindBuffer((GLenum)i->Arg0, (GLuint)i->Arg1);
+		break;
 	case MultiDrawArraysIndirect:
-		glMultiDrawArraysIndirect((GLenum)i->Arg0, (const void*)i->Arg1, (GLsizei)i->Arg2, (GLsizei)i->Arg3);
+		glMultiDrawArraysIndirect((GLenum)i->Arg0, (const void*)i->Arg1, *((GLsizei*)i->Arg2), (GLsizei)i->Arg3);
 		break;
 	case MultiDrawElementsIndirect:
-		glMultiDrawElementsIndirect((GLenum)i->Arg0, (GLenum)i->Arg1, (const void*)i->Arg2, (GLsizei)i->Arg3, (GLsizei)i->Arg4);
+		glMultiDrawElementsIndirect((GLenum)i->Arg0, (GLenum)i->Arg1, (const void*)i->Arg2, *((GLsizei*)i->Arg3), (GLsizei)i->Arg4);
 		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
@@ -534,11 +538,15 @@ Statistics runRedundancyChecks(Fragment* frag)
 					glVertexAttrib4f((GLuint)i->Arg0, *((GLfloat*)&i->Arg1), *((GLfloat*)&i->Arg2), *((GLfloat*)&i->Arg3), *((GLfloat*)&i->Arg4));
 					break;
 
+				case BindBuffer:
+					glBindBuffer((GLenum)i->Arg0, (GLuint)i->Arg1);
+					break;
+
 				case MultiDrawArraysIndirect:
-					glMultiDrawArraysIndirect((GLenum)i->Arg0, (const void*)i->Arg1, (GLsizei)i->Arg2, (GLsizei)i->Arg3);
+					glMultiDrawArraysIndirect((GLenum)i->Arg0, (const void*)i->Arg1, *((GLsizei*)i->Arg2), (GLsizei)i->Arg3);
 					break;
 				case MultiDrawElementsIndirect:
-					glMultiDrawElementsIndirect((GLenum)i->Arg0, (GLenum)i->Arg1, (const void*)i->Arg2, (GLsizei)i->Arg3, (GLsizei)i->Arg4);
+					glMultiDrawElementsIndirect((GLenum)i->Arg0, (GLenum)i->Arg1, (const void*)i->Arg2, *((GLsizei*)i->Arg3), (GLsizei)i->Arg4);
 					break;
 
 				default:

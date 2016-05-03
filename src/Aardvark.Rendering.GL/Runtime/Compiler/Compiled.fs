@@ -9,7 +9,6 @@ type MetaInstruction = IMod<list<Instruction>>
 
 type CompilerState =
     {
-        manager             : ResourceManager
         currentContext      : IMod<ContextHandle>
         instructions        : list<MetaInstruction>
     }

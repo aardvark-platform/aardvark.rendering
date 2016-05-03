@@ -6,9 +6,6 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
 
-type AdaptiveCode(instructions : list<MetaInstruction>) =
-    member x.Instructions = instructions
-
 module DeltaCompiler =
 
     /// determines if all uniforms (given in values) are equal to the uniforms
@@ -118,55 +115,51 @@ module DeltaCompiler =
     /// This function is the core-ingredient making our rendering-system
     /// fast as hell \o/.
     /// </summary>
-    let compileDelta (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
+    let compileDelta (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
         let c = compileDeltaInternal prev rj
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext
-                manager = manager
                 instructions = []
             }
 
-        AdaptiveCode(s.instructions)
+        s.instructions
 
     /// <summary>
     /// compileFull compiles all instructions needed to render [rj] 
     /// making no assumpltions about the previous GL state.
     /// </summary>
-    let compileFull (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
+    let compileFull (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
         let c = compileDeltaInternal PreparedRenderObject.empty rj
 
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext
-                manager = manager
                 instructions = []
             }
 
-        AdaptiveCode(s.instructions)
+        s.instructions
 
 
 module internal DeltaCompilerDebug =
     open DeltaCompiler
 
-    let compileDeltaDebugNoResources (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
+    let compileDeltaDebugNoResources (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
         let c = compileDeltaInternal prev rj
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext
-                manager = manager
                 instructions = []
             }
 
         s.instructions |> List.collect (fun mi -> mi.GetValue())
 
-    let compileFullDebugNoResources (manager : ResourceManager) (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
+    let compileFullDebugNoResources (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
         let c = compileDeltaInternal PreparedRenderObject.empty rj
 
         let (s,()) =
             c.runCompile {
                 currentContext = currentContext
-                manager = manager
                 instructions = []
             }
 

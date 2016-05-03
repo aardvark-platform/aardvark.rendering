@@ -144,7 +144,7 @@ type NativeCommandBufferProgram(ctx : Context, renderObjects : aset<list<uint64>
         member x.Update c = x.Update c
         member x.Run cmd = x.Run cmd
 
-type ManagedCommandBufferProgram(ctx : Context, renderObjects : aset<list<uint64> * PreparedRenderObject>) =
+type ManagedCommandBufferProgram(ctx : Context, renderObjects : aset<list<IComparable> * PreparedRenderObject>) =
     let ictx = ctx.InstructionContext
 
     let toFunc (i : Instruction) =

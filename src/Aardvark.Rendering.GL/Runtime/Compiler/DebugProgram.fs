@@ -42,7 +42,7 @@ type DebugProgram(parent : IRenderTask,
                     | :? RenderObject as rj -> (manager.Prepare(parent.FramebufferSignature, rj), true)
                     | _ -> failwith "unsupported RenderObject type"
 
-            let prog = DeltaCompiler.compileFull manager ctxMod prep
+            let prog = DeltaCompiler.compileFull ctxMod prep
 
             // release (duplicated) resources whose reference count was incremented by compileFullPrepared
             if own then prep.Dispose()
@@ -50,7 +50,7 @@ type DebugProgram(parent : IRenderTask,
             for r in prep.Resources do
                 usedResources.Add r |> ignore
 
-            for mi in prog.Instructions do
+            for mi in prog do
                 let instructions = mi.GetValue(parent)
                        
                 for i in instructions do

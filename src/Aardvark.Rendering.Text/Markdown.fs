@@ -73,7 +73,7 @@ module Markdown =
 
             shapes      : list<Shape>
             offsets     : list<V2d>
-            scales      : list<V2d>
+            scales      : list<float -> V2d>
             colors      : list<C4b>
 
         }
@@ -265,11 +265,21 @@ module Markdown =
                         max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
                         shapes = g::s.shapes
                         offsets = V2d(s.x, s.y)::s.offsets
-                        scales = s.textState.scale::s.scales
+                        scales = (fun _ -> s.textState.scale)::s.scales
                         colors = s.color::s.colors
                     }
                 )
 
+            let emitFullWidth (g : Shape) =
+                modifyState (fun (s : LayoutState) ->
+                    { s with
+                        max = V2d(s.max.X, max (s.y + s.textState.scale.Y) s.max.Y)
+                        shapes = g::s.shapes
+                        offsets = V2d(s.x, s.y)::s.offsets
+                        scales = (fun w -> V2d(w, s.textState.scale.Y))::s.scales
+                        colors = s.color::s.colors
+                    }
+                )
 
             module Paragraph = 
                 let fontName        = "Arial"
@@ -372,11 +382,10 @@ module Markdown =
                             
                         | HorizontalRuler ->
                             let h = 0.05
-                            let w = 20.0
                             do! moveY -(0.4 + h/2.0)
-                            do! withTextState { TextStyle.empty with scale = V2d(w, h) } (fun () ->
+                            do! withTextState { TextStyle.empty with scale = V2d(1.0, h) } (fun () ->
                                 state {
-                                    do! emit Shape.Quad
+                                    do! emitFullWidth Shape.Quad
                                 }
                             )
                             do! moveY (0.4 + h/2.0)
@@ -426,7 +435,7 @@ module Markdown =
                 ShapeList.bounds   = bounds
                 ShapeList.shapes   = s.shapes
                 ShapeList.offsets  = s.offsets
-                ShapeList.scales   = s.scales
+                ShapeList.scales   = s.scales |> List.map (fun f -> f bounds.SizeX)
                 ShapeList.colors   = s.colors
             }
 
@@ -440,4 +449,4 @@ module ``Markdown Sg Extensions`` =
         let markdown (config : MarkdownConfig) (code : IMod<string>) =
             code
                 |> Mod.map (Markdown.layout config)
-                |> Sg.shapeWithBackground (C4b(255uy, 255uy, 255uy, 120uy))
+                |> Sg.shapeWithBackground (C4b(255uy, 255uy, 255uy, 200uy))

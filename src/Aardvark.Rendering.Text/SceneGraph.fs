@@ -8,6 +8,9 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.Text
 
 
+module RenderPass =
+    let shapes = RenderPass.main |> RenderPass.after "shapes" RenderPassOrder.BackToFront
+
 module Sg =
     open Aardvark.SceneGraph.Semantics
     open Aardvark.Base.Ag
@@ -42,6 +45,18 @@ module Sg =
 
             b.Child?ModelTrafoStack <- trafo::b.ModelTrafoStack
 
+
+        member x.LocalBoundingBox(t : Shape) : IMod<Box3d> =
+            t.Content |> Mod.map (fun c ->
+                Box3d(V3d(c.bounds.Min, 0.0), V3d(c.bounds.Max, 0.0))
+            )
+
+        member x.GlobalBoundingBox(t : Shape) : IMod<Box3d> =
+            Mod.map2 (fun c (t : Trafo3d) ->
+                let box = Box3d(V3d(c.bounds.Min, 0.0), V3d(c.bounds.Max, 0.0))
+                box.Transformed(t.Forward)
+
+            ) t.Content t.ModelTrafo
 
         member x.RenderObjects(t : Shape) : aset<IRenderObject> =
             let content = t.Content
@@ -96,7 +111,7 @@ module Sg =
                     member x.Dispose() = old.Dispose()
                 }
 
-            shapes.RenderPass <- 100UL
+            shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- Mod.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
             shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
@@ -108,7 +123,7 @@ module Sg =
                 ASet.single (shapes :> IRenderObject)
             else
                 let boundary = RenderObject.create()
-                boundary.RenderPass <- 99UL
+                boundary.RenderPass <- RenderPass.shapes
                 boundary.BlendMode <- Mod.constant BlendMode.Blend
                 boundary.VertexAttributes <- cache.VertexBuffers
                 let drawCall =
@@ -177,7 +192,9 @@ module Sg =
                 shapes.DepthTest <- Mod.constant DepthTestMode.None
                 shapes.StencilMode <- Mod.constant readStencil
 
-                ASet.ofList [boundary :> IRenderObject; shapes :> IRenderObject]
+
+                MultiRenderObject [boundary; shapes] :> IRenderObject |> ASet.single
+                //ASet.ofList [boundary :> IRenderObject; shapes :> IRenderObject]
 
         member x.FillGlyphs(s : ISg) =
             let mode = s.FillMode

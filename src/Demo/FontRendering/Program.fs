@@ -182,15 +182,26 @@ let main argv =
         geometry
             |> Sg.ofIndexedGeometry
             |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect ]
+            |> Sg.scale 5.0
 
     let mode = Mod.init FillMode.Fill
     let font = new Font("Comic Sans")
-    let sg = 
+
+
+    let label1 =
         Sg.markdown MarkdownConfig.light (Mod.constant md)
-            |> Sg.trafo (Trafo3d.Scale 0.1 |> Mod.constant)
+            |> Sg.scale 0.1
             |> Sg.billboard
+
+    let label2 =
+        Sg.markdown MarkdownConfig.light (Mod.constant md)
+            |> Sg.scale 0.1
+            |> Sg.billboard
+            |> Sg.translate 5.0 0.0 0.0
+
+    let sg = 
+        Sg.group [label1; label2]
             |> Sg.andAlso quad
-        //Sg.label font C4b.White (Mod.constant all)
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
             |> Sg.fillMode mode

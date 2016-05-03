@@ -194,17 +194,17 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
 
     let getId (m : IMod) =
         match idCache.TryGetValue m with
-            | (true, r) -> !r
+            | (true, r) -> !r :> IComparable
             | _ ->
                 let r = ref (Interlocked.Increment &currentId |> uint64)
                 idCache.Add(m, r)
-                !r
+                !r :> IComparable
 
     let createSortKey (prep : PreparedRenderObject) =
         match config.sorting with
             | Grouping projections ->
                 let ids = projections |> List.map (fun f -> f prep.original |> getId)
-                prep.RenderPass::ids
+                (prep.RenderPass :> IComparable)::ids
 
             | _ ->
                 failwithf "[RenderTask] unsupported sorting: %A" config.sorting
