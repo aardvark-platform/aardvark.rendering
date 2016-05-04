@@ -216,7 +216,8 @@ module Sharing =
                 else
                     ctx.Delete b
 
-type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>, size : int, fields : list<ActiveUniform>) =
+
+type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>, size : int, fields : list<UniformField>) =
 
     let alignedSize = (size + 255) &&& ~~~255
 
@@ -229,7 +230,8 @@ type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>
 
     member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<obj>) : IResource<UniformBufferView> =
         let values =
-            fields |> List.map (fun f ->
+            fields 
+            |> List.map (fun f ->
                 let sem = Symbol.Create f.semantic
                 match u.TryGetUniform(scope, sem) with
                     | Some v -> sem, v
@@ -245,8 +247,7 @@ type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>
             key,
             fun () ->
                 let values = values |> List.map (fun (s,v) -> s, v :> IAdaptiveObject) |> Map.ofList
-                let uniformFields = fields |> List.map (fun a -> a.UniformField)
-                let writers = UnmanagedUniformWriters.writers true uniformFields values
+                let writers = UnmanagedUniformWriters.writers true fields values
      
                 let mutable block = Unchecked.defaultof<_>
                 { new Resource<UniformBufferView>(ResourceKind.UniformBufferView) with
@@ -471,7 +472,12 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
      
     member x.CreateUniformBuffer(scope : Ag.Scope, layout : UniformBlock, program : Program, u : IUniformProvider) =
         let manager = 
-            uniformBufferManagers.GetOrAdd((layout.size, layout.fields), fun (s,f) -> new UniformBufferManager(ctx, renderTaskLock, s, f))
+            uniformBufferManagers.GetOrAdd(
+                (layout.size, layout.fields), 
+                fun (s,f) -> 
+                    let uniformFields = layout.fields |> List.map (fun f -> f.UniformField)
+                    new UniformBufferManager(ctx, renderTaskLock, s, uniformFields)
+            )
 
         manager.CreateUniformBuffer(scope, u, program.UniformGetters)
       
