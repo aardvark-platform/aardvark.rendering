@@ -136,7 +136,7 @@ module Sg =
                         BaseVertex = 0
                     )
 
-                boundary.IndirectBuffer <- [|drawCall|] |> ArrayBuffer :> IBuffer |> Mod.constant
+                boundary.DrawCallInfos <- [drawCall] |> Mod.constant
                 boundary.Mode <- Mod.constant IndexedGeometryMode.TriangleList
                 boundary.Uniforms <-
                     let old = boundary.Uniforms

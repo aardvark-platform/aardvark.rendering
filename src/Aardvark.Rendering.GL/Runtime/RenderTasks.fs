@@ -616,17 +616,19 @@ module YetAnotherRenderTaskImpl =
 
 
     [<AbstractClass>]
-    type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, renderTaskLock : RenderTaskLock, debug : bool) =
+    type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, renderTaskLock : RenderTaskLock, config : IMod<BackendConfiguration>) as this =
         inherit AdaptiveObject()
         let currentContext = Mod.init Unchecked.defaultof<ContextHandle>
 
-        let mutable debug = debug
         let mutable frameId = 0UL
         let mutable stats = FrameStatistics.Zero
 
         let pushDebugOutput() =
             let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
-            if debug then
+            let c = config.GetValue this
+            if c.useDebugOutput then
+                if frameId = 0UL then
+                    Log.warn "debug output enabled"
                 match ContextHandle.Current with
                     | Some v -> v.AttachDebugOutputIfNeeded()
                     | None -> Report.Warn("No active context handle in RenderTask.Run")
@@ -635,7 +637,8 @@ module YetAnotherRenderTaskImpl =
             wasEnabled
 
         let popDebugOutput(wasEnabled : bool) =
-            if wasEnabled <> debug then
+            let c = config.GetValue this
+            if wasEnabled <> c.useDebugOutput then
                 if wasEnabled then GL.Enable EnableCap.DebugOutput
                 else GL.Disable EnableCap.DebugOutput
 
@@ -665,7 +668,8 @@ module YetAnotherRenderTaskImpl =
                                 (v &&& ColorWriteMask.Blue)  <> ColorWriteMask.None, 
                                 (v &&& ColorWriteMask.Alpha) <> ColorWriteMask.None
                             )
-                         | None -> GL.ColorMask(index, true, true, true, true)
+                         | None -> 
+                            GL.ColorMask(index, true, true, true, true)
 
                     GL.DrawBuffers(drawBuffers.Length, drawBuffers)
                     GL.Check "DrawBuffers errored"
@@ -722,6 +726,8 @@ module YetAnotherRenderTaskImpl =
 
                 popFbo fboState
                 popDebugOutput debugState
+
+                
 
                 GL.BindVertexArray 0
                 GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
@@ -944,7 +950,7 @@ module YetAnotherRenderTaskImpl =
 
 
     type StaticOrderRenderTask(ctx : Context, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) =
-        inherit AbstractRenderTask(ctx, fboSignature, RenderTaskLock(), false)
+        inherit AbstractRenderTask(ctx, fboSignature, RenderTaskLock(), config)
 
         let objects = CSet.empty
 
@@ -1158,7 +1164,7 @@ module YetAnotherRenderTaskImpl =
             member x.Dispose() = x.Dispose()
 
     type CameraSortedRenderTask(order : RenderPassOrder, ctx : Context, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) as this =
-        inherit AbstractRenderTask(ctx, fboSignature, RenderTaskLock(), false)
+        inherit AbstractRenderTask(ctx, fboSignature, RenderTaskLock(), config)
         do GLVM.vmInit()
 
         let mutable hasCameraView = false
