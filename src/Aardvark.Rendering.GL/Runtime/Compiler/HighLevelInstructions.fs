@@ -11,6 +11,14 @@ open Microsoft.FSharp.NativeInterop
 module Instructions =
     open OpenTK.Graphics.OpenGL4
 
+    let setDepthMask (active : bool) =
+        Instruction.DepthMask(if active then 1 else 0)
+
+    let setColorMasks (masks : list<V4i>) =
+        masks |> List.mapi (fun i mask ->
+            Instruction.ColorMask i mask.X mask.Y mask.Z mask.W
+        )
+
     let setDepthTest (m : IMod<DepthTestMode>) =
         m |> Mod.map (fun dt ->
             if dt <> DepthTestMode.None then

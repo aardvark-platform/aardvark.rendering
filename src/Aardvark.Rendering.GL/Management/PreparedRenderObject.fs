@@ -27,6 +27,12 @@ type PreparedRenderObject =
 
         mutable VertexArray : IResource<VertexArrayObject>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
+        
+        ColorAttachmentCount : int
+        ColorBufferMasks : Option<list<V4i>>
+        DepthBufferMask : bool
+
+        
         mutable IsDisposed : bool
     } 
 
@@ -166,6 +172,9 @@ module PreparedRenderObject =
             IndirectBuffer = None
             VertexArray = Unchecked.defaultof<_>
             VertexAttributeValues = Map.empty
+            ColorAttachmentCount = 0
+            ColorBufferMasks = None
+            DepthBufferMask = true
             IsDisposed = false
         }  
 
@@ -187,6 +196,9 @@ module PreparedRenderObject =
                 IndirectBuffer = o.IndirectBuffer
                 VertexArray = o.VertexArray
                 VertexAttributeValues = o.VertexAttributeValues
+                ColorAttachmentCount = o.ColorAttachmentCount
+                ColorBufferMasks = o.ColorBufferMasks
+                DepthBufferMask = o.DepthBufferMask
                 IsDisposed = o.IsDisposed
             }  
 
@@ -361,6 +373,27 @@ type ResourceManagerExtensions private() =
                                 None
                     )
                 ) |> Map.ofList
+        let attachments = fboSignature.ColorAttachments |> Map.toList
+        let attachmentCount = 1 + (attachments |> List.map (fun (i,_) -> i) |> List.max)
+
+        let colorMasks =
+            match rj.WriteBuffers with
+                | Some b ->
+                    let masks = Array.zeroCreate attachmentCount
+                    for (index, (sem, att)) in attachments do
+                        if Set.contains sem b then
+                            masks.[index] <- V4i.IIII
+                        else
+                            masks.[index] <- V4i.OOOO
+
+                    Some (Array.toList masks)
+                | _ ->
+                    None
+
+        let depthMask =
+            match rj.WriteBuffers with
+                | Some b -> Set.contains DefaultSemantic.Depth b
+                | None -> true
 
         // finally return the PreparedRenderObject
         {
@@ -379,5 +412,8 @@ type ResourceManagerExtensions private() =
             IndirectBuffer = indirect
             VertexArray = vao
             VertexAttributeValues = attributeValues
+            ColorAttachmentCount = attachmentCount
+            ColorBufferMasks = colorMasks
+            DepthBufferMask = depthMask
             IsDisposed = false
         }

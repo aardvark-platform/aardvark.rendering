@@ -26,6 +26,16 @@ module DeltaCompiler =
 
     let internal compileDeltaInternal (prev : PreparedRenderObject) (me : PreparedRenderObject) =
         compiled {
+
+            // set the output-buffers
+            if prev.DepthBufferMask <> me.DepthBufferMask then
+                yield Instructions.setDepthMask me.DepthBufferMask
+
+            if prev.ColorBufferMasks <> me.ColorBufferMasks then
+                match me.ColorBufferMasks with
+                    | Some masks -> yield Instructions.setColorMasks masks
+                    | None -> yield Instructions.setColorMasks (List.init me.ColorAttachmentCount (fun _ -> V4i.IIII))
+
             //set all modes if needed
             if prev.DepthTest <> me.DepthTest && me.DepthTest <> null then
                 yield Instructions.setDepthTest me.DepthTest

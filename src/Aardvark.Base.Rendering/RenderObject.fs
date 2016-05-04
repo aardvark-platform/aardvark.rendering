@@ -70,9 +70,10 @@ type RenderObject =
         mutable InstanceAttributes  : IAttributeProvider
         mutable VertexAttributes    : IAttributeProvider
                 
-        mutable Uniforms : IUniformProvider
+        mutable Uniforms            : IUniformProvider
 
         mutable Activate            : unit -> IDisposable
+        mutable WriteBuffers        : Option<Set<Symbol>>
 
     }  
     interface IRenderObject with
@@ -104,6 +105,7 @@ type RenderObject =
           VertexAttributes = null
           Uniforms = null
           Activate = nopActivate
+          WriteBuffers = None
         }
 
     static member Clone(org : RenderObject) =
@@ -156,6 +158,7 @@ module RenderObjectExtensions =
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms
           Activate = nopActivate
+          WriteBuffers = None
         }
 
 
