@@ -81,6 +81,8 @@ DllExport(void) vmInit()
 
 	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
 	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
+	glColorMaski = (PFNGLCOLORMASKIPROC)getProc("glColorMaski");
+
 }
 
 DllExport(Fragment*) vmCreate()
@@ -304,6 +306,12 @@ void runInstruction(Instruction* i)
 	case MultiDrawElementsIndirect:
 		glMultiDrawElementsIndirect((GLenum)i->Arg0, (GLenum)i->Arg1, (const void*)i->Arg2, *((GLsizei*)i->Arg3), (GLsizei)i->Arg4);
 		break;
+	case DepthMask:
+		glDepthMask((GLboolean)i->Arg0);
+		break;
+	case ColorMask:
+		glColorMaski((GLuint)i->Arg0, (GLboolean)i->Arg1, (GLboolean)i->Arg2, (GLboolean)i->Arg3, (GLboolean)i->Arg4);
+		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
 		break;
@@ -458,8 +466,19 @@ Statistics runRedundancyChecks(Fragment* frag)
 					}
 					break;
 
+				case DepthMask:
+					if (state.ShouldSetDepthMask(arg0))
+					{
+						glDepthMask((GLboolean)arg0);
+					}
+					break;
 
-
+				case ColorMask:
+					if (state.ShouldSetColorMask(arg0, i->Arg1, i->Arg2, i->Arg3, i->Arg4))
+					{
+						glColorMaski((GLuint)arg0, (GLboolean)i->Arg1, (GLboolean)i->Arg2, (GLboolean)i->Arg3, (GLboolean)i->Arg4);
+					}
+					break;
 
 				case BindFramebuffer:
 					glBindFramebuffer((GLenum)i->Arg0, (GLuint)i->Arg1);

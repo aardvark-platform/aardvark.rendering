@@ -20,40 +20,39 @@ static PFNGLACTIVETEXTUREPROC			glActiveTexture;
 static PFNGLBLENDCOLORPROC				glBlendColor;
 #endif
 
-static PFNGLBINDVERTEXARRAYPROC		glBindVertexArray;
-static PFNGLUSEPROGRAMPROC				glUseProgram;
-static PFNGLBINDSAMPLERPROC			glBindSampler;
-static PFNGLBINDBUFFERPROC			glBindBuffer;
-static PFNGLBINDBUFFERBASEPROC			glBindBufferBase;
-static PFNGLBINDBUFFERRANGEPROC		glBindBufferRange;
-static PFNGLBINDFRAMEBUFFERPROC		glBindFramebuffer;
-static PFNGLBLENDFUNCSEPARATEPROC		glBlendFuncSeparate;
-static PFNGLBLENDEQUATIONSEPARATEPROC	glBlendEquationSeparate;
-static PFNGLSTENCILFUNCSEPARATEPROC	glStencilFuncSeparate;
-static PFNGLSTENCILOPSEPARATEPROC		glStencilOpSeparate;
-static PFNGLPATCHPARAMETERIPROC		glPatchParameteri;
-static PFNGLDRAWARRAYSINSTANCEDPROC	glDrawArraysInstanced;
-static PFNGLDRAWELEMENTSINSTANCEDPROC  glDrawElementsInstanced;
-static PFNGLVERTEXATTRIBPOINTERPROC	glVertexAttribPointer;
-static PFNGLUNIFORM1FVPROC				glUniform1fv;
-static PFNGLUNIFORM1IVPROC				glUniform1iv;
-static PFNGLUNIFORM2FVPROC				glUniform2fv;
-static PFNGLUNIFORM2IVPROC				glUniform2iv;
-static PFNGLUNIFORM3FVPROC				glUniform3fv;
-static PFNGLUNIFORM3IVPROC				glUniform3iv;
-static PFNGLUNIFORM4FVPROC				glUniform4fv;
-static PFNGLUNIFORM4IVPROC				glUniform4iv;
-static PFNGLUNIFORMMATRIX2FVPROC		glUniformMatrix2fv;
-static PFNGLUNIFORMMATRIX3FVPROC		glUniformMatrix3fv;
-static PFNGLUNIFORMMATRIX4FVPROC		glUniformMatrix4fv;
-static PFNGLVERTEXATTRIB1FPROC			glVertexAttrib1f;
-static PFNGLVERTEXATTRIB2FPROC			glVertexAttrib2f;
-static PFNGLVERTEXATTRIB3FPROC			glVertexAttrib3f;
-static PFNGLVERTEXATTRIB4FPROC			glVertexAttrib4f;
-
-static PFNGLMULTIDRAWARRAYSINDIRECTPROC glMultiDrawArraysIndirect;
-static PFNGLMULTIDRAWELEMENTSINDIRECTPROC glMultiDrawElementsIndirect;
-
+static PFNGLBINDVERTEXARRAYPROC				glBindVertexArray;
+static PFNGLUSEPROGRAMPROC					glUseProgram;
+static PFNGLBINDSAMPLERPROC					glBindSampler;
+static PFNGLBINDBUFFERPROC					glBindBuffer;
+static PFNGLBINDBUFFERBASEPROC				glBindBufferBase;
+static PFNGLBINDBUFFERRANGEPROC				glBindBufferRange;
+static PFNGLBINDFRAMEBUFFERPROC				glBindFramebuffer;
+static PFNGLBLENDFUNCSEPARATEPROC			glBlendFuncSeparate;
+static PFNGLBLENDEQUATIONSEPARATEPROC		glBlendEquationSeparate;
+static PFNGLSTENCILFUNCSEPARATEPROC			glStencilFuncSeparate;
+static PFNGLSTENCILOPSEPARATEPROC			glStencilOpSeparate;
+static PFNGLPATCHPARAMETERIPROC				glPatchParameteri;
+static PFNGLDRAWARRAYSINSTANCEDPROC			glDrawArraysInstanced;
+static PFNGLDRAWELEMENTSINSTANCEDPROC		glDrawElementsInstanced;
+static PFNGLVERTEXATTRIBPOINTERPROC			glVertexAttribPointer;
+static PFNGLUNIFORM1FVPROC					glUniform1fv;
+static PFNGLUNIFORM1IVPROC					glUniform1iv;
+static PFNGLUNIFORM2FVPROC					glUniform2fv;
+static PFNGLUNIFORM2IVPROC					glUniform2iv;
+static PFNGLUNIFORM3FVPROC					glUniform3fv;
+static PFNGLUNIFORM3IVPROC					glUniform3iv;
+static PFNGLUNIFORM4FVPROC					glUniform4fv;
+static PFNGLUNIFORM4IVPROC					glUniform4iv;
+static PFNGLUNIFORMMATRIX2FVPROC			glUniformMatrix2fv;
+static PFNGLUNIFORMMATRIX3FVPROC			glUniformMatrix3fv;
+static PFNGLUNIFORMMATRIX4FVPROC			glUniformMatrix4fv;
+static PFNGLVERTEXATTRIB1FPROC				glVertexAttrib1f;
+static PFNGLVERTEXATTRIB2FPROC				glVertexAttrib2f;
+static PFNGLVERTEXATTRIB3FPROC				glVertexAttrib3f;
+static PFNGLVERTEXATTRIB4FPROC				glVertexAttrib4f;
+static PFNGLMULTIDRAWARRAYSINDIRECTPROC		glMultiDrawArraysIndirect;
+static PFNGLMULTIDRAWELEMENTSINDIRECTPROC	glMultiDrawElementsIndirect;
+static PFNGLCOLORMASKIPROC					glColorMaski;
 
 // enum holding the available instruction codes
 typedef enum {
@@ -109,7 +108,9 @@ typedef enum {
 	VertexAttrib3f = 50,
 	VertexAttrib4f = 51,
 	MultiDrawArraysIndirect = 52,
-	MultiDrawElementsIndirect = 53
+	MultiDrawElementsIndirect = 53,
+	DepthMask = 54,
+	ColorMask = 55
 
 } InstructionCode;
 

@@ -65,6 +65,9 @@ type InstructionCode =
     | MultiDrawArraysIndirect       = 52
     | MultiDrawElementsIndirect     = 53
 
+    | DepthMask                     = 54
+    | ColorMask                     = 55
+
 
 /// <summary>
 /// an instrution consists of an instruction-code and the corresponding arguments
@@ -171,3 +174,9 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
 
     static member MultiDrawElementsIndirectPtr (mode : int) (t : int) (indirect : nativeint) (drawCountPtr : nativeint) (stride : int) =
         Instruction(InstructionCode.MultiDrawElementsIndirect, [|mode :> obj; t :> obj; indirect :> obj; Aardvark.Base.Ptr32 drawCountPtr :> obj; stride :> obj|])
+
+    static member DepthMask (enabled : int) =
+        Instruction(InstructionCode.DepthMask, [|enabled :> obj|])
+
+    static member ColorMask (index : int) (r : int) (g : int) (b : int) (a : int) =
+        Instruction(InstructionCode.DepthMask, [|index :> obj; r :> obj; g :> obj; b :> obj; a :> obj|])

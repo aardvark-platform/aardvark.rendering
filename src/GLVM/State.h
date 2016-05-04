@@ -27,6 +27,9 @@ private:
 	intptr_t currentDepthFunc;
 	intptr_t currentCullFace;
 
+	intptr_t currentDepthMask;
+	std::unordered_map<intptr_t, int> currentColorMask;
+
 	std::tuple<intptr_t, intptr_t> currentPolygonMode;
 	std::tuple<intptr_t, intptr_t, intptr_t, intptr_t> blendFunc;
 	std::tuple<intptr_t, intptr_t> blendEquation;
@@ -65,6 +68,8 @@ public:
 	bool ShouldSetStencilFunc(intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3);
 	bool ShouldSetStencilOp(intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3);
 	bool ShouldSetPatchParameter(intptr_t parameter, intptr_t value);
+	bool ShouldSetDepthMask(intptr_t depthMask);
+	bool ShouldSetColorMask(intptr_t index, intptr_t r, intptr_t g, intptr_t b, intptr_t a);
 
 	int GetRemovedInstructions();
 };

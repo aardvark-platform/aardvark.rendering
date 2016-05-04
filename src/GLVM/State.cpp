@@ -12,6 +12,9 @@ State::State()
 	currentActiveTexture = -1;
 	currentDepthFunc = -1;
 	currentCullFace = -1;
+	currentDepthMask = -1;
+	currentColorMask = std::unordered_map<intptr_t, int>();
+
 	currentSampler = std::unordered_map<int, intptr_t>();
 	currentTexture = std::unordered_map<GLenum, std::unordered_map<int, intptr_t>>();
 	currentBuffer = std::unordered_map<int, std::tuple<intptr_t, intptr_t, intptr_t>>();
@@ -95,6 +98,48 @@ bool State::ShouldSetActiveTexture(intptr_t unit)
 		return false;
 	}
 }
+
+bool State::ShouldSetDepthMask(intptr_t mask)
+{
+	if (currentDepthMask != mask)
+	{
+		currentDepthMask = mask;
+		return true;
+	}
+	else
+	{
+		removedInstructions++;
+		return false;
+	}
+}
+
+bool State::ShouldSetColorMask(intptr_t index, intptr_t r, intptr_t g, intptr_t b, intptr_t a)
+{
+	int mask = ((r & 1) << 3) | ((g & 1 << 2)) | ((b & 1) << 1) | (a & 1);
+
+	auto res = currentColorMask.find(index);
+	if (res != currentColorMask.end())
+	{
+		if (res->second != mask)
+		{
+			currentColorMask[index] = mask;
+			return true;
+		}
+		else
+		{
+			removedInstructions++;
+			return false;
+		}
+	}
+	else
+	{
+		currentColorMask[index] = mask;
+		return true;
+	}
+
+
+}
+
 
 bool State::ShouldSetTexture(GLenum target, intptr_t texture)
 {
