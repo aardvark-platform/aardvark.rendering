@@ -1,0 +1,6 @@
+{
+  "name": "Aardvark.Rendering",
+  "tagline": "Rendering framework based on the aardvark open source libraries.",
+  "body": "[![Build status](https://ci.appveyor.com/api/projects/status/oqg1tw2ax1jl8qjx?svg=true)](https://ci.appveyor.com/project/haraldsteinlechner/aardvark-rendering)\r\n[![Build Status](https://travis-ci.org/vrvis/aardvark.rendering.svg?branch=master)](https://travis-ci.org/vrvis/aardvark.rendering)\r\n\r\n# Aardvark.Rendering\r\n\r\nHow to build:\r\n------\r\n\r\nWindows:\r\n- Visual Studio 2015,\r\n- Visual FSharp Tools installed (we use 4.0 now) \r\n- run build.cmd which will install all dependencies\r\n- msbuild src\\Aardvark.sln or use VisualStudio to build the solution\r\n\r\nLinux:\r\n- install mono >= 4.2.3.0 (might work in older versions as well)\r\n- install fsharp 4.0 (http://fsharp.org/use/linux/)\r\n- run build.sh which will install all dependencies\r\n- run xbuild src/Aardvark.Rendering.sln\r\n\r\nTutorials can be found here:\r\nhttps://github.com/vrvis/aardvark.rendering/tree/master/src/Demo/Examples\r\ne.g. interactive rendering \"Hello World\": https://github.com/vrvis/aardvark.rendering/blob/master/src/Demo/Examples/HelloWorld.fs\r\n\r\n\r\n[1] https://visualfsharp.codeplex.com/releases/view/161288\r\n\r\n\r\n",
+  "note": "Don't delete this file! It's used internally to help with page regeneration."
+}
