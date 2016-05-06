@@ -21,6 +21,7 @@ module Shader =
     type Vertex = { 
         [<Position>] pos : V4d 
         [<TexCoord>] tc : V2d
+        [<Color>] color : V4d
         [<Semantic("ZZZInstanceTrafo")>] trafo : M44d
     }
 
@@ -32,6 +33,7 @@ module Shader =
                 pos = uniform.ViewProjTrafo * wp
                 tc = v.tc
                 trafo = v.trafo
+                color = v.color
             }
         }
 
@@ -178,26 +180,51 @@ let main argv =
         "* second *item*\r\n" 
 
 
+    // old school stuff here^^
+
+    // here's an example-usage of AIR (Aardvark Imperative Renderer) 
+    // showing how to integrate arbitrary logic in the SceneGraph without
+    // implementing new nodes for that
     let quad = 
         Sg.air { 
+            // inside an air-block we're allowed to read current values
+            // which will be inherited from the SceneGraph
+            let! parentFill = AirState.fillMode
+
+            // modes can be modified by simply calling the respective setters.
+            // Note that these setters are overloaded with and without IMod<Mode>
             do! Air.DepthTest    DepthTestMode.LessOrEqual
             do! Air.CullMode     CullMode.None
             do! Air.BlendMode    BlendMode.None
             do! Air.FillMode     FillMode.Fill
             do! Air.StencilMode  StencilMode.Disabled
 
+            // we can also override the shaders in use (and with FSHade)
+            // build our own dynamic shaders e.g. depending on the inherited 
+            // FillMode from the SceneGraph
+            do! Air.BindShader {
+                    do! DefaultSurfaces.trafo               
+                    
+                    // if the parent fillmode is not filled make the quad red.
+                    let! fill = parentFill
+                    match fill with
+                        | FillMode.Fill -> do! DefaultSurfaces.diffuseTexture
+                        | _ -> do! DefaultSurfaces.constantColor C4f.Red 
 
-            do! Air.BindEffect [
-                    DefaultSurfaces.trafo                   |> toEffect
-                    DefaultSurfaces.constantColor C4f.Red   |> toEffect
-                    DefaultSurfaces.diffuseTexture          |> toEffect
-                ]
+                }
 
+            // uniforms can be bound using lists or one-by-one
             do! Air.BindUniforms [
                     "Hugo", uniformValue 10 
                     "Sepp", uniformValue V3d.Zero
                 ]
 
+            do! Air.BindUniform(
+                    Symbol.Create "BlaBla",
+                    Trafo3d.Identity
+                )
+
+            // textures can also be bound (using file-texture here)
             do! Air.BindTexture(
                     DefaultSemantic.DiffuseColorTexture, 
                     @"E:\Development\WorkDirectory\DataSVN\pattern.jpg"
@@ -213,20 +240,29 @@ let main argv =
                     0;2;3 
                 |]
         
+
+            // since for some effects it is not desireable to write certain pixel-outputs
+            // one can change the current WriteBuffers using a list of written semantics
             do! Air.WriteBuffers [
                     DefaultSemantic.Depth
                     DefaultSemantic.Colors
                 ]
+
+            // topology can be set separately (not by the DrawCall)
             do! Air.Toplogy IndexedGeometryMode.TriangleList
 
+
+            // trafos keep their usual stack-semantics and can be pushed/poped
+            // initially the trafo-stack is filled with all trafos inherited 
+            // from the containing SceneGraph
             do! Air.PushTrafo (Trafo3d.Scale 5.0)
 
-            do! Air.DrawInstanced(1, 6)
-            do! Air.PushTrafo (Trafo3d.Translation(0.0,0.0,1.0/5.0))
-            do! Air.DrawInstanced(1, 6)
-            do! Air.PopTrafo()
+            // draw the quad 10 times and step by 1/5 in z every time
+            for y in 1..10 do
+                do! Air.Draw 6
+                do! Air.PushTrafo (Trafo3d.Translation(0.0,0.0,1.0/5.0))
 
-            do! Air.PopTrafo()
+
 
         }
 
@@ -252,6 +288,15 @@ let main argv =
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
             |> Sg.fillMode mode
+            |> Sg.shader {
+                    do! DefaultSurfaces.trafo 
+                    let! mode = mode
+                    match mode with
+                        | FillMode.Fill -> 
+                            do! DefaultSurfaces.diffuseTexture
+                        | _ -> 
+                            do! DefaultSurfaces.constantColor C4f.Red
+               }
 
     win.Keyboard.KeyDown(Keys.F8).Values.Add (fun _ ->
         transact (fun () ->

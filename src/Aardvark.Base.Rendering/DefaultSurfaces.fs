@@ -3,6 +3,7 @@
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open FShade
+open Microsoft.FSharp.Quotations
 
 module DefaultSurfaces =
     
@@ -237,3 +238,40 @@ module DefaultSurfaces =
 
             return { v with n = n }
         }
+
+    let transformColor (f : Expr<V4d -> V4d>) (v : Vertex) =
+        fragment {
+            return (%f) v.c
+        }
+
+[<AutoOpen>]
+module EffectAPI =
+    type private Effect = IMod<list<FShadeEffect>>
+
+    type EffectBuilder() =
+        member x.Bind(f : 'a -> Expr<'b>, c : unit -> Effect) : Effect =
+            let effect = toEffect f
+            c() |> Mod.map (fun c -> effect::c)
+
+        member x.Bind(f : FShadeEffect, c : unit -> Effect) : Effect =
+            c() |> Mod.map (fun c -> f::c)
+
+        member x.Bind(m : IMod<'a>, f : 'a -> Effect) =
+            m |> Mod.bind f
+
+        member x.Return (u : unit) : Effect = Mod.constant []
+
+        member x.Zero() : Effect = Mod.constant []
+
+        member x.Combine(l : Effect, r : unit -> Effect) : Effect = Mod.map2 (fun l r -> l @ r) l (r())
+
+        member x.Delay(f : unit -> Effect) = f
+
+        member x.For(seq : seq<'a>, f : 'a -> Effect) : Effect =
+            seq |> Seq.toList |> List.map f |> Mod.mapN (Seq.concat >> Seq.toList)
+
+        member x.Run(f : unit -> Effect) = f()
+
+
+
+    let effect = EffectBuilder()

@@ -38,43 +38,6 @@ type AirState =
         final               : list<IRenderObject>
     }
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module AirState =
-    open Aardvark.SceneGraph.Semantics
-
-    let ofScope (scope : Ag.Scope) = 
-        let ro = RenderObject.ofScope scope
-
-
-        {
-            isActive            = ro.IsActive
-            drawCallInfos       = ro.DrawCallInfos
-            mode                = ro.Mode
-            surface             = ro.Surface
-                              
-            depthTest           = ro.DepthTest
-            cullMode            = ro.CullMode
-            blendMode           = ro.BlendMode
-            fillMode            = ro.FillMode
-            stencilMode         = ro.StencilMode
-                              
-            indices             = ro.Indices
-            instanceAttributes  = Map.empty
-            vertexAttributes    = Map.empty
-                              
-            uniforms            = Map.empty
-            trafos              = scope?ModelTrafoStack
-                        
-            writeBuffers        = ro.WriteBuffers
-                             
-            scope               = ro
-            final               = []
-        }
-
-    let create() =
-        Ag.getContext() |> ofScope
-        
-
 [<AbstractClass>]
 type Air<'a>() =
     abstract member RunUnit : byref<AirState> -> unit
@@ -130,6 +93,82 @@ module ``Air Builder`` =
             }
 
     let air = AirBuilder()
+
+    type AirShaderBuilder() =
+        inherit EffectBuilder()
+
+        member x.Run(f : unit -> IMod<list<FShadeEffect>>) =
+            let surface = 
+                f() |> Mod.map (fun effects ->
+                    effects
+                        |> FShade.SequentialComposition.compose
+                        |> FShadeSurface
+                        :> ISurface
+                )
+            { new Air<unit>() with
+                member x.RunUnit(state) =
+                    state <- { state with surface = surface }
+            }
+
+    let internal airShader = AirShaderBuilder()
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module AirState =
+    open Aardvark.SceneGraph.Semantics
+    let private reader (f : AirState -> 'a) = 
+        { new Air<'a>() with
+            member x.Run(state) = f state
+        }
+
+    let ofScope (scope : Ag.Scope) = 
+        let ro = RenderObject.ofScope scope
+
+
+        {
+            isActive            = ro.IsActive
+            drawCallInfos       = ro.DrawCallInfos
+            mode                = ro.Mode
+            surface             = ro.Surface
+                              
+            depthTest           = ro.DepthTest
+            cullMode            = ro.CullMode
+            blendMode           = ro.BlendMode
+            fillMode            = ro.FillMode
+            stencilMode         = ro.StencilMode
+                              
+            indices             = ro.Indices
+            instanceAttributes  = Map.empty
+            vertexAttributes    = Map.empty
+                              
+            uniforms            = Map.empty
+            trafos              = scope?ModelTrafoStack
+                        
+            writeBuffers        = ro.WriteBuffers
+                             
+            scope               = ro
+            final               = []
+        }
+
+    let create() =
+        Ag.getContext() |> ofScope
+
+    let isActive = reader (fun s -> s.isActive)
+    let mode = reader (fun s -> s.mode)
+    let surface = reader (fun s -> s.surface)
+    let depthTest = reader (fun s -> s.depthTest)
+    let cullMode = reader (fun s -> s.cullMode)
+    let blendMode = reader (fun s -> s.blendMode)
+    let fillMode = reader (fun s -> s.fillMode)
+    let stencilMode = reader (fun s -> s.stencilMode)
+    let indices = reader (fun s -> s.indices)
+    let instanceAttributes = reader (fun s -> s.instanceAttributes)
+    let vertexAttributes = reader (fun s -> s.vertexAttributes)
+    let uniforms = reader (fun s -> s.uniforms)
+    let trafos = reader (fun s -> s.trafos)
+    let writeBuffers = reader (fun s -> s.writeBuffers)
+    let scope = reader (fun s -> s.scope)
+        
 
 type private AirAttributeProvider(local : Map<Symbol, BufferView>, inh : IAttributeProvider) =
     interface IAttributeProvider with
@@ -490,6 +529,8 @@ type Air private() =
         let surf = FShadeSurface (FShade.SequentialComposition.compose l) :> ISurface
         modify (fun s -> { s with surface = Mod.constant surf })
 
+    static member BindShader = airShader
+
 
     // ================================================================================================================
     // DepthTest
@@ -499,6 +540,7 @@ type Air private() =
 
     static member DepthTest(mode : DepthTestMode) =
         modify (fun s -> { s with depthTest = Mod.constant mode })
+
 
     // ================================================================================================================
     // CullMode
