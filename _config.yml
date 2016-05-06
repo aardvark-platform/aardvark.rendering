@@ -14,7 +14,7 @@ url:              https://vrvis.github.io
 baseurl:          /aardvark.rendering
 
 author:
-  name:           'FsBlog'
+  name:           'VRVis'
   url:            
 
 paginate:         5
