@@ -1,0 +1,20 @@
+source https://api.nuget.org/v3/index.json
+source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
+
+nuget Aardvark.Base                        ~> 2.0.0
+nuget Aardvark.Base.Incremental            ~> 2.0.0
+nuget Aardvark.Base.FSharp                 ~> 2.0.0
+nuget Aardvark.Base.Essentials             ~> 2.0.0
+nuget Aardvark.Base.Rendering              ~> 2.1.0
+nuget Aardvark.Application.WinForms.GL     ~> 2.1.0
+nuget Aardvark.SceneGraph                  ~> 2.1.0
+nuget Aardvark.Rendering.NanoVg            ~> 2.1.0
+
+nuget FSharp.Formatting.CommandTool        ~> 2.14.2
+
+group Build
+content: none
+source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
+source https://api.nuget.org/v3/index.json
+
+github vrvis/Aardvark.Fake:customPaket
