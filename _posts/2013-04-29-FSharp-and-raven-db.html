@@ -1,0 +1,198 @@
+---
+layout: page
+title: F# and Raven DB
+---
+
+<p>Ok so I have blogged about these to before. Previously, F# didn't have brilliant support for Linq. F# Expressions couldn't <code>easily</code> be 
+converted to the Linq expression trees that the RavenDB API required. This caused somewhat of a mis-match between the two which made 
+Raven difficult but not impossible to use from F#. My previous blog introduced a library  which is available for Raven clients prior 
+to version 2.0, to bridge this gap, and tried to make Raven more natural to use from F#. However as of Raven 2.0 this library has 
+been removed. The reasons are explained <a href="https://groups.google.com/forum/?fromgroups=#!searchin/ravendb/fsharp/ravendb/Zv3bwF4Y07M/qsCDbP9VKKkJ">here</a>. I don't 
+disagree with the reasons ayende cut the support, I wouldn't want to support something I had little knowledge of either. 
+However things have changed.... :)</p>
+
+<h2>The advent F# 3 and query expressions</h2>
+
+<p>So we are now in the era of F# 3.0 and things have changed somewhat. F# is now truly in the data era... Information Rich programming is an 
+awesome feature of F# manifested in the form of <code>Type Providers</code> and <code>Query Expressions</code>. If you haven't read about or don't know what 
+type providers are then I encourage you to check them out <a href="http://msdn.microsoft.com/en-us/library/hh156509.aspx">here</a>. Type providers are 
+not really applicable for use with RavenDB see it is schemaless so for the rest of thispost we will focus on <code>Query Expressions</code>. It is this 
+feature that means the gap between Linq and F# no longer exists. If you are familiar with</p>
+
+<table class="pre"><tr><td><pre lang="csharp"><span class="k">var</span> result <span class="o">=</span> 
+    (<span class="k">from</span> x <span class="k">in</span> xs <span class="k">do</span>
+     <span class="k">where</span> x.Published <span class="o">&gt;</span><span class="o">=</span> someDate
+     <span class="k">select</span> x.Name).ToArray()</pre></td></tr></table>
+
+<p>then the query expression syntax shouldn't feel that different,</p>
+
+<table class="pre"><tr><td class="lines"><pre class="fssnip">
+<span class="l">1: </span>
+<span class="l">2: </span>
+<span class="l">3: </span>
+<span class="l">4: </span>
+<span class="l">5: </span>
+<span class="l">6: </span>
+</pre>
+</td>
+<td class="snippet"><pre class="fssnip">
+<span class="k">let</span> <span class="i">publishedOn</span> <span class="i">date</span> <span class="i">xs</span> <span class="o">=</span>
+    <span onmouseout="hideTip(event, 'fs25', 55)" onmouseover="showTip(event, 'fs25', 55)" class="i">query</span> {
+           <span class="k">for</span> <span class="i">x</span> <span class="k">in</span> <span class="i">xs</span> <span class="k">do</span>
+           <span class="i">where</span> (<span class="i">x</span><span class="o">.</span><span class="i">Published</span> <span class="o">&gt;</span><span class="o">=</span> <span class="i">date</span>)
+           <span class="i">select</span> <span class="i">x</span><span class="o">.</span><span class="i">Title</span>
+      } <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs26', 56)" onmouseover="showTip(event, 'fs26', 56)" class="i">Seq</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs27', 57)" onmouseover="showTip(event, 'fs27', 57)" class="i">toArray</span></pre>
+</td>
+</tr>
+</table>
+
+<h2>So What about RavenDB?</h2>
+
+<p>Using RavenDB from C# is well documented and things are not that different when using it from F#. The in's and out's are well known and lets 
+face it the API is your safety net. It doesn't let you kill yourself, in fact you have to try very hard to actually do anything really bad in 
+RavenDB. This is I think the best feature of RavenDB.</p>
+
+<p>So, what are the things that we need to be aware of when using RavenDB from F#? First things first, initializing the document store. This can 
+be done pretty much the same as in C#</p>
+
+<table class="pre"><tr><td class="lines"><pre class="fssnip">
+<span class="l">1: </span>
+</pre>
+</td>
+<td class="snippet"><pre class="fssnip">
+<span class="k">let</span> <span class="i">store</span> <span class="o">=</span> <span class="k">new</span> <span class="i">DocumentStore</span>(<span class="i">Url</span> <span class="o">=</span> <span class="s">&quot;</span><span class="s">http</span><span class="s">:</span><span class="s">/</span><span class="s">/</span><span class="s">localhost</span><span class="s">:</span><span class="s">8080</span><span class="s">&quot;</span>)</pre>
+</td>
+</tr>
+</table>
+
+<p>and this is all well and good if we just use straight forward POCO objects. But what if we want to use F# record or Union types? We need to make a few simple changes.
+Lets first consider F# record types, all we need to do here is declare the <code>Id</code> property as mutable.</p>
+
+<table class="pre"><tr><td class="lines"><pre class="fssnip">
+<span class="l">1: </span>
+<span class="l">2: </span>
+<span class="l">3: </span>
+<span class="l">4: </span>
+<span class="l">5: </span>
+<span class="l">6: </span>
+</pre>
+</td>
+<td class="snippet"><pre class="fssnip">
+<span class="k">type</span> <span class="i">BlogPost</span> <span class="o">=</span> {
+    <span class="k">mutable</span> <span class="i">Id</span> <span class="o">:</span> <span onmouseout="hideTip(event, 'fs14', 52)" onmouseover="showTip(event, 'fs14', 52)" class="i">string</span>
+    <span class="i">Title</span> <span class="o">:</span> <span onmouseout="hideTip(event, 'fs14', 53)" onmouseover="showTip(event, 'fs14', 53)" class="i">string</span>
+    <span class="i">Body</span> <span class="o">:</span> <span onmouseout="hideTip(event, 'fs14', 54)" onmouseover="showTip(event, 'fs14', 54)" class="i">string</span>
+    <span class="i">Published</span> <span class="o">:</span> <span class="i">DateTime</span>
+}</pre>
+</td>
+</tr>
+</table>
+
+<p>Simple eh?, but what about Union types, Maps, F# lists? These are a little more complex as Json.NET doesn't do the correct thing to serialize these out of the box. However Json.NET and the 
+internalised Raven counterpart does have an extension point and a UnionTypeConverter or MapTypeConverter as Json.NET implementations can be found <a href="https://github.com/colinbull/FSharp.Enterprise/blob/develop/src/FSharp.Enterprise/Json.fs">here</a>. To use this we need to modify our
+document store setup a little to include the converter.</p>
+
+<table class="pre"><tr><td class="lines"><pre class="fssnip">
+<span class="l">1: </span>
+<span class="l">2: </span>
+<span class="l">3: </span>
+<span class="l">4: </span>
+<span class="l">5: </span>
+<span class="l">6: </span>
+<span class="l">7: </span>
+<span class="l">8: </span>
+</pre>
+</td>
+<td class="snippet"><pre class="fssnip">
+<span class="k">let</span> <span class="i">customisedStore</span> <span class="o">=</span>
+    <span class="k">let</span> <span class="i">customiseSerialiser</span> (<span class="i">s</span> <span class="o">:</span> <span class="i">Raven</span><span class="o">.</span><span class="i">Imports</span><span class="o">.</span><span class="i">Newtonsoft</span><span class="o">.</span><span class="i">Json</span><span class="o">.</span><span class="i">JsonSerializer</span>) <span class="o">=</span>
+        <span class="i">s</span><span class="o">.</span><span class="i">Converters</span><span class="o">.</span><span class="i">Add</span>(<span class="k">new</span> <span class="i">Json</span><span class="o">.</span><span class="i">MapTypeConverter</span>())
+        <span class="i">s</span><span class="o">.</span><span class="i">Converters</span><span class="o">.</span><span class="i">Add</span>(<span class="k">new</span> <span class="i">Json</span><span class="o">.</span><span class="i">UnionTypeConverter</span>())
+
+    <span class="k">let</span> <span class="i">store</span> <span class="o">=</span> <span class="k">new</span> <span class="i">DocumentStore</span>(<span class="i">Url</span><span class="o">=</span><span class="s">&quot;</span><span class="s">http</span><span class="s">:</span><span class="s">/</span><span class="s">/</span><span class="s">localhost</span><span class="s">:</span><span class="s">8080</span><span class="s">&quot;</span>)
+    <span class="i">store</span><span class="o">.</span><span class="i">Conventions</span><span class="o">.</span><span class="i">CustomizeJsonSerializer</span> <span class="o">&lt;-</span> (<span class="k">fun</span> <span class="i">s</span> <span class="k">-&gt;</span> (<span class="i">customiseSerialiser</span> <span class="i">s</span>))
+    <span class="i">store</span><span class="o">.</span><span class="i">Initialize</span>()</pre>
+</td>
+</tr>
+</table>
+
+<h2>Querying raven</h2>
+
+<p>With the document store setup we can now start querying Raven. As with any Raven query we need to create a session from our document store, 
+then we need to create the query.</p>
+
+<table class="pre"><tr><td class="lines"><pre class="fssnip">
+<span class="l">1: </span>
+<span class="l">2: </span>
+<span class="l">3: </span>
+<span class="l">4: </span>
+<span class="l">5: </span>
+<span class="l">6: </span>
+<span class="l">7: </span>
+</pre>
+</td>
+<td class="snippet"><pre class="fssnip">
+<span class="k">let</span> <span class="i">getPostsAsOf</span> <span class="i">asOfDate</span> <span class="o">=</span> 
+    <span class="k">use</span> <span class="i">session</span> <span class="o">=</span> <span class="i">customisedStore</span><span class="o">.</span><span class="i">OpenSession</span>()
+    <span onmouseout="hideTip(event, 'fs25', 58)" onmouseover="showTip(event, 'fs25', 58)" class="i">query</span> {
+        <span class="k">for</span> <span class="i">post</span> <span class="k">in</span> <span class="i">session</span><span class="o">.</span><span class="i">Query</span><span class="o">&lt;</span><span class="i">BlogPost</span><span class="o">&gt;</span>() <span class="k">do</span>
+        <span class="i">where</span> (<span class="i">post</span><span class="o">.</span><span class="i">Published</span> <span class="o">&gt;</span><span class="o">=</span> <span class="i">asOfDate</span>)
+        <span class="i">select</span> <span class="i">post</span>
+    }</pre>
+</td>
+</tr>
+</table>
+
+<p>The above creates a query that is pending execution. To execute this we can run,</p>
+
+<table class="pre"><tr><td class="lines"><pre class="fssnip">
+<span class="l">1: </span>
+<span class="l">2: </span>
+<span class="l">3: </span>
+</pre>
+</td>
+<td class="snippet"><pre class="fssnip">
+<span class="k">let</span> <span class="i">posts</span> <span class="o">=</span> 
+    <span class="i">getPostsAsOf</span> (<span class="i">DateTime</span><span class="o">.</span><span class="i">Now</span><span class="o">.</span><span class="i">AddDays</span>(<span class="o">-</span><span class="n">2.</span>)<span class="o">.</span><span class="i">Date</span>) 
+    <span class="o">|&gt;</span> <span onmouseout="hideTip(event, 'fs26', 59)" onmouseover="showTip(event, 'fs26', 59)" class="i">Seq</span><span class="o">.</span><span onmouseout="hideTip(event, 'fs27', 60)" onmouseover="showTip(event, 'fs27', 60)" class="i">toArray</span></pre>
+</td>
+</tr>
+</table>
+
+<p>this will give us an array of BlogPosts published from 2 days ago. Notice we had to enumerate to an array for the query to actually be executed. This is the same execution semantics
+as C#; and it is important to realise that there isn't really any magic going on in the world of F#, it is still just a .NET lanuguage it still compiles to CIL and is fully
+interoperable with any other .NET library.</p>
+
+<h2>Indexes</h2>
+
+<p>OK so things haven't got much better here in terms of static indexes. Basically you still need to define them in C# and then you can extend the document initialization process by
+including the assembly that contains the index definitions. However in Raven 2.0, dynamic indexes and promotion to permanent indexes have been massively improved, which reduces the need to create static indexes.</p>
+
+
+<div class="tip" id="fs1">namespace System</div>
+<div class="tip" id="fs2">namespace System.Collections</div>
+<div class="tip" id="fs3">namespace System.Collections.Generic</div>
+<div class="tip" id="fs4">namespace System.Reflection</div>
+<div class="tip" id="fs5">namespace Microsoft</div>
+<div class="tip" id="fs6">namespace Microsoft.FSharp</div>
+<div class="tip" id="fs7">namespace Microsoft.FSharp.Reflection</div>
+<div class="tip" id="fs8">namespace System.Text</div>
+<div class="tip" id="fs9">namespace System.IO</div>
+<div class="tip" id="fs10">val ignore : value:&#39;T -&gt; unit<br /><br />Full name: Microsoft.FSharp.Core.Operators.ignore</div>
+<div class="tip" id="fs11">val typeof&lt;&#39;T&gt; : System.Type<br /><br />Full name: Microsoft.FSharp.Core.Operators.typeof</div>
+<div class="tip" id="fs12">type IEnumerable =<br />&#160;&#160;member GetEnumerator : unit -&gt; IEnumerator<br /><br />Full name: System.Collections.IEnumerable</div>
+<div class="tip" id="fs13">type obj = System.Object<br /><br />Full name: Microsoft.FSharp.Core.obj</div>
+<div class="tip" id="fs14">Multiple items<br />val string : value:&#39;T -&gt; string<br /><br />Full name: Microsoft.FSharp.Core.Operators.string<br /><br />--------------------<br />type string = System.String<br /><br />Full name: Microsoft.FSharp.Core.string</div>
+<div class="tip" id="fs15">module Array<br /><br />from Microsoft.FSharp.Collections</div>
+<div class="tip" id="fs16">val find : predicate:(&#39;T -&gt; bool) -&gt; array:&#39;T [] -&gt; &#39;T<br /><br />Full name: Microsoft.FSharp.Collections.Array.find</div>
+<div class="tip" id="fs17">val empty&lt;&#39;T&gt; : &#39;T []<br /><br />Full name: Microsoft.FSharp.Collections.Array.empty</div>
+<div class="tip" id="fs18">val typedefof&lt;&#39;T&gt; : System.Type<br /><br />Full name: Microsoft.FSharp.Core.Operators.typedefof</div>
+<div class="tip" id="fs19">Multiple items<br />module Map<br /><br />from Microsoft.FSharp.Collections<br /><br />--------------------<br />type Map&lt;&#39;Key,&#39;Value (requires comparison)&gt; =<br />&#160;&#160;interface IEnumerable<br />&#160;&#160;interface IComparable<br />&#160;&#160;interface IEnumerable&lt;KeyValuePair&lt;&#39;Key,&#39;Value&gt;&gt;<br />&#160;&#160;interface ICollection&lt;KeyValuePair&lt;&#39;Key,&#39;Value&gt;&gt;<br />&#160;&#160;interface IDictionary&lt;&#39;Key,&#39;Value&gt;<br />&#160;&#160;new : elements:seq&lt;&#39;Key * &#39;Value&gt; -&gt; Map&lt;&#39;Key,&#39;Value&gt;<br />&#160;&#160;member Add : key:&#39;Key * value:&#39;Value -&gt; Map&lt;&#39;Key,&#39;Value&gt;<br />&#160;&#160;member ContainsKey : key:&#39;Key -&gt; bool<br />&#160;&#160;override Equals : obj -&gt; bool<br />&#160;&#160;member Remove : key:&#39;Key -&gt; Map&lt;&#39;Key,&#39;Value&gt;<br />&#160;&#160;...<br /><br />Full name: Microsoft.FSharp.Collections.Map&lt;_,_&gt;<br /><br />--------------------<br />new : elements:seq&lt;&#39;Key * &#39;Value&gt; -&gt; Map&lt;&#39;Key,&#39;Value&gt;</div>
+<div class="tip" id="fs20">type Array =<br />&#160;&#160;member Clone : unit -&gt; obj<br />&#160;&#160;member CopyTo : array:Array * index:int -&gt; unit + 1 overload<br />&#160;&#160;member GetEnumerator : unit -&gt; IEnumerator<br />&#160;&#160;member GetLength : dimension:int -&gt; int<br />&#160;&#160;member GetLongLength : dimension:int -&gt; int64<br />&#160;&#160;member GetLowerBound : dimension:int -&gt; int<br />&#160;&#160;member GetUpperBound : dimension:int -&gt; int<br />&#160;&#160;member GetValue : params indices:int[] -&gt; obj + 7 overloads<br />&#160;&#160;member Initialize : unit -&gt; unit<br />&#160;&#160;member IsFixedSize : bool<br />&#160;&#160;...<br /><br />Full name: System.Array</div>
+<div class="tip" id="fs21">System.Array.CreateInstance(elementType: System.Type, params lengths: int64 []) : System.Array<br />System.Array.CreateInstance(elementType: System.Type, params lengths: int []) : System.Array<br />System.Array.CreateInstance(elementType: System.Type, length: int) : System.Array<br />System.Array.CreateInstance(elementType: System.Type, lengths: int [], lowerBounds: int []) : System.Array<br />System.Array.CreateInstance(elementType: System.Type, length1: int, length2: int) : System.Array<br />System.Array.CreateInstance(elementType: System.Type, length1: int, length2: int, length3: int) : System.Array</div>
+<div class="tip" id="fs22">System.Array.Copy(sourceArray: System.Array, destinationArray: System.Array, length: int64) : unit<br />System.Array.Copy(sourceArray: System.Array, destinationArray: System.Array, length: int) : unit<br />System.Array.Copy(sourceArray: System.Array, sourceIndex: int64, destinationArray: System.Array, destinationIndex: int64, length: int64) : unit<br />System.Array.Copy(sourceArray: System.Array, sourceIndex: int, destinationArray: System.Array, destinationIndex: int, length: int) : unit</div>
+<div class="tip" id="fs23">val box : value:&#39;T -&gt; obj<br /><br />Full name: Microsoft.FSharp.Core.Operators.box</div>
+<div class="tip" id="fs24">val empty&lt;&#39;Key,&#39;T (requires comparison)&gt; : Map&lt;&#39;Key,&#39;T&gt; (requires comparison)<br /><br />Full name: Microsoft.FSharp.Collections.Map.empty</div>
+<div class="tip" id="fs25">val query : Linq.QueryBuilder<br /><br />Full name: Microsoft.FSharp.Core.ExtraTopLevelOperators.query</div>
+<div class="tip" id="fs26">module Seq<br /><br />from Microsoft.FSharp.Collections</div>
+<div class="tip" id="fs27">val toArray : source:seq&lt;&#39;T&gt; -&gt; &#39;T []<br /><br />Full name: Microsoft.FSharp.Collections.Seq.toArray</div>

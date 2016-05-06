@@ -1,0 +1,23 @@
+# Dependencies
+markdown:         redcarpet
+highlighter:      pygments
+
+# Permalinks
+permalink:        pretty
+relative_permalinks: true
+
+# Setup
+title:            'FsBlog'
+tagline:          'Blogging FSharp'
+description:      ''
+url:              https://github.com/colinbull/FsBlog
+baseurl:          /
+
+author:
+  name:           'FsBlog'
+  url:            
+
+paginate:         5
+
+github:
+  repo:           https://github.com/colinbull/FsBlog
