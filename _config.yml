@@ -7,10 +7,10 @@ permalink:        pretty
 relative_permalinks: true
 
 # Setup
-title:            'FsBlog'
-tagline:          'Blogging FSharp'
+title:            'Aardvark.Rendering'
+tagline:          'rendering things'
 description:      ''
-url:              https://github.com/colinbull/FsBlog
+url:              https://vrvis.github.io/aardvark.rendering
 baseurl:          /
 
 author:
@@ -20,4 +20,4 @@ author:
 paginate:         5
 
 github:
-  repo:           https://github.com/colinbull/FsBlog
+  repo:           https://github.com/vrvis/aardvark.rendering
