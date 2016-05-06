@@ -4,7 +4,7 @@ source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 nuget Aardvark.Base.Incremental          ~> 2.0.5
 nuget Aardvark.Base.Runtime              ~> 2.0.5
                                          
-nuget FShade                             ~> 2.0.1
+nuget FShade                             ~> 2.0.5
 nuget GLSLangSharp                       ~> 0.2.3
      
 nuget Poly2Tri                           ~> 1.0.1	 
