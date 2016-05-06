@@ -15,16 +15,9 @@ if errorlevel 1 (
 
 cls
 
+.paket\paket.exe restore
 
-SET FSI_PATH=packages\build\FAKE\tools\Fake.exe
-
-IF exist boot.fsx ( 
-    "%FSI_PATH%" "boot.fsx" 
-    del "boot.fsx"
-	.paket\paket.exe install
-) ELSE (
-	"%FSI_PATH%" "build.fsx" Dummy --fsiargs build.fsx %* 
-)
+packages\FSharp.Formatting.CommandTool\tools\fsformatting.exe literate --processDirectory --inputDirectory src --outputDirectory output
 
 
 

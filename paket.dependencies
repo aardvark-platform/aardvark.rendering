@@ -10,7 +10,7 @@ nuget Aardvark.Application.WinForms.GL     ~> 2.1.0
 nuget Aardvark.SceneGraph                  ~> 2.1.0
 nuget Aardvark.Rendering.NanoVg            ~> 2.1.0
 
-nuget FSharp.Formatting.CommandTool        ~> 2.14.2
+nuget FSharp.Formatting.CommandTool        ~> 2.13.5
 
 group Build
 content: none
