@@ -1,5 +1,5 @@
 NUGET
-  remote: https://nuget.org/api/v23
+  remote: https://nuget.org/api/v3
   specs:
     FAKE (3.8.5)
     FSharpx.TypeProviders.Xaml (1.8.41)
