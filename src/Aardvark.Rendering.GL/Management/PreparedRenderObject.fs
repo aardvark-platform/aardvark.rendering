@@ -379,14 +379,18 @@ type ResourceManagerExtensions private() =
         let colorMasks =
             match rj.WriteBuffers with
                 | Some b ->
-                    let masks = Array.zeroCreate attachmentCount
-                    for (index, (sem, att)) in attachments do
-                        if Set.contains sem b then
-                            masks.[index] <- V4i.IIII
-                        else
-                            masks.[index] <- V4i.OOOO
+                    let isAll = fboSignature.ColorAttachments |> Map.toSeq |> Seq.forall (fun (_,(sem,_)) -> Set.contains sem b)
+                    if isAll then
+                        None
+                    else
+                        let masks = Array.zeroCreate attachmentCount
+                        for (index, (sem, att)) in attachments do
+                            if Set.contains sem b then
+                                masks.[index] <- V4i.IIII
+                            else
+                                masks.[index] <- V4i.OOOO
 
-                    Some (Array.toList masks)
+                        Some (Array.toList masks)
                 | _ ->
                     None
 

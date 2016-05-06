@@ -92,28 +92,48 @@ module TrafoSemantics =
                     cache.[key] <- strong.Weak
                     strong
 
+    let mulCache = BinaryWeakCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
+    let invCache = UnaryWeakCache (Mod.map (fun (t : Trafo3d) -> t.Inverse))
 
+    let (<*>) a b = 
+        if a = rootTrafo then b
+        elif b = rootTrafo then a
+        else
+            if System.Object.ReferenceEquals(a,null) then 
+                Log.warn "mul null"
+                System.Diagnostics.Debugger.Break()
+            if System.Object.ReferenceEquals(b,null) then 
+                Log.warn "mul null"
+                System.Diagnostics.Debugger.Break()  
+            mulCache.Invoke a b
+
+    let inverse t = invCache.Invoke t
+
+        
+
+
+    let flattenStack (stack : list<IMod<Trafo3d>>) =
+        let rec foldConstants (l : list<IMod<Trafo3d>>) =
+            match l with
+                | [] -> []
+                | a::b::rest when a.IsConstant && b.IsConstant ->
+                    let n = (Mod.constant (a.GetValue() * b.GetValue()))::rest
+                    foldConstants n
+                | a::rest ->
+                    a::foldConstants rest
+
+        let s = foldConstants stack
+
+        match s with
+            | [] -> rootTrafo
+            | [a] -> a
+            | [a;b] -> a <*> b
+            | _ -> 
+                // TODO: add a better logic here
+                s |> List.fold (<*>) rootTrafo
 
     [<Semantic>]
     type Trafos() =
-        let mulCache = BinaryWeakCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
-        let invCache = UnaryWeakCache (Mod.map (fun (t : Trafo3d) -> t.Inverse))
-
-        let (<*>) a b = 
-            if a = rootTrafo then b
-            elif b = rootTrafo then a
-            else
-                if System.Object.ReferenceEquals(a,null) then 
-                    Log.warn "mul null"
-                    System.Diagnostics.Debugger.Break()
-                if System.Object.ReferenceEquals(b,null) then 
-                    Log.warn "mul null"
-                    System.Diagnostics.Debugger.Break()  
-                mulCache.Invoke a b
-
-        let inverse t = invCache.Invoke t
-
-        
 
 
         member x.ModelTrafoStack(e : Root<ISg>) =
@@ -125,25 +145,7 @@ module TrafoSemantics =
 
         member x.ModelTrafo(e : ISg) =
             let stack = e.ModelTrafoStack
-
-            let rec foldConstants (l : list<IMod<Trafo3d>>) =
-                match l with
-                    | [] -> []
-                    | a::b::rest when a.IsConstant && b.IsConstant ->
-                        let n = (Mod.constant (a.GetValue() * b.GetValue()))::rest
-                        foldConstants n
-                    | a::rest ->
-                        a::foldConstants rest
-
-            let s = foldConstants stack
-
-            match s with
-                | [] -> rootTrafo
-                | [a] -> a
-                | [a;b] -> a <*> b
-                | _ -> 
-                    // TODO: add a better logic here
-                    s |> List.fold (<*>) rootTrafo
+            flattenStack stack
 
         member x.ViewTrafo(v : Sg.ViewTrafoApplicator) =
             v.Child?ViewTrafo <- v.ViewTrafo

@@ -49,22 +49,22 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, ren
             GL.Check "could not bind framebuffer"
             let attachmentCount = fbo.Attachments.Count
             let drawBuffers = Array.init attachmentCount (fun i -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
-            if handle <> 0 then
-                
-                for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
-                    match Map.tryFind sem desc.colorWrite with
-                     | Some v -> 
-                         GL.ColorMask(
+            GL.DepthMask(true)
+
+            for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
+                match Map.tryFind sem desc.colorWrite with
+                    | Some v -> 
+                        GL.ColorMask(
                             index, 
                             (v &&& ColorWriteMask.Red)   <> ColorWriteMask.None, 
                             (v &&& ColorWriteMask.Green) <> ColorWriteMask.None,
                             (v &&& ColorWriteMask.Blue)  <> ColorWriteMask.None, 
                             (v &&& ColorWriteMask.Alpha) <> ColorWriteMask.None
                         )
-                     | None -> GL.ColorMask(index, true, true, true, true)
+                    | None -> GL.ColorMask(index, true, true, true, true)
 
-                GL.DrawBuffers(drawBuffers.Length, drawBuffers)
-                GL.Check "DrawBuffers errored"
+            GL.DrawBuffers(drawBuffers.Length, drawBuffers)
+            GL.Check "DrawBuffers errored"
         elif handle <> 0 then
             failwithf "cannot render to texture on this OpenGL driver"
 
@@ -623,6 +623,12 @@ module YetAnotherRenderTaskImpl =
         let mutable frameId = 0UL
         let mutable stats = FrameStatistics.Zero
 
+        let drawBuffers = 
+            fboSignature.ColorAttachments 
+                |> Map.toList 
+                |> List.map (fun (i,_) -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
+                |> List.toArray
+
         let pushDebugOutput() =
             let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
             let c = config.GetValue this
@@ -654,25 +660,27 @@ module YetAnotherRenderTaskImpl =
             if ExecutionContext.framebuffersSupported then
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
-                let attachmentCount = fbo.Attachments.Count
-                let drawBuffers = Array.init attachmentCount (fun i -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
-                if handle <> 0 then
-                
-                    for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
-                        match Map.tryFind sem desc.colorWrite with
-                         | Some v -> 
-                             GL.ColorMask(
+        
+                GL.DrawBuffers(drawBuffers.Length, drawBuffers)
+                GL.Check "DrawBuffers errored"
+
+
+                GL.DepthMask(true)
+
+                for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
+                    match Map.tryFind sem desc.colorWrite with
+                        | Some v -> 
+                            GL.ColorMask(
                                 index, 
                                 (v &&& ColorWriteMask.Red)   <> ColorWriteMask.None, 
                                 (v &&& ColorWriteMask.Green) <> ColorWriteMask.None,
                                 (v &&& ColorWriteMask.Blue)  <> ColorWriteMask.None, 
                                 (v &&& ColorWriteMask.Alpha) <> ColorWriteMask.None
                             )
-                         | None -> 
+                        | None -> 
                             GL.ColorMask(index, true, true, true, true)
 
-                    GL.DrawBuffers(drawBuffers.Length, drawBuffers)
-                    GL.Check "DrawBuffers errored"
+
             elif handle <> 0 then
                 failwithf "cannot render to texture on this OpenGL driver"
 

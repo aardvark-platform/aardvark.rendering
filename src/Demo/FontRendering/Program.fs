@@ -178,11 +178,58 @@ let main argv =
         "* second *item*\r\n" 
 
 
-    let quad =
-        geometry
-            |> Sg.ofIndexedGeometry
-            |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect ]
-            |> Sg.scale 5.0
+    let quad = 
+        Sg.air { 
+            do! Air.DepthTest    DepthTestMode.LessOrEqual
+            do! Air.CullMode     CullMode.None
+            do! Air.BlendMode    BlendMode.None
+            do! Air.FillMode     FillMode.Fill
+            do! Air.StencilMode  StencilMode.Disabled
+
+
+            do! Air.BindEffect [
+                    DefaultSurfaces.trafo                   |> toEffect
+                    DefaultSurfaces.constantColor C4f.Red   |> toEffect
+                    DefaultSurfaces.diffuseTexture          |> toEffect
+                ]
+
+            do! Air.BindUniforms [
+                    "Hugo", uniformValue 10 
+                    "Sepp", uniformValue V3d.Zero
+                ]
+
+            do! Air.BindTexture(
+                    DefaultSemantic.DiffuseColorTexture, 
+                    @"E:\Development\WorkDirectory\DataSVN\pattern.jpg"
+                )
+
+            do! Air.BindVertexBuffers [
+                    DefaultSemantic.Positions,                  attValue [|V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO|]
+                    DefaultSemantic.DiffuseColorCoordinates,    attValue [|V2f.OO; V2f.IO; V2f.II; V2f.OI|]
+                ]
+
+            do! Air.BindIndexBuffer [| 
+                    0;1;2
+                    0;2;3 
+                |]
+        
+            do! Air.WriteBuffers [
+                    DefaultSemantic.Depth
+                    DefaultSemantic.Colors
+                ]
+            do! Air.Toplogy IndexedGeometryMode.TriangleList
+
+            do! Air.PushTrafo (Trafo3d.Scale 5.0)
+
+            do! Air.DrawInstanced(1, 6)
+            do! Air.PushTrafo (Trafo3d.Translation(0.0,0.0,1.0/5.0))
+            do! Air.DrawInstanced(1, 6)
+            do! Air.PopTrafo()
+
+            do! Air.PopTrafo()
+
+        }
+
 
     let mode = Mod.init FillMode.Fill
     let font = new Font("Comic Sans")

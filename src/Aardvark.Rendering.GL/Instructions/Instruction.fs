@@ -179,4 +179,4 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
         Instruction(InstructionCode.DepthMask, [|enabled :> obj|])
 
     static member ColorMask (index : int) (r : int) (g : int) (b : int) (a : int) =
-        Instruction(InstructionCode.DepthMask, [|index :> obj; r :> obj; g :> obj; b :> obj; a :> obj|])
+        Instruction(InstructionCode.ColorMask, [|index :> obj; r :> obj; g :> obj; b :> obj; a :> obj|])
