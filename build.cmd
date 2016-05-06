@@ -1,23 +1,7 @@
 @echo off
-SETLOCAL
-PUSHD %~dp0
+call .paket\paket.exe restore
+call packages\FSharp.Formatting.CommandTool\tools\fsformatting.exe literate --processDirectory --lineNumbers true --inputDirectory src --outputDirectory _posts
 
-
-.paket\paket.bootstrapper.exe
-if errorlevel 1 (
-  exit /b %errorlevel%
-)
-
-.paket\paket.exe restore group Build
-if errorlevel 1 (
-  exit /b %errorlevel%
-)
-
-cls
-
-.paket\paket.exe restore
-
-packages\FSharp.Formatting.CommandTool\tools\fsformatting.exe literate --processDirectory --inputDirectory src --outputDirectory output
-
-
-
+git add --all .
+git commit -a -m $*
+REM git push
