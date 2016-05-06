@@ -10,8 +10,8 @@ relative_permalinks: false
 title:            'Aardvark.Rendering'
 tagline:          'rendering things'
 description:      ''
-url:              https://vrvis.github.io/aardvark.rendering
-baseurl:          /
+url:              https://vrvis.github.io
+baseurl:          /aardvark.rendering
 
 author:
   name:           'FsBlog'
