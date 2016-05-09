@@ -373,8 +373,9 @@ type ResourceManagerExtensions private() =
                                 None
                     )
                 ) |> Map.ofList
+
         let attachments = fboSignature.ColorAttachments |> Map.toList
-        let attachmentCount = 1 + (attachments |> List.map (fun (i,_) -> i) |> List.max)
+        let attachmentCount = if attachments.Length > 0 then 1 + (attachments |> List.map (fun (i,_) -> i) |> List.max) else 0
 
         let colorMasks =
             match rj.WriteBuffers with
