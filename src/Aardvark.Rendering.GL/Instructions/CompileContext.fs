@@ -300,6 +300,8 @@ module ExecutionContext =
     /// </summary>
     let debug(i : Instruction) =
         run i
+        OpenTK.Graphics.OpenGL4.GL.Flush()
+        OpenTK.Graphics.OpenGL4.GL.Finish()
         let err = OpenGl.Unsafe.GetError() |> unbox<OpenTK.Graphics.OpenGL4.ErrorCode>
         if err <> OpenTK.Graphics.OpenGL4.ErrorCode.NoError then
             let str = sprintf "%A failed with code: %A" i err
@@ -326,3 +328,6 @@ module GLExtensionsPossiblyNotWorkingEverywhere =
                     | WaitSyncStatus.WaitFailed ->
                         Log.warn "[GL] wait failed"
                     | _ -> ()
+            else
+                GL.Flush()
+                GL.Finish()

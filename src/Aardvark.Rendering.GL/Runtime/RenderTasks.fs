@@ -661,8 +661,9 @@ module YetAnotherRenderTaskImpl =
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
         
-                GL.DrawBuffers(drawBuffers.Length, drawBuffers)
-                GL.Check "DrawBuffers errored"
+                if handle <> 0 then
+                    GL.DrawBuffers(drawBuffers.Length, drawBuffers)
+                    GL.Check "DrawBuffers errored"
 
 
                 GL.DepthMask(true)
@@ -1350,6 +1351,8 @@ module YetAnotherRenderTaskImpl =
                     stats <- stats + t.Run(x, output).Statistics
 
                 frameId <- frameId + 1UL
+
+                GL.Sync()
 
                 RenderingResult(output.framebuffer, stats)
             )
