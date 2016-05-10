@@ -63,8 +63,9 @@ type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, ren
                         )
                     | None -> GL.ColorMask(index, true, true, true, true)
 
-            GL.DrawBuffers(drawBuffers.Length, drawBuffers)
-            GL.Check "DrawBuffers errored"
+            if handle <> 0 then
+                GL.DrawBuffers(drawBuffers.Length, drawBuffers)
+                GL.Check "DrawBuffers errored"
         elif handle <> 0 then
             failwithf "cannot render to texture on this OpenGL driver"
 
@@ -661,8 +662,9 @@ module YetAnotherRenderTaskImpl =
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
         
-                GL.DrawBuffers(drawBuffers.Length, drawBuffers)
-                GL.Check "DrawBuffers errored"
+                if handle <> 0 then
+                    GL.DrawBuffers(drawBuffers.Length, drawBuffers)
+                    GL.Check "DrawBuffers errored"
 
 
                 GL.DepthMask(true)
@@ -1123,7 +1125,7 @@ module YetAnotherRenderTaskImpl =
 
         let dirtyBlocks = HashSet blocksWithContent
         
-        override x.InputChanged (o : IAdaptiveObject) =
+        override x.InputChanged (transaction : obj, o : IAdaptiveObject) =
             match blockTable.TryGetValue o with
                 | (true, dirty) -> lock dirtyBlocks (fun () -> dirtyBlocks.Add dirty |> ignore)
                 | _ -> ()
@@ -1198,7 +1200,7 @@ module YetAnotherRenderTaskImpl =
                     f |> Seq.sortBy (fun f -> f.BoundingBox.GetMinimalDistanceTo pos) |> Seq.toList
                     
 
-        override x.InputChanged(i : IAdaptiveObject) =
+        override x.InputChanged(transaction : obj, i : IAdaptiveObject) =
             match i with
                 | :? AdaptiveGLVMFragment as f -> lock dirtyFragments (fun () -> dirtyFragments.Add f |> ignore)
                 | _ -> ()

@@ -146,7 +146,7 @@ module DefaultCameraController =
                     let direction = 0.10 * (cam.Forward * df)
 
                     if abs v < 0.5 then
-                        transact (fun () -> Mod.change active false)
+                        Mod.changeAfterEvaluation active false
 
                     cam.WithLocation(cam.Location + direction)
 
