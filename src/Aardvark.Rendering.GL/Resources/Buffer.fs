@@ -539,13 +539,59 @@ module IndirectBufferExtensions =
             | _ -> 
                 failwith "IndirectBuffers must be ArrayBuffers atm."
 
+    /// repairs the buffer containing DrawCallInfos s.t. it matches the GL layout.
+    /// sadly this needs to be done since DrawArraysIndirectCommand is not a sub-range of
+    /// DrawElementsIndirectCommand. Therefore we need to exchange the 3rd and 4th fields
+    /// of every DrawCallInfo (FirstInstance and BaseVertex)
+    /// This function is executed after every write to the buffer (Create / Upload)
+    /// and assumes that the buffer is filled with DrawCallInfos
+    let private postProcessDrawCallBuffer (indexed : bool) (b : Buffer) =
+        let callCount = int b.SizeInBytes / sizeof<DrawCallInfo>
+
+        if indexed then
+            using b.Context.ResourceLock (fun _ ->
+                GL.BindBuffer(BufferTarget.ArrayBuffer, b.Handle)
+                GL.Check "could not bind buffer"
+
+                
+
+                let ptr = GL.MapBufferRange(BufferTarget.ArrayBuffer, 0n, b.SizeInBytes, BufferAccessMask.MapReadBit ||| BufferAccessMask.MapWriteBit)
+                if ptr = 0n then failwithf "[GL] could not map buffer"
+
+
+                let step = 5 //sizeof<DrawCallInfo> / sizeof<int>
+                let ptr : nativeptr<int> = NativePtr.ofNativeInt ptr
+
+                // swap the two last fields FirstInstance/BaseVertex (indices 3,4)
+                let mutable current = 3
+                let mutable next = current + 1
+                for i in 0..callCount-1 do
+                    let firstInstance = NativePtr.get ptr current
+                    let baseVertex = NativePtr.get ptr next
+                    NativePtr.set ptr current baseVertex
+                    NativePtr.set ptr next firstInstance
+
+                    current <- current + step
+                    next <- current + 1
+
+
+                GL.UnmapBuffer(BufferTarget.ArrayBuffer) |> ignore
+                GL.Check "could not unmap buffer"
+
+                GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
+                GL.Check "could not unbind buffer"
+
+            )
+
+        callCount
 
     type IndirectBuffer =
         class
             val mutable public Buffer : Buffer
             val mutable public Count : nativeptr<int>
-        
-            new(b, ptr) = { Buffer = b; Count = ptr }
+            val mutable public Stride : int
+
+            new(b, ptr, stride) = { Buffer = b; Count = ptr; Stride = stride }
         end 
 
     type Context with
@@ -555,16 +601,20 @@ module IndirectBufferExtensions =
             NativePtr.free buffer.Count
 
         member x.UploadIndirect(buffer : IndirectBuffer, indexed : bool, data : IBuffer) =
-            let data = getIndirectData indexed data
-            x.Upload(buffer.Buffer, data)
-            NativePtr.write buffer.Count data.Length
+            using x.ResourceLock (fun _ ->
+                x.Upload(buffer.Buffer, data)
+                let callCount = postProcessDrawCallBuffer indexed buffer.Buffer
+                NativePtr.write buffer.Count callCount
+            )
 
         member x.CreateIndirect(indexed : bool, data : IBuffer) =
-            let data = getIndirectData indexed data
-            let buffer = x.CreateBuffer(data)
-            let cnt = NativePtr.alloc 1
-            NativePtr.write cnt data.Length
-            IndirectBuffer(buffer, cnt)
+            using x.ResourceLock (fun _ ->
+                let buffer = x.CreateBuffer(data)
+                let callCount = postProcessDrawCallBuffer indexed buffer
+                let cnt = NativePtr.alloc 1
+                NativePtr.write cnt callCount
+                IndirectBuffer(buffer, cnt, sizeof<DrawCallInfo>)
+            )
 
 
 

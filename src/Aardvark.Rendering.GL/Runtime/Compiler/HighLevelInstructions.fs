@@ -224,9 +224,9 @@ module Instructions =
                         elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
                         else failwithf "unsupported index type: %A"  indexType
 
-                    return igMode, Instruction.MultiDrawElementsIndirectPtr mode indexType 0n count 0
+                    return igMode, Instruction.MultiDrawElementsIndirectPtr mode indexType 0n count buffer.Stride
                 else
-                    return igMode, Instruction.MultiDrawArraysIndirectPtr mode 0n count 0
+                    return igMode, Instruction.MultiDrawArraysIndirectPtr mode 0n count buffer.Stride
             }
 
 
