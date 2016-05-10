@@ -502,7 +502,6 @@ module PointCloudRenderObjectSemantics =
                                         transact (fun () -> CSet.remove v workingSet |> ignore)
                                 )
 
-                        printfn "content: %A" content.Count
                 }
 
             let subV = view.AddMarkingCallback (fun () -> r.Put ()) 
