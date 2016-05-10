@@ -156,7 +156,7 @@ module StepwiseQueueExection =
     open StepwiseProgress
 
 
-    let runEffects (c : ConcurrentDeltaQueue<'a>) (f : CancellationToken -> 'a -> Stepwise<unit>)  =
+    let runEffects (c : ConcurrentDeltaQueue<'a>) (f : CancellationToken -> 'a -> Stepwise<unit>) (undo : 'a -> unit)  =
         let cache = ConcurrentDictionary<'a, Stepwise<unit> * CancellationTokenSource>()
         let working = ConcurrentHashSet<'a>()
         let a =
@@ -174,10 +174,13 @@ module StepwiseQueueExection =
                                     let cts = new CancellationTokenSource()
                                     let s = f cts.Token v
                                     s,cts)
-                                match Stepwise.run cts.Token stepwise with
-                                    | [] -> Log.line "cancelled something"
-                                    | undoThings -> 
-                                        cts.Token.Register(fun () -> List.iter (fun i -> i ()) undoThings) |> ignore
+                                if cts.Token.IsCancellationRequested then undo v
+                                else
+                                    cts.Token.Register (fun () -> undo v) |> ignore
+                                    match Stepwise.run cts.Token stepwise with
+                                        | [] -> Log.line "cancelled something"
+                                        | undoThings -> 
+                                            cts.Token.Register(fun () -> List.iter (fun i -> i ()) undoThings) |> ignore
                             | Rem v ->
                                 match cache.TryRemove(v) with
                                     | (true,(stepwise,cts)) ->
@@ -373,7 +376,7 @@ module PointCloudRenderObjectSemantics =
     type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, progress : LodProgress.Progress, runtime : IRuntime) =
         let queueCount = 8
         let cancel = new System.Threading.CancellationTokenSource()
-
+        let l = obj()
         let mutable currentId = 0
         let getId (n : LodDataNode) =
             if n.uniqueId <> 0 then n.uniqueId
@@ -421,7 +424,7 @@ module PointCloudRenderObjectSemantics =
 
         let removeFromWorkingSet n = 
             if node.Config.boundingBoxSurface.IsSome  then
-                lock workingSet (fun () -> 
+                lock l (fun () -> 
                     transact (fun () -> workingSet.Remove n |> ignore)
                 )
 
@@ -467,7 +470,7 @@ module PointCloudRenderObjectSemantics =
                             let id = getId v
                             deltas.[id % queueCount].Add v
                             if content.Add v && node.Config.boundingBoxSurface.IsSome  then
-                                lock workingSet (fun () ->  
+                                lock l (fun () ->  
                                     if not <| workingSet.Contains v then
                                         transact (fun () -> CSet.add v workingSet |> ignore)
                                 )
@@ -476,7 +479,7 @@ module PointCloudRenderObjectSemantics =
                             let id = getId v
                             deltas.[id % queueCount].Remove v
                             content.Remove v |> ignore
-                            lock workingSet (fun () ->  
+                            lock l (fun () ->  
                                 if workingSet.Contains v then
                                     transact (fun () -> CSet.remove v workingSet |> ignore)
                             )
@@ -540,18 +543,30 @@ module PointCloudRenderObjectSemantics =
                         do! Async.Sleep node.Config.pruneInterval
                 }
 
+            let mutable deltaProcessors = 0
             let printer =
                 async {
                     while true do
                         do! Async.Sleep(1000)
-                        printfn "active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
+                        printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
                         ()
                 }
 
 
             for i in 0..queueCount-1 do
-                let deltaProcessing,info =  StepwiseQueueExection.runEffects deltas.[i] effect
-                Async.StartAsTask(deltaProcessing, cancellationToken = cancel.Token) |> ignore
+                let deltaProcessing,info =  StepwiseQueueExection.runEffects deltas.[i] effect removeFromWorkingSet
+                let safeDeltas =
+                    async {
+                        deltaProcessors <- deltaProcessors + 1
+                        try
+                            try
+                                return! deltaProcessing
+                            with e -> Log.error "delta processor died!!!"
+                        finally 
+                            Log.warn "ending delta processing"
+                            deltaProcessors <- deltaProcessors - 1
+                    }
+                Async.StartAsTask(safeDeltas, cancellationToken = cancel.Token) |> ignore
             
             if pruning then Async.StartAsTask(pruningTask, cancellationToken = cancel.Token) |> ignore
             Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
