@@ -138,6 +138,10 @@ module OpenGl =
                          | InvConstantColor = 0x8002
                          | ConstantAlpha = 0x8003
                          | InvConstantAlpha = 0x8004
+                         | Src1Alpha = 0x8589
+                         | Src1Color = 0x88F9
+                         | InvSrc1Color = 0x88FA
+                         | InvSrc1Alpha = 0x88FB
 
         type BlendOperation = Add = 0x8006
                             | Subtract = 0x800A

@@ -43,6 +43,10 @@ module Translations =
             | ABlendFactor.InvDestinationColor -> GLBlendFactor.InvDstColor |> int
             | ABlendFactor.InvSourceAlpha -> GLBlendFactor.InvSrcAlpha |> int
             | ABlendFactor.InvSourceColor -> GLBlendFactor.InvSrcColor |> int
+            | ABlendFactor.SecondarySourceColor -> GLBlendFactor.Src1Color |> int
+            | ABlendFactor.SecondarySourceAlpha -> GLBlendFactor.Src1Alpha |> int
+            | ABlendFactor.InvSecondarySourceColor -> GLBlendFactor.InvSrc1Color |> int
+            | ABlendFactor.InvSecondarySourceAlpha -> GLBlendFactor.InvSrc1Alpha |> int
             | _ -> failwithf "unknown blend factor: %A" f
 
     let toGLOperation (f : ABlendOperation) =
