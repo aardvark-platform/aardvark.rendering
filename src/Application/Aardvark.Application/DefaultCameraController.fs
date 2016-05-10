@@ -41,7 +41,7 @@ module DefaultCameraController =
                 )
             else
                 return AdaptiveFunc.Identity
-        } |> Mod.onPush
+        }
 
     let controlLookAround (m : IMouse) =
         let down = m.IsDown(MouseButtons.Left)
