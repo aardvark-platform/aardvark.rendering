@@ -156,8 +156,8 @@ module StepwiseQueueExection =
     open StepwiseProgress
 
 
-    let cache = ConcurrentDictionary<'a, Stepwise<unit> * CancellationTokenSource>(1,0)
     let runEffects (c : ConcurrentDeltaQueue<'a>) (f : CancellationToken -> 'a -> Stepwise<unit>) (undo : 'a -> unit)  =
+        let cache = ConcurrentDictionary<'a, Stepwise<unit> * CancellationTokenSource>(1,0)
         //let working = ConcurrentHashSet<'a>()
         let a =
             async {
@@ -374,12 +374,12 @@ module PointCloudRenderObjectSemantics =
         let l = obj()
         let mutable currentId = 0
 
-        let d = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode,int>()
+        //let d = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode,int>()
 
-        let getId (n : LodDataNode) =
-            d.GetOrAdd(n, fun n ->
-                Interlocked.Increment &currentId
-            )
+//        let getId (n : LodDataNode) =
+////            d.GetOrAdd(n, fun n ->
+////                Interlocked.Increment &currentId
+////            )
 //            if n.uniqueId <> 0 then n.uniqueId
 //            else 
 //                let id = Interlocked.Increment(&currentId)
@@ -448,7 +448,19 @@ module PointCloudRenderObjectSemantics =
             let r = MVar<_>()
 
             let run =
-                let content = System.Collections.Generic.HashSet<_>()
+                let mutable currentId = 0
+                let content = Dict<_,_>()
+
+                let getId v =
+                    content.GetOrCreate(v, fun _ -> 
+                        Interlocked.Increment(&currentId)
+                    )
+
+                let removeId v =
+                    match content.TryRemove v with
+                        | (true, id) -> id
+                        | _ -> failwith "removal of unknown object"
+
                 async {
                     do! Async.SwitchToNewThread()
 
@@ -466,12 +478,11 @@ module PointCloudRenderObjectSemantics =
                             node.Data.Rasterize(v, p, wantedNearPlaneDistance)
                         ) 
 
-                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (content.Contains >> not) )
-                        let rem = System.Collections.Generic.HashSet<_>( content |> Seq.filter (set.Contains >> not)     )
+                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (content.ContainsKey >> not) )
+                        let rem = System.Collections.Generic.HashSet<_>( content.Keys |> Seq.filter (set.Contains >> not)     )
 
                         for v in add do
                             let id = getId v
-                            content.Add v |> ignore
                             if deltas.[id % queueCount].Add v then
                                 if node.Config.boundingBoxSurface.IsSome  then
                                     lock l (fun () ->  
@@ -480,9 +491,9 @@ module PointCloudRenderObjectSemantics =
                                     )
                             else
                                 ()
+
                         for v in rem do
-                            let id = getId v
-                            content.Remove v |> ignore
+                            let id = removeId v
                             if deltas.[id % queueCount].Remove v then 
                                 ()
                             else
@@ -490,6 +501,8 @@ module PointCloudRenderObjectSemantics =
                                     if workingSet.Contains v then
                                         transact (fun () -> CSet.remove v workingSet |> ignore)
                                 )
+
+                        printfn "content: %A" content.Count
                 }
 
             let subV = view.AddMarkingCallback (fun () -> r.Put ()) 

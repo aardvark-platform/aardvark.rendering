@@ -407,8 +407,8 @@ module YetAnotherRenderTaskImpl =
                    
 
 
-    type StaticOrderRenderTask(ctx : Context, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) =
-        inherit AbstractRenderTask(ctx, fboSignature, RenderTaskLock(), config)
+    type StaticOrderRenderTask(ctx : Context, fboSignature : IFramebufferSignature, rtLock : RenderTaskLock, config : IMod<BackendConfiguration>) =
+        inherit AbstractRenderTask(ctx, fboSignature, rtLock, config)
 
         let objects = CSet.empty
 
@@ -621,8 +621,8 @@ module YetAnotherRenderTaskImpl =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    type CameraSortedRenderTask(order : RenderPassOrder, ctx : Context, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) as this =
-        inherit AbstractRenderTask(ctx, fboSignature, RenderTaskLock(), config)
+    type CameraSortedRenderTask(order : RenderPassOrder, ctx : Context, fboSignature : IFramebufferSignature, rtLock : RenderTaskLock, config : IMod<BackendConfiguration>) as this =
+        inherit AbstractRenderTask(ctx, fboSignature, rtLock, config)
         do GLVM.vmInit()
 
         let mutable hasCameraView = false
@@ -724,7 +724,7 @@ module YetAnotherRenderTaskImpl =
         let ctx = manager.Context
         let resources = new Aardvark.Base.Rendering.ResourceInputSet()
         let inputSet = InputSet(this) 
-
+        let renderTaskLock = RenderTaskLock()
 
         let add (ro : PreparedRenderObject) = 
             let all = ro.Resources |> Seq.toList
@@ -770,10 +770,10 @@ module YetAnotherRenderTaskImpl =
                     let task = 
                         match pass.Order with
                             | RenderPassOrder.Arbitrary ->
-                                new StaticOrderRenderTask(ctx, fboSignature, config) :> AbstractRenderTask
+                                new StaticOrderRenderTask(ctx, fboSignature, renderTaskLock, config) :> AbstractRenderTask
 
                             | order ->
-                                new CameraSortedRenderTask(order, ctx, fboSignature, config) :> AbstractRenderTask
+                                new CameraSortedRenderTask(order, ctx, fboSignature, renderTaskLock, config) :> AbstractRenderTask
 
                     subtasks <- Map.add pass task subtasks
                     task
