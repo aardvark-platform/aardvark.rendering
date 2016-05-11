@@ -113,7 +113,7 @@ module DeltaCompiler =
                     yield Instructions.bindIndirectBuffer ib
                     yield Instructions.drawIndirect prog me.Original.Indices ib me.Mode me.IsActive
                 | _ ->
-                    yield Instructions.draw prog me.Original.Indices me.DrawCallInfos me.Mode me.IsActive
+                    yield Instructions.draw prog me.Original.Indices me.DrawCallInfos.Handle me.Mode me.IsActive
 
         }   
 

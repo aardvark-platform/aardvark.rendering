@@ -134,7 +134,7 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
     member x.RemoveStats (f : FrameStatistics) = 
         frameStatistics <- frameStatistics - f
 
-    override x.InputChanged(o : IAdaptiveObject) =
+    override x.InputChanged(transaction : obj, o : IAdaptiveObject) =
         match o with
             | :? IResource as o ->
                 lock dirtyLock (fun () ->

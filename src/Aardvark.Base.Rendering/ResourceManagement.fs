@@ -214,19 +214,17 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
 
 
 type ResourceInputSet() =
-    inherit AdaptiveObject()
+    inherit DirtyTrackingAdaptiveObject<IResource>()
 
     let all = ReferenceCountingSet<IResource>()
-    let mutable dirty = HashSet<IResource>()
+//    let mutable dirty = HashSet<IResource>()
 
     let updateDirty(x : ResourceInputSet) =
         let rec run (level : int) (stats : FrameStatistics) = 
             let dirty = 
-                lock all (fun () ->
-                    let d = dirty
-                    dirty <- HashSet()
-                    d
-                )
+                let d = x.Dirty
+                x.Dirty <- HashSet()
+                d
 
             if level = 0 then
                 dirty.IntersectWith all
@@ -246,16 +244,16 @@ type ResourceInputSet() =
         run 0 FrameStatistics.Zero
 
 
-    override x.InputChanged(i : IAdaptiveObject) =
-        match i with
-            | :? IResource as r ->
-                lock all (fun () ->
-                    if all.Contains r then dirty.Add r |> ignore
-                )
-            | _ ->
-                ()
-
-    
+//    override x.InputChanged(i : IAdaptiveObject) =
+//        match i with
+//            | :? IResource as r ->
+//                lock all (fun () ->
+//                    if all.Contains r then dirty.Add r |> ignore
+//                )
+//            | _ ->
+//                ()
+//
+//    
 
     member x.Count = all.Count
 
@@ -265,7 +263,7 @@ type ResourceInputSet() =
                 if all.Add r then
                     lock r (fun () ->
                         if r.OutOfDate then 
-                            dirty.Add r |> ignore
+                            x.Dirty.Add r |> ignore
                             true
 
                         else 
@@ -284,7 +282,7 @@ type ResourceInputSet() =
         lock all (fun () ->
 
             if all.Remove r then
-                dirty.Remove r |> ignore
+                x.Dirty.Remove r |> ignore
                 lock r (fun () -> r.Outputs.Remove x |> ignore)
                
         )
@@ -300,7 +298,7 @@ type ResourceInputSet() =
                 lock r (fun () -> r.Outputs.Remove x |> ignore)
 
             all.Clear()
-            dirty.Clear()
+            x.Dirty.Clear()
         )
 
     interface IDisposable with
