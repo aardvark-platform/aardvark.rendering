@@ -124,6 +124,9 @@ module SgFSharp =
         let cullMode (m : IMod<CullMode>) (sg : ISg) =
             Sg.CullModeApplicator(m, sg) :> ISg
 
+        let stencilMode (m : IMod<StencilMode>) (sg : ISg) =
+            Sg.StencilModeApplicator(m,sg) :> ISg
+
         let depthTest (m : IMod<DepthTestMode>) (sg : ISg) =
             Sg.DepthTestModeApplicator(m, sg) :> ISg
 
