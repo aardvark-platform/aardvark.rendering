@@ -214,7 +214,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let man = ResourceManager(manager, ctx, Some renderTaskLock, shareTextures, shareBuffers)
 
         match eng.sorting with
-            | Grouping _ -> 
+            | Arbitrary | Grouping _  -> 
                 new RenderTasks.RenderTask(man, fboSignature, set, engine) :> IRenderTask
 
             | Dynamic _ -> 

@@ -16,51 +16,6 @@ open System.Runtime.CompilerServices
 module RenderTasks =
     open System.Collections.Generic
 
-    type SortKey = RenderPass * list<int>
-
-    type ProjectionComparer(projections : list<RenderObject -> IMod>) =
-
-        let rec getRenderObject (ro : IRenderObject) =
-            match ro with
-                | :? RenderObject as ro -> ro
-                | :? MultiRenderObject as ro -> ro.Children |> List.head |> getRenderObject
-                | :? PreparedRenderObject as ro -> ro.Original
-                | :? PreparedMultiRenderObject as ro -> ro.First.Original
-                | _ -> failwithf "[ProjectionComparer] unknown RenderObject: %A" ro
-
-        let ids = ConditionalWeakTable<IMod, ref<int>>()
-        let mutable currentId = 0
-        let getId (m : IMod) =
-            match ids.TryGetValue m with
-                | (true, r) -> !r
-                | _ ->
-                    let id = Interlocked.Increment &currentId
-                    ids.Add(m, ref id)
-                    id
-
-
-        let keys = ConditionalWeakTable<IRenderObject, SortKey>()
-        let project (ro : IRenderObject) =
-            let ro = getRenderObject ro
-
-            match keys.TryGetValue ro with
-                | (true, key) -> key
-                | _ ->
-                    let projected = projections |> List.map (fun p -> p ro |> getId)
-                    let pass = ro.RenderPass
-
-                    let key = (pass, projected)
-                    keys.Add(ro, key)
-                    key
-
-
-        interface IComparer<IRenderObject> with
-            member x.Compare(l : IRenderObject, r : IRenderObject) =
-                let left = project l
-                let right = project r
-                compare left right
- 
-
 
     [<AbstractClass>]
     type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, renderTaskLock : RenderTaskLock, config : IMod<BackendConfiguration>) as this =
@@ -215,6 +170,50 @@ module RenderTasks =
 
 
 
+
+    type SortKey = RenderPass * list<int>
+
+    type ProjectionComparer(projections : list<RenderObject -> IMod>) =
+
+        let rec getRenderObject (ro : IRenderObject) =
+            match ro with
+                | :? RenderObject as ro -> ro
+                | :? MultiRenderObject as ro -> ro.Children |> List.head |> getRenderObject
+                | :? PreparedRenderObject as ro -> ro.Original
+                | :? PreparedMultiRenderObject as ro -> ro.First.Original
+                | _ -> failwithf "[ProjectionComparer] unknown RenderObject: %A" ro
+
+        let ids = ConditionalWeakTable<IMod, ref<int>>()
+        let mutable currentId = 0
+        let getId (m : IMod) =
+            match ids.TryGetValue m with
+                | (true, r) -> !r
+                | _ ->
+                    let id = Interlocked.Increment &currentId
+                    ids.Add(m, ref id)
+                    id
+
+
+        let keys = ConditionalWeakTable<IRenderObject, SortKey>()
+        let project (ro : IRenderObject) =
+            let ro = getRenderObject ro
+
+            match keys.TryGetValue ro with
+                | (true, key) -> key
+                | _ ->
+                    let projected = projections |> List.map (fun p -> p ro |> getId)
+                    let pass = ro.RenderPass
+
+                    let key = (pass, projected)
+                    keys.Add(ro, key)
+                    key
+
+
+        interface IComparer<IRenderObject> with
+            member x.Compare(l : IRenderObject, r : IRenderObject) =
+                let left = project l
+                let right = project r
+                compare left right
 
     module private Compiler =
         let compileDelta (this : AbstractRenderTask) (left : Option<PreparedMultiRenderObject>) (right : PreparedMultiRenderObject) =
@@ -407,8 +406,6 @@ module RenderTasks =
 
         let managedUnoptimized (debug : bool) (compile : PreparedMultiRenderObject -> IAdaptiveCode<Instruction>) () =
             { managedOptimized debug (fun _ v -> compile v) () with compileNeedsPrev = false }
-                   
-
 
     type StaticOrderRenderTask(ctx : Context, fboSignature : IFramebufferSignature, rtLock : RenderTaskLock, config : IMod<BackendConfiguration>) =
         inherit AbstractRenderTask(ctx, fboSignature, rtLock, config)
@@ -441,12 +438,18 @@ module RenderTasks =
                         | RenderObjectSorting.Static comparer -> 
                             comparer
 
+                        | Arbitrary ->
+                            { new IComparer<_> with member x.Compare(l, r) = 0 }
+
                         | RenderObjectSorting.Dynamic create ->
                             failwith "[AbstractRenderTask] dynamic sorting not implemented"
 
                 // create the new program
                 let newProgram = 
                     match config.execution, config.redundancy with
+                        | ExecutionEngine.Interpreter, _ ->
+                            Log.line "using interpreted program"
+                            new InterpreterProgram(objects) :> IAdaptiveProgram<_>
 
                         | ExecutionEngine.Native, RedundancyRemoval.Static -> 
                             Log.line "using optimized native program"
@@ -530,6 +533,7 @@ module RenderTasks =
         override x.Remove(o) = transact (fun () -> objects.Remove o |> ignore)
 
 
+    
 
                 
     [<AllowNullLiteral>]
@@ -635,6 +639,102 @@ module RenderTasks =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
+    type SortedGLVMProgram(parent : AbstractRenderTask, objects : aset<PreparedMultiRenderObject>, createComparer : Ag.Scope -> IMod<IComparer<PreparedMultiRenderObject>>) =
+        inherit AbstractAdaptiveProgram<AdaptiveGLVMFragment>()
+        static do GLVM.vmInit()
+
+        let fragments = objects |> ASet.mapUse (fun o -> new AdaptiveGLVMFragment(o, Compiler.compile parent o))
+        let fragmentReader = fragments.GetReader()
+        let mutable vmStats = VMStats()
+        let mutable first : AdaptiveGLVMFragment = null
+        let mutable last : AdaptiveGLVMFragment = null
+
+        let mutable comparer = None
+
+        let getComparer (f : seq<AdaptiveGLVMFragment>) =
+            match comparer with
+                | Some cmp -> cmp
+                | None ->
+                    if Seq.isEmpty f then
+                        Mod.constant { new IComparer<_> with member x.Compare(a,b) = 0 }
+                    else
+                        let fst = Seq.head f
+                        let c = createComparer fst.Object.Original.AttributeScope
+                        comparer <- Some c
+                        c
+
+
+        member private x.sort (f : seq<AdaptiveGLVMFragment>) : list<AdaptiveGLVMFragment> =
+            let comparer = getComparer f
+            let cmp = comparer.GetValue x
+            f |> Seq.sortWith (fun a b -> cmp.Compare(a.Object, b.Object)) |> Seq.toList
+
+        override x.Update(dirty : HashSet<_>) =
+            let deltas = fragmentReader.GetDelta()
+            for d in deltas do
+                match d with
+                    | Add f -> dirty.Add f |> ignore
+                    | Rem f -> dirty.Remove f |> ignore
+
+            for d in dirty do d.Update x
+
+            let ordered = x.sort fragmentReader.Content
+
+                    
+            for f in ordered do
+                f.Prev <- last
+                if isNull last then first <- f
+                else last.Next <- f
+                last <- f
+
+        override x.Run() =
+            vmStats.TotalInstructions <- 0
+            vmStats.RemovedInstructions <- 0
+            if not (isNull first) then
+                last.Next <- null
+                GLVM.vmRun(first.Handle, VMMode.RuntimeRedundancyChecks, &vmStats)
+
+        override x.Dispose() =
+            fragmentReader.Dispose()
+
+    type SortedInterpreterProgram(parent : AbstractRenderTask, objects : aset<PreparedMultiRenderObject>, createComparer : Ag.Scope -> IMod<IComparer<PreparedMultiRenderObject>>) =
+        inherit AbstractAdaptiveProgram<IAdaptiveObject>()
+
+        let reader = objects.GetReader()
+        let mutable arr = null
+
+        let mutable comparer = None
+
+        let getComparer (f : seq<PreparedMultiRenderObject>) =
+            match comparer with
+                | Some cmp -> cmp
+                | None ->
+                    if Seq.isEmpty f then
+                        Mod.constant { new IComparer<_> with member x.Compare(a,b) = 0 }
+                    else
+                        let fst = Seq.head f
+                        let c = createComparer fst.Original.AttributeScope
+                        comparer <- Some c
+                        c
+
+
+        override x.Update(_) =
+            reader.Update(x)
+
+            let comparer = getComparer reader.Content
+            let cmp = comparer.GetValue x
+            arr <- reader.Content |> Seq.sortWith (fun a b -> cmp.Compare(a,b)) |> Seq.toArray
+
+            ()
+
+        override x.Run() =
+            Interpreter.run (fun gl ->
+                for a in arr do gl.render a
+            )
+
+        override x.Dispose() =
+            reader.Dispose()
+
     type CameraSortedRenderTask(order : RenderPassOrder, ctx : Context, fboSignature : IFramebufferSignature, rtLock : RenderTaskLock, config : IMod<BackendConfiguration>) as this =
         inherit AbstractRenderTask(ctx, fboSignature, rtLock, config)
         do GLVM.vmInit()
@@ -643,73 +743,65 @@ module RenderTasks =
         let mutable cameraView = Mod.constant Trafo3d.Identity
         
         let objects = CSet.empty
-        let mutable vmStats = VMStats()   
+        let boundingBoxes = Dictionary<PreparedMultiRenderObject, IMod<Box3d>>()
+
+        let bb (o : PreparedMultiRenderObject) =
+            boundingBoxes.[o].GetValue(this)
+
+        let mutable program = Unchecked.defaultof<IAdaptiveProgram<unit>>
+        let mutable hasProgram = false
+        let mutable currentConfig = BackendConfiguration.Debug
+
+        let createComparer (scope : Ag.Scope) =
+            Mod.custom (fun self ->
+                let cam = cameraView.GetValue self
+                let pos = cam.GetViewPosition()
+
+                match order with
+                    | RenderPassOrder.BackToFront ->
+                        { new IComparer<PreparedMultiRenderObject> with
+                            member x.Compare(l,r) = compare ((bb r).GetMinimalDistanceTo pos) ((bb l).GetMinimalDistanceTo pos)
+                        }
+                    | _ ->
+                        { new IComparer<PreparedMultiRenderObject> with
+                            member x.Compare(l,r) = compare ((bb l).GetMinimalDistanceTo pos) ((bb r).GetMinimalDistanceTo pos)
+                        }
+            )
 
 
-        let fragments = objects |> ASet.mapUse (fun o -> new AdaptiveGLVMFragment(o, Compiler.compile this o))
-        let fragmentReader = fragments.GetReader()
-        let mutable dirtyFragments = HashSet<AdaptiveGLVMFragment>()
+        let reinit (c : BackendConfiguration) =
+            if currentConfig <> c || not hasProgram then
+                if hasProgram then
+                    program.Dispose()
 
+                let newProgram = 
+                    match c.execution with
+                        | ExecutionEngine.Interpreter -> new SortedInterpreterProgram(this, objects, createComparer) :> IAdaptiveProgram<_>
+                        | _ -> new SortedGLVMProgram(this, objects, createComparer) :> IAdaptiveProgram<_>
 
-        let sort (f : seq<AdaptiveGLVMFragment>) : list<AdaptiveGLVMFragment> =
-            let cam = cameraView.GetValue this
-            let pos = cam.GetViewPosition()
+                program <- newProgram
+                hasProgram <- true
 
-            match order with
-                | RenderPassOrder.BackToFront ->
-                    f |> Seq.sortByDescending (fun f -> f.BoundingBox.GetMinimalDistanceTo pos) |> Seq.toList
-                | _ ->
-                    f |> Seq.sortBy (fun f -> f.BoundingBox.GetMinimalDistanceTo pos) |> Seq.toList
-                    
-
-        override x.InputChanged(transaction : obj, i : IAdaptiveObject) =
-            match i with
-                | :? AdaptiveGLVMFragment as f -> lock dirtyFragments (fun () -> dirtyFragments.Add f |> ignore)
-                | _ -> ()
 
         override x.Run(fbo) =
-            let deltas = fragmentReader.GetDelta()
+            let cfg = config.GetValue x
+            reinit cfg
 
-            let dirty = 
-                lock dirtyFragments (fun () -> 
-                    let old = dirtyFragments
-                    dirtyFragments <- HashSet()
-                    old
-                )
+            program.Update x |> ignore
+            program.Run()
 
-            for d in deltas do
-                match d with
-                    | Add f -> dirty.Add f |> ignore
-                    | Rem f -> dirty.Remove f |> ignore
-
-            for d in dirty do d.Update x
-
-
-            let ordered = sort fragmentReader.Content
-
-            let mutable first = null
-            let mutable last = null
-            for f in ordered do
-                f.Prev <- last
-                if isNull last then first <- f
-                else last.Next <- f
-                last <- f
-
-            vmStats.TotalInstructions <- 0
-            vmStats.RemovedInstructions <- 0
-            if not (isNull first) then
-                last.Next <- null
-                GLVM.vmRun(first.Handle, VMMode.RuntimeRedundancyChecks, &vmStats)
-
-
-            { FrameStatistics.Zero with
-                InstructionCount = float vmStats.TotalInstructions
-                ActiveInstructionCount = float (vmStats.TotalInstructions - vmStats.RemovedInstructions)
-            }
+            FrameStatistics.Zero
+//            { FrameStatistics.Zero with
+//                InstructionCount = float vmStats.TotalInstructions
+//                ActiveInstructionCount = float (vmStats.TotalInstructions - vmStats.RemovedInstructions)
+//            }
 
 
         override x.Dispose() =
-            fragmentReader.Dispose()
+            if hasProgram then
+                program.Dispose()
+                hasProgram <- false
+
             objects.Clear()
             hasCameraView <- false
             cameraView <- Mod.constant Trafo3d.Identity
@@ -717,15 +809,21 @@ module RenderTasks =
         override x.Add(o) = 
             if not hasCameraView then
                 let o = o.First.Original
+
                 match o.Uniforms.TryGetUniform (o.AttributeScope, Symbol.Create "ViewTrafo") with
                     | Some (:? IMod<Trafo3d> as view) -> 
                         hasCameraView <- true
                         cameraView <- view
                     | _ -> ()
 
+            match Ag.tryGetAttributeValue o.Original.AttributeScope "GlobalBoundingBox" with
+                | Success b -> boundingBoxes.[o] <- b
+                | _ -> failwithf "[GL] could not get bounding-box for RenderObject"
+
             transact (fun () -> objects.Add o |> ignore)
 
-        override x.Remove(o) = 
+        override x.Remove(o) =
+            boundingBoxes.Remove o |> ignore
             transact (fun () -> objects.Remove o |> ignore)
                 
 

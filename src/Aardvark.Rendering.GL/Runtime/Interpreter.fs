@@ -8,6 +8,9 @@ open System.Collections.Generic
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Base.Runtime
+open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 
 [<AutoOpen>]
 module private Values =
@@ -94,6 +97,9 @@ module OpenGLInterpreter =
                 cell2 <- value 
                 true
 
+
+        member x.EffectiveInstructions = effectiveInstructions
+        member x.TotalInstructions = effectiveInstructions + removedInstructions
 
         member x.Clear() =
             effectiveInstructions   <- 0
@@ -411,40 +417,36 @@ module OpenGLInterpreter =
 
 [<AutoOpen>]
 module OpenGLObjectInterpreter =
-    open Aardvark.Base.Incremental
-    open Aardvark.Base.Rendering
-    open Interpreter
-
 
     type GLState with
 
-        member inline gl.setDepthMask (mask : bool) =
+        member gl.setDepthMask (mask : bool) =
             gl.depthMask (if mask then 1 else 0)
 
-        member inline gl.setColorMasks (masks : list<V4i>) =
+        member gl.setColorMasks (masks : list<V4i>) =
             let mutable i = 0
             for m in masks do
                 gl.colorMask i m
                 i <- i + 1
 
-        member inline gl.setDepthTestMode (mode : DepthTestMode) =
+        member gl.setDepthTestMode (mode : DepthTestMode) =
             if mode = DepthTestMode.None then
                 gl.disable GL_DEPTH_TEST  
             else
                 gl.enable GL_DEPTH_TEST
                 gl.depthFunc (Translations.toGLComparison mode)
 
-        member inline gl.setFillMode (mode : FillMode) =
+        member gl.setFillMode (mode : FillMode) =
             gl.polygonMode GL_FRONT_AND_BACK (Translations.toGLPolygonMode mode)
 
-        member inline gl.setCullMode (mode : CullMode) =
+        member gl.setCullMode (mode : CullMode) =
             if mode = CullMode.None then
                 gl.disable GL_CULL_FACE
             else
                 gl.enable GL_CULL_FACE
                 gl.cullFace (Translations.toGLFace mode)
 
-        member inline gl.setBlendMode (bm : BlendMode) =
+        member gl.setBlendMode (bm : BlendMode) =
             if bm.Enabled then
                 let src = Translations.toGLFactor bm.SourceFactor
                 let dst = Translations.toGLFactor bm.DestinationFactor
@@ -459,7 +461,7 @@ module OpenGLObjectInterpreter =
             else
                 gl.disable GL_BLEND
 
-        member inline gl.setStencilMode (sm : StencilMode) =
+        member gl.setStencilMode (sm : StencilMode) =
             if sm.IsEnabled then
                 let cmpFront = Translations.toGLFunction sm.CompareFront.Function
                 let cmpBack= Translations.toGLFunction sm.CompareBack.Function
@@ -477,7 +479,7 @@ module OpenGLObjectInterpreter =
             else
                 gl.disable GL_STENCIL_TEST
 
-        member inline gl.bindUniformLocation (l : int) (loc : UniformLocation)=
+        member gl.bindUniformLocation (l : int) (loc : UniformLocation)=
             match loc.Type with
                 | FloatVectorType 1 ->
                     gl.uniform1fv l 1 loc.Data
@@ -614,31 +616,86 @@ module OpenGLObjectInterpreter =
                         let ib = ib.Handle.GetValue()
                         let cnt = ib.Count |> Microsoft.FSharp.NativeInterop.NativePtr.read
 
-                        gl.bindBuffer GL_DRAW_INDIRECT_BUFFER ib.Buffer.Handle
+                        if cnt > 0 then
+                            let cnt =
+                                let cap = int ib.Buffer.SizeInBytes / sizeof<DrawCallInfo>
+                                if cnt > cap then
+                                    Log.warn "indirect too small"
+                                    cap
+                                else
+                                    cnt
 
-                        if indexed then
-                            gl.multiDrawElementsIndirect mode indexType 0n cnt ib.Stride
-                        else
-                            gl.multiDrawArraysIndirect mode 0n cnt ib.Stride
+                            gl.bindBuffer GL_DRAW_INDIRECT_BUFFER ib.Buffer.Handle
+
+                            if indexed then
+                                gl.multiDrawElementsIndirect mode indexType 0n cnt ib.Stride
+                            else
+                                gl.multiDrawArraysIndirect mode 0n cnt ib.Stride
 
                     | None ->
                         let calls = o.DrawCallInfos.Handle.GetValue()
                         if indexed then
                             for c in calls do
-                                gl.drawElements mode c.FaceVertexCount indexType (nativeint c.FirstIndex)
+                                if c.InstanceCount = 1 then
+                                    gl.drawElements mode c.FaceVertexCount indexType (nativeint c.FirstIndex)
+                                elif c.InstanceCount > 0 then
+                                    gl.drawElementsInstanced mode c.FaceVertexCount indexType (nativeint c.FirstIndex) c.InstanceCount
+                                    
                         else
                             for c in calls do
-                                gl.drawArrays mode c.FirstIndex c.FaceVertexCount
+                                if c.InstanceCount = 1 then
+                                    gl.drawArrays mode c.FirstIndex c.FaceVertexCount
+                                elif c.InstanceCount > 0 then
+                                    gl.drawArraysInstanced mode c.FirstIndex c.FaceVertexCount c.InstanceCount
+
+                OpenTK.Graphics.OpenGL4.GL.Flush()
+                OpenTK.Graphics.OpenGL4.GL.Finish()
+
 
         member gl.render (o : PreparedMultiRenderObject) =
             for o in o.Children do
                 gl.render o
 
-        
-module InterpreterTest =
-    let sepp() =
-        Interpreter.run (fun gl ->
-            
-            gl.bindVertexArray 0
-            gl.patchVertices 10
+
+[<AbstractClass>]
+type AbstractAdaptiveProgram<'input when 'input :> IAdaptiveObject>() =
+    inherit DirtyTrackingAdaptiveObject<'input>()
+    
+    abstract member Dispose : unit -> unit
+    abstract member Update : HashSet<'input> -> unit
+    abstract member Run : unit -> unit
+
+    interface IAdaptiveProgram<unit> with
+        member x.Update caller =
+            x.EvaluateIfNeeded' caller AdaptiveProgramStatistics.Zero (fun dirty ->
+                x.Update dirty
+                AdaptiveProgramStatistics.Zero
+            )
+
+        member x.Run s = x.Run()
+        member x.Disassemble() = null
+        member x.AutoDefragmentation 
+            with get() = false
+            and set _ = ()
+
+        member x.StartDefragmentation() = System.Threading.Tasks.Task.FromResult(TimeSpan.Zero)
+        member x.NativeCallCount = 0
+        member x.FragmentCount = 1
+        member x.ProgramSizeInBytes = 0L
+        member x.TotalJumpDistanceInBytes = 0L
+        member x.Dispose() = x.Dispose()
+  
+
+type InterpreterProgram(content : seq<PreparedMultiRenderObject>) =
+    inherit AbstractAdaptiveProgram<IAdaptiveObject>()
+    override x.Update _ = ()
+    override x.Dispose() = ()
+    override x.Run() = 
+        Interpreter.run (fun gl -> 
+            for o in content do gl.render o
+//            { FrameStatistics.Zero with
+//                InstructionCount = gl.TotalInstructions |> float
+//                ActiveInstructionCount = gl.EffectiveInstructions |> float
+//            }
         )
+ 
