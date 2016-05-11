@@ -689,8 +689,8 @@ module YetAnotherRenderTaskImpl =
 
 
             { FrameStatistics.Zero with
-                InstructionCount = float vmStats.TotalInstructions
-                ActiveInstructionCount = float (vmStats.TotalInstructions - vmStats.RemovedInstructions)
+                InstructionCount = float 0
+                ActiveInstructionCount = float -vmStats.RemovedInstructions
             }
 
 
