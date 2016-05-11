@@ -13,7 +13,7 @@ open Aardvark.Rendering.GL.Compiler
 open System.Runtime.CompilerServices
 
 
-module YetAnotherRenderTaskImpl =
+module RenderTasks =
     open System.Collections.Generic
 
     type SortKey = RenderPass * list<int>
@@ -364,7 +364,7 @@ module YetAnotherRenderTaskImpl =
                 new(instructions) = { Next = null; Instructions = instructions }
             end
 
-        let managedOptimized (compileDelta : Option<PreparedMultiRenderObject> -> PreparedMultiRenderObject -> IAdaptiveCode<Instruction>) () =
+        let managedOptimized (debug : bool) (compileDelta : Option<PreparedMultiRenderObject> -> PreparedMultiRenderObject -> IAdaptiveCode<Instruction>) () =
             let prolog = ManagedFragment [||]
             let epilog = ManagedFragment [||]
 
@@ -381,7 +381,10 @@ module YetAnotherRenderTaskImpl =
                 let all = all f
                 for part in all do
                     for i in part do
-                        ExecutionContext.debug i
+                        if debug then 
+                            ExecutionContext.debug i
+                        else
+                            ExecutionContext.run i
 
             {
                 compileNeedsPrev = true
@@ -402,8 +405,8 @@ module YetAnotherRenderTaskImpl =
                 disassemble = fun f -> f.Instructions |> Array.toList
             }  
 
-        let managedUnoptimized (compile : PreparedMultiRenderObject -> IAdaptiveCode<Instruction>) () =
-            { managedOptimized (fun _ v -> compile v) () with compileNeedsPrev = false }
+        let managedUnoptimized (debug : bool) (compile : PreparedMultiRenderObject -> IAdaptiveCode<Instruction>) () =
+            { managedOptimized debug (fun _ v -> compile v) () with compileNeedsPrev = false }
                    
 
 
@@ -457,13 +460,24 @@ module YetAnotherRenderTaskImpl =
 
                         | ExecutionEngine.Managed, RedundancyRemoval.Static -> 
                             Log.line "using optimized managed program"
-                            let handler = GLFragmentHandlers.managedOptimized (Compiler.compileDelta self)
+                            let handler = GLFragmentHandlers.managedOptimized false (Compiler.compileDelta self)
                             AdaptiveProgram.custom comparer handler objectsWithKeys
 
                         | ExecutionEngine.Managed, RedundancyRemoval.None -> 
                             Log.line "using unoptimized managed program"
-                            let handler = GLFragmentHandlers.managedUnoptimized (Compiler.compile self)
+                            let handler = GLFragmentHandlers.managedUnoptimized false (Compiler.compile self)
                             AdaptiveProgram.custom comparer handler objectsWithKeys
+
+                        | ExecutionEngine.Debug, RedundancyRemoval.Static -> 
+                            Log.line "using optimized debug program"
+                            let handler = GLFragmentHandlers.managedOptimized true (Compiler.compileDelta self)
+                            AdaptiveProgram.custom comparer handler objectsWithKeys
+
+                        | ExecutionEngine.Debug, RedundancyRemoval.None -> 
+                            Log.line "using unoptimized debug program"
+                            let handler = GLFragmentHandlers.managedUnoptimized true (Compiler.compile self)
+                            AdaptiveProgram.custom comparer handler objectsWithKeys
+
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Static -> 
                             Log.line "using optimized unmanaged program"
@@ -827,257 +841,92 @@ module YetAnotherRenderTaskImpl =
 
 
 
+    type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
+        inherit AdaptiveObject()
 
+        let mutable frameId = 0UL
 
+        member x.Run(caller : IAdaptiveObject, desc : OutputDescription) =
+            let fbo = desc.framebuffer
+            using ctx.ResourceLock (fun _ ->
+                x.EvaluateAlways caller (fun () ->
 
+                    let old = Array.create 4 0
+                    let mutable oldFbo = 0
+                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
+                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
+                    let handle = fbo.GetHandle null |> unbox<int>
 
+                    if ExecutionContext.framebuffersSupported then
+                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                        GL.Check "could not bind framebuffer"
+                    elif handle <> 0 then
+                        failwithf "cannot render to texture on this OpenGL driver"
 
-
-//
-//module SortedRenderTask =
-//    let private getArgs (o : Instruction) =
-//        o.Arguments |> Array.map (fun arg ->
-//            match arg with
-//                | :? int as i -> nativeint i
-//                | :? nativeint as i -> i
-//                | :? float32 as f -> BitConverter.ToInt32(BitConverter.GetBytes(f), 0) |> nativeint
-//                | _ -> failwith "invalid argument"
-//        )
-//
-//    let private appendToBlock (frag : FragmentPtr) (id : int) (instructions : seq<Instruction>) =
-//        for i in instructions do
-//            match getArgs i with
-//                | [| a |] -> GLVM.vmAppend1(frag, id, i.Operation, a)
-//                | [| a; b |] -> GLVM.vmAppend2(frag, id, i.Operation, a, b)
-//                | [| a; b; c |] -> GLVM.vmAppend3(frag, id, i.Operation, a, b, c)
-//                | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, i.Operation, a, b, c, d)
-//                | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
-//                | _ -> failwithf "invalid instruction: %A" i
-//
-//    [<AllowNullLiteral>]
-//    type private Fragment =
-//        class
-//            inherit AdaptiveObject
-//            val mutable public Handle : FragmentPtr
-//            val mutable public RenderObject : PreparedRenderObject
-//            val mutable public Code : IAdaptiveCode<Instruction>
-//            val mutable public Next : Fragment
-//
-//            member x.Dispose() =
-//                if x.Handle <> 0n then
-//                    GLVM.vmDelete x.Handle
-//                    x.Handle <- 0n
-//
-//            member x.Link(caller : IAdaptiveObject) =
-//                x.EvaluateAlways caller (fun () ->
-//                    if isNull x.Next then GLVM.vmUnlink(x.Handle)
-//                    else GLVM.vmLink(x.Handle, x.Next.Handle)
-//                )
-//
-//            member x.Update(caller : IAdaptiveObject) =
-//                x.EvaluateIfNeeded caller () (fun () ->
-//                    let fullCode = x.Code.Content |> List.collect (fun p -> p.GetValue(x))
-//
-//                    if x.Handle = 0n then x.Handle <- GLVM.vmCreate()
-//                    else GLVM.vmClear x.Handle
-//
-//                    let id = GLVM.vmNewBlock x.Handle
-//                    appendToBlock x.Handle id fullCode
-//                )
-//
-//            interface IDisposable with
-//                member x.Dispose() = x.Dispose()
-//
-//            new(obj, code) = { Handle = 0n; RenderObject = obj; Code = code; Next = null }
-//
-//        end
-//
-//    type RenderTask(objects : aset<IRenderObject>, manager : ResourceManager, fboSignature : IFramebufferSignature, config : BackendConfiguration) as this =
-//        inherit AbstractRenderTaskWithResources(manager, fboSignature, manager.RenderTaskLock.Value, config.useDebugOutput) // manager needs resourcelock
-//
-//        let mutable anyScope = Ag.emptyScope
-//
-//        let sorter =
-//            match config.sorting with
-//                | Dynamic newSorter -> lazy (newSorter anyScope)
-//                | _ ->
-//                    failwith "[SortedRenderTask] unexpected RenderObject sorting"
-//
-//        let toFragment (prep : PreparedRenderObject) =
-//            let frag = new Fragment(prep, RenderTaskUtilities.compile this prep)
-//            this.InputChanged frag
-//            frag
-//
-//        let fragmentCache = Dictionary<IRenderObject, Fragment>()
-//        let prepareRenderObject (ro : IRenderObject) =
-//            anyScope <- ro.AttributeScope
-//            match ro with
-//                | :? RenderObject as r ->
-//                    let r = sorter.Value.ToSortedRenderObject r
-//                    let frag = manager.Prepare(fboSignature, r) |> toFragment
-//                    fragmentCache.[r] <- frag
-//                    frag
-//
-//                | :? PreparedRenderObject as prep ->
-//                    Log.warn "[SortedRenderTask] cannot sort PreparedRenderObjects"
-//                    let frag = toFragment prep
-//                    fragmentCache.[ro] <- frag
-//                    frag
-//                | _ ->
-//                    failwithf "[SortedRenderTask] unsupported IRenderObject: %A" ro
-//
-//        let preparedObjects = objects |> ASet.mapUse prepareRenderObject
-//        let reader = preparedObjects.GetReader()
-//        let prolog = new Fragment(PreparedRenderObject.empty, new AdaptiveCode<_>([]))
-//
-//        let dirtyFragments = HashSet<Fragment>()
-//
-//        override x.InputChanged(o : IAdaptiveObject) =
-//            match o with
-//                | :? Fragment as f -> 
-//                    lock dirtyFragments (fun () -> dirtyFragments.Add f |> ignore)
-//                | _ ->
-//                    base.InputChanged o
-//
-//        override x.Dispose() =
-//            reader.Dispose()
-//            prolog.Dispose()
-//
-//        override x.Run fbo =
-//            let deltas = reader.GetDelta(x)
-//            let sorter = sorter.Value
-//            for d in deltas do
-//                match d with
-//                    | Add prep -> sorter.Add prep.RenderObject.Original
-//                    | Rem prep -> sorter.Remove prep.RenderObject.Original
-//
-//            let sorted = sorter.SortedList.GetValue x
-//
-//            let mutable stats = x.UpdateDirtyResources(0)
-//
-//            // update all links and contents
-//            let mutable current = prolog
-//
-//            let dirtyFrags = 
-//                lock dirtyFragments (fun () ->
-//                    let res = dirtyFragments.ToArray()
-//                    dirtyFragments.Clear()
-//                    res
-//                )
-//
-//            prolog.Update x
-//            for frag in dirtyFrags do
-//                frag.Update x
-//
-//            for ro in sorted do
-//                match fragmentCache.TryGetValue ro with
-//                    | (true, frag) ->
-//                        current.Next <- frag
-//                        current.Link x
-//                        current <- frag
-//                    | _ ->
-//                        Log.warn "[SortedRenderTask] skipping unknown RenderObject generated by sorter"
-//                        ()
-//
-//            current.Update x
-//            current.Link x
-//
-//      
-//            stats <- stats + x.GetStats()
-//
-//            let mutable vmStats = VMStats()
-//            GLVM.vmRun(prolog.Handle, VMMode.RuntimeRedundancyChecks, &vmStats)
-//
-//            { stats with ActiveInstructionCount = stats.ActiveInstructionCount - float vmStats.RemovedInstructions }
-
-
-type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
-    inherit AdaptiveObject()
-
-    let mutable frameId = 0UL
-
-    member x.Run(caller : IAdaptiveObject, desc : OutputDescription) =
-        let fbo = desc.framebuffer
-        using ctx.ResourceLock (fun _ ->
-            x.EvaluateAlways caller (fun () ->
-
-                let old = Array.create 4 0
-                let mutable oldFbo = 0
-                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
-
-                let handle = fbo.GetHandle null |> unbox<int>
-
-                if ExecutionContext.framebuffersSupported then
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
+                    GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                     GL.Check "could not bind framebuffer"
-                elif handle <> 0 then
-                    failwithf "cannot render to texture on this OpenGL driver"
 
-                GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
-                GL.Check "could not bind framebuffer"
+                    let depthValue = depth.GetValue x
+                    let colorValues = color.GetValue x
 
-                let depthValue = depth.GetValue x
-                let colorValues = color.GetValue x
-
-                match colorValues, depthValue with
-                    | [Some c], Some depth ->
-                        GL.ClearColor(c.R, c.G, c.B, c.A)
-                        GL.ClearDepth(depth)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                    match colorValues, depthValue with
+                        | [Some c], Some depth ->
+                            GL.ClearColor(c.R, c.G, c.B, c.A)
+                            GL.ClearDepth(depth)
+                            GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
                         
-                    | [Some c], None ->
-                        GL.ClearColor(c.R, c.G, c.B, c.A)
-                        GL.Clear(ClearBufferMask.ColorBufferBit)
+                        | [Some c], None ->
+                            GL.ClearColor(c.R, c.G, c.B, c.A)
+                            GL.Clear(ClearBufferMask.ColorBufferBit)
 
-                    | l, Some depth when List.forall Option.isNone l ->
-                        GL.ClearDepth(depth)
-                        GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                    | l, d ->
+                        | l, Some depth when List.forall Option.isNone l ->
+                            GL.ClearDepth(depth)
+                            GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                        | l, d ->
                             
-                        let mutable i = 0
-                        for c in l do
-                            match c with
-                                | Some c ->
-                                    GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
-                                    GL.ClearColor(c.R, c.G, c.B, c.A)
-                                    GL.Clear(ClearBufferMask.ColorBufferBit)
+                            let mutable i = 0
+                            for c in l do
+                                match c with
+                                    | Some c ->
+                                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
+                                        GL.ClearColor(c.R, c.G, c.B, c.A)
+                                        GL.Clear(ClearBufferMask.ColorBufferBit)
+                                    | None ->
+                                        ()
+                                i <- i + 1
+
+                            match d with
+                                | Some depth -> 
+                                    GL.ClearDepth(depth)
+                                    GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
                                 | None ->
                                     ()
-                            i <- i + 1
-
-                        match d with
-                            | Some depth -> 
-                                GL.ClearDepth(depth)
-                                GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                            | None ->
-                                ()
 
 
-                if ExecutionContext.framebuffersSupported then
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+                    if ExecutionContext.framebuffersSupported then
+                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
 
-                GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-                GL.Check "could not bind framebuffer"
+                    GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+                    GL.Check "could not bind framebuffer"
 
-                frameId <- frameId + 1UL
+                    frameId <- frameId + 1UL
 
-                RenderingResult(fbo, FrameStatistics.Zero)
+                    RenderingResult(fbo, FrameStatistics.Zero)
+                )
             )
-        )
-
-    member x.Dispose() =
-        color.RemoveOutput x
-        depth.RemoveOutput x
-
-    interface IRenderTask with
-        member x.FramebufferSignature = fboSignature
-        member x.Runtime = runtime |> Some
-        member x.Run(caller, fbo) =
-            x.Run(caller, fbo)
 
         member x.Dispose() =
-            x.Dispose()
+            color.RemoveOutput x
+            depth.RemoveOutput x
 
-        member x.FrameId = frameId
+        interface IRenderTask with
+            member x.FramebufferSignature = fboSignature
+            member x.Runtime = runtime |> Some
+            member x.Run(caller, fbo) =
+                x.Run(caller, fbo)
+
+            member x.Dispose() =
+                x.Dispose()
+
+            member x.FrameId = frameId
