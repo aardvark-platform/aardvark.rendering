@@ -7,7 +7,6 @@ open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
-open Aardvark.Base.Incremental.Telemetry
 
 type InputSet(o : IAdaptiveObject) =
     let l = obj()
