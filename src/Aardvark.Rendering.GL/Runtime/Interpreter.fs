@@ -657,6 +657,11 @@ module OpenGLObjectInterpreter =
                 gl.render o
 
 
+type IAdaptiveRenderProgram =
+    inherit IAdaptiveProgram<unit>
+    abstract member FrameStatistics : FrameStatistics
+
+
 [<AbstractClass>]
 type AbstractAdaptiveProgram<'input when 'input :> IAdaptiveObject>() =
     inherit DirtyTrackingAdaptiveObject<'input>()
@@ -664,6 +669,12 @@ type AbstractAdaptiveProgram<'input when 'input :> IAdaptiveObject>() =
     abstract member Dispose : unit -> unit
     abstract member Update : HashSet<'input> -> unit
     abstract member Run : unit -> unit
+
+    abstract member FrameStatistics : FrameStatistics
+    default x.FrameStatistics = FrameStatistics.Zero
+
+    interface IAdaptiveRenderProgram with
+        member x.FrameStatistics = x.FrameStatistics
 
     interface IAdaptiveProgram<unit> with
         member x.Update caller =
@@ -688,14 +699,23 @@ type AbstractAdaptiveProgram<'input when 'input :> IAdaptiveObject>() =
 
 type InterpreterProgram(content : seq<PreparedMultiRenderObject>) =
     inherit AbstractAdaptiveProgram<IAdaptiveObject>()
+
+    let mutable activeInstructions = 0
+    let mutable totalInstructions = 0
+
+    override x.FrameStatistics =
+        { FrameStatistics.Zero with
+            InstructionCount = totalInstructions |> float
+            ActiveInstructionCount = activeInstructions |> float
+        }
+
     override x.Update _ = ()
     override x.Dispose() = ()
     override x.Run() = 
         Interpreter.run (fun gl -> 
             for o in content do gl.render o
-//            { FrameStatistics.Zero with
-//                InstructionCount = gl.TotalInstructions |> float
-//                ActiveInstructionCount = gl.EffectiveInstructions |> float
-//            }
+
+            activeInstructions <- gl.EffectiveInstructions
+            totalInstructions <- gl.TotalInstructions
         )
  

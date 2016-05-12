@@ -663,6 +663,10 @@ module RenderTasks =
                         comparer <- Some c
                         c
 
+        override x.FrameStatistics =
+            { FrameStatistics.Zero with
+                ActiveInstructionCount = float -vmStats.RemovedInstructions
+            }
 
         member private x.sort (f : seq<AdaptiveGLVMFragment>) : list<AdaptiveGLVMFragment> =
             let comparer = getComparer f
@@ -704,6 +708,8 @@ module RenderTasks =
         let mutable arr = null
 
         let mutable comparer = None
+        let mutable activeInstructions = 0
+        let mutable totalInstructions = 0
 
         let getComparer (f : seq<PreparedMultiRenderObject>) =
             match comparer with
@@ -717,6 +723,11 @@ module RenderTasks =
                         comparer <- Some c
                         c
 
+        override x.FrameStatistics =
+            { FrameStatistics.Zero with
+                ActiveInstructionCount = float activeInstructions
+                InstructionCount = float totalInstructions
+            }
 
         override x.Update(_) =
             reader.Update(x)
@@ -748,7 +759,7 @@ module RenderTasks =
         let bb (o : PreparedMultiRenderObject) =
             boundingBoxes.[o].GetValue(this)
 
-        let mutable program = Unchecked.defaultof<IAdaptiveProgram<unit>>
+        let mutable program = Unchecked.defaultof<IAdaptiveRenderProgram>
         let mutable hasProgram = false
         let mutable currentConfig = BackendConfiguration.Debug
 
@@ -776,8 +787,8 @@ module RenderTasks =
 
                 let newProgram = 
                     match c.execution with
-                        | ExecutionEngine.Interpreter -> new SortedInterpreterProgram(this, objects, createComparer) :> IAdaptiveProgram<_>
-                        | _ -> new SortedGLVMProgram(this, objects, createComparer) :> IAdaptiveProgram<_>
+                        | ExecutionEngine.Interpreter -> new SortedInterpreterProgram(this, objects, createComparer) :> IAdaptiveRenderProgram
+                        | _ -> new SortedGLVMProgram(this, objects, createComparer) :> IAdaptiveRenderProgram
 
                 program <- newProgram
                 hasProgram <- true
@@ -790,11 +801,7 @@ module RenderTasks =
             program.Update x |> ignore
             program.Run()
 
-            FrameStatistics.Zero
-//            { FrameStatistics.Zero with
-//                InstructionCount = float vmStats.TotalInstructions
-//                ActiveInstructionCount = float (vmStats.TotalInstructions - vmStats.RemovedInstructions)
-//            }
+            program.FrameStatistics
 
 
         override x.Dispose() =
