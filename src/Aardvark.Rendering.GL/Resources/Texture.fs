@@ -75,7 +75,7 @@ module TextureExtensions =
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,-size) |> ignore
 
     let private updateTexture (ctx:Context) oldSize newSize =
-        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,newSize-oldSize) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.TextureMemory,newSize-oldSize) |> ignore
 
 
     // PositiveX = 0,
@@ -615,6 +615,9 @@ module TextureExtensions =
             let target = cubeSides.[int side] |> snd
             downloadTexture2DInternal target false t level image
 
+    let texSizeInBytes (size : V3i, t : TextureFormat, samples : int) =
+        let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
+        pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
 
     type Context with
         member x.CreateTexture1D(size : int, mipMapLevels : int, t : TextureFormat) =
@@ -690,8 +693,7 @@ module TextureExtensions =
 
                 tex
             )
-
-
+            
         member x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, t : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
@@ -700,7 +702,7 @@ module TextureExtensions =
                 GL.BindTexture(TextureTarget.Texture1D, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size) / 8
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
   
@@ -729,10 +731,9 @@ module TextureExtensions =
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
-
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size.X * size.Y) / 8
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
-                tex.SizeInBytes <- sizeInBytes // TODO check multisampling
+                tex.SizeInBytes <- sizeInBytes
 
                 if samples = 1 then
                     GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int t), size.X, size.Y)
@@ -768,7 +769,7 @@ module TextureExtensions =
 
                 let ifmt = unbox (int t) 
 
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int ifmt))) * size.X * size.Y * size.Z) / 8
+                let sizeInBytes = texSizeInBytes(size, t, 1)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
@@ -807,7 +808,7 @@ module TextureExtensions =
                 GL.BindTexture(TextureTarget.TextureCubeMap, 0)
                 GL.Check "could not unbind texture"
 
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size.X * size.Y) / 8
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples)
                 let sizeInBytes = sizeInBytes * 6L
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
@@ -834,7 +835,7 @@ module TextureExtensions =
                 GL.Check "could not bind texture"
 
 
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size.X * size.Y * count) / 8
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples) * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes // TODO check multisampling
 
@@ -870,7 +871,7 @@ module TextureExtensions =
                 GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int t))) * size) / 8
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1) * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
   
@@ -1006,6 +1007,7 @@ module TextureExtensions =
             
         member x.Delete(t : Texture) =
             using x.ResourceLock (fun _ ->
+                removeTexture x t.SizeInBytes
                 GL.DeleteTexture(t.Handle)
                 GL.Check "could not delete texture"
             )
