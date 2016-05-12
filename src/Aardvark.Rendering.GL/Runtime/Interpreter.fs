@@ -35,7 +35,8 @@ module private Values =
     let GL_UNIFORM_BUFFER = 35345
     [<Literal>]
     let GL_DRAW_INDIRECT_BUFFER = 36671
-
+    [<Literal>]
+    let GL_TEXTURE0 = 33984 //int OpenGl.Enums.TextureUnit.Texture0
 [<AutoOpen>]
 module OpenGLInterpreter =
     module GL = OpenGl.Unsafe
@@ -69,6 +70,7 @@ module OpenGLInterpreter =
         let currentRangeBuffers             = Dictionary<V2i, V3l>(32)
         let currentBuffers                  = Dictionary<int, int>(32)
         let currentEnabled                  = HashSet<int>()
+        let currentDisabled                 = HashSet<int>()
         let currentFramebuffers             = Dictionary<int, int>(32)
         
         [<MethodImpl(MethodImplOptions.AggressiveInlining)>]
@@ -128,6 +130,7 @@ module OpenGLInterpreter =
             currentTextures.Clear() 
             currentRangeBuffers.Clear()
             currentBuffers.Clear()
+            currentDisabled.Clear()
             currentEnabled.Clear()
             currentFramebuffers.Clear()
 
@@ -185,14 +188,14 @@ module OpenGLInterpreter =
 
 
         member x.ShouldEnable (cap : int) =
-            if currentEnabled.Add cap then
+            if currentEnabled.Add cap || currentDisabled.Remove cap then
                 effectiveInstructions <- effectiveInstructions + 1
                 true
             else
                 removed()
 
         member x.ShouldDisable (cap : int) =
-            if currentEnabled.Remove cap then
+            if currentDisabled.Add cap || currentEnabled.Remove cap then
                 effectiveInstructions <- effectiveInstructions + 1
                 true
             else
@@ -340,7 +343,7 @@ module OpenGLInterpreter =
                 GL.StencilFuncSeparate face func ref mask
 
         member inline x.stencilOperation (face : int) (sfail : int) (dfail : int) (dpass : int) =
-            if x.ShouldSetStencilFunction(face, sfail, dfail, dpass) then
+            if x.ShouldSetStencilOperation(face, sfail, dfail, dpass) then
                 GL.StencilOpSeparate face sfail dfail dpass
 
         member inline x.patchVertices (p : int) =
@@ -593,7 +596,7 @@ module OpenGLObjectInterpreter =
 
                     let target = Translations.toGLTarget tex.Dimension tex.IsArray tex.Multisamples
 
-                    gl.activeTexture id
+                    gl.activeTexture (GL_TEXTURE0 + id)
                     gl.bindTexture target tex.Handle
                     gl.bindSampler id sam.Handle
 

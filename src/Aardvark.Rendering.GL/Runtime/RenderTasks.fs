@@ -516,13 +516,19 @@ module RenderTasks =
 
             program.Run()
 
-            // TODO: proper statistics here
-            { FrameStatistics.Zero with
-                ActiveInstructionCount = float -vmStats.Value.RemovedInstructions
-                AddedRenderObjects = float updateStats.AddedFragmentCount
-                RemovedRenderObjects = float updateStats.RemovedFragmentCount
-            }
+
+            let stats =
+                // TODO: proper statistics here
+                { FrameStatistics.Zero with
+                    ActiveInstructionCount = float -vmStats.Value.RemovedInstructions
+                    AddedRenderObjects = float updateStats.AddedFragmentCount
+                    RemovedRenderObjects = float updateStats.RemovedFragmentCount
+                }
                
+            match program with
+                | :? IAdaptiveRenderProgram as rp -> stats + rp.FrameStatistics
+                | _ -> stats
+
         override x.Dispose() =
             if hasProgram then
                 hasProgram <- false
@@ -741,6 +747,9 @@ module RenderTasks =
         override x.Run() =
             Interpreter.run (fun gl ->
                 for a in arr do gl.render a
+
+                activeInstructions <- gl.EffectiveInstructions
+                totalInstructions <- gl.TotalInstructions
             )
 
         override x.Dispose() =
