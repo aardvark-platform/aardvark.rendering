@@ -53,7 +53,7 @@ type RenderControl() as this =
 
                     Log.line "saving screenshot"
                     let! shot = self.CaptureAsync() |> Async.AwaitTask
-                    Aardvark.Rendering.Screenshot.SaveAndUpload(shot, false)
+                    Aardvark.Rendering.Screenshot.SaveAndUpload(shot, true)
                 }
 
             Async.Start take

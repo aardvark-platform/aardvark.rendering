@@ -179,7 +179,9 @@ let main argv =
         "with multiple lines\r\n" + 
         "* second *item*\r\n" 
 
-
+    let message = 
+        "# This is Aardvark.Rendering\r\n" +
+        "I'm uploading my first screenshot to tracker"
     // old school stuff here^^
 
     // here's an example-usage of AIR (Aardvark Imperative Renderer) 
@@ -277,7 +279,7 @@ let main argv =
             |> Sg.billboard
 
     let label2 =
-        Sg.markdown MarkdownConfig.light (Mod.constant md)
+        Sg.markdown MarkdownConfig.light (Mod.constant message)
             |> Sg.scale 0.1
             |> Sg.billboard
             |> Sg.translate 5.0 0.0 0.0
