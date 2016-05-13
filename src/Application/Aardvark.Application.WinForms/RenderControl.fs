@@ -46,6 +46,22 @@ type RenderControl() as this =
         ctrl <- Some c
         impl <- Some cr
 
+        (keyboard :> IKeyboard).KeyDown(Keys.F12).Values.Add(fun () ->
+            let take =
+                async {
+                    do! Async.SwitchToThreadPool()
+
+                    Log.line "saving screenshot"
+                    let! shot = self.CaptureAsync() |> Async.AwaitTask
+                    Aardvark.Rendering.Screenshot.SaveAndUpload(shot, false)
+                }
+
+            Async.Start take
+        )
+
+
+
+
 
     static let rec subscribeToLocationChange (ctrl : Control) (action : EventHandler) : IDisposable =
         if ctrl <> null then

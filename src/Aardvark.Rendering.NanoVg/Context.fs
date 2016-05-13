@@ -137,7 +137,6 @@ module Context =
                 | _ ->
                     let name = Guid.NewGuid().ToString()
                     let id = NanoVg.nvgCreateFont(handle, name, path)
-                    printfn "font-id: %A %s" id path
                     loadedFonts.[path] <- id
                     id
 

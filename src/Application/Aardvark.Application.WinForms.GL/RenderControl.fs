@@ -143,9 +143,10 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
         base.MakeCurrent()
 
         x.KeyDown.Add(fun e ->
-            if e.KeyCode = System.Windows.Forms.Keys.F12 && e.Control then
+            if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
                 renderContiuously <- not renderContiuously
                 x.Invalidate()
+                e.Handled <- true
         )
 
          
