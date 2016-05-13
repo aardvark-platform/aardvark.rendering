@@ -688,6 +688,9 @@ module RenderTasks =
         let mutable effectiveCalls = 0
         let mutable resourceCount = 0
 
+        let mutable added = 0
+        let mutable removed = 0
+
         let add (stats : DrawCallStats) =
             match stats with
                 | NoDraw -> ()
@@ -711,12 +714,14 @@ module RenderTasks =
                     Interlocked.Add(&effectiveCalls, -c) |> ignore
 
         member x.Add(o : PreparedRenderObject) =
+            added <- added + 1
             resourceCount <- resourceCount + o.ResourceCount
             let value = o.DrawCallStats.GetValue x
             oldValues.[o.DrawCallStats] <- value
             add value
 
         member x.Remove(o : PreparedRenderObject) =
+            removed <- removed + 1
             resourceCount <- resourceCount - o.ResourceCount
             match oldValues.TryRemove o.DrawCallStats with
                 | (true, old) -> 
@@ -738,10 +743,14 @@ module RenderTasks =
 
                         oldValues.[d] <- value
                                 
+                let add = Interlocked.Exchange(&added, 0) 
+                let rem = Interlocked.Exchange(&removed, 0)
                 { FrameStatistics.Zero with 
                     DrawCallCount = float drawCalls
                     EffectiveDrawCallCount = float effectiveCalls 
                     VirtualResourceCount = float resourceCount
+                    AddedRenderObjects = float add
+                    RemovedRenderObjects = float rem
                 }
             )
 

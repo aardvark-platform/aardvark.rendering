@@ -162,14 +162,22 @@ type FrameStatistics =
 
         /// the total number of physical resources (IResource)
         PhysicalResourceCount : float
-        VirtualResourceCount : float
 
+        /// the total number of resource-references
+        VirtualResourceCount : float
+        
+        /// used resources by their kind
         ResourceCounts : Map<ResourceKind, float>
+        
+        // the total (approximate) memory-size for all resources
         ResourceSize : Mem
 
-        JumpDistance : float
+        /// the total number of added/removed renderobjects in one frame
         AddedRenderObjects : float
         RemovedRenderObjects : float
+
+        // historical
+        JumpDistance : float
         ProgramSize : uint64
     } with
 
