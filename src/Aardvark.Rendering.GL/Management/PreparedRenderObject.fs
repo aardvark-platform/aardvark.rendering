@@ -1,11 +1,19 @@
 ﻿namespace Aardvark.Rendering.GL
 
+#nowarn "9"
+
 open System
 open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
+open Microsoft.FSharp.NativeInterop
+
+type DrawCallStats =
+    | NoDraw
+    | DirectDraw of count : int * instances : int
+    | IndirectDraw of count : int
 
 [<CustomEquality;CustomComparison>]
 type PreparedRenderObject =
@@ -33,7 +41,10 @@ type PreparedRenderObject =
         ColorBufferMasks : Option<list<V4i>>
         DepthBufferMask : bool
 
-        
+        DrawCallStats : IMod<DrawCallStats>
+        mutable ResourceCount : int
+        mutable ResourceCounts : Map<ResourceKind, int>
+
         mutable IsDisposed : bool
     } 
 
@@ -134,7 +145,8 @@ type PreparedRenderObject =
             x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
             x.Program.Dispose() 
             x.VertexArray <- Unchecked.defaultof<_>
-            
+         
+             
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -178,6 +190,9 @@ module PreparedRenderObject =
             ColorBufferMasks = None
             DepthBufferMask = true
             IsDisposed = false
+            DrawCallStats = Mod.constant NoDraw
+            ResourceCount = 0
+            ResourceCounts = Map.empty
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -203,6 +218,9 @@ module PreparedRenderObject =
                 ColorBufferMasks = o.ColorBufferMasks
                 DepthBufferMask = o.DepthBufferMask
                 IsDisposed = o.IsDisposed
+                DrawCallStats = o.DrawCallStats
+                ResourceCount = o.ResourceCount
+                ResourceCounts = o.ResourceCounts
             }  
 
         for r in res.Resources do
@@ -218,6 +236,11 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
             | h::_ -> h
 
     let last = children |> List.last
+
+    let drawCallStats =
+        children |> List.map (fun c -> c.DrawCallStats) |> Mod.mapN Seq.toList
+
+    member x.DrawCallStats = drawCallStats
 
     member x.Children = children
 
@@ -405,37 +428,68 @@ type ResourceManagerExtensions private() =
 
         let drawCalls =
             if isNull rj.DrawCallInfos then
-                { new Resource<list<DrawCallInfo>>(ResourceKind.Unknown) with
+                { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
                     member x.Create(_) = [], FrameStatistics.Zero
                     member x.Destroy(_) = ()
+                    member x.GetInfo _ = ResourceInfo.Zero
                 }
             else
-                { new Resource<list<DrawCallInfo>>(ResourceKind.Unknown) with
+                { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
                     member x.Create(_) = rj.DrawCallInfos.GetValue x, FrameStatistics.Zero
                     member x.Destroy(_) = ()
+                    member x.GetInfo _ = ResourceInfo.Zero
                 }
+
         drawCalls.AddRef()
 
+        let drawCallStats =
+            Mod.custom (fun self ->
+                match indirect with
+                    | Some ib ->
+                        // we don't want to update the indirect-buffer but we need to depend on it
+                        lock ib (fun () -> ib.Outputs.Add self |> ignore)
+                        let ib = ib.Handle.GetValue(self)
+                        let calls = ib.Count |> NativePtr.read
+                        IndirectDraw calls
+
+                    | None ->
+                        let calls = drawCalls.Handle.GetValue(self)
+
+                        let instances = calls |> List.sumBy (fun c -> c.InstanceCount)
+                        let calls = calls |> List.length
+                        DirectDraw (calls, instances)
+            )
+
+
+
         // finally return the PreparedRenderObject
-        {
-            Activation = activation
-            Context = x.Context
-            Original = rj
-            Parent = None
-            FramebufferSignature = fboSignature
-            LastTextureSlot = !lastTextureSlot
-            Program = program
-            UniformBuffers = uniformBuffers
-            Uniforms = uniforms
-            Textures = textures
-            Buffers = buffers
-            IndexBuffer = index
-            IndirectBuffer = indirect
-            DrawCallInfos = drawCalls
-            VertexArray = vao
-            VertexAttributeValues = attributeValues
-            ColorAttachmentCount = attachmentCount
-            ColorBufferMasks = colorMasks
-            DepthBufferMask = depthMask
-            IsDisposed = false
-        }
+        let res = 
+            {
+                Activation = activation
+                Context = x.Context
+                Original = rj
+                Parent = None
+                FramebufferSignature = fboSignature
+                LastTextureSlot = !lastTextureSlot
+                Program = program
+                UniformBuffers = uniformBuffers
+                Uniforms = uniforms
+                Textures = textures
+                Buffers = buffers
+                IndexBuffer = index
+                IndirectBuffer = indirect
+                DrawCallInfos = drawCalls
+                VertexArray = vao
+                VertexAttributeValues = attributeValues
+                ColorAttachmentCount = attachmentCount
+                ColorBufferMasks = colorMasks
+                DepthBufferMask = depthMask
+                IsDisposed = false
+                DrawCallStats = drawCallStats
+                ResourceCount = -1
+                ResourceCounts = Map.empty
+            }
+
+        res.ResourceCount <- res.Resources |> Seq.length
+        res.ResourceCounts <- res.Resources |> Seq.countBy (fun r -> r.Kind) |> Map.ofSeq
+        res

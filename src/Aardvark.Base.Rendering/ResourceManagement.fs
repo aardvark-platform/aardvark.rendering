@@ -8,6 +8,67 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 
 
+type ResourceInfo = 
+    struct
+        val mutable public AllocatedSize : Mem
+        val mutable public UsedSize : Mem
+
+        static member Zero = ResourceInfo(Mem.Zero, Mem.Zero)
+
+        static member (+) (l : ResourceInfo, r : ResourceInfo) =
+            ResourceInfo(
+                l.AllocatedSize + r.AllocatedSize,
+                l.UsedSize + r.UsedSize
+            )
+
+        static member (-) (l : ResourceInfo, r : ResourceInfo) =
+            ResourceInfo(
+                l.AllocatedSize - r.AllocatedSize,
+                l.UsedSize - r.UsedSize
+            )
+
+        static member (*) (l : ResourceInfo, r : int) =
+            ResourceInfo(
+                l.AllocatedSize * r,
+                l.UsedSize * r
+            )
+
+        static member (*) (l : ResourceInfo, r : float) =
+            ResourceInfo(
+                l.AllocatedSize * r,
+                l.UsedSize * r
+            )
+
+        static member (*) (l : int, r : ResourceInfo) =
+            ResourceInfo(
+                l * r.AllocatedSize,
+                l * r.UsedSize
+            )
+
+        static member (*) (l : float, r : ResourceInfo) =
+            ResourceInfo(
+                l * r.AllocatedSize,
+                l * r.UsedSize
+            )
+
+        static member (/) (l : ResourceInfo, r : int) =
+            ResourceInfo(
+                l.AllocatedSize / r,
+                l.UsedSize / r
+            )
+
+        static member (/) (l : ResourceInfo, r : float) =
+            ResourceInfo(
+                l.AllocatedSize / r,
+                l.UsedSize / r
+            )
+
+
+        new(a,u) = { AllocatedSize = a; UsedSize = u }
+        new(s) = { AllocatedSize = s; UsedSize = s }
+    end
+
+
 type IResource =
     inherit IAdaptiveObject
     inherit IDisposable  
@@ -15,6 +76,9 @@ type IResource =
     abstract member RemoveRef : unit -> unit
     abstract member Update : caller : IAdaptiveObject -> FrameStatistics
     abstract member Kind : ResourceKind
+
+    abstract member Info : ResourceInfo
+
 
 type IResource<'h when 'h : equality> =
     inherit IResource
@@ -26,7 +90,8 @@ type ResourceDescription<'d, 'h when 'h : equality> =
         create : 'd -> 'h
         update : 'h -> 'd -> 'h
         delete : 'h -> unit
-        kind : ResourceKind
+        info   : 'h -> ResourceInfo
+        kind   : ResourceKind
     }
 
 [<AbstractClass>]
@@ -40,8 +105,15 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
     let updateStats = { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
 
+    let mutable info = ResourceInfo.Zero
+
+
     abstract member Create : Option<'h> -> 'h * FrameStatistics
     abstract member Destroy : 'h -> unit
+    abstract member GetInfo : 'h -> ResourceInfo
+
+
+    member x.Info = info
 
     member x.Kind = kind
 
@@ -49,15 +121,14 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
     member x.AddRef() =
         if Interlocked.Increment(&refCount) = 1 then
-            let (h,_) = x.EvaluateAlways null (fun () -> x.Create None)
-            current <- Some h
-            transact (fun () -> handle.Value <- h)
+            x.Update null |> ignore
 
     member x.RemoveRef() =
         if Interlocked.Decrement(&refCount) = 0 then
             onDispose.OnNext()
             x.Destroy handle.Value
             current <- None
+            info <- ResourceInfo.Zero
             transact (fun () -> handle.Value <- Unchecked.defaultof<_>)
 
     member x.Update(caller : IAdaptiveObject) =
@@ -66,10 +137,15 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
                 failwithf "[Resource] cannot update unreferenced resource"
 
             let (h, stats) = x.Create current
+            info <- x.GetInfo h
+
             match current with
-                | Some old when old = h -> updateStats + stats
+                | Some old when old = h -> 
+                    updateStats + stats
+
                 | _ -> 
                     current <- Some h
+                    
                     if h <> handle.Value then
                         transact (fun () -> handle.Value <- h)
 
@@ -89,6 +165,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
         member x.RemoveRef() = x.RemoveRef()
         member x.Handle = x.Handle
         member x.Update caller = x.Update caller
+        member x.Info = x.Info
 
 and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, renderTaskLock : Option<RenderTaskLock>) =
     let store = ConcurrentDictionary<list<obj>, Resource<'h>>()
@@ -152,9 +229,13 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                     match dataMod with
                         | :? ILockedResource as r ->
                             { new Resource<'h>(v.Kind) with
+                                member x.GetInfo(h : 'h) =
+                                    desc.info h
+
                                 member x.Create(old : Option<'h>) =
                                     acquire old dataMod
                                     v.Create old
+
                                 member x.Destroy(h : 'h) =
                                     release dataMod
                                     v.Destroy h 
@@ -165,6 +246,9 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                         let mutable ownsHandle = false
                 
                         { new Resource<'h>(desc.kind) with
+                            member x.GetInfo (h : 'h) =
+                                desc.info h
+
                             member x.Create(old : Option<'h>) =
                                 acquire old dataMod
                                 let data = dataMod.GetValue x
@@ -212,12 +296,45 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
     member x.Count = store.Count
     member x.Clear() = store.Clear()
 
+type InputSet(o : IAdaptiveObject) =
+    let l = obj()
+    let inputs = ReferenceCountingSet<IAdaptiveObject>()
+
+    member x.Add(m : IAdaptiveObject) = 
+        lock l (fun () ->
+            if inputs.Add m then
+                m.Outputs.Add o |> ignore
+        )
+
+    member x.Remove (m : IAdaptiveObject) = 
+        lock l (fun () ->
+            if inputs.Remove m then
+                m.Outputs.Remove o |> ignore
+        )
 
 type ResourceInputSet() =
     inherit DirtyTrackingAdaptiveObject<IResource>()
 
     let all = ReferenceCountingSet<IResource>()
-//    let mutable dirty = HashSet<IResource>()
+    let resourceInfos = Dictionary<ResourceKind, ResourceInfo>()
+    let mutable resourceInfo = ResourceInfo.Zero
+
+    let applyResourceInfo (kind : ResourceKind) (oldInfo : ResourceInfo) (newInfo : ResourceInfo) =
+        let dInfo = newInfo - oldInfo
+        resourceInfo <- resourceInfo + dInfo
+
+        match resourceInfos.TryGetValue kind with
+            | (true, total) ->
+                resourceInfos.[kind] <- total + dInfo
+            | _ ->
+                resourceInfos.[kind] <- dInfo
+
+    let updateOne (x : ResourceInputSet) (r : IResource) =
+        let oldInfo = r.Info
+        let ret = r.Update x
+        let newInfo = r.Info
+        applyResourceInfo r.Kind oldInfo newInfo
+        ret
 
     let updateDirty(x : ResourceInputSet) =
         let rec run (level : int) (stats : FrameStatistics) = 
@@ -235,7 +352,7 @@ type ResourceInputSet() =
             let mutable stats = stats
             if dirty.Count > 0 then
                 for d in dirty do
-                    stats <- stats + d.Update x
+                    stats <- stats + updateOne x d
 
                 run (level + 1) stats
             else
@@ -244,16 +361,9 @@ type ResourceInputSet() =
         run 0 FrameStatistics.Zero
 
 
-//    override x.InputChanged(i : IAdaptiveObject) =
-//        match i with
-//            | :? IResource as r ->
-//                lock all (fun () ->
-//                    if all.Contains r then dirty.Add r |> ignore
-//                )
-//            | _ ->
-//                ()
-//
-//    
+
+    member x.ResourceInfo = resourceInfo
+    member x.ResourceInfos = resourceInfos :> IDictionary<_,_>
 
     member x.Count = all.Count
 
@@ -262,6 +372,7 @@ type ResourceInputSet() =
             lock all (fun () ->
                 if all.Add r then
                     lock r (fun () ->
+                        applyResourceInfo r.Kind ResourceInfo.Zero r.Info
                         if r.OutOfDate then 
                             x.Dirty.Add r |> ignore
                             true
@@ -284,13 +395,18 @@ type ResourceInputSet() =
             if all.Remove r then
                 x.Dirty.Remove r |> ignore
                 lock r (fun () -> r.Outputs.Remove x |> ignore)
-               
+                applyResourceInfo r.Kind r.Info ResourceInfo.Zero
         )
 
     member x.Update (caller : IAdaptiveObject) =
-        x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () ->
-            updateDirty x
-        )
+        let updateStats = 
+            x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () -> updateDirty x)
+
+        { updateStats with
+            ResourceSize = resourceInfo.AllocatedSize
+            PhysicalResourceCount = float all.Count 
+            ResourceCounts = all |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k, float v) |> Map.ofSeq
+        }
 
     member x.Dispose () =
         lock all (fun () ->
@@ -299,6 +415,8 @@ type ResourceInputSet() =
 
             all.Clear()
             x.Dirty.Clear()
+            resourceInfos.Clear()
+            resourceInfo <- ResourceInfo.Zero
         )
 
     interface IDisposable with

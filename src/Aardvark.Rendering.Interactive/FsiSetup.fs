@@ -143,7 +143,7 @@ module FsiSetup =
 
         let b = { BackendConfiguration.NativeOptimized with useDebugOutput = true }
         let task = 
-            app.Runtime.CompileRender(win.FramebufferSignature, b, sg) //|> DefaultOverlays.withStatistics
+            app.Runtime.CompileRender(win.FramebufferSignature, b, sg) |> DefaultOverlays.withStatistics
 
         win.Text <- @"Aardvark rocks \o/"
         win.Visible <- true

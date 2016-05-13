@@ -21,6 +21,14 @@ module Statistics =
 
     let private timer = new Timer(TimerCallback(tick), null, 10, 10)
 
+    let installTick (f : unit -> unit) =
+        lock tickFunctions (fun () -> 
+            tickFunctions.Add(f, f)
+        )
+        { new IDisposable with
+            member x.Dispose() = lock tickFunctions (fun () -> tickFunctions.Remove f |> ignore)
+        }
+
     type Interlocked with
         static member TryChange(cell : byref<'a>, f : 'a -> 'a) =
             let captured = cell
@@ -48,24 +56,28 @@ module Statistics =
         let values = ConcurrentQueue<DateTime * 'a>()
         let mutable tickInstalled = false
 
+        let minCount = 5
         let mutable sum = zero
         let mutable count = 0
 
         let rec prune (rc : int) (t : DateTime) =
-            match values.TryPeek() with
-                | (true, (tv,v)) ->
-                    if tv < t - length then
-                        match values.TryDequeue() with
-                            | (true, (tv,v)) ->
-                                Interlocked.Decrement &count |> ignore
-                                Interlocked.Change(&sum, fun s -> sub s v)
-                                prune (rc + 1) t
-                            | _ -> 
-                                rc
-                    else
+            if values.Count <= minCount then
+                rc
+            else
+                match values.TryPeek() with
+                    | (true, (tv,v)) ->
+                        if tv < t - length then
+                            match values.TryDequeue() with
+                                | (true, (tv,v)) ->
+                                    Interlocked.Decrement &count |> ignore
+                                    Interlocked.Change(&sum, fun s -> sub s v)
+                                    prune (rc + 1) t
+                                | _ -> 
+                                    rc
+                        else
+                            rc
+                    | _ -> 
                         rc
-                | _ -> 
-                    rc
 
         let emit (value : 'a) =
             let now = DateTime.Now
@@ -147,23 +159,27 @@ module Statistics =
 
 
 module DefaultOverlays =
-    
-    let timeString (t : TimeSpan) =
-        let ticks = t.Ticks
-        if ticks >= TimeSpan.TicksPerDay then 
-            sprintf "%.3fdays" (float ticks / float TimeSpan.TicksPerDay)
-        elif ticks >= TimeSpan.TicksPerHour then
-            sprintf "%.3fh" (float ticks / float TimeSpan.TicksPerHour)
-        elif ticks >= TimeSpan.TicksPerMinute then
-            sprintf "%.3fh" (float ticks / float TimeSpan.TicksPerMinute)
-        elif ticks >= TimeSpan.TicksPerSecond then
-            sprintf "%.2fs" (float ticks / float TimeSpan.TicksPerSecond)
-        elif ticks >= TimeSpan.TicksPerMillisecond then
-            sprintf "%.2fms" (float ticks / float TimeSpan.TicksPerMillisecond)
-        elif ticks >= TimeSpan.TicksPerMillisecond / 1000L then
-            sprintf "%.1fµs" (1000.0 * float ticks / float TimeSpan.TicksPerMillisecond)
+    open System.Threading
+
+    let timeString (t : MicroTime) =
+        t.ToString()
+
+    let splittime (cpu : MicroTime) (gpu : MicroTime) =
+        let sum = cpu + gpu
+
+        if sum.TotalNanoseconds = 0L then
+            "0"
         else
-            "0µs"
+            let length = 6
+            let cut = float length * (gpu / sum) |> round |> int |> clamp 0 length
+            let progress = System.String('=', int cut) + System.String(' ', length - cut)
+
+            let total = sum |> string
+            let total = total + String(' ', 8 - total.Length)
+
+            sprintf "%s (%s)" total progress
+
+
 
     let mapKind (k : ResourceKind) =
         match k with 
@@ -172,25 +188,45 @@ module DefaultOverlays =
          | ResourceKind.Framebuffer -> "F"
          | ResourceKind.SamplerState -> "S"
          | ResourceKind.Renderbuffer -> "R"
-         | ResourceKind.StreamingTexture -> "ST"
          | ResourceKind.ShaderProgram -> "P"
          | ResourceKind.UniformLocation -> "UL"
-         | ResourceKind.UniformBuffer -> "U"
-         | ResourceKind.UniformBufferView -> "UV"
+         | ResourceKind.UniformBuffer -> "UB"
          | ResourceKind.VertexArrayObject -> "V"
+         | ResourceKind.IndirectBuffer -> "IB"
+         | ResourceKind.DrawCall -> "D"
+         | ResourceKind.IndexBuffer -> "I"
          | _ -> "?"
          
-    let printResourceUpdateCounts (r : Map<ResourceKind,float>) =
-        let sorted = r |> Map.filter (fun k v -> v <> 0.0) |> Map.toArray
-        sorted.QuickSortDescending(snd)
-        let takes = min (Array.length sorted) 3
+    let printResourceUpdateCounts (max : int) (r : Map<ResourceKind,float>) =
+        let sorted = 
+            r |> Map.filter (fun k v -> k <> ResourceKind.DrawCall && int v <> 0) 
+              |> Map.toArray
+              |> Array.map (fun (k,v) -> mapKind k, int v)
+        
+        sorted.QuickSort(fun (lk,lv) (rk,rv) -> 
+            let c = compare lv rv
+            if c = 0 then compare lk rk
+            else -c
+        )
+
+        let takes = min (Array.length sorted) max
         let mutable result = ""
         for i in 0 .. takes - 1 do
             let k,v = sorted.[i] 
             if i <> 0 then
-             result <- sprintf "%s/%.0f%s" result v (mapKind k)
-            else result <- sprintf "%.0f%s" v (mapKind k) 
-        if result = "" then "none" else result
+                result <- sprintf "%s/%d%s" result v k
+            else 
+                result <- sprintf "%d%s" v k
+
+        
+
+        if result = "" then 
+            "none" 
+        else 
+            if sorted.Length > takes then
+                result + "/..."
+            else
+                result
         
     let memoryString (mem : uint64) =
         if mem > 1073741824UL then
@@ -203,17 +239,22 @@ module DefaultOverlays =
             sprintf "%db" mem
 
     let statisticsTable (s : FrameStatistics) =
+        let sortTime = s.SortingTime
+        let updateTime = s.ProgramUpdateTime - sortTime
+
+
         [
-            "draw calls", sprintf "%.0f" s.DrawCallCount
+            "draw calls", (if s.DrawCallCount = s.EffectiveDrawCallCount then sprintf "%.0f" s.DrawCallCount else sprintf "%.0f (%.0f)" s.DrawCallCount s.EffectiveDrawCallCount)
             "instructions", (if s.InstructionCount = s.ActiveInstructionCount then sprintf "%.0f" s.InstructionCount else sprintf "%.0f (%.0f)" s.ActiveInstructionCount s.InstructionCount)
             "primitives", sprintf "%.0f" s.PrimitiveCount
-            "execute", timeString s.ExecutionTime
-            "resource update", timeString s.ResourceUpdateTime
-            "resource updates", printResourceUpdateCounts s.ResourceUpdateCounts
-            "instruction update", timeString s.InstructionUpdateTime
+            "execute", splittime s.SubmissionTime s.ExecutionTime
+            "resource update", splittime s.ResourceUpdateSubmissionTime s.ResourceUpdateTime
+            "resource updates", printResourceUpdateCounts 3 s.ResourceUpdateCounts
+            "program update", sprintf "%A" updateTime
             "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
-            "resources", sprintf "%.0f" s.ResourceCount
-            "memory", memoryString s.ProgramSize
+            "resources", printResourceUpdateCounts 3 s.ResourceCounts
+            //"resources", sprintf "%.0f" s.PhysicalResourceCount
+            "memory", string s.ResourceSize
         ]
 
     let tableString (t : list<string * string>) =
@@ -265,54 +306,76 @@ module DefaultOverlays =
 
         runtime.CompileRender sg
 
-    type AnnotationRenderTask(real : IRenderTask, annotation : IRenderTask, emit : RenderingResult -> unit) as this =
+    type StatisticsOverlayTask(inner : IRenderTask) =
         inherit AdaptiveObject()
 
-        let mutable upToDateExec = 0
-        let mutable frameId = 0UL
+        let realStats : Statistics.TimeFrame<FrameStatistics> = Statistics.timeFrame (TimeSpan.FromMilliseconds 100.0)
+        let stats = Mod.initDefault realStats.Average
+        let overlay = statisticsOverlay inner.Runtime.Value stats
 
-        do real.AddOutput this
-           annotation.AddOutput this
+        let mutable tickSubscription = null
+
+        let mutable frameId = 0UL
+        let mutable lastExecuteTime = DateTime.MinValue
+        let mutable render0 = 0
+        let mutable rendering = 0
+
+        let tick (self : StatisticsOverlayTask) =
+            if rendering = 0 then
+                let now = DateTime.Now
+                if now - lastExecuteTime > TimeSpan.FromMilliseconds(100.0) then
+                    if Interlocked.Exchange(&render0, 1) = 0 then
+                        transact (fun () -> 
+                            stats.Value <- FrameStatistics.Zero
+                            self.MarkOutdated()
+                        )
+
+        let installTick (self : StatisticsOverlayTask) =
+            if isNull tickSubscription then
+                tickSubscription <- Statistics.installTick (fun () -> tick self)
 
         interface IRenderTask with
-            member x.FramebufferSignature = real.FramebufferSignature
+            member x.FramebufferSignature = inner.FramebufferSignature
             member x.Dispose() =
-                real.RemoveOutput x
-                annotation.RemoveOutput x
+                inner.RemoveOutput x
+                inner.Dispose()
+                overlay.Dispose()
+                if not (isNull tickSubscription) then
+                    tickSubscription.Dispose()
+                    tickSubscription <- null
 
-            member x.Runtime = real.Runtime
+            member x.Runtime = inner.Runtime
 
             member x.Run(caller, f) =
+                installTick x
                 x.EvaluateAlways caller (fun () ->
-                    // TODO: 1) does not work when rendering continuously
-                    //       2) does also not work when annotating the same task multiple times
-                    if not x.OutOfDate then upToDateExec <- upToDateExec + 1
-                    else upToDateExec <- 0
+                    Interlocked.Exchange(&rendering, 1) |> ignore
+                    let res = inner.Run(x,f)
 
+                    let isZero = Interlocked.Exchange(&render0, 0) = 1
+
+                    if not isZero then
+                        realStats.Emit res.Statistics
+
+                    overlay.Run(f) |> ignore
+
+
+                    lastExecuteTime <- DateTime.Now
+                    if isZero then
+                        transact (fun () -> stats.Reset())
+                        
                     frameId <- frameId + 1UL
-
-                    if real.OutOfDate || upToDateExec > 1 then
-                        let real = real.Run(x,f)
-                        emit real
-                        let annotation = annotation.Run(x,f)
-                        RenderingResult(annotation.Framebuffer, real.Statistics + annotation.Statistics)
-                    else
-                        let real = real.Run(x,f)
-                        let annotation = annotation.Run(x,f)
-                        RenderingResult(annotation.Framebuffer, real.Statistics + annotation.Statistics)
+                    Interlocked.Exchange(&rendering, 0) |> ignore
+                    res
                 )
 
             member x.FrameId = frameId
 
+
     let withStatistics (t : IRenderTask) =
         match t.Runtime with
             | Some runtime ->
-                let frame = Statistics.timeFrame (TimeSpan.FromMilliseconds 100.0)
-                let emit (r : RenderingResult) = frame.Emit r.Statistics
-
-                let overlay = statisticsOverlay runtime frame.Average
-
-                let task = new AnnotationRenderTask(t, overlay, emit)
+                let task = new StatisticsOverlayTask(t) //new AnnotationRenderTask(t, overlay, emit)
                 task :> IRenderTask
             | _ -> 
                 Log.warn "could not determine the original task's runtime"

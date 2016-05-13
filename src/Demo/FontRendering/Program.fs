@@ -146,8 +146,8 @@ let main argv =
     let resetPos = Mod.init (6.0 * V3d.III)
     let resetDir = Mod.init (DateTime.MaxValue, V3d.Zero)
 
-    //let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
-    let cam = cam |> AFun.integrate (controller resetPos resetDir)
+    let cam = DefaultCameraController.control win.Mouse win.Keyboard win.Time cam // |> AFun.integrate controller
+    //let cam = cam |> AFun.integrate (controller resetPos resetDir)
 
         
 //    let test = sgs |> ASet.map id
@@ -179,7 +179,9 @@ let main argv =
         "with multiple lines\r\n" + 
         "* second *item*\r\n" 
 
-
+    let message = 
+        "# This is Aardvark.Rendering\r\n" +
+        "I'm uploading my first screenshot to tracker"
     // old school stuff here^^
 
     // here's an example-usage of AIR (Aardvark Imperative Renderer) 
@@ -277,7 +279,7 @@ let main argv =
             |> Sg.billboard
 
     let label2 =
-        Sg.markdown MarkdownConfig.light (Mod.constant md)
+        Sg.markdown MarkdownConfig.light (Mod.constant message)
             |> Sg.scale 0.1
             |> Sg.billboard
             |> Sg.translate 5.0 0.0 0.0
@@ -288,15 +290,15 @@ let main argv =
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
             |> Sg.fillMode mode
-            |> Sg.shader {
-                    do! DefaultSurfaces.trafo 
-                    let! mode = mode
-                    match mode with
-                        | FillMode.Fill -> 
-                            do! DefaultSurfaces.diffuseTexture
-                        | _ -> 
-                            do! DefaultSurfaces.constantColor C4f.Red
-               }
+//            |> Sg.shader {
+//                    do! DefaultSurfaces.trafo 
+//                    let! mode = mode
+//                    match mode with
+//                        | FillMode.Fill -> 
+//                            do! DefaultSurfaces.diffuseTexture
+//                        | _ -> 
+//                            do! DefaultSurfaces.constantColor C4f.Red
+//               }
 
     win.Keyboard.KeyDown(Keys.F8).Values.Add (fun _ ->
         transact (fun () ->
@@ -306,7 +308,7 @@ let main argv =
         )
     )
 
-    let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) // |> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) |> DefaultOverlays.withStatistics
     let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
 
     win.RenderTask <- RenderTask.ofList [clear; main]

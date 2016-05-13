@@ -746,6 +746,7 @@ module OpenGl =
         let BlendFuncSeparate : int -> int -> int -> int -> unit = wrap Pointers.BlendFuncSeparate
         let BlendEquationSeparate : int -> int -> unit = wrap Pointers.BlendEquationSeparate
         let BlendColor : int -> int -> int -> int -> unit = wrap Pointers.BlendColor
+        let BlendColorF : float32 -> float32 -> float32 -> float32 -> unit = wrap Pointers.BlendColor
         let PolygonMode : int -> int -> unit = wrap Pointers.PolygonMode
         let StencilFuncSeparate : int -> int -> int -> int -> unit = wrap Pointers.StencilFuncSeparate
         let StencilOpSeparate : int -> int -> int -> int -> unit = wrap Pointers.StencilOpSeparate

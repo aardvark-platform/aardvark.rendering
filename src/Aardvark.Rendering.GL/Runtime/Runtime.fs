@@ -214,8 +214,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let man = ResourceManager(manager, ctx, Some renderTaskLock, shareTextures, shareBuffers)
 
         match eng.sorting with
-            | Grouping _ -> 
-                new YetAnotherRenderTaskImpl.RenderTask(man, fboSignature, set, engine) :> IRenderTask
+            | Arbitrary | Grouping _  -> 
+                new RenderTasks.RenderTask(man, fboSignature, set, engine) :> IRenderTask
 
             | Dynamic _ -> 
                 failwith "[SortedRenderTask] not available atm."
@@ -255,7 +255,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                     |> List.map (fun (_,(s,_)) -> Map.tryFind s clearColors)
             )
         
-        new ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
+        new RenderTasks.ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, ss : IBackendTexture, trafo : ImageTrafo) =
         using ctx.ResourceLock (fun _ ->

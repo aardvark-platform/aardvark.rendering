@@ -8,6 +8,7 @@ open System.Collections.Generic
 
 
 type ExecutionEngine =
+    | Interpreter = -1
     | Debug = 0
     | Managed = 1
     | Unmanaged = 2
@@ -38,6 +39,7 @@ type IDynamicRenderObjectSorter =
 
 [<CustomEquality; NoComparison>]
 type RenderObjectSorting =
+    | Arbitrary
     | Dynamic of (Ag.Scope -> IDynamicRenderObjectSorter)
     | Static of cmp : IComparer<IRenderObject>
     | Grouping of projections : (list<RenderObject -> IMod>) with
@@ -47,6 +49,7 @@ type RenderObjectSorting =
             | Dynamic a -> (a :> obj).GetHashCode()
             | Static a -> a.GetHashCode()
             | Grouping l -> l |> List.fold (fun hc f -> hc ^^^ (f :> obj).GetHashCode()) 0
+            | Arbitrary -> 0
 
     override x.Equals o =
         match o with
@@ -55,6 +58,7 @@ type RenderObjectSorting =
                     | Dynamic x, Dynamic o -> System.Object.Equals(x,o)
                     | Static x, Static o -> x.Equals o
                     | Grouping x, Grouping o -> List.forall2 (fun l r -> System.Object.Equals(l,r)) x o
+                    | Arbitrary, Arbitrary -> true
                     | _ -> false 
             | _ ->
                 false
@@ -148,6 +152,15 @@ module BackendConfiguration =
             redundancy      = RedundancyRemoval.None
             sharing         = ResourceSharing.Textures
             sorting         = RenderObjectSorting.Grouping Projections.standard
+            useDebugOutput  = false 
+        }
+
+    let Interpreted = 
+        { 
+            execution       = ExecutionEngine.Interpreter
+            redundancy      = RedundancyRemoval.Runtime
+            sharing         = ResourceSharing.Textures
+            sorting         = RenderObjectSorting.Arbitrary
             useDebugOutput  = false 
         }
 
