@@ -175,25 +175,36 @@ module DefaultOverlays =
          | ResourceKind.Framebuffer -> "F"
          | ResourceKind.SamplerState -> "S"
          | ResourceKind.Renderbuffer -> "R"
-         | ResourceKind.StreamingTexture -> "ST"
          | ResourceKind.ShaderProgram -> "P"
          | ResourceKind.UniformLocation -> "UL"
-         | ResourceKind.UniformBuffer -> "U"
-         | ResourceKind.UniformBufferView -> "UV"
+         | ResourceKind.UniformBuffer -> "UB"
          | ResourceKind.VertexArrayObject -> "V"
+         | ResourceKind.IndirectBuffer -> "IB"
+         | ResourceKind.DrawCall -> "D"
+         | ResourceKind.IndexBuffer -> "I"
          | _ -> "?"
          
-    let printResourceUpdateCounts (r : Map<ResourceKind,float>) =
-        let sorted = r |> Map.filter (fun k v -> v <> 0.0) |> Map.toArray
+    let printResourceUpdateCounts (max : int) (r : Map<ResourceKind,float>) =
+        let sorted = r |> Map.filter (fun k v -> k <> ResourceKind.DrawCall && v <> 0.0) |> Map.toArray
         sorted.QuickSortDescending(snd)
-        let takes = min (Array.length sorted) 3
+        let takes = min (Array.length sorted) max
         let mutable result = ""
         for i in 0 .. takes - 1 do
             let k,v = sorted.[i] 
             if i <> 0 then
-             result <- sprintf "%s/%.0f%s" result v (mapKind k)
-            else result <- sprintf "%.0f%s" v (mapKind k) 
-        if result = "" then "none" else result
+                result <- sprintf "%s/%.0f%s" result v (mapKind k)
+            else 
+                result <- sprintf "%.0f%s" v (mapKind k) 
+
+        
+
+        if result = "" then 
+            "none" 
+        else 
+            if sorted.Length > takes then
+                result + "/..."
+            else
+                result
         
     let memoryString (mem : uint64) =
         if mem > 1073741824UL then
@@ -206,16 +217,21 @@ module DefaultOverlays =
             sprintf "%db" mem
 
     let statisticsTable (s : FrameStatistics) =
+        let sortTime = s.SortingTime
+        let updateTime = s.ProgramUpdateTime - sortTime
+
+
         [
             "draw calls", (if s.DrawCallCount = s.EffectiveDrawCallCount then sprintf "%.0f" s.DrawCallCount else sprintf "%.0f (%.0f)" s.DrawCallCount s.EffectiveDrawCallCount)
             "instructions", (if s.InstructionCount = s.ActiveInstructionCount then sprintf "%.0f" s.InstructionCount else sprintf "%.0f (%.0f)" s.ActiveInstructionCount s.InstructionCount)
             "primitives", sprintf "%.0f" s.PrimitiveCount
             "execute", splittime s.SubmissionTime s.ExecutionTime
             "resource update", splittime s.ResourceUpdateSubmissionTime s.ResourceUpdateTime
-            "resource updates", printResourceUpdateCounts s.ResourceUpdateCounts
-            "program update", timeString s.ProgramUpdateTime
+            "resource updates", printResourceUpdateCounts 3 s.ResourceUpdateCounts
+            "program update", sprintf "%A" updateTime
             "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
-            "resources", sprintf "%.0f" s.PhysicalResourceCount
+            "resources", printResourceUpdateCounts 3 s.ResourceCounts
+            //"resources", sprintf "%.0f" s.PhysicalResourceCount
             "memory", memoryString s.ProgramSize
         ]
 

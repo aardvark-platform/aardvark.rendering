@@ -428,12 +428,12 @@ type ResourceManagerExtensions private() =
 
         let drawCalls =
             if isNull rj.DrawCallInfos then
-                { new Resource<list<DrawCallInfo>>(ResourceKind.Unknown) with
+                { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
                     member x.Create(_) = [], FrameStatistics.Zero
                     member x.Destroy(_) = ()
                 }
             else
-                { new Resource<list<DrawCallInfo>>(ResourceKind.Unknown) with
+                { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
                     member x.Create(_) = rj.DrawCallInfos.GetValue x, FrameStatistics.Zero
                     member x.Destroy(_) = ()
                 }
@@ -443,6 +443,8 @@ type ResourceManagerExtensions private() =
             Mod.custom (fun self ->
                 match indirect with
                     | Some ib ->
+                        // we don't want to update the indirect-buffer but we need to depend on it
+                        lock ib (fun () -> ib.Outputs.Add self |> ignore)
                         let ib = ib.Handle.GetValue(self)
                         let calls = ib.Count |> NativePtr.read
                         IndirectDraw calls

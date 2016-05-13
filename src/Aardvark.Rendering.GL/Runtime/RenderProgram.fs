@@ -141,7 +141,7 @@ module RenderProgram =
                         | true -> 
                             let i = i.GetValue()
                             let cnt = List.length i
-                            let dStats = { FrameStatistics.Zero with InstructionCount = float cnt }
+                            let dStats = { FrameStatistics.Zero with InstructionCount = float cnt; ActiveInstructionCount = float cnt }
                             stats := !stats + dStats
                             myStats := !myStats + dStats
 
@@ -153,7 +153,7 @@ module RenderProgram =
                                 let newCount = List.length i
                                 let dCount = newCount - oldCount
                                 oldCount <- newCount
-                                let dStats = { FrameStatistics.Zero with InstructionCount = float dCount }
+                                let dStats = { FrameStatistics.Zero with InstructionCount = float dCount; ActiveInstructionCount = float dCount }
 
                                 stats := !stats + dStats
                                 myStats := !myStats + dStats

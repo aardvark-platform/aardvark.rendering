@@ -184,6 +184,6 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
         let res = oneTimeStatistics + frameStatistics
         oneTimeStatistics <- FrameStatistics.Zero
         { res with
-            PhyiscalResourceCount = float inputSet.Resources.Count 
+            PhysicalResourceCount = float inputSet.Resources.Count 
         }
 

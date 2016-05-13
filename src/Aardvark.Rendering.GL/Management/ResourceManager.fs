@@ -250,7 +250,7 @@ type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>
                 let writers = UnmanagedUniformWriters.writers true fields values
      
                 let mutable block = Unchecked.defaultof<_>
-                { new Resource<UniformBufferView>(ResourceKind.UniformBufferView) with
+                { new Resource<UniformBufferView>(ResourceKind.UniformBuffer) with
                     member x.Create old =
                         let handle = 
                             match old with
@@ -381,7 +381,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.CreateIndirect(indexed, b)
             update = fun h b    -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h      -> ctx.Delete h
-            kind = ResourceKind.Buffer
+            kind = ResourceKind.IndirectBuffer
         })
 
     member x.CreateSurface(signature : IFramebufferSignature, surface : IMod<ISurface>) =

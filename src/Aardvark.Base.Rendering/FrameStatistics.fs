@@ -8,13 +8,14 @@ type ResourceKind =
     | VertexArrayObject = 2
     | Texture = 3
     | UniformBuffer = 4
-    | UniformBufferView = 5
-    | UniformLocation = 6
-    | SamplerState = 7
-    | ShaderProgram = 8
-    | Renderbuffer = 9
-    | Framebuffer = 10
-    | StreamingTexture = 11
+    | UniformLocation = 5
+    | SamplerState = 6
+    | ShaderProgram = 7
+    | Renderbuffer = 8
+    | Framebuffer = 9
+    | IndirectBuffer = 10
+    | DrawCall = 11
+    | IndexBuffer = 12
 
 
 module Map =
@@ -24,7 +25,7 @@ module Map =
             let newValue = 
                 match Map.tryFind k result with
                     | Some v -> fuse v right
-                    | None -> right
+                    | None -> fuse zero right
 
             result <- result |> Map.add k newValue
         result
@@ -119,6 +120,8 @@ type FrameStatistics =
         PhysicalResourceCount : float
         VirtualResourceCount : float
 
+        ResourceCounts : Map<ResourceKind, float>
+
         JumpDistance : float
         AddedRenderObjects : float
         RemovedRenderObjects : float
@@ -147,6 +150,7 @@ type FrameStatistics =
             SubmissionTime = MicroTime.Zero
             ExecutionTime = MicroTime.Zero
             ProgramSize = 0UL
+            ResourceCounts = Map.empty
         }
 
     static member DivideByInt(l : FrameStatistics, r : int) =
@@ -165,6 +169,7 @@ type FrameStatistics =
             VirtualResourceCount = l.VirtualResourceCount + r.VirtualResourceCount
             PhysicalResourceCount = l.PhysicalResourceCount + r.PhysicalResourceCount
             ResourceUpdateCounts = Map.unionWith l.ResourceUpdateCounts r.ResourceUpdateCounts (+) 0.0
+            ResourceCounts = Map.unionWith l.ResourceCounts r.ResourceCounts (+) 0.0
             AddedRenderObjects = l.AddedRenderObjects + r.AddedRenderObjects
             RemovedRenderObjects = l.RemovedRenderObjects + r.RemovedRenderObjects
             SortingTime = l.SortingTime + r.SortingTime
@@ -189,6 +194,7 @@ type FrameStatistics =
             VirtualResourceCount = l.VirtualResourceCount - r.VirtualResourceCount
             PhysicalResourceCount = l.PhysicalResourceCount - r.PhysicalResourceCount
             ResourceUpdateCounts = Map.unionWith l.ResourceUpdateCounts r.ResourceUpdateCounts (-) 0.0
+            ResourceCounts = Map.unionWith l.ResourceCounts r.ResourceCounts (-) 0.0
             AddedRenderObjects = l.AddedRenderObjects - r.AddedRenderObjects
             RemovedRenderObjects = l.RemovedRenderObjects - r.RemovedRenderObjects
             SortingTime = l.SortingTime - r.SortingTime
@@ -213,6 +219,7 @@ type FrameStatistics =
             VirtualResourceCount = l.VirtualResourceCount / r
             PhysicalResourceCount = l.PhysicalResourceCount / r
             ResourceUpdateCounts = Map.map (fun k v -> v / r) l.ResourceUpdateCounts
+            ResourceCounts = Map.map (fun k v -> v / r) l.ResourceCounts
             AddedRenderObjects = l.AddedRenderObjects / r
             RemovedRenderObjects = l.RemovedRenderObjects / r
             SortingTime = l.SortingTime / r

@@ -482,7 +482,7 @@ module RenderTasks =
         inherit AbstractRenderProgram<AdaptiveGLVMFragment>()
         static do GLVM.vmInit()
 
-        let fragments = objects |> ASet.mapUse (fun o -> new AdaptiveGLVMFragment(o, RenderProgram.Compiler.compileFull parent.Parent.Scope o))
+        let fragments = objects |> ASet.mapUse (fun o -> new AdaptiveGLVMFragment(o, RenderProgram.Compiler.compileFull { parent.Parent.Scope with stats = ref FrameStatistics.Zero } o))
         let fragmentReader = fragments.GetReader()
         let mutable vmStats = VMStats()
         let mutable first : AdaptiveGLVMFragment = null

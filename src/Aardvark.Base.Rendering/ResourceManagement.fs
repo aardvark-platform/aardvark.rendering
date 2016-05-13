@@ -256,7 +256,11 @@ type ResourceInputSet() =
             else
                 stats
 
-        run 0 { FrameStatistics.Zero with PhysicalResourceCount = float all.Count }
+        run 0 { 
+            FrameStatistics.Zero with 
+                PhysicalResourceCount = float all.Count 
+                ResourceCounts = all |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k, float v) |> Map.ofSeq
+        }
 
 
 //    override x.InputChanged(i : IAdaptiveObject) =
