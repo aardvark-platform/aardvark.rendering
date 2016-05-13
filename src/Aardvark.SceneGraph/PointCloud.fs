@@ -388,7 +388,7 @@ module PointCloudRenderObjectSemantics =
 
 
         let pool = GeometryPool.createAsync runtime
-        let calls = DrawCallSet(false)
+        let calls = DrawCallSet(true)
         let mutable activeSize = 0L
 
 

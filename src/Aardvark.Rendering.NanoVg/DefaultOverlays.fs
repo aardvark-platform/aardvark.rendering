@@ -232,7 +232,7 @@ module DefaultOverlays =
             "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
             "resources", printResourceUpdateCounts 3 s.ResourceCounts
             //"resources", sprintf "%.0f" s.PhysicalResourceCount
-            "memory", memoryString s.ProgramSize
+            "memory", string s.ResourceSize
         ]
 
     let tableString (t : list<string * string>) =

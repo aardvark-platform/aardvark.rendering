@@ -70,6 +70,50 @@ type MicroTime =
         new (ts : TimeSpan) = { TotalNanoseconds = (ts.Ticks * 1000000000L) / TimeSpan.TicksPerSecond}
     end
 
+[<StructuredFormatDisplay("{AsString}")>]
+type Mem =
+    struct
+        val mutable public Bytes : int64
+
+        member x.Kilobytes = float x.Bytes / 1024.0
+        member x.Megabytes = float x.Bytes / 1048576.0
+        member x.Gigabytes = float x.Bytes / 1073741824.0
+        member x.Terabytes = float x.Bytes / 1099511627776.0
+
+        member private x.AsString = x.ToString()
+
+        override x.ToString() =
+            let b = abs x.Bytes
+            if b = 0L then "0"
+            elif b > 1099511627776L then sprintf "%.3fTB" x.Terabytes
+            elif b > 1073741824L then sprintf "%.3fGB" x.Gigabytes
+            elif b > 1048576L then sprintf "%.2fMB" x.Megabytes
+            elif b > 1024L then sprintf "%.1fkB" x.Kilobytes
+            else sprintf "%db" x.Bytes
+
+        static member Zero = Mem(0L)
+
+        static member (+) (l : Mem, r : Mem) = Mem(l.Bytes + r.Bytes)
+        static member (-) (l : Mem, r : Mem) = Mem(l.Bytes - r.Bytes)
+        static member (~-) (l : Mem) = Mem(-l.Bytes)
+
+        static member (*) (l : Mem, r : int) = Mem(l.Bytes * int64 r)
+        static member (*) (l : Mem, r : float) = Mem(float l.Bytes * r |> int64)
+        static member (*) (l : int, r : Mem) = Mem(int64 l * r.Bytes)
+        static member (*) (l : float, r : Mem) = Mem(l * float r.Bytes |> int64)
+        static member (/) (l : Mem, r : int) = Mem(l.Bytes / int64 r)
+        static member (/) (l : Mem, r : float) = Mem(float l.Bytes / r |> int64)
+        static member (/) (l : Mem, r : Mem) = float l.Bytes / float r.Bytes
+
+        new(bytes : int64) = { Bytes = bytes }
+        new(bytes : int) = { Bytes = int64 bytes }
+        new(bytes : uint64) = { Bytes = int64 bytes }
+        new(bytes : uint32) = { Bytes = int64 bytes }
+        new(bytes : nativeint) = { Bytes = int64 bytes }
+        new(bytes : unativeint) = { Bytes = int64 bytes }
+    end
+
+
 
 type FrameStatistics =
     {
@@ -121,6 +165,7 @@ type FrameStatistics =
         VirtualResourceCount : float
 
         ResourceCounts : Map<ResourceKind, float>
+        ResourceSize : Mem
 
         JumpDistance : float
         AddedRenderObjects : float
@@ -151,6 +196,7 @@ type FrameStatistics =
             ExecutionTime = MicroTime.Zero
             ProgramSize = 0UL
             ResourceCounts = Map.empty
+            ResourceSize = Mem.Zero
         }
 
     static member DivideByInt(l : FrameStatistics, r : int) =
@@ -179,6 +225,7 @@ type FrameStatistics =
             SubmissionTime = l.SubmissionTime + r.SubmissionTime
             ExecutionTime = l.ExecutionTime + r.ExecutionTime
             ProgramSize = l.ProgramSize + r.ProgramSize
+            ResourceSize = l.ResourceSize + r.ResourceSize
         }
 
     static member (-) (l : FrameStatistics, r : FrameStatistics) =
@@ -204,6 +251,7 @@ type FrameStatistics =
             SubmissionTime = l.SubmissionTime - r.SubmissionTime
             ExecutionTime = l.ExecutionTime - r.ExecutionTime
             ProgramSize = l.ProgramSize - r.ProgramSize
+            ResourceSize = l.ResourceSize - r.ResourceSize
         }
 
     static member (/) (l : FrameStatistics, r : float) =
@@ -229,6 +277,7 @@ type FrameStatistics =
             SubmissionTime = l.SubmissionTime / r
             ExecutionTime = l.ExecutionTime / r
             ProgramSize = uint64 (float l.ProgramSize / r)
+            ResourceSize = l.ResourceSize / r
         }
 
 

@@ -431,12 +431,15 @@ type ResourceManagerExtensions private() =
                 { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
                     member x.Create(_) = [], FrameStatistics.Zero
                     member x.Destroy(_) = ()
+                    member x.GetInfo _ = ResourceInfo.Zero
                 }
             else
                 { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
                     member x.Create(_) = rj.DrawCallInfos.GetValue x, FrameStatistics.Zero
                     member x.Destroy(_) = ()
+                    member x.GetInfo _ = ResourceInfo.Zero
                 }
+
         drawCalls.AddRef()
 
         let drawCallStats =

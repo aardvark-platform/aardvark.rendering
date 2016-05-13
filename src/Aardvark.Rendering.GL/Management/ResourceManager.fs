@@ -251,6 +251,9 @@ type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>
      
                 let mutable block = Unchecked.defaultof<_>
                 { new Resource<UniformBufferView>(ResourceKind.UniformBuffer) with
+                    member x.GetInfo b = 
+                        b.Size |> Mem |> ResourceInfo
+
                     member x.Create old =
                         let handle = 
                             match old with
@@ -330,6 +333,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> arrayBufferManager.Create b
             update = fun h b    -> arrayBufferManager.Update(h, b)
             delete = fun h      -> arrayBufferManager.Delete h
+            info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
             kind = ResourceKind.Buffer
         })
 
@@ -341,6 +345,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     fun () ->
                         let mutable r = Unchecked.defaultof<_>
                         { new Resource<Buffer>(ResourceKind.Buffer) with
+
+                            member x.GetInfo b = 
+                                b.SizeInBytes |> Mem |> ResourceInfo
+
                             member x.Create (old : Option<Buffer>) =
                                 match old with
                                     | None ->
@@ -365,6 +373,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     create = fun b      -> bufferManager.Create b
                     update = fun h b    -> bufferManager.Update(h, b)
                     delete = fun h      -> bufferManager.Delete h
+                    info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
                     kind = ResourceKind.Buffer
                 })
 
@@ -373,6 +382,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
             delete = fun h      -> textureManager.Delete h
+            info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
             kind = ResourceKind.Texture
         })
 
@@ -381,6 +391,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.CreateIndirect(indexed, b)
             update = fun h b    -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h      -> ctx.Delete h
+            info =   fun h      -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
             kind = ResourceKind.IndirectBuffer
         })
 
@@ -396,6 +407,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> create b
             update = fun h b    -> ctx.Delete(h); create b
             delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
             kind = ResourceKind.ShaderProgram
         })
 
@@ -404,6 +416,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.CreateSampler b
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
             kind = ResourceKind.SamplerState
         })
 
@@ -422,6 +435,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             [ bindings :> obj; index :> obj ],
             fun () ->
                 { new Resource<VertexArrayObject>(ResourceKind.VertexArrayObject) with
+
+                    member x.GetInfo _ = ResourceInfo.Zero
+
                     member x.Create (old : Option<VertexArrayObject>) =
                         let attributes = bindings |> List.map (createView x)
                         let index = match index with | Some i -> i.Handle.GetValue x |> Some | _ -> None
@@ -452,6 +468,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         let _,writer = UnmanagedUniformWriters.writers false [uniform.UniformField] inputs |> List.head
      
                         { new Resource<UniformLocation>(ResourceKind.UniformLocation) with
+                            
+                            member x.GetInfo h =
+                                h.Size |> Mem |> ResourceInfo
+
                             member x.Create old =
                                 let handle =
                                     match old with 
