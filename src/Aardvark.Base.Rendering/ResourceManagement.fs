@@ -358,11 +358,7 @@ type ResourceInputSet() =
             else
                 stats
 
-        run 0 { 
-            FrameStatistics.Zero with 
-                PhysicalResourceCount = float all.Count 
-                ResourceCounts = all |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k, float v) |> Map.ofSeq
-        }
+        run 0 FrameStatistics.Zero
 
 
 
@@ -408,6 +404,8 @@ type ResourceInputSet() =
 
         { updateStats with
             ResourceSize = resourceInfo.AllocatedSize
+            PhysicalResourceCount = float all.Count 
+            ResourceCounts = all |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k, float v) |> Map.ofSeq
         }
 
     member x.Dispose () =

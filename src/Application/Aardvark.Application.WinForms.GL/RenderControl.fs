@@ -72,6 +72,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     let mutable needsRedraw = false
     let mutable first = true
     
+    let mutable renderContiuously = false
     let mutable autoInvalidate = true
     let mutable threadStealing : StopStealing = 
         { new StopStealing with member x.StopStealing () = { new IDisposable with member x.Dispose() = () } }
@@ -93,20 +94,23 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     interface IControl with
         member x.IsInvalid = needsRedraw
         member x.Invalidate() =
-            if not needsRedraw then
-                needsRedraw <- true
-                x.Invalidate()
+            if not renderContiuously then
+                if not needsRedraw then
+                    needsRedraw <- true
+                    x.Invalidate()
 
         member x.Paint() =
-            use g = x.CreateGraphics()
-            use e = new PaintEventArgs(g, x.ClientRectangle)
-            x.InvokePaint(x, e)
+            if not renderContiuously then
+                use g = x.CreateGraphics()
+                use e = new PaintEventArgs(g, x.ClientRectangle)
+                x.InvokePaint(x, e)
 
         member x.Invoke f =
             base.Invoke (new System.Action(f)) |> ignore
 
     member private x.ForceRedraw() =
-        messageLoop.Draw x
+        if renderContiuously then () 
+        else messageLoop.Draw x
 
 
     member x.RenderTask
@@ -137,6 +141,13 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
         base.OnHandleCreated(e)
         loaded <- true
         base.MakeCurrent()
+
+        x.KeyDown.Add(fun e ->
+            if e.KeyCode = System.Windows.Forms.Keys.F12 && e.Control then
+                renderContiuously <- not renderContiuously
+                x.Invalidate()
+        )
+
          
     member x.Render() = 
         if loaded then
@@ -207,6 +218,9 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                         transact (fun () -> Mod.change sizes size)
 
                     needsRedraw <- false
+
+            if renderContiuously then
+                x.Invalidate()
 
     override x.OnPaint(e) =
         if x.OnPaintRender then
