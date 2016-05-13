@@ -81,10 +81,11 @@
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\GLVM.fs" />
-    <Compile Include="Runtime\Interpreter.fs" />
     <Compile Include="Runtime\Compiled.fs" />
     <Compile Include="Runtime\HighLevelInstructions.fs" />
     <Compile Include="Runtime\DeltaCompiler.fs" />
+    <Compile Include="Runtime\RenderProgram.fs" />
+    <Compile Include="Runtime\Interpreter.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <None Include="paket.references" />

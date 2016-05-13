@@ -148,22 +148,25 @@ module Statistics =
 
 module DefaultOverlays =
     
-    let timeString (t : TimeSpan) =
-        let ticks = t.Ticks
-        if ticks >= TimeSpan.TicksPerDay then 
-            sprintf "%.3fdays" (float ticks / float TimeSpan.TicksPerDay)
-        elif ticks >= TimeSpan.TicksPerHour then
-            sprintf "%.3fh" (float ticks / float TimeSpan.TicksPerHour)
-        elif ticks >= TimeSpan.TicksPerMinute then
-            sprintf "%.3fh" (float ticks / float TimeSpan.TicksPerMinute)
-        elif ticks >= TimeSpan.TicksPerSecond then
-            sprintf "%.2fs" (float ticks / float TimeSpan.TicksPerSecond)
-        elif ticks >= TimeSpan.TicksPerMillisecond then
-            sprintf "%.2fms" (float ticks / float TimeSpan.TicksPerMillisecond)
-        elif ticks >= TimeSpan.TicksPerMillisecond / 1000L then
-            sprintf "%.1fµs" (1000.0 * float ticks / float TimeSpan.TicksPerMillisecond)
+    let timeString (t : MicroTime) =
+        t.ToString()
+
+    let splittime (cpu : MicroTime) (gpu : MicroTime) =
+        let sum = cpu + gpu
+
+        if sum.TotalNanoseconds = 0L then
+            "0"
         else
-            "0µs"
+            let length = 6
+            let cut = float length * (gpu / sum) |> round |> int |> clamp 0 length
+            let progress = System.String('=', int cut) + System.String(' ', length - cut)
+
+            let total = sum |> string
+            let total = total + String(' ', 8 - total.Length)
+
+            sprintf "%s (%s)" total progress
+
+
 
     let mapKind (k : ResourceKind) =
         match k with 
@@ -204,15 +207,15 @@ module DefaultOverlays =
 
     let statisticsTable (s : FrameStatistics) =
         [
-            "draw calls", sprintf "%.0f" s.DrawCallCount
+            "draw calls", (if s.DrawCallCount = s.EffectiveDrawCallCount then sprintf "%.0f" s.DrawCallCount else sprintf "%.0f (%.0f)" s.DrawCallCount s.EffectiveDrawCallCount)
             "instructions", (if s.InstructionCount = s.ActiveInstructionCount then sprintf "%.0f" s.InstructionCount else sprintf "%.0f (%.0f)" s.ActiveInstructionCount s.InstructionCount)
             "primitives", sprintf "%.0f" s.PrimitiveCount
-            "execute", timeString s.ExecutionTime
-            "resource update", timeString s.ResourceUpdateTime
+            "execute", splittime s.SubmissionTime s.ExecutionTime
+            "resource update", splittime s.ResourceUpdateSubmissionTime s.ResourceUpdateTime
             "resource updates", printResourceUpdateCounts s.ResourceUpdateCounts
-            "instruction update", timeString s.InstructionUpdateTime
+            "program update", timeString s.ProgramUpdateTime
             "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
-            "resources", sprintf "%.0f" s.ResourceCount
+            "resources", sprintf "%.0f" s.PhysicalResourceCount
             "memory", memoryString s.ProgramSize
         ]
 

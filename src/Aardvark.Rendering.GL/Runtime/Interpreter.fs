@@ -37,6 +37,7 @@ module private Values =
     let GL_DRAW_INDIRECT_BUFFER = 36671
     [<Literal>]
     let GL_TEXTURE0 = 33984 //int OpenGl.Enums.TextureUnit.Texture0
+
 [<AutoOpen>]
 module OpenGLInterpreter =
     module GL = OpenGl.Unsafe
@@ -659,66 +660,23 @@ module OpenGLObjectInterpreter =
             for o in o.Children do
                 gl.render o
 
+[<AutoOpen>]
+module ``Interpreter Extensions`` =
+    type private InterpreterProgram(scope : RenderTaskScope, content : seq<PreparedMultiRenderObject>) =
+        inherit AbstractRenderProgram()
 
-type IAdaptiveRenderProgram =
-    inherit IAdaptiveProgram<unit>
-    abstract member FrameStatistics : FrameStatistics
+        override x.Update() = ()
+        override x.Dispose() = ()
+        override x.Run() = 
+            Interpreter.run (fun gl -> 
+                for o in content do gl.render o
 
-
-[<AbstractClass>]
-type AbstractAdaptiveProgram<'input when 'input :> IAdaptiveObject>() =
-    inherit DirtyTrackingAdaptiveObject<'input>()
-    
-    abstract member Dispose : unit -> unit
-    abstract member Update : HashSet<'input> -> unit
-    abstract member Run : unit -> unit
-
-    abstract member FrameStatistics : FrameStatistics
-    default x.FrameStatistics = FrameStatistics.Zero
-
-    interface IAdaptiveRenderProgram with
-        member x.FrameStatistics = x.FrameStatistics
-
-    interface IAdaptiveProgram<unit> with
-        member x.Update caller =
-            x.EvaluateIfNeeded' caller AdaptiveProgramStatistics.Zero (fun dirty ->
-                x.Update dirty
-                AdaptiveProgramStatistics.Zero
+                { FrameStatistics.Zero with
+                    InstructionCount = gl.TotalInstructions |> float
+                    ActiveInstructionCount = gl.EffectiveInstructions |> float
+                }
             )
-
-        member x.Run s = x.Run()
-        member x.Disassemble() = null
-        member x.AutoDefragmentation 
-            with get() = false
-            and set _ = ()
-
-        member x.StartDefragmentation() = System.Threading.Tasks.Task.FromResult(TimeSpan.Zero)
-        member x.NativeCallCount = 0
-        member x.FragmentCount = 1
-        member x.ProgramSizeInBytes = 0L
-        member x.TotalJumpDistanceInBytes = 0L
-        member x.Dispose() = x.Dispose()
-  
-
-type InterpreterProgram(content : seq<PreparedMultiRenderObject>) =
-    inherit AbstractAdaptiveProgram<IAdaptiveObject>()
-
-    let mutable activeInstructions = 0
-    let mutable totalInstructions = 0
-
-    override x.FrameStatistics =
-        { FrameStatistics.Zero with
-            InstructionCount = totalInstructions |> float
-            ActiveInstructionCount = activeInstructions |> float
-        }
-
-    override x.Update _ = ()
-    override x.Dispose() = ()
-    override x.Run() = 
-        Interpreter.run (fun gl -> 
-            for o in content do gl.render o
-
-            activeInstructions <- gl.EffectiveInstructions
-            totalInstructions <- gl.TotalInstructions
-        )
  
+    module RenderProgram =
+        module Interpreter =
+            let runtime scope content = new InterpreterProgram(scope, content) :> IRenderProgram

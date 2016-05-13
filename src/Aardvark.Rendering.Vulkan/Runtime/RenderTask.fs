@@ -276,11 +276,12 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
                 stats with 
                     AddedRenderObjects = float programUpdateStats.AddedFragmentCount
                     RemovedRenderObjects = float programUpdateStats.RemovedFragmentCount
-                    InstructionUpdateCount = 0.0 // TODO!!
-                    InstructionUpdateTime = 
-                        programUpdateStats.DeltaProcessTime +
-                        programUpdateStats.WriteTime +
-                        programUpdateStats.CompileTime
+                    ProgramUpdateTime = 
+                        MicroTime (
+                            programUpdateStats.DeltaProcessTime +
+                            programUpdateStats.WriteTime +
+                            programUpdateStats.CompileTime
+                        )
             }
 
         executionTime.Restart()
@@ -299,7 +300,7 @@ type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : 
 
 
         { stats with 
-            ExecutionTime = executionTime.Elapsed 
+            ExecutionTime = MicroTime (executionTime.Elapsed )
         }
 
     override x.Dispose() =

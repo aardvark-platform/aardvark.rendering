@@ -256,7 +256,7 @@ type ResourceInputSet() =
             else
                 stats
 
-        run 0 FrameStatistics.Zero
+        run 0 { FrameStatistics.Zero with PhysicalResourceCount = float all.Count }
 
 
 //    override x.InputChanged(i : IAdaptiveObject) =

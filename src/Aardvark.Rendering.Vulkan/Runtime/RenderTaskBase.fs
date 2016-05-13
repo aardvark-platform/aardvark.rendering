@@ -165,7 +165,7 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
                     { stats with
                         ResourceUpdateCount = stats.ResourceUpdateCount + float count
                         ResourceUpdateCounts = counts
-                        ResourceUpdateTime = updateCPUTime.Elapsed + updateGPUTime.Elapsed
+                        ResourceUpdateTime = MicroTime (updateCPUTime.Elapsed + updateGPUTime.Elapsed)
                     }
 
                 if dirtyResources.Count > 0 then
@@ -184,6 +184,6 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
         let res = oneTimeStatistics + frameStatistics
         oneTimeStatistics <- FrameStatistics.Zero
         { res with
-            ResourceCount = float inputSet.Resources.Count 
+            PhyiscalResourceCount = float inputSet.Resources.Count 
         }
 

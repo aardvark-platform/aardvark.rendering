@@ -1,7 +1,9 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open Aardvark.Base
+open Aardvark.Base.Incremental
 open Aardvark.Rendering
+open OpenTK.Graphics.OpenGL4
 
 module InstructionStatistics =
     open OpenGl
@@ -86,3 +88,38 @@ module InstructionStatistics =
     let replaceList (stats : EventSource<FrameStatistics>) (o : list<Instruction>) (n : list<Instruction>) =
         o |> List.iter (remove stats)
         n |> List.iter (add stats)
+
+type OpenGlStopwatch() =
+    let mutable query = -1
+    let cpu = System.Diagnostics.Stopwatch()
+
+    member x.Start() =
+        if query < 0 then query <- GL.GenQuery()
+        cpu.Start()
+        GL.BeginQuery(QueryTarget.TimeElapsed, query)
+
+    member x.Restart() =
+        if query >= 0 then GL.DeleteQuery query
+        query <- GL.GenQuery()
+
+        cpu.Restart()
+        GL.BeginQuery(QueryTarget.TimeElapsed, query)
+
+    member x.Stop() =
+        GL.EndQuery(QueryTarget.TimeElapsed)
+        cpu.Stop()
+
+    member x.ElapsedGPU =
+        let mutable ns = 0L
+        GL.GetQueryObject(query, GetQueryObjectParam.QueryResult, &ns)
+        MicroTime(ns)
+
+    member x.ElapsedCPU =
+        cpu.Elapsed |> MicroTime
+            
+type RenderTaskScope =
+    {
+        currentContext  : IMod<ContextHandle>
+        stats           : ref<FrameStatistics>
+    }
+
