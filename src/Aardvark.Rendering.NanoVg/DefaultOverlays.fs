@@ -198,16 +198,25 @@ module DefaultOverlays =
          | _ -> "?"
          
     let printResourceUpdateCounts (max : int) (r : Map<ResourceKind,float>) =
-        let sorted = r |> Map.filter (fun k v -> k <> ResourceKind.DrawCall && v <> 0.0) |> Map.toArray
-        sorted.QuickSortDescending(snd)
+        let sorted = 
+            r |> Map.filter (fun k v -> k <> ResourceKind.DrawCall && int v <> 0) 
+              |> Map.toArray
+              |> Array.map (fun (k,v) -> mapKind k, int v)
+        
+        sorted.QuickSort(fun (lk,lv) (rk,rv) -> 
+            let c = compare lv rv
+            if c = 0 then compare lk rk
+            else -c
+        )
+
         let takes = min (Array.length sorted) max
         let mutable result = ""
         for i in 0 .. takes - 1 do
             let k,v = sorted.[i] 
             if i <> 0 then
-                result <- sprintf "%s/%.0f%s" result v (mapKind k)
+                result <- sprintf "%s/%d%s" result v k
             else 
-                result <- sprintf "%.0f%s" v (mapKind k) 
+                result <- sprintf "%d%s" v k
 
         
 
