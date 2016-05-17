@@ -406,10 +406,12 @@ module PointCloudRenderObjectSemantics =
                 if inactive.Remove n then
                     Interlocked.Add(&inactiveSize, int64 -size) |> ignore
 
-            if calls.Add n.range then
-                Interlocked.Add(&activeSize, int64 size) |> ignore
-                Interlocked.Increment(progress.activeNodeCount) |> ignore
-
+            if n.range.Size >= 0 then
+                if calls.Add n.range then
+                    Interlocked.Add(&activeSize, int64 size) |> ignore
+                    Interlocked.Increment(progress.activeNodeCount) |> ignore
+                else
+                    Log.line "could not add calls"
 
         let deactivate (n : GeometryRef) =
             let size = int64 n.range.Size
@@ -418,10 +420,12 @@ module PointCloudRenderObjectSemantics =
                 if inactive.Enqueue n then
                     Interlocked.Add(&inactiveSize, size) |> ignore
 
-            if calls.Remove n.range then
-                Interlocked.Add(&activeSize, -size) |> ignore
-                Interlocked.Decrement(progress.activeNodeCount) |> ignore
-            else Log.line "could not remove calls"
+            if n.range.Size >= 0 then
+                if calls.Remove n.range then
+                    Interlocked.Add(&activeSize, -size) |> ignore
+                    Interlocked.Decrement(progress.activeNodeCount) |> ignore
+                else 
+                    Log.line "could not remove calls"
 
         let removeFromWorkingSet n = 
             if node.Config.boundingBoxSurface.IsSome  then
@@ -522,15 +526,19 @@ module PointCloudRenderObjectSemantics =
                             Log.warn "data got cancelled"; 
                             None
                     match data with
-                        | Some v ->    
+                        | Some (Some v) ->
                             do! Stepwise.register (fun () -> pool.Remove v |> ignore)
                             let range = pool.Add v
                             let gref = { geometry = v; range = range; node = n }
-                            do! Stepwise.register (fun () -> deactivate gref)
-                            activate gref
-                            removeFromWorkingSet n
+                            let mutable activated = false
+                            do! Stepwise.register (fun () -> if activated then deactivate gref)
+                            let () =
+                                activate gref
+                                activated <- true
+                                removeFromWorkingSet n
                             return ()
                         | None -> return! Stepwise.cancel
+                        | Some None -> return ()
                 }
 
 

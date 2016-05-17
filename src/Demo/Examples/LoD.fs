@@ -234,7 +234,7 @@ module LoD =
 //                        for i in 0..(1 <<< 20) do a <- a + 1
 //                        a
 
-                    return IndexedGeometry(Mode = unbox a, IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
+                    return Some <| IndexedGeometry(Mode = unbox a, IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
                 }
 
     let data = DummyDataProvider(Box3d(V3d.OOO, 20.0 * V3d.III)) :> ILodData

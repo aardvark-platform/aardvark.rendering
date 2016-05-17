@@ -27,7 +27,7 @@ type ILodData =
     abstract member BoundingBox : Box3d
     abstract member Traverse : (LodDataNode -> bool) -> unit
     abstract member Dependencies : list<IMod>
-    abstract member GetData : node : LodDataNode -> Async<IndexedGeometry>
+    abstract member GetData : node : LodDataNode -> Async<Option<IndexedGeometry>>
 
 [<AutoOpen>]
 module ``Lod Data Extensions`` =

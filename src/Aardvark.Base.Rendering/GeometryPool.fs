@@ -190,14 +190,14 @@ type GeometryPool(runtime : IRuntime, asyncWrite : bool) =
             ReaderWriterLock.write pointersRW (fun () ->
                 pointers.GetOrCreate(g, fun g ->
                     let count = faceVertexCount g
-                    //isNew := true
                     let ptr = manager.Alloc count
 
-                    ReaderWriterLock.read buffersRW (fun () ->
-                        for (KeyValue(sem, buffer)) in buffers do
-                            buffer.AdjustToCount(nativeint manager.Capacity)
-                            write g sem ptr buffer
-                    )
+                    if count <> 0 then
+                        ReaderWriterLock.read buffersRW (fun () ->
+                            for (KeyValue(sem, buffer)) in buffers do
+                                buffer.AdjustToCount(nativeint manager.Capacity)
+                                write g sem ptr buffer
+                        )
                     ptr
                 )
             )
