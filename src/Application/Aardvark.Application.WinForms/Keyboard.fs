@@ -26,7 +26,8 @@ type Keyboard() as this =
                 this.KeyDown (%e.KeyCode)
             | _ -> ()
 
-        e.IsInputKey <- true
+        if (this :> IKeyboard).ClaimsKeyEvents then
+            e.IsInputKey <- true
 
     let onKeyUp (s : obj) (e : KeyEventArgs) =
         this.KeyUp (%e.KeyCode)
@@ -44,7 +45,7 @@ type Keyboard() as this =
 
     let addHandlers() =
         match ctrl with
-            | Some ctrl ->
+            | Some ctrl -> 
                ctrl.PreviewKeyDown.AddHandler onPreviewKeyDownHandler
                ctrl.KeyDown.AddHandler onKeyDownHandler
                ctrl.KeyUp.AddHandler onKeyUpHandler

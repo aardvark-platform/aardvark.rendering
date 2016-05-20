@@ -16,6 +16,8 @@ type IKeyboard =
     abstract member Up : IEvent<Keys>
     abstract member Press : IEvent<char>
 
+    abstract member ClaimsKeyEvents : bool with get, set
+
 
 type EventKeyboard() =
     let downKeys = CSet.empty
@@ -74,4 +76,6 @@ type EventKeyboard() =
         member x.DownWithRepeats = downWithRepeats :> IEvent<_>
         member x.Up = upEvent :> IEvent<_>
         member x.Press = input :> IEvent<_>
+
+        member val ClaimsKeyEvents = true with get, set
 
