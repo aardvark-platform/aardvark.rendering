@@ -119,9 +119,28 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
     member internal x.OnDispose = onDispose :> IObservable<_>
 
+    member private x.PerformUpdate() =
+        if refCount <= 0 then
+            failwithf "[Resource] cannot update unreferenced resource"
+
+        let (h, stats) = x.Create current
+        info <- x.GetInfo h
+
+        match current with
+            | Some old when old = h -> 
+                updateStats + stats
+
+            | _ -> 
+                current <- Some h
+                    
+                if h <> handle.Value then
+                    transact (fun () -> handle.Value <- h)
+
+                updateStats + stats
+
     member x.AddRef() =
         if Interlocked.Increment(&refCount) = 1 then
-            x.Update null |> ignore
+            x.ForceUpdate null |> ignore
 
     member x.RemoveRef() =
         if Interlocked.Decrement(&refCount) = 0 then
@@ -129,27 +148,19 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
             x.Destroy handle.Value
             current <- None
             info <- ResourceInfo.Zero
-            transact (fun () -> handle.Value <- Unchecked.defaultof<_>)
+            transact (fun () -> 
+                x.MarkOutdated()
+                handle.Value <- Unchecked.defaultof<_>
+            )
 
     member x.Update(caller : IAdaptiveObject) =
         x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () ->
-            if refCount <= 0 then
-                failwithf "[Resource] cannot update unreferenced resource"
-
-            let (h, stats) = x.Create current
-            info <- x.GetInfo h
-
-            match current with
-                | Some old when old = h -> 
-                    updateStats + stats
-
-                | _ -> 
-                    current <- Some h
-                    
-                    if h <> handle.Value then
-                        transact (fun () -> handle.Value <- h)
-
-                    updateStats + stats
+            x.PerformUpdate()
+        )
+  
+    member x.ForceUpdate(caller : IAdaptiveObject) =
+        x.EvaluateAlways caller (fun () ->
+            x.PerformUpdate()
         )
     
     member x.Handle = handle :> IMod<_>
@@ -208,90 +219,102 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | (true,v) -> Some v
             | _ -> None
      
-    member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h>) =
-        let resource =
-            match tryGetParent key with
-                | Some r -> r
-                | None ->
-                     store.GetOrAdd(key, fun _ -> 
-                        let res = create()
-                        res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
-                        res
-                     )
+    member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'h>) =
+        let resource = 
+            store.GetOrAdd(key, fun _ -> 
+                let res = create()
+                res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
+                res
+            )
         resource.AddRef()
         resource :> IResource<_>
+
+    member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h>) =
+        match tryGetParent key with
+            | Some r -> 
+                r.AddRef()
+                r :> IResource<_>
+            | None -> x.GetOrCreateLocal(key, create)
 
     member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
         let key = [dataMod :> obj]
-        let resource = 
-            match tryGetParent key with
-                | Some v -> 
-                    match dataMod with
-                        | :? ILockedResource as r ->
+        match tryGetParent key with
+            | Some v -> 
+                match dataMod with
+                    | :? ILockedResource as r ->
+                        x.GetOrCreateLocal(key, fun () ->
+                            v.AddRef()
                             { new Resource<'h>(v.Kind) with
                                 member x.GetInfo(h : 'h) =
-                                    desc.info h
+                                    v.GetInfo h
 
                                 member x.Create(old : Option<'h>) =
                                     acquire old dataMod
-                                    v.Create old
+                                    let stats = v.Update(x)
+                                    let handle = v.Handle.GetValue(x)
+                                    handle, stats
 
                                 member x.Destroy(h : 'h) =
                                     release dataMod
-                                    v.Destroy h 
+                                    lock v (fun () -> 
+                                        v.Outputs.Remove x |> ignore
+                                        v.Handle.Outputs.Remove x |> ignore
+                                    )
+                                    v.RemoveRef()
                             }
-                        | _ -> v 
-                | None ->
-                    store.GetOrAdd(key, fun _ -> 
-                        let mutable ownsHandle = false
+                        )
+                    | _ ->
+                        v.AddRef()
+                        v :> IResource<_>
+            | None ->
+                x.GetOrCreateLocal(key, fun _ -> 
+                    let mutable ownsHandle = false
                 
-                        { new Resource<'h>(desc.kind) with
-                            member x.GetInfo (h : 'h) =
-                                desc.info h
+                    { new Resource<'h>(desc.kind) with
+                        member x.GetInfo (h : 'h) =
+                            desc.info h
 
-                            member x.Create(old : Option<'h>) =
-                                acquire old dataMod
-                                let data = dataMod.GetValue x
-                                let stats = stats dataMod
+                        member x.Create(old : Option<'h>) =
+                            acquire old dataMod
+                            let data = dataMod.GetValue x
+                            let stats = stats dataMod
 
-                                match old with
-                                    | Some old ->
-                                        match data :> obj with
-                                            | :? 'h as handle ->
-                                                if ownsHandle then desc.delete old
-                                                ownsHandle <- false
-                                                handle, stats
+                            match old with
+                                | Some old ->
+                                    match data :> obj with
+                                        | :? 'h as handle ->
+                                            if ownsHandle then desc.delete old
+                                            ownsHandle <- false
+                                            handle, stats
 
-                                            | _ ->
-                                                if ownsHandle then
-                                                    let newHandle = desc.update old data
-                                                    newHandle, stats
-                                                else
-                                                    let newHandle = desc.create data
-                                                    ownsHandle <- true
-                                                    newHandle, stats
-
-                                    | None -> 
-
-
-                                        match data :> obj with
-                                            | :? 'h as handle -> 
-                                                ownsHandle <- false
-                                                handle, stats
-                                            | _ ->
-                                                let handle = desc.create data
+                                        | _ ->
+                                            if ownsHandle then
+                                                let newHandle = desc.update old data
+                                                newHandle, stats
+                                            else
+                                                let newHandle = desc.create data
                                                 ownsHandle <- true
-                                                handle, stats
+                                                newHandle, stats
 
-                            member x.Destroy(h : 'h) =
-                                release dataMod
-                                if ownsHandle then
-                                    ownsHandle <- false
-                                    desc.delete h
-                        }
-                    )
-        resource.AddRef()
-        resource :> IResource<_>
+                                | None -> 
+
+
+                                    match data :> obj with
+                                        | :? 'h as handle -> 
+                                            ownsHandle <- false
+                                            handle, stats
+                                        | _ ->
+                                            let handle = desc.create data
+                                            ownsHandle <- true
+                                            handle, stats
+
+                        member x.Destroy(h : 'h) =
+                            release dataMod
+                            if ownsHandle then
+                                ownsHandle <- false
+                                desc.delete h
+                    }
+                )
 
     member x.Count = store.Count
     member x.Clear() = store.Clear()
