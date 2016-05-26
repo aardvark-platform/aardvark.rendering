@@ -845,29 +845,35 @@ module RenderTasks =
                         let task = getSubTask v.RenderPass
                         task.Remove v
 
-            let query = GL.GenQuery()
-            GL.BeginQuery(QueryTarget.PrimitivesGenerated, query)
+
+            let mutable current = 0
+            let mutable query =  0 //GL.GenQuery()
+            GL.GetQuery(QueryTarget.PrimitivesGenerated, GetQueryParam.CurrentQuery, &current)
+            if current = 0 then
+                query <- GL.GenQuery()
+                GL.BeginQuery(QueryTarget.PrimitivesGenerated, query)
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
                 let s = t.Run()
                 runStats <- s::runStats
 
-            GL.EndQuery(QueryTarget.PrimitivesGenerated)
+            if current = 0 then
+                GL.EndQuery(QueryTarget.PrimitivesGenerated)
+
 
             GL.Sync()
             
             let mutable primitives = 0L
-            GL.GetQueryObject(query, GetQueryObjectParam.QueryResult, &primitives)
-            GL.DeleteQuery(query)
+            if current = 0 then
+                GL.GetQueryObject(query, GetQueryObjectParam.QueryResult, &primitives)
+                GL.DeleteQuery(query)
 
-            let stats = 
-                stats + 
-                !this.Scope.stats + 
-                (runStats |> List.sumBy (fun l -> l.Value)) +
-                callStats.GetValue()
-
-            { stats with
+            stats + 
+            !this.Scope.stats + 
+            (runStats |> List.sumBy (fun l -> l.Value)) +
+            callStats.GetValue() +
+            { FrameStatistics.Zero with
                 ResourceUpdateSubmissionTime = resourceUpdateWatch.ElapsedCPU
                 ResourceUpdateTime = resourceUpdateWatch.ElapsedGPU
                 PrimitiveCount = float primitives

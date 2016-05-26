@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.GL
 
+open System.Threading
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Rendering
@@ -90,29 +91,80 @@ module InstructionStatistics =
         n |> List.iter (add stats)
 
 type OpenGlStopwatch() =
+    static let current = new ThreadLocal<Option<OpenGlStopwatch>>(fun () -> None)
+
     let mutable query = -1
+    let mutable running = false
+    let mutable offset = 0L
+    let mutable parent : Option<OpenGlStopwatch> = None
+    let mutable children = []
+
     let cpu = System.Diagnostics.Stopwatch()
 
-    member x.Start() =
-        if query < 0 then query <- GL.GenQuery()
+    member private x.DoStop() =
+        GL.EndQuery(QueryTarget.TimeElapsed)
+        cpu.Stop()
+
+    member private x.DoStart() =
         cpu.Start()
         GL.BeginQuery(QueryTarget.TimeElapsed, query)
 
-    member x.Restart() =
-        if query >= 0 then GL.DeleteQuery query
-        query <- GL.GenQuery()
 
-        cpu.Restart()
-        GL.BeginQuery(QueryTarget.TimeElapsed, query)
+    member private x.Add(other : OpenGlStopwatch) =
+        children <- other::children
+
+    member x.Start() =
+        cpu.Start()
+        if not running then
+            if query < 0 then 
+                query <- GL.GenQuery()
+
+            match current.Value with
+                | Some p -> 
+                    p.DoStop()
+                    parent <- Some p
+                | None ->
+                    parent <- None
+            
+            GL.BeginQuery(QueryTarget.TimeElapsed, query)
+            running <- true
+            children <- []
+            current.Value <- Some x
+
+    member x.Restart() =
+        cpu.Stop()
+        cpu.Reset()
+        if running then 
+            GL.EndQuery(QueryTarget.TimeElapsed)
+            running <- false
+            current.Value <- parent
+
+        if query >= 0 then 
+            GL.DeleteQuery query
+            query <- -1
+
+        x.Start()
 
     member x.Stop() =
-        GL.EndQuery(QueryTarget.TimeElapsed)
         cpu.Stop()
+        if running then
+            GL.EndQuery(QueryTarget.TimeElapsed)
+
+            current.Value <- parent
+            match parent with
+                | Some p -> 
+                    parent <- None
+                    p.Add(x)
+                    p.DoStart()
+                | None -> ()
+
+            running <- false
 
     member x.ElapsedGPU =
         let mutable ns = 0L
         GL.GetQueryObject(query, GetQueryObjectParam.QueryResult, &ns)
-        MicroTime(ns)
+        let childTime = children |> List.sumBy (fun c -> c.ElapsedGPU)
+        MicroTime(ns) + childTime
 
     member x.ElapsedCPU =
         cpu.Elapsed |> MicroTime

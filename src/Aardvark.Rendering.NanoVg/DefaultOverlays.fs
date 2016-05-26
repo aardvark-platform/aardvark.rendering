@@ -316,19 +316,16 @@ module DefaultOverlays =
         let mutable tickSubscription = null
 
         let mutable frameId = 0UL
-        let mutable lastExecuteTime = DateTime.MinValue
         let mutable render0 = 0
-        let mutable rendering = 0
+        let notRendering = System.Diagnostics.Stopwatch()
 
         let tick (self : StatisticsOverlayTask) =
-            if rendering = 0 then
-                let now = DateTime.Now
-                if now - lastExecuteTime > TimeSpan.FromMilliseconds(100.0) then
-                    if Interlocked.Exchange(&render0, 1) = 0 then
-                        transact (fun () -> 
-                            stats.Value <- FrameStatistics.Zero
-                            self.MarkOutdated()
-                        )
+            if notRendering.Elapsed > TimeSpan.FromMilliseconds(100.0) then
+                if Interlocked.Increment(&render0) = 1 then
+                    transact (fun () -> 
+                        stats.Value <- FrameStatistics.Zero
+                        self.MarkOutdated()
+                    )
 
         let installTick (self : StatisticsOverlayTask) =
             if isNull tickSubscription then
@@ -347,25 +344,25 @@ module DefaultOverlays =
             member x.Runtime = inner.Runtime
 
             member x.Run(caller, f) =
+                notRendering.Reset()
                 installTick x
+                let isUseless = Interlocked.Exchange(&render0, 0) > 0
+
                 x.EvaluateAlways caller (fun () ->
-                    Interlocked.Exchange(&rendering, 1) |> ignore
                     let res = inner.Run(x,f)
 
-                    let isZero = Interlocked.Exchange(&render0, 0) = 1
-
-                    if not isZero then
+                    if not isUseless then
                         realStats.Emit res.Statistics
 
                     overlay.Run(f) |> ignore
 
 
-                    lastExecuteTime <- DateTime.Now
-                    if isZero then
+                    if isUseless then
                         transact (fun () -> stats.Reset())
                         
                     frameId <- frameId + 1UL
-                    Interlocked.Exchange(&rendering, 0) |> ignore
+                    if not isUseless then
+                        notRendering.Start()
                     res
                 )
 
