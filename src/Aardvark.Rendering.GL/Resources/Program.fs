@@ -154,6 +154,7 @@ module ProgramReflector =
         let mutable stride = 0
         GL.GetActiveUniforms(p, 1, &slot, ActiveUniformParameter.UniformArrayStride, &stride)
 
+
         GL.Check "could not get active uniform"
 
         let location = GL.GetUniformLocation(p, name)
@@ -241,7 +242,8 @@ module ProgramReflector =
                         for i in 0..size-1 do
                             yield { u with slot = baseBinding + i; index = i }
                     | _ ->
-                        yield u
+                        if not (u.name.StartsWith "_main_") then
+                            yield u
         ]
     
     let getActiveInputs (p : int) =

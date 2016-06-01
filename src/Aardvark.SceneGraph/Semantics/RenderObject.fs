@@ -63,13 +63,13 @@ module RenderObjectSemantics =
 
     type ISg with
         member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
-        member x.OverlayTasks() : aset<uint64 * IRenderTask> = x?OverlayTasks()
+        member x.OverlayTasks() : aset<RenderPass * IRenderTask> = x?OverlayTasks()
 
     module Semantic =
         [<System.Obsolete("renderJobs is deprecated, please use renderObjects instead.")>]        
         let renderJobs (s : ISg) : aset<IRenderObject> = s?RenderObjects()
         let renderObjects (s : ISg) : aset<IRenderObject> = s?RenderObjects()
-        let overlayTasks (s : ISg) : aset<uint64 * IRenderTask> = s?OverlayTasks()
+        let overlayTasks (s : ISg) : aset<RenderPass * IRenderTask> = s?OverlayTasks()
 
 
     [<Semantic>]
@@ -191,7 +191,7 @@ module RenderObjectSemantics =
 
     [<Semantic>]
     type SubTaskSem() =
-        member x.OverlayTasks(r : ISg) : aset<uint64 * IRenderTask> =
+        member x.OverlayTasks(r : ISg) : aset<RenderPass * IRenderTask> =
             ASet.empty
 
         member x.OverlayTasks(app : IApplicator) =

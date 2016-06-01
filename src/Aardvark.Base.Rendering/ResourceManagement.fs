@@ -107,6 +107,17 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
     let mutable info = ResourceInfo.Zero
 
+    abstract member Create : Option<'h> -> 'h * FrameStatistics
+    abstract member Destroy : 'h -> unit
+    abstract member GetInfo : 'h -> ResourceInfo
+
+
+    member x.Info = info
+
+    member x.Kind = kind
+
+    member internal x.OnDispose = onDispose :> IObservable<_>
+
     member private x.PerformUpdate() =
         if refCount <= 0 then
             failwithf "[Resource] cannot update unreferenced resource"
@@ -126,20 +137,9 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
                 updateStats + stats
 
-    abstract member Create : Option<'h> -> 'h * FrameStatistics
-    abstract member Destroy : 'h -> unit
-    abstract member GetInfo : 'h -> ResourceInfo
-
-
-    member x.Info = info
-
-    member x.Kind = kind
-
-    member internal x.OnDispose = onDispose :> IObservable<_>
-
     member x.AddRef() =
         if Interlocked.Increment(&refCount) = 1 then
-            x.PerformUpdate() |> ignore
+            x.ForceUpdate null |> ignore
 
     member x.RemoveRef() =
         if Interlocked.Decrement(&refCount) = 0 then
@@ -147,10 +147,18 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
             x.Destroy handle.Value
             current <- None
             info <- ResourceInfo.Zero
-            transact (fun () ->  handle.Value <- Unchecked.defaultof<_>)
+            transact (fun () -> 
+                x.MarkOutdated()
+                handle.Value <- Unchecked.defaultof<_>
+            )
 
     member x.Update(caller : IAdaptiveObject) =
         x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () ->
+            x.PerformUpdate()
+        )
+  
+    member x.ForceUpdate(caller : IAdaptiveObject) =
+        x.EvaluateAlways caller (fun () ->
             x.PerformUpdate()
         )
     
@@ -210,18 +218,22 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | (true,v) -> Some v
             | _ -> None
      
-    member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h>) =
-        let resource =
-            match tryGetParent key with
-                | Some r -> r
-                | None ->
-                     store.GetOrAdd(key, fun _ -> 
-                        let res = create()
-                        res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
-                        res
-                     )
+    member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'h>) =
+        let resource = 
+            store.GetOrAdd(key, fun _ -> 
+                let res = create()
+                res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
+                res
+            )
         resource.AddRef()
         resource :> IResource<_>
+
+    member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h>) =
+        match tryGetParent key with
+            | Some r -> 
+                r.AddRef()
+                r :> IResource<_>
+            | None -> x.GetOrCreateLocal(key, create)
 
     member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
         let key = [dataMod :> obj]
@@ -229,7 +241,7 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | Some v -> 
                 match dataMod with
                     | :? ILockedResource as r ->
-                        x.GetOrCreate(key, fun () ->
+                        x.GetOrCreateLocal(key, fun () ->
                             v.AddRef()
                             { new Resource<'h>(v.Kind) with
                                 member x.GetInfo(h : 'h) =
@@ -242,14 +254,18 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
 
                                 member x.Destroy(h : 'h) =
                                     release dataMod
+                                    lock v (fun () -> 
+                                        v.Outputs.Remove x |> ignore
+                                        v.Handle.Outputs.Remove x |> ignore
+                                    )
                                     v.RemoveRef()
                             }
                         )
-                    | _ -> 
+                    | _ ->
+                        v.AddRef()
                         v :> IResource<_>
-
             | None ->
-                x.GetOrCreate(key, fun _ -> 
+                x.GetOrCreateLocal(key, fun _ -> 
                     let mutable ownsHandle = false
                 
                     { new Resource<'h>(desc.kind) with
