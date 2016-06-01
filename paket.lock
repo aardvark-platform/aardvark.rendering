@@ -1,28 +1,28 @@
 NUGET
   remote: https://vrvis.myget.org/F/aardvark_public
   specs:
-    Aardvark.Base (2.1.1)
+    Aardvark.Base (2.1.2)
       DevILSharp (>= 0.0.11 < 0.1)
-    Aardvark.Base.Essentials (2.1.1)
-      Aardvark.Base (>= 2.1.1)
+    Aardvark.Base.Essentials (2.1.2)
+      Aardvark.Base (>= 2.1.2)
       Rx-Linq (>= 2.2.5 < 2.3)
       System.Collections.Immutable (>= 1.1.36 < 1.2)
-    Aardvark.Base.FSharp (2.1.1)
-      Aardvark.Base (>= 2.1.1)
+    Aardvark.Base.FSharp (2.1.2)
+      Aardvark.Base (>= 2.1.2)
       DevILSharp (>= 0.0.11 < 0.1)
       FSharp.Compiler.Service (>= 2.0.0.6 < 2.0.1)
-    Aardvark.Base.Incremental (2.1.1)
-      Aardvark.Base (>= 2.1.1)
-      Aardvark.Base.Essentials (>= 2.1.1)
-      Aardvark.Base.FSharp (>= 2.1.1)
+    Aardvark.Base.Incremental (2.1.2)
+      Aardvark.Base (>= 2.1.2)
+      Aardvark.Base.Essentials (>= 2.1.2)
+      Aardvark.Base.FSharp (>= 2.1.2)
       FsPickler.Json (>= 1.8 < 1.9)
       Rx-Core (>= 2.2.5 < 2.3)
       Rx-Linq (>= 2.2.5 < 2.3)
-    Aardvark.Base.Runtime (2.1.1)
-      Aardvark.Base (2.1.1)
-      Aardvark.Base.Essentials (2.1.1)
-      Aardvark.Base.FSharp (2.1.1)
-      Aardvark.Base.Incremental (2.1.1)
+    Aardvark.Base.Runtime (2.1.2)
+      Aardvark.Base (2.1.2)
+      Aardvark.Base.Essentials (2.1.2)
+      Aardvark.Base.FSharp (2.1.2)
+      Aardvark.Base.Incremental (2.1.2)
     FShade (2.1.1)
       Aardvark.Base (>= 2.1 < 2.2)
       Aardvark.Base.FSharp (>= 2.1 < 2.2)
@@ -146,11 +146,11 @@ NUGET
   specs:
     Chessie (0.5.1) - content: none
       FSharp.Core
-    FAKE (4.17.1) - content: none
+    FAKE (4.28) - content: none
     FSharp.Core (4.0.0.1) - content: none
     Mono.Cecil (0.9.5.4) - content: none
     Newtonsoft.Json (8.0.3) - content: none
-    Paket.Core (2.60.2) - content: none
+    Paket.Core (2.66.6) - content: none
       Chessie
       FSharp.Core
       Newtonsoft.Json
@@ -158,8 +158,8 @@ NUGET
 GITHUB
   remote: vrvis/Aardvark.Fake
   specs:
-    FULLPROJECT (7edcf69d8c208a1c3a6a108e408805e3496d63ef)
-      FAKE (>= 4.17 < 4.18)
-      Mono.Cecil (>= 0.9.5.4 < 0.9.6)
-      Paket.Core (>= 2.60.1 < 2.61)
-      SourceLink.Fake (>= 1.1 < 1.2)
+    FULLPROJECT (9f89cc130281fe28376f0e03af71dc4e00297a5b)
+      FAKE
+      Mono.Cecil
+      Paket.Core
+      SourceLink.Fake
