@@ -12,6 +12,7 @@ type LodDataNode =
         bounds : Box3d
         inner : bool
         granularity : float
+        render : bool
 
         [<DefaultValue>]
         mutable uniqueId : int
@@ -85,11 +86,13 @@ module ``Lod Data Extensions`` =
                         let projAvgDistance =
                             abs (node.granularity / depthRange.Min)
 
+                        if node.render then result.Add node |> ignore
+
                         // add all inner nodes to the result too
-                        result.Add node |> ignore
                         if projAvgDistance > wantedNearPlaneDistance then
                             true
                         else
+                            if not node.render then result.Add node |> ignore
                             false
                     else
                         result.Add node |> ignore

@@ -256,8 +256,6 @@ type PointCloudInfo =
         /// optional surface for bounding boxes of cells that are load in progress.
         // the surface should properly transform instances by using DefaultSemantic.InstanceTrafo
         boundingBoxSurface : Option<IMod<ISurface>>
-
-
     }
 
 [<AutoOpen>]

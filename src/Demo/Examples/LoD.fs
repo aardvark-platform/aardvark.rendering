@@ -183,7 +183,7 @@ module LoD =
                 let rec traverse (level : int) (b : Box3d) =
                     let box = b
                     let n = 100.0
-                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n) }
+                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n); render = true}
 
                     if f node then
                         let center = b.Center
