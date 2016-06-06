@@ -944,7 +944,7 @@ let main args =
     
     //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
-    let modelPath =  @"C:\Users\Schorsch\Desktop\Sponza bunt\sponza_cm.obj"
+    //let modelPath =  @"C:\Users\Schorsch\Desktop\Sponza bunt\sponza_cm.obj"
     //let modelPath =  @"C:\Aardwork\Sponza bunt\sponza_cm.obj"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
@@ -1054,7 +1054,7 @@ let main args =
                 DefaultSurfaces.trafo |> toEffect
                 //DefaultSurfaces.constantColor C4f.Red |> toEffect
                 DefaultSurfaces.diffuseTexture |> toEffect
-                DefaultSurfaces.simpleLighting |> toEffect
+                DefaultSurfaces.lighting false |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod

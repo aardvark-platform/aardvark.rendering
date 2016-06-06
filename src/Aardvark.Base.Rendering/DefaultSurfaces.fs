@@ -207,6 +207,21 @@ module DefaultSurfaces =
             return V4d(v.c.XYZ * diffuse, v.c.W)
         }
 
+    let lighting (twoSided : bool) (v : Vertex) =
+        fragment {
+            let n = v.n |> Vec.normalize
+            let c = uniform.CameraLocation - v.wp.XYZ |> Vec.normalize
+
+            let ambient = 0.1
+            let diffuse = 
+                if twoSided then Vec.dot c n |> abs
+                else Vec.dot c n |> max 0.0
+
+            let l = ambient + (1.0 - ambient) * diffuse
+
+            return V4d(v.c.XYZ * l, v.c.W)
+        }
+
     let private diffuseSampler =
         sampler2d {
             texture uniform?DiffuseColorTexture

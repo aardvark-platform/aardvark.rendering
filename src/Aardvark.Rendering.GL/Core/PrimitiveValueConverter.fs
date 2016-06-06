@@ -524,48 +524,48 @@ module PrimitiveValueConverter =
             ( fun (v : M33l)        -> M44d.op_Explicit v ) :> obj
 
             // M33f -> other matrices
-            ( fun (v : M33f)        -> M22i.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M22l.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M22f.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M22d.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M23i.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M23l.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M23f.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M23d.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M33i.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M33l.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> v ) :> obj
-            ( fun (v : M33f)        -> M33d.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M34i.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M34l.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M34f.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M34d.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M44i.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M44l.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M44f.op_Explicit v ) :> obj
-            ( fun (v : M33f)        -> M44d.op_Explicit v ) :> obj
+            ( fun (v : M33f)        -> M22i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M22l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M22f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M22d.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M23i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M23l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M23f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M23d.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M33i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M33l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> v.Transposed ) :> obj        
+            ( fun (v : M33f)        -> M33d.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M34i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M34l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M34f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M34d.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M44i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M44l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M44f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33f)        -> M44d.op_Explicit v.Transposed ) :> obj
 
             // M33d -> other matrices
-            ( fun (v : M33d)        -> M22i.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M22l.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M22f.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M22d.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M23i.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M23l.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M23f.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M23d.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M33i.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M33l.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M33f.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> v ) :> obj
-            ( fun (v : M33d)        -> M34i.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M34l.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M34f.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M34d.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M44i.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M44l.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M44f.op_Explicit v ) :> obj
-            ( fun (v : M33d)        -> M44d.op_Explicit v ) :> obj
+            ( fun (v : M33d)        -> M22i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M22l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M22f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M22d.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M23i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M23l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M23f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M23d.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M33i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M33l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M33f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> v.Transposed ) :> obj    
+            ( fun (v : M33d)        -> M34i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M34l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M34f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M34d.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M44i.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M44l.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M44f.op_Explicit v.Transposed ) :> obj
+            ( fun (v : M33d)        -> M44d.op_Explicit v.Transposed ) :> obj
         ]
 
     let private matrix34Conversions =
