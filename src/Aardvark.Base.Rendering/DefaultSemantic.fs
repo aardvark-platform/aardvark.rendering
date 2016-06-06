@@ -36,3 +36,4 @@ module DefaultSemantic =
     let Stencil = Sym.ofString "Stencil"
     let ImageOutput = Sym.ofString "ImageOutput"
     let InstanceTrafo = Sym.ofString "ZZZInstanceTrafo"
+    let SamplerStateModifier = Sym.ofString "SamplerStateModifier"

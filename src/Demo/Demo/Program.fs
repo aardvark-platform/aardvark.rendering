@@ -98,10 +98,16 @@ module Assimp =
                         | (true, tex) -> 
                             Some tex
                         | _ ->
-                            let tex = FileTexture(path, true)
-                            let m = Mod.constant (tex :> ITexture)
-                            textureCache.[path] <- m
-                            Some m
+                            try 
+                                let tex = FileTexture(path, true)
+                                let m = Mod.constant (tex :> ITexture)
+                                textureCache.[path] <- m
+                                Some m
+                            with _ ->
+                                let tex = NullTexture()
+                                let m = Mod.constant (tex :> ITexture)
+                                textureCache.[path] <- m
+                                Some m
                 else
                     None
             else 
@@ -922,16 +928,12 @@ let testImageCopy<'a> (size : V2i) =
 
 
 
-            
-
-
-
 [<EntryPoint>]
 [<STAThread>]
 let main args = 
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\zoey\Zoey.dae"
-    printfn "%A" scene
-    Environment.Exit 0
+//    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\zoey\Zoey.dae"
+//    printfn "%A" scene
+//    Environment.Exit 0
 
     //timeTest()
 
@@ -942,7 +944,7 @@ let main args =
     
     //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
 
-    let modelPath =  @"E:\Development\WorkDirectory\Sponza bunt\sponza_cm.obj"
+    let modelPath =  @"C:\Users\Schorsch\Desktop\Sponza bunt\sponza_cm.obj"
     //let modelPath =  @"C:\Aardwork\Sponza bunt\sponza_cm.obj"
 
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
@@ -1026,6 +1028,22 @@ let main args =
 
     let pointSize = Mod.constant <| V2d(0.06, 0.08)
 
+    let noMipsSampler =
+        SamplerStateDescription(
+            Filter = TextureFilter.MinMagMipPoint,
+            AddressU = WrapMode.Wrap,
+            AddressV = WrapMode.Wrap,
+            MaxLod = 8.0f,
+            MinLod = 8.0f
+        )
+
+    let samplerState = Mod.init (None)
+
+
+    let mutable v = V3d.III
+    v.X <- 5.0
+
+
     let sg =
         sg |> Sg.effect [
                 //Shader.pvLight |> toEffect
@@ -1041,6 +1059,7 @@ let main args =
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
            |> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
+           |> Sg.samplerState DefaultSemantic.DiffuseColorTexture samplerState
            //|> Sg.fillMode mode
            //|> Sg.blendMode (Mod.constant BlendMode.Blend)
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
@@ -1107,16 +1126,11 @@ let main args =
 
     ctrl.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->
         if k = Aardvark.Application.Keys.P then
-            match !engines with
-                | h::r ->
-                    transact(fun () -> Mod.change engine h)
-                    engines := r @ [h]
-                | _ -> ()
-        elif k = Aardvark.Application.Keys.G then
-            System.GC.AddMemoryPressure(1000000000L)
-            System.GC.Collect()
-            System.GC.WaitForFullGCApproach() |> ignore
-            System.GC.RemoveMemoryPressure(1000000000L)
+            transact (fun () ->
+                match samplerState.Value with
+                    | None -> samplerState.Value <- Some noMipsSampler
+                    | _ -> samplerState.Value <- None
+            )
 
         ()
     ) |> ignore

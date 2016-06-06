@@ -115,6 +115,34 @@ module SgFSharp =
         let runtimeDependentDiffuseTexture(tex : IRuntime -> IMod<ITexture>) (sg : ISg) =
             runtimeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
+        let samplerState (sem : Symbol) (state : IMod<Option<SamplerStateDescription>>) (sg : ISg) =
+            let modifier =   
+                adaptive {
+                    let! user = state
+                    return fun (textureSem : Symbol) (state : SamplerStateDescription) ->
+                        if sem = textureSem then
+                            match user with
+                                | Some state -> state
+                                | _ -> state
+                        else
+                            state
+                }
+            sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
+
+        let modifySamplerState (sem : Symbol) (modifier : IMod<SamplerStateDescription -> SamplerStateDescription>) (sg : ISg) =
+            let modifier =   
+                adaptive {
+                    let! modifier = modifier
+                    return fun (textureSem : Symbol) (state : SamplerStateDescription) ->
+                        if sem = textureSem then
+                            modifier state
+                        else
+                            state
+                }
+            sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
+
+
+
         let fillMode (m : IMod<FillMode>) (sg : ISg) =
             Sg.FillModeApplicator(m, sg) :> ISg
         

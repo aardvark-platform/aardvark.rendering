@@ -301,14 +301,24 @@ type ResourceManagerExtensions private() =
 
         // create all requested Textures
         let lastTextureSlot = ref -1
+
+        let samplerModifier = 
+            match rj.Uniforms.TryGetUniform(rj.AttributeScope, DefaultSemantic.SamplerStateModifier) with
+                | Some(:? IMod<Symbol -> SamplerStateDescription -> SamplerStateDescription> as mode) ->
+                    Some mode
+                | _ ->
+                    None
+
         let textures =
             textureUniforms
                 |> List.choose (fun uniform ->
-                    let tex = rj.Uniforms.TryGetUniform(rj.AttributeScope, uniform.semantic |> Symbol.Create)
+                    let sem = Sym.ofString uniform.semantic
+                    let tex = rj.Uniforms.TryGetUniform(rj.AttributeScope, sem)
 
                     match tex with
                         | Some value ->
-                            let sampler =
+
+                            let shaderSampler =
                                 match prog.SamplerStates.TryGetValue (Symbol.Create uniform.semantic) with
                                     | (true, sampler) -> sampler
                                     | _ -> 
@@ -319,7 +329,15 @@ type ResourceManagerExtensions private() =
                                                     | _ -> SamplerStateDescription()
                                             | None ->
                                                 SamplerStateDescription()
-                            let s = x.CreateSampler(Mod.constant sampler)
+
+                            let sampler =
+                                match samplerModifier with
+                                    | Some modifier -> 
+                                        modifier |> Mod.map (fun f -> f sem shaderSampler)
+                                    | None -> 
+                                        Mod.constant shaderSampler
+
+                            let s = x.CreateSampler(sampler)
 
                             match value with
                                 | :? IMod<ITexture> as value ->
