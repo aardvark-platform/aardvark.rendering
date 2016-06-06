@@ -115,6 +115,17 @@ module FShadeInterop =
             | Filter.MinLinearMagPoint -> Aardvark.Base.Rendering.TextureFilter.MinLinearMagPoint
             | _ -> failwithf "unknown filter mode: %A" mode
 
+    let private toCompareFunction (f : ComparisonFunction) =
+        match f with
+            | ComparisonFunction.Never -> SamplerComparisonFunction.Never
+            | ComparisonFunction.Less -> SamplerComparisonFunction.Less
+            | ComparisonFunction.LessOrEqual -> SamplerComparisonFunction.LessOrEqual
+            | ComparisonFunction.Greater -> SamplerComparisonFunction.Greater
+            | ComparisonFunction.GreaterOrEqual -> SamplerComparisonFunction.GreaterOrEqual
+            | ComparisonFunction.NotEqual -> SamplerComparisonFunction.NotEqual
+            | ComparisonFunction.Always -> SamplerComparisonFunction.Always
+            | _ -> failwithf "unknown compare mode: %A" f
+
     let private toSamplerStateDescription (state : SamplerState) =
 
         let r = Aardvark.Base.Rendering.SamplerStateDescription()
@@ -129,7 +140,7 @@ module FShadeInterop =
         state.MaxLod |> Option.iter (fun b -> r.MinLod <- float32 b)
         state.MinLod |> Option.iter (fun b -> r.MaxLod <- float32 b)
         state.MipLodBias |> Option.iter (fun b -> r.MipLodBias <- float32 b)
-
+        state.Comparison |> Option.iter (fun b -> r.ComparisonFunction <- toCompareFunction b)
         r
 
 
@@ -155,6 +166,7 @@ module FShadeInterop =
                 createPerStageUniforms = false
                 flipHandedness = false
                 depthRange = Range1d(-1.0,1.0)
+                treatUniformsAsInputs = false
             }
 
         static let mac410 = 
@@ -170,6 +182,7 @@ module FShadeInterop =
                 createPerStageUniforms = false
                 flipHandedness = false
                 depthRange = Range1d(-1.0,1.0)
+                treatUniformsAsInputs = false
             }
 
 
@@ -186,6 +199,7 @@ module FShadeInterop =
                 createPerStageUniforms = false
                 flipHandedness = false
                 depthRange = Range1d(-1.0,1.0)
+                treatUniformsAsInputs = false
             }
 
         static let vulkan =
@@ -201,6 +215,7 @@ module FShadeInterop =
                 createPerStageUniforms = true
                 flipHandedness = true
                 depthRange = Range1d(0.0,1.0)
+                treatUniformsAsInputs = false
             }
 
         static let tryGetGlslConfig (r : IRuntime) =

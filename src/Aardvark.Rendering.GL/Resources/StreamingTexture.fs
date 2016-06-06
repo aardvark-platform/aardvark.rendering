@@ -112,7 +112,7 @@ type StreamingTexture(ctx : Context, handle : int, mipMap : bool) =
                             t.Enqueue(self)
                             id
                         | _ ->
-                            let t = Transaction()
+                            let t = new Transaction()
                             t.Enqueue(self)
                             fun () -> t.Commit()
                 else id

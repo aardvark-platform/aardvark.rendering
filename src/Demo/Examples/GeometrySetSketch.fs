@@ -49,7 +49,7 @@ type cbuffer(sizeInBytes : nativeint, release : cbuffer -> unit) =
     let changed (self : cbuffer) (offset : nativeint) (size : nativeint) =
         if size > 0n then
             let range = Range.ofOffsetAndSize offset size
-            let transaction = Transaction()
+            let transaction = new Transaction()
             transaction.Enqueue self
 
             lock readers (fun () ->
