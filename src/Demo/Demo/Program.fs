@@ -922,12 +922,17 @@ let testImageCopy<'a> (size : V2i) =
 
 
 
+            
 
 
 
 [<EntryPoint>]
 [<STAThread>]
 let main args = 
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\zoey\Zoey.dae"
+    printfn "%A" scene
+    Environment.Exit 0
+
     //timeTest()
 
     let modelPath = match args |> Array.toList with

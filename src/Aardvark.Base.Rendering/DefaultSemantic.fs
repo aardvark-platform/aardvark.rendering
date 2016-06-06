@@ -15,8 +15,14 @@ module DefaultSemantic =
 
     // Single Attributes
     let DiffuseColorTexture = Sym.ofString "DiffuseColorTexture"
+    let AmbientColorTexture = Sym.ofString "AmbientColorTexture"
+    let EmissiveColorTexture = Sym.ofString "EmissiveColorTexture"
+    let SpecularColorTexture = Sym.ofString "SpecularColorTexture"
+    let ShininessTexture = Sym.ofString "ShininessTexture"
+    
     let LightMapTexture = Sym.ofString "LightMapTexture"
     let NormalMapTexture = Sym.ofString "NormalMapTexture"
+
     let Trafo3d = Sym.ofString "Trafo3d"
     let DiffuseColorTrafo2d = Sym.ofString "DiffuseColorTrafo2d"
     let Name = Sym.ofString "Name"
