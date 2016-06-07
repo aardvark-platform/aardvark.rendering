@@ -126,9 +126,9 @@ module Shader =
         fragment {
             let lightSpace = uniform.LightViewMatrix * v.wp
             let div = lightSpace.XYZ / lightSpace.W
-            let v = V3d(0.5, 0.5,0.5) + V3d(0.5, 0.5, 0.5) * div.XYZ
-            let d = diffuseSampler.Sample(v.XY, v.Z - 0.00017)
-            return V4d(d,d,d,1.0)
+            let tc = V3d(0.5, 0.5,0.5) + V3d(0.5, 0.5, 0.5) * div.XYZ
+            let d = diffuseSampler.Sample(tc.XY, tc.Z - 0.00017)
+            return V4d(v.c.XYZ * d, v.c.W)
         }
 
 
@@ -183,7 +183,7 @@ module Shadows =
 
 
     let pointSize = Mod.init 14.0
-    let pointCount = 2048
+    let pointCount = 100000
 
 
     let box (color : C4b) (box : Box3d) = 

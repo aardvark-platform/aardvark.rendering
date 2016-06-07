@@ -41,6 +41,8 @@ type PreparedRenderObject =
         ColorBufferMasks : Option<list<V4i>>
         DepthBufferMask : bool
 
+        //ClipDistanceBitmask : array<bool>
+
         DrawCallStats : IMod<DrawCallStats>
         mutable ResourceCount : int
         mutable ResourceCounts : Map<ResourceKind, int>
