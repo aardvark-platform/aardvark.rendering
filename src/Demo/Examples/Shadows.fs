@@ -127,7 +127,7 @@ module Shader =
             let lightSpace = uniform.LightViewMatrix * v.wp
             let div = lightSpace.XYZ / lightSpace.W
             let v = V3d(0.5, 0.5,0.5) + V3d(0.5, 0.5, 0.5) * div.XYZ
-            let d = diffuseSampler.Sample(v.XY, v.Z - 0.000017)
+            let d = diffuseSampler.Sample(v.XY, v.Z - 0.00017)
             return V4d(d,d,d,1.0)
         }
 
@@ -144,6 +144,16 @@ module Shader =
 
             return V4d(v.c.XYZ * diffuse, v.c.W)
         }
+           
+    type InstanceVertex = { 
+        [<Position>] pos : V4d 
+        [<Semantic("ZZZInstanceTrafo")>] trafo : M44d
+    }
+
+    let instanceTrafo (v : InstanceVertex) =
+        vertex {
+            return { v with pos = v.trafo * v.pos }
+        }
              
 module Shadows = 
 
@@ -152,7 +162,7 @@ module Shadows =
 
     let win = openWindow()
 
-    let shadowMapSize = Mod.init (V2i(1024, 1024))
+    let shadowMapSize = Mod.init (V2i(4096, 4096))
 
     let shadowCam = CameraView.lookAt (V3d.III * 2.5) V3d.Zero V3d.OOI
     let shadowProj = Frustum.perspective 60.0 0.1 10.0 1.0
@@ -162,7 +172,7 @@ module Shadows =
     let rotation =
         controller {
             let! dt = differentiate Mod.time
-            return fun f -> f + dt.TotalSeconds * 2.0
+            return fun f -> f + dt.TotalSeconds * 0.6
         }
     let angle = AFun.integrate rotation 0.0
     let lightSpaceView =
@@ -237,21 +247,22 @@ module Shadows =
     let pointSg = 
         let rand = Random()
         let randomV3f() = V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
-        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
 
-        Sg.draw IndexedGeometryMode.PointList
-            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
-            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
-            |> Sg.vertexAttribute DefaultSemantic.Normals (Array.init pointCount (fun _ -> V3f.OOI) |> Mod.constant)
-            |> Sg.uniform "PointSize" pointSize
+        Sg.instancedGeometry (Mod.constant <| Array.init pointCount (fun _ -> randomV3f() |> V3d.op_Explicit |> Trafo3d.Translation)) (box C4b.Red (Box3d.FromCenterAndSize(V3d.OOO, 0.04 * V3d.III)))
+
+//        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
+//
+//        Sg.draw IndexedGeometryMode.PointList
+//            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
+//            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
+//            |> Sg.vertexAttribute DefaultSemantic.Normals (Array.init pointCount (fun _ -> V3f.OOI) |> Mod.constant)
+//            |> Sg.uniform "PointSize" pointSize
 
     let sceneSg (fragmentShader : list<FShadeEffect>) =
         quadSg C4b.Green 
         |> Sg.effect ( (Shader.trafo |> toEffect) :: fragmentShader )
         |> Sg.andAlso ( pointSg 
-                        |> Sg.effect ([ DefaultSurfaces.trafo |> toEffect; 
-                                        DefaultSurfaces.pointSprite |> toEffect
-                                        DefaultSurfaces.pointSpriteFragment |> toEffect ] @ fragmentShader)
+                        |> Sg.effect (toEffect Shader.instanceTrafo :: toEffect Shader.trafo :: fragmentShader)
                       )
         |> Sg.uniform "LightViewMatrix" (lightSpaceViewProjTrafo)
         |> Sg.trafo ( Trafo3d.Translation(V3d(0.0,0.0,0.3)) |> Mod.constant )
@@ -264,7 +275,7 @@ module Shadows =
     let shadowDepth =
         sceneSg [ DefaultSurfaces.vertexColor |> toEffect ]
             |> Sg.uniform "ViewportSize" (Mod.constant (V2i(1024,1024)))
-            |> Sg.viewTrafo (shadowCam |> CameraView.viewTrafo |> Mod.constant)
+            |> Sg.viewTrafo lightSpaceView
             |> Sg.projTrafo (shadowProj |> Frustum.projTrafo |> Mod.constant)
             |> Sg.compile win.Runtime signature   
             |> RenderTask.renderToDepth shadowMapSize
