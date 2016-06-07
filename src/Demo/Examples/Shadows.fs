@@ -174,6 +174,7 @@ module Shadows =
             let! dt = differentiate Mod.time
             return fun f -> f + dt.TotalSeconds * 0.6
         }
+  
     let angle = AFun.integrate rotation 0.0
     let lightSpaceView =
         angle |> Mod.map (fun angle -> Trafo3d.RotationZ(angle) * (shadowCam |> CameraView.viewTrafo))
@@ -300,6 +301,13 @@ module Shadows =
         let renderTask =  Sg.compile win.Runtime win.FramebufferSignature sg
         let composedTask = 
             match renderTask with
+                | :? Aardvark.Rendering.GL.RenderTasks.AbstractRenderTask as a -> 
+                     a.BeforeRender.Add (fun _ -> 
+                                OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
+                            )
+                     a.AfterRender.Add( fun _ -> 
+                         OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
+                     )
                 | :? Aardvark.Base.RenderTask.SequentialRenderTask as s -> 
                     match s.Tasks.[0] with
                         | :? Aardvark.Rendering.GL.RenderTasks.AbstractRenderTask as a -> 

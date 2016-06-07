@@ -24,8 +24,9 @@ type SceneGraphRuntimeExtensions private() =
         let app = Sg.DynamicNode(Mod.constant s)
         app?Runtime <- x
         let jobs : aset<IRenderObject> = app.RenderObjects()
-        let overlays = app.OverlayTasks() |> ASet.sortBy fst |> AList.map snd |> RenderTask.ofAList
-        RenderTask.ofList [x.CompileRender(signature, engine, jobs); overlays]
+        // TODO: fix overlays
+        //let overlays = app.OverlayTasks() |> ASet.sortBy fst |> AList.map snd |> RenderTask.ofAList
+        x.CompileRender(signature, engine, jobs)
 
     [<Extension>]
     static member CompileRender (x : IRuntime, signature : IFramebufferSignature, s : ISg) =
