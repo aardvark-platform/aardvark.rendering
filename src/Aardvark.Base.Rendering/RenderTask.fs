@@ -545,7 +545,7 @@ module RenderTask =
             member x.Runtime = None
             member x.FrameId = 0UL
 
-    type private SequentialRenderTask(f : RenderingResult -> RenderingResult, tasks : IRenderTask[]) as this =
+    type SequentialRenderTask(f : RenderingResult -> RenderingResult, tasks : IRenderTask[]) as this =
         inherit AdaptiveObject()
 
         do for t in tasks do t.AddOutput this
@@ -565,6 +565,8 @@ module RenderTask =
 
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
         let mutable frameId = 0UL
+
+        member x.Tasks = tasks
 
         interface IRenderTask with
             member x.FramebufferSignature = signature.Value

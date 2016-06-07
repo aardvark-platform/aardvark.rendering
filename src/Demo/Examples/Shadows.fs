@@ -30,6 +30,121 @@ open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.NanoVg
 
+[<AutoOpen>]
+module EffectStack = 
+    open Aardvark.Base.Ag
+
+    module Sg =
+        type ComposeEffects(child : IMod<ISg>) =
+            inherit Sg.AbstractApplicator(child)
+            member x.Child = child
+
+        type AttachEffects(child : IMod<ISg>, effects : list<FShadeEffect>) =
+            inherit Sg.AbstractApplicator(child)
+            member x.Effects : list<FShadeEffect> = effects
+            member x.Child  = child
+
+        let composeEffects (s : ISg) = ComposeEffects(Mod.constant s) :> ISg
+        let attachEffects (e : list<FShadeEffect>) (s : ISg) = AttachEffects(Mod.constant s, e)
+
+    type ISg with
+        member x.EffectStack : list<FShadeEffect> = x?EffectStack
+
+    module EffectStackSemantics =
+
+        [<Semantic>]
+        type ComposeEffectsSemantics() =
+            member x.Surface(sg : Sg.ComposeEffects) =
+                let e = FShade.SequentialComposition.compose sg.EffectStack
+                let s = Mod.constant (FShadeSurface(e) :> ISurface)
+                sg.Child?Surface <- s
+
+            member x.EffectStack(s : Sg.AttachEffects) =
+                s.Child?EffectStack <- s.EffectStack @ s.Effects 
+
+            member x.EffectStack(s : Root<ISg>) = 
+                s.Child?EffectStack <- List.empty<FShadeEffect>
+     
+
+module Shader =
+    open FShade
+
+    type Vertex = {
+        [<Position>]        pos     : V4d
+        [<WorldPosition>]   wp      : V4d
+        [<Normal>]          n       : V3d
+        [<BiNormal>]        b       : V3d
+        [<Tangent>]         t       : V3d
+        [<Color>]           c       : V4d
+        [<TexCoord>]        tc      : V2d
+    }
+
+    type UniformScope with
+        member x.LightViewMatrix : M44d = uniform?LightViewMatrix
+        
+    let private diffuseSampler =
+        sampler2dShadow {
+            texture uniform?DiffuseColorTexture
+            filter Filter.MinMagLinear
+            addressU WrapMode.Border
+            addressV WrapMode.Border
+            borderColor C4f.White
+            comparison ComparisonFunction.LessOrEqual
+        }
+
+    let clipPlane = V4d(1.0,1.0,1.0,0.0)
+
+    type ClipVertex = {
+        [<Position>]        pos     : V4d
+        [<WorldPosition>]   wp      : V4d
+        [<Normal>]          n       : V3d
+        [<BiNormal>]        b       : V3d
+        [<Tangent>]         t       : V3d
+        [<Color>]           c       : V4d
+        [<TexCoord>]        tc      : V2d
+        [<ClipDistance>] clipDistances : float[]
+    }
+
+    let trafo (v : Vertex) =
+        vertex {
+            let wp = uniform.ModelTrafo * v.pos
+            let distance = Vec.dot v.wp clipPlane
+            let distance = -10.0
+            return {
+                pos = uniform.ViewProjTrafo * wp
+                wp = wp
+                n = (uniform.ViewTrafo * (V4d(v.n,0.0))).XYZ
+                b = uniform.NormalMatrix * v.b
+                t = uniform.NormalMatrix * v.t
+                c = v.c
+                tc = v.tc
+                clipDistances = [| distance |]
+            }
+        }
+
+    let shadowShader (v : Vertex) =
+        fragment {
+            let lightSpace = uniform.LightViewMatrix * v.wp
+            let div = lightSpace.XYZ / lightSpace.W
+            let v = V3d(0.5, 0.5,0.5) + V3d(0.5, 0.5, 0.5) * div.XYZ
+            let d = diffuseSampler.Sample(v.XY, v.Z - 0.000017)
+            return V4d(d,d,d,1.0)
+        }
+
+
+    let lighting (v : Vertex) =
+        fragment {
+            let n = v.n |> Vec.normalize
+            let c = uniform?lightLocation - v.wp.XYZ |> Vec.normalize
+
+            let ambient = 0.2
+            let diffuse = Vec.dot (uniform.ViewTrafo * V4d(c,0.0)).XYZ n |> max 0.0
+
+            let l = ambient + (1.0 - ambient) * diffuse
+
+            return V4d(v.c.XYZ * diffuse, v.c.W)
+        }
+             
 module Shadows = 
 
     Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
@@ -39,12 +154,78 @@ module Shadows =
 
     let shadowMapSize = Mod.init (V2i(1024, 1024))
 
-    let shadowCam = CameraView.lookAt (V3d.III * 3.0) V3d.Zero V3d.OOI
+    let shadowCam = CameraView.lookAt (V3d.III * 2.5) V3d.Zero V3d.OOI
     let shadowProj = Frustum.perspective 60.0 0.1 10.0 1.0
+
+
+    //let angle = Mod.init 0.0
+    let rotation =
+        controller {
+            let! dt = differentiate Mod.time
+            return fun f -> f + dt.TotalSeconds * 2.0
+        }
+    let angle = AFun.integrate rotation 0.0
+    let lightSpaceView =
+        angle |> Mod.map (fun angle -> Trafo3d.RotationZ(angle) * (shadowCam |> CameraView.viewTrafo))
+    let lightSpaceViewProjTrafo = lightSpaceView |> Mod.map (fun view -> view * (shadowProj |> Frustum.projTrafo))
+    let lightPos = lightSpaceView |> Mod.map (fun t -> t.GetViewPosition())
+
+
+    let pointSize = Mod.init 14.0
+    let pointCount = 2048
+
+
+    let box (color : C4b) (box : Box3d) = 
+            let randomColor = color //C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, 255uy)
+
+            let indices =
+                [|
+                    1;2;6; 1;6;5
+                    2;3;7; 2;7;6
+                    4;5;6; 4;6;7
+                    3;0;4; 3;4;7
+                    0;1;5; 0;5;4
+                    0;3;2; 0;2;1
+                |]
+
+            let positions = 
+                [|
+                    V3f(box.Min.X, box.Min.Y, box.Min.Z)
+                    V3f(box.Max.X, box.Min.Y, box.Min.Z)
+                    V3f(box.Max.X, box.Max.Y, box.Min.Z)
+                    V3f(box.Min.X, box.Max.Y, box.Min.Z)
+                    V3f(box.Min.X, box.Min.Y, box.Max.Z)
+                    V3f(box.Max.X, box.Min.Y, box.Max.Z)
+                    V3f(box.Max.X, box.Max.Y, box.Max.Z)
+                    V3f(box.Min.X, box.Max.Y, box.Max.Z)
+                |]
+
+            let normals = 
+                [| 
+                    V3f.IOO;
+                    V3f.OIO;
+                    V3f.OOI;
+
+                    -V3f.IOO;
+                    -V3f.OIO;
+                    -V3f.OOI;
+                |]
+
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.TriangleList,
+
+                IndexedAttributes =
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, indices |> Array.map (fun i -> positions.[i]) :> Array
+                        DefaultSemantic.Normals, indices |> Array.mapi (fun ti _ -> normals.[ti / 6]) :> Array
+                        DefaultSemantic.Colors, indices |> Array.map (fun _ -> randomColor) :> Array
+                    ]
+
+            )
 
     let quadSg (color : C4b) = 
             let index = [|0;1;2; 0;2;3|]
-            let positions = [|V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |]
+            let positions = [|V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |] |> Array.map ((*)3.0f)
 
             IndexedGeometry(IndexedGeometryMode.TriangleList, index, 
                 SymDict.ofList [
@@ -53,54 +234,27 @@ module Shadows =
                     DefaultSemantic.Normals, Array.init positions.Length (constF V3f.OOI) :> Array
                 ], SymDict.empty) |> Sg.ofIndexedGeometry
 
-    let boxSg (color : C4b) (box : Box3f) = 
-        let indices =
-            [|
-                1;2;6; 1;6;5
-                2;3;7; 2;7;6
-                4;5;6; 4;6;7
-                3;0;4; 3;4;7
-                0;1;5; 0;5;4
-                0;3;2; 0;2;1
-            |]
+    let pointSg = 
+        let rand = Random()
+        let randomV3f() = V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
+        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
 
-        let positions = 
-            [|
-                V3f(box.Min.X, box.Min.Y, box.Min.Z)
-                V3f(box.Max.X, box.Min.Y, box.Min.Z)
-                V3f(box.Max.X, box.Max.Y, box.Min.Z)
-                V3f(box.Min.X, box.Max.Y, box.Min.Z)
-                V3f(box.Min.X, box.Min.Y, box.Max.Z)
-                V3f(box.Max.X, box.Min.Y, box.Max.Z)
-                V3f(box.Max.X, box.Max.Y, box.Max.Z)
-                V3f(box.Min.X, box.Max.Y, box.Max.Z)
-            |]
-            |> Array.map (fun x -> x - box.Center)
+        Sg.draw IndexedGeometryMode.PointList
+            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
+            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
+            |> Sg.vertexAttribute DefaultSemantic.Normals (Array.init pointCount (fun _ -> V3f.OOI) |> Mod.constant)
+            |> Sg.uniform "PointSize" pointSize
 
-        let normals = 
-            [| 
-                 V3f.IOO;
-                 V3f.OIO;
-                 V3f.OOI;
-                -V3f.IOO;
-                -V3f.OIO;
-                -V3f.OOI;
-            |]
-
-        IndexedGeometry(
-            Mode = IndexedGeometryMode.TriangleList,
-            IndexedAttributes =
-                SymDict.ofList [
-                    DefaultSemantic.Positions, indices |> Array.map (fun i -> positions.[i]) :> Array
-                    DefaultSemantic.Normals, indices |> Array.mapi (fun ti _ -> normals.[ti / 6]) :> Array
-                    DefaultSemantic.Colors, indices |> Array.map (fun _ -> color) :> Array
-                ]
-        ) |> Sg.ofIndexedGeometry
-
-    let sceneSg =
+    let sceneSg (fragmentShader : list<FShadeEffect>) =
         quadSg C4b.Green 
-        |> Sg.andAlso ((boxSg C4b.Yellow (Box3f.Unit.Scaled (V3f.One * 0.25f))) 
-        |> Sg.trafo (Trafo3d.Translation(V3d(0.0,0.0,0.3)) |> Mod.constant))
+        |> Sg.effect ( (Shader.trafo |> toEffect) :: fragmentShader )
+        |> Sg.andAlso ( pointSg 
+                        |> Sg.effect ([ DefaultSurfaces.trafo |> toEffect; 
+                                        DefaultSurfaces.pointSprite |> toEffect
+                                        DefaultSurfaces.pointSpriteFragment |> toEffect ] @ fragmentShader)
+                      )
+        |> Sg.uniform "LightViewMatrix" (lightSpaceViewProjTrafo)
+        |> Sg.trafo ( Trafo3d.Translation(V3d(0.0,0.0,0.3)) |> Mod.constant )
 
     let signature = 
         win.Runtime.CreateFramebufferSignature [
@@ -108,77 +262,46 @@ module Shadows =
         ]
  
     let shadowDepth =
-        sceneSg
+        sceneSg [ DefaultSurfaces.vertexColor |> toEffect ]
+            |> Sg.uniform "ViewportSize" (Mod.constant (V2i(1024,1024)))
             |> Sg.viewTrafo (shadowCam |> CameraView.viewTrafo |> Mod.constant)
             |> Sg.projTrafo (shadowProj |> Frustum.projTrafo |> Mod.constant)
-            |> Sg.effect [
-                DefaultSurfaces.trafo |> toEffect
-                DefaultSurfaces.vertexColor |> toEffect
-            ]
             |> Sg.compile win.Runtime signature   
             |> RenderTask.renderToDepth shadowMapSize
 
-    module Shader =
-        open FShade
-
-        type Vertex = {
-            [<Position>]        pos     : V4d
-            [<WorldPosition>]   wp      : V4d
-            [<Normal>]          n       : V3d
-            [<BiNormal>]        b       : V3d
-            [<Tangent>]         t       : V3d
-            [<Color>]           c       : V4d
-            [<TexCoord>]        tc      : V2d
-        }
-
-        type UniformScope with
-            member x.LightViewMatrix : M44d = uniform?LightViewMatrix
-        
-        let private diffuseSampler =
-            sampler2dShadow {
-                texture uniform?DiffuseColorTexture
-                filter Filter.MinMagLinear
-                addressU WrapMode.Border
-                addressV WrapMode.Border
-                borderColor C4f.White
-                comparison ComparisonFunction.LessOrEqual
-            }
-
-        let shadowShader (v : Vertex) =
-            fragment {
-                let lightSpace = uniform.LightViewMatrix * v.wp
-                let div = lightSpace.XYZ / lightSpace.W
-                let v = V3d(0.5, 0.5,0.5) + V3d(0.5, 0.5, 0.5) * div.XYZ
-                let d = diffuseSampler.Sample(v.XY, v.Z - 0.000017)
-                return V4d(d,d,d,1.0)
-            }
-
-    let angle = Mod.init 0.0
-    let lightSpaceViewProjTrafo =
-        angle |> Mod.map (fun angle -> 
-            Trafo3d.RotationZ(angle) * (shadowCam |> CameraView.viewTrafo) * (shadowProj |> Frustum.projTrafo)
-        )
-
     let sg =
-        sceneSg
+        sceneSg [ Shader.shadowShader |> toEffect; Shader.lighting |> toEffect ]
+            |> Sg.uniform "lightLocation" lightPos
             |> Sg.uniform "ViewportSize" win.Sizes
-            |> Sg.uniform "LightViewMatrix" (lightSpaceViewProjTrafo)
             |> Sg.texture DefaultSemantic.DiffuseColorTexture shadowDepth
-            |> Sg.effect [DefaultSurfaces.trafo |> toEffect
-                          DefaultSurfaces.vertexColor |> toEffect
-                          Shader.shadowShader |> toEffect 
-                          DefaultSurfaces.simpleLighting |> toEffect ]
+
+            |> Sg.andAlso (
+                box C4b.Red Box3d.Unit |> Sg.ofIndexedGeometry |> Sg.trafo (lightPos |> Mod.map Trafo3d.Translation)
+                 |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect ]
+             )
+
             |> Sg.viewTrafo (viewTrafo win   |> Mod.map CameraView.viewTrafo )
             |> Sg.projTrafo (perspective win |> Mod.map Frustum.projTrafo)
 
 
-    win.Keyboard.KeyDown(Keys.T).Values.Subscribe(fun _ -> 
-        transact (fun _ -> Mod.change angle (angle.Value + 0.1))
-    ) |> ignore
-
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-        showSg win sg
+        let renderTask =  Sg.compile win.Runtime win.FramebufferSignature sg
+        let composedTask = 
+            match renderTask with
+                | :? Aardvark.Base.RenderTask.SequentialRenderTask as s -> 
+                    match s.Tasks.[0] with
+                        | :? Aardvark.Rendering.GL.RenderTasks.AbstractRenderTask as a -> 
+                            a.BeforeRender.Add (fun _ -> 
+                                OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
+                            )
+                            a.AfterRender.Add( fun _ -> 
+                                OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
+                            )
+                        | _ -> failwith "unexpected task"
+                | _ -> failwith "unexpected task"
+        win.RenderTask <- renderTask
+        //showSg win sg
         System.Windows.Forms.Application.Run ()
 
 

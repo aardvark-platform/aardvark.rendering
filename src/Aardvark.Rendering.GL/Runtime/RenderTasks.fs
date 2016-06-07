@@ -32,6 +32,12 @@ module RenderTasks =
                 |> List.toArray
         let renderTaskLock = RenderTaskLock()
 
+        let beforeRender = new System.Reactive.Subjects.Subject<unit>()
+        let afterRender = new System.Reactive.Subjects.Subject<unit>()
+
+        member x.BeforeRender = beforeRender
+        member x.AfterRender = afterRender
+
         member private x.pushDebugOutput() =
             let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
             let c = config.GetValue x
@@ -143,7 +149,10 @@ module RenderTasks =
 
                 let innerStats = 
                     renderTaskLock.Run (fun () -> 
-                        x.Perform ()
+                        beforeRender.OnNext()
+                        let r = x.Perform ()
+                        afterRender.OnNext()
+                        r
                     )
 
                 x.popFbo fboState
