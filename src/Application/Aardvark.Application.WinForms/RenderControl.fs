@@ -17,7 +17,17 @@ type RenderControl() as this =
     let keyboard = new Keyboard()
     let mouse = new Mouse()
     let sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
+    let focus = Mod.init false
     let mutable inner : Option<IMod<DateTime>> = None
+
+    let onGotFocus (sender : obj) (e : EventArgs) =
+        transact(fun () ->
+            Mod.change focus true)
+
+    let onLostFocus (sender : obj) (e : EventArgs) =
+        transact(fun () ->
+            Mod.change focus false)
+
     let time = 
         Mod.custom (fun s -> 
             match inner with
@@ -41,10 +51,14 @@ type RenderControl() as this =
 
         transact(fun () ->
             inner <- Some cr.Time
+            Mod.change focus c.Focused
             cr.Time.AddOutput(time)
         )
         ctrl <- Some c
         impl <- Some cr
+
+        c.GotFocus.AddHandler (EventHandler onGotFocus)
+        c.LostFocus.AddHandler (EventHandler onLostFocus)
 
         (keyboard :> IKeyboard).KeyDown(Keys.F12).Values.Add(fun () ->
             let take =
@@ -131,6 +145,7 @@ type RenderControl() as this =
     member x.FramebufferSignature = impl.Value.FramebufferSignature
     member x.Runtime = impl.Value.Runtime
     member x.Time = time
+    member x.Focus = focus :> IMod<_>
 
     interface IRenderControl with
         member x.FramebufferSignature = impl.Value.FramebufferSignature
