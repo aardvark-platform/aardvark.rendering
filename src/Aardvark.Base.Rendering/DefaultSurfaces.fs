@@ -207,19 +207,42 @@ module DefaultSurfaces =
             return V4d(v.c.XYZ * diffuse, v.c.W)
         }
 
+    let private specular =
+        sampler2d {
+            texture uniform?SpecularColorTexture
+            filter Filter.MinMagMipLinear
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+        }
+
+    type UniformScope with
+        member x.HasSpecularColorTexture : bool = x?HasSpecularColorTexture
+
     let lighting (twoSided : bool) (v : Vertex) =
         fragment {
             let n = v.n |> Vec.normalize
             let c = uniform.CameraLocation - v.wp.XYZ |> Vec.normalize
+            let l = c
+            let h = c
 
             let ambient = 0.1
             let diffuse = 
-                if twoSided then Vec.dot c n |> abs
-                else Vec.dot c n |> max 0.0
+                if twoSided then Vec.dot l n |> abs
+                else Vec.dot l n |> max 0.0
+
+            let s = Vec.dot h n 
 
             let l = ambient + (1.0 - ambient) * diffuse
 
-            return V4d(v.c.XYZ * l, v.c.W)
+            let spec =
+                if uniform.HasSpecularColorTexture then 
+                    let v = specular.Sample(v.tc).XYZ
+                    v.X * V3d.III
+                else V3d.III
+
+            
+
+            return V4d(v.c.XYZ * l + spec * pown s 32, v.c.W)
         }
 
     let private diffuseSampler =
@@ -247,9 +270,10 @@ module DefaultSurfaces =
     let normalMap (v : Vertex) =
         fragment {
             let texColor = normalSampler.Sample(v.tc).XYZ
-            let texNormal = 2.0 * texColor - V3d.III |> Vec.normalize
+            let texNormal = (2.0 * texColor - V3d.III) |> Vec.normalize
 
-            let n = v.n * texNormal.Z + v.b * texNormal.X + v.t * texNormal.Y |> Vec.normalize
+
+            let n = v.n.Normalized * texNormal.Z + v.b.Normalized * texNormal.X + v.t.Normalized * texNormal.Y |> Vec.normalize
 
             return { v with n = n }
         }

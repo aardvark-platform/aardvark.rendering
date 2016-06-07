@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-
+open Aardvark.Base.Incremental
 
 module Loader =
     open System
@@ -29,11 +29,44 @@ module Loader =
             textures        : Map<Symbol, Texture>
         }
 
+        interface IUniformProvider with
+            member x.TryGetUniform(_, sem) =
+                match Map.tryFind sem x.textures with
+                    | Some tex -> Mod.constant tex.texture :> IMod |> Some
+                    | _ ->
+                        let singleValueTexture (c : C4f) =
+                            let img = PixImage<float32>(Col.Format.RGBA, V2i.II)
+                            
+                            img.GetMatrix<C4f>().Set(c) |> ignore
+                            let mip = PixImageMipMap [| img :> PixImage |]
+                            PixTexture2d(mip, false) :> ITexture |> Mod.constant :> IMod |> Some
+
+                        match string sem with
+                            | "DiffuseColorTexture" -> singleValueTexture x.diffuse
+                            | "SpecularColorTexture" -> singleValueTexture x.specular
+                            | "NormalMapTexture" -> singleValueTexture (C4f(0.5f, 0.5f, 1.0f, 1.0f))
+                            | _ -> None
+
+            member x.Dispose() = ()
+
     type Mesh =
         {
             geometry : IndexedGeometry
             bounds   : Box3d
         }
+
+        interface IAttributeProvider with
+            member x.TryGetAttribute(sem) =
+                match x.geometry.IndexedAttributes.TryGetValue sem with
+                    | (true, arr) ->
+                        let b = arr |> ArrayBuffer :> IBuffer |> Mod.constant
+                        Some (BufferView(b, arr.GetType().GetElementType()))
+                    | _ ->
+                        let nb = NullBuffer(V4f.Zero) :> IBuffer |> Mod.constant
+                        Some (BufferView(nb, typeof<V4f>))
+
+            member x.All = Seq.empty
+            member x.Dispose() = ()
 
     type Node =
         | Trafo     of Trafo3d * Node
@@ -48,6 +81,95 @@ module Loader =
             bounds : Box3d 
             root : Node 
         }
+
+    module SgSems =
+        open Aardvark.Base.Ag
+        open Aardvark.SceneGraph
+        open Aardvark.SceneGraph.Semantics
+
+        type Node with      
+            member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
+            member x.ModelTrafoStack 
+                with get() : list<IMod<Trafo3d>> = x?ModelTrafoStack
+                and set v = x?ModelTrafoStack <- v
+
+            
+            member x.Uniforms 
+                with get() : list<IUniformProvider> = x?Uniforms
+                and set v = x?Uniforms <- v
+
+            member x.ModelTrafo : IMod<Trafo3d> = x?ModelTrafo()
+
+        type Scene with      
+            member x.RenderObjects() : aset<IRenderObject> = x?RenderObjects()
+            member x.ModelTrafoStack : list<IMod<Trafo3d>> = x?ModelTrafoStack
+            member x.ModelTrafo : IMod<Trafo3d> = x?ModelTrafo()
+
+        [<Semantic>]
+        type SceneSem() =
+
+            member x.Uniforms(n : Node) =
+                let parent = n.Uniforms
+                match n with
+                    | Material(m,c) ->
+                        c.Uniforms <- (m :> IUniformProvider)::parent
+                    | _ ->
+                        n.AllChildren?Uniforms <- parent
+
+            member x.ModelTrafoStack(n : Node) =
+                let parent = n.ModelTrafoStack
+                match n with
+                    | Trafo(t,c) -> 
+                        c.ModelTrafoStack <- (Mod.constant t)::parent
+
+                    | Material(m,c) ->
+                        c.ModelTrafoStack <- parent
+
+                    | _ ->
+                        n.AllChildren?ModelTrafoStack <- parent
+
+            member x.RenderObjects(n : Node) =
+                match n with
+                    | Trafo(_,n) -> 
+                        n.RenderObjects()
+                    | Material(_,n) -> 
+                        n.RenderObjects()
+                    | Group(nodes) ->
+                        nodes |> ASet.collect' (fun n -> n.RenderObjects())
+                    | Empty ->
+                        ASet.empty
+                    | Leaf mesh ->
+
+                        let faceVertexCount, indexed =
+                            if isNull mesh.geometry.IndexArray then
+                                let (KeyValue(_,v)) = mesh.geometry.IndexedAttributes |> Seq.head
+                                v.Length, false
+                            else
+                                mesh.geometry.IndexArray.Length, true
+
+                        let call =
+                            DrawCallInfo(
+                                FaceVertexCount = faceVertexCount,
+                                InstanceCount = 1
+                            )
+
+                        let ro = RenderObject.create()
+                        ro.VertexAttributes <- mesh
+                        ro.Mode <- Mod.constant mesh.geometry.Mode
+                        ro.DrawCallInfos <- Mod.constant [call]
+                        if indexed then ro.Indices <- Mod.constant mesh.geometry.IndexArray
+                        else ro.Indices <- null
+
+                        ASet.single (ro :> IRenderObject)
+
+            member x.RenderObjects(s : Scene) =
+                s.root.RenderObjects()
+
+            member x.LocalBoundingBox(s : Scene) =
+                Mod.constant s.bounds
+
+            member x.GlobalBoundingBox(s : Scene) =
+                s.ModelTrafo |> Mod.map (fun t -> s.bounds.Transformed t)
 
     module Assimp =
         open System.Runtime.CompilerServices
@@ -95,7 +217,7 @@ module Loader =
                     | Assimp.TextureType.Normals -> DefaultSemantic.NormalMapTexture
                     | Assimp.TextureType.Shininess -> DefaultSemantic.ShininessTexture
                     | Assimp.TextureType.Lightmap -> DefaultSemantic.LightMapTexture
-                    | t -> failwithf "[Assimp] unknown texture type: %A" t
+                    | t -> Symbol.Empty //failwithf "[Assimp] unknown texture type: %A" t
 
 
             let private knownSuffixes =
@@ -140,6 +262,11 @@ module Loader =
                                     | Suffix "_color" name -> [name, (DefaultSemantic.DiffuseColorTexture, f)]
                                     | Suffix "_spec" name -> [name, (DefaultSemantic.SpecularColorTexture, f)]
                                     | Suffix "_normal" name -> [name, (DefaultSemantic.NormalMapTexture, f)]
+                                    | Suffix "_d" name -> [name, (DefaultSemantic.DiffuseColorTexture, f)]
+                                    | Suffix "_s" name -> [name, (DefaultSemantic.SpecularColorTexture, f)]
+                                    | Suffix "_n" name -> [name, (DefaultSemantic.NormalMapTexture, f)]
+                                    | Suffix "_diff" name -> [name, (DefaultSemantic.DiffuseColorTexture, f)]
+                                    | Suffix "_norm" name -> [name, (DefaultSemantic.NormalMapTexture, f)]
                                     | _ -> [] 
                                 
                             (name, (Symbol.Empty, f)) :: specific
@@ -162,7 +289,7 @@ module Loader =
                         name, slot
                     )
 
-                let textures = 
+                let mutable textures = 
                     slots |> List.map (fun (name, slot) ->
                             let sem = toSemantic slot.TextureType
 
@@ -181,8 +308,30 @@ module Loader =
                       |> Map.ofList
 
                 
-                let names = slots |> List.map fst |> Set.ofList
-                Log.warn "names: %A" names
+                let names = 
+                    slots |> List.map (fun (n,s) ->
+                        match n with
+                            | Suffix "_color" name -> name
+                            | Suffix "_spec" name -> name
+                            | Suffix "_normal" name -> name
+                            | Suffix "_d" name -> name
+                            | Suffix "_s" name -> name
+                            | Suffix "_n" name -> name
+                            | Suffix "_diff" name -> name
+                            | Suffix "_norm" name -> name
+                            | _ -> n
+                    )
+                    |> Set.ofList
+
+                if Set.count names = 1 then
+                    let name = Seq.head names
+                    match Map.tryFind name table with
+                        | Some map ->
+                            for (k,v) in Map.toSeq map do
+                                if not (Map.containsKey k textures) then
+                                    textures <- Map.add k { texture = FileTexture(v, true) :> ITexture; coordIndex = 0 } textures
+                        | None ->
+                            ()
 
 
                 textures
@@ -221,7 +370,9 @@ module Loader =
                                 let coordSem = 
                                     match string sem with
                                         | "DiffuseColorTexture" -> DefaultSemantic.DiffuseColorCoordinates
-                                        | _ -> failwithf "[Assimp] no coords for semantic: %A" sem
+                                        | _ -> 
+                                            DefaultSemantic.DiffuseColorCoordinates
+                                            //failwithf "[Assimp] no coords for semantic: %A" sem
                                 
                                 attributes.[coordSem] <- att.MapToArray(fun v -> V2f(v.X, v.Y))
 
@@ -337,7 +488,17 @@ module Loader =
             use ctx = new Assimp.AssimpContext()
             let dir = Path.GetDirectoryName(file)
 
-            let scene = ctx.ImportFile(file)
+            let flags = 
+                Assimp.PostProcessSteps.Triangulate |||
+                Assimp.PostProcessSteps.CalculateTangentSpace |||
+                Assimp.PostProcessSteps.GenerateSmoothNormals |||
+                //Assimp.PostProcessSteps.FixInFacingNormals ||| 
+                Assimp.PostProcessSteps.JoinIdenticalVertices |||
+//                Assimp.PostProcessSteps.FlipUVs |||
+//                Assimp.PostProcessSteps.FlipWindingOrder |||
+                Assimp.PostProcessSteps.MakeLeftHanded
+
+            let scene = ctx.ImportFile(file, flags)
 
             let textureTable = getTextureTable dir
             let materials = scene.Materials.MapToArray(fun m -> toMaterial textureTable m)
@@ -351,6 +512,8 @@ module Loader =
                 }
 
             let root = traverse state scene.RootNode
+
+            let root = Trafo(Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero), root)
 
             {
                 root = root

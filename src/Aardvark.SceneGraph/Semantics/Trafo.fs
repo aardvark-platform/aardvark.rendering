@@ -11,7 +11,7 @@ open Aardvark.SceneGraph.Internal
 module TrafoExtensions =
 
     let inline private trafo v : IMod<Trafo3d> = v 
-    type ISg with
+    type System.Object with
         member x.ModelTrafoStack : list<IMod<Trafo3d>> = x?ModelTrafoStack         
         member x.ModelTrafo             = x?ModelTrafo()            |> trafo
         member x.ViewTrafo              = x?ViewTrafo               |> trafo
@@ -143,8 +143,8 @@ module TrafoSemantics =
             t.Child?ModelTrafoStack <- t.Trafo::t.ModelTrafoStack
 
 
-        member x.ModelTrafo(e : ISg) =
-            let stack = e.ModelTrafoStack
+        member x.ModelTrafo(e : obj) =
+            let stack = e?ModelTrafoStack
             flattenStack stack
 
         member x.ViewTrafo(v : Sg.ViewTrafoApplicator) =
@@ -166,31 +166,31 @@ module TrafoSemantics =
             e.Child?ProjTrafo <- e.ProjTrafo
 
 
-        member x.ModelTrafoInv(s : ISg) =
+        member x.ModelTrafoInv(s : obj) =
             s.ModelTrafo |> inverse
 
-        member x.ViewTrafoInv(s : ISg) =
+        member x.ViewTrafoInv(s : obj) =
             s.ViewTrafo |> inverse
 
-        member x.ProjTrafoInv(s : ISg) =
+        member x.ProjTrafoInv(s : obj) =
             s.ProjTrafo |> inverse
 
 
-        member x.ModelViewTrafo(s : ISg) =
+        member x.ModelViewTrafo(s : obj) =
             s.ModelTrafo <*> s.ViewTrafo
 
-        member x.ViewProjTrafo(s : ISg) =
+        member x.ViewProjTrafo(s : obj) =
             s.ViewTrafo <*> s.ProjTrafo
 
-        member x.ModelViewProjTrafo(s : ISg) =
+        member x.ModelViewProjTrafo(s : obj) =
             s.ModelTrafo <*> s.ViewProjTrafo
 
 
-        member x.ModelViewTrafoInv(s : ISg) =
+        member x.ModelViewTrafoInv(s : obj) =
             s.ModelViewTrafo |> inverse
         
-        member x.ViewProjTrafoInv(s : ISg) =
+        member x.ViewProjTrafoInv(s : obj) =
             s.ViewProjTrafo |> inverse
 
-        member x.ModelViewProjTrafoInv(s : ISg) =
+        member x.ModelViewProjTrafoInv(s : obj) =
             s.ModelViewProjTrafo |> inverse

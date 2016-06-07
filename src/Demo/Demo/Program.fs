@@ -993,6 +993,10 @@ let main args =
 
     let sg = Assimp.load modelPath
 
+
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\Geralt.obj"
+    let sg = Sg.AdapterNode(scene)
+
     let normalizeTo (target : Box3d) (sg : ISg) =
         let source = sg.LocalBoundingBox().GetValue()
         
@@ -1053,16 +1057,18 @@ let main args =
                 //DefaultSurfaces.uniformColor color |> toEffect
                 DefaultSurfaces.trafo |> toEffect
                 //DefaultSurfaces.constantColor C4f.Red |> toEffect
+                DefaultSurfaces.constantColor C4f.White |> toEffect
                 DefaultSurfaces.diffuseTexture |> toEffect
-                DefaultSurfaces.lighting false |> toEffect
+                DefaultSurfaces.normalMap |> toEffect
+                DefaultSurfaces.lighting true |> toEffect
               ]
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
-           |> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
+           //|> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
            |> Sg.samplerState DefaultSemantic.DiffuseColorTexture samplerState
            //|> Sg.fillMode mode
            //|> Sg.blendMode (Mod.constant BlendMode.Blend)
-           |> normalizeTo (Box3d(-V3d.III, V3d.III))
+           //|> normalizeTo (Box3d(-V3d.III, V3d.III))
     
 
 
