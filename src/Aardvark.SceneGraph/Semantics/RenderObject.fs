@@ -43,6 +43,8 @@ module RenderObject =
         rj.VertexAttributes <- vertexAttributes
         rj.InstanceAttributes <- instanceAttributes
             
+        rj.WriteBuffers <- scope?WriteBuffers
+
         rj.DepthTest <- scope?DepthTestMode
         rj.CullMode <- scope?CullMode
         rj.FillMode <- scope?FillMode
