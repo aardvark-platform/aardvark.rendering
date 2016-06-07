@@ -342,7 +342,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         ctx.Download(unbox<Texture> t, level, slice, target)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
-        ctx.Download(unbox<Texture> t, level, slice, source)
+        ctx.Upload(unbox<Texture> t, level, slice, source)
 
     member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
 
