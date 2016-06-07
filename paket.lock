@@ -23,7 +23,7 @@ NUGET
       Aardvark.Base.Essentials (2.1.2)
       Aardvark.Base.FSharp (2.1.2)
       Aardvark.Base.Incremental (2.1.2)
-    FShade (2.1.2)
+    FShade (2.1.3)
       Aardvark.Base (>= 2.1 < 2.2)
       Aardvark.Base.FSharp (>= 2.1 < 2.2)
     GLSLangSharp (0.2.4)

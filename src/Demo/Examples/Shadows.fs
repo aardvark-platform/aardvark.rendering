@@ -108,8 +108,8 @@ module Shader =
     let trafo (v : Vertex) =
         vertex {
             let wp = uniform.ModelTrafo * v.pos
-            let distance = Vec.dot v.wp clipPlane
-            let distance = -10.0
+            let distance = Vec.dot wp clipPlane
+            //let distance = 10.0
             return {
                 pos = uniform.ViewProjTrafo * wp
                 wp = wp
@@ -302,12 +302,13 @@ module Shadows =
         let composedTask = 
             match renderTask with
                 | :? Aardvark.Rendering.GL.RenderTasks.AbstractRenderTask as a -> 
-                     a.BeforeRender.Add (fun _ -> 
-                                OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
-                            )
-                     a.AfterRender.Add( fun _ -> 
-                         OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
-                     )
+//                     a.BeforeRender.Add (fun _ -> 
+//                                OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
+//                            )
+//                     a.AfterRender.Add( fun _ -> 
+//                         OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
+//                     )
+                       ()
                 | :? Aardvark.Base.RenderTask.SequentialRenderTask as s -> 
                     match s.Tasks.[0] with
                         | :? Aardvark.Rendering.GL.RenderTasks.AbstractRenderTask as a -> 
