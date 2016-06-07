@@ -217,6 +217,9 @@ module Sg =
         new(value : IEvent<RasterizerState>, child : IMod<ISg>) = RasterizerStateApplicator(Mod.fromEvent value, child)
         new(value : IEvent<RasterizerState>, child : ISg) = RasterizerStateApplicator(Mod.fromEvent value, Mod.constant child)
 
+    type WriteBuffersApplicator(buffers : Option<Set<Symbol>>, child : IMod<ISg>) =
+        inherit AbstractApplicator(child)
+        member x.WriteBuffers = buffers
 
     type Group(elements : seq<ISg>) =
         let aset = cset(elements)

@@ -48,6 +48,9 @@ module ModeSemantics =
         member x.BlendMode(e : Root<ISg>) =
             e.Child?BlendMode <- defaultBlend
 
+        member x.WriteBuffers(e : Root<ISg>) =
+            e.Child?WriteBuffers <- None
+
 
         member x.DepthTestMode(a : Sg.DepthTestModeApplicator) =
             a.Child?DepthTestMode <- a.Mode
@@ -64,6 +67,8 @@ module ModeSemantics =
         member x.BlendMode(a : Sg.BlendModeApplicator) =
             a.Child?BlendMode <- a.Mode
 
+        member x.WriteBuffers(b : Sg.WriteBuffersApplicator) =
+            b.Child?WriteBuffers <- b.WriteBuffers
 
 
         member x.DepthTestMode(a : Sg.RasterizerStateApplicator) =
@@ -80,3 +85,4 @@ module ModeSemantics =
 
         member x.BlendMode(a : Sg.RasterizerStateApplicator) =
             a.Child?BlendMode <- a.BlendMode
+
