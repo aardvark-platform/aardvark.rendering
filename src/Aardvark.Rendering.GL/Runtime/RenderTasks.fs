@@ -90,6 +90,14 @@ module RenderTasks =
                         | None -> 
                             GL.ColorMask(index, true, true, true, true)
 
+                for (index, sem) in fbo.Signature.Images |> Map.toSeq do
+                    match Map.tryFind sem desc.images with
+                        | Some img ->
+                            let tex = img.texture |> unbox<Texture>
+                            GL.BindImageTexture(index, tex.Handle, img.level, false, img.slice, TextureAccess.ReadWrite, unbox (int tex.Format))
+                        | None -> 
+                            GL.ActiveTexture(int TextureUnit.Texture0 + index |> unbox)
+                            GL.BindTexture(TextureTarget.Texture2D, 0)
 
             elif handle <> 0 then
                 failwithf "cannot render to texture on this OpenGL driver"
@@ -101,10 +109,15 @@ module RenderTasks =
 
             oldFbo, old
 
-        member private x.popFbo (oldFbo : int, old : int[]) =
+        member private x.popFbo (desc : OutputDescription, (oldFbo : int, old : int[])) =
             if ExecutionContext.framebuffersSupported then
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
                 GL.Check "could not bind framebuffer"
+
+                for (index, sem) in desc.framebuffer.Signature.Images |> Map.toSeq do
+                    GL.ActiveTexture(int TextureUnit.Texture0 + index |> unbox)
+                    GL.BindTexture(TextureTarget.Texture2D, 0)
+
 
             GL.Viewport(old.[0], old.[1], old.[2], old.[3])
             GL.Check "could not set viewport"
@@ -155,7 +168,7 @@ module RenderTasks =
                         r
                     )
 
-                x.popFbo fboState
+                x.popFbo (desc, fboState)
                 x.popDebugOutput debugState
 
                 
@@ -861,6 +874,7 @@ module RenderTasks =
             if current = 0 then
                 query <- GL.GenQuery()
                 GL.BeginQuery(QueryTarget.PrimitivesGenerated, query)
+
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do

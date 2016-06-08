@@ -351,6 +351,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
         FramebufferSignature(
             runtime,
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
+            Map.empty,
             depthSignature,
             None
         )

@@ -63,6 +63,8 @@ type RenderPass =
                     | _ ->
                         None
 
+            member x.Images = failwith "not implemented"
+
             member x.IsAssignableFrom(other : IFramebufferSignature) = true
 
 

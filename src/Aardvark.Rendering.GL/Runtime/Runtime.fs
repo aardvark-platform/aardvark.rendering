@@ -8,7 +8,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 
-type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
+type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
    
     let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
         let myCol = RenderbufferFormat.toColFormat mine.format
@@ -34,7 +34,7 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
     member x.ColorAttachments = colors
     member x.DepthAttachment = depth
     member x.StencilAttachment = depth
-
+    member x.Images = images
     member x.IsAssignableFrom (other : IFramebufferSignature) =
         if x.Equals other then 
             true
@@ -56,6 +56,7 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
         member x.DepthAttachment = depth
         member x.StencilAttachment = stencil
         member x.IsAssignableFrom other = x.IsAssignableFrom other
+        member x.Images = images
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
@@ -89,8 +90,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     interface IRuntime with
 
-        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
-            x.CreateFramebufferSignature(attachments) :> IFramebufferSignature
+        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+            x.CreateFramebufferSignature(attachments, images) :> IFramebufferSignature
 
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
@@ -154,7 +155,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             x.CreateMappedBuffer ()
 
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
 
         let depth =
@@ -177,7 +178,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 |> List.mapi (fun i t -> (i, t))
                 |> Map.ofList
 
-        FramebufferSignature(x, indexedColors, depth, stencil)
+        let images = images |> Seq.mapi (fun i s -> (i,s)) |> Map.ofSeq
+
+        FramebufferSignature(x, indexedColors, images, depth, stencil)
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)

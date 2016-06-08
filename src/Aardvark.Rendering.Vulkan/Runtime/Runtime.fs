@@ -34,6 +34,7 @@ type private FramebufferSignature(runtime : IRuntime, res : Resource<RenderPass>
         member x.DepthAttachment = signature.Value.DepthAttachment
         member x.StencilAttachment = signature.Value.StencilAttachment
         member x.Runtime = runtime
+        member x.Images = Map.empty
 
 //type private BackendTexture(res : Resource<Image>) =
 //    let img = lazy ( res.Handle.GetValue() :> IBackendTexture )
@@ -159,7 +160,7 @@ type Runtime(device : Device) as this =
 
         // framebuffer signatures
 
-        member x.CreateFramebufferSignature(signature) = 
+        member x.CreateFramebufferSignature(signature, images) = 
             x.CreateFramebufferSignature(signature)
 
         member x.DeleteFramebufferSignature(signature) = 
