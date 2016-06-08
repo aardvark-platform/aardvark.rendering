@@ -59,6 +59,28 @@ module FShadeInterop =
         member x.ViewportSize : V2i = x?PerView?ViewportSize
 
 
+        member x.DiffuseColor : V4d = x?PerMaterial?DiffuseColor
+        member x.AmbientColor : V4d = x?PerMaterial?DiffuseColor
+        member x.EmissiveColor : V4d = x?PerMaterial?EmissiveColor
+        member x.SpecularColor : V4d = x?PerMaterial?SpecularColor
+        member x.Shininess : float = x?PerMaterial?Shininess
+
+        member x.DiffuseColorTexture : ShaderTextureHandle = x?DiffuseColorTexture
+        member x.AmbientColorTexture : ShaderTextureHandle = x?AmbientColorTexture
+        member x.EmissiveColorTexture : ShaderTextureHandle = x?EmissiveColorTexture
+        member x.SpecularColorTexture : ShaderTextureHandle = x?SpecularColorTexture
+        member x.ShininessTexture : ShaderTextureHandle = x?HasShininessTexture
+        member x.LightMapTexture : ShaderTextureHandle = x?LightMapTexture
+        member x.NormalMapTexture : ShaderTextureHandle = x?NormalMapTexture
+
+        member x.HasDiffuseColorTexture : bool = x?PerMaterial?HasDiffuseColorTexture
+        member x.HasAmbientColorTexture : bool = x?PerMaterial?HasAmbientColorTexture
+        member x.HasEmissiveColorTexture : bool = x?PerMaterial?HasEmissiveColorTexture
+        member x.HasSpecularColorTexture : bool = x?PerMaterial?HasSpecularColorTexture
+        member x.HasShininessTexture : bool = x?PerMaterial?HasShininessTexture
+        member x.HasLightMapTexture : bool = x?PerMaterial?HasLightMapTexture
+        member x.HasNormalMapTexture : bool = x?PerMaterial?HasNormalMapTexture
+
 
     let private backendSurfaceCache = ConcurrentDictionary<string, BackendSurface>()
 

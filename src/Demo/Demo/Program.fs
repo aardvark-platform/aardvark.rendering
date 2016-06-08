@@ -1058,10 +1058,11 @@ let main args =
                 DefaultSurfaces.trafo |> toEffect
                 //DefaultSurfaces.constantColor C4f.Red |> toEffect
                 DefaultSurfaces.constantColor C4f.White |> toEffect
-                DefaultSurfaces.diffuseTexture |> toEffect
+                //DefaultSurfaces.diffuseTexture |> toEffect
                 DefaultSurfaces.normalMap |> toEffect
-                DefaultSurfaces.lighting true |> toEffect
+                DefaultSurfaces.lighting false |> toEffect
               ]
+           |> Sg.trafo (Trafo3d.RotationZ(45.0 / 57.296) |> Mod.constant) //(Trafo3d.FromBasis(V3d.IOO, V3d(10.0, 1.0, 0.0).Normalized, V3d.OOI, V3d.Zero) |> Mod.constant)
            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo proj.ProjectionTrafos.Mod
            //|> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
