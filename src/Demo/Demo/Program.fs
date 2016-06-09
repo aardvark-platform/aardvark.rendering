@@ -927,71 +927,530 @@ let testImageCopy<'a> (size : V2i) =
     printfn "memcpy: %.3fms" t
 
 
+module TriangleSet =
+    open System.Collections.Generic
+    open Aardvark.Base.Monads.Option
+
+    let private tryGetTrianglesAsMod (ro : IRenderObject) =
+        option {
+            match ro with
+                | :? RenderObject as ro ->
+
+                    
+                    let! modelTrafo = ro.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelTrafo")
+                    let! positions = ro.VertexAttributes.TryGetAttribute(DefaultSemantic.Positions)
+                    let indices = ro.Indices
+
+                    let positionType = positions.ElementType
+                    let indexType = if isNull ro.Indices then typeof<int> else indices.GetValue().GetType().GetElementType()
+                    
+                    let toInt : Array -> int[] = PrimitiveValueConverter.arrayConverter indexType
+                    let toV3d : Array -> V3d[] = PrimitiveValueConverter.arrayConverter positionType
+
+                    let triangles =
+                        Mod.custom(fun self ->
+                            let modelTrafo = modelTrafo.GetValue self |> unbox<Trafo3d>
+                            let positions = positions.Buffer.GetValue self
+                            let indices =
+                                if isNull indices then null
+                                else indices.GetValue self |> toInt
+
+                            match positions with
+                                | :? ArrayBuffer as ab ->
+                                    let data = toV3d ab.Data |> Array.map modelTrafo.Forward.TransformPos
+                                        
+                                    if isNull indices then
+                                        let triangles = Array.zeroCreate (data.Length / 3)
+                                        for i in 0..triangles.Length-1 do
+                                            let p0 = data.[3*i + 0]
+                                            let p1 = data.[3*i + 1]
+                                            let p2 = data.[3*i + 2]
+                                            triangles.[i] <- Triangle3d(p0, p1, p2)
+
+                                        triangles
+                                    else
+                                        let triangles = Array.zeroCreate (indices.Length / 3)
+                                        for i in 0..triangles.Length-1 do
+                                            let p0 = data.[indices.[3*i + 0]]
+                                            let p1 = data.[indices.[3*i + 1]]
+                                            let p2 = data.[indices.[3*i + 2]]
+                                            triangles.[i] <- Triangle3d(p0, p1, p2)
+
+                                        triangles
+
+                                | _ ->
+                                    failwith "not implemented"
+
+
+                        )
+
+
+                    return triangles
+
+
+
+                | _ ->
+                    return! None
+        }
+
+    let private tryGetTrianglesAsASet (ro : IRenderObject) =
+        option {
+            match ro with
+                | :? RenderObject as ro ->
+
+                    
+                    let! modelTrafo = ro.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelTrafo")
+                    let! positions = ro.VertexAttributes.TryGetAttribute(DefaultSemantic.Positions)
+                    let indices = ro.Indices
+
+                    let positionType = positions.ElementType
+                    let indexType = if isNull ro.Indices then typeof<int> else indices.GetValue().GetType().GetElementType()
+                    
+                    let toInt : Array -> int[] = PrimitiveValueConverter.arrayConverter indexType
+                    let toV3d : Array -> V3d[] = PrimitiveValueConverter.arrayConverter positionType
+
+                    let triangles =
+                        ASet.custom(fun self ->
+                            let modelTrafo = modelTrafo.GetValue self |> unbox<Trafo3d>
+                            let positions = positions.Buffer.GetValue self
+                            let indices =
+                                if isNull indices then null
+                                else indices.GetValue self |> toInt
+
+                            let newTriangles =
+                                match positions with
+                                    | :? ArrayBuffer as ab ->
+                                        let data = toV3d ab.Data |> Array.map modelTrafo.Forward.TransformPos
+                                        
+                                        if isNull indices then
+                                            let triangles = Array.zeroCreate (data.Length / 3)
+                                            for i in 0..triangles.Length-1 do
+                                                let p0 = data.[3*i + 0]
+                                                let p1 = data.[3*i + 1]
+                                                let p2 = data.[3*i + 2]
+                                                triangles.[i] <- Triangle3d(p0, p1, p2)
+
+                                            triangles
+                                        else
+                                            let triangles = Array.zeroCreate (indices.Length / 3)
+                                            for i in 0..triangles.Length-1 do
+                                                let p0 = data.[indices.[3*i + 0]]
+                                                let p1 = data.[indices.[3*i + 1]]
+                                                let p2 = data.[indices.[3*i + 2]]
+                                                triangles.[i] <- Triangle3d(p0, p1, p2)
+
+                                            triangles
+
+                                    | _ ->
+                                        failwith "not implemented"
+
+                            let newTriangles = HashSet newTriangles
+
+                            let rem = self.Content |> Seq.filter (newTriangles.Contains >> not) |> Seq.map Rem |> Seq.toList
+                            let add = newTriangles |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add |> Seq.toList
+
+
+                            add @ rem
+                        )
+
+
+                    return triangles
+
+
+
+                | _ ->
+                    return! None
+        }
+
+
+    let ofRenderObject (o : IRenderObject) =
+        o |> tryGetTrianglesAsMod |> Option.get
+
+    let ofSg (sg : ISg) =
+        aset {
+            for ro in sg.RenderObjects() do
+                match tryGetTrianglesAsASet ro with
+                    | Some set -> yield! set
+                    | _ -> ()
+        }
+
+
+
+module Outline = 
+    open System.Collections.Generic
+    open Aardvark.Base.Monads.Option
+
+    let create (runtime : IRuntime) (viewPos : IMod<V3d>) (sg : ISg) =
+
+        let size = V2i(4096, 4096)
+
+        let surfaceCache = Dict<IMod<ISurface>, IMod<ISurface>>()
+
+        let stencilMode =
+            StencilMode(
+                StencilOperationFunction.Replace,
+                StencilOperationFunction.Zero,
+                StencilOperationFunction.Keep,
+                StencilCompareFunction.Always,
+                1,
+                0xFFFFFFFFu
+            )
+
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                //DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+            ]
+
+        let bounds = sg.LocalBoundingBox()
+
+        let viewProjTup = 
+            Mod.map2 ViewProjection.containing viewPos bounds
+
+        let view = viewProjTup |> Mod.map (fst >> CameraView.viewTrafo)
+        let proj = viewProjTup |> Mod.map (snd >> Frustum.projTrafo)
+
+        let viewProj = 
+            viewProjTup |> Mod.map (fun (v,p) ->
+                (CameraView.viewTrafo v) * (Frustum.projTrafo p)
+            )
+
+        let writeStencil =
+            StencilMode(
+                StencilOperationFunction.Replace,
+                StencilOperationFunction.Replace,
+                StencilOperationFunction.Keep,
+                StencilCompareFunction.Always,
+                1,
+                0xFFFFFFFFu
+            ) |> Mod.constant
+
+
+        let objects = 
+            sg.RenderObjects()
+                |> ASet.choose (fun ro ->
+                    match ro with
+                        | :? RenderObject as ro ->
+                            let newObj = 
+                                { ro with
+                                    WriteBuffers = None //Some (Set.singleton DefaultSemantic.Depth)
+                                    StencilMode = writeStencil
+                                    Uniforms =
+                                        { new IUniformProvider with
+                                            member x.TryGetUniform(scope, sem) =
+                                                match string sem with
+                                                    | "ViewTrafo" | "ViewTrafoInv" -> Mod.constant Trafo3d.Identity :> IMod |> Some
+                                                    | "ProjTrafo" | "ViewProjTrafo" -> viewProj :> IMod |> Some
+                                                    | "ProjTrafoInv" | "ViewProjTrafoInv" -> viewProj |> TrafoSemantics.inverse :> IMod |> Some
+                                                    | "CameraLocation" -> viewPos :> IMod |> Some
+                                                    | _ -> ro.Uniforms.TryGetUniform(scope, sem)
+                                            member x.Dispose() =
+                                                ro.Uniforms.Dispose()
+                                        
+                                        }
+                                }
+                            Some (newObj :> IRenderObject)
+                        | _ ->
+                            None
+                )
+
+        let renderTask = 
+            RenderTask.ofList [
+                runtime.CompileClear(signature, Mod.constant C4f.Black, Mod.constant 1.0)
+                runtime.CompileRender(signature, objects)
+            ]
+
+        let fbo = runtime.CreateFramebuffer(signature, Mod.constant size)
+        match fbo with
+            | :? IOutputMod<IFramebuffer> as m -> m.Acquire()
+            | _ -> ()
+
+        Mod.custom (fun self ->
+            let fbo = fbo.GetValue(self)
+            renderTask.Run(self, OutputDescription.ofFramebuffer fbo) |> ignore
+
+            let depth = fbo.Attachments.[DefaultSemantic.Depth] |> unbox<BackendTextureOutputView>
+
+            let stencil = Matrix<int>(fbo.Size)
+            //let depthImage = PixImage<float32>(Col.Format.Gray, fbo.Size)
+            runtime.DownloadStencil(depth.texture, 0, 0, stencil)
+
+            let stencilDiff = Matrix<int>(fbo.Size - V2i.II)
+            stencilDiff.SetByIndex(stencil.SubMatrix(V2i.Zero, fbo.Size - V2i.II), fun index ->
+                let px = index + stencil.DX
+                let py = index + stencil.DY
+
+                let dx = stencil.[px] - stencil.[index] |> abs
+                let dy = stencil.[py] - stencil.[index] |> abs
+
+                dx + dy
+            ) |> ignore
+
+            let image (mat : Matrix<int>) =
+                let depthImage = PixImage<byte>(Col.Format.RGBA, V2i mat.Size)
+
+                depthImage.GetMatrix<C4b>().SetMap(mat, fun v -> 
+                    let v = 255 * v
+                    C4b(v,v,v,255)
+                ) |> ignore
+
+                depthImage
+
+            image stencilDiff
+            //depthImage.ToPixImage<byte>(Col.Format.RGBA)
+        )
+
+
+
+    let detect (viewPos : V3d) (viewDirection : V3d) (triangles : Triangle3d[]) : Line3d[] =
+    
+        let frontFacing = triangles
+//            triangles |> Array.filter (fun t ->
+//                let d = Vec.dot t.Normal viewDirection
+//                d < 0.0
+//            )
+
+        let counts = Dictionary<Line3d, int>()
+
+        let add (l : Line3d) =
+            match counts.TryGetValue l with
+                | (true, old) -> counts.[l] <- old + 1
+                | _ -> counts.[l] <- 1
+
+        for t in frontFacing do
+            add t.Line01 
+            add t.Line12 
+            add t.Line20 
+
+
+
+        let final =
+            counts
+                |> Dictionary.toSeq
+                |> Seq.filter (fun (_,c) -> c = 1)
+                |> Seq.map fst 
+                |> Seq.toArray
+
+        Log.warn "input: %d res: %d" counts.Count final.Length
+        final
+
+    let extrude (viewPos : V3d) (far : float) (outline : Line3d[]) =
+        let pointCount = outline.Length * 6
+
+        let normals = Array.zeroCreate pointCount
+        let positions = Array.zeroCreate pointCount
+        for i in 0..outline.Length - 1 do
+            let line = outline.[i]
+
+
+            let p0n = line.P0 
+            let p1n = line.P1
+
+            let p0f = 
+                let r = Ray3d(viewPos, p0n - viewPos |> Vec.normalize)
+                r.GetPointOnRay(far)
+
+            let p1f = 
+                let r = Ray3d(viewPos, p1n - viewPos |> Vec.normalize)
+                r.GetPointOnRay(far)
+
+            // p0n p1n p1f p0f
+            //  0   1   2   3
+
+            // 0 1 2  0 2 3
+
+            let n = Vec.cross (p1f - p1n) (p1n - p0n) |> Vec.normalize
+
+            let vi = 6 * i 
+            positions.[vi + 0] <- V3f p0n
+            positions.[vi + 1] <- V3f p1n
+            positions.[vi + 2] <- V3f p1f
+        
+            positions.[vi + 3] <- V3f p0n
+            positions.[vi + 4] <- V3f p1f
+            positions.[vi + 5] <- V3f p0f
+
+            for o in 0..5 do
+                normals.[vi + o] <- V3f n
+
+        
+        let positions =
+            outline |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1|])
+
+        IndexedGeometry(
+            Mode = IndexedGeometryMode.LineList,
+            IndexedAttributes =
+                SymDict.ofList [
+                    DefaultSemantic.Positions, positions :> Array
+                    //DefaultSemantic.Normals, normals :> Array
+                ]
+            )
+
+module Helpers = 
+    let rand = Random()
+    let randomPoints (bounds : Box3d) (pointCount : int) =
+        let size = bounds.Size
+        let randomV3f() = V3d(rand.NextDouble(), rand.NextDouble(), rand.NextDouble()) * size + bounds.Min |> V3f.op_Explicit
+        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
+
+        IndexedGeometry(
+            Mode = IndexedGeometryMode.PointList,
+            IndexedAttributes = 
+                SymDict.ofList [
+                        DefaultSemantic.Positions, Array.init pointCount (fun _ -> randomV3f()) :> Array
+                        DefaultSemantic.Colors, Array.init pointCount (fun _ -> randomColor()) :> Array
+                ]
+        )
+
+    let randomColor() =
+        C4b(128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 255uy)
+    let randomColor2(alpha) =
+        C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, alpha)
+
+    let box (color : C4b) (box : Box3d) =
+
+        let randomColor = color //C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, 255uy)
+
+        let indices =
+            [|
+                1;2;6; 1;6;5
+                2;3;7; 2;7;6
+                4;5;6; 4;6;7
+                3;0;4; 3;4;7
+                0;1;5; 0;5;4
+                0;3;2; 0;2;1
+            |]
+
+        let positions = 
+            [|
+                V3f(box.Min.X, box.Min.Y, box.Min.Z)
+                V3f(box.Max.X, box.Min.Y, box.Min.Z)
+                V3f(box.Max.X, box.Max.Y, box.Min.Z)
+                V3f(box.Min.X, box.Max.Y, box.Min.Z)
+                V3f(box.Min.X, box.Min.Y, box.Max.Z)
+                V3f(box.Max.X, box.Min.Y, box.Max.Z)
+                V3f(box.Max.X, box.Max.Y, box.Max.Z)
+                V3f(box.Min.X, box.Max.Y, box.Max.Z)
+            |]
+
+        let normals = 
+            [| 
+                V3f.IOO;
+                V3f.OIO;
+                V3f.OOI;
+
+                -V3f.IOO;
+                -V3f.OIO;
+                -V3f.OOI;
+            |]
+
+        IndexedGeometry(
+            Mode = IndexedGeometryMode.TriangleList,
+
+            IndexedAttributes =
+                SymDict.ofList [
+                    DefaultSemantic.Positions, indices |> Array.map (fun i -> positions.[i]) :> Array
+                    DefaultSemantic.Normals, indices |> Array.mapi (fun ti _ -> normals.[ti / 6]) :> Array
+                    DefaultSemantic.Colors, indices |> Array.map (fun _ -> randomColor) :> Array
+                ]
+
+        )
+
+    let wireBox (color : C4b) (box : Box3d) =
+        let indices =
+            [|
+                1;2; 2;6; 6;5; 5;1;
+                2;3; 3;7; 7;6; 4;5; 
+                7;4; 3;0; 0;4; 0;1;
+            |]
+
+        let positions = 
+            [|
+                V3f(box.Min.X, box.Min.Y, box.Min.Z)
+                V3f(box.Max.X, box.Min.Y, box.Min.Z)
+                V3f(box.Max.X, box.Max.Y, box.Min.Z)
+                V3f(box.Min.X, box.Max.Y, box.Min.Z)
+                V3f(box.Min.X, box.Min.Y, box.Max.Z)
+                V3f(box.Max.X, box.Min.Y, box.Max.Z)
+                V3f(box.Max.X, box.Max.Y, box.Max.Z)
+                V3f(box.Min.X, box.Max.Y, box.Max.Z)
+            |]
+
+        let normals = 
+            [| 
+                V3f.IOO;
+                V3f.OIO;
+                V3f.OOI;
+
+                -V3f.IOO;
+                -V3f.OIO;
+                -V3f.OOI;
+            |]
+
+        IndexedGeometry(
+            Mode = IndexedGeometryMode.LineList,
+
+            IndexedAttributes =
+                SymDict.ofList [
+                    DefaultSemantic.Positions, indices |> Array.map (fun i -> positions.[i]) :> Array
+                    DefaultSemantic.Normals, indices |> Array.mapi (fun ti _ -> normals.[ti / 6]) :> Array
+                    DefaultSemantic.Colors, indices |> Array.map (fun _ -> color) :> Array
+                ]
+
+        )
+
+    let frustum (f : IMod<CameraView>) (proj : IMod<Frustum>) =
+        let invViewProj = Mod.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) f proj
+
+        let positions = 
+            [|
+                V3f(-1.0, -1.0, -1.0)
+                V3f(1.0, -1.0, -1.0)
+                V3f(1.0, 1.0, -1.0)
+                V3f(-1.0, 1.0, -1.0)
+                V3f(-1.0, -1.0, 1.0)
+                V3f(1.0, -1.0, 1.0)
+                V3f(1.0, 1.0, 1.0)
+                V3f(-1.0, 1.0, 1.0)
+            |]
+
+        let indices =
+            [|
+                1;2; 2;6; 6;5; 5;1;
+                2;3; 3;7; 7;6; 4;5; 
+                7;4; 3;0; 0;4; 0;1;
+            |]
+
+        let geometry =
+            IndexedGeometry(
+                Mode = IndexedGeometryMode.LineList,
+                IndexedAttributes =
+                    SymDict.ofList [
+                        DefaultSemantic.Positions, indices |> Array.map (fun i -> positions.[i]) :> Array
+                        DefaultSemantic.Colors, Array.create indices.Length C4b.Red :> Array
+                    ]
+            )
+
+        geometry
+            |> Sg.ofIndexedGeometry
+            |> Sg.trafo invViewProj
+
+
+
+
+
+
+
 
 [<EntryPoint>]
 [<STAThread>]
 let main args = 
-//    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\zoey\Zoey.dae"
-//    printfn "%A" scene
-//    Environment.Exit 0
-
-    //timeTest()
-
-    let modelPath = match args |> Array.toList with
-                      | []     -> printfn "using default eigi model."; System.IO.Path.Combine( __SOURCE_DIRECTORY__, "eigi", "eigi.dae") 
-                      | [path] -> printfn "using path: %s" path; path
-                      | _      -> failwith "usage: Demo.exe | Demo.exe modelPath"
-    
-    //let modelPath =  @"C:\Users\Schorsch\Desktop\bench\4000_128_2000_9.dae"
-
-    //let modelPath =  @"C:\Users\Schorsch\Desktop\Sponza bunt\sponza_cm.obj"
-    //let modelPath =  @"C:\Aardwork\Sponza bunt\sponza_cm.obj"
-
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
     Aardvark.Init()
-//
-//    testGpuThroughput()
-//    System.Environment.Exit 0
 
     use app = new OpenGlApplication()
     let f = app.CreateGameWindow(1)
     let ctrl = f //f.Control
-
-//    ctrl.Mouse.Events.Values.Subscribe(fun e ->
-//        match e with
-//            | MouseDown p -> printfn  "down: %A" p.location.Position
-//            | MouseUp p -> printfn  "up: %A" p.location.Position
-//            | MouseClick p -> printfn  "click: %A" p.location.Position
-//            | MouseDoubleClick p -> printfn  "doubleClick: %A" p.location.Position
-//            | MouseMove p -> printfn  "move: %A" p.Position
-//            | MouseScroll(delta,p) -> printfn  "scroll: %A" delta
-//            | MouseEnter p -> printfn  "enter: %A" p.Position
-//            | MouseLeave p -> printfn  "leave: %A" p.Position
-//    ) |> ignore
-
-    let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-    let proj = CameraProjectionPerspective(60.0, 0.1, 10000.0, float (ctrl.Sizes.GetValue().X) / float (ctrl.Sizes.GetValue().Y))
-    let mode = Mod.init FillMode.Fill
-
-
-
-//    let moveX =
-//        let l = left |> Mod.map (fun a -> if a then -1.0 else 0.0) 
-//        let r = right |> Mod.map (fun a -> if a then 1.0 else 0.0) 
-//        Mod.map2 (+) l r
-//
-//    let moveView =
-//        let f = forward |> Mod.map (fun a -> if a then 1.0 else 0.0) 
-//        let b = backward |> Mod.map (fun a -> if a then -1.0 else 0.0) 
-//        Mod.map2 (+) f b
-
-
-    //ctrl.Time |> Mod.registerCallback (fun t -> printfn "%A" t) |> ignore
-
-//    use cc = WinForms.addCameraController w view
-//    WinForms.addFillModeController w mode
-
-    let sg = Assimp.load modelPath
 
 
     let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\Geralt.obj"
@@ -1013,158 +1472,57 @@ let main args =
         sg |> Sg.trafo (Mod.constant trafo)
 
 
-    let view = DefaultCameraController.control ctrl.Mouse ctrl.Keyboard ctrl.Time view
+    let view = 
+        CameraView.lookAt (V3d(2.0, 2.0, 2.0)) V3d.Zero V3d.OOI
+            |> DefaultCameraController.control ctrl.Mouse ctrl.Keyboard ctrl.Time
 
-    let color = Mod.init C4f.Red
-
-    f.Keyboard.KeyDown(Keys.C).Values.Subscribe(fun () ->
-        let v = C4f(C3f.White - (Mod.force color).ToC3f())
-        transact (fun () ->
-            Mod.change color v
-        )
-    ) |> ignore
-
-    f.Keyboard.KeyDown(Keys.F12).Values.Add (fun () ->
-        let res = f.Capture()
-        res.SaveAsImage(@"C:\Users\schorsch\Desktop\screeny.png")
-    )
-
-
-    let pointSize = Mod.constant <| V2d(0.06, 0.08)
-
-    let noMipsSampler =
-        SamplerStateDescription(
-            Filter = TextureFilter.MinMagMipPoint,
-            AddressU = WrapMode.Wrap,
-            AddressV = WrapMode.Wrap,
-            MaxLod = 8.0f,
-            MinLod = 8.0f
-        )
-
-    let samplerState = Mod.init (None)
-
-
-    let mutable v = V3d.III
-    v.X <- 5.0
-
+    let proj =
+        ctrl.Sizes 
+            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
 
     let sg =
         sg |> Sg.effect [
-                //Shader.pvLight |> toEffect
-                //Shader.pvFrag  |> toEffect
-                //DefaultSurfaces.trafo |> toEffect
-                //DefaultSurfaces.pointSurface pointSize |> toEffect
-                //DefaultSurfaces.uniformColor color |> toEffect
                 DefaultSurfaces.trafo |> toEffect
-                //DefaultSurfaces.constantColor C4f.Red |> toEffect
                 DefaultSurfaces.constantColor C4f.White |> toEffect
-                //DefaultSurfaces.diffuseTexture |> toEffect
+                DefaultSurfaces.diffuseTexture |> toEffect
                 DefaultSurfaces.normalMap |> toEffect
                 DefaultSurfaces.lighting false |> toEffect
               ]
-           |> Sg.trafo (Trafo3d.RotationZ(45.0 / 57.296) |> Mod.constant) //(Trafo3d.FromBasis(V3d.IOO, V3d(10.0, 1.0, 0.0).Normalized, V3d.OOI, V3d.Zero) |> Mod.constant)
-           |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-           |> Sg.projTrafo proj.ProjectionTrafos.Mod
-           //|> Sg.trafo (Mod.constant <| Trafo3d.ChangeYZ)
-           |> Sg.samplerState DefaultSemantic.DiffuseColorTexture samplerState
-           //|> Sg.fillMode mode
-           //|> Sg.blendMode (Mod.constant BlendMode.Blend)
-           //|> normalizeTo (Box3d(-V3d.III, V3d.III))
-    
+
+           |> normalizeTo (Box3d(-V3d.III, V3d.III))
+           |> Sg.trafo (Mod.constant Trafo3d.ChangeYZ)
 
 
-    //Demo.AssimpExporter.save @"C:\Users\Schorsch\Desktop\quadScene\eigi.dae" sg
+    let bounds = sg.LocalBoundingBox()
 
+    let helpers =
+        Sg.group' [ 
+            yield Sg.wireBox (Mod.constant C4b.Red) bounds
 
-//    let arr = new ModRef<Array> ([|V3f.III|] :> Array)
-//
-//    let info = arr.Select(fun arr -> DrawCallInfo(FaceVertexCount = arr.Length))
-//    let line = 
-//        new Sg.VertexAttributeApplicator(
-//            SymDict.ofList [
-//                DefaultSemantic.Positions, BufferView(ArrayBuffer(arr), typeof<V3f>)
-//            ], 
-//            new Sg.RenderNode(info)
-//        )
-// 
-//    transact <| fun () ->
-//        arr.Value <- [||]
-    
-    ctrl.Sizes |> Mod.unsafeRegisterCallbackKeepDisposable (fun s ->
-        let aspect = float s.X / float s.Y
-        proj.AspectRatio <- aspect
-    ) |> ignore
-
-//    let ctx = app.Runtime.Context
-//    let fbo = new Aardvark.Rendering.GL.Framebuffer(ctx,(fun _ -> 0),ignore,[],None)
-//
-//
-//
-//    let sw = System.Diagnostics.Stopwatch()
-//    using ctx.ResourceLock (fun _ ->
-//        for i in 0 .. 10000 do
-//            printfn "run %d" i
-//            sw.Restart()
-//            let task = app.Runtime.CompileRender(sg.RenderObjects())
-//            task.Run fbo |> ignore
-//            sw.Stop ()
-//            task.Dispose()
-//            app.Runtime.Reset()
-//            printfn "%A ms" sw.Elapsed.TotalMilliseconds
-//            System.Environment.Exit 0
-//    )
-// 
- 
-//    let task = app.Runtime.CompileRender(sg.RenderObjects())
-//    using ctx.ResourceLock (fun _ ->
-//       task.Run fbo |> ignore
-//    )   
- 
-    let engine = Mod.init BackendConfiguration.NativeOptimized
-    let engines = 
-        ref [
-            BackendConfiguration.UnmanagedOptimized
-            BackendConfiguration.UnmanagedRuntime
-            BackendConfiguration.UnmanagedUnoptimized
-            BackendConfiguration.ManagedOptimized
-            BackendConfiguration.NativeOptimized
-            BackendConfiguration.NativeUnoptimized
+            let view, proj = ViewProjection.containing (V3d(2,2,2)) (Mod.force bounds)
+            yield Sg.frustum (Mod.constant C4b.Green) (Mod.constant view) (Mod.constant proj)
+        ]
+        |> Sg.effect [
+            DefaultSurfaces.trafo |> toEffect
+            DefaultSurfaces.vertexColor |> toEffect
         ]
 
-    ctrl.Keyboard.DownWithRepeats.Values.Subscribe (fun k ->
-        if k = Aardvark.Application.Keys.P then
-            transact (fun () ->
-                match samplerState.Value with
-                    | None -> samplerState.Value <- Some noMipsSampler
-                    | _ -> samplerState.Value <- None
-            )
 
-        ()
-    ) |> ignore
-
-    //let sg = sg |> Sg.loadAsync
+    let o = Outline.create app.Runtime (Mod.constant (V3d(2.0,-2.0,2.0))) sg
+    o.GetValue().SaveAsImage @"C:\Users\schorsch\desktop\outline.jpg"
 
 
-    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, engine, sg?RenderObjects())
 
-    //let task = RenderTask.cache task
 
-    let second =
-        quadSg
-            |> Sg.trafo (Mod.constant (Trafo3d.Translation(0.0,0.0,0.25)))
-            |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect]
+    let sg =
+        sg  
+            |> Sg.andAlso helpers
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo proj.ProjectionTrafos.Mod
+            |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
 
-    let secTask = app.Runtime.CompileRender(ctrl.FramebufferSignature, second)
+    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, sg)
 
-    ctrl.RenderTask <- RenderTask.ofList [task; ] |> DefaultOverlays.withStatistics
+    ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
 
-
-//    w.Run()
-
-//    let app = System.Windows.Application()
-//    app.Run(f) |> ignore
-    //System.Windows.Forms.Application.Run(f)
     f.Run()
     0

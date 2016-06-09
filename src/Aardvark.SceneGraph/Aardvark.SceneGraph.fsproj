@@ -66,6 +66,7 @@
     <Compile Include="HighLevelSceneGraph\Lod.fs" />
     <Compile Include="HighLevelSceneGraph\Culling.fs" />
     <Compile Include="SgFSharp.fs" />
+    <Compile Include="Primitives.fs" />
     <Compile Include="PointCloud.fs" />
     <Compile Include="FShadeSceneGraph.fs" />
     <Compile Include="Imperative.fs" />

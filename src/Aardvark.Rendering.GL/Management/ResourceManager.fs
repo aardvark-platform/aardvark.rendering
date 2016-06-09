@@ -386,7 +386,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateIndirectBuffer(indexed : bool, data : IMod<IBuffer>) =
-        indirectBufferCache.GetOrCreate<IBuffer>(data, {
+        indirectBufferCache.GetOrCreate<IBuffer>(data, [indexed :> obj], {
             create = fun b      -> ctx.CreateIndirect(indexed, b)
             update = fun h b    -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h      -> ctx.Delete h
@@ -402,7 +402,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     Log.error "[GL] surface compilation failed: %s" e
                     failwithf "[GL] surface compilation failed: %s" e
 
-        programCache.GetOrCreate<ISurface>(surface, {
+        programCache.GetOrCreate<ISurface>(surface, [signature :> obj], {
             create = fun b      -> create b
             update = fun h b    -> ctx.Delete(h); create b
             delete = fun h      -> ctx.Delete h

@@ -134,6 +134,9 @@ module TextureExtensions =
                 | (true, v) -> Some v
                 | _ -> None
 
+    type Col.Format with
+        static member Stencil = unbox<Col.Format> (Int32.MaxValue)
+
     let internal toPixelType =
         lookupTable [
             typeof<uint8>, PixelType.UnsignedByte
@@ -144,6 +147,7 @@ module TextureExtensions =
             typeof<int32>, PixelType.Int
             typeof<float32>, PixelType.Float
             typeof<float16>, PixelType.HalfFloat
+
 
         ]
 
@@ -160,11 +164,13 @@ module TextureExtensions =
             Col.Format.BGRA, PixelFormat.Bgra
             Col.Format.RGBP, PixelFormat.Rgba
             Col.Format.NormalUV, PixelFormat.Rg
+            Col.Format.Stencil, PixelFormat.StencilIndex
         ]
 
     let internal toUntypedPixelFormat =
         lookupTable [
             TextureFormat.DepthComponent16, PixelFormat.DepthComponent
+            TextureFormat.Depth24Stencil8, PixelFormat.DepthComponent
             TextureFormat.DepthComponent32, PixelFormat.DepthComponent
             TextureFormat.DepthComponent32f, PixelFormat.DepthComponent
 
@@ -188,6 +194,22 @@ module TextureExtensions =
             TextureFormat.R16f, PixelFormat.Red
             TextureFormat.R32f, PixelFormat.Red
         ]
+
+    let internal toChannelCount =
+        lookupTable [
+            Col.Format.Alpha, 1
+            Col.Format.BW, 1
+            Col.Format.Gray, 1
+            Col.Format.GrayAlpha, 2
+            Col.Format.RGB, 3
+            Col.Format.BGR, 3
+            Col.Format.RGBA, 4
+            Col.Format.BGRA, 4
+            Col.Format.RGBP, 4
+            Col.Format.NormalUV, 2
+            Col.Format.Stencil, 1
+        ]
+
 
     [<AutoOpen>]
     module private Uploads =
@@ -224,7 +246,12 @@ module TextureExtensions =
                         failwith "conversion not implemented"
 
             let elementSize = image.PixFormat.Type.GLSize
-            let lineSize = image.Size.X * image.PixFormat.ChannelCount * elementSize
+            let channelCount =
+                match toChannelCount image.Format with
+                    | Some c -> c
+                    | _ -> image.PixFormat.ChannelCount
+
+            let lineSize = image.Size.X * channelCount * elementSize
             let packAlign = t.Context.PackAlignment
 
             let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
@@ -297,7 +324,11 @@ module TextureExtensions =
                             failwith "conversion not implemented"
 
                 let elementSize = image.PixFormat.Type.GLSize
-                let lineSize = image.Size.X * image.PixFormat.ChannelCount * elementSize
+                let channelCount =
+                    match toChannelCount image.Format with
+                        | Some c -> c
+                        | _ -> image.PixFormat.ChannelCount
+                let lineSize = image.Size.X * channelCount * elementSize
                 let packAlign = t.Context.PackAlignment
 
                 let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
@@ -560,14 +591,19 @@ module TextureExtensions =
             GL.Check "could not bind texture"
 
             let pixelType, pixelFormat =
-                match toPixelType format.Type, toUntypedPixelFormat t.Format with
+                match toPixelType format.Type, toPixelFormat image.Format with
                     | Some t, Some f -> (t,f)
                     | _ ->
                         failwith "conversion not implemented"
 
 
             let elementSize = image.PixFormat.Type.GLSize
-            let lineSize = image.Size.X * image.PixFormat.ChannelCount * elementSize
+            let channelCount =
+                match toChannelCount image.Format with
+                    | Some c -> c
+                    | _ -> image.PixFormat.ChannelCount
+
+            let lineSize = image.Size.X * channelCount * elementSize
             let packAlign = t.Context.PackAlignment
 
             let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
@@ -1193,6 +1229,22 @@ module TextureExtensions =
 
                     | _ ->  
                         failwithf "cannot download textures of kind: %A" t.Dimension
+            )
+
+        member x.DownloadStencil(t : Texture, level : int, slice : int, target : Matrix<int>) =
+            using x.ResourceLock (fun _ ->
+                match t.Dimension with
+                    | TextureDimension.Texture2D -> 
+                        
+                        //let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage)
+                        
+                        let img : PixImage<int> = PixImage<int>()
+                        img.Volume <- target.AsVolume()
+                        img.Format <- Col.Format.Stencil
+                        downloadTexture2DInternal TextureTarget.Texture2D true t level img
+
+                    | _ ->  
+                        failwithf "cannot download stecil-texture of kind: %A" t.Dimension
             )
 
         member x.Download(t : Texture, level : int, slice : int) : PixImage =

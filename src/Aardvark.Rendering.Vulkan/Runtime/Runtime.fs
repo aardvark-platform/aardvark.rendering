@@ -293,6 +293,9 @@ type Runtime(device : Device) as this =
                 | _ ->
                     failf "unexpected BackendTexture: %A" tex
 
+        member x.DownloadStencil(tex : IBackendTexture, slice : int, level : int, target : Matrix<int>) =
+                failf "not implemented"
+
         member x.Upload(tex : IBackendTexture, slice : int, level : int, source : PixImage) =
             match tex with
                 | :? Image as img ->

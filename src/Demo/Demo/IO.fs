@@ -494,7 +494,7 @@ module Loader =
                 Assimp.PostProcessSteps.GenerateSmoothNormals |||
                 //Assimp.PostProcessSteps.FixInFacingNormals ||| 
                 Assimp.PostProcessSteps.JoinIdenticalVertices |||
-//                Assimp.PostProcessSteps.FlipUVs |||
+                //Assimp.PostProcessSteps.FlipUVs |||
 //                Assimp.PostProcessSteps.FlipWindingOrder |||
                 Assimp.PostProcessSteps.MakeLeftHanded
 
@@ -512,8 +512,6 @@ module Loader =
                 }
 
             let root = traverse state scene.RootNode
-
-            let root = Trafo(Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero), root)
 
             {
                 root = root

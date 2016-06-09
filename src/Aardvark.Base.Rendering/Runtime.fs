@@ -72,6 +72,7 @@ type IRuntime =
     abstract member ResolveMultisamples : IFramebufferOutput * IBackendTexture * ImageTrafo -> unit
     abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
     abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
+    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
 
 and IRenderTask =
     inherit IDisposable

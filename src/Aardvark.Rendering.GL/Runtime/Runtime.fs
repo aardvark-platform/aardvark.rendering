@@ -98,7 +98,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
         member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
-  
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
+
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock
@@ -343,6 +344,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
         ctx.Download(unbox<Texture> t, level, slice, target)
+
+    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) =
+        ctx.DownloadStencil(unbox<Texture> t, level, slice, target)
+
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
         ctx.Upload(unbox<Texture> t, level, slice, source)

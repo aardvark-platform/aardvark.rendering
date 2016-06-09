@@ -134,12 +134,15 @@ module CameraView =
 
 
 
-type Frustum = { left   : float
-                 right  : float
-                 bottom : float
-                 top    : float
-                 near   : float
-                 far    : float  }
+type Frustum = 
+    { 
+        left   : float
+        right  : float
+        bottom : float
+        top    : float
+        near   : float
+        far    : float  
+    }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Frustum =
@@ -147,22 +150,52 @@ module Frustum =
         let d = tan (0.5 * Conversion.RadiansFromDegrees horizontalFieldOfViewInDegrees) * near
         { left = -d; right = +d; bottom = -d / aspect; top = +d / aspect; near = near; far = far}
 
-    let projTrafo { left = l; right = r; top = t; bottom = b; near = n; far = f} : Trafo3d = 
+    let ortho (b : Box3d) =
+        { 
+            left = b.Min.X
+            right = b.Max.X
+            bottom = b.Min.Y
+            top = b.Max.Y
+            near = b.Min.Z
+            far = b.Max.Z
+        }
+
+    let projTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f} : Trafo3d = 
         Trafo3d(
             M44d(
-                (2.0 * n) / (r - l),                     0.0,     (r + l) / (r - l),                     0.0,
-                                0.0,     (2.0 * n) / (t - b),     (t + b) / (t - b),                     0.0,
-                                0.0,                     0.0,           f / (n - f),       (f * n) / (n - f),
-                                0.0,                     0.0,                  -1.0,                     0.0
+                (2.0 * n) / (r - l),                     0.0,         (r + l) / (r - l),                        0.0,
+                                0.0,     (2.0 * n) / (t - b),         (t + b) / (t - b),                        0.0,
+                                0.0,                     0.0,         (f + n) / (n - f),    (2.0 * f * n) / (n - f),
+                                0.0,                     0.0,                      -1.0,                        0.0
                 ),                                                     
                                                                        
             M44d(                                      
-                (r - l) / (2.0 * n),                     0.0,                     0.0,     (r + l) / (2.0 * n),
-                                0.0,     (t - b) / (2.0 * n),                     0.0,     (t + b) / (2.0 * n),
-                                0.0,                     0.0,                     0.0,                    -1.0,
-                                0.0,                     0.0,       (n - f) / (f * n),                 1.0 / n
+                (r - l) / (2.0 * n),                     0.0,                       0.0,        (r + l) / (2.0 * n),
+                                0.0,     (t - b) / (2.0 * n),                       0.0,        (t + b) / (2.0 * n),
+                                0.0,                     0.0,                       0.0,                       -1.0,
+                                0.0,                     0.0,   (n - f) / (2.0 * f * n),     (f + n) / (2.0 * f * n)
                 )
         )
+
+    let orthoTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f} : Trafo3d = 
+        Trafo3d(
+            M44d(
+                2.0 / (r - l),               0.0,               0.0,      (r + l) / (l - r),
+                          0.0,     2.0 / (t - b),               0.0,      (t + b) / (b - t),
+                          0.0,               0.0,      2.0 / (n - f),     (f + n) / (n - f),
+                          0.0,               0.0,               0.0,      1.0
+            ),                                                     
+                                                                       
+            M44d(
+                (r - l) / 2.0,               0.0,               0.0,      (r + l) / 2.0,
+                          0.0,     (t - b) / 2.0,               0.0,      (t + b) / 2.0,
+                          0.0,               0.0,     (n - f) / 2.0,     -(f + n) / 2.0,
+                          0.0,               0.0,               0.0,      1.0
+
+            )
+        )
+
+
 
     let ofTrafo (t : Trafo3d) =
         let bw = t.Backward
@@ -203,8 +236,7 @@ module Frustum =
 
     [<Obsolete("use pickRayDirection instead")>]
     let unproject { near = n } (xyOnPlane : V2d) = Ray3d(V3d.Zero, V3d(xyOnPlane, -n))
-        
-    
+
     let pickRayDirection (pp : PixelPosition) (f : Frustum) =
         let n = pp.NormalizedPosition
         let ndc = V3d(2.0 * n.X - 1.0, 1.0 - 2.0 * n.Y, 0.0)
@@ -281,6 +313,51 @@ module ViewProjection =
 
         let inline height (plane : V4d) (b : Box3d) =
             plane.Dot(maxDir plane.XYZ b)
+
+
+    let containing (viewPos : V3d) (bounds : Box3d) =
+        let angularRange =
+            bounds.ComputeCorners()
+                |> Array.map (fun world ->
+                    let dir = world - viewPos
+                    dir.SphericalFromCartesian()
+                    )
+                |> Box2d
+
+        let forward = angularRange.Center.CartesianFromSpherical()
+
+        let mutable closest = V3d.Zero
+        let mutable farthest = V3d.Zero
+        bounds.GetMinMaxInDirection(forward, &closest, &farthest)
+        let near = V3d.Distance(viewPos, closest)
+        let far = V3d.Distance(viewPos, farthest)
+
+
+
+        let halfAngularSize = angularRange.Size * 0.5 
+        let l = -near * Fun.Tan(halfAngularSize.X)
+        let r = -l
+        let t = near * Fun.Tan(halfAngularSize.Y)
+        let b = -t
+
+
+        let sky =
+            if Fun.ApproximateEquals(abs forward.Z, 1.0, Constant.PositiveTinyValue) then V3d.OIO
+            else V3d.OOI
+
+        let view = CameraView.lookAt viewPos (viewPos + forward) sky
+        let proj =
+            { 
+                left = l
+                right = r
+                top = t
+                bottom = b
+                near = near
+                far = far
+            }
+
+        view, proj
+
          
 
     let intersects (b : Box3d) (viewProj : Trafo3d) =
