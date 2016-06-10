@@ -76,7 +76,9 @@ module RenderTasks =
 
 
                 GL.DepthMask(true)
-
+                GL.StencilMask(0xFFFFFFFFu)
+                GL.Enable(EnableCap.DepthClamp)
+                
                 for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
                     match Map.tryFind sem desc.colorWrite with
                         | Some v -> 
@@ -940,6 +942,12 @@ module RenderTasks =
 
                     let depthValue = depth.GetValue x
                     let colorValues = color.GetValue x
+                    
+                    colorValues |> List.iteri (fun i _ ->
+                        GL.ColorMask(i, true, true, true, true)
+                    )
+                    GL.DepthMask(true)
+                    GL.StencilMask(0xFFFFFFFFu)
 
                     match colorValues, depthValue with
                         | [Some c], Some depth ->

@@ -489,14 +489,15 @@ module Loader =
             let dir = Path.GetDirectoryName(file)
 
             let flags = 
-                Assimp.PostProcessSteps.Triangulate |||
                 Assimp.PostProcessSteps.CalculateTangentSpace |||
                 Assimp.PostProcessSteps.GenerateSmoothNormals |||
                 //Assimp.PostProcessSteps.FixInFacingNormals ||| 
-                Assimp.PostProcessSteps.JoinIdenticalVertices |||
+                //Assimp.PostProcessSteps.JoinIdenticalVertices |||
+                //Assimp.PostProcessSteps.FindDegenerates |||
                 //Assimp.PostProcessSteps.FlipUVs |||
-//                Assimp.PostProcessSteps.FlipWindingOrder |||
-                Assimp.PostProcessSteps.MakeLeftHanded
+                //Assimp.PostProcessSteps.FlipWindingOrder |||
+                Assimp.PostProcessSteps.MakeLeftHanded ||| 
+                Assimp.PostProcessSteps.Triangulate
 
             let scene = ctx.ImportFile(file, flags)
 

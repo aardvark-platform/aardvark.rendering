@@ -631,6 +631,12 @@ module OpenGl =
         let DepthMask = getProcAddress "glDepthMask"
 
         /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/html/glDepthMask.xhtml
+        /// </summary>
+        let StencilMask = getProcAddress "glStencilMask"
+
+
+        /// <summary>
         /// https://www.opengl.org/sdk/docs/man/html/glColorMask.xhtml
         /// </summary>
         let ColorMask = getProcAddress "glColorMaski"
@@ -790,4 +796,5 @@ module OpenGl =
         let MultiDrawElementsIndirect : int -> int -> nativeint -> int -> int -> unit = wrap Pointers.MultiDrawElementsIndirect
 
         let DepthMask : int -> unit = wrap Pointers.DepthMask
+        let StencilMask : int -> unit = wrap Pointers.StencilMask
         let ColorMask : int -> int  -> int -> int -> int -> unit = wrap Pointers.ColorMask

@@ -173,10 +173,13 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                         defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size) }
 
+                        GL.ColorMask(true, true, true, true)
+                        GL.DepthMask(true)
+                        GL.StencilMask(0xFFFFFFFFu)
                         GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
                         GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
                         GL.ClearDepth(1.0)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
+                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
                         let res = EvaluationUtilities.evaluateTopLevel(fun () ->
                             t.Run(null, defaultOutput)

@@ -1242,41 +1242,104 @@ module SpatialDict =
 
 
 
+open ClipperLib
+open System.Collections.Generic
+type Clipper private() =
+    static let clipper = ClipperLib.ClipperOffset()
+    static let max = V2d(4096, 4096)
+    static let toClipper (offset : V2d) (size : V2d) (p : Polygon2d) =
+        let res = 
+            p.Points
+                |> Seq.map (fun p ->
+                    let pp = max * ((p - offset) / size) |> V2l
+                    IntPoint(pp.X, pp.Y)
+                   )
+                |> List
+        res
+
+    static let toClipperTri (offset : V2d) (size : V2d) (p : Triangle2d) =
+        
+        let p =
+            if p.WindingOrder < 0.0 then
+                p.Reversed
+            else
+                p
+
+        let res = 
+            p.Points
+                |> Seq.map (fun p ->
+                    //let p = 1.0001 * (p - c) + c
+                    let pp = max * ((p - offset) / size)
+                    IntPoint(int64 (round pp.X), int64 (round pp.Y))
+                   )
+                |> List
+        res
+
+    static let ofClipper (offset : V2d) (size : V2d) (l : List<IntPoint>) =
+        l 
+        |> Seq.map (fun ip ->
+            let p = (V2d(ip.X, ip.Y) / max) * size + offset
+            p
+        )
+        |> Seq.toArray
+        |> Polygon2d
 
 
 
+    static member Union (bounds : Box2d, tris : seq<Triangle2d>) =
+        clipper.Clear()
+        let res = List()
+        let off = bounds.Min
+        let size = bounds.Size
+        for p in tris do
+            res.Add(toClipperTri off size p)
+
+        clipper.AddPaths(res, JoinType.jtMiter, EndType.etClosedPolygon) |> ignore
 
 
+        let mutable sol = PolyTree()
+        clipper.Execute(&sol, 0.0001) |> ignore
 
+        let rec all (res : List<Polygon2d>) (t : PolyNode) =
+            if isNull t then ()
+            else 
+                if t.Contour.Count > 2 && not t.IsOpen then
+                    let poly = ofClipper off size t.Contour
+                    
+                    if t.IsHole then res.Add poly
+                    else res.Add poly.Reversed
+
+                if t.Childs.Count > 0 then
+                    t.Childs |> Seq.iter (all res)
+
+
+        let res = List()
+        sol.Childs |> Seq.iter (all res)
+        res |> CSharpList.toArray
+
+    static member Union (tris : seq<Triangle2d>) =
+        let bounds = tris |> Seq.map (fun p -> p.BoundingBox2d) |> Box2d
+        Clipper.Union(bounds, tris)
 
 
 module Outline = 
     open System.Collections.Generic
     open Aardvark.Base.Monads.Option
-
+    open Aardvark.VRVis
 
 
     open SpatialDict
 
 
-    let depthTest (runtime : IRuntime) (viewPos : IMod<V3d>) (size : V2i) (sg : ISg) =
-        let primitiveId = Symbol.Create "PrimitiveId"
+    let depthImage (runtime : IRuntime) (viewProj : IMod<Trafo3d>) (size : V2i) (sg : ISg) =
         let signature =
             runtime.CreateFramebufferSignature [
                 DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
-                primitiveId, { format = RenderbufferFormat.R32f; samples = 1 }
             ]
 
 
         let bounds = sg.LocalBoundingBox()
 
-        let viewProjTup = 
-            Mod.map2 ViewProjection.containing viewPos bounds
-
-        let viewProj = 
-            viewProjTup |> Mod.map (fun (v,p) ->
-                (CameraView.viewTrafo v) * (Frustum.projTrafo p)
-            )
 
         let objects = 
             sg.RenderObjects()
@@ -1292,7 +1355,7 @@ module Outline =
                                                     | "ViewTrafo" | "ViewTrafoInv" -> Mod.constant Trafo3d.Identity :> IMod |> Some
                                                     | "ProjTrafo" | "ViewProjTrafo" -> viewProj :> IMod |> Some
                                                     | "ProjTrafoInv" | "ViewProjTrafoInv" -> viewProj |> TrafoSemantics.inverse :> IMod |> Some
-                                                    | "CameraLocation" -> viewPos :> IMod |> Some
+                                                    | "CameraLocation" -> viewProj |> Mod.map (fun t -> t.GetViewPosition()) :> IMod |> Some
                                                     | _ -> ro.Uniforms.TryGetUniform(scope, sem)
                                             member x.Dispose() =
                                                 ro.Uniforms.Dispose()
@@ -1304,14 +1367,10 @@ module Outline =
                             None
                 )
 
-        let clearColors =
-            Map.ofList [
-                primitiveId, C4f(-1.0, -1.0, -1.0, -1.0)
-            ]
 
         let task = 
             RenderTask.ofList [
-                runtime.CompileClear(signature, Mod.constant clearColors, Mod.constant(Some 1.0))
+                runtime.CompileClear(signature, Mod.constant Map.empty, Mod.constant(Some 1.0))
                 runtime.CompileRender(signature, objects)
             ]
 
@@ -1320,294 +1379,176 @@ module Outline =
             | :? IOutputMod<IFramebuffer> as m -> m.Acquire()
             | _ -> ()
 
-        let depth = Matrix<float32>(size)
+        let depth = Matrix<float32>(size + V2i.II * 4)
+        depth.Set(1.0f) |> ignore
+
+        let depth = depth.SubMatrix(V2i(2,2),V2i(size.X, size.Y))
+
         Mod.custom (fun self ->
             let fbo = fbo.GetValue self
             let viewProj = viewProj.GetValue self
 
-            let stats = task.Run(self, OutputDescription.ofFramebuffer fbo)
-
-            let pid = fbo.Attachments.[primitiveId] |> unbox<BackendTextureOutputView>
-            let img = runtime.Download(pid.texture, PixFormat.FloatGray) |> unbox<PixImage<float32>>
-            let res = PixImage<byte>(Col.Format.RGBA, img.Size)
-            let all = HashSet<int>()
-
-            let mutable range = Range1i.Invalid
-            let img = img.ChannelArray.[0]
-            img.ForeachIndex(fun i ->
-                let v = img.[i]
-                if v >= 0.0f then
-                    all.Add(int v) |> ignore
-                    range.ExtendBy(int v)
-            )
-
-            res.GetMatrix<C4b>()
-               .SetMap(img, fun v ->
-                    if v >= 0.0f then
-                        let v = (float v - float range.Min) / float range.Size
-                        C4f(v, 1.0 - v, 0.0 ,1.0).ToC4b()
-                    else
-                        C4b.Blue
-               )
-               |> ignore
-
-            //printfn "%A" (Seq.toList all)
-
-            res.SaveAsImage @"C:\Users\schorsch\Desktop\depth.jpg"
-
+            task.Run(self, OutputDescription.ofFramebuffer fbo) |> ignore
             let da = fbo.Attachments.[DefaultSemantic.Depth] |> unbox<BackendTextureOutputView>
 
             runtime.DownloadDepth(da.texture, 0, 0, depth)
 
-//            let pi = PixImage<float32>(Col.Format.Gray, size)
-//            pi.ChannelArray.[0].Set(depth) |> ignore
-//            pi.ToPixImage<byte>(Col.Format.RGBA).SaveAsImage @"C:\Users\schorsch\Desktop\depth.jpg"
+            let sampleIndex (index : int64) =
+                2.0 * float depth.Data.[int index] - 1.0
 
             let dsize = V2d size
-            let visible (p : V3d) =
-                
-                let pp = V3d(0.5, 0.5, 0.5) + V3d(0.5, -0.5, 0.5) * viewProj.Forward.TransformPosProj(p)
-
+            let sample (pp : V2d) =
                 let dpixel =
                     pp.XY * dsize + V2d(0.5, 0.5)
                     
-                let pixel = V2l(int64 (round dpixel.X), int64 (round dpixel.Y))
-                if pixel.X >= 0L && pixel.Y >= 0L && pixel.X < depth.Size.X && pixel.Y < depth.Size.Y then
-                    let minDepth = depth.[pixel] 
-                    pp.Z <= float minDepth + 0.001
-                else
-                    false
+                let pixel = V2l(int64 (floor dpixel.X), int64 (floor dpixel.Y))
+                let frac = dpixel - V2d pixel
+
+                let index = depth.Info.Index(pixel)
 
 
-            visible
+                let mutable res = 1.0
+                let mat = depth.SubMatrix(V2i pixel - 2*V2i.II, V2i.II * 5)
+                mat.ForeachIndex (fun i ->
+                    res <- min res (float mat.[i])
+                ) |> ignore
+
+                2.0 * res - 1.0
+
+//                let v00 = sampleIndex index
+//                let v10 = sampleIndex (index + depth.DX)
+//                let v01 = sampleIndex (index + depth.DY)
+//                let v11 = sampleIndex (index + depth.DX + depth.DY)
+//
+//                (v00 * (1.0 - frac.X) + v10 * frac.X) * (1.0 - frac.Y) +
+//                (v01 * (1.0 - frac.X) + v11 * frac.X) * frac.Y
+
+            sample
         )
 
     let create (runtime : IRuntime) (viewPos : IMod<V3d>) (sg : ISg) =
 
-//        let size = V2i(512, 512)
-//
-//        let surfaceCache = Dict<IMod<ISurface>, IMod<ISurface>>()
-//
-//        let stencilMode =
-//            StencilMode(
-//                StencilOperationFunction.Replace,
-//                StencilOperationFunction.Zero,
-//                StencilOperationFunction.Keep,
-//                StencilCompareFunction.Always,
-//                1,
-//                0xFFFFFFFFu
-//            )
-//
-//        let signature =
-//            runtime.CreateFramebufferSignature [
-//                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
-//                //DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-//            ]
-//
-//        let bounds = sg.LocalBoundingBox()
-//
-//        let viewProjTup = 
-//            Mod.map2 ViewProjection.containing viewPos bounds
-//
-//        let view = viewProjTup |> Mod.map (fst >> CameraView.viewTrafo)
-//        let proj = viewProjTup |> Mod.map (snd >> Frustum.projTrafo)
-//
-//        let viewProj = 
-//            viewProjTup |> Mod.map (fun (v,p) ->
-//                (CameraView.viewTrafo v) * (Frustum.projTrafo p)
-//            )
-//
-//        let writeStencil =
-//            StencilMode(
-//                StencilOperationFunction.Replace,
-//                StencilOperationFunction.Replace,
-//                StencilOperationFunction.Keep,
-//                StencilCompareFunction.Always,
-//                1,
-//                0xFFFFFFFFu
-//            ) |> Mod.constant
-//
-//
-//        let objects = 
-//            sg.RenderObjects()
-//                |> ASet.choose (fun ro ->
-//                    match ro with
-//                        | :? RenderObject as ro ->
-//                            let newObj = 
-//                                { ro with
-//                                    WriteBuffers = None //Some (Set.singleton DefaultSemantic.Depth)
-//                                    StencilMode = writeStencil
-//                                    Uniforms =
-//                                        { new IUniformProvider with
-//                                            member x.TryGetUniform(scope, sem) =
-//                                                match string sem with
-//                                                    | "ViewTrafo" | "ViewTrafoInv" -> Mod.constant Trafo3d.Identity :> IMod |> Some
-//                                                    | "ProjTrafo" | "ViewProjTrafo" -> viewProj :> IMod |> Some
-//                                                    | "ProjTrafoInv" | "ViewProjTrafoInv" -> viewProj |> TrafoSemantics.inverse :> IMod |> Some
-//                                                    | "CameraLocation" -> viewPos :> IMod |> Some
-//                                                    | _ -> ro.Uniforms.TryGetUniform(scope, sem)
-//                                            member x.Dispose() =
-//                                                ro.Uniforms.Dispose()
-//                                        
-//                                        }
-//                                }
-//                            Some (newObj :> IRenderObject)
-//                        | _ ->
-//                            None
-//                )
-//
-//        
-        let triangles = TriangleSet.ofSg sg |> ASet.toMod
+        let bounds      = sg.LocalBoundingBox()
+        let triangles   = TriangleSet.ofSg sg |> ASet.toMod |> Mod.map Seq.toArray
+        let viewProjTup = Mod.map2 ViewProjection.containing viewPos bounds
+        let viewProj    = Mod.map (fun (v, p) -> (CameraView.viewTrafo v) * (Frustum.projTrafo p)) viewProjTup
+
+        let depth = depthImage runtime viewProj (V2i.II * 512) sg
+
+        let outline = 
+            Mod.custom (fun self ->
+                let viewPos         = viewPos.GetValue self
+                let viewProj        = viewProj.GetValue self
+                let triangles       = triangles.GetValue self
+                let depth           = depth.GetValue self
+
+                //let mutable bounds = Box2d.Invalid
+            
+                let mutable res = GpcPolygon.Empty
+
+                let back = HashSet<Triangle3d>()
+
+                let mutable bounds = Box2d.Invalid
+                let projected = 
+                    triangles 
+                    |> Seq.choose (fun t ->
+                        if Vec.dot t.Normal (viewPos - t.P0) > 0.0 then
+                            let p0 = viewProj.Forward.TransformPosProj(t.P0)
+                            let p1 = viewProj.Forward.TransformPosProj(t.P1)
+                            let p2 = viewProj.Forward.TransformPosProj(t.P2)
+
+                            bounds.ExtendBy(p0.XY)
+                            bounds.ExtendBy(p1.XY)
+                            bounds.ExtendBy(p2.XY)
+
+                            Triangle2d(p0.XY, p1.XY, p2.XY) |> Some
+                        else
+                            None
+                    )
+                    |> Seq.toArray
+
+                let unprojectPoint (p : V2d) =
+                    viewProj.Backward.TransformPosProj(V3d(p, depth (V2d(0.5, 0.5) + V2d(0.5, -0.5) * p) ))
+            
+                let unproject (line : Line2d) =
+                    Line3d(unprojectPoint line.P0, unprojectPoint line.P1)
+
+                let outline = Clipper.Union(bounds, projected) |> Array.collect (fun c -> c.EdgeLines |> Seq.map unproject |> Seq.toArray)
 
 
-//
-//
-//        let renderTask = 
-//            RenderTask.ofList [
-//                runtime.CompileClear(signature, Mod.constant C4f.Black, Mod.constant 1.0)
-//                runtime.CompileRender(signature, objects)
-//            ]
-//
-//        let fbo = runtime.CreateFramebuffer(signature, Mod.constant size)
-//        match fbo with
-//            | :? IOutputMod<IFramebuffer> as m -> m.Acquire()
-//            | _ -> ()
+                
 
+                outline, [||]
+            )
+
+
+        outline
+
+    let createFB (runtime : IRuntime) (viewPos : IMod<V3d>) (sg : ISg) =
+
+        let bounds      = sg.LocalBoundingBox()
+        let triangles = 
+            TriangleSet.ofSg sg 
+                |> ASet.toMod 
+                |> Mod.map2 (fun viewPos ts ->
+                    ts  |> Seq.choose (fun t ->
+                        if t.IsDegenerated then
+                            None
+                        else
+                            let shifted =
+                                Triangle3d(
+                                    viewPos + (t.P0 - viewPos) * 1.001,
+                                    viewPos + (t.P1 - viewPos) * 1.001,
+                                    viewPos + (t.P2 - viewPos) * 1.001
+                                )
+                            Some shifted
+                        )
+                        |> Seq.toArray
+                ) viewPos
 
         let topology =
             Mod.custom (fun self ->
                 let triangles = triangles.GetValue self
                 let store = SpatialDict<int>()
-                let triangles = Seq.toArray triangles
+
                 for i in 0..triangles.Length - 1 do
                     let t = triangles.[i]
                     store.AddRange [t.P0, i; t.P1, i; t.P2, i]
-                store, triangles
+
+                store
             )
 
-        let depthTest = sg |> depthTest runtime viewPos (V2i.II * 4096)
+        let eps = 50.0 * Constant.PositiveTinyValue
 
         Mod.custom (fun self ->
-//            let fbo = fbo.GetValue(self)
-//            renderTask.Run(self, OutputDescription.ofFramebuffer fbo) |> ignore
-//
-//            let depth = fbo.Attachments.[DefaultSemantic.Depth] |> unbox<BackendTextureOutputView>
-//
-//            let stencil = Matrix<int>(fbo.Size)
-//            //let depthImage = PixImage<float32>(Col.Format.Gray, fbo.Size)
-//            runtime.DownloadStencil(depth.texture, 0, 0, stencil)
-//            
-//            let stencilDiff = Matrix<int>(fbo.Size)
-//            stencilDiff
-//                .SubMatrix(V2i.II, fbo.Size - 2 * V2i.II)
-//                .SetByIndex(stencil.SubMatrix(V2i.II, fbo.Size - 2 * V2i.II), fun index ->
-//                    let v = stencil.[index]
-//                    if v > 0 then
-//                        let px = stencil.[index + stencil.DX]
-//                        let py = stencil.[index + stencil.DY]
-//                        let nx = stencil.[index - stencil.DX]
-//                        let ny = stencil.[index - stencil.DY]
-//
-//                        if px = 0 || py = 0 || nx = 0 || ny = 0 then 1
-//                        else 0
-//                    else
-//                        0
-//
-//
-//                ) |> ignore            
-//
-//            let triangles = triangles.GetValue self
-//            let viewProj = viewProj.GetValue self
-//
-//            let sampleLinear (img : Matrix<int>) (tc : V2d) =
-//                let c = V2d img.Size * tc + V2d(0.5, 0.5)
-//                
-//
-//                let sx = 0L
-//                let sy = 0L
-//
-//                let mutable sum = 0
-//                let p00 = img.Info.Index(V2i c)
-//                for x in -sx .. sx do
-//                    for y in -sy .. sy do
-//                        let i = p00 + x * img.DX + y * img.DY
-//                        sum <- sum + img.[i]
-//
-//                sum
-//
-//
-//            let save (file : string) (mat : Matrix<int>) =
-//                let img = PixImage<byte>(Col.Format.RGBA, mat.Size)
-//
-//
-//                img.GetMatrix<C4b>().SetMap(mat, fun v ->
-//                    let v = 255 * v
-//                    C4b(v,v,v,255)
-//                ) |> ignore
-//
-//                img.SaveAsImage file
-//
-//
-//
-//            stencil |> save @"C:\Users\schorsch\Desktop\stencil.jpg"
-//            stencilDiff |> save @"C:\Users\schorsch\Desktop\outline.jpg"
-//
-//            let isBoundary (other : V3d) (line : Line3d) =
-//                if line.Direction.MajorDim <> 2 then
-//                    let coord (p : V3d) =
-//                        V2d(0.5 + 0.5 * p.X, 0.5 - 0.5 * p.Y)
-//
-//                    let c0 = sampleLinear stencil (coord line.P0)
-//                    let c1 = sampleLinear stencil (coord line.P1)
-//                    
-//                    let n = V2d(-line.Direction.Y, line.Direction.X) |> Vec.normalize
-//
-//                    let outPos = 
-//                        let s = n.Dot(other.XY - line.P0.XY) |> sign
-//                        0.5 * (line.P0.XY + line.P1.XY) - (float s) * 0.001 * n
-//                            
-//
-//
-//                    let co = sampleLinear stencil (coord (V3d(outPos, 0.0)))
-//
-//                    if c0 <> 0 && c1 <> 0 && co = 0 then
-//                        true
-//
-//                    else
-//                        false
-//                else
-//                    false
-
 
             let outline = HashSet<Line3d>()
 
+            let triangles = triangles.GetValue self
             let viewPos = viewPos.GetValue self
-            let top, triangles = topology.GetValue self
+            let top = topology.GetValue self
 
 
             let frontFacing = HashSet<int>()
             let backFacing = HashSet<int>()
-            let tagential = HashSet<int>()
-            let depthTest = depthTest.GetValue self
+            let tangential = HashSet<int>()
 
             for i in 0..triangles.Length-1 do
                 let t = triangles.[i]
                 let d = Vec.dot t.Normal (viewPos - t.P0).Normalized
 
-                if d > Constant.PositiveTinyValue then
-                    if depthTest t.P0 || depthTest t.P1 || depthTest t.P2 then
-                        frontFacing.Add i |> ignore
-                elif d < -Constant.PositiveTinyValue then
-                    backFacing.Add i |> ignore
+                if d > -Constant.PositiveTinyValue then
+                    frontFacing.Add i |> ignore
                 else
-                    tagential.Add i |> ignore
+                    backFacing.Add i |> ignore
 
+            
 
             for i in frontFacing do
                 let t = triangles.[i]
-                let t0 = top.Query(t.P0, 0.001) |> Set.ofSeq |> Set.remove i
-                let t1 = top.Query(t.P1, 0.001) |> Set.ofSeq |> Set.remove i
-                let t2 = top.Query(t.P2, 0.001) |> Set.ofSeq |> Set.remove i
+                let t0 = top.Query(t.P0, eps) |> Set.ofSeq |> Set.remove i
+                let t1 = top.Query(t.P1, eps) |> Set.ofSeq |> Set.remove i
+                let t2 = top.Query(t.P2, eps) |> Set.ofSeq |> Set.remove i
 
                 let t01 = Set.intersect t0 t1
                 let t12 = Set.intersect t1 t2
@@ -1626,10 +1567,10 @@ module Outline =
 
                     ()
 
-
-            Seq.toArray outline
+            let cap = 
+                frontFacing |> Seq.map (fun i -> triangles.[i].Reversed) |> Seq.toArray
+            Seq.toArray outline, cap
         )
-
 
 
     let detect (viewPos : V3d) (viewDirection : V3d) (triangles : Triangle3d[]) : Line3d[] =
@@ -1704,21 +1645,187 @@ module Outline =
                 normals.[vi + o] <- V3f n
 
         
-        let positions =
-            outline |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1|])
+//        let positions =
+//            outline |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1|])
 
         IndexedGeometry(
-            Mode = IndexedGeometryMode.LineList,
+            Mode = IndexedGeometryMode.TriangleList,
             IndexedAttributes =
                 SymDict.ofList [
                     DefaultSemantic.Positions, positions :> Array
-                    //DefaultSemantic.Normals, normals :> Array
+                    DefaultSemantic.Normals, normals :> Array
                 ]
             )
 
 
 
+module VolumeShader =
+    open FShade
 
+    type UniformScope with
+        member x.LightPos : V3d = uniform?LightPos
+
+    [<ReflectedDefinition>]
+    let closestHitPoint (vp : M44d) (o : V3d) (d : V3d) =
+        let r0 = vp.R0
+        let r1 = vp.R1
+        let r2 = vp.R2
+        let r3 = vp.R3
+
+
+        let l = r3 + r0
+        let r = r3 - r0
+        let t = r3 + r1
+        let b = r3 - r1
+        let n = r3 + r2
+        let f = r3 - r2
+
+        let ts = Arr<N<6>, float>()
+
+        ts.[0] <- (l.W - o.Dot(l.XYZ)) / d.Dot(l.XYZ)
+        ts.[1] <- (r.W - o.Dot(r.XYZ)) / d.Dot(r.XYZ)
+        ts.[2] <- (t.W - o.Dot(t.XYZ)) / d.Dot(t.XYZ)
+        ts.[3] <- (b.W - o.Dot(b.XYZ)) / d.Dot(b.XYZ)
+        ts.[4] <- (n.W - o.Dot(n.XYZ)) / d.Dot(n.XYZ)
+        ts.[5] <- (f.W - o.Dot(f.XYZ)) / d.Dot(f.XYZ)
+
+        let mutable minT = 10000000.0
+        for i in 0..2 do
+            if ts.[i] >= 0.0 then
+                minT <- min minT ts.[i]
+
+        o + minT * d
+
+    let extrudeToInf (l : Line<DefaultSurfaces.Vertex>) =
+        triangle {
+
+            let vp      = uniform.ViewProjTrafo
+            let light   = V4d(uniform.LightPos,1.0)
+            let p0      = l.P0.pos
+            let p1      = l.P1.pos
+
+            
+            let pl      = vp * light
+            let p0n     = vp * p0
+            let p1n     = vp * p1
+            let p0f     = p0n - pl
+            let p1f     = p1n - pl
+
+            // p0n p1n p1f p0f
+            //  0   1   2   3
+            yield { l.P0 with pos = p0n }
+            yield { l.P1 with pos = p1n }
+            yield { l.P0 with pos = p0f }
+            yield { l.P1 with pos = p1f }
+            //yield { l.P0 with pos = V4d(0.0,0.0,1.0,1.0) }
+        }
+
+    let duplicateAtInf (t : Triangle<DefaultSurfaces.Vertex>) =
+        triangle {
+
+            let vp      = uniform.ViewProjTrafo
+            let light   = V4d(uniform.LightPos,1.0)
+            let p0      = t.P0.pos
+            let p1      = t.P1.pos
+            let p2      = t.P2.pos
+
+            
+            let pl      = vp * light
+            let p0n     = vp * p0
+            let p1n     = vp * p1
+            let p2n     = vp * p2
+            let p0f     = (p0n - pl)
+            let p1f     = (p1n - pl)
+            let p2f     = (p2n - pl)
+
+            // p0n p1n p1f p0f
+            //  0   1   2   3
+            yield { t.P0 with pos = p0n }
+            yield { t.P1 with pos = p1n }
+            yield { t.P2 with pos = p2n }
+            restartStrip()
+            yield { t.P0 with pos = p0f }
+            yield { t.P2 with pos = p2f }
+            yield { t.P1 with pos = p1f }
+                                   
+        }
+
+
+
+module Camera =
+    type Mode =
+        | Main
+        | Test
+
+    type Camera =
+        {
+            mainView : IMod<CameraView>
+            testView : IMod<CameraView>
+
+            currentView : IMod<CameraView>
+            currentProj : IMod<Frustum>
+
+        }
+
+    let viewProj (win : IRenderControl) =
+        let mode = Mod.init Main
+
+        let currentMain = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
+        let currentTest = ref (CameraView.lookAt (V3d(3,3,3)) V3d.Zero V3d.OOI)
+
+        let mainCam =
+            adaptive {
+                let! mode = mode
+                match mode with
+                    | Main ->
+                        let! m = DefaultCameraController.control win.Mouse win.Keyboard win.Time !currentMain
+                        currentMain := m
+                        return m
+                    | _ ->
+                        return !currentMain
+            }
+
+        let gridCam =
+            adaptive {
+                let! mode = mode
+                match mode with
+                    | Test ->
+                        let! m = DefaultCameraController.control win.Mouse win.Keyboard win.Time !currentTest
+                        currentTest := m
+                        return m
+                    | _ ->
+                        return !currentTest
+            }
+
+        let view =
+            adaptive {
+                let! mode = mode
+                match mode with
+                    | Main -> return! mainCam
+                    | Test -> return! gridCam
+            }
+
+        win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
+            transact (fun () ->
+                match mode.Value with
+                    | Main -> Mod.change mode Test
+                    | Test -> Mod.change mode Main
+
+                printfn "mode: %A" mode.Value
+            )
+        )
+
+
+        let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 50.0 (float s.X / float s.Y))
+
+        {
+            mainView = mainCam
+            testView = gridCam
+
+            currentView = view
+            currentProj = proj
+
+        }
 
 [<EntryPoint>]
 [<STAThread>]
@@ -1727,12 +1834,8 @@ let main args =
     Aardvark.Init()
 
     use app = new OpenGlApplication()
-    let f = app.CreateGameWindow(1)
+    let f = app.CreateSimpleRenderWindow(1)
     let ctrl = f //f.Control
-
-
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\Geralt.obj"
-    let sg = Sg.AdapterNode(scene)
 
     let normalizeTo (target : Box3d) (sg : ISg) =
         let source = sg.LocalBoundingBox().GetValue()
@@ -1750,13 +1853,28 @@ let main args =
         sg |> Sg.trafo (Mod.constant trafo)
 
 
-    let view = 
-        CameraView.lookAt (V3d(2.0, 2.0, 2.0)) V3d.Zero V3d.OOI
-            |> DefaultCameraController.control ctrl.Mouse ctrl.Keyboard ctrl.Time
 
-    let proj =
-        ctrl.Sizes 
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\ironman\ironman.obj"
+    let sg = Sg.AdapterNode(scene) |> normalizeTo (Box3d(-V3d.III, V3d.III))
+
+//    let scene2 = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\avent\Avent.obj"
+//    let sg2 = Sg.AdapterNode(scene2) |> normalizeTo (Box3d(-V3d.III, V3d.III))
+//
+
+    let cam = Camera.viewProj ctrl
+    let view = cam.currentView
+    let proj = cam.currentProj
+
+    let floor =
+        Sg.fullScreenQuad
+            |> Sg.scale 10.0
+            |> Sg.effect [
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.constantColor C4f.White |> toEffect
+                DefaultSurfaces.simpleLighting |> toEffect
+            ]
+
+
 
     let sg =
         sg |> Sg.effect [
@@ -1768,45 +1886,110 @@ let main args =
               ]
 
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
-           |> Sg.trafo (Mod.constant Trafo3d.ChangeYZ)
-
+           |> Sg.trafo (Mod.constant (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) ))
+           |> Sg.translate 0.0 0.0 1.0
+           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.6, -1.6, 0.0), V3d(0.1,0.2,0.3))))
+           |> Sg.effect [
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.constantColor C4f.White |> toEffect
+                DefaultSurfaces.lighting false |> toEffect
+            ]
 
     let bounds = sg.LocalBoundingBox()
 
+    let viewPos = cam.testView |> Mod.map CameraView.location //V3d(2.0, 2.0, 4.0) |> Mod.constant
+    let outlineAndTriangles = Outline.createFB app.Runtime viewPos sg
 
-    let viewPos = view |> Mod.map CameraView.location //|> Mod.force |> Mod.constant
-    let o = Outline.create app.Runtime viewPos sg
+
+    let writeStencil =
+        StencilMode(
+            IsEnabled = true,
+            Compare = StencilFunction(StencilCompareFunction.Always, 0, 0u),
+            OperationFront = 
+                StencilOperation(
+                    StencilOperationFunction.Keep, 
+                    StencilOperationFunction.DecrementWrap, 
+                    StencilOperationFunction.Keep
+                ),
+            OperationBack = 
+                StencilOperation(
+                    StencilOperationFunction.Keep,
+                    StencilOperationFunction.IncrementWrap, 
+                    StencilOperationFunction.Keep
+                )
+        )
 
 
+    let readStencil =
+        StencilMode(
+            IsEnabled = true,
+            Compare = StencilFunction(StencilCompareFunction.Less, 0, 0xFFFFFFFFu),
+            Operation = 
+                StencilOperation(
+                    StencilOperationFunction.Keep, 
+                    StencilOperationFunction.Keep, 
+                    StencilOperationFunction.Keep
+                )
+        )
+
+    let afterMain = RenderPass.after "bla" RenderPassOrder.Arbitrary RenderPass.main
+    let final = RenderPass.after "blubb" RenderPassOrder.Arbitrary afterMain
+    let afterFinal = RenderPass.after "blubber" RenderPassOrder.Arbitrary final
+    
     let helpers =
         Sg.group' [ 
-            yield Sg.wireBox (Mod.constant C4b.Red) bounds
 
-            let viewProj = viewPos |> Mod.map (fun p -> ViewProjection.containing p (Mod.force bounds))
-            yield Sg.frustum (Mod.constant C4b.Green) (viewProj |> Mod.map fst) (viewProj |> Mod.map snd)
+            let color = C4f(0.0,0.0,0.0,0.0)
+
+            let cap = 
+                Sg.triangles (Mod.constant C4b.White) (Mod.map snd outlineAndTriangles)
+                    |> Sg.stencilMode (Mod.constant writeStencil)
+                    |> Sg.effect [
+                        VolumeShader.duplicateAtInf |> toEffect
+                        DefaultSurfaces.constantColor color |> toEffect
+                    ]
+
+            let sides = 
+                Sg.lines (Mod.constant C4b.White) (Mod.map fst outlineAndTriangles)
+                    |> Sg.stencilMode (Mod.constant writeStencil)
+                    |> Sg.effect [
+                        VolumeShader.extrudeToInf |> toEffect
+                        DefaultSurfaces.constantColor color |> toEffect
+                    ]
+            yield 
+                Sg.group' [cap; sides]
+                    |> Sg.pass afterMain
+                    |> Sg.writeBuffers (Set.ofList [ DefaultSemantic.Colors; DefaultSemantic.Stencil ])
+                    |> Sg.blendMode (Mod.constant BlendMode.Blend)
+                    |> Sg.uniform "LightPos" viewPos
+                    |> Sg.depthTest (Mod.constant DepthTestMode.Less)
 
             yield
-                Sg.lines (Mod.constant C4b.Blue) o
+                Sg.fullScreenQuad
+                    |> Sg.pass final
                     |> Sg.depthTest (Mod.constant DepthTestMode.None)
-                    |> Sg.pass (RenderPass.after "bla" RenderPassOrder.Arbitrary RenderPass.main)
+                    |> Sg.writeBuffers (Set.ofList [DefaultSemantic.Colors])
+                    |> Sg.stencilMode (Mod.constant readStencil)
+                    |> Sg.blendMode (Mod.constant BlendMode.Blend)
+                    |> Sg.effect [
+                        DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.8)) |> toEffect
+                    ]
         ]
-        |> Sg.effect [
-            DefaultSurfaces.trafo |> toEffect
-            DefaultSurfaces.vertexColor |> toEffect
-        ]
-
-
-
 
 
 
     let sg =
-        sg  
-            |> Sg.andAlso helpers
+        sg  |> Sg.andAlso helpers
+            |> Sg.andAlso floor
+            |> Sg.uniform "LightLocation" viewPos
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
 
-    let task = app.Runtime.CompileRender(ctrl.FramebufferSignature, sg)
+    let task = 
+        RenderTask.ofList [
+            //app.Runtime.CompileClear(ctrl.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
+            app.Runtime.CompileRender(ctrl.FramebufferSignature, sg)
+        ]
 
     ctrl.RenderTask <- task |> DefaultOverlays.withStatistics
 

@@ -15,17 +15,14 @@ module EnvironmentSemantics =
 
         let getViewPosition (viewTrafo : Trafo3d) = viewTrafo.GetViewPosition()
 
-        member x.LightLocations(e : Sg.Environment) =
-            e.Child?LightLocations <- [| Mod.map getViewPosition e.ViewTrafo |]
-
-        member x.LightLocation(e : Sg.Environment) =
-            e.Child?LightLocation <- Mod.map getViewPosition e.ViewTrafo 
-
         member x.CameraLocation(e : Sg.Environment) =
             e.Child?CameraLocation <- Mod.map getViewPosition e.ViewTrafo
 
         member x.CameraLocation(e : Sg.ViewTrafoApplicator) =
             e.Child?CameraLocation <- Mod.map getViewPosition e.ViewTrafo
+
+        member x.LightLocation(e : obj) : IMod<V3d> =
+            e?CameraLocation
 
 
         member x.NormalMatrix(s : obj) : IMod<M33d> = 

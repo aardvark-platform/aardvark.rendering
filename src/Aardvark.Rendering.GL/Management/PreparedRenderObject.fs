@@ -40,6 +40,7 @@ type PreparedRenderObject =
         ColorAttachmentCount : int
         ColorBufferMasks : Option<list<V4i>>
         DepthBufferMask : bool
+        StencilBufferMask : bool
 
         //ClipDistanceBitmask : array<bool>
 
@@ -191,6 +192,7 @@ module PreparedRenderObject =
             ColorAttachmentCount = 0
             ColorBufferMasks = None
             DepthBufferMask = true
+            StencilBufferMask = true
             IsDisposed = false
             DrawCallStats = Mod.constant NoDraw
             ResourceCount = 0
@@ -219,6 +221,7 @@ module PreparedRenderObject =
                 ColorAttachmentCount = o.ColorAttachmentCount
                 ColorBufferMasks = o.ColorBufferMasks
                 DepthBufferMask = o.DepthBufferMask
+                StencilBufferMask = o.StencilBufferMask
                 IsDisposed = o.IsDisposed
                 DrawCallStats = o.DrawCallStats
                 ResourceCount = o.ResourceCount
@@ -446,6 +449,11 @@ type ResourceManagerExtensions private() =
                 | Some b -> Set.contains DefaultSemantic.Depth b
                 | None -> true
 
+        let stencilMask =
+            match rj.WriteBuffers with
+                | Some b -> Set.contains DefaultSemantic.Stencil b
+                | None -> true
+
         let drawCalls =
             if isNull rj.DrawCallInfos then
                 { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
@@ -504,6 +512,7 @@ type ResourceManagerExtensions private() =
                 ColorAttachmentCount = attachmentCount
                 ColorBufferMasks = colorMasks
                 DepthBufferMask = depthMask
+                StencilBufferMask = stencilMask
                 IsDisposed = false
                 DrawCallStats = drawCallStats
                 ResourceCount = -1

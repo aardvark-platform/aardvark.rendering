@@ -31,6 +31,9 @@ module DeltaCompiler =
             if prev.DepthBufferMask <> me.DepthBufferMask then
                 yield Instructions.setDepthMask me.DepthBufferMask
 
+            if prev.StencilBufferMask <> me.StencilBufferMask then
+                yield Instructions.setStencilMask me.StencilBufferMask
+
             if prev.ColorBufferMasks <> me.ColorBufferMasks then
                 match me.ColorBufferMasks with
                     | Some masks -> yield Instructions.setColorMasks masks

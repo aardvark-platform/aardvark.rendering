@@ -2,3 +2,5 @@ Aardvark.Base.Incremental
 Aardvark.Base.Runtime
 AssimpNet
 FShade
+Clipper
+Poly2Tri

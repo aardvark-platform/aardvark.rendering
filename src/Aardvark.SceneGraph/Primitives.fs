@@ -187,4 +187,22 @@ module SgPrimitives =
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
 
+        let triangles (color : IMod<C4b>) (triangles : IMod<Triangle3d[]>) =
+            let call = 
+                triangles |> Mod.map (fun triangles ->
+                    DrawCallInfo(
+                        FaceVertexCount = 3 * triangles.Length,
+                        InstanceCount = 1
+                    )
+                )
 
+            let positions =
+                triangles |> Mod.map (fun l ->
+                    l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1; V3f l.P2|])
+                )
+            
+            Sg.RenderNode(call, Mod.constant IndexedGeometryMode.TriangleList)
+                |> Sg.vertexAttribute DefaultSemantic.Positions positions
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
+
+        

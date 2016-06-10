@@ -63,6 +63,7 @@ module OpenGLInterpreter =
         let mutable currentStencilOpBack    = V3i(-1,-1,-1)
         let mutable currentPatchVertices    = -1
         let mutable currentDepthMask        = 1
+        let mutable currentStencilMask      = 0xFFFFFFFF
         let mutable currentViewport         = Box2i.Invalid
 
         let currentColorMasks               = Dictionary<int, V4i>(32)
@@ -248,6 +249,9 @@ module OpenGLInterpreter =
         member x.ShouldSetDepthMask (mask : int) =
             x.set(&currentDepthMask, mask)
 
+        member x.ShouldSetStencilMask (mask : int) =
+            x.set(&currentStencilMask, mask)
+
         member x.ShouldSetColorMask (index : int, mask : V4i) =
             match currentColorMasks.TryGetValue index with
                 | (true, o) when o = mask ->
@@ -355,6 +359,11 @@ module OpenGLInterpreter =
             if x.ShouldSetDepthMask mask then
                 GL.DepthMask mask
 
+        member inline x.stencilMask (mask : int) =
+            if x.ShouldSetStencilMask mask then
+                GL.StencilMask mask
+
+
         member inline x.colorMask (index : int) (mask : V4i) =
             if x.ShouldSetColorMask(index, mask) then
                 GL.ColorMask index mask.X mask.Y mask.Z mask.W
@@ -426,6 +435,9 @@ module OpenGLObjectInterpreter =
 
         member gl.setDepthMask (mask : bool) =
             gl.depthMask (if mask then 1 else 0)
+
+        member gl.setStencilMask (mask : bool) =
+            gl.stencilMask (if mask then 0xFFFFFFFF else 0)
 
         member gl.setColorMasks (masks : list<V4i>) =
             let mutable i = 0
@@ -521,6 +533,7 @@ module OpenGLObjectInterpreter =
         member gl.render (o : PreparedRenderObject) =
             if Mod.force o.IsActive then
                 gl.setDepthMask o.DepthBufferMask
+                gl.setStencilMask o.StencilBufferMask
 
                 match o.ColorBufferMasks with
                     | Some masks -> gl.setColorMasks masks

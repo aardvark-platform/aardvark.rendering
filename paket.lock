@@ -38,6 +38,7 @@ NUGET
   specs:
     AssimpNet (3.3.1)
     BruTile (0.12)
+    Clipper (6.2.10)
     CommonMark.NET (0.12)
     DevILSharp (0.0.13)
     DockPanelSuite (2.10.0-beta2)

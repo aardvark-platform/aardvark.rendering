@@ -13,11 +13,12 @@ nuget FSharp.Quotations.Evaluator        ~> 1.0.6
 nuget AssimpNet                          ~> 3.3.1
 nuget OpenHardwareMonitor                ~> 0.7.1
 nuget NanoVgSharp                        ~> 2.1.0
-nuget DockPanelSuite                     ~> 2.10.0
-nuget DockPanelSuite.ThemeVS2012Light    ~> 2.10.0
-nuget DockPanelSuite.ThemeVS2013Blue     ~> 2.10.0
+nuget DockPanelSuite                     = 2.10.0-beta2
+nuget DockPanelSuite.ThemeVS2012Light    = 2.10.0-beta2
+nuget DockPanelSuite.ThemeVS2013Blue     = 2.10.0-beta2
 
 nuget Poly2Tri                           ~> 1.0.1
+nuget Clipper                            ~> 6.2.10
 nuget CommonMark.NET                     ~> 0.12.0
 
 nuget FsUnit                             ~> 2.1.0

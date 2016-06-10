@@ -131,6 +131,7 @@ module ExecutionContext =
             | InstructionCode.MultiDrawArraysIndirect       -> OpenGl.Pointers.MultiDrawArraysIndirect
             | InstructionCode.MultiDrawElementsIndirect     -> OpenGl.Pointers.MultiDrawElementsIndirect
             | InstructionCode.DepthMask                     -> OpenGl.Pointers.DepthMask
+            | InstructionCode.StencilMask                   -> OpenGl.Pointers.StencilMask
             | InstructionCode.ColorMask                     -> OpenGl.Pointers.ColorMask
 
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
@@ -193,6 +194,7 @@ module ExecutionContext =
             OpenGl.Pointers.MultiDrawArraysIndirect, fun args -> Instruction(InstructionCode.MultiDrawArraysIndirect, args)
             OpenGl.Pointers.MultiDrawElementsIndirect, fun args -> Instruction(InstructionCode.MultiDrawElementsIndirect, args)
             OpenGl.Pointers.DepthMask, fun args -> Instruction(InstructionCode.DepthMask, args)
+            OpenGl.Pointers.StencilMask, fun args -> Instruction(InstructionCode.StencilMask, args)
             OpenGl.Pointers.ColorMask, fun args -> Instruction(InstructionCode.ColorMask, args)
         ]
 
@@ -283,6 +285,7 @@ module ExecutionContext =
             | InstructionCode.VertexAttrib4f           -> OpenGl.Unsafe.VertexAttrib4f (int 0) (float 1) (float 2) (float 3) (float 4)
 
             | InstructionCode.DepthMask                -> OpenGl.Unsafe.DepthMask (int 0)
+            | InstructionCode.StencilMask              -> OpenGl.Unsafe.StencilMask (int 0)
             | InstructionCode.ColorMask                -> OpenGl.Unsafe.ColorMask (int 0) (int 1) (int 2) (int 3) (int 4)
 
             | InstructionCode.MultiDrawArraysIndirect  -> 

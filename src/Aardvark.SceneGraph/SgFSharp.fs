@@ -93,6 +93,9 @@ module SgFSharp =
         let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) = 
             texture DefaultSemantic.DiffuseColorTexture (Mod.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
+        let writeBuffers (buffers : Set<Symbol>) (s : ISg) = 
+            Sg.WriteBuffersApplicator(Some buffers, Mod.constant s) :> ISg
+
 
         let scopeDependentTexture (sem : Symbol) (tex : Scope -> IMod<ITexture>) (sg : ISg) =
             Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sem, fun s -> tex s :> IMod]), sg) :> ISg
