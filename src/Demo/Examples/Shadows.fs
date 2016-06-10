@@ -127,7 +127,7 @@ module Shader =
             let lightSpace = uniform.LightViewMatrix * v.wp
             let div = lightSpace.XYZ / lightSpace.W
             let tc = V3d(0.5, 0.5,0.5) + V3d(0.5, 0.5, 0.5) * div.XYZ
-            let d = diffuseSampler.Sample(tc.XY, tc.Z - 0.00017)
+            let d = max 0.3 (diffuseSampler.Sample(tc.XY, tc.Z - 0.000017))
             return V4d(v.c.XYZ * d, v.c.W)
         }
 
@@ -164,7 +164,7 @@ module Shadows =
 
     let shadowMapSize = Mod.init (V2i(4096, 4096))
 
-    let shadowCam = CameraView.lookAt (V3d.III * 2.5) V3d.Zero V3d.OOI
+    let shadowCam = CameraView.lookAt (V3d.III * 2.0) V3d.Zero V3d.OOI
     let shadowProj = Frustum.perspective 60.0 0.1 10.0 1.0
 
 
@@ -183,7 +183,7 @@ module Shadows =
 
 
     let pointSize = Mod.init 14.0
-    let pointCount = 100000
+    let pointCount = 1000
 
 
     let box (color : C4b) (box : Box3d) = 
@@ -265,7 +265,7 @@ module Shadows =
         |> Sg.andAlso ( pointSg 
                         |> Sg.effect (toEffect Shader.instanceTrafo :: toEffect Shader.trafo :: fragmentShader)
                       )
-        |> Sg.uniform "LightViewMatrix" (lightSpaceViewProjTrafo)
+        |> Sg.uniform "LightViewMatrix" lightSpaceViewProjTrafo
         |> Sg.trafo ( Trafo3d.Translation(V3d(0.0,0.0,0.3)) |> Mod.constant )
 
     let signature = 
@@ -288,7 +288,7 @@ module Shadows =
             |> Sg.texture DefaultSemantic.DiffuseColorTexture shadowDepth
 
             |> Sg.andAlso (
-                box C4b.Red Box3d.Unit |> Sg.ofIndexedGeometry |> Sg.trafo (lightPos |> Mod.map Trafo3d.Translation)
+                box C4b.Red (Box3d.FromCenterAndSize(V3d.OOO,V3d.III * 0.1)) |> Sg.ofIndexedGeometry |> Sg.trafo (lightPos |> Mod.map Trafo3d.Translation)
                  |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect ]
              )
 
