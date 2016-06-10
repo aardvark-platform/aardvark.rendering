@@ -157,8 +157,8 @@ module TextureExtensions =
         
             Col.Format.Alpha, PixelFormat.Alpha
             Col.Format.BW, PixelFormat.Red
-            Col.Format.Gray, PixelFormat.Luminance
-            Col.Format.GrayAlpha, PixelFormat.LuminanceAlpha
+            Col.Format.Gray, PixelFormat.Red
+            Col.Format.GrayAlpha, PixelFormat.Rg
             Col.Format.RGB, PixelFormat.Rgb
             Col.Format.BGR, PixelFormat.Bgr
             Col.Format.RGBA, PixelFormat.Rgba

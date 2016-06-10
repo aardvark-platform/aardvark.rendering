@@ -1260,9 +1260,11 @@ module Outline =
 
 
     let depthTest (runtime : IRuntime) (viewPos : IMod<V3d>) (size : V2i) (sg : ISg) =
+        let primitiveId = Symbol.Create "PrimitiveId"
         let signature =
             runtime.CreateFramebufferSignature [
                 DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                primitiveId, { format = RenderbufferFormat.R32f; samples = 1 }
             ]
 
 
@@ -1302,9 +1304,14 @@ module Outline =
                             None
                 )
 
+        let clearColors =
+            Map.ofList [
+                primitiveId, C4f(-1.0, -1.0, -1.0, -1.0)
+            ]
+
         let task = 
             RenderTask.ofList [
-                runtime.CompileClear(signature, Mod.constant C4f.Black, Mod.constant 1.0)
+                runtime.CompileClear(signature, Mod.constant clearColors, Mod.constant(Some 1.0))
                 runtime.CompileRender(signature, objects)
             ]
 
@@ -1318,7 +1325,35 @@ module Outline =
             let fbo = fbo.GetValue self
             let viewProj = viewProj.GetValue self
 
-            task.Run(self, OutputDescription.ofFramebuffer fbo) |> ignore
+            let stats = task.Run(self, OutputDescription.ofFramebuffer fbo)
+
+            let pid = fbo.Attachments.[primitiveId] |> unbox<BackendTextureOutputView>
+            let img = runtime.Download(pid.texture, PixFormat.FloatGray) |> unbox<PixImage<float32>>
+            let res = PixImage<byte>(Col.Format.RGBA, img.Size)
+            let all = HashSet<int>()
+
+            let mutable range = Range1i.Invalid
+            let img = img.ChannelArray.[0]
+            img.ForeachIndex(fun i ->
+                let v = img.[i]
+                if v >= 0.0f then
+                    all.Add(int v) |> ignore
+                    range.ExtendBy(int v)
+            )
+
+            res.GetMatrix<C4b>()
+               .SetMap(img, fun v ->
+                    if v >= 0.0f then
+                        let v = (float v - float range.Min) / float range.Size
+                        C4f(v, 1.0 - v, 0.0 ,1.0).ToC4b()
+                    else
+                        C4b.Blue
+               )
+               |> ignore
+
+            //printfn "%A" (Seq.toList all)
+
+            res.SaveAsImage @"C:\Users\schorsch\Desktop\depth.jpg"
 
             let da = fbo.Attachments.[DefaultSemantic.Depth] |> unbox<BackendTextureOutputView>
 
@@ -1330,6 +1365,7 @@ module Outline =
 
             let dsize = V2d size
             let visible (p : V3d) =
+                
                 let pp = V3d(0.5, 0.5, 0.5) + V3d(0.5, -0.5, 0.5) * viewProj.Forward.TransformPosProj(p)
 
                 let dpixel =
