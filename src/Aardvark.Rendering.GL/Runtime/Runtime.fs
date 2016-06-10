@@ -99,6 +99,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
         member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
         member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
@@ -348,6 +349,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) =
         ctx.DownloadStencil(unbox<Texture> t, level, slice, target)
 
+    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) =
+        ctx.DownloadDepth(unbox<Texture> t, level, slice, target)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
         ctx.Upload(unbox<Texture> t, level, slice, source)

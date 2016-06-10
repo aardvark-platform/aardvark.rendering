@@ -166,3 +166,25 @@ module SgPrimitives =
                 |> Mod.constant
                 |> wireBox color
                 |> Sg.trafo invViewProj
+
+        let lines (color : IMod<C4b>) (lines : IMod<Line3d[]>) =
+            
+
+            let call = 
+                lines |> Mod.map (fun lines ->
+                    DrawCallInfo(
+                        FaceVertexCount = 2 * lines.Length,
+                        InstanceCount = 1
+                    )
+                )
+
+            let positions =
+                lines |> Mod.map (fun l ->
+                    l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1|])
+                )
+            
+            Sg.RenderNode(call, Mod.constant IndexedGeometryMode.LineList)
+                |> Sg.vertexAttribute DefaultSemantic.Positions positions
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
+
+

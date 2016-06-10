@@ -1066,6 +1066,14 @@ module TriangleSet =
     let ofRenderObject (o : IRenderObject) =
         o |> tryGetTrianglesAsMod |> Option.get
 
+    let ofRenderObjects (o : aset<IRenderObject>) =
+        aset {
+            for ro in o do
+                match tryGetTrianglesAsASet ro with
+                    | Some set -> yield! set
+                    | _ -> ()
+        }
+
     let ofSg (sg : ISg) =
         aset {
             for ro in sg.RenderObjects() do
@@ -1076,55 +1084,197 @@ module TriangleSet =
 
 
 
+module SpatialDict =
+    open System.Collections.Generic
+    
+    [<AllowNullLiteral>]
+    type private Node<'a> =
+        class
+            val mutable public Content : List<V3d * 'a>
+            val mutable public Children : Node<'a>[]
+        
+            new(p,c) = { Content = p; Children = c }
+        end
+
+    type SpatialDict<'a>(pointsPerLeaf : int) =
+
+        static let (|Empty|Leaf|Node|) (n : Node<'a>) =
+            if isNull n then Empty
+            elif isNull n.Children then Leaf n.Content
+            else Node n.Children
+
+        static let cluster (cell : GridCell) (values : array<V3d * 'a>) =
+            let c = cell.Center
+
+            let lists = Array.init 8 (fun i -> List<V3d * 'a>(values.Length))
+
+            for (p,v) in values do
+                let index =
+                    (if p.X > c.X then 4 else 0) +
+                    (if p.Y > c.Y then 2 else 0) +
+                    (if p.Z > c.Z then 1 else 0)
+
+                lists.[index].Add(p,v)
+
+            lists
+                |> Array.indexed
+                |> Array.choose (fun (i,l) -> 
+                    if l.Count > 0 then
+                        Some (i, CSharpList.toArray l)
+                    else
+                        None
+                )
+
+
+        static let Empty : Node<'a> = null
+        static let Leaf v = Node(v, null)
+        static let Node c = Node(null, c)
+
+        let mutable root : Node<'a> = null
+        let mutable bounds = Box3d.Invalid
+        let mutable cell = GridCell()
+        let mutable count = 0
+
+
+
+        member private x.build (cell : GridCell, values : array<V3d * 'a>) =
+            if values.Length = 0 then
+                Empty
+
+            elif values.Length < pointsPerLeaf then
+                Leaf (List values)
+
+            else
+                let children = Array.zeroCreate 8
+                for (child, values) in cluster cell values do
+                    children.[child] <- x.build (cell.GetChild child, values)
+
+                Node children
+
+        member private x.addContained (cell : GridCell, values : array<V3d * 'a>, n : byref<Node<'a>>) =
+            match n with
+                | Empty ->
+                    n <- Leaf (List values)
+
+                | Leaf content ->
+                    if content.Count + values.Length <= pointsPerLeaf then
+                        content.AddRange values
+                    else
+                        let children = Array.zeroCreate 8
+
+                        let all = Array.append values (CSharpList.toArray content)
+
+                        for (child, values) in cluster cell all do
+                            children.[child] <- x.build (cell.GetChild child, values)
+
+                        n <- Node(children)
+
+                | Node children ->
+                    for (child, values) in cluster cell values do
+                        x.addContained(cell.GetChild child, values, &children.[child])
+
+        member private x.query (point : V3d, r : float, cell : GridCell, n : Node<'a>, res : List<'a>) =
+            match n with
+                | Empty -> 
+                    ()
+
+                | Leaf values ->
+                    for (p,v) in values do
+                        if V3d.Distance(p, point) <= r then
+                            res.Add v
+
+                | Node children ->
+                    let center = cell.Center
+
+                    let index = 
+                        (if point.X > center.X then 4 else 0) +
+                        (if point.Y > center.Y then 2 else 0) +
+                        (if point.Z > center.Z then 1 else 0)
+
+                    x.query(point, r, cell.GetChild index, children.[index], res)
+
+
+        member x.Count = count
+
+        member x.Clear() =
+            count <- 0
+            root <- null
+            bounds <- Box3d.Invalid
+            cell <- GridCell()
+
+        member x.AddRange (values : array<V3d * 'a>) =
+            count <- count + values.Length
+            let bb = values |> Seq.map fst |> Box3d
+            match root with
+                | Empty ->
+                    let c = GridCell.ofBox bb
+
+                    bounds <- bb
+                    cell <- c
+                    root <- x.build(c, values)
+
+                | _ ->
+                    bounds.ExtendBy bb
+
+                    while not (cell.Contains bb) do
+                        let pi = cell.IndexInParent
+                        root <- Node (Array.init 8 (fun i -> if i = pi then root else Empty)) 
+                        cell <- cell.Parent
+
+                    x.addContained(cell, values, &root)
+                    
+        member x.AddRange (values : seq<V3d * 'a>) =
+            values |> Seq.toArray |> x.AddRange
+
+        member x.Add(key : V3d, value : 'a) =
+            x.AddRange [|key, value|]
+
+        member x.Query(point : V3d, maxDistance : float) =
+            let res = List<'a>()
+            x.query(point, maxDistance, cell, root, res) 
+            res :> seq<_>
+
+
+        new() = SpatialDict<'a>(64)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 module Outline = 
     open System.Collections.Generic
     open Aardvark.Base.Monads.Option
 
-    let create (runtime : IRuntime) (viewPos : IMod<V3d>) (sg : ISg) =
 
-        let size = V2i(4096, 4096)
 
-        let surfaceCache = Dict<IMod<ISurface>, IMod<ISurface>>()
+    open SpatialDict
 
-        let stencilMode =
-            StencilMode(
-                StencilOperationFunction.Replace,
-                StencilOperationFunction.Zero,
-                StencilOperationFunction.Keep,
-                StencilCompareFunction.Always,
-                1,
-                0xFFFFFFFFu
-            )
 
+    let depthTest (runtime : IRuntime) (viewPos : IMod<V3d>) (size : V2i) (sg : ISg) =
         let signature =
             runtime.CreateFramebufferSignature [
                 DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
-                //DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
             ]
+
 
         let bounds = sg.LocalBoundingBox()
 
         let viewProjTup = 
             Mod.map2 ViewProjection.containing viewPos bounds
 
-        let view = viewProjTup |> Mod.map (fst >> CameraView.viewTrafo)
-        let proj = viewProjTup |> Mod.map (snd >> Frustum.projTrafo)
-
         let viewProj = 
             viewProjTup |> Mod.map (fun (v,p) ->
                 (CameraView.viewTrafo v) * (Frustum.projTrafo p)
             )
-
-        let writeStencil =
-            StencilMode(
-                StencilOperationFunction.Replace,
-                StencilOperationFunction.Replace,
-                StencilOperationFunction.Keep,
-                StencilCompareFunction.Always,
-                1,
-                0xFFFFFFFFu
-            ) |> Mod.constant
-
 
         let objects = 
             sg.RenderObjects()
@@ -1133,8 +1283,6 @@ module Outline =
                         | :? RenderObject as ro ->
                             let newObj = 
                                 { ro with
-                                    WriteBuffers = None //Some (Set.singleton DefaultSemantic.Depth)
-                                    StencilMode = writeStencil
                                     Uniforms =
                                         { new IUniformProvider with
                                             member x.TryGetUniform(scope, sem) =
@@ -1154,7 +1302,7 @@ module Outline =
                             None
                 )
 
-        let renderTask = 
+        let task = 
             RenderTask.ofList [
                 runtime.CompileClear(signature, Mod.constant C4f.Black, Mod.constant 1.0)
                 runtime.CompileRender(signature, objects)
@@ -1165,39 +1313,285 @@ module Outline =
             | :? IOutputMod<IFramebuffer> as m -> m.Acquire()
             | _ -> ()
 
+        let depth = Matrix<float32>(size)
         Mod.custom (fun self ->
-            let fbo = fbo.GetValue(self)
-            renderTask.Run(self, OutputDescription.ofFramebuffer fbo) |> ignore
+            let fbo = fbo.GetValue self
+            let viewProj = viewProj.GetValue self
 
-            let depth = fbo.Attachments.[DefaultSemantic.Depth] |> unbox<BackendTextureOutputView>
+            task.Run(self, OutputDescription.ofFramebuffer fbo) |> ignore
 
-            let stencil = Matrix<int>(fbo.Size)
-            //let depthImage = PixImage<float32>(Col.Format.Gray, fbo.Size)
-            runtime.DownloadStencil(depth.texture, 0, 0, stencil)
+            let da = fbo.Attachments.[DefaultSemantic.Depth] |> unbox<BackendTextureOutputView>
 
-            let stencilDiff = Matrix<int>(fbo.Size - V2i.II)
-            stencilDiff.SetByIndex(stencil.SubMatrix(V2i.Zero, fbo.Size - V2i.II), fun index ->
-                let px = index + stencil.DX
-                let py = index + stencil.DY
+            runtime.DownloadDepth(da.texture, 0, 0, depth)
 
-                let dx = stencil.[px] - stencil.[index] |> abs
-                let dy = stencil.[py] - stencil.[index] |> abs
+//            let pi = PixImage<float32>(Col.Format.Gray, size)
+//            pi.ChannelArray.[0].Set(depth) |> ignore
+//            pi.ToPixImage<byte>(Col.Format.RGBA).SaveAsImage @"C:\Users\schorsch\Desktop\depth.jpg"
 
-                dx + dy
-            ) |> ignore
+            let dsize = V2d size
+            let visible (p : V3d) =
+                let pp = V3d(0.5, 0.5, 0.5) + V3d(0.5, -0.5, 0.5) * viewProj.Forward.TransformPosProj(p)
 
-            let image (mat : Matrix<int>) =
-                let depthImage = PixImage<byte>(Col.Format.RGBA, V2i mat.Size)
+                let dpixel =
+                    pp.XY * dsize + V2d(0.5, 0.5)
+                    
+                let pixel = V2l(int64 (round dpixel.X), int64 (round dpixel.Y))
+                if pixel.X >= 0L && pixel.Y >= 0L && pixel.X < depth.Size.X && pixel.Y < depth.Size.Y then
+                    let minDepth = depth.[pixel] 
+                    pp.Z <= float minDepth + 0.001
+                else
+                    false
 
-                depthImage.GetMatrix<C4b>().SetMap(mat, fun v -> 
-                    let v = 255 * v
-                    C4b(v,v,v,255)
-                ) |> ignore
 
-                depthImage
+            visible
+        )
 
-            image stencilDiff
-            //depthImage.ToPixImage<byte>(Col.Format.RGBA)
+    let create (runtime : IRuntime) (viewPos : IMod<V3d>) (sg : ISg) =
+
+//        let size = V2i(512, 512)
+//
+//        let surfaceCache = Dict<IMod<ISurface>, IMod<ISurface>>()
+//
+//        let stencilMode =
+//            StencilMode(
+//                StencilOperationFunction.Replace,
+//                StencilOperationFunction.Zero,
+//                StencilOperationFunction.Keep,
+//                StencilCompareFunction.Always,
+//                1,
+//                0xFFFFFFFFu
+//            )
+//
+//        let signature =
+//            runtime.CreateFramebufferSignature [
+//                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+//                //DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+//            ]
+//
+//        let bounds = sg.LocalBoundingBox()
+//
+//        let viewProjTup = 
+//            Mod.map2 ViewProjection.containing viewPos bounds
+//
+//        let view = viewProjTup |> Mod.map (fst >> CameraView.viewTrafo)
+//        let proj = viewProjTup |> Mod.map (snd >> Frustum.projTrafo)
+//
+//        let viewProj = 
+//            viewProjTup |> Mod.map (fun (v,p) ->
+//                (CameraView.viewTrafo v) * (Frustum.projTrafo p)
+//            )
+//
+//        let writeStencil =
+//            StencilMode(
+//                StencilOperationFunction.Replace,
+//                StencilOperationFunction.Replace,
+//                StencilOperationFunction.Keep,
+//                StencilCompareFunction.Always,
+//                1,
+//                0xFFFFFFFFu
+//            ) |> Mod.constant
+//
+//
+//        let objects = 
+//            sg.RenderObjects()
+//                |> ASet.choose (fun ro ->
+//                    match ro with
+//                        | :? RenderObject as ro ->
+//                            let newObj = 
+//                                { ro with
+//                                    WriteBuffers = None //Some (Set.singleton DefaultSemantic.Depth)
+//                                    StencilMode = writeStencil
+//                                    Uniforms =
+//                                        { new IUniformProvider with
+//                                            member x.TryGetUniform(scope, sem) =
+//                                                match string sem with
+//                                                    | "ViewTrafo" | "ViewTrafoInv" -> Mod.constant Trafo3d.Identity :> IMod |> Some
+//                                                    | "ProjTrafo" | "ViewProjTrafo" -> viewProj :> IMod |> Some
+//                                                    | "ProjTrafoInv" | "ViewProjTrafoInv" -> viewProj |> TrafoSemantics.inverse :> IMod |> Some
+//                                                    | "CameraLocation" -> viewPos :> IMod |> Some
+//                                                    | _ -> ro.Uniforms.TryGetUniform(scope, sem)
+//                                            member x.Dispose() =
+//                                                ro.Uniforms.Dispose()
+//                                        
+//                                        }
+//                                }
+//                            Some (newObj :> IRenderObject)
+//                        | _ ->
+//                            None
+//                )
+//
+//        
+        let triangles = TriangleSet.ofSg sg |> ASet.toMod
+
+
+//
+//
+//        let renderTask = 
+//            RenderTask.ofList [
+//                runtime.CompileClear(signature, Mod.constant C4f.Black, Mod.constant 1.0)
+//                runtime.CompileRender(signature, objects)
+//            ]
+//
+//        let fbo = runtime.CreateFramebuffer(signature, Mod.constant size)
+//        match fbo with
+//            | :? IOutputMod<IFramebuffer> as m -> m.Acquire()
+//            | _ -> ()
+
+
+        let topology =
+            Mod.custom (fun self ->
+                let triangles = triangles.GetValue self
+                let store = SpatialDict<int>()
+                let triangles = Seq.toArray triangles
+                for i in 0..triangles.Length - 1 do
+                    let t = triangles.[i]
+                    store.AddRange [t.P0, i; t.P1, i; t.P2, i]
+                store, triangles
+            )
+
+        let depthTest = sg |> depthTest runtime viewPos (V2i.II * 4096)
+
+        Mod.custom (fun self ->
+//            let fbo = fbo.GetValue(self)
+//            renderTask.Run(self, OutputDescription.ofFramebuffer fbo) |> ignore
+//
+//            let depth = fbo.Attachments.[DefaultSemantic.Depth] |> unbox<BackendTextureOutputView>
+//
+//            let stencil = Matrix<int>(fbo.Size)
+//            //let depthImage = PixImage<float32>(Col.Format.Gray, fbo.Size)
+//            runtime.DownloadStencil(depth.texture, 0, 0, stencil)
+//            
+//            let stencilDiff = Matrix<int>(fbo.Size)
+//            stencilDiff
+//                .SubMatrix(V2i.II, fbo.Size - 2 * V2i.II)
+//                .SetByIndex(stencil.SubMatrix(V2i.II, fbo.Size - 2 * V2i.II), fun index ->
+//                    let v = stencil.[index]
+//                    if v > 0 then
+//                        let px = stencil.[index + stencil.DX]
+//                        let py = stencil.[index + stencil.DY]
+//                        let nx = stencil.[index - stencil.DX]
+//                        let ny = stencil.[index - stencil.DY]
+//
+//                        if px = 0 || py = 0 || nx = 0 || ny = 0 then 1
+//                        else 0
+//                    else
+//                        0
+//
+//
+//                ) |> ignore            
+//
+//            let triangles = triangles.GetValue self
+//            let viewProj = viewProj.GetValue self
+//
+//            let sampleLinear (img : Matrix<int>) (tc : V2d) =
+//                let c = V2d img.Size * tc + V2d(0.5, 0.5)
+//                
+//
+//                let sx = 0L
+//                let sy = 0L
+//
+//                let mutable sum = 0
+//                let p00 = img.Info.Index(V2i c)
+//                for x in -sx .. sx do
+//                    for y in -sy .. sy do
+//                        let i = p00 + x * img.DX + y * img.DY
+//                        sum <- sum + img.[i]
+//
+//                sum
+//
+//
+//            let save (file : string) (mat : Matrix<int>) =
+//                let img = PixImage<byte>(Col.Format.RGBA, mat.Size)
+//
+//
+//                img.GetMatrix<C4b>().SetMap(mat, fun v ->
+//                    let v = 255 * v
+//                    C4b(v,v,v,255)
+//                ) |> ignore
+//
+//                img.SaveAsImage file
+//
+//
+//
+//            stencil |> save @"C:\Users\schorsch\Desktop\stencil.jpg"
+//            stencilDiff |> save @"C:\Users\schorsch\Desktop\outline.jpg"
+//
+//            let isBoundary (other : V3d) (line : Line3d) =
+//                if line.Direction.MajorDim <> 2 then
+//                    let coord (p : V3d) =
+//                        V2d(0.5 + 0.5 * p.X, 0.5 - 0.5 * p.Y)
+//
+//                    let c0 = sampleLinear stencil (coord line.P0)
+//                    let c1 = sampleLinear stencil (coord line.P1)
+//                    
+//                    let n = V2d(-line.Direction.Y, line.Direction.X) |> Vec.normalize
+//
+//                    let outPos = 
+//                        let s = n.Dot(other.XY - line.P0.XY) |> sign
+//                        0.5 * (line.P0.XY + line.P1.XY) - (float s) * 0.001 * n
+//                            
+//
+//
+//                    let co = sampleLinear stencil (coord (V3d(outPos, 0.0)))
+//
+//                    if c0 <> 0 && c1 <> 0 && co = 0 then
+//                        true
+//
+//                    else
+//                        false
+//                else
+//                    false
+
+
+            let outline = HashSet<Line3d>()
+
+            let viewPos = viewPos.GetValue self
+            let top, triangles = topology.GetValue self
+
+
+            let frontFacing = HashSet<int>()
+            let backFacing = HashSet<int>()
+            let tagential = HashSet<int>()
+            let depthTest = depthTest.GetValue self
+
+            for i in 0..triangles.Length-1 do
+                let t = triangles.[i]
+                let d = Vec.dot t.Normal (viewPos - t.P0).Normalized
+
+                if d > Constant.PositiveTinyValue then
+                    if depthTest t.P0 || depthTest t.P1 || depthTest t.P2 then
+                        frontFacing.Add i |> ignore
+                elif d < -Constant.PositiveTinyValue then
+                    backFacing.Add i |> ignore
+                else
+                    tagential.Add i |> ignore
+
+
+            for i in frontFacing do
+                let t = triangles.[i]
+                let t0 = top.Query(t.P0, 0.001) |> Set.ofSeq |> Set.remove i
+                let t1 = top.Query(t.P1, 0.001) |> Set.ofSeq |> Set.remove i
+                let t2 = top.Query(t.P2, 0.001) |> Set.ofSeq |> Set.remove i
+
+                let t01 = Set.intersect t0 t1
+                let t12 = Set.intersect t1 t2
+                let t20 = Set.intersect t2 t0
+
+                if t01 |> Set.forall backFacing.Contains then
+                    outline.Add(t.Line01) |> ignore
+
+                if t12 |> Set.forall backFacing.Contains then
+                    outline.Add(t.Line12) |> ignore
+
+                if t20 |> Set.forall backFacing.Contains then
+                    outline.Add(t.Line20) |> ignore
+
+
+
+                    ()
+
+
+            Seq.toArray outline
         )
 
 
@@ -1286,158 +1680,6 @@ module Outline =
                 ]
             )
 
-module Helpers = 
-    let rand = Random()
-    let randomPoints (bounds : Box3d) (pointCount : int) =
-        let size = bounds.Size
-        let randomV3f() = V3d(rand.NextDouble(), rand.NextDouble(), rand.NextDouble()) * size + bounds.Min |> V3f.op_Explicit
-        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
-
-        IndexedGeometry(
-            Mode = IndexedGeometryMode.PointList,
-            IndexedAttributes = 
-                SymDict.ofList [
-                        DefaultSemantic.Positions, Array.init pointCount (fun _ -> randomV3f()) :> Array
-                        DefaultSemantic.Colors, Array.init pointCount (fun _ -> randomColor()) :> Array
-                ]
-        )
-
-    let randomColor() =
-        C4b(128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 128 + rand.Next(127) |> byte, 255uy)
-    let randomColor2(alpha) =
-        C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, alpha)
-
-    let box (color : C4b) (box : Box3d) =
-
-        let randomColor = color //C4b(rand.Next(255) |> byte, rand.Next(255) |> byte, rand.Next(255) |> byte, 255uy)
-
-        let indices =
-            [|
-                1;2;6; 1;6;5
-                2;3;7; 2;7;6
-                4;5;6; 4;6;7
-                3;0;4; 3;4;7
-                0;1;5; 0;5;4
-                0;3;2; 0;2;1
-            |]
-
-        let positions = 
-            [|
-                V3f(box.Min.X, box.Min.Y, box.Min.Z)
-                V3f(box.Max.X, box.Min.Y, box.Min.Z)
-                V3f(box.Max.X, box.Max.Y, box.Min.Z)
-                V3f(box.Min.X, box.Max.Y, box.Min.Z)
-                V3f(box.Min.X, box.Min.Y, box.Max.Z)
-                V3f(box.Max.X, box.Min.Y, box.Max.Z)
-                V3f(box.Max.X, box.Max.Y, box.Max.Z)
-                V3f(box.Min.X, box.Max.Y, box.Max.Z)
-            |]
-
-        let normals = 
-            [| 
-                V3f.IOO;
-                V3f.OIO;
-                V3f.OOI;
-
-                -V3f.IOO;
-                -V3f.OIO;
-                -V3f.OOI;
-            |]
-
-        IndexedGeometry(
-            Mode = IndexedGeometryMode.TriangleList,
-
-            IndexedAttributes =
-                SymDict.ofList [
-                    DefaultSemantic.Positions, indices |> Array.map (fun i -> positions.[i]) :> Array
-                    DefaultSemantic.Normals, indices |> Array.mapi (fun ti _ -> normals.[ti / 6]) :> Array
-                    DefaultSemantic.Colors, indices |> Array.map (fun _ -> randomColor) :> Array
-                ]
-
-        )
-
-    let wireBox (color : C4b) (box : Box3d) =
-        let indices =
-            [|
-                1;2; 2;6; 6;5; 5;1;
-                2;3; 3;7; 7;6; 4;5; 
-                7;4; 3;0; 0;4; 0;1;
-            |]
-
-        let positions = 
-            [|
-                V3f(box.Min.X, box.Min.Y, box.Min.Z)
-                V3f(box.Max.X, box.Min.Y, box.Min.Z)
-                V3f(box.Max.X, box.Max.Y, box.Min.Z)
-                V3f(box.Min.X, box.Max.Y, box.Min.Z)
-                V3f(box.Min.X, box.Min.Y, box.Max.Z)
-                V3f(box.Max.X, box.Min.Y, box.Max.Z)
-                V3f(box.Max.X, box.Max.Y, box.Max.Z)
-                V3f(box.Min.X, box.Max.Y, box.Max.Z)
-            |]
-
-        let normals = 
-            [| 
-                V3f.IOO;
-                V3f.OIO;
-                V3f.OOI;
-
-                -V3f.IOO;
-                -V3f.OIO;
-                -V3f.OOI;
-            |]
-
-        IndexedGeometry(
-            Mode = IndexedGeometryMode.LineList,
-
-            IndexedAttributes =
-                SymDict.ofList [
-                    DefaultSemantic.Positions, indices |> Array.map (fun i -> positions.[i]) :> Array
-                    DefaultSemantic.Normals, indices |> Array.mapi (fun ti _ -> normals.[ti / 6]) :> Array
-                    DefaultSemantic.Colors, indices |> Array.map (fun _ -> color) :> Array
-                ]
-
-        )
-
-    let frustum (f : IMod<CameraView>) (proj : IMod<Frustum>) =
-        let invViewProj = Mod.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) f proj
-
-        let positions = 
-            [|
-                V3f(-1.0, -1.0, -1.0)
-                V3f(1.0, -1.0, -1.0)
-                V3f(1.0, 1.0, -1.0)
-                V3f(-1.0, 1.0, -1.0)
-                V3f(-1.0, -1.0, 1.0)
-                V3f(1.0, -1.0, 1.0)
-                V3f(1.0, 1.0, 1.0)
-                V3f(-1.0, 1.0, 1.0)
-            |]
-
-        let indices =
-            [|
-                1;2; 2;6; 6;5; 5;1;
-                2;3; 3;7; 7;6; 4;5; 
-                7;4; 3;0; 0;4; 0;1;
-            |]
-
-        let geometry =
-            IndexedGeometry(
-                Mode = IndexedGeometryMode.LineList,
-                IndexedAttributes =
-                    SymDict.ofList [
-                        DefaultSemantic.Positions, indices |> Array.map (fun i -> positions.[i]) :> Array
-                        DefaultSemantic.Colors, Array.create indices.Length C4b.Red :> Array
-                    ]
-            )
-
-        geometry
-            |> Sg.ofIndexedGeometry
-            |> Sg.trafo invViewProj
-
-
-
-
 
 
 
@@ -1495,12 +1737,22 @@ let main args =
 
     let bounds = sg.LocalBoundingBox()
 
+
+    let viewPos = view |> Mod.map CameraView.location //|> Mod.force |> Mod.constant
+    let o = Outline.create app.Runtime viewPos sg
+
+
     let helpers =
         Sg.group' [ 
             yield Sg.wireBox (Mod.constant C4b.Red) bounds
 
-            let view, proj = ViewProjection.containing (V3d(2,2,2)) (Mod.force bounds)
-            yield Sg.frustum (Mod.constant C4b.Green) (Mod.constant view) (Mod.constant proj)
+            let viewProj = viewPos |> Mod.map (fun p -> ViewProjection.containing p (Mod.force bounds))
+            yield Sg.frustum (Mod.constant C4b.Green) (viewProj |> Mod.map fst) (viewProj |> Mod.map snd)
+
+            yield
+                Sg.lines (Mod.constant C4b.Blue) o
+                    |> Sg.depthTest (Mod.constant DepthTestMode.None)
+                    |> Sg.pass (RenderPass.after "bla" RenderPassOrder.Arbitrary RenderPass.main)
         ]
         |> Sg.effect [
             DefaultSurfaces.trafo |> toEffect
@@ -1508,8 +1760,6 @@ let main args =
         ]
 
 
-    let o = Outline.create app.Runtime (Mod.constant (V3d(2.0,-2.0,2.0))) sg
-    o.GetValue().SaveAsImage @"C:\Users\schorsch\desktop\outline.jpg"
 
 
 

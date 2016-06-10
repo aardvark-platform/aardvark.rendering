@@ -136,6 +136,7 @@ module TextureExtensions =
 
     type Col.Format with
         static member Stencil = unbox<Col.Format> (Int32.MaxValue)
+        static member Depth = unbox<Col.Format> (Int32.MaxValue - 1)
 
     let internal toPixelType =
         lookupTable [
@@ -165,6 +166,7 @@ module TextureExtensions =
             Col.Format.RGBP, PixelFormat.Rgba
             Col.Format.NormalUV, PixelFormat.Rg
             Col.Format.Stencil, PixelFormat.StencilIndex
+            Col.Format.Depth, PixelFormat.DepthComponent
         ]
 
     let internal toUntypedPixelFormat =
@@ -208,6 +210,7 @@ module TextureExtensions =
             Col.Format.RGBP, 4
             Col.Format.NormalUV, 2
             Col.Format.Stencil, 1
+            Col.Format.Depth, 1
         ]
 
 
@@ -1241,6 +1244,22 @@ module TextureExtensions =
                         let img : PixImage<int> = PixImage<int>()
                         img.Volume <- target.AsVolume()
                         img.Format <- Col.Format.Stencil
+                        downloadTexture2DInternal TextureTarget.Texture2D true t level img
+
+                    | _ ->  
+                        failwithf "cannot download stecil-texture of kind: %A" t.Dimension
+            )
+
+        member x.DownloadDepth(t : Texture, level : int, slice : int, target : Matrix<float32>) =
+            using x.ResourceLock (fun _ ->
+                match t.Dimension with
+                    | TextureDimension.Texture2D -> 
+                        
+                        //let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage)
+                        
+                        let img : PixImage<float32> = PixImage<float32>()
+                        img.Volume <- target.AsVolume()
+                        img.Format <- Col.Format.Depth
                         downloadTexture2DInternal TextureTarget.Texture2D true t level img
 
                     | _ ->  

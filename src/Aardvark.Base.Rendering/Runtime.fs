@@ -73,6 +73,7 @@ type IRuntime =
     abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
     abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
     abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
+    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
 
 and IRenderTask =
     inherit IDisposable

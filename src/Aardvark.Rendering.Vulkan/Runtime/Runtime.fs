@@ -294,7 +294,9 @@ type Runtime(device : Device) as this =
                     failf "unexpected BackendTexture: %A" tex
 
         member x.DownloadStencil(tex : IBackendTexture, slice : int, level : int, target : Matrix<int>) =
-                failf "not implemented"
+            failf "not implemented"
+        member x.DownloadDepth(tex : IBackendTexture, slice : int, level : int, target : Matrix<float32>) =
+            failf "not implemented"
 
         member x.Upload(tex : IBackendTexture, slice : int, level : int, source : PixImage) =
             match tex with
