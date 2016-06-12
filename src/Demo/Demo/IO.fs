@@ -491,9 +491,9 @@ module Loader =
             let flags = 
                 Assimp.PostProcessSteps.CalculateTangentSpace |||
                 Assimp.PostProcessSteps.GenerateSmoothNormals |||
-                //Assimp.PostProcessSteps.FixInFacingNormals ||| 
+                Assimp.PostProcessSteps.FixInFacingNormals ||| 
                 //Assimp.PostProcessSteps.JoinIdenticalVertices |||
-                //Assimp.PostProcessSteps.FindDegenerates |||
+                Assimp.PostProcessSteps.FindDegenerates |||
                 //Assimp.PostProcessSteps.FlipUVs |||
                 //Assimp.PostProcessSteps.FlipWindingOrder |||
                 Assimp.PostProcessSteps.MakeLeftHanded ||| 

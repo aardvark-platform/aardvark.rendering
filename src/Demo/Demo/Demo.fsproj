@@ -55,9 +55,6 @@
     <EmbeddedResource Include="Assimp.zip" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="Aardvark.VRVis.Gpc">
-      <HintPath>..\..\..\lib\Release\Aardvark.VRVis.Gpc.dll</HintPath>
-    </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />

@@ -936,7 +936,7 @@ module TriangleSet =
             match ro with
                 | :? RenderObject as ro ->
 
-                    
+                    let mode = ro.Mode
                     let! modelTrafo = ro.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelTrafo")
                     let! positions = ro.VertexAttributes.TryGetAttribute(DefaultSemantic.Positions)
                     let indices = ro.Indices
@@ -949,6 +949,7 @@ module TriangleSet =
 
                     let triangles =
                         Mod.custom(fun self ->
+                            let mode = mode.GetValue self
                             let modelTrafo = modelTrafo.GetValue self |> unbox<Trafo3d>
                             let positions = positions.Buffer.GetValue self
                             let indices =
@@ -959,24 +960,59 @@ module TriangleSet =
                                 | :? ArrayBuffer as ab ->
                                     let data = toV3d ab.Data |> Array.map modelTrafo.Forward.TransformPos
                                         
-                                    if isNull indices then
-                                        let triangles = Array.zeroCreate (data.Length / 3)
-                                        for i in 0..triangles.Length-1 do
-                                            let p0 = data.[3*i + 0]
-                                            let p1 = data.[3*i + 1]
-                                            let p2 = data.[3*i + 2]
-                                            triangles.[i] <- Triangle3d(p0, p1, p2)
+                                    match mode with
+                                        | IndexedGeometryMode.TriangleList ->
+                                            if isNull indices then
+                                                let triangles = Array.zeroCreate (data.Length / 3)
+                                                for i in 0..triangles.Length-1 do
+                                                    let p0 = data.[3*i + 0]
+                                                    let p1 = data.[3*i + 1]
+                                                    let p2 = data.[3*i + 2]
+                                                    triangles.[i] <- Triangle3d(p0, p1, p2)
 
-                                        triangles
-                                    else
-                                        let triangles = Array.zeroCreate (indices.Length / 3)
-                                        for i in 0..triangles.Length-1 do
-                                            let p0 = data.[indices.[3*i + 0]]
-                                            let p1 = data.[indices.[3*i + 1]]
-                                            let p2 = data.[indices.[3*i + 2]]
-                                            triangles.[i] <- Triangle3d(p0, p1, p2)
+                                                triangles
+                                            else
+                                                let triangles = Array.zeroCreate (indices.Length / 3)
+                                                for i in 0..triangles.Length-1 do
+                                                    let p0 = data.[indices.[3*i + 0]]
+                                                    let p1 = data.[indices.[3*i + 1]]
+                                                    let p2 = data.[indices.[3*i + 2]]
+                                                    triangles.[i] <- Triangle3d(p0, p1, p2)
 
-                                        triangles
+                                                triangles
+
+                                        | IndexedGeometryMode.TriangleStrip ->
+                                            if isNull indices then
+                                                let triangles = Array.zeroCreate (data.Length - 2)
+
+                                                let mutable p0 = data.[0]
+                                                let mutable p1 = data.[1]
+                         
+                                                for i in 2..triangles.Length-1 do
+                                                    let p2 = data.[i]
+                                                    triangles.[i - 2] <- Triangle3d(p0, p1, p2)
+
+                                                    if i % 2 = 0 then p0 <- p2
+                                                    else p1 <- p2
+
+
+                                                triangles
+                                            else
+                                                let triangles = Array.zeroCreate (indices.Length - 2)
+
+                                                let mutable p0 = data.[indices.[0]]
+                                                let mutable p1 = data.[indices.[1]]
+                         
+                                                for i in 2..triangles.Length-1 do
+                                                    let p2 = data.[indices.[i]]
+                                                    triangles.[i - 2] <- Triangle3d(p0, p1, p2)
+
+                                                    if i % 2 = 0 then p0 <- p2
+                                                    else p1 <- p2
+
+                                                triangles
+                                        | _ ->
+                                            [||]
 
                                 | _ ->
                                     failwith "not implemented"
@@ -998,7 +1034,7 @@ module TriangleSet =
             match ro with
                 | :? RenderObject as ro ->
 
-                    
+                    let mode = ro.Mode
                     let! modelTrafo = ro.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelTrafo")
                     let! positions = ro.VertexAttributes.TryGetAttribute(DefaultSemantic.Positions)
                     let indices = ro.Indices
@@ -1011,6 +1047,7 @@ module TriangleSet =
 
                     let triangles =
                         ASet.custom(fun self ->
+                            let mode = mode.GetValue self
                             let modelTrafo = modelTrafo.GetValue self |> unbox<Trafo3d>
                             let positions = positions.Buffer.GetValue self
                             let indices =
@@ -1022,28 +1059,62 @@ module TriangleSet =
                                     | :? ArrayBuffer as ab ->
                                         let data = toV3d ab.Data |> Array.map modelTrafo.Forward.TransformPos
                                         
-                                        if isNull indices then
-                                            let triangles = Array.zeroCreate (data.Length / 3)
-                                            for i in 0..triangles.Length-1 do
-                                                let p0 = data.[3*i + 0]
-                                                let p1 = data.[3*i + 1]
-                                                let p2 = data.[3*i + 2]
-                                                triangles.[i] <- Triangle3d(p0, p1, p2)
+                                        match mode with
+                                            | IndexedGeometryMode.TriangleList ->
+                                                if isNull indices then
+                                                    let triangles = Array.zeroCreate (data.Length / 3)
+                                                    for i in 0..triangles.Length-1 do
+                                                        let p0 = data.[3*i + 0]
+                                                        let p1 = data.[3*i + 1]
+                                                        let p2 = data.[3*i + 2]
+                                                        triangles.[i] <- Triangle3d(p0, p1, p2)
 
-                                            triangles
-                                        else
-                                            let triangles = Array.zeroCreate (indices.Length / 3)
-                                            for i in 0..triangles.Length-1 do
-                                                let p0 = data.[indices.[3*i + 0]]
-                                                let p1 = data.[indices.[3*i + 1]]
-                                                let p2 = data.[indices.[3*i + 2]]
-                                                triangles.[i] <- Triangle3d(p0, p1, p2)
+                                                    triangles
+                                                else
+                                                    let triangles = Array.zeroCreate (indices.Length / 3)
+                                                    for i in 0..triangles.Length-1 do
+                                                        let p0 = data.[indices.[3*i + 0]]
+                                                        let p1 = data.[indices.[3*i + 1]]
+                                                        let p2 = data.[indices.[3*i + 2]]
+                                                        triangles.[i] <- Triangle3d(p0, p1, p2)
 
-                                            triangles
+                                                    triangles
+
+                                            | IndexedGeometryMode.TriangleStrip ->
+                                                if isNull indices then
+                                                    let triangles = Array.zeroCreate (data.Length - 2)
+
+                                                    let mutable p0 = data.[0]
+                                                    let mutable p1 = data.[1]
+                         
+                                                    for i in 0..triangles.Length-1 do
+                                                        let p2 = data.[i + 2]
+                                                        triangles.[i] <- Triangle3d(p0, p1, p2)
+
+                                                        if i % 2 = 0 then p0 <- p2
+                                                        else p1 <- p2
+
+
+                                                    triangles
+                                                else
+                                                    let triangles = Array.zeroCreate (indices.Length - 2)
+
+                                                    let mutable p0 = data.[indices.[0]]
+                                                    let mutable p1 = data.[indices.[1]]
+                         
+                                                    for i in 0..triangles.Length-1 do
+                                                        let p2 = data.[indices.[i + 2]]
+                                                        triangles.[i] <- Triangle3d(p0, p1, p2)
+
+                                                        if i % 2 = 0 then p0 <- p2
+                                                        else p1 <- p2
+
+                                                    triangles
+                                            | _ ->
+                                                [||]
 
                                     | _ ->
                                         failwith "not implemented"
-
                             let newTriangles = HashSet newTriangles
 
                             let rem = self.Content |> Seq.filter (newTriangles.Contains >> not) |> Seq.map Rem |> Seq.toList
@@ -1087,23 +1158,36 @@ module TriangleSet =
 module SpatialDict =
     open System.Collections.Generic
     
+    type private OctNodeInfo =
+        {
+            pointsPerLeaf : int
+            minLeafVolume : float
+        }
+
     [<AllowNullLiteral>]
-    type private Node<'a> =
+    type private OctNode<'a> =
         class
+            val mutable public Center : V3d
             val mutable public Content : List<V3d * 'a>
-            val mutable public Children : Node<'a>[]
+            val mutable public Children : OctNode<'a>[]
         
-            new(p,c) = { Content = p; Children = c }
+            new(center, p,c) = { Center = center; Content = p; Children = c }
         end
 
-    type SpatialDict<'a>(pointsPerLeaf : int) =
-
-        static let (|Empty|Leaf|Node|) (n : Node<'a>) =
+    [<AutoOpen>]
+    module private NodePatterns =
+        let inline (|Empty|Leaf|Node|) (n : OctNode<'a>) =
             if isNull n then Empty
             elif isNull n.Children then Leaf n.Content
             else Node n.Children
+        let Empty<'a> : OctNode<'a> = null
+        let Leaf(center, v) = OctNode(center, v, null)
+        let Node(center, c) = OctNode(center, null, c)
 
-        static let cluster (cell : GridCell) (values : array<V3d * 'a>) =
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module private OctNode =
+
+        let cluster (cell : GridCell) (values : array<V3d * 'a>) =
             let c = cell.Center
 
             let lists = Array.init 8 (fun i -> List<V3d * 'a>(values.Length))
@@ -1126,38 +1210,27 @@ module SpatialDict =
                 )
 
 
-        static let Empty : Node<'a> = null
-        static let Leaf v = Node(v, null)
-        static let Node c = Node(null, c)
-
-        let mutable root : Node<'a> = null
-        let mutable bounds = Box3d.Invalid
-        let mutable cell = GridCell()
-        let mutable count = 0
-
-
-
-        member private x.build (cell : GridCell, values : array<V3d * 'a>) =
+        let rec build (info : OctNodeInfo) (cell : GridCell) (values : array<V3d * 'a>) =
             if values.Length = 0 then
                 Empty
 
-            elif values.Length < pointsPerLeaf then
-                Leaf (List values)
+            elif values.Length < info.pointsPerLeaf || cell.ChildVolume < info.minLeafVolume then
+                Leaf (cell.Center, List values)
 
             else
                 let children = Array.zeroCreate 8
                 for (child, values) in cluster cell values do
-                    children.[child] <- x.build (cell.GetChild child, values)
+                    children.[child] <- build info (cell.GetChild child) values
 
-                Node children
+                Node(cell.Center, children)
 
-        member private x.addContained (cell : GridCell, values : array<V3d * 'a>, n : byref<Node<'a>>) =
+        let rec addContained (info : OctNodeInfo) (cell : GridCell) (values : array<V3d * 'a>) (n : byref<OctNode<'a>>) =
             match n with
                 | Empty ->
-                    n <- Leaf (List values)
+                    n <- Leaf (cell.Center, List values)
 
                 | Leaf content ->
-                    if content.Count + values.Length <= pointsPerLeaf then
+                    if content.Count + values.Length <= info.pointsPerLeaf || cell.ChildVolume < info.minLeafVolume then
                         content.AddRange values
                     else
                         let children = Array.zeroCreate 8
@@ -1165,15 +1238,15 @@ module SpatialDict =
                         let all = Array.append values (CSharpList.toArray content)
 
                         for (child, values) in cluster cell all do
-                            children.[child] <- x.build (cell.GetChild child, values)
+                            children.[child] <- build info (cell.GetChild child) values
 
-                        n <- Node(children)
+                        n <- Node(cell.Center, children)
 
                 | Node children ->
                     for (child, values) in cluster cell values do
-                        x.addContained(cell.GetChild child, values, &children.[child])
+                        addContained info (cell.GetChild child) values &children.[child]
 
-        member private x.query (point : V3d, r : float, cell : GridCell, n : Node<'a>, res : List<'a>) =
+        let rec query (point : V3d) (r : float) (cell : GridCell) (n : OctNode<'a>) (res : List<'a>) =
             match n with
                 | Empty -> 
                     ()
@@ -1184,15 +1257,43 @@ module SpatialDict =
                             res.Add v
 
                 | Node children ->
-                    let center = cell.Center
+                    let center = n.Center
 
-                    let index = 
+//                    let indices = HashSet.ofList [0..7]
+//
+//                    if point.X > center.X + r then
+//                        indices.IntersectWith [4; 5; 6; 7]
+//                    elif point.X < center.X - r then
+//                        indices.IntersectWith [0; 1; 2; 3]
+//                        
+//                    if point.Y > center.Y + r then
+//                        indices.IntersectWith [2; 3; 6; 7]
+//                    elif point.Y < center.Y - r then
+//                        indices.IntersectWith [0; 1; 4; 5]
+//
+//                    if point.Z > center.Z + r then
+//                        indices.IntersectWith [1; 3; 5; 7]
+//                    elif point.Z < center.Z - r then
+//                        indices.IntersectWith [0; 2; 4; 6]
+//
+//                    if indices.Count > 1 then
+//                        Log.warn "did it"
+
+                    let child =
                         (if point.X > center.X then 4 else 0) +
                         (if point.Y > center.Y then 2 else 0) +
                         (if point.Z > center.Z then 1 else 0)
 
-                    x.query(point, r, cell.GetChild index, children.[index], res)
+                    query point r (cell.GetChild child) children.[child] res
 
+
+    type SpatialDict<'a>(pointsPerLeaf : int) =
+
+        let info = { pointsPerLeaf = pointsPerLeaf; minLeafVolume = pown 0.00001 3 }
+        let mutable root : OctNode<'a> = null
+        let mutable bounds = Box3d.Invalid
+        let mutable cell = GridCell()
+        let mutable count = 0
 
         member x.Count = count
 
@@ -1211,17 +1312,17 @@ module SpatialDict =
 
                     bounds <- bb
                     cell <- c
-                    root <- x.build(c, values)
+                    root <- OctNode.build info c values
 
                 | _ ->
                     bounds.ExtendBy bb
 
                     while not (cell.Contains bb) do
                         let pi = cell.IndexInParent
-                        root <- Node (Array.init 8 (fun i -> if i = pi then root else Empty)) 
                         cell <- cell.Parent
+                        root <- Node (cell.Center, Array.init 8 (fun i -> if i = pi then root else Empty)) 
 
-                    x.addContained(cell, values, &root)
+                    OctNode.addContained info cell values &root
                     
         member x.AddRange (values : seq<V3d * 'a>) =
             values |> Seq.toArray |> x.AddRange
@@ -1231,11 +1332,11 @@ module SpatialDict =
 
         member x.Query(point : V3d, maxDistance : float) =
             let res = List<'a>()
-            x.query(point, maxDistance, cell, root, res) 
+            OctNode.query point maxDistance cell root res
             res :> seq<_>
 
 
-        new() = SpatialDict<'a>(64)
+        new() = SpatialDict<'a>(10)
 
 
 
@@ -1325,8 +1426,6 @@ type Clipper private() =
 module Outline = 
     open System.Collections.Generic
     open Aardvark.Base.Monads.Option
-    open Aardvark.VRVis
-
 
     open SpatialDict
 
@@ -1444,8 +1543,7 @@ module Outline =
 
                 //let mutable bounds = Box2d.Invalid
             
-                let mutable res = GpcPolygon.Empty
-
+   
                 let back = HashSet<Triangle3d>()
 
                 let mutable bounds = Box2d.Invalid
@@ -1484,92 +1582,355 @@ module Outline =
 
         outline
 
+    [<AllowNullLiteral>]
+    type UnionNode() as this =
+        let mutable rank = 0
+        let mutable parent = this
+
+        member x.Parent
+            with get() = parent
+            and set p = parent <- p
+
+        member x.Rank
+            with get() = rank
+            and set r = rank <- r
+
+    type UnionFind<'a when 'a : equality>() =
+        let nodes = Dict<'a, UnionNode>()
+
+        let node (v : 'a) =
+            nodes.GetOrCreate(v, fun v -> 
+                let n = UnionNode()
+                n
+            )
+
+        let rec find (n : UnionNode) =
+            if n = n.Parent then n
+            else 
+                let parent = find n.Parent
+                n.Parent <- parent
+                parent
+
+        member x.Add(l : 'a, r : 'a) =
+            let l = node l
+            let r = node r
+
+            let pl = find l
+            let pr = find r
+            if pl <> pr then
+                if pl.Rank < pr.Rank then
+                    pl.Parent <- pr
+                elif pl.Rank > pr.Rank then
+                    pr.Parent <- pl
+                else
+                    pr.Parent <- pl
+                    pl.Rank <- pl.Rank + 1
+
+        member x.Groups =
+            let sets = Dictionary<UnionNode, HashSet<'a>>()
+
+            for (k,v) in Dict.toSeq nodes do
+                let rep = find v
+                match sets.TryGetValue rep with
+                    | (true, set) -> set.Add k |> ignore
+                    | _ -> sets.[rep] <- HashSet [k]
+           
+            sets.Values :> seq<HashSet<'a>>
+
+
+
+
+    let partitionTriangles (top : Set<int>[]) =
+        let triangleCount = top.Length / 3
+        let uf = UnionFind<int>()
+        let isolated = HashSet<int>()
+
+
+        for i in 0..triangleCount-1 do
+            let t0 = top.[3*i+0] |> Set.remove i
+            let t1 = top.[3*i+1] |> Set.remove i
+            let t2 = top.[3*i+2] |> Set.remove i
+
+            let t01 = Set.intersect t0 t1
+            let t12 = Set.intersect t1 t2
+            let t20 = Set.intersect t2 t0
+            let adjacent = Set.unionMany [t01; t12; t20]
+
+            if Set.isEmpty adjacent then isolated.Add i |> ignore
+            else for a in adjacent do uf.Add(i, a)
+
+           
+        let parts = uf.Groups |> Seq.toList
+        let isolated = isolated |> Seq.map (fun v -> true, HashSet [v]) |> Seq.toList
+
+        let parts = 
+            parts |> List.map (fun p ->
+                let tris = HashSet.toArray p
+                let mutable hasBoundary = false
+                let mutable gi = 0
+                while not hasBoundary && gi < tris.Length do
+                    let i = tris.[gi]
+                    let t0 = top.[3*i+0] |> Set.remove i
+                    let t1 = top.[3*i+1] |> Set.remove i
+                    let t2 = top.[3*i+2] |> Set.remove i
+
+                    let t01 = Set.intersect t0 t1 |> Set.isEmpty
+                    let t12 = Set.intersect t1 t2 |> Set.isEmpty
+                    let t20 = Set.intersect t2 t0 |> Set.isEmpty
+
+                    if t01 || t12 || t20 then
+                        hasBoundary <- true
+
+                    gi <- gi + 1
+
+                hasBoundary, p
+
+            )
+
+
+        isolated @ parts
+                       
     let createFB (runtime : IRuntime) (viewPos : IMod<V3d>) (sg : ISg) =
+
+        let filterRedundant (triangles : Triangle3d[]) =
+            
+            let res = List<Triangle3d>()
+
+            let eps = 2.0 * Constant.PositiveTinyValue
+            let rec anyContains (current : int) (t : Triangle3d) (ti : int) =
+                if current = ti then 
+                    anyContains (current + 1) t ti
+
+                elif current < triangles.Length then
+                    let tt = triangles.[current]
+                    let p = tt.Plane
+                    if Fun.IsTiny(p.Height(t.P0), eps) && Fun.IsTiny(p.Height(t.P1), eps) && Fun.IsTiny(p.Height(t.P2), eps) then
+                        
+                        let u = tt.P1 - tt.P0
+                        let v = tt.P2 - tt.P0
+                        let n = Vec.cross u v
+                        let mat = M33d.FromCols(u,v,n).Inverse
+
+                        let contains (p : V3d) =
+                            let coord = mat * (p - tt.P0)
+                            let u' = coord.X
+                            let v' = coord.Y
+                            u' > 0.0 && v' > 0.0 && u' + v' < 1.0
+
+                        contains t.P0 && contains t.P1 && contains t.P2
+
+                    else
+                        anyContains (current + 1) t ti
+
+                else
+                    false
+
+            for ti in 0..triangles.Length-1 do
+                let t = triangles.[ti]
+                if not (anyContains 0 t ti) then
+                    res.Add t
+
+            let filtered = triangles.Length - res.Count
+            Log.warn "remove %d triangles" filtered
+            res |> CSharpList.toArray
 
         let bounds      = sg.LocalBoundingBox()
         let triangles = 
             TriangleSet.ofSg sg 
                 |> ASet.toMod 
-                |> Mod.map2 (fun viewPos ts ->
-                    ts  |> Seq.choose (fun t ->
-                        if t.IsDegenerated then
-                            None
-                        else
-                            let shifted =
-                                Triangle3d(
-                                    viewPos + (t.P0 - viewPos) * 1.001,
-                                    viewPos + (t.P1 - viewPos) * 1.001,
-                                    viewPos + (t.P2 - viewPos) * 1.001
-                                )
-                            Some shifted
-                        )
-                        |> Seq.toArray
-                ) viewPos
+                |> Mod.map (Seq.toArray)
+
 
         let topology =
             Mod.custom (fun self ->
                 let triangles = triangles.GetValue self
                 let store = SpatialDict<int>()
 
+
+                let values = Array.zeroCreate (triangles.Length * 3)
+                let mutable vi = 0
                 for i in 0..triangles.Length - 1 do
                     let t = triangles.[i]
-                    store.AddRange [t.P0, i; t.P1, i; t.P2, i]
 
-                store
+                    values.[vi+0] <- (t.P0, i)
+                    values.[vi+1] <- (t.P1, i)
+                    values.[vi+2] <- (t.P2, i)
+                    vi <- vi + 3
+
+                store.AddRange values
+
+                let pointTriangles =
+                    Array.init (3 * triangles.Length) (fun i ->
+                        let t = triangles.[i / 3]
+                        let p = t.[i % 3]
+
+                        let set = store.Query(p, 0.0) |> Set.ofSeq
+
+   
+                        set
+
+                    )
+
+                let edgeTriangles =
+                    Array.init (3 * triangles.Length) (fun i ->
+                        let ti = i / 3
+                        let ei = i % 3
+                        let t = triangles.[ti]
+
+                        let p0, p1 = 
+                            match ei with
+                                | 0 -> 0,1
+                                | 1 -> 1,2
+                                | _ -> 2,0
+
+                        
+                        let edgeTris = Set.intersect pointTriangles.[p0] pointTriangles.[p1] |> Set.remove ti
+                        if Set.isEmpty edgeTris then
+                            edgeTris
+                        else
+                            let ne = Vec.normalize (t.[p1] - t.[p0])
+                            
+                            let rotT = Vec.cross ne t.Normal
+
+                            edgeTris |> Set.filter (fun oi ->
+                                let o = triangles.[oi]
+                                let rotO = Vec.cross ne o.Normal
+
+                                if Vec.dot rotO rotT < 0.0 then
+                                    false
+                                else
+                                    true
+
+                            )
+
+                    )
+
+                pointTriangles
             )
 
         let eps = 50.0 * Constant.PositiveTinyValue
 
+
+
+
         Mod.custom (fun self ->
 
-            let outline = HashSet<Line3d>()
+            let outline = List<Line3d>()
+            let cap = List<Triangle3d>()
+
+            let parts = List<Triangle3d[] * Line3d[]>()
 
             let triangles = triangles.GetValue self
             let viewPos = viewPos.GetValue self
-            let top = topology.GetValue self
+            let pointTriangles = topology.GetValue self
 
-
+            //for (hasBoundary, group) in groups do
+            let group = [0..triangles.Length-1]
             let frontFacing = HashSet<int>()
             let backFacing = HashSet<int>()
-            let tangential = HashSet<int>()
 
-            for i in 0..triangles.Length-1 do
+            for i in group do
                 let t = triangles.[i]
                 let d = Vec.dot t.Normal (viewPos - t.P0).Normalized
+                if d > Constant.NegativeTinyValue then frontFacing.Add i |> ignore
+                elif d < Constant.PositiveTinyValue then backFacing.Add i |> ignore
 
-                if d > -Constant.PositiveTinyValue then
-                    frontFacing.Add i |> ignore
-                else
-                    backFacing.Add i |> ignore
 
+            let unvisited = HashSet (group |> Seq.filter (fun i -> frontFacing.Contains i || backFacing.Contains i))
             
+            while unvisited.Count > 0 do
+                let start = unvisited |> Seq.head
+                let front = frontFacing.Contains start
 
-            for i in frontFacing do
-                let t = triangles.[i]
-                let t0 = top.Query(t.P0, eps) |> Set.ofSeq |> Set.remove i
-                let t1 = top.Query(t.P1, eps) |> Set.ofSeq |> Set.remove i
-                let t2 = top.Query(t.P2, eps) |> Set.ofSeq |> Set.remove i
+                let lines = List()
+                let part = List()
+                
 
-                let t01 = Set.intersect t0 t1
-                let t12 = Set.intersect t1 t2
-                let t20 = Set.intersect t2 t0
+                let queue = Queue [start]
 
-                if t01 |> Set.forall backFacing.Contains then
-                    outline.Add(t.Line01) |> ignore
+                let enqueue (v : int) =
+                    if unvisited.Contains v then queue.Enqueue v
 
-                if t12 |> Set.forall backFacing.Contains then
-                    outline.Add(t.Line12) |> ignore
+                let addCap (l : Triangle3d) =
+                    part.Add l
+                    cap.Add l
 
-                if t20 |> Set.forall backFacing.Contains then
-                    outline.Add(t.Line20) |> ignore
+                let add (l : Line3d) =
+                    lines.Add l
+                    outline.Add l
+
+//                let testRealEdge (ti0 : int) (ti1 : int) =
+//                    let t0 = triangles.[ti0]
+//                    let t1 = triangles.[ti0]
+//
 
 
 
-                    ()
+                let mutable cnt = 0
+                while queue.Count > 0 do
+                    let i = queue.Dequeue()
+                    if unvisited.Remove i then
+                        cnt <- cnt + 1
+                        let t = triangles.[i]
+                        if not (Fun.IsTiny t.Area) then
+                            let testSet =
+                                if front then frontFacing
+                                else backFacing
+    //
+    //                        let t01 = edgeTriangles.[3*i+0] |> Set.filter (fun n -> testSet.Contains n)
+    //                        let t12 = edgeTriangles.[3*i+1] |> Set.filter (fun n -> testSet.Contains n)
+    //                        let t20 = edgeTriangles.[3*i+2] |> Set.filter (fun n -> testSet.Contains n)
+                        
+                            let t0 = pointTriangles.[3*i+0] |> Set.remove i
+                            let t1 = pointTriangles.[3*i+1] |> Set.remove i
+                            let t2 = pointTriangles.[3*i+2] |> Set.remove i
 
-            let cap = 
-                frontFacing |> Seq.map (fun i -> triangles.[i].Reversed) |> Seq.toArray
-            Seq.toArray outline, cap
+                            let valid (ei : int) (o : int) =
+                                let n = t.[(ei + 1) % 3] - t.[ei] |> Vec.normalize
+                                let d = Vec.dot (Vec.cross n t.Normal |> Vec.normalize) (Vec.cross n triangles.[o].Normal |> Vec.normalize)
+                                d > 0.5
+                            
+
+                            let t01 = Set.intersect t0 t1 |> Set.filter (fun n -> testSet.Contains n && valid 0 n)
+                            let t12 = Set.intersect t1 t2 |> Set.filter (fun n -> testSet.Contains n && valid 1 n)
+                            let t20 = Set.intersect t2 t0 |> Set.filter (fun n -> testSet.Contains n && valid 2 n)
+
+    //
+    //                        if c01 > 1 || c12 > 1 || c20 > 1 then
+    //                            Log.warn "weirdo triangle encountered"
+
+                            if front then addCap t.Reversed |> ignore
+                            else addCap t |> ignore
+
+                            match Set.toList t01 with
+                                | [] ->
+                                    if front then add t.Line10 |> ignore
+                                    else add t.Line01 |> ignore
+                                | l -> 
+                                    l |> List.iter enqueue
+
+                            match Set.toList t12 with
+                                | [] ->
+                                    if front then add t.Line21 |> ignore
+                                    else add t.Line12 |> ignore
+                                | l -> 
+                                    l |> List.iter enqueue
+                        
+               
+                            match Set.toList t20 with
+                                | [] ->
+                                    if front then add t.Line02 |> ignore
+                                    else add t.Line20 |> ignore
+                                | l -> 
+                                    l |> List.iter enqueue
+
+                parts.Add (part |> Seq.toArray, lines |> Seq.toArray)
+                //unvisited.Clear()
+                //Log.warn "group: %d" cnt
+
+
+
+            Seq.toArray outline, Seq.toArray cap, parts
         )
 
 
@@ -1662,6 +2023,18 @@ module Outline =
 module VolumeShader =
     open FShade
 
+    type Vertex = 
+        {
+            [<Position>]        pos     : V4d
+            [<WorldPosition>]   wp      : V4d
+            [<Normal>]          n       : V3d
+            [<BiNormal>]        b       : V3d
+            [<Tangent>]         t       : V3d
+            [<Color>]           c       : V4d
+            [<TexCoord>]        tc      : V2d
+            [<FrontFacing>]     f : bool
+        }
+
     type UniformScope with
         member x.LightPos : V3d = uniform?LightPos
 
@@ -1701,8 +2074,8 @@ module VolumeShader =
 
             let vp      = uniform.ViewProjTrafo
             let light   = V4d(uniform.LightPos,1.0)
-            let p0      = l.P0.pos
-            let p1      = l.P1.pos
+            let p0      = l.P1.pos
+            let p1      = l.P0.pos
 
             
             let pl      = vp * light
@@ -1717,7 +2090,6 @@ module VolumeShader =
             yield { l.P1 with pos = p1n }
             yield { l.P0 with pos = p0f }
             yield { l.P1 with pos = p1f }
-            //yield { l.P0 with pos = V4d(0.0,0.0,1.0,1.0) }
         }
 
     let duplicateAtInf (t : Triangle<DefaultSurfaces.Vertex>) =
@@ -1731,12 +2103,17 @@ module VolumeShader =
 
             
             let pl      = vp * light
-            let p0n     = vp * p0
-            let p1n     = vp * p1
-            let p2n     = vp * p2
+            let mutable p0n     = vp * p0
+            let mutable p1n     = vp * p1
+            let mutable p2n     = vp * p2
             let p0f     = (p0n - pl)
             let p1f     = (p1n - pl)
             let p2f     = (p2n - pl)
+
+
+            p0n.Z <- p0n.Z + 0.0001
+            p1n.Z <- p1n.Z + 0.0001
+            p2n.Z <- p2n.Z + 0.0001
 
             // p0n p1n p1f p0f
             //  0   1   2   3
@@ -1750,6 +2127,13 @@ module VolumeShader =
                                    
         }
 
+    let frontBack (t : Vertex) =
+        fragment {
+            return V4d.OIOI
+//            if t.f then return V4d(1,0,0,1)
+//            else return V4d(0,1,0,1)
+                                   
+        }
 
 
 module Camera =
@@ -1854,12 +2238,9 @@ let main args =
 
 
 
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\ironman\ironman.obj"
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\lara\lara.dae"
     let sg = Sg.AdapterNode(scene) |> normalizeTo (Box3d(-V3d.III, V3d.III))
 
-//    let scene2 = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\avent\Avent.obj"
-//    let sg2 = Sg.AdapterNode(scene2) |> normalizeTo (Box3d(-V3d.III, V3d.III))
-//
 
     let cam = Camera.viewProj ctrl
     let view = cam.currentView
@@ -1882,22 +2263,23 @@ let main args =
                 DefaultSurfaces.constantColor C4f.White |> toEffect
                 DefaultSurfaces.diffuseTexture |> toEffect
                 DefaultSurfaces.normalMap |> toEffect
-                DefaultSurfaces.lighting false |> toEffect
+                DefaultSurfaces.lighting true |> toEffect
               ]
 
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
            |> Sg.trafo (Mod.constant (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) ))
            |> Sg.translate 0.0 0.0 1.0
-           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.6, -1.6, 0.0), V3d(0.1,0.2,0.3))))
+//           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.6, -1.6, 0.0), V3d(0.1,0.2,0.3))))
+//           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.56, -1.57, 0.15), V3d(0.05,0.15,0.3))))
+//           |> Sg.andAlso (Sg.fullScreenQuad |> Sg.scale 0.5 |> Sg.transform (Trafo3d.RotationX Constant.PiHalf ) |> Sg.translate -2.0 -2.0 0.5)
            |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.constantColor C4f.White |> toEffect
                 DefaultSurfaces.lighting false |> toEffect
             ]
 
-    let bounds = sg.LocalBoundingBox()
 
-    let viewPos = cam.testView |> Mod.map CameraView.location //V3d(2.0, 2.0, 4.0) |> Mod.constant
+    let viewPos = cam.testView |> Mod.map CameraView.location 
     let outlineAndTriangles = Outline.createFB app.Runtime viewPos sg
 
 
@@ -1908,13 +2290,13 @@ let main args =
             OperationFront = 
                 StencilOperation(
                     StencilOperationFunction.Keep, 
-                    StencilOperationFunction.DecrementWrap, 
+                    StencilOperationFunction.IncrementWrap, 
                     StencilOperationFunction.Keep
                 ),
             OperationBack = 
                 StencilOperation(
                     StencilOperationFunction.Keep,
-                    StencilOperationFunction.IncrementWrap, 
+                    StencilOperationFunction.DecrementWrap, 
                     StencilOperationFunction.Keep
                 )
         )
@@ -1923,7 +2305,7 @@ let main args =
     let readStencil =
         StencilMode(
             IsEnabled = true,
-            Compare = StencilFunction(StencilCompareFunction.Less, 0, 0xFFFFFFFFu),
+            Compare = StencilFunction(StencilCompareFunction.NotEqual, 0, 0xFFFFFFFFu),
             Operation = 
                 StencilOperation(
                     StencilOperationFunction.Keep, 
@@ -1936,13 +2318,18 @@ let main args =
     let final = RenderPass.after "blubb" RenderPassOrder.Arbitrary afterMain
     let afterFinal = RenderPass.after "blubber" RenderPassOrder.Arbitrary final
     
+    let group = Mod.init 0
+    let debug = false
+    let currentGroup = outlineAndTriangles |> Mod.map2 (fun i (_,_,g) -> g.[i % g.Count]) group
+    let lines = if debug then currentGroup |> Mod.map snd else outlineAndTriangles |> Mod.map (fun (l,_,_) -> l)
+    let capTriangles = if debug then currentGroup |> Mod.map fst else outlineAndTriangles |> Mod.map (fun (_,t,_) -> t)
     let helpers =
         Sg.group' [ 
 
             let color = C4f(0.0,0.0,0.0,0.0)
 
             let cap = 
-                Sg.triangles (Mod.constant C4b.White) (Mod.map snd outlineAndTriangles)
+                Sg.triangles (Mod.constant C4b.White) capTriangles
                     |> Sg.stencilMode (Mod.constant writeStencil)
                     |> Sg.effect [
                         VolumeShader.duplicateAtInf |> toEffect
@@ -1950,7 +2337,7 @@ let main args =
                     ]
 
             let sides = 
-                Sg.lines (Mod.constant C4b.White) (Mod.map fst outlineAndTriangles)
+                Sg.lines (Mod.constant C4b.White) lines
                     |> Sg.stencilMode (Mod.constant writeStencil)
                     |> Sg.effect [
                         VolumeShader.extrudeToInf |> toEffect
@@ -1974,17 +2361,53 @@ let main args =
                     |> Sg.effect [
                         DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.8)) |> toEffect
                     ]
+
+            if debug then
+                yield 
+                    Sg.lines (Mod.constant C4b.Blue) (Mod.map snd currentGroup)
+                        |> Sg.depthTest (Mod.constant DepthTestMode.None)
+                        |> Sg.pass afterFinal
+                        |> Sg.effect [
+                            DefaultSurfaces.trafo |> toEffect
+                            DefaultSurfaces.vertexColor |> toEffect
+                        ]
+
+                yield 
+                    Sg.triangles (Mod.constant C4b.Green) (currentGroup |> Mod.map fst)
+                        |> Sg.depthTest (Mod.constant DepthTestMode.None)
+                        |> Sg.cullMode (Mod.constant CullMode.None)
+                        |> Sg.pass afterFinal
+                        |> Sg.effect [
+                            DefaultSurfaces.trafo |> toEffect
+                            VolumeShader.frontBack |> toEffect
+                        ]
+
         ]
 
-
+    let mode = Mod.init FillMode.Fill
 
     let sg =
-        sg  |> Sg.andAlso helpers
+        sg  |> Sg.fillMode mode
+            |> Sg.andAlso helpers
             |> Sg.andAlso floor
             |> Sg.uniform "LightLocation" viewPos
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
 
+    ctrl.Keyboard.KeyDown(Keys.X).Values.Add (fun () ->
+        transact (fun () ->
+            match mode.Value with
+                | FillMode.Fill -> mode.Value <- FillMode.Line
+                | _ -> mode.Value <- FillMode.Fill
+        )
+    )
+
+    ctrl.Keyboard.KeyDown(Keys.G).Values.Add (fun () ->
+        transact (fun () ->
+            group.Value <- group.Value + 1
+            Log.warn "showing group %d" group.Value
+        )
+    )
     let task = 
         RenderTask.ofList [
             //app.Runtime.CompileClear(ctrl.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)

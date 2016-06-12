@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.24720.0
+VisualStudioVersion = 14.0.25123.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
 EndProject
@@ -53,7 +53,15 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinFor
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Text", "Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj", "{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{B5AD6854-A8DC-475D-8B09-242DDB5D79BC}"
+	ProjectSection(SolutionItems) = preProject
+		Performance1.psess = Performance1.psess
+	EndProjectSection
+EndProject
 Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU

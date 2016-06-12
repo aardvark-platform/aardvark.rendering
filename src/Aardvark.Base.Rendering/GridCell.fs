@@ -72,6 +72,16 @@ type GridCell =
                 (shift + float x.Z + 0.5) * size    |> float
             )          
 
+        member x.Size =
+            let size = pown 2.0 x.Exp
+            V3d(size, size, size)
+
+        member x.Volume =
+            pown 2.0 (3 * x.Exp)
+
+        member x.ChildVolume =
+            pown 2.0 (3 * (x.Exp - 1))
+
         member x.Contains (p : V3d) =
             x.BoundingBox.Contains p
 
