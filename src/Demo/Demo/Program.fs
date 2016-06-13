@@ -1759,18 +1759,41 @@ module Outline =
 
                 store.AddRange values
 
-                let pointTriangles =
-                    Array.init (3 * triangles.Length) (fun i ->
-                        let t = triangles.[i / 3]
-                        let p = t.[i % 3]
+                let pointTriangles = Array.zeroCreate (3 * triangles.Length)
 
-                        let set = store.Query(p, 0.0) |> Set.ofSeq
+                for ti in 0..triangles.Length-1 do
+                    let t = triangles.[ti]
+                    let mutable n0 = store.Query(t.P0, 0.0) |> Set.ofSeq
+                    let mutable n1 = store.Query(t.P1, 0.0) |> Set.ofSeq
+                    let mutable n2 = store.Query(t.P2, 0.0) |> Set.ofSeq
 
-   
-                        set
 
-                    )
+                    let all = Set.intersect n0 (Set.intersect n1 n2) |> Set.remove ti
 
+                    if not (Set.isEmpty all) then
+                        n0 <- Set.difference n0 all
+                        n1 <- Set.difference n1 all
+                        n2 <- Set.difference n2 all
+                        Log.warn "removed duplicate triangle"
+
+                    pointTriangles.[3 * ti + 0] <- n0
+                    pointTriangles.[3 * ti + 1] <- n1
+                    pointTriangles.[3 * ti + 2] <- n2
+
+
+//
+//                let pointTriangles =
+//                    Array.init (3 * triangles.Length) (fun i ->
+//                        let t = triangles.[i / 3]
+//                        let p = t.[i % 3]
+//
+//                        let set = store.Query(p, 0.0) |> Set.ofSeq
+//
+//   
+//                        set
+//
+//                    )
+//
                 let edgeTriangles =
                     Array.init (3 * triangles.Length) (fun i ->
                         let ti = i / 3
@@ -1785,18 +1808,19 @@ module Outline =
 
                         
                         let edgeTris = Set.intersect pointTriangles.[p0] pointTriangles.[p1] |> Set.remove ti
+
                         if Set.isEmpty edgeTris then
                             edgeTris
                         else
                             let ne = Vec.normalize (t.[p1] - t.[p0])
                             
-                            let rotT = Vec.cross ne t.Normal
+                            let rotT = Vec.cross (t.ComputeCentroid() - t.[p0]) t.Normal |> Vec.dot ne
 
                             edgeTris |> Set.filter (fun oi ->
                                 let o = triangles.[oi]
-                                let rotO = Vec.cross ne o.Normal
+                                let rotO = Vec.cross (o.ComputeCentroid() - t.[p0]) o.Normal |> Vec.dot ne
 
-                                if Vec.dot rotO rotT < 0.0 then
+                                if rotO * rotT > 0.0 then
                                     false
                                 else
                                     true
@@ -1885,19 +1909,38 @@ module Outline =
                             let t1 = pointTriangles.[3*i+1] |> Set.remove i
                             let t2 = pointTriangles.[3*i+2] |> Set.remove i
 
-                            let valid (ei : int) (o : int) =
-                                let n = t.[(ei + 1) % 3] - t.[ei] |> Vec.normalize
-                                let d = Vec.dot (Vec.cross n t.Normal |> Vec.normalize) (Vec.cross n triangles.[o].Normal |> Vec.normalize)
-                                d > 0.5
+                            let valid (ei : int) (oi : int) =
+                                let o = triangles.[oi]
+                                let p0t = ei
+                                let p1t = (ei + 1) % 3
+                                let p2t = (ei + 2) % 3
+//
+//                                let p0o, p1o, p2o =
+//                                    let s0 = Set.contains i pointTriangles.[3 * oi + 0]
+//                                    let s1 = Set.contains i pointTriangles.[3 * oi + 1]
+//                                    let s2 = Set.contains i pointTriangles.[3 * oi + 2]
+//
+//                                    match s0, s1, s2 with
+//                                        | true, true, false -> 0, 1, 2
+//                                        | true, false, true -> 0, 2, 1
+//                                        | false, true, true -> 1, 2, 0
+//                                        | _ -> failwith "invalid topology"
+//
+//
+//                                
+
+
+                                let ne = Vec.normalize (t.[p1t] - t.[p0t])
+                            
+                                let rotT = Vec.cross (t.ComputeCentroid() - t.[p0t]) t.Normal |> Vec.dot ne
+                                let rotO = Vec.cross (o.ComputeCentroid() - t.[p0t]) o.Normal |> Vec.dot ne
+
+                                rotO * rotT < 0.0
                             
 
                             let t01 = Set.intersect t0 t1 |> Set.filter (fun n -> testSet.Contains n && valid 0 n)
                             let t12 = Set.intersect t1 t2 |> Set.filter (fun n -> testSet.Contains n && valid 1 n)
                             let t20 = Set.intersect t2 t0 |> Set.filter (fun n -> testSet.Contains n && valid 2 n)
-
-    //
-    //                        if c01 > 1 || c12 > 1 || c20 > 1 then
-    //                            Log.warn "weirdo triangle encountered"
 
                             if front then addCap t.Reversed |> ignore
                             else addCap t |> ignore
@@ -2238,7 +2281,7 @@ let main args =
 
 
 
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\lara\lara.dae"
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\geralt.obj"
     let sg = Sg.AdapterNode(scene) |> normalizeTo (Box3d(-V3d.III, V3d.III))
 
 
@@ -2381,6 +2424,7 @@ let main args =
                             DefaultSurfaces.trafo |> toEffect
                             VolumeShader.frontBack |> toEffect
                         ]
+                        |> Sg.fillMode (Mod.constant FillMode.Line)
 
         ]
 
