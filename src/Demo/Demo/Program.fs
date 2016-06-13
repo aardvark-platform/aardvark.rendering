@@ -1115,7 +1115,11 @@ module TriangleSet =
 
                                     | _ ->
                                         failwith "not implemented"
-                            let newTriangles = HashSet newTriangles
+
+                            let newTriangles = 
+                                newTriangles |> Seq.filter (fun t -> not t.IsDegenerated) |> HashSet
+                            
+
 
                             let rem = self.Content |> Seq.filter (newTriangles.Contains >> not) |> Seq.map Rem |> Seq.toList
                             let add = newTriangles |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add |> Seq.toList
@@ -1227,7 +1231,7 @@ module SpatialDict =
         let rec addContained (info : OctNodeInfo) (cell : GridCell) (values : array<V3d * 'a>) (n : byref<OctNode<'a>>) =
             match n with
                 | Empty ->
-                    n <- Leaf (cell.Center, List values)
+                    n <- build info cell values
 
                 | Leaf content ->
                     if content.Count + values.Length <= info.pointsPerLeaf || cell.ChildVolume < info.minLeafVolume then
@@ -1253,38 +1257,44 @@ module SpatialDict =
 
                 | Leaf values ->
                     for (p,v) in values do
-                        if V3d.Distance(p, point) <= r then
+                        let a = (p - point).Abs.AnySmallerOrEqual r
+                        let b = (point - p).Abs.AnySmallerOrEqual r
+
+                        if a <> b then
+                            Log.warn "asdasdsadasd"
+
+                        if (p - point).Abs.AnySmallerOrEqual r then
                             res.Add v
 
                 | Node children ->
                     let center = n.Center
 
-//                    let indices = HashSet.ofList [0..7]
-//
-//                    if point.X > center.X + r then
-//                        indices.IntersectWith [4; 5; 6; 7]
-//                    elif point.X < center.X - r then
-//                        indices.IntersectWith [0; 1; 2; 3]
-//                        
-//                    if point.Y > center.Y + r then
-//                        indices.IntersectWith [2; 3; 6; 7]
-//                    elif point.Y < center.Y - r then
-//                        indices.IntersectWith [0; 1; 4; 5]
-//
-//                    if point.Z > center.Z + r then
-//                        indices.IntersectWith [1; 3; 5; 7]
-//                    elif point.Z < center.Z - r then
-//                        indices.IntersectWith [0; 2; 4; 6]
-//
-//                    if indices.Count > 1 then
-//                        Log.warn "did it"
+                    let indices = HashSet.ofList [0..7]
 
-                    let child =
-                        (if point.X > center.X then 4 else 0) +
-                        (if point.Y > center.Y then 2 else 0) +
-                        (if point.Z > center.Z then 1 else 0)
+                    if point.X > center.X + r then
+                        indices.IntersectWith [4; 5; 6; 7]
+                    elif point.X < center.X - r then
+                        indices.IntersectWith [0; 1; 2; 3]
+                        
+                    if point.Y > center.Y + r then
+                        indices.IntersectWith [2; 3; 6; 7]
+                    elif point.Y < center.Y - r then
+                        indices.IntersectWith [0; 1; 4; 5]
 
-                    query point r (cell.GetChild child) children.[child] res
+                    if point.Z > center.Z + r then
+                        indices.IntersectWith [1; 3; 5; 7]
+                    elif point.Z < center.Z - r then
+                        indices.IntersectWith [0; 2; 4; 6]
+
+                    for i in indices do
+                        query point r (cell.GetChild i) children.[i] res
+
+//                    let child =
+//                        (if point.X > center.X then 4 else 0) +
+//                        (if point.Y > center.Y then 2 else 0) +
+//                        (if point.Z > center.Z then 1 else 0)
+//
+//                    query point r (cell.GetChild child) children.[child] res
 
 
     type SpatialDict<'a>(pointsPerLeaf : int) =
@@ -1763,18 +1773,18 @@ module Outline =
 
                 for ti in 0..triangles.Length-1 do
                     let t = triangles.[ti]
-                    let mutable n0 = store.Query(t.P0, Constant.PositiveTinyValue) |> Set.ofSeq
-                    let mutable n1 = store.Query(t.P1, Constant.PositiveTinyValue) |> Set.ofSeq
-                    let mutable n2 = store.Query(t.P2, Constant.PositiveTinyValue) |> Set.ofSeq
+                    let mutable n0 = store.Query(t.P0, 10.0 * Constant.PositiveTinyValue) |> Set.ofSeq
+                    let mutable n1 = store.Query(t.P1, 10.0 * Constant.PositiveTinyValue) |> Set.ofSeq
+                    let mutable n2 = store.Query(t.P2, 10.0 * Constant.PositiveTinyValue) |> Set.ofSeq
 
 
                     let all = Set.intersect n0 (Set.intersect n1 n2) |> Set.remove ti
 
-                    if not (Set.isEmpty all) then
-                        n0 <- Set.difference n0 all
-                        n1 <- Set.difference n1 all
-                        n2 <- Set.difference n2 all
-                        Log.warn "removed duplicate triangle"
+//                    if not (Set.isEmpty all) then
+//                        n0 <- Set.difference n0 all
+//                        n1 <- Set.difference n1 all
+//                        n2 <- Set.difference n2 all
+//                        Log.warn "removed duplicate triangle"
 
                     pointTriangles.[3 * ti + 0] <- n0
                     pointTriangles.[3 * ti + 1] <- n1
@@ -1794,12 +1804,12 @@ module Outline =
                         let o0 = pointTriangles.[3 * oi + 0]
                         let o1 = pointTriangles.[3 * oi + 1]
                         let o2 = pointTriangles.[3 * oi + 2]
-                        let o01 = Set.intersect t0 t1 |> Set.contains ti
-                        let o12 = Set.intersect t1 t2 |> Set.contains ti
-                        let o20 = Set.intersect t2 t0 |> Set.contains ti
+                        let o01 = Set.intersect o0 o1 |> Set.contains ti
+                        let o12 = Set.intersect o1 o2 |> Set.contains ti
+                        let o20 = Set.intersect o2 o0 |> Set.contains ti
 
 
-                        if not o01 || not o12 || not o20 then
+                        if not (o01 || o12 || o20) then
                             Log.warn "broken topology"
 
 
@@ -1937,58 +1947,50 @@ module Outline =
                     if unvisited.Remove i then
                         cnt <- cnt + 1
                         let t = triangles.[i]
-                        if not (Fun.IsTiny t.Area) then
-//                            let testSet =
-//                                if front then frontFacing
-//                                else backFacing
-    //
-    //                        let t01 = edgeTriangles.[3*i+0] |> Set.filter (fun n -> testSet.Contains n)
-    //                        let t12 = edgeTriangles.[3*i+1] |> Set.filter (fun n -> testSet.Contains n)
-    //                        let t20 = edgeTriangles.[3*i+2] |> Set.filter (fun n -> testSet.Contains n)
-                        
-                            let t0 = pointTriangles.[3*i+0] |> Set.remove i
-                            let t1 = pointTriangles.[3*i+1] |> Set.remove i
-                            let t2 = pointTriangles.[3*i+2] |> Set.remove i
 
-                            let valid (ei : int) (oi : int) =
-                                let o = triangles.[oi]
-                                let p0t = ei
-                                let p1t = (ei + 1) % 3
-                                let p2t = (ei + 2) % 3
+                        let t0 = pointTriangles.[3*i+0] |> Set.remove i
+                        let t1 = pointTriangles.[3*i+1] |> Set.remove i
+                        let t2 = pointTriangles.[3*i+2] |> Set.remove i
+
+                        let valid (ei : int) (oi : int) =
+                            let o = triangles.[oi]
+                            let p0t = ei
+                            let p1t = (ei + 1) % 3
+                            let p2t = (ei + 2) % 3
 
                                 
 
 
 
-                                let valid, p0o, p1o, p2o =
-                                    let s0 = Set.contains i pointTriangles.[3 * oi + 0]
-                                    let s1 = Set.contains i pointTriangles.[3 * oi + 1]
-                                    let s2 = Set.contains i pointTriangles.[3 * oi + 2]
+                            let valid, p0o, p1o, p2o =
+                                let s0 = Set.contains i pointTriangles.[3 * oi + 0]
+                                let s1 = Set.contains i pointTriangles.[3 * oi + 1]
+                                let s2 = Set.contains i pointTriangles.[3 * oi + 2]
 
-                                    match s0, s1, s2 with
-                                        | true, true, false -> true,0, 1, 2
-                                        | true, false, true -> true,0, 2, 1
-                                        | false, true, true -> true,1, 2, 0
-                                        | _ -> 
-                                            Log.warn "broken"
-                                            false, 0, 0, 0
+                                match s0, s1, s2 with
+                                    | true, true, false -> true, 0, 1, 2
+                                    | true, false, true -> true, 0, 2, 1
+                                    | false, true, true -> true, 1, 2, 0
+                                    | _ -> 
+                                        Log.warn "broken"
+                                        false, 0, 0, 0
 
 
                                 
-                                if not valid then 
+                            if not valid then 
+                                false
+                            else
+                                let line = Vec.normalize (t.[p1t] - t.[p0t])
+                                let n = Vec.cross (t.[p0t] - viewPos) line |> Vec.normalize
+                                let plane = Plane3d(n, t.[p0t])
+
+                                let ht = plane.Height t.[p2t]
+                                let ho = plane.Height o.[p2o]
+
+                                if ht * ho > 0.0 then
                                     false
                                 else
-                                    let line = Vec.normalize (t.[p1t] - t.[p0t])
-                                    let n = Vec.cross (t.[p0t] - viewPos) line |> Vec.normalize
-                                    let plane = Plane3d(n, t.[p0t])
-
-                                    let ht = plane.Height t.[p2t]
-                                    let ho = plane.Height o.[p2o]
-
-                                    if ht * ho > 0.0 then
-                                        false
-                                    else
-                                        true
+                                    true
 
 //
 //                                    let ne = Vec.normalize (t.[p1t] - t.[p0t])
@@ -2008,48 +2010,48 @@ module Outline =
 //                                        rotO * rotT < 0.0
                             
 
-                            let t01 = Set.intersect t0 t1 
-                            let t12 = Set.intersect t1 t2 
-                            let t20 = Set.intersect t2 t0 
+                        let t01 = Set.intersect t0 t1 
+                        let t12 = Set.intersect t1 t2 
+                        let t20 = Set.intersect t2 t0 
 
-                            let front = frontFacing.Contains i
+                        let front = frontFacing.Contains i
 
-                            if Set.count t01 > 1 then
-                                if front then add t.Line10 |> ignore
-                                else add t.Line01
-                            else
-                                match t01 |> Set.filter (fun n -> valid 0 n) |> Set.toList with
-                                    | [l] ->  enqueue l
-                                    | _ ->
-                                        if front then add t.Line10 |> ignore
-                                        else add t.Line01 |> ignore
+                        if Set.count t01 > 1 then
+                            if front then add t.Line10 |> ignore
+                            else add t.Line01
+                        else
+                            match t01 |> Set.filter (fun n -> valid 0 n) |> Set.toList with
+                                | [l] ->  enqueue l
+                                | _ ->
+                                    if front then add t.Line10 |> ignore
+                                    else add t.Line01 |> ignore
 
  
          
 
-                            if Set.count t12 > 1 then
-                                if front then add t.Line21 |> ignore
-                                else add t.Line12
-                            else
-                                match t12 |> Set.filter (fun n -> valid 1 n) |> Set.toList with
-                                    | [l] ->  enqueue l
-                                    | l ->
-                                        if front then add t.Line21 |> ignore
-                                        else add t.Line12 |> ignore
+                        if Set.count t12 > 1 then
+                            if front then add t.Line21 |> ignore
+                            else add t.Line12
+                        else
+                            match t12 |> Set.filter (fun n -> valid 1 n) |> Set.toList with
+                                | [l] ->  enqueue l
+                                | l ->
+                                    if front then add t.Line21 |> ignore
+                                    else add t.Line12 |> ignore
                         
-                            if Set.count t20 > 1 then
-                                if front then add t.Line02 |> ignore
-                                else add t.Line20
-                            else
-                                match t20 |> Set.filter (fun n -> valid 2 n) |> Set.toList with
-                                    | [l] ->  enqueue l
-                                    | l ->
-                                        if front then add t.Line02 |> ignore
-                                        else add t.Line20 |> ignore
+                        if Set.count t20 > 1 then
+                            if front then add t.Line02 |> ignore
+                            else add t.Line20
+                        else
+                            match t20 |> Set.filter (fun n -> valid 2 n) |> Set.toList with
+                                | [l] ->  enqueue l
+                                | l ->
+                                    if front then add t.Line02 |> ignore
+                                    else add t.Line20 |> ignore
                                                        
     
-                            if front then addCap t.Reversed |> ignore
-                            else addCap t |> ignore
+                        if front then addCap t.Reversed |> ignore
+                        else addCap t |> ignore
 
 
                 parts.Add (part |> Seq.toArray, lines |> Seq.toArray)
@@ -2365,7 +2367,7 @@ let main args =
 
 
         
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\lara\lara.dae"
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\Geralt.obj"
     let sg = Sg.AdapterNode(scene) |> normalizeTo (Box3d(-V3d.III, V3d.III))
 
 
@@ -2396,9 +2398,9 @@ let main args =
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
            |> Sg.trafo (Mod.constant (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) ))
            |> Sg.translate 0.0 0.0 1.0
-           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.6, -1.6, 0.0), V3d(0.1,0.2,0.3))))
-           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.56, -1.57, 0.15), V3d(0.05,0.15,0.3))))
-           |> Sg.andAlso (Sg.fullScreenQuad |> Sg.scale 0.5 |> Sg.transform (Trafo3d.RotationX Constant.PiHalf ) |> Sg.translate -2.0 -2.0 0.5)
+//           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.6, -1.6, 0.0), V3d(0.1,0.2,0.3))))
+//           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.56, -1.57, 0.15), V3d(0.05,0.15,0.3))))
+//           |> Sg.andAlso (Sg.fullScreenQuad |> Sg.scale 0.5 |> Sg.transform (Trafo3d.RotationX Constant.PiHalf ) |> Sg.translate -2.0 -2.0 0.5)
            |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.constantColor C4f.White |> toEffect
