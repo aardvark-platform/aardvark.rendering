@@ -1763,9 +1763,9 @@ module Outline =
 
                 for ti in 0..triangles.Length-1 do
                     let t = triangles.[ti]
-                    let mutable n0 = store.Query(t.P0, 0.0) |> Set.ofSeq
-                    let mutable n1 = store.Query(t.P1, 0.0) |> Set.ofSeq
-                    let mutable n2 = store.Query(t.P2, 0.0) |> Set.ofSeq
+                    let mutable n0 = store.Query(t.P0, Constant.PositiveTinyValue) |> Set.ofSeq
+                    let mutable n1 = store.Query(t.P1, Constant.PositiveTinyValue) |> Set.ofSeq
+                    let mutable n2 = store.Query(t.P2, Constant.PositiveTinyValue) |> Set.ofSeq
 
 
                     let all = Set.intersect n0 (Set.intersect n1 n2) |> Set.remove ti
@@ -1781,6 +1781,33 @@ module Outline =
                     pointTriangles.[3 * ti + 2] <- n2
 
 
+                for ti in 0..triangles.Length-1 do
+                    let t0 = pointTriangles.[3 * ti + 0]
+                    let t1 = pointTriangles.[3 * ti + 1]
+                    let t2 = pointTriangles.[3 * ti + 2]
+
+                    let t01 = Set.intersect t0 t1 |> Set.remove ti
+                    let t12 = Set.intersect t1 t2 |> Set.remove ti
+                    let t20 = Set.intersect t2 t0 |> Set.remove ti
+
+                    for oi in Set.unionMany [t01; t12; t20] do
+                        let o0 = pointTriangles.[3 * oi + 0]
+                        let o1 = pointTriangles.[3 * oi + 1]
+                        let o2 = pointTriangles.[3 * oi + 2]
+                        let o01 = Set.intersect t0 t1 |> Set.contains ti
+                        let o12 = Set.intersect t1 t2 |> Set.contains ti
+                        let o20 = Set.intersect t2 t0 |> Set.contains ti
+
+
+                        if not o01 || not o12 || not o20 then
+                            Log.warn "broken topology"
+
+
+                        ()
+
+
+
+
 //
 //                let pointTriangles =
 //                    Array.init (3 * triangles.Length) (fun i ->
@@ -1794,40 +1821,40 @@ module Outline =
 //
 //                    )
 //
-                let edgeTriangles =
-                    Array.init (3 * triangles.Length) (fun i ->
-                        let ti = i / 3
-                        let ei = i % 3
-                        let t = triangles.[ti]
-
-                        let p0, p1 = 
-                            match ei with
-                                | 0 -> 0,1
-                                | 1 -> 1,2
-                                | _ -> 2,0
-
-                        
-                        let edgeTris = Set.intersect pointTriangles.[p0] pointTriangles.[p1] |> Set.remove ti
-
-                        if Set.isEmpty edgeTris then
-                            edgeTris
-                        else
-                            let ne = Vec.normalize (t.[p1] - t.[p0])
-                            
-                            let rotT = Vec.cross (t.ComputeCentroid() - t.[p0]) t.Normal |> Vec.dot ne
-
-                            edgeTris |> Set.filter (fun oi ->
-                                let o = triangles.[oi]
-                                let rotO = Vec.cross (o.ComputeCentroid() - t.[p0]) o.Normal |> Vec.dot ne
-
-                                if rotO * rotT > 0.0 then
-                                    false
-                                else
-                                    true
-
-                            )
-
-                    )
+//                let edgeTriangles =
+//                    Array.init (3 * triangles.Length) (fun i ->
+//                        let ti = i / 3
+//                        let ei = i % 3
+//                        let t = triangles.[ti]
+//
+//                        let p0, p1 = 
+//                            match ei with
+//                                | 0 -> 0,1
+//                                | 1 -> 1,2
+//                                | _ -> 2,0
+//
+//                        
+//                        let edgeTris = Set.intersect pointTriangles.[p0] pointTriangles.[p1] |> Set.remove ti
+//
+//                        if Set.isEmpty edgeTris then
+//                            edgeTris
+//                        else
+//                            let ne = Vec.normalize (t.[p1] - t.[p0])
+//                            
+//                            let rotT = Vec.cross (t.ComputeCentroid() - t.[p0]) t.Normal |> Vec.dot ne
+//
+//                            edgeTris |> Set.filter (fun oi ->
+//                                let o = triangles.[oi]
+//                                let rotO = Vec.cross (o.ComputeCentroid() - t.[p0]) o.Normal |> Vec.dot ne
+//
+//                                if rotO * rotT > 0.0 then
+//                                    false
+//                                else
+//                                    true
+//
+//                            )
+//
+//                    )
 
                 pointTriangles
             )
@@ -1914,33 +1941,64 @@ module Outline =
                                 let p0t = ei
                                 let p1t = (ei + 1) % 3
                                 let p2t = (ei + 2) % 3
-//
-//                                let p0o, p1o, p2o =
-//                                    let s0 = Set.contains i pointTriangles.[3 * oi + 0]
-//                                    let s1 = Set.contains i pointTriangles.[3 * oi + 1]
-//                                    let s2 = Set.contains i pointTriangles.[3 * oi + 2]
-//
-//                                    match s0, s1, s2 with
-//                                        | true, true, false -> 0, 1, 2
-//                                        | true, false, true -> 0, 2, 1
-//                                        | false, true, true -> 1, 2, 0
-//                                        | _ -> failwith "invalid topology"
-//
-//
-//                                
+
+                                
 
 
-                                let ne = Vec.normalize (t.[p1t] - t.[p0t])
-                            
-                                let rotT = Vec.cross (t.ComputeCentroid() - t.[p0t]) t.Normal |> Vec.dot ne
-                                let rotO = Vec.cross (o.ComputeCentroid() - t.[p0t]) o.Normal |> Vec.dot ne
 
-                                rotO * rotT < 0.0
+                                let valid, p0o, p1o, p2o =
+                                    let s0 = Set.contains i pointTriangles.[3 * oi + 0]
+                                    let s1 = Set.contains i pointTriangles.[3 * oi + 1]
+                                    let s2 = Set.contains i pointTriangles.[3 * oi + 2]
+
+                                    match s0, s1, s2 with
+                                        | true, true, false -> true,0, 1, 2
+                                        | true, false, true -> true,0, 2, 1
+                                        | false, true, true -> true,1, 2, 0
+                                        | _ -> 
+                                            Log.warn "broken"
+                                            false, 0, 0, 0
+
+
+                                
+                                if not valid then 
+                                    false
+                                else
+                                    let line = Vec.normalize (t.[p1t] - t.[p0t])
+                                    let n = Vec.cross (t.[p0t] - viewPos) line |> Vec.normalize
+                                    let plane = Plane3d(n, t.[p0t])
+
+                                    let ht = plane.Height t.[p2t]
+                                    let ho = plane.Height o.[p2o]
+
+                                    if ht * ho > 0.0 then
+                                        false
+                                    else
+                                        true
+
+//
+//                                    let ne = Vec.normalize (t.[p1t] - t.[p0t])
+//                            
+//                                    let pn = Vec.cross ne t.Normal |> Vec.normalize
+//                                    let plane = Plane3d(pn, t.[p0t])
+//
+//                                    let ht2 = plane.Height t.[p2t]
+//                                    let ho2 = plane.Height o.[p2o]
+//
+//                                    if ho2 * ht2 > 0.0 then
+//                                        false
+//                                    else
+//                                        let rotT = Vec.cross (t.ComputeCentroid() - t.[p0t]) t.Normal |> Vec.dot ne
+//                                        let rotO = Vec.cross (o.ComputeCentroid() - t.[p0t]) o.Normal |> Vec.dot ne
+//
+//                                        rotO * rotT < 0.0
                             
 
                             let t01 = Set.intersect t0 t1 |> Set.filter (fun n -> testSet.Contains n && valid 0 n)
                             let t12 = Set.intersect t1 t2 |> Set.filter (fun n -> testSet.Contains n && valid 1 n)
                             let t20 = Set.intersect t2 t0 |> Set.filter (fun n -> testSet.Contains n && valid 2 n)
+
+                            //let front = frontFacing.Contains i
 
                             if front then addCap t.Reversed |> ignore
                             else addCap t |> ignore
@@ -2281,7 +2339,7 @@ let main args =
 
 
 
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\geralt.obj"
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\Geralt.obj"
     let sg = Sg.AdapterNode(scene) |> normalizeTo (Box3d(-V3d.III, V3d.III))
 
 
@@ -2362,8 +2420,8 @@ let main args =
     let afterFinal = RenderPass.after "blubber" RenderPassOrder.Arbitrary final
     
     let group = Mod.init 0
-    let debug = false
-    let currentGroup = outlineAndTriangles |> Mod.map2 (fun i (_,_,g) -> g.[i % g.Count]) group
+    let debug = true
+    let currentGroup = outlineAndTriangles |> Mod.map2 (fun i (o,t,g) -> if i < 0 then (t,o) else g.[i % g.Count]) group
     let lines = if debug then currentGroup |> Mod.map snd else outlineAndTriangles |> Mod.map (fun (l,_,_) -> l)
     let capTriangles = if debug then currentGroup |> Mod.map fst else outlineAndTriangles |> Mod.map (fun (_,t,_) -> t)
     let helpers =
@@ -2446,11 +2504,25 @@ let main args =
         )
     )
 
-    ctrl.Keyboard.KeyDown(Keys.G).Values.Add (fun () ->
+    let mutable oldGroup = 0
+    ctrl.Keyboard.KeyDown(Keys.Y).Values.Add (fun () ->
         transact (fun () ->
-            group.Value <- group.Value + 1
-            Log.warn "showing group %d" group.Value
+            transact (fun () ->
+                if group.Value >= 0 then 
+                    oldGroup <- group.Value
+                    group.Value <- -1
+                else 
+                    group.Value <- oldGroup
+                Log.warn "showing group %d" group.Value
+            )
         )
+    )
+    ctrl.Keyboard.DownWithRepeats.Values.Add (fun k ->
+        if k = Keys.G then
+            transact (fun () ->
+                group.Value <- group.Value + 1
+                Log.warn "showing group %d" group.Value
+            )
     )
     let task = 
         RenderTask.ofList [
