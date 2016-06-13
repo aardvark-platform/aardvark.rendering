@@ -643,6 +643,7 @@ module RenderTasks =
 
                 program <- newProgram
                 hasProgram <- true
+                currentConfig <- c
 
 
         override x.Perform() =
