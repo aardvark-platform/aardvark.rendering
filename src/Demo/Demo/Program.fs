@@ -1875,7 +1875,19 @@ module Outline =
             let viewPos = viewPos.GetValue self
             let pointTriangles = topology.GetValue self
 
-            //for (hasBoundary, group) in groups do
+
+//            for ti in 0 .. triangles.Length-1 do
+//                let t = triangles.[ti]
+//                let d = Vec.dot t.Normal (viewPos - t.P0).Normalized
+//                let t = 
+//                    if d > Constant.NegativeTinyValue then t.Reversed
+//                    else t
+//                    
+//                cap.Add(t)
+//                outline.Add(t.Line01)     
+//                outline.Add(t.Line12)     
+//                outline.Add(t.Line20)              
+
             let group = [0..triangles.Length-1]
             let frontFacing = HashSet<int>()
             let backFacing = HashSet<int>()
@@ -1883,15 +1895,17 @@ module Outline =
             for i in group do
                 let t = triangles.[i]
                 let d = Vec.dot t.Normal (viewPos - t.P0).Normalized
-                if d > Constant.NegativeTinyValue then frontFacing.Add i |> ignore
-                elif d < Constant.PositiveTinyValue then backFacing.Add i |> ignore
+                if d >= 0.0 then frontFacing.Add i |> ignore
+                else backFacing.Add i |> ignore
+
+
 
 
             let unvisited = HashSet (group |> Seq.filter (fun i -> frontFacing.Contains i || backFacing.Contains i))
             
             while unvisited.Count > 0 do
                 let start = unvisited |> Seq.head
-                let front = frontFacing.Contains start
+                //let front = frontFacing.Contains start
 
                 let lines = List()
                 let part = List()
@@ -1924,9 +1938,9 @@ module Outline =
                         cnt <- cnt + 1
                         let t = triangles.[i]
                         if not (Fun.IsTiny t.Area) then
-                            let testSet =
-                                if front then frontFacing
-                                else backFacing
+//                            let testSet =
+//                                if front then frontFacing
+//                                else backFacing
     //
     //                        let t01 = edgeTriangles.[3*i+0] |> Set.filter (fun n -> testSet.Contains n)
     //                        let t12 = edgeTriangles.[3*i+1] |> Set.filter (fun n -> testSet.Contains n)
@@ -1994,40 +2008,52 @@ module Outline =
 //                                        rotO * rotT < 0.0
                             
 
-                            let t01 = Set.intersect t0 t1 |> Set.filter (fun n -> testSet.Contains n && valid 0 n)
-                            let t12 = Set.intersect t1 t2 |> Set.filter (fun n -> testSet.Contains n && valid 1 n)
-                            let t20 = Set.intersect t2 t0 |> Set.filter (fun n -> testSet.Contains n && valid 2 n)
+                            let t01 = Set.intersect t0 t1 
+                            let t12 = Set.intersect t1 t2 
+                            let t20 = Set.intersect t2 t0 
 
-                            //let front = frontFacing.Contains i
+                            let front = frontFacing.Contains i
 
+                            if Set.count t01 > 1 then
+                                if front then add t.Line10 |> ignore
+                                else add t.Line01
+                            else
+                                match t01 |> Set.filter (fun n -> valid 0 n) |> Set.toList with
+                                    | [l] ->  enqueue l
+                                    | _ ->
+                                        if front then add t.Line10 |> ignore
+                                        else add t.Line01 |> ignore
+
+ 
+         
+
+                            if Set.count t12 > 1 then
+                                if front then add t.Line21 |> ignore
+                                else add t.Line12
+                            else
+                                match t12 |> Set.filter (fun n -> valid 1 n) |> Set.toList with
+                                    | [l] ->  enqueue l
+                                    | l ->
+                                        if front then add t.Line21 |> ignore
+                                        else add t.Line12 |> ignore
+                        
+                            if Set.count t20 > 1 then
+                                if front then add t.Line02 |> ignore
+                                else add t.Line20
+                            else
+                                match t20 |> Set.filter (fun n -> valid 2 n) |> Set.toList with
+                                    | [l] ->  enqueue l
+                                    | l ->
+                                        if front then add t.Line02 |> ignore
+                                        else add t.Line20 |> ignore
+                                                       
+    
                             if front then addCap t.Reversed |> ignore
                             else addCap t |> ignore
 
-                            match Set.toList t01 with
-                                | [] ->
-                                    if front then add t.Line10 |> ignore
-                                    else add t.Line01 |> ignore
-                                | l -> 
-                                    l |> List.iter enqueue
-
-                            match Set.toList t12 with
-                                | [] ->
-                                    if front then add t.Line21 |> ignore
-                                    else add t.Line12 |> ignore
-                                | l -> 
-                                    l |> List.iter enqueue
-                        
-               
-                            match Set.toList t20 with
-                                | [] ->
-                                    if front then add t.Line02 |> ignore
-                                    else add t.Line20 |> ignore
-                                | l -> 
-                                    l |> List.iter enqueue
 
                 parts.Add (part |> Seq.toArray, lines |> Seq.toArray)
-                //unvisited.Clear()
-                //Log.warn "group: %d" cnt
+
 
 
 
@@ -2338,8 +2364,8 @@ let main args =
         sg |> Sg.trafo (Mod.constant trafo)
 
 
-
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\Geralt.obj"
+        
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\lara\lara.dae"
     let sg = Sg.AdapterNode(scene) |> normalizeTo (Box3d(-V3d.III, V3d.III))
 
 
@@ -2364,19 +2390,19 @@ let main args =
                 DefaultSurfaces.constantColor C4f.White |> toEffect
                 DefaultSurfaces.diffuseTexture |> toEffect
                 DefaultSurfaces.normalMap |> toEffect
-                DefaultSurfaces.lighting true |> toEffect
+                DefaultSurfaces.lighting false |> toEffect
               ]
 
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
            |> Sg.trafo (Mod.constant (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) ))
            |> Sg.translate 0.0 0.0 1.0
-//           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.6, -1.6, 0.0), V3d(0.1,0.2,0.3))))
-//           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.56, -1.57, 0.15), V3d(0.05,0.15,0.3))))
-//           |> Sg.andAlso (Sg.fullScreenQuad |> Sg.scale 0.5 |> Sg.transform (Trafo3d.RotationX Constant.PiHalf ) |> Sg.translate -2.0 -2.0 0.5)
+           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.6, -1.6, 0.0), V3d(0.1,0.2,0.3))))
+           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.56, -1.57, 0.15), V3d(0.05,0.15,0.3))))
+           |> Sg.andAlso (Sg.fullScreenQuad |> Sg.scale 0.5 |> Sg.transform (Trafo3d.RotationX Constant.PiHalf ) |> Sg.translate -2.0 -2.0 0.5)
            |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.constantColor C4f.White |> toEffect
-                DefaultSurfaces.lighting false |> toEffect
+                DefaultSurfaces.lighting true |> toEffect
             ]
 
 
@@ -2418,9 +2444,10 @@ let main args =
     let afterMain = RenderPass.after "bla" RenderPassOrder.Arbitrary RenderPass.main
     let final = RenderPass.after "blubb" RenderPassOrder.Arbitrary afterMain
     let afterFinal = RenderPass.after "blubber" RenderPassOrder.Arbitrary final
+    let afterafterFinal = RenderPass.after "blubber2" RenderPassOrder.Arbitrary afterFinal
     
     let group = Mod.init 0
-    let debug = true
+    let debug = false
     let currentGroup = outlineAndTriangles |> Mod.map2 (fun i (o,t,g) -> if i < 0 then (t,o) else g.[i % g.Count]) group
     let lines = if debug then currentGroup |> Mod.map snd else outlineAndTriangles |> Mod.map (fun (l,_,_) -> l)
     let capTriangles = if debug then currentGroup |> Mod.map fst else outlineAndTriangles |> Mod.map (fun (_,t,_) -> t)
@@ -2467,7 +2494,7 @@ let main args =
                 yield 
                     Sg.lines (Mod.constant C4b.Blue) (Mod.map snd currentGroup)
                         |> Sg.depthTest (Mod.constant DepthTestMode.None)
-                        |> Sg.pass afterFinal
+                        |> Sg.pass afterafterFinal
                         |> Sg.effect [
                             DefaultSurfaces.trafo |> toEffect
                             DefaultSurfaces.vertexColor |> toEffect
