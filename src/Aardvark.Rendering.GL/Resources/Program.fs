@@ -426,10 +426,19 @@ module ProgramExtensions =
                                 match m.Groups.["top"].Value with
                                     | "points" -> 
                                         [IndexedGeometryMode.PointList] |> Set.ofList |> Some
-                                    | "lines" | "lines_adjacency" ->
+
+                                    | "lines" ->
                                         [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
-                                    | "triangles" | "triangles_adjacency" ->
+
+                                    | "lines_adjacency" ->
+                                        [IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+
+                                    | "triangles"  ->
                                         [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
+                                    
+                                    | "triangles_adjacency" ->
+                                        [IndexedGeometryMode.TriangleAdjacencyList] |> Set.ofList |> Some
+                                    
                                     | v ->
                                        failwithf "unknown geometry shader input topology: %A" v 
                             else

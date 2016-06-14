@@ -2250,24 +2250,128 @@ module Outline =
         )
 
 
-
+[<ReflectedDefinition>]
 module VolumeShader =
     open FShade
 
     type Vertex = 
         {
-            [<Position>]        pos     : V4d
-            [<WorldPosition>]   wp      : V4d
-            [<Normal>]          n       : V3d
-            [<BiNormal>]        b       : V3d
-            [<Tangent>]         t       : V3d
-            [<Color>]           c       : V4d
-            [<TexCoord>]        tc      : V2d
-            [<FrontFacing>]     f : bool
+            [<Position>]                pos     : V4d
+            [<Semantic "Inf">]          inf     : V4d
+        }
+
+    type SimpleVertex = 
+        {
+            [<Position>]                p     : V4d
         }
 
     type UniformScope with
         member x.LightPos : V3d = uniform?LightPos
+
+    
+    let vertex (v : Vertex) =
+        vertex {
+            let p = uniform.ViewProjTrafo * v.pos
+            let l = uniform.ViewProjTrafo * V4d(uniform.LightLocation, 1.0)
+
+            return {
+                pos = p
+                inf = p - l
+            }
+        }
+
+    let isOutlineEdge (p0 : V4d) (p1 : V4d) (inside : V4d) (test : V4d) =
+        let light = V3d.Zero
+
+        let line = Vec.normalize (p1.XYZ - p0.XYZ)
+        let dir = Vec.normalize (p0.XYZ - light)
+        let n = Vec.cross dir line
+        
+        let hi = Vec.dot n inside.XYZ
+        let ht = Vec.dot n test.XYZ
+
+        hi * ht >= 0.0
+
+    let extrude (a : TriangleAdjacency<Vertex>) =
+        triangle {
+            let u = a.P1.inf - a.P0.inf |> Vec.xyz
+            let v = a.P2.inf - a.P0.inf |> Vec.xyz
+            let n = Vec.cross u v |> Vec.normalize
+            let ff = Vec.dot n a.P0.inf.XYZ > 0.0
+
+            if ff then
+                yield { p = a.P0.pos + V4d(0.0,0.0,0.001,0.0) }
+                yield { p = a.P2.pos + V4d(0.0,0.0,0.001,0.0) }
+                yield { p = a.P1.pos + V4d(0.0,0.0,0.001,0.0) }
+                restartStrip()
+                yield { p = a.P0.inf }
+                yield { p = a.P1.inf }
+                yield { p = a.P2.inf }
+                restartStrip()
+            else
+                yield { p = a.P0.pos + V4d(0.0,0.0,0.001,0.0) }
+                yield { p = a.P1.pos + V4d(0.0,0.0,0.001,0.0) }
+                yield { p = a.P2.pos + V4d(0.0,0.0,0.001,0.0) }
+                restartStrip()
+                yield { p = a.P0.inf }
+                yield { p = a.P2.inf }
+                yield { p = a.P1.inf }
+                restartStrip()
+
+
+            if isOutlineEdge a.P0.inf a.P1.inf a.P2.inf a.N01.inf then
+                // Line01 is an outline
+
+                if ff then 
+                    yield { p = a.P0.pos }
+                    yield { p = a.P1.pos }
+                    yield { p = a.P0.inf }
+                    yield { p = a.P1.inf }
+                    restartStrip()
+                else
+                    yield { p = a.P1.pos }
+                    yield { p = a.P0.pos }
+                    yield { p = a.P1.inf }
+                    yield { p = a.P0.inf }
+                    restartStrip()
+
+
+
+                ()
+
+            if isOutlineEdge a.P1.inf a.P2.inf a.P0.inf a.N12.inf then
+                // Line12 is an outline
+
+                if ff then 
+                    yield { p = a.P1.pos }
+                    yield { p = a.P2.pos }
+                    yield { p = a.P1.inf }
+                    yield { p = a.P2.inf }
+                    restartStrip()
+                else
+                    yield { p = a.P2.pos }
+                    yield { p = a.P1.pos }
+                    yield { p = a.P2.inf }
+                    yield { p = a.P1.inf }
+                    restartStrip()
+
+            if isOutlineEdge a.P2.inf a.P0.inf a.P1.inf a.N20.inf then
+                // Line20 is an outline
+                if ff then 
+                    yield { p = a.P2.pos }
+                    yield { p = a.P0.pos }
+                    yield { p = a.P2.inf }
+                    yield { p = a.P0.inf }
+                    restartStrip()
+                else
+                    yield { p = a.P0.pos }
+                    yield { p = a.P2.pos }
+                    yield { p = a.P0.inf }
+                    yield { p = a.P2.inf }
+                    restartStrip()
+
+        }
+
 
     [<ReflectedDefinition>]
     let closestHitPoint (vp : M44d) (o : V3d) (d : V3d) =
@@ -2367,6 +2471,9 @@ module VolumeShader =
         }
 
 
+
+
+
 module Camera =
     type Mode =
         | Main
@@ -2431,7 +2538,7 @@ module Camera =
         )
 
 
-        let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 50.0 (float s.X / float s.Y))
+        let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 500.0 (float s.X / float s.Y))
 
         {
             mainView = mainCam
@@ -2469,8 +2576,11 @@ let main args =
 
 
         
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\witcher\Geralt.obj"
-    let sg = Sg.AdapterNode(scene) |> normalizeTo (Box3d(-V3d.III, V3d.III))
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\sponza\sponza.obj"
+    let sg = 
+        Sg.AdapterNode(scene) 
+            |> normalizeTo (Box3d(-V3d.III, V3d.III))
+            
 
 
     let cam = Camera.viewProj ctrl
@@ -2479,7 +2589,7 @@ let main args =
 
     let floor =
         Sg.fullScreenQuad
-            |> Sg.scale 10.0
+            |> Sg.scale 200.0
             |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.constantColor C4f.White |> toEffect
@@ -2500,6 +2610,7 @@ let main args =
            |> normalizeTo (Box3d(-V3d.III, V3d.III))
            |> Sg.trafo (Mod.constant (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) ))
            |> Sg.translate 0.0 0.0 1.0
+           |> Sg.scale 20.0
 //           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.6, -1.6, 0.0), V3d(0.1,0.2,0.3))))
 //           |> Sg.andAlso (Sg.box' C4b.Red (Box3d.FromMinAndSize(V3d(-1.56, -1.57, 0.15), V3d(0.05,0.15,0.3))))
 //           |> Sg.andAlso (Sg.fullScreenQuad |> Sg.scale 0.5 |> Sg.transform (Trafo3d.RotationX Constant.PiHalf ) |> Sg.translate -2.0 -2.0 0.5)
@@ -2508,6 +2619,10 @@ let main args =
                 DefaultSurfaces.constantColor C4f.White |> toEffect
                 DefaultSurfaces.lighting true |> toEffect
             ]
+
+
+
+
 
 
     let viewPos = cam.testView |> Mod.map CameraView.location 
@@ -2533,6 +2648,9 @@ let main args =
         )
 
 
+
+
+
     let readStencil =
         StencilMode(
             IsEnabled = true,
@@ -2552,36 +2670,73 @@ let main args =
     
     let group = Mod.init 0
     let debug = false
-    let currentGroup = outlineAndTriangles |> Mod.map2 (fun i (o,t,g) -> if i < 0 then (t,o) else g.[i % g.Count]) group
-    let lines = if debug then currentGroup |> Mod.map snd else outlineAndTriangles |> Mod.map (fun (l,_,_) -> l)
-    let capTriangles = if debug then currentGroup |> Mod.map fst else outlineAndTriangles |> Mod.map (fun (_,t,_) -> t)
+
+    let mesh =
+        sg  |> TriangleSet.ofSg
+            |> ASet.toMod
+            |> Mod.map (Seq.filter (fun t -> not t.IsDegenerated) >> Seq.toArray >> TriangleMesh)
+
+    
+    let shadowVolumes =
+        let index = mesh |> Mod.map (fun m -> m.Adjacency.UnsafeCoerce<int>())
+        let positions = mesh |> Mod.map (fun m -> m.Positions |> Array.map V3f)
+
+        let drawCall = 
+            index |> Mod.map (fun i -> 
+                DrawCallInfo(
+                    FaceVertexCount = i.Length,
+                    InstanceCount = 1
+                )
+            )
+
+        
+        Sg.RenderNode(drawCall, Mod.constant IndexedGeometryMode.TriangleAdjacencyList)
+            |> Sg.index index
+            |> Sg.vertexAttribute DefaultSemantic.Positions positions
+            |> Sg.stencilMode (Mod.constant writeStencil)
+            |> Sg.writeBuffers (Set.ofList [ DefaultSemantic.Stencil ])
+            //|> Sg.blendMode (Mod.constant BlendMode.Blend)
+            |> Sg.pass afterMain
+            |> Sg.effect [
+                VolumeShader.vertex |> toEffect
+                VolumeShader.extrude |> toEffect
+                DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.0)) |> toEffect
+            ]
+
+
+
+//    let currentGroup = outlineAndTriangles |> Mod.map2 (fun i (o,t,g) -> if i < 0 then (t,o) else g.[i % g.Count]) group
+//    let lines = if debug then currentGroup |> Mod.map snd else outlineAndTriangles |> Mod.map (fun (l,_,_) -> l)
+//    let capTriangles = if debug then currentGroup |> Mod.map fst else outlineAndTriangles |> Mod.map (fun (_,t,_) -> t)
     let helpers =
         Sg.group' [ 
 
             let color = C4f(0.0,0.0,0.0,0.0)
 
-            let cap = 
-                Sg.triangles (Mod.constant C4b.White) capTriangles
-                    |> Sg.stencilMode (Mod.constant writeStencil)
-                    |> Sg.effect [
-                        VolumeShader.duplicateAtInf |> toEffect
-                        DefaultSurfaces.constantColor color |> toEffect
-                    ]
+//            let cap = 
+//                Sg.triangles (Mod.constant C4b.White) capTriangles
+//                    |> Sg.stencilMode (Mod.constant writeStencil)
+//                    |> Sg.effect [
+//                        VolumeShader.duplicateAtInf |> toEffect
+//                        DefaultSurfaces.constantColor color |> toEffect
+//                    ]
+//
+//            let sides = 
+//                Sg.lines (Mod.constant C4b.White) lines
+//                    |> Sg.stencilMode (Mod.constant writeStencil)
+//                    |> Sg.effect [
+//                        VolumeShader.extrudeToInf |> toEffect
+//                        DefaultSurfaces.constantColor color |> toEffect
+//                    ]
+//            yield 
+//                Sg.group' [cap; sides]
+//                    |> Sg.pass afterMain
+//                    |> Sg.writeBuffers (Set.ofList [ DefaultSemantic.Colors; DefaultSemantic.Stencil ])
+//                    |> Sg.blendMode (Mod.constant BlendMode.Blend)
+//                    |> Sg.uniform "LightPos" viewPos
+//                    |> Sg.depthTest (Mod.constant DepthTestMode.Less)
 
-            let sides = 
-                Sg.lines (Mod.constant C4b.White) lines
-                    |> Sg.stencilMode (Mod.constant writeStencil)
-                    |> Sg.effect [
-                        VolumeShader.extrudeToInf |> toEffect
-                        DefaultSurfaces.constantColor color |> toEffect
-                    ]
-            yield 
-                Sg.group' [cap; sides]
-                    |> Sg.pass afterMain
-                    |> Sg.writeBuffers (Set.ofList [ DefaultSemantic.Colors; DefaultSemantic.Stencil ])
-                    |> Sg.blendMode (Mod.constant BlendMode.Blend)
-                    |> Sg.uniform "LightPos" viewPos
-                    |> Sg.depthTest (Mod.constant DepthTestMode.Less)
+            yield shadowVolumes
 
             yield
                 Sg.fullScreenQuad
@@ -2594,26 +2749,26 @@ let main args =
                         DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.8)) |> toEffect
                     ]
 
-            if debug then
-                yield 
-                    Sg.lines (Mod.constant C4b.Blue) (Mod.map snd currentGroup)
-                        |> Sg.depthTest (Mod.constant DepthTestMode.None)
-                        |> Sg.pass afterafterFinal
-                        |> Sg.effect [
-                            DefaultSurfaces.trafo |> toEffect
-                            DefaultSurfaces.vertexColor |> toEffect
-                        ]
-
-                yield 
-                    Sg.triangles (Mod.constant C4b.Green) (currentGroup |> Mod.map fst)
-                        |> Sg.depthTest (Mod.constant DepthTestMode.None)
-                        |> Sg.cullMode (Mod.constant CullMode.None)
-                        |> Sg.pass afterFinal
-                        |> Sg.effect [
-                            DefaultSurfaces.trafo |> toEffect
-                            VolumeShader.frontBack |> toEffect
-                        ]
-                        |> Sg.fillMode (Mod.constant FillMode.Line)
+//            if debug then
+//                yield 
+//                    Sg.lines (Mod.constant C4b.Blue) (Mod.map snd currentGroup)
+//                        |> Sg.depthTest (Mod.constant DepthTestMode.None)
+//                        |> Sg.pass afterafterFinal
+//                        |> Sg.effect [
+//                            DefaultSurfaces.trafo |> toEffect
+//                            DefaultSurfaces.vertexColor |> toEffect
+//                        ]
+//
+//                yield 
+//                    Sg.triangles (Mod.constant C4b.Green) (currentGroup |> Mod.map fst)
+//                        |> Sg.depthTest (Mod.constant DepthTestMode.None)
+//                        |> Sg.cullMode (Mod.constant CullMode.None)
+//                        |> Sg.pass afterFinal
+//                        |> Sg.effect [
+//                            DefaultSurfaces.trafo |> toEffect
+//                            VolumeShader.frontBack |> toEffect
+//                        ]
+//                        |> Sg.fillMode (Mod.constant FillMode.Line)
 
         ]
 
@@ -2621,8 +2776,8 @@ let main args =
 
     let sg =
         sg  |> Sg.fillMode mode
-            |> Sg.andAlso helpers
             |> Sg.andAlso floor
+            |> Sg.andAlso helpers
             |> Sg.uniform "LightLocation" viewPos
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)

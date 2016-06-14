@@ -558,14 +558,7 @@ module OpenGLObjectInterpreter =
 
                 let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
-                let patchSize =
-                    match o.Mode.GetValue() with
-                        | IndexedGeometryMode.LineList -> 2
-                        | IndexedGeometryMode.PointList -> 1
-                        | IndexedGeometryMode.TriangleList -> 3
-                        | IndexedGeometryMode.LineStrip -> 2
-                        | IndexedGeometryMode.TriangleStrip -> 3
-                        | m -> failwithf "unsupported patch-mode: %A" m
+                let patchSize = o.Mode.GetValue() |> Translations.toPatchCount
 
                 let mode =
                     let igMode = o.Mode.GetValue()

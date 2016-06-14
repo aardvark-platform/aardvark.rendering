@@ -444,19 +444,22 @@ module Loader =
             let leaves =
                 if n.HasMeshes then
                     let leaves = 
-                        n.MeshIndices |> Seq.map (fun i -> 
+                        n.MeshIndices |> Seq.choose (fun i -> 
                             let mesh = state.meshes.[i]
                             let mat = state.materials.[state.meshMaterials.[i]]
 
-                            match mesh.geometry.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
-                                | (true, (:? array<V3f> as pos)) -> 
-                                    let bb = Box3d(pos |> Seq.map (fun p -> state.trafo.Forward.TransformPos(V3d(p))))
-                                    state.bounds.contents.ExtendBy(bb)
+                            if mat.name.ToLower().Contains "16___default" then
+                                None
+                            else
+                                match mesh.geometry.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
+                                    | (true, (:? array<V3f> as pos)) -> 
+                                        let bb = Box3d(pos |> Seq.map (fun p -> state.trafo.Forward.TransformPos(V3d(p))))
+                                        state.bounds.contents.ExtendBy(bb)
 
-                                | _ ->
-                                    ()
+                                    | _ ->
+                                        ()
 
-                            Material(mat, Leaf mesh)
+                                Some (Material(mat, Leaf mesh))
                         ) |> Seq.toList 
                     match leaves with
                         | [l] -> l

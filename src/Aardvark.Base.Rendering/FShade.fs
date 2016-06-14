@@ -100,9 +100,30 @@ module FShadeInterop =
 
     let private (|SplicedMod|_|) (e : Expr) =
         match e with
-            | Call(None, mi, [Value(target,ModOf(_))]) when mi.Name = "op_BangBang" ->
-                let t = mi.ReturnType
-                SplicedMod(t, target |> unbox<IMod>) |> Some 
+//            | Call(None, mi, [Value(target,ModOf(_))]) when mi.Name = "op_BangBang" ->
+//                let t = mi.ReturnType
+//                SplicedMod(t, target |> unbox<IMod>) |> Some 
+//
+//            | Call(None, mi, [PropertyGet(None, prop, [])]) when mi.Name = "op_BangBang" ->
+//                let t = mi.ReturnType
+//                SplicedMod(t, prop.GetValue null |> unbox<IMod>) |> Some 
+//
+//            | Call(None, mi, [FieldGet(None, field)]) when mi.Name = "op_BangBang" ->
+//                let t = mi.ReturnType
+//                SplicedMod(t, field.GetValue null |> unbox<IMod>) |> Some 
+
+            | Call(None, mi, [e]) when mi.Name = "op_BangBang" ->
+                match e.Type with
+                    | ModOf(_) ->
+                        try
+                            let v = Microsoft.FSharp.Linq.RuntimeHelpers.LeafExpressionConverter.EvaluateQuotation e
+                            let t = mi.ReturnType
+                            SplicedMod(t, v |> unbox<IMod>) |> Some 
+                        with _ ->
+                            None
+                    | _ ->
+                        None
+
             | _ -> None
 
     do FShade.Parameters.Uniforms.uniformDetectors <- [fun e ->

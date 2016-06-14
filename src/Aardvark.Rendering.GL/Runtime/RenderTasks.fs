@@ -125,7 +125,7 @@ module RenderTasks =
             GL.Check "could not set viewport"
 
 
-        abstract member Perform : unit -> FrameStatistics
+        abstract member Perform : Framebuffer -> FrameStatistics
         abstract member Release : unit -> unit
 
         member x.Dispose() =
@@ -165,7 +165,7 @@ module RenderTasks =
                 let innerStats = 
                     renderTaskLock.Run (fun () -> 
                         beforeRender.OnNext()
-                        let r = x.Perform ()
+                        let r = x.Perform fbo
                         afterRender.OnNext()
                         r
                     )
@@ -852,7 +852,7 @@ module RenderTasks =
 
 
 
-        override x.Perform() =
+        override x.Perform(fbo : Framebuffer) =
             let mutable stats = FrameStatistics.Zero
             let deltas = preparedObjectReader.GetDelta x
 
@@ -881,6 +881,11 @@ module RenderTasks =
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
                 let s = t.Run()
+                fbo.Signature.ColorAttachments |> Map.iter (fun i _ ->
+                    GL.ColorMask(i, true, true, true, true)
+                )
+                GL.DepthMask(true)
+                GL.StencilMask(0xFFFFFFFFu)
                 runStats <- s::runStats
 
             if current = 0 then
