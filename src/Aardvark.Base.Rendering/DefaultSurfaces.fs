@@ -286,6 +286,16 @@ module DefaultSurfaces =
             return (%f) v.c
         }
 
+    type InstanceVertex = { 
+        [<Position>]      pos   : V4d 
+        [<InstanceTrafo>] trafo : M44d
+    }
+
+    let instanceTrafo (v : InstanceVertex) =
+        vertex {
+            return { v with pos = v.trafo * v.pos }
+        }
+
 [<AutoOpen>]
 module EffectAPI =
     type private Effect = IMod<list<FShadeEffect>>
