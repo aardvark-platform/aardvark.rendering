@@ -20,7 +20,9 @@ Linux:
 
 Tutorials can be found here:
 https://github.com/vrvis/aardvark.rendering/tree/master/src/Demo/Examples
-e.g. interactive rendering "Hello World": https://github.com/vrvis/aardvark.rendering/blob/master/src/Demo/Examples/HelloWorld.fs
+- "Hello World": https://github.com/vrvis/aardvark.rendering/blob/master/src/Demo/Examples/HelloWorld.fs
+- a version of Hello World based on Aardvark.Rendering.Interactive (lightweight abstraction for application setup in examples): https://github.com/vrvis/aardvark.rendering/blob/master/src/Demo/Examples/Tutorial.fs ... Note that this file can be executed in the F# interactive shell
+
 
 
 [1] https://visualfsharp.codeplex.com/releases/view/161288
