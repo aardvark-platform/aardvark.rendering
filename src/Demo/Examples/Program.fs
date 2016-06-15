@@ -9,7 +9,8 @@ let main args =
     //Vulkan.Lod.run()  
     //Vulkan.Simple.run()  
 
-    //HelloWorld.run() |> ignore
+    //Playground.run() |> ignore // former hacked helloWorld example
+    HelloWorld.run() |> ignore
 
     //Examples.Tutorial.run()
     //Examples.Render2TexturePrimitive.run()
@@ -23,5 +24,5 @@ let main args =
     //Examples.Polygons.run()
     //Examples.TicTacToe.run()
     //Examples.AssimpInterop.run()
-    Examples.Shadows.run()
+    //Examples.Shadows.run()
     0
