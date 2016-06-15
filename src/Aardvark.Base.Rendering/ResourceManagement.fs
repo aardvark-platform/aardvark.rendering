@@ -353,7 +353,7 @@ type ResourceInputSet() =
             | _ ->
                 resourceInfos.[kind] <- dInfo
 
-    let updateOne (x : ResourceInputSet) (r : IResource) =
+    let updateOne (x : ResourceInputSet) (r : IResource)  =
         let oldInfo = r.Info
         let ret = r.Update x
         let newInfo = r.Info
@@ -411,7 +411,9 @@ type ResourceInputSet() =
 
         if needsUpdate then
             Log.warn "adding outdated resource: %A" r.Kind
-            updateDirty x |> ignore
+            x.EvaluateAlways null (fun () -> 
+                updateDirty x |> ignore
+            )
 
     member x.Remove (r : IResource) =
         lock all (fun () ->
