@@ -779,6 +779,7 @@ module RenderTasks =
         let inputSet = InputSet(this) 
         let resourceUpdateWatch = OpenGlStopwatch()
         let callStats = RenderObjectStats()
+        let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
 
 
         let add (ro : PreparedRenderObject) = 
@@ -858,26 +859,30 @@ module RenderTasks =
 
             let mutable current = 0
             let mutable query =  0 //GL.GenQuery()
-            GL.GetQuery(QueryTarget.PrimitivesGenerated, GetQueryParam.CurrentQuery, &current)
-            if current = 0 then
-                query <- GL.GenQuery()
-                GL.BeginQuery(QueryTarget.PrimitivesGenerated, query)
+
+            
+            primitivesGenerated.Restart()
+//
+//            GL.GetQuery(QueryTarget.PrimitivesGenerated, GetQueryParam.CurrentQuery, &current)
+//            if current = 0 then
+//                query <- GL.GenQuery()
+//                GL.BeginQuery(QueryTarget.PrimitivesGenerated, query)
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
                 let s = t.Run()
                 runStats <- s::runStats
+//
+//            if current = 0 then
+//                GL.EndQuery(QueryTarget.PrimitivesGenerated)
 
-            if current = 0 then
-                GL.EndQuery(QueryTarget.PrimitivesGenerated)
-
-
+            primitivesGenerated.Stop()
             GL.Sync()
             
-            let mutable primitives = 0L
-            if current = 0 then
-                GL.GetQueryObject(query, GetQueryObjectParam.QueryResult, &primitives)
-                GL.DeleteQuery(query)
+            let mutable primitives = primitivesGenerated.Value
+//            if current = 0 then
+//                GL.GetQueryObject(query, GetQueryObjectParam.QueryResult, &primitives)
+//                GL.DeleteQuery(query)
 
             stats + 
             !this.Scope.stats + 
