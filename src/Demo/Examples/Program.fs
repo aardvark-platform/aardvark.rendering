@@ -23,6 +23,5 @@ let main args =
     //Examples.Polygons.run()
     //Examples.TicTacToe.run()
     //Examples.AssimpInterop.run()
-    //Examples.Shadows.run()
-    Examples.PerformanceTest.run()
+    Examples.Shadows.run()
     0

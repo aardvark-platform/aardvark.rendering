@@ -65,10 +65,21 @@
     <Compile Include="ShaderTests.fs" />
     <Compile Include="MultiStageAgTest.fs" />
     <Compile Include="RenderingTests.fs" />
+    <Compile Include="PerformanceTest.fs" />
     <Compile Include="Program.fs" />
     <Content Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj">
+      <Name>Aardvark.Rendering.Interactive</Name>
+      <Project>{79d48400-f885-461a-b747-e3675a7ef2ef}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj">
+      <Name>Aardvark.Rendering.NanoVg</Name>
+      <Project>{054df582-d549-4da0-b74b-762ab2585d3f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
       <Name>Aardvark.Application.WinForms.GL</Name>
       <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
