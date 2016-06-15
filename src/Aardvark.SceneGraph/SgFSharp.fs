@@ -158,6 +158,15 @@ module SgFSharp =
         let depthTest (m : IMod<DepthTestMode>) (sg : ISg) =
             Sg.DepthTestModeApplicator(m, sg) :> ISg
 
+        let writeBuffers (buffers : Option<Set<Symbol>>) (sg : ISg) =
+            Sg.WriteBuffersApplicator(buffers, Mod.constant sg) :> ISg
+
+        let colorMask (maskRgba : IMod<bool * bool * bool * bool>) (sg : ISg) =
+            Sg.ColorWriteMaskApplicator(maskRgba, Mod.constant sg)
+
+        let depthMask (depthWriteEnabled : IMod<bool>) (sg : ISg) =
+            Sg.DepthWriteMaskApplicator(depthWriteEnabled, Mod.constant sg)
+
         let private arrayModCache = ConditionalWeakTable<IMod, IMod<Array>>()
 
         let private modOfArray (m : IMod<'a[]>) =

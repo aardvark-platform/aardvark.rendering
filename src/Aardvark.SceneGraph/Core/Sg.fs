@@ -221,6 +221,14 @@ module Sg =
         inherit AbstractApplicator(child)
         member x.WriteBuffers = buffers
 
+    type ColorWriteMaskApplicator(maskRgba : IMod<bool*bool*bool*bool>, child : IMod<ISg>) =
+        inherit AbstractApplicator(child)
+        member x.MaskRgba = maskRgba
+
+    type DepthWriteMaskApplicator(writeEnabled : IMod<bool>, child : IMod<ISg>) =
+        inherit AbstractApplicator(child)
+        member x.WriteEnabled = writeEnabled
+
     type Group(elements : seq<ISg>) =
         let aset = cset(elements)
 
