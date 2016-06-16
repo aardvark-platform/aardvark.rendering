@@ -78,6 +78,7 @@
     <Compile Include="ResourceManagement.fs" />
     <Compile Include="FShade.fs" />
     <Compile Include="DefaultSurfaces.fs" />
+    <Compile Include="GridCell.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

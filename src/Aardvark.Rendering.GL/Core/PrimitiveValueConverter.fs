@@ -931,9 +931,14 @@ module PrimitiveValueConverter =
 
     let private mapping = createCompiledMap allConversions
 
+    type private ArrayMapLambda<'a, 'b>(converter : 'a -> 'b) =
+        inherit FSharpFunc<Array, 'b[]>()
+
+        override x.Invoke(arr : Array) =
+            arr |> unbox |> Array.map converter
 
     let getConverter (inType : Type) (outType : Type) =
-        if outType.IsArray then
+        if outType.IsArray then 
             failwith "arrays are currently not implemented"
         else
             match mapping.TryGet(inType, outType) with
@@ -948,4 +953,27 @@ module PrimitiveValueConverter =
             f |> unbox
         else
             getConverter typeof<'a> typeof<'b> |> unbox
-             
+
+
+
+    type private ArrayConverterCache<'a>() =
+        static let conv = Dict<Type, Array -> 'a[]>()
+        static let t = typedefof<ArrayMapLambda<_,_>>
+
+        static member Get (inputType : Type) =
+            lock conv (fun () ->
+                conv.GetOrCreate(inputType, Func<Type, Array -> 'a[]>(fun inputType ->
+                    if inputType = typeof<'a> then
+                        unbox
+                    else
+                        let t = t.MakeGenericType [| inputType; typeof<'a> |]
+                        let ctor = t.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance ||| BindingFlags.CreateInstance ||| BindingFlags.Public ||| BindingFlags.Static, Type.DefaultBinder, [| FSharpType.MakeFunctionType(inputType, typeof<'a>) |], null)
+                        let conv = getConverter inputType typeof<'a>
+                        ctor.Invoke [|conv|] |> unbox<Array -> 'a[]>
+                ) )
+            )
+
+
+
+    let arrayConverter<'a> (inputType : Type) : Array -> 'a[] =
+        ArrayConverterCache<'a>.Get(inputType)

@@ -168,6 +168,34 @@ module Loader =
             member x.LocalBoundingBox(s : Scene) =
                 Mod.constant s.bounds
 
+            member x.GlobalBoundingBox(n : Node) : IMod<Box3d> =
+                match n with
+                    | Trafo(_,n) -> 
+                        n?GlobalBoundingBox()
+                    | Material(_,n) -> 
+                        n?GlobalBoundingBox()
+                    | Group(nodes) ->
+                        nodes |> List.map (fun n -> n?GlobalBoundingBox()) |> Mod.mapN (Seq.fold (curry Box3d.Union) Box3d.Invalid)
+                    | Empty ->
+                        Mod.constant Box3d.Invalid
+                    | Leaf mesh ->
+                        n.ModelTrafo |> Mod.map (fun t -> mesh.bounds.Transformed t)
+                            
+            member x.LocalBoundingBox(n : Node) : IMod<Box3d> =
+                match n with
+                    | Trafo(t,n) -> 
+                        let box : IMod<Box3d> = n?LocalBoundingBox()
+                        box |> Mod.map (fun b -> b.Transformed t)
+                    | Material(_,n) -> 
+                        n?LocalBoundingBox()
+                    | Group(nodes) ->
+                        nodes |> List.map (fun n -> n?LocalBoundingBox()) |> Mod.mapN (Seq.fold (curry Box3d.Union) Box3d.Invalid)
+                    | Empty ->
+                        Mod.constant Box3d.Invalid
+                    | Leaf mesh ->
+                        Mod.constant mesh.bounds
+                            
+
             member x.GlobalBoundingBox(s : Scene) =
                 s.ModelTrafo |> Mod.map (fun t -> s.bounds.Transformed t)
 
@@ -444,19 +472,22 @@ module Loader =
             let leaves =
                 if n.HasMeshes then
                     let leaves = 
-                        n.MeshIndices |> Seq.map (fun i -> 
+                        n.MeshIndices |> Seq.choose (fun i -> 
                             let mesh = state.meshes.[i]
                             let mat = state.materials.[state.meshMaterials.[i]]
 
-                            match mesh.geometry.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
-                                | (true, (:? array<V3f> as pos)) -> 
-                                    let bb = Box3d(pos |> Seq.map (fun p -> state.trafo.Forward.TransformPos(V3d(p))))
-                                    state.bounds.contents.ExtendBy(bb)
+                            if mat.name.ToLower().Contains "16___default" then
+                                None
+                            else
+                                match mesh.geometry.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
+                                    | (true, (:? array<V3f> as pos)) -> 
+                                        let bb = Box3d(pos |> Seq.map (fun p -> state.trafo.Forward.TransformPos(V3d(p))))
+                                        state.bounds.contents.ExtendBy(bb)
 
-                                | _ ->
-                                    ()
+                                    | _ ->
+                                        ()
 
-                            Material(mat, Leaf mesh)
+                                Some (Material(mat, Leaf mesh))
                         ) |> Seq.toList 
                     match leaves with
                         | [l] -> l
@@ -489,14 +520,15 @@ module Loader =
             let dir = Path.GetDirectoryName(file)
 
             let flags = 
-                Assimp.PostProcessSteps.Triangulate |||
                 Assimp.PostProcessSteps.CalculateTangentSpace |||
                 Assimp.PostProcessSteps.GenerateSmoothNormals |||
                 //Assimp.PostProcessSteps.FixInFacingNormals ||| 
-                Assimp.PostProcessSteps.JoinIdenticalVertices |||
-//                Assimp.PostProcessSteps.FlipUVs |||
-//                Assimp.PostProcessSteps.FlipWindingOrder |||
-                Assimp.PostProcessSteps.MakeLeftHanded
+                //Assimp.PostProcessSteps.JoinIdenticalVertices |||
+                Assimp.PostProcessSteps.FindDegenerates |||
+                //Assimp.PostProcessSteps.FlipUVs |||
+                //Assimp.PostProcessSteps.FlipWindingOrder |||
+                Assimp.PostProcessSteps.MakeLeftHanded ||| 
+                Assimp.PostProcessSteps.Triangulate
 
             let scene = ctx.ImportFile(file, flags)
 
@@ -512,8 +544,6 @@ module Loader =
                 }
 
             let root = traverse state scene.RootNode
-
-            let root = Trafo(Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero), root)
 
             {
                 root = root

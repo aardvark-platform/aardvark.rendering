@@ -105,29 +105,36 @@ type RuntimeExtensions private() =
         this.Upload(texture, 0, 0, source)
 
     [<Extension>]
+    static member CreateFramebufferSignature(this : IRuntime, l : SymbolDict<AttachmentSignature>) =
+        this.CreateFramebufferSignature(l, Set.empty)
+
+
+    [<Extension>]
     static member CreateFramebufferSignature(this : IRuntime, l : seq<Symbol * AttachmentSignature>) =
-        this.CreateFramebufferSignature(SymDict.ofSeq l)
+        this.CreateFramebufferSignature(SymDict.ofSeq l, Set.empty)
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IRuntime, l : list<Symbol * AttachmentSignature>) =
-        this.CreateFramebufferSignature(SymDict.ofList l)
+        this.CreateFramebufferSignature(SymDict.ofList l, Set.empty)
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IRuntime, l : Map<Symbol, AttachmentSignature>) =
-        this.CreateFramebufferSignature(SymDict.ofMap l)
+        this.CreateFramebufferSignature(SymDict.ofMap l, Set.empty)
 
 
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IRuntime, samples : int, l : seq<Symbol * RenderbufferFormat>) =
         this.CreateFramebufferSignature(
-            l |> Seq.map (fun (s,f) -> s, { format = f; samples = samples }) |> SymDict.ofSeq
+            l |> Seq.map (fun (s,f) -> s, { format = f; samples = samples }) |> SymDict.ofSeq,
+            Set.empty
         )
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IRuntime, l : seq<Symbol * RenderbufferFormat>) =
         this.CreateFramebufferSignature(
-            l |> Seq.map (fun (s,f) -> s, { format = f; samples = 1 }) |> SymDict.ofSeq
+            l |> Seq.map (fun (s,f) -> s, { format = f; samples = 1 }) |> SymDict.ofSeq,
+            Set.empty
         )
 
     [<Extension>]

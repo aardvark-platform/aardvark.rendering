@@ -1,22 +1,65 @@
 ﻿namespace Aardvark.Rendering.GL.Compiler
 
+#nowarn "9"
+
 open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
+open Microsoft.FSharp.NativeInterop
 
 type MetaInstruction = IMod<list<Instruction>>
 
+
+type CompilerInfo =
+    {
+        stats : ref<FrameStatistics>
+        currentContext : IMod<ContextHandle>
+        drawBuffers : nativeint
+        drawBufferCount : int
+        
+        structuralChange        : IMod<unit>
+        usedTextureSlots        : ref<RefSet<int>>
+        usedUniformBufferSlots  : ref<RefSet<int>>
+
+    }
+
+
 type CompilerState =
     {
-        currentContext      : IMod<ContextHandle>
+        info                : CompilerInfo
         instructions        : list<MetaInstruction>
+        disposeActions      : list<unit -> unit>
     }
 
 type Compiled<'a> = { runCompile : CompilerState -> CompilerState * 'a }
 
 [<AutoOpen>]
 module ``Compiled Builder`` =
+    let compilerState = { runCompile = fun s -> s, s }
+
+    let useTextureSlot (slot : int) =
+        { runCompile = fun s ->
+            let slots = s.info.usedTextureSlots
+            slots.Value <- RefSet.add slot slots.Value 
+
+            let remove () =
+                slots.Value <- RefSet.remove slot slots.Value 
+
+            { s with disposeActions = remove :: s.disposeActions }, ()
+        }
+
+    let useUniformBufferSlot (slot : int) =
+        { runCompile = fun s ->
+            let slots = s.info.usedUniformBufferSlots
+            slots.Value <- RefSet.add slot slots.Value 
+
+            let remove () =
+                slots.Value <- RefSet.remove slot slots.Value 
+
+            { s with disposeActions = remove :: s.disposeActions }, ()
+        }
+
     type CompiledBuilder() =
     
         member x.Bind(m : Compiled<'a>, f : 'a -> Compiled<'b>) =
@@ -35,12 +78,14 @@ module ``Compiled Builder`` =
 
         member x.Yield(m : IMod<ContextHandle -> list<Instruction>>) =
             { runCompile = fun s ->
-                let i = Mod.map2 (fun f ctx -> f ctx) m s.currentContext
+                let i = Mod.map2 (fun f ctx -> f ctx) m s.info.currentContext
                 { s with instructions = s.instructions @ [i] }, ()
             }
 
         member x.Yield(m : IMod<Instruction>) =
             m |> Mod.map (fun i -> [i]) |> x.Yield
+
+
 
         member x.Yield(m : Instruction) =
             [m] |> Mod.constant |> x.Yield
@@ -52,7 +97,7 @@ module ``Compiled Builder`` =
 
         member x.Yield(m : IMod<ContextHandle -> Instruction>) =
             { runCompile = fun s ->
-                let i = Mod.map2 (fun f ctx -> [f ctx]) m s.currentContext
+                let i = Mod.map2 (fun f ctx -> [f ctx]) m s.info.currentContext
                 { s with instructions = s.instructions @ [i] }, ()
             }
 

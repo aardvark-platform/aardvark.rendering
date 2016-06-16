@@ -631,9 +631,20 @@ module OpenGl =
         let DepthMask = getProcAddress "glDepthMask"
 
         /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/html/glDepthMask.xhtml
+        /// </summary>
+        let StencilMask = getProcAddress "glStencilMask"
+
+
+        /// <summary>
         /// https://www.opengl.org/sdk/docs/man/html/glColorMask.xhtml
         /// </summary>
         let ColorMask = getProcAddress "glColorMaski"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/html/glDrawBuffers.xhtml
+        /// </summary>
+        let DrawBuffers = getProcAddress "glDrawBuffers"
 
 
         let Uniform1iv = getProcAddress "glUniform1iv"
@@ -715,6 +726,7 @@ module OpenGl =
               MultiDrawElementsIndirect, "glMultiDrawElementsIndirect"
               DepthMask, "glDepthMask"
               ColorMask, "glColorMaski"
+              DrawBuffers, "glDrawBuffers"
 
             ] |> Map.ofList
 
@@ -790,4 +802,6 @@ module OpenGl =
         let MultiDrawElementsIndirect : int -> int -> nativeint -> int -> int -> unit = wrap Pointers.MultiDrawElementsIndirect
 
         let DepthMask : int -> unit = wrap Pointers.DepthMask
+        let StencilMask : int -> unit = wrap Pointers.StencilMask
         let ColorMask : int -> int  -> int -> int -> int -> unit = wrap Pointers.ColorMask
+        let DrawBuffers : int -> nativeint -> unit = wrap Pointers.DrawBuffers

@@ -89,6 +89,7 @@ type PreparedRenderObject =
             | None -> ()
 
     interface IPreparedRenderObject with
+        member x.Id = x.original.Id
         member x.RenderPass = x.original.RenderPass
         member x.AttributeScope = x.original.AttributeScope
         member x.Update(caller) = x.Update(caller) |> x.ctx.DefaultQueue.RunSynchronously

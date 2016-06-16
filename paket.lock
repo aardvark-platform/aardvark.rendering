@@ -23,7 +23,7 @@ NUGET
       Aardvark.Base.Essentials (2.1.2)
       Aardvark.Base.FSharp (2.1.2)
       Aardvark.Base.Incremental (2.1.2)
-    FShade (2.1.3)
+    FShade (2.1.4)
       Aardvark.Base (>= 2.1 < 2.2)
       Aardvark.Base.FSharp (>= 2.1 < 2.2)
     GLSLangSharp (0.2.4)
@@ -38,6 +38,7 @@ NUGET
   specs:
     AssimpNet (3.3.1)
     BruTile (0.12)
+    Clipper (6.2.10)
     CommonMark.NET (0.12)
     DevILSharp (0.0.13)
     DockPanelSuite (2.10.0-beta2)
@@ -158,8 +159,8 @@ NUGET
 GITHUB
   remote: vrvis/Aardvark.Fake
   specs:
-    FULLPROJECT (9f89cc130281fe28376f0e03af71dc4e00297a5b)
-      FAKE
-      Mono.Cecil
-      Paket.Core
+    FULLPROJECT (7c479e6e1818b2b868bd2443e79c7afbc68d872f)
+      FAKE (< 5.0)
+      Mono.Cecil (<= 0.9.5.4)
+      Paket.Core (< 4.0)
       SourceLink.Fake

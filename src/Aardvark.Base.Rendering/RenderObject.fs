@@ -40,6 +40,7 @@ module private RenderObjectHelpers =
     let nopActivate () = nopDisposable
 
 type IRenderObject =
+    abstract member Id : int
     abstract member RenderPass : RenderPass
     abstract member AttributeScope : Ag.Scope
 
@@ -77,6 +78,7 @@ type RenderObject =
 
     }  
     interface IRenderObject with
+        member x.Id = x.Id
         member x.RenderPass = x.RenderPass
         member x.AttributeScope = x.AttributeScope
 
@@ -181,6 +183,7 @@ type MultiRenderObject(children : list<IRenderObject>) =
     member x.Children = children
 
     interface IRenderObject with
+        member x.Id = first.Value.Id
         member x.RenderPass = first.Value.RenderPass
         member x.AttributeScope = first.Value.AttributeScope
 

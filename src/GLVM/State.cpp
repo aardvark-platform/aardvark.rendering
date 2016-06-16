@@ -12,8 +12,10 @@ State::State()
 	currentActiveTexture = -1;
 	currentDepthFunc = -1;
 	currentCullFace = -1;
-	currentDepthMask = -1;
+	currentDepthMask = 1;
+	currentStencilMask = 0xFFFFFFFF;
 	currentColorMask = std::unordered_map<intptr_t, int>();
+	currentDrawBuffers = std::vector<GLenum>();
 
 	currentSampler = std::unordered_map<int, intptr_t>();
 	currentTexture = std::unordered_map<GLenum, std::unordered_map<int, intptr_t>>();
@@ -42,6 +44,11 @@ void State::Reset()
 	currentActiveTexture = -1;
 	currentDepthFunc = -1;
 	currentCullFace = -1;
+	currentDepthMask = 1;
+	currentStencilMask = 0xFFFFFFFF;
+	currentColorMask.clear();
+	currentDrawBuffers.clear();
+
 	currentSampler.clear();
 	currentTexture.clear();
 	currentBuffer.clear();
@@ -99,6 +106,20 @@ bool State::ShouldSetActiveTexture(intptr_t unit)
 	}
 }
 
+bool State::ShouldSetStencilMask(intptr_t mask)
+{
+	if (currentStencilMask != mask)
+	{
+		currentStencilMask = mask;
+		return true;
+	}
+	else
+	{
+		removedInstructions++;
+		return false;
+	}
+}
+
 bool State::ShouldSetDepthMask(intptr_t mask)
 {
 	if (currentDepthMask != mask)
@@ -111,6 +132,35 @@ bool State::ShouldSetDepthMask(intptr_t mask)
 		removedInstructions++;
 		return false;
 	}
+}
+
+bool State::ShouldSetDrawBuffers(GLuint n, const GLenum* buffers)
+{
+	if (currentDrawBuffers.size() == n)
+	{
+		bool equal = true;
+		for (GLuint i = 0; i < n; i++)
+		{
+			if (buffers[i] != currentDrawBuffers[i])
+			{
+				equal = false;
+				break;
+			}
+		}
+		if (equal)
+		{
+			removedInstructions++;
+			return false;
+		}
+
+	}
+
+	currentDrawBuffers.clear();
+	for (GLuint i = 0; i < n; i++)
+	{
+		currentDrawBuffers.push_back(buffers[i]);
+	}
+	return true;
 }
 
 bool State::ShouldSetColorMask(intptr_t index, intptr_t r, intptr_t g, intptr_t b, intptr_t a)

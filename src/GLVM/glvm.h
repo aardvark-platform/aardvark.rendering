@@ -53,6 +53,7 @@ static PFNGLVERTEXATTRIB4FPROC				glVertexAttrib4f;
 static PFNGLMULTIDRAWARRAYSINDIRECTPROC		glMultiDrawArraysIndirect;
 static PFNGLMULTIDRAWELEMENTSINDIRECTPROC	glMultiDrawElementsIndirect;
 static PFNGLCOLORMASKIPROC					glColorMaski;
+static PFNGLDRAWBUFFERSPROC					glDrawBuffers;
 
 // enum holding the available instruction codes
 typedef enum {
@@ -110,7 +111,9 @@ typedef enum {
 	MultiDrawArraysIndirect = 52,
 	MultiDrawElementsIndirect = 53,
 	DepthMask = 54,
-	ColorMask = 55
+	ColorMask = 55,
+	StencilMask = 56,
+	DrawBuffers = 57
 
 } InstructionCode;
 

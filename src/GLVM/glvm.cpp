@@ -82,6 +82,7 @@ DllExport(void) vmInit()
 	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
 	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
 	glColorMaski = (PFNGLCOLORMASKIPROC)getProc("glColorMaski");
+	glDrawBuffers = (PFNGLDRAWBUFFERSPROC)getProc("glDrawBuffers");
 
 }
 
@@ -312,6 +313,12 @@ void runInstruction(Instruction* i)
 	case ColorMask:
 		glColorMaski((GLuint)i->Arg0, (GLboolean)i->Arg1, (GLboolean)i->Arg2, (GLboolean)i->Arg3, (GLboolean)i->Arg4);
 		break;
+	case StencilMask:
+		glStencilMask((GLuint)i->Arg0);
+		break;
+	case DrawBuffers:
+		glDrawBuffers((GLuint)i->Arg0, (const GLenum*)i->Arg1);
+		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
 		break;
@@ -472,11 +479,23 @@ Statistics runRedundancyChecks(Fragment* frag)
 						glDepthMask((GLboolean)arg0);
 					}
 					break;
-
+				case StencilMask:
+					if (state.ShouldSetStencilMask(arg0))
+					{
+						glStencilMask((GLuint)arg0);
+					}
+					break;
 				case ColorMask:
 					if (state.ShouldSetColorMask(arg0, i->Arg1, i->Arg2, i->Arg3, i->Arg4))
 					{
 						glColorMaski((GLuint)arg0, (GLboolean)i->Arg1, (GLboolean)i->Arg2, (GLboolean)i->Arg3, (GLboolean)i->Arg4);
+					}
+					break;
+
+				case DrawBuffers:
+					if (state.ShouldSetDrawBuffers((GLuint)arg0, (const GLenum*)i->Arg1))
+					{
+						glDrawBuffers((GLsizei)arg0, (const GLenum*)i->Arg1);
 					}
 					break;
 

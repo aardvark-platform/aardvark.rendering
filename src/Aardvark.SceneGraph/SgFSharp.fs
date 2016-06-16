@@ -93,7 +93,6 @@ module SgFSharp =
         let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) = 
             texture DefaultSemantic.DiffuseColorTexture (Mod.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
-
         let scopeDependentTexture (sem : Symbol) (tex : Scope -> IMod<ITexture>) (sg : ISg) =
             Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sem, fun s -> tex s :> IMod]), sg) :> ISg
 
@@ -157,6 +156,9 @@ module SgFSharp =
 
         let depthTest (m : IMod<DepthTestMode>) (sg : ISg) =
             Sg.DepthTestModeApplicator(m, sg) :> ISg
+
+        let writeBuffers' (buffers : Set<Symbol>) (sg : ISg) =
+            Sg.WriteBuffersApplicator(Some buffers, Mod.constant sg) :> ISg
 
         let writeBuffers (buffers : Option<Set<Symbol>>) (sg : ISg) =
             Sg.WriteBuffersApplicator(buffers, Mod.constant sg) :> ISg

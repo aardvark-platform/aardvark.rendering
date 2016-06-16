@@ -38,7 +38,7 @@ type IPreparedRenderObject =
 type IRuntime =
     abstract member ContextLock : IDisposable
 
-    abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> -> IFramebufferSignature
+    abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * Set<Symbol> -> IFramebufferSignature
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
 
@@ -72,6 +72,8 @@ type IRuntime =
     abstract member ResolveMultisamples : IFramebufferOutput * IBackendTexture * ImageTrafo -> unit
     abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
     abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
+    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
+    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
 
 and IRenderTask =
     inherit IDisposable
@@ -86,6 +88,7 @@ and [<AllowNullLiteral>] IFramebufferSignature =
     abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
     abstract member DepthAttachment : Option<AttachmentSignature>
     abstract member StencilAttachment : Option<AttachmentSignature>
+    abstract member Images : Map<int, Symbol>
 
     abstract member IsAssignableFrom : other : IFramebufferSignature -> bool
 
@@ -112,6 +115,7 @@ and [<Flags>]ColorWriteMask =
 and OutputDescription =
     {
         framebuffer : IFramebuffer
+        images : Map<Symbol, BackendTextureOutputView>
         viewport    : Box2i
         colorWrite : Map<Symbol,ColorWriteMask>
         depthWrite : bool
@@ -132,6 +136,7 @@ module OutputDescription =
     let ofFramebuffer (framebuffer : IFramebuffer) =
         { 
             framebuffer = framebuffer
+            images = Map.empty
             viewport = Box2i.FromMinAndSize(V2i.OO, framebuffer.Size)
             colorWrite = Map.empty 
             depthWrite = true

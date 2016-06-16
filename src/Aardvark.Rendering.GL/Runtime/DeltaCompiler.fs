@@ -1,12 +1,16 @@
 ﻿namespace Aardvark.Rendering.GL.Compiler
 
+#nowarn "9"
+
+open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.Incremental
 open Aardvark.Base
+open Aardvark.Base.Runtime
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
-
 module DeltaCompiler =
+
 
     /// determines if all uniforms (given in values) are equal to the uniforms
     /// of the given RenderObject
@@ -24,17 +28,23 @@ module DeltaCompiler =
 
             | [] -> true
 
-    let internal compileDeltaInternal (prev : PreparedRenderObject) (me : PreparedRenderObject) =
+    let compileDelta (prev : PreparedRenderObject) (me : PreparedRenderObject) =
         compiled {
 
             // set the output-buffers
             if prev.DepthBufferMask <> me.DepthBufferMask then
                 yield Instructions.setDepthMask me.DepthBufferMask
 
-            if prev.ColorBufferMasks <> me.ColorBufferMasks then
-                match me.ColorBufferMasks with
-                    | Some masks -> yield Instructions.setColorMasks masks
-                    | None -> yield Instructions.setColorMasks (List.init me.ColorAttachmentCount (fun _ -> V4i.IIII))
+            if prev.StencilBufferMask <> me.StencilBufferMask then
+                yield Instructions.setStencilMask me.StencilBufferMask
+
+            if prev.DrawBuffers <> me.DrawBuffers then
+                match me.DrawBuffers with
+                    | None -> 
+                        let! s = compilerState
+                        yield Instruction.DrawBuffers s.info.drawBufferCount s.info.drawBuffers
+                    | Some b ->
+                        yield Instruction.DrawBuffers b.Count (NativePtr.toNativeInt b.Buffers)
 
             //set all modes if needed
             if prev.DepthTest <> me.DepthTest && me.DepthTest <> null then
@@ -58,6 +68,8 @@ module DeltaCompiler =
 
             // bind all uniform-buffers (if needed)
             for (id,ub) in Map.toSeq me.UniformBuffers do
+                do! useUniformBufferSlot id
+
                 match Map.tryFind id prev.UniformBuffers with
                     | Some old when old = ub -> 
                         // the same UniformBuffer has already been bound
@@ -68,6 +80,8 @@ module DeltaCompiler =
             // bind all textures/samplers (if needed)
             let latestSlot = ref prev.LastTextureSlot
             for (id,(tex,sam)) in Map.toSeq me.Textures do
+                do! useTextureSlot id
+
                 let texEqual, samEqual =
                     match Map.tryFind id prev.Textures with
                         | Some (ot, os) -> (ot = tex), (os = sam)
@@ -117,6 +131,102 @@ module DeltaCompiler =
 
         }   
 
+    let compileFull (me : PreparedRenderObject) =
+        compileDelta PreparedRenderObject.empty me
+
+    let compileEpilog (prev : Option<PreparedMultiRenderObject>) =
+        compiled {
+            let! s = compilerState
+            let textures = s.info.structuralChange |> Mod.map (fun () -> !s.info.usedTextureSlots)
+            let ubos = s.info.structuralChange |> Mod.map (fun () -> !s.info.usedUniformBufferSlots)
+
+            match prev with
+                | Some prev ->
+                    if not prev.Last.DepthBufferMask then
+                        yield Instruction.DepthMask 1
+
+                    if not prev.Last.StencilBufferMask then
+                        yield Instruction.StencilMask 0xFFFFFFFF
+
+                    if Option.isSome prev.Last.DrawBuffers then
+                        let! s = compilerState
+                        yield Instruction.DrawBuffers s.info.drawBufferCount s.info.drawBuffers
+                | _ ->
+                    let! s = compilerState
+                    yield Instruction.DepthMask 1
+                    yield Instruction.StencilMask 0xFFFFFFFF
+                    yield Instruction.DrawBuffers s.info.drawBufferCount s.info.drawBuffers
+
+            yield
+                textures |> Mod.map (fun textures ->
+                    textures |> RefSet.toList |> List.collect (fun i ->
+                        [
+                            Instructions.setActiveTexture i
+                            Instruction.BindSampler i 0
+                            Instruction.BindTexture (int OpenGl.Enums.TextureTarget.Texture2D) 0
+                        ]
+                    )
+                )
+
+            yield
+                ubos |> Mod.map (fun ubos ->
+                    ubos |> RefSet.toList |> List.map (fun i ->
+                        Instruction.BindBufferBase (int OpenGl.Enums.BufferTarget.UniformBuffer) i 0
+                    )
+                )
+
+            yield Instruction.BindVertexArray 0
+            yield Instruction.BindProgram 0
+            yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer) 0
+
+            
+        }    
+
+    let private toCode (s : CompilerState) =
+        let myStats = ref FrameStatistics.Zero
+        let stats = s.info.stats
+        let calls =
+            s.instructions |> List.map (fun i ->
+                match i.IsConstant with
+                    | true -> 
+                        let i = i.GetValue()
+                        let cnt = List.length i
+                        let dStats = { FrameStatistics.Zero with InstructionCount = float cnt; ActiveInstructionCount = float cnt }
+                        stats := !stats + dStats
+                        myStats := !myStats + dStats
+
+                        Mod.constant i
+
+                    | false -> 
+                        let mutable oldCount = 0
+                        i |> Mod.map (fun i -> 
+                            let newCount = List.length i
+                            let dCount = newCount - oldCount
+                            oldCount <- newCount
+                            let dStats = { FrameStatistics.Zero with InstructionCount = float dCount; ActiveInstructionCount = float dCount }
+
+                            stats := !stats + dStats
+                            myStats := !myStats + dStats
+                            i
+                        )
+            )
+
+
+        { new IAdaptiveCode<Instruction> with
+            member x.Content = calls
+            member x.Dispose() =    
+                transact (fun () ->
+                    for d in s.disposeActions do d()
+                )
+
+                for o in s.instructions do
+                    for i in o.Inputs do
+                        i.RemoveOutput o
+
+                stats := !stats - !myStats
+                myStats := FrameStatistics.Zero
+
+        }
 
 
     /// <summary>
@@ -125,53 +235,23 @@ module DeltaCompiler =
     /// This function is the core-ingredient making our rendering-system
     /// fast as hell \o/.
     /// </summary>
-    let compileDelta (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternal prev rj
-        let (s,()) =
-            c.runCompile {
-                currentContext = currentContext
-                instructions = []
-            }
-
-        s.instructions
 
     /// <summary>
     /// compileFull compiles all instructions needed to render [rj] 
     /// making no assumpltions about the previous GL state.
     /// </summary>
-    let compileFull (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternal PreparedRenderObject.empty rj
 
+
+
+
+    let run (info : CompilerInfo) (c : Compiled<unit>) =
         let (s,()) =
             c.runCompile {
-                currentContext = currentContext
+                info = info
                 instructions = []
+                disposeActions = []
             }
 
-        s.instructions
+        s |> toCode
 
 
-module internal DeltaCompilerDebug =
-    open DeltaCompiler
-
-    let compileDeltaDebugNoResources (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternal prev rj
-        let (s,()) =
-            c.runCompile {
-                currentContext = currentContext
-                instructions = []
-            }
-
-        s.instructions |> List.collect (fun mi -> mi.GetValue())
-
-    let compileFullDebugNoResources (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternal PreparedRenderObject.empty rj
-
-        let (s,()) =
-            c.runCompile {
-                currentContext = currentContext
-                instructions = []
-            }
-
-        
-        s.instructions |> List.collect (fun mi -> mi.GetValue())

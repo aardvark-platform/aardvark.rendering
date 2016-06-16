@@ -235,8 +235,8 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                 r :> IResource<_>
             | None -> x.GetOrCreateLocal(key, create)
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
-        let key = [dataMod :> obj]
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+        let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
                 match dataMod with
@@ -314,6 +314,8 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                     }
                 )
 
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
+        x.GetOrCreate(dataMod, [], desc)
 
     member x.Count = store.Count
     member x.Clear() = store.Clear()

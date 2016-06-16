@@ -8,6 +8,8 @@ type IndexedGeometryMode =
     | LineList = 2
     | TriangleStrip = 3
     | TriangleList = 4
+    | TriangleAdjacencyList = 5
+    | LineAdjacencyList = 6
 
 type IndexedGeometry =
     class

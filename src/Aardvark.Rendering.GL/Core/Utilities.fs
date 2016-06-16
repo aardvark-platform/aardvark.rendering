@@ -55,11 +55,50 @@ module UniformTypePatterns =
             ActiveUniformType.UnsignedIntSamplerCubeMapArray
         ]
 
+    let private imageTypes =
+        HashSet [
+            ActiveUniformType.Image1D
+            ActiveUniformType.Image1DArray
+            ActiveUniformType.Image2D
+            ActiveUniformType.Image2DArray
+            ActiveUniformType.Image2DMultisample
+            ActiveUniformType.Image2DMultisampleArray
+            ActiveUniformType.Image2DRect
+            ActiveUniformType.Image3D
+            ActiveUniformType.ImageBuffer
+            ActiveUniformType.ImageCube
+            ActiveUniformType.ImageCubeMapArray
+            ActiveUniformType.IntImage1D
+            ActiveUniformType.IntImage1DArray
+            ActiveUniformType.IntImage2D
+            ActiveUniformType.IntImage2DArray
+            ActiveUniformType.IntImage2DMultisample
+            ActiveUniformType.IntImage2DMultisampleArray
+            ActiveUniformType.IntImage2DRect
+            ActiveUniformType.IntImage3D
+            ActiveUniformType.IntImageBuffer
+            ActiveUniformType.UnsignedIntImage1D
+            ActiveUniformType.UnsignedIntImage1DArray
+            ActiveUniformType.UnsignedIntImage2D
+            ActiveUniformType.UnsignedIntImage2DArray
+            ActiveUniformType.UnsignedIntImage2DMultisample
+            ActiveUniformType.UnsignedIntImage2DMultisampleArray
+            ActiveUniformType.UnsignedIntImage2DRect
+            ActiveUniformType.UnsignedIntImage3D
+            ActiveUniformType.UnsignedIntImageBuffer
+        ]
+
     let (|SamplerType|_|) (a : ActiveUniformType) =
         if samplerTypes.Contains a then
             Some ()
         else
             None   
+
+    let (|ImageType|_|) (a : ActiveUniformType) =
+        if imageTypes.Contains a then
+            Some ()
+        else
+            None  
 
     let (|FloatMatrixType|_|) (a : ActiveUniformType) =
         if a = ActiveUniformType.FloatMat2 then Some (2,2)
