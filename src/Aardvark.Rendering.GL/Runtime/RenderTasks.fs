@@ -21,44 +21,45 @@ module RenderTasks =
 
 
     [<AbstractClass>]
-    type AbstractRenderTask(ctx : Context, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>) =
+    type AbstractRenderTask(manager : ResourceManager, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
         inherit AdaptiveObject()
+        let ctx = manager.Context
+        let renderTaskLock = RenderTaskLock()
+        let manager = ResourceManager(manager.Context, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
+        let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
+        let structureChanged = Mod.custom ignore
+
+
         let mutable isDisposed = false
         let currentContext = Mod.init Unchecked.defaultof<ContextHandle>
-        let drawBuffers, drawBufferCount = 
-            let arr = 
-                fboSignature.ColorAttachments 
-                    |> Map.toSeq 
-                    |> Seq.collect (fun (i,(s,_)) -> 
-                        if s = DefaultSemantic.Colors then [int FramebufferAttachment.BackLeft; int FramebufferAttachment.ColorAttachment0 + i]
-                        else [int FramebufferAttachment.ColorAttachment0 + i]
-                    ) 
-                    |> Set.ofSeq
-                    |> Set.toArray
 
-            let ptr = NativePtr.alloc arr.Length
-            for i in 0..arr.Length-1 do
-                NativePtr.set ptr i arr.[i]
 
-            (NativePtr.toNativeInt ptr, arr.Length)
+        let scope =
+            { 
+                currentContext = currentContext
+                stats = ref FrameStatistics.Zero
+                drawBuffers = NativePtr.toNativeInt allBuffers.Buffers
+                drawBufferCount = allBuffers.Count 
+                usedTextureSlots = ref RefSet.empty
+                usedUniformBufferSlots = ref RefSet.empty
+                structuralChange = structureChanged
+            }
 
-        let scope =  { currentContext = currentContext; stats = ref FrameStatistics.Zero; drawBuffers = drawBuffers; drawBufferCount = drawBufferCount }
         let mutable frameId = 0UL
 //        let drawBuffers = 
 //            fboSignature.ColorAttachments 
 //                |> Map.toList 
 //                |> List.map (fun (i,_) -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
 //                |> List.toArray
-        let renderTaskLock = RenderTaskLock()
-
+        
         let beforeRender = new System.Reactive.Subjects.Subject<unit>()
         let afterRender = new System.Reactive.Subjects.Subject<unit>()
 
         member x.BeforeRender = beforeRender
         member x.AfterRender = afterRender
 
-        member internal x.DrawBuffers = drawBuffers
-        member internal x.DrawBufferCount = drawBufferCount
+        member x.StructureChanged() =
+            transact (fun () -> structureChanged.MarkOutdated())
 
         member private x.pushDebugOutput() =
             let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
@@ -92,8 +93,6 @@ module RenderTasks =
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
         
-                GL.DrawBuffers(drawBufferCount, NativePtr.ofNativeInt drawBuffers)
-                GL.Check "DrawBuffers errored"
 
 
                 GL.DepthMask(true)
@@ -151,7 +150,6 @@ module RenderTasks =
 
         member x.Dispose() =
             if not isDisposed then
-                System.Runtime.InteropServices.Marshal.FreeHGlobal drawBuffers
                 isDisposed <- true
                 let dummy = ref 0
                 currentContext.Outputs.Consume(dummy) |> ignore
@@ -162,6 +160,7 @@ module RenderTasks =
         member x.FramebufferSignature = fboSignature
         member x.Scope = scope
         member x.RenderTaskLock = renderTaskLock
+        member x.ResourceManager = manager
 
         member x.Run(caller : IAdaptiveObject, desc : OutputDescription) =
             let fbo = desc.framebuffer // TODO: fix outputdesc
@@ -263,7 +262,7 @@ module RenderTasks =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    type SortKey = RenderPass * list<int>
+    type SortKey = list<int>
 
     type ProjectionComparer(projections : list<RenderObject -> IMod>) =
 
@@ -285,6 +284,7 @@ module RenderTasks =
                     ids.Add(m, ref id)
                     id
 
+        let maxKey = Int32.MaxValue :: (projections |> List.map (fun _ -> Int32.MaxValue))
 
         let keys = ConditionalWeakTable<IRenderObject, SortKey>()
         let project (ro : IRenderObject) =
@@ -293,12 +293,12 @@ module RenderTasks =
             match keys.TryGetValue ro with
                 | (true, key) -> key
                 | _ ->
-                    let projected = projections |> List.map (fun p -> p ro |> getId)
-                    let pass = ro.RenderPass
-
-                    let key = (pass, projected)
-                    keys.Add(ro, key)
-                    key
+                    if ro.Id < 0 then
+                        maxKey
+                    else
+                        let key = projections |> List.map (fun p -> p ro |> getId)
+                        keys.Add(ro, key)
+                        key
 
 
         interface IComparer<IRenderObject> with
@@ -309,12 +309,14 @@ module RenderTasks =
 
     type StaticOrderSubTask(parent : AbstractRenderTask) =
         inherit AbstractSubTask(parent)
-
-        let objects = CSet.empty
+        static let empty = new PreparedMultiRenderObject([PreparedRenderObject.empty])
+        let objects = CSet.ofList [empty]
 
         let mutable hasProgram = false
         let mutable currentConfig = BackendConfiguration.Default
         let mutable program : IRenderProgram = Unchecked.defaultof<_>
+        let structuralChange = Mod.custom ignore
+        let scope = { parent.Scope with structuralChange = structuralChange }
 
         // TODO: add AdaptiveProgram creator not taking a separate key but simply comparing the values
         let objectsWithKeys = objects |> ASet.map (fun o -> (o :> IRenderObject, o))
@@ -334,10 +336,21 @@ module RenderTasks =
                             ProjectionComparer(projections) :> IComparer<_>
 
                         | RenderObjectSorting.Static comparer -> 
-                            comparer
+                            { new IComparer<_> with 
+                                member x.Compare(l, r) =
+                                    if l.Id = r.Id then 0
+                                    elif l.Id < 0 then -1
+                                    elif r.Id < 0 then 1
+                                    else comparer.Compare(l,r)
+                            }
 
                         | Arbitrary ->
-                            { new IComparer<_> with member x.Compare(l, r) = 0 }
+                            { new IComparer<_> with 
+                                member x.Compare(l, r) =
+                                    if l.Id < 0 then -1
+                                    elif r.Id < 0 then 1
+                                    else 0
+                            }
 
                         | RenderObjectSorting.Dynamic create ->
                             failwith "[AbstractRenderTask] dynamic sorting not implemented"
@@ -347,44 +360,44 @@ module RenderTasks =
                     match config.execution, config.redundancy with
                         | ExecutionEngine.Interpreter, _ ->
                             Log.line "using interpreted program"
-                            RenderProgram.Interpreter.runtime parent.Scope objects
+                            RenderProgram.Interpreter.runtime scope objects
 
                         | ExecutionEngine.Native, RedundancyRemoval.Static -> 
                             Log.line "using optimized native program"
-                            RenderProgram.Native.optimized parent.Scope comparer objectsWithKeys
+                            RenderProgram.Native.optimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Native, RedundancyRemoval.None -> 
                             Log.line "using unoptimized native program"
-                            RenderProgram.Native.unoptimized parent.Scope comparer objectsWithKeys
+                            RenderProgram.Native.unoptimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Managed, RedundancyRemoval.Static -> 
                             Log.line "using optimized managed program"
-                            RenderProgram.Managed.optimized parent.Scope comparer objectsWithKeys
+                            RenderProgram.Managed.optimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Managed, RedundancyRemoval.None -> 
                             Log.line "using unoptimized managed program"
-                            RenderProgram.Managed.unoptimized parent.Scope comparer objectsWithKeys
+                            RenderProgram.Managed.unoptimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Debug, RedundancyRemoval.Static -> 
                             Log.line "using optimized debug program"
-                            RenderProgram.Debug.optimized parent.Scope comparer objectsWithKeys
+                            RenderProgram.Debug.optimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Debug, RedundancyRemoval.None -> 
                             Log.line "using unoptimized debug program"
-                            RenderProgram.Debug.unoptimized parent.Scope comparer objectsWithKeys
+                            RenderProgram.Debug.unoptimized scope comparer objectsWithKeys
 
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Static -> 
                             Log.line "using optimized unmanaged program"
-                            RenderProgram.GLVM.optimized parent.Scope comparer objectsWithKeys
+                            RenderProgram.GLVM.optimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.Runtime -> 
                             Log.line "using runtime-optimized unmanaged program"
-                            RenderProgram.GLVM.runtime parent.Scope comparer objectsWithKeys
+                            RenderProgram.GLVM.runtime scope comparer objectsWithKeys
 
                         | ExecutionEngine.Unmanaged, RedundancyRemoval.None -> 
                             Log.line "using unoptimized unmanaged program"
-                            RenderProgram.GLVM.unoptimized parent.Scope comparer objectsWithKeys
+                            RenderProgram.GLVM.unoptimized scope comparer objectsWithKeys
 
                         | t ->
                             failwithf "[GL] unsupported backend configuration: %A" t
@@ -414,8 +427,17 @@ module RenderTasks =
                 program.Dispose()
                 objects.Clear()
         
-        override x.Add(o) = transact (fun () -> objects.Add o |> ignore)
-        override x.Remove(o) = transact (fun () -> objects.Remove o |> ignore)
+        override x.Add(o) = 
+            transact (fun () -> 
+                structuralChange.MarkOutdated()
+                objects.Add o |> ignore
+            )
+
+        override x.Remove(o) = 
+            transact (fun () -> 
+                structuralChange.MarkOutdated()
+                objects.Remove o |> ignore
+            )
 
 
     
@@ -807,14 +829,16 @@ module RenderTasks =
         interface IMod<FrameStatistics> with
             member x.GetValue caller = x.GetValue caller
 
-    type RenderTask(manager : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>) as this =
-        inherit AbstractRenderTask(manager.Context, fboSignature, config)
-
-        let ctx = manager.Context
+    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
+        inherit AbstractRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
+        
+        let ctx = man.Context
         let resources = new Aardvark.Base.Rendering.ResourceInputSet()
         let inputSet = InputSet(this) 
         let resourceUpdateWatch = OpenGlStopwatch()
         let callStats = RenderObjectStats()
+        let structuralChange = Mod.init ()
+        
 
 
         let add (ro : PreparedRenderObject) = 
@@ -831,13 +855,12 @@ module RenderTasks =
                         for r in all do resources.Remove r
                         callStats.Remove ro
                 }
-
             ro
 
         let rec prepareRenderObject (ro : IRenderObject) =
             match ro with
                 | :? RenderObject as r ->
-                    new PreparedMultiRenderObject([manager.Prepare(fboSignature, r) |> add])
+                    new PreparedMultiRenderObject([this.ResourceManager.Prepare(fboSignature, r) |> add])
 
                 | :? PreparedRenderObject as prep ->
                     new PreparedMultiRenderObject([prep |> PreparedRenderObject.clone |> add])
@@ -878,9 +901,15 @@ module RenderTasks =
             let mutable stats = FrameStatistics.Zero
             let deltas = preparedObjectReader.GetDelta x
 
+            x.ResourceManager.DrawBufferManager.Write(fbo)
+
             resourceUpdateWatch.Restart()
             stats <- stats + resources.Update(x)
             resourceUpdateWatch.Stop()
+
+            match deltas with
+                | [] -> ()
+                | _ -> x.StructureChanged()
 
             for d in deltas do 
                 match d with
@@ -902,14 +931,9 @@ module RenderTasks =
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
-                GL.DrawBuffers(x.DrawBufferCount, NativePtr.ofNativeInt x.DrawBuffers)
-                GL.DepthMask(true)
                 let s = t.Run()
                 runStats <- s::runStats
                 
-            GL.DrawBuffers(x.DrawBufferCount, NativePtr.ofNativeInt x.DrawBuffers)
-            GL.DepthMask(true)
-
             if current = 0 then
                 GL.EndQuery(QueryTarget.PrimitivesGenerated)
 

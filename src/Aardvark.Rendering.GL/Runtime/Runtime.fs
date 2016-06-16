@@ -215,12 +215,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
-        let renderTaskLock = RenderTaskLock()
-        let man = ResourceManager(manager, ctx, Some renderTaskLock, shareTextures, shareBuffers)
-
         match eng.sorting with
             | Arbitrary | Grouping _  -> 
-                new RenderTasks.RenderTask(man, fboSignature, set, engine) :> IRenderTask
+                new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
 
             | Dynamic _ -> 
                 failwith "[SortedRenderTask] not available atm."

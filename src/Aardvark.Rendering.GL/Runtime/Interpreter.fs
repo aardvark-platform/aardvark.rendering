@@ -560,7 +560,11 @@ module OpenGLObjectInterpreter =
                     | Some masks -> gl.setColorMasks masks
                     | None -> gl.setColorMasks (List.init o.ColorAttachmentCount (fun _ -> V4i.IIII))
 
-                gl.drawBuffers allBuffers o.DrawBufferCount o.DrawBuffers
+                match o.DrawBuffers with
+                    | Some b ->
+                        gl.drawBuffers allBuffers b.Count (NativePtr.toNativeInt b.Buffers)
+                    | _ ->
+                        gl.drawBuffers allBuffers -1 0n
 
 
                 let depthMode = o.DepthTest.GetValue()

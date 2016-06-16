@@ -216,15 +216,15 @@ module Sharing =
                     ctx.Delete b
 
 
-type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>, size : int, fields : list<UniformField>) =
+type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>, size : int, fields : list<UniformField>) =
 
     let alignedSize = (size + 255) &&& ~~~255
 
     let buffer = new MappedBuffer(ctx)
-    do renderTaskLock |> Option.iter buffer.AddLock
+    do renderTaskInfo |> Option.iter buffer.AddLock
     let manager = MemoryManager.createNop()
 
-    let viewCache = ResourceCache<UniformBufferView>(None, renderTaskLock)
+    let viewCache = ResourceCache<UniformBufferView>(None, renderTaskInfo)
     let rw = new ReaderWriterLockSlim()
 
     member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<obj>) : IResource<UniformBufferView> =
@@ -283,12 +283,77 @@ type UniformBufferManager(ctx : Context, renderTaskLock : Option<RenderTaskLock>
         buffer.Dispose()
         manager.Dispose()
 
+type DrawBufferConfig =
+    class
+        val mutable public Key : list<bool>
+        val mutable public Parent : DrawBufferManager
+        val mutable public Signature : IFramebufferSignature
+        val mutable public Count : int
+        val mutable public Buffers : nativeptr<int>
+        val mutable public RefCount : int
+
+        member x.Write(fbo : Framebuffer) =
+            x.Signature.ColorAttachments |> Map.iter (fun i (s,_) ->
+                if x.Key.[i] then
+                    if fbo.Handle = 0 && i = 0 && s = DefaultSemantic.Colors then
+                        NativePtr.set x.Buffers i (int OpenTK.Graphics.OpenGL4.FramebufferAttachment.BackLeft)
+                    else
+                        NativePtr.set x.Buffers i (int OpenTK.Graphics.OpenGL4.FramebufferAttachment.ColorAttachment0 + i)
+                else
+                    NativePtr.set x.Buffers i 0
+            )
+
+        member x.AddRef() = 
+            if Interlocked.Increment &x.RefCount = 1 then
+                x.Buffers <- NativePtr.alloc x.Count
+
+        member x.RemoveRef() = 
+            if Interlocked.Decrement &x.RefCount = 0 then
+                NativePtr.free x.Buffers
+                x.Buffers <- NativePtr.zero
+                x.Parent.DeleteConfig(x)
+
+        new(p, key, s, c) = { Parent = p; Key = key; Signature = s; Count = c; Buffers = NativePtr.zero; RefCount = 0 }
+
+    end
+
+and DrawBufferManager (signature : IFramebufferSignature) =
+    let count = signature.ColorAttachments.Count
+    let ptrs = ConcurrentDictionary<list<bool>, DrawBufferConfig>()
+
+    member x.Write(fbo : Framebuffer) =
+        for (KeyValue(_,dbc)) in ptrs do
+            if dbc.RefCount > 0 then
+                dbc.Write(fbo)
+
+    member x.CreateConfig(set : Set<Symbol>) =
+        let set = signature.ColorAttachments |> Map.toSeq |> Seq.map (fun (i,(s,_)) -> Set.contains s set) |> Seq.toList
+        let config = 
+            ptrs.GetOrAdd(set, fun set ->
+                DrawBufferConfig(x, set, signature, count)
+            )
+
+        config.AddRef()
+        config
+
+    member internal x.DeleteConfig(c : DrawBufferConfig) =
+        ptrs.TryRemove c.Key |> ignore
+
+
+
+
+
 
 [<AllowNullLiteral>]
-type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskLock : Option<RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
+type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     
+    let drawBufferManager = 
+        match renderTaskInfo with
+            | Some (signature, _) -> DrawBufferManager(signature) |> Some
+            | _ -> None
+
     let derivedCache (f : ResourceManager -> ResourceCache<'a>) =
-        ResourceCache<'a>(Option.map f parent, renderTaskLock)
+        ResourceCache<'a>(Option.map f parent, Option.map snd renderTaskInfo)
 
    
     let bufferManager           = Sharing.BufferManager(ctx, shareBuffers)
@@ -319,12 +384,12 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.UniformLocationCache   : ResourceCache<UniformLocation>    = uniformLocationCache
     member private x.UniformBufferManagers                                      = uniformBufferManagers
 
-    member x.RenderTaskLock = renderTaskLock
+    member x.RenderTaskLock = renderTaskInfo
 
     new(parent, ctx, lock, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, lock, shareTextures, shareBuffers)
     new(ctx, lock, shareTextures, shareBuffers) = ResourceManager(None, ctx, lock, shareTextures, shareBuffers)
 
-
+    member x.DrawBufferManager = drawBufferManager.Value
     member x.Context = ctx
 
     member x.CreateBuffer(data : IMod<Array>) =
@@ -495,7 +560,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 (layout.size, layout.fields), 
                 fun (s,f) -> 
                     let uniformFields = layout.fields |> List.map (fun f -> f.UniformField)
-                    new UniformBufferManager(ctx, renderTaskLock, s, uniformFields)
+                    new UniformBufferManager(ctx, Option.map snd renderTaskInfo, s, uniformFields)
             )
 
         manager.CreateUniformBuffer(scope, u, program.UniformGetters)

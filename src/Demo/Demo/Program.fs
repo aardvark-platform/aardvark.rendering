@@ -2734,12 +2734,11 @@ let main args =
             |> Sg.vertexAttribute DefaultSemantic.Positions positions
             |> Sg.stencilMode (Mod.constant writeStencil)
             |> Sg.writeBuffers (Set.ofList [ DefaultSemantic.Stencil ])
-            //|> Sg.blendMode (Mod.constant BlendMode.Blend)
             |> Sg.pass afterMain
             |> Sg.effect [
                 VolumeShader.vertex |> toEffect
                 VolumeShader.extrude |> toEffect
-                DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.0)) |> toEffect
+                DefaultSurfaces.constantColor (C4f(1.0,0.0,0.0,0.0)) |> toEffect
             ]
 
 
@@ -2849,7 +2848,7 @@ let main args =
                 Log.warn "showing group %d" group.Value
             )
     )
-    let task = 
+    use task = 
         RenderTask.ofList [
             //app.Runtime.CompileClear(ctrl.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
             app.Runtime.CompileRender(ctrl.FramebufferSignature, sg)

@@ -119,69 +119,45 @@ module RenderProgram =
 
     [<AutoOpen>]
     module Compiler =
-        let compileDelta (scope : CompilerInfo) (l : Option<PreparedMultiRenderObject>) (r : PreparedMultiRenderObject) =
-            let mutable last =
-                match l with
-                    | Some l -> Some l.Last
-                    | None -> None
 
-            let code = 
-                if List.isEmpty r.Children then
-                    Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileEpilog scope
-                else
-                    [ for r in r.Children do
-                        match last with
-                            | Some last -> yield! Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileDelta scope last r
-                            | None -> yield! Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileFull scope r
-                        last <- Some r
-                    ]
+        type RefCounted() =
+            let used = ReferenceCountingSet<int>()
 
-            let myStats = ref FrameStatistics.Zero
-            let stats = scope.stats
-            let calls =
-                code |> List.map (fun i ->
-                    match i.IsConstant with
-                        | true -> 
-                            let i = i.GetValue()
-                            let cnt = List.length i
-                            let dStats = { FrameStatistics.Zero with InstructionCount = float cnt; ActiveInstructionCount = float cnt }
-                            stats := !stats + dStats
-                            myStats := !myStats + dStats
-
-                            Mod.constant i
-
-                        | false -> 
-                            let mutable oldCount = 0
-                            i |> Mod.map (fun i -> 
-                                let newCount = List.length i
-                                let dCount = newCount - oldCount
-                                oldCount <- newCount
-                                let dStats = { FrameStatistics.Zero with InstructionCount = float dCount; ActiveInstructionCount = float dCount }
-
-                                stats := !stats + dStats
-                                myStats := !myStats + dStats
-                                i
-                            )
-                )
+            member x.UsedSlots =
+                used :> seq<_>
 
 
+        let private emptyCode =
             { new IAdaptiveCode<Instruction> with
-                member x.Content = calls
-                member x.Dispose() =    
-                    for o in code do
-                        for i in o.Inputs do
-                            i.RemoveOutput o
-
-                    stats := !stats - !myStats
-                    myStats := FrameStatistics.Zero
-
+                member x.Content = []
+                member x.Dispose() = ()
             }
+
+        let compileDelta (scope : CompilerInfo) (l : Option<PreparedMultiRenderObject>) (r : PreparedMultiRenderObject) =
+            if r.First.Id < 0 then
+                match l with
+                    | None ->
+                        emptyCode
+                    | Some last ->
+                        last |> DeltaCompiler.compileEpilog |> DeltaCompiler.run scope
+            else
+                let code = 
+                    compiled {
+                        let mutable last =
+                            match l with
+                                | Some l -> Some l.Last
+                                | None -> None
+
+                        for r in r.Children do
+                            match last with
+                                | Some last -> do! DeltaCompiler.compileDelta last r
+                                | None -> do! DeltaCompiler.compileFull r
+                            last <- Some r
+                    }
+                code |> DeltaCompiler.run scope
 
         let compileFull scope r =
             compileDelta scope None r
-
-        let compileEpilog (scope : CompilerInfo) =
-            Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileEpilog scope |> List.map Mod.force |> List.concat |> List.toArray
 
     module Native =
         let private instructionToCall (i : Instruction) : NativeCall =
@@ -195,15 +171,13 @@ module RenderProgram =
             
 
             let handler = FragmentHandler.warpDifferential instructionToCall ExecutionContext.callToInstruction (compileDelta scope) inner
-
+//
 //            let epilog = Compiler.compileEpilog scope
 //
 //            let handler () =
 //                let h = handler()
-//                
 //                let code =
 //                    epilog |> Array.map instructionToCall |> ASM.assembleCalls 0
-//
 //                let c = Array.append code h.epilog.Memory.UInt8Array
 //                h.epilog.Write(c)
 //                h.writeNext h.prolog h.epilog |> ignore
