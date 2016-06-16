@@ -168,6 +168,34 @@ module Loader =
             member x.LocalBoundingBox(s : Scene) =
                 Mod.constant s.bounds
 
+            member x.GlobalBoundingBox(n : Node) : IMod<Box3d> =
+                match n with
+                    | Trafo(_,n) -> 
+                        n?GlobalBoundingBox()
+                    | Material(_,n) -> 
+                        n?GlobalBoundingBox()
+                    | Group(nodes) ->
+                        nodes |> List.map (fun n -> n?GlobalBoundingBox()) |> Mod.mapN (Seq.fold (curry Box3d.Union) Box3d.Invalid)
+                    | Empty ->
+                        Mod.constant Box3d.Invalid
+                    | Leaf mesh ->
+                        n.ModelTrafo |> Mod.map (fun t -> mesh.bounds.Transformed t)
+                            
+            member x.LocalBoundingBox(n : Node) : IMod<Box3d> =
+                match n with
+                    | Trafo(t,n) -> 
+                        let box : IMod<Box3d> = n?LocalBoundingBox()
+                        box |> Mod.map (fun b -> b.Transformed t)
+                    | Material(_,n) -> 
+                        n?LocalBoundingBox()
+                    | Group(nodes) ->
+                        nodes |> List.map (fun n -> n?LocalBoundingBox()) |> Mod.mapN (Seq.fold (curry Box3d.Union) Box3d.Invalid)
+                    | Empty ->
+                        Mod.constant Box3d.Invalid
+                    | Leaf mesh ->
+                        Mod.constant mesh.bounds
+                            
+
             member x.GlobalBoundingBox(s : Scene) =
                 s.ModelTrafo |> Mod.map (fun t -> s.bounds.Transformed t)
 

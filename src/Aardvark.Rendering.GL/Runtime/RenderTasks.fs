@@ -448,9 +448,11 @@ module RenderTasks =
         inherit AdaptiveObject()
 
         let boundingBox : IMod<Box3d> =
-            match Ag.tryGetAttributeValue obj.First.Original.AttributeScope "GlobalBoundingBox" with
-                | Success box -> box
-                | _ -> failwith "[GL] could not get BoundingBox for RenderObject"
+            if obj.First.Id < 0 then Mod.constant Box3d.Invalid
+            else
+                match Ag.tryGetAttributeValue obj.First.Original.AttributeScope "GlobalBoundingBox" with
+                    | Success box -> box
+                    | _ -> failwith "[GL] could not get BoundingBox for RenderObject"
         let mutable currentBox = Box3d.Invalid
 
         let mutable prev : AdaptiveGLVMFragment = null
@@ -592,7 +594,7 @@ module RenderTasks =
                 for f in ordered do
                     f.Prev <- current
                     if isNull current then first <- f
-                    else last.Next <- f
+                    else current.Next <- f
                     current <- f
             )
 
@@ -742,9 +744,12 @@ module RenderTasks =
                         cameraView <- view
                     | _ -> ()
 
-            match Ag.tryGetAttributeValue o.Original.AttributeScope "GlobalBoundingBox" with
-                | Success b -> boundingBoxes.[o] <- b
-                | _ -> failwithf "[GL] could not get bounding-box for RenderObject"
+            if o.First.Id < 0 then
+                 boundingBoxes.[o] <- Mod.constant Box3d.Invalid
+            else
+                match Ag.tryGetAttributeValue o.Original.AttributeScope "GlobalBoundingBox" with
+                    | Success b -> boundingBoxes.[o] <- b
+                    | _ -> failwithf "[GL] could not get bounding-box for RenderObject"
 
             transact (fun () -> 
                 structuralChange.MarkOutdated()
