@@ -6,6 +6,7 @@ open System
 open System.Threading
 open System.Collections.Generic
 open System.Runtime.CompilerServices
+open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Base.Runtime
@@ -65,6 +66,7 @@ module OpenGLInterpreter =
         let mutable currentDepthMask        = 1
         let mutable currentStencilMask      = 0xFFFFFFFF
         let mutable currentViewport         = Box2i.Invalid
+        let mutable currentDrawBuffers      = None
 
         let currentColorMasks               = Dictionary<int, V4i>(32)
         let currentSamplers                 = Dictionary<int, int>(32)
@@ -126,6 +128,7 @@ module OpenGLInterpreter =
             currentPatchVertices    <- -1
             currentDepthMask        <- 1
             currentViewport         <- Box2i.Invalid
+            currentDrawBuffers      <- None
 
             currentColorMasks.Clear()
             currentSamplers.Clear() 
@@ -262,6 +265,18 @@ module OpenGLInterpreter =
                     currentColorMasks.[index] <- mask
                     true
 
+        member x.ShouldSetDrawBuffers (all : Set<int>, n : int, ptr : nativeint) =
+            let ptr : nativeptr<int> = NativePtr.ofNativeInt ptr
+            let value = 
+                if n < 0 then 
+                    None
+                else
+                    let s = ptr |> NativePtr.toArray n |> Set.ofArray
+                    if s = all then None else Some s
+
+            x.set(&currentDrawBuffers, value)
+
+
         member x.ShouldSetFramebuffer(target : int, fbo : int) =
             match currentFramebuffers.TryGetValue(target) with
                 | (true, o) when o = fbo ->
@@ -367,6 +382,10 @@ module OpenGLInterpreter =
         member inline x.colorMask (index : int) (mask : V4i) =
             if x.ShouldSetColorMask(index, mask) then
                 GL.ColorMask index mask.X mask.Y mask.Z mask.W
+
+        member inline x.drawBuffers (all : Set<int>) (n : int) (ptr : nativeint) =
+            if x.ShouldSetDrawBuffers(all, n, ptr) then
+                GL.DrawBuffers n ptr
 
         member inline x.bindFramebuffer (target : int) (fbo : int) =
             if x.ShouldSetFramebuffer(target, fbo) then
@@ -535,9 +554,13 @@ module OpenGLObjectInterpreter =
                 gl.setDepthMask o.DepthBufferMask
                 gl.setStencilMask o.StencilBufferMask
 
+                let allBuffers = o.FramebufferSignature.ColorAttachments |> Map.toSeq |> Seq.map fst |> Set.ofSeq
+
                 match o.ColorBufferMasks with
                     | Some masks -> gl.setColorMasks masks
                     | None -> gl.setColorMasks (List.init o.ColorAttachmentCount (fun _ -> V4i.IIII))
+
+                gl.drawBuffers allBuffers o.DrawBufferCount o.DrawBuffers
 
 
                 let depthMode = o.DepthTest.GetValue()
@@ -668,7 +691,7 @@ module OpenGLObjectInterpreter =
 
 [<AutoOpen>]
 module ``Interpreter Extensions`` =
-    type private InterpreterProgram(scope : RenderTaskScope, content : seq<PreparedMultiRenderObject>) =
+    type private InterpreterProgram(scope : Aardvark.Rendering.GL.Compiler.CompilerInfo, content : seq<PreparedMultiRenderObject>) =
         inherit AbstractRenderProgram()
 
         override x.Update() = ()

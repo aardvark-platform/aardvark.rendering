@@ -2040,9 +2040,6 @@ module Outline =
             Mod.custom (fun self ->
                 let mesh = mesh.GetValue self
 
-
-                mesh.Adjacency |> printfn "%A"
-
                 let triangles = triangles.GetValue self
                 let store = SpatialDict<int>()
 
@@ -2258,6 +2255,8 @@ module VolumeShader =
         {
             [<Position>]                pos     : V4d
             [<Semantic "Inf">]          inf     : V4d
+            [<WorldPosition>]           wp      : V4d
+            [<Semantic "Light">]        l       : V3d
         }
 
     type SimpleVertex = 
@@ -2277,6 +2276,8 @@ module VolumeShader =
             return {
                 pos = p
                 inf = p - l
+                wp = v.pos
+                l = uniform.LightLocation
             }
         }
 
@@ -2290,28 +2291,66 @@ module VolumeShader =
         let hi = Vec.dot n inside.XYZ
         let ht = Vec.dot n test.XYZ
 
-        hi * ht >= 0.0
+        hi * ht > 0.0
+
+    let eps = 0.0
+
+    let isOutlineEdgeWorld (light : V3d) (p0 : V3d) (p1 : V3d) (inside : V3d) (test : V3d) =
+        let line = Vec.normalize (p1 - p0)
+        let dir = Vec.normalize (p0 - light)
+        let n = Vec.cross dir line
+        let n = Vec.normalize n
+        let d = Vec.dot light n
+        let hi = Vec.dot n inside - d
+        let ht = Vec.dot n test - d
+
+        if (hi >= 0.0 && ht <= 0.0) || (hi <= 0.0 && ht >= 0.0) then
+            false
+        else
+            true 
+
+
+    let isDegenerated (light : V3d) (p0 : V3d) (p1 : V3d) (p2 : V3d) =
+        let u = p1 - p0
+        let v = p2 - p0
+        let n = Vec.cross u v |> Vec.normalize
+        let h = Vec.dot n (Vec.normalize (p0 - light))
+        abs h <= 0.0001
 
     let extrude (a : TriangleAdjacency<Vertex>) =
         triangle {
             let u = a.P1.inf - a.P0.inf |> Vec.xyz
             let v = a.P2.inf - a.P0.inf |> Vec.xyz
             let n = Vec.cross u v |> Vec.normalize
-            let ff = Vec.dot n a.P0.inf.XYZ > 0.0
+            let h = Vec.dot n a.P0.inf.XYZ
+            let ff = h > 0.0
+
+            let w0 = a.P0.wp.XYZ
+            let w1 = a.P1.wp.XYZ
+            let w2 = a.P2.wp.XYZ
+            let w01 = a.N01.wp.XYZ
+            let w12 = a.N12.wp.XYZ
+            let w20 = a.N20.wp.XYZ
+
+            let p0n = a.P0.pos + V4d(0.0,0.0,0.0001,0.0)
+            let p1n = a.P1.pos + V4d(0.0,0.0,0.0001,0.0)
+            let p2n = a.P2.pos + V4d(0.0,0.0,0.0001,0.0)
+                    
+            let light = a.P0.l
 
             if ff then
-                yield { p = a.P0.pos + V4d(0.0,0.0,0.001,0.0) }
-                yield { p = a.P2.pos + V4d(0.0,0.0,0.001,0.0) }
-                yield { p = a.P1.pos + V4d(0.0,0.0,0.001,0.0) }
+                yield { p = p0n }
+                yield { p = p2n }
+                yield { p = p1n }
                 restartStrip()
                 yield { p = a.P0.inf }
                 yield { p = a.P1.inf }
                 yield { p = a.P2.inf }
                 restartStrip()
             else
-                yield { p = a.P0.pos + V4d(0.0,0.0,0.001,0.0) }
-                yield { p = a.P1.pos + V4d(0.0,0.0,0.001,0.0) }
-                yield { p = a.P2.pos + V4d(0.0,0.0,0.001,0.0) }
+                yield { p = p0n }
+                yield { p = p1n }
+                yield { p = p2n }
                 restartStrip()
                 yield { p = a.P0.inf }
                 yield { p = a.P2.inf }
@@ -2319,18 +2358,18 @@ module VolumeShader =
                 restartStrip()
 
 
-            if isOutlineEdge a.P0.inf a.P1.inf a.P2.inf a.N01.inf then
+            if isDegenerated light w0 w1 w01 || isOutlineEdgeWorld light w0 w1 w2 w01 then
                 // Line01 is an outline
 
                 if ff then 
-                    yield { p = a.P0.pos }
-                    yield { p = a.P1.pos }
+                    yield { p = p0n }
+                    yield { p = p1n }
                     yield { p = a.P0.inf }
                     yield { p = a.P1.inf }
                     restartStrip()
                 else
-                    yield { p = a.P1.pos }
-                    yield { p = a.P0.pos }
+                    yield { p = p1n }
+                    yield { p = p0n }
                     yield { p = a.P1.inf }
                     yield { p = a.P0.inf }
                     restartStrip()
@@ -2339,33 +2378,33 @@ module VolumeShader =
 
                 ()
 
-            if isOutlineEdge a.P1.inf a.P2.inf a.P0.inf a.N12.inf then
+            if isDegenerated light w1 w2 w12 || isOutlineEdgeWorld light w1 w2 w0 w12 then
                 // Line12 is an outline
 
                 if ff then 
-                    yield { p = a.P1.pos }
-                    yield { p = a.P2.pos }
+                    yield { p = p1n }
+                    yield { p = p2n }
                     yield { p = a.P1.inf }
                     yield { p = a.P2.inf }
                     restartStrip()
                 else
-                    yield { p = a.P2.pos }
-                    yield { p = a.P1.pos }
+                    yield { p = p2n }
+                    yield { p = p1n }
                     yield { p = a.P2.inf }
                     yield { p = a.P1.inf }
                     restartStrip()
 
-            if isOutlineEdge a.P2.inf a.P0.inf a.P1.inf a.N20.inf then
+            if isDegenerated light w2 w0 w20 || isOutlineEdgeWorld light w2 w0 w1 w20 then
                 // Line20 is an outline
                 if ff then 
-                    yield { p = a.P2.pos }
-                    yield { p = a.P0.pos }
+                    yield { p = p2n }
+                    yield { p = p0n }
                     yield { p = a.P2.inf }
                     yield { p = a.P0.inf }
                     restartStrip()
                 else
-                    yield { p = a.P0.pos }
-                    yield { p = a.P2.pos }
+                    yield { p = p0n }
+                    yield { p = p2n }
                     yield { p = a.P0.inf }
                     yield { p = a.P2.inf }
                     restartStrip()

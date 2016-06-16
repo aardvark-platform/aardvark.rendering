@@ -133,6 +133,7 @@ module ExecutionContext =
             | InstructionCode.DepthMask                     -> OpenGl.Pointers.DepthMask
             | InstructionCode.StencilMask                   -> OpenGl.Pointers.StencilMask
             | InstructionCode.ColorMask                     -> OpenGl.Pointers.ColorMask
+            | InstructionCode.DrawBuffers                   -> OpenGl.Pointers.DrawBuffers
 
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 
@@ -196,6 +197,7 @@ module ExecutionContext =
             OpenGl.Pointers.DepthMask, fun args -> Instruction(InstructionCode.DepthMask, args)
             OpenGl.Pointers.StencilMask, fun args -> Instruction(InstructionCode.StencilMask, args)
             OpenGl.Pointers.ColorMask, fun args -> Instruction(InstructionCode.ColorMask, args)
+            OpenGl.Pointers.DrawBuffers, fun args -> Instruction(InstructionCode.DrawBuffers, args)
         ]
 
     let callToInstruction (ptr : nativeint, args : obj[]) =
@@ -287,6 +289,7 @@ module ExecutionContext =
             | InstructionCode.DepthMask                -> OpenGl.Unsafe.DepthMask (int 0)
             | InstructionCode.StencilMask              -> OpenGl.Unsafe.StencilMask (int 0)
             | InstructionCode.ColorMask                -> OpenGl.Unsafe.ColorMask (int 0) (int 1) (int 2) (int 3) (int 4)
+            | InstructionCode.DrawBuffers              -> OpenGl.Unsafe.DrawBuffers (int 0) (ptr 1) 
 
             | InstructionCode.MultiDrawArraysIndirect  -> 
                 OpenGl.Unsafe.MultiDrawArraysIndirect (int 0) (ptr 1) (drawCount 2) (int 3)

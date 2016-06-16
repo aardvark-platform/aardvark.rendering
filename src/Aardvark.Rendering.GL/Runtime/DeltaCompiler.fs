@@ -5,7 +5,13 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 
-
+type CompilerInfo =
+    {
+        stats : ref<FrameStatistics>
+        currentContext : IMod<ContextHandle>
+        drawBuffers : nativeint
+        drawBufferCount : int
+    }
 module DeltaCompiler =
 
     /// determines if all uniforms (given in values) are equal to the uniforms
@@ -34,10 +40,12 @@ module DeltaCompiler =
             if prev.StencilBufferMask <> me.StencilBufferMask then
                 yield Instructions.setStencilMask me.StencilBufferMask
 
-            if prev.ColorBufferMasks <> me.ColorBufferMasks then
-                match me.ColorBufferMasks with
-                    | Some masks -> yield Instructions.setColorMasks masks
-                    | None -> yield Instructions.setColorMasks (List.init me.ColorAttachmentCount (fun _ -> V4i.IIII))
+            if prev.DrawBufferSet <> me.DrawBufferSet then
+                if me.DrawBufferCount < 0 then
+                    let! s = compilerState
+                    yield Instruction.DrawBuffers s.allDrawBuffersCount s.allDrawBuffers
+                else
+                    yield Instruction.DrawBuffers me.DrawBufferCount me.DrawBuffers
 
             //set all modes if needed
             if prev.DepthTest <> me.DepthTest && me.DepthTest <> null then
@@ -120,6 +128,34 @@ module DeltaCompiler =
 
         }   
 
+    let internal compileEpilogInternal =
+        compiled {
+
+            yield Instruction.DepthMask 1
+            yield Instruction.StencilMask 0xFFFFFFFF
+
+            let! s = compilerState
+            yield Instruction.DrawBuffers s.allDrawBuffersCount s.allDrawBuffers
+//
+//            for (i,_) in Map.toSeq signature.ColorAttachments do
+//                yield Instruction.ColorMask i 1 1 1 1
+
+            // TODO: find max used texture-unit
+            for i in 0..15 do
+                yield Instructions.setActiveTexture i
+                yield Instruction.BindSampler i 0
+                yield Instruction.BindTexture (int OpenGl.Enums.TextureTarget.Texture2D) 0
+
+            for i in 0..15 do
+                yield Instruction.BindBufferBase (int OpenGl.Enums.BufferTarget.UniformBuffer) i 0
+
+
+            yield Instruction.BindVertexArray 0
+            yield Instruction.BindProgram 0
+            yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer) 0
+
+            
+        }    
 
 
     /// <summary>
@@ -128,11 +164,13 @@ module DeltaCompiler =
     /// This function is the core-ingredient making our rendering-system
     /// fast as hell \o/.
     /// </summary>
-    let compileDelta (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
+    let compileDelta (info : CompilerInfo) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
         let c = compileDeltaInternal prev rj
         let (s,()) =
             c.runCompile {
-                currentContext = currentContext
+                currentContext = info.currentContext
+                allDrawBuffers = info.drawBuffers
+                allDrawBuffersCount = info.drawBufferCount
                 instructions = []
             }
 
@@ -142,39 +180,30 @@ module DeltaCompiler =
     /// compileFull compiles all instructions needed to render [rj] 
     /// making no assumpltions about the previous GL state.
     /// </summary>
-    let compileFull (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
+    let compileFull (info : CompilerInfo) (rj : PreparedRenderObject) =
         let c = compileDeltaInternal PreparedRenderObject.empty rj
 
         let (s,()) =
             c.runCompile {
-                currentContext = currentContext
+                currentContext = info.currentContext
+                allDrawBuffers = info.drawBuffers
+                allDrawBuffersCount = info.drawBufferCount
+                instructions = []
+            }
+
+        s.instructions
+
+    let compileEpilog (info : CompilerInfo) =
+        let c = compileEpilogInternal
+
+        let (s,()) =
+            c.runCompile {
+                currentContext = info.currentContext
+                allDrawBuffers = info.drawBuffers
+                allDrawBuffersCount = info.drawBufferCount
                 instructions = []
             }
 
         s.instructions
 
 
-module internal DeltaCompilerDebug =
-    open DeltaCompiler
-
-    let compileDeltaDebugNoResources (currentContext : IMod<ContextHandle>) (prev : PreparedRenderObject ) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternal prev rj
-        let (s,()) =
-            c.runCompile {
-                currentContext = currentContext
-                instructions = []
-            }
-
-        s.instructions |> List.collect (fun mi -> mi.GetValue())
-
-    let compileFullDebugNoResources (currentContext : IMod<ContextHandle>) (rj : PreparedRenderObject) =
-        let c = compileDeltaInternal PreparedRenderObject.empty rj
-
-        let (s,()) =
-            c.runCompile {
-                currentContext = currentContext
-                instructions = []
-            }
-
-        
-        s.instructions |> List.collect (fun mi -> mi.GetValue())

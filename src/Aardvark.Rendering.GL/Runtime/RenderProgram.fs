@@ -119,19 +119,22 @@ module RenderProgram =
 
     [<AutoOpen>]
     module Compiler =
-        let compileDelta (scope : RenderTaskScope) (l : Option<PreparedMultiRenderObject>) (r : PreparedMultiRenderObject) =
+        let compileDelta (scope : CompilerInfo) (l : Option<PreparedMultiRenderObject>) (r : PreparedMultiRenderObject) =
             let mutable last =
                 match l with
                     | Some l -> Some l.Last
                     | None -> None
 
             let code = 
-                [ for r in r.Children do
-                    match last with
-                        | Some last -> yield! Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileDelta scope.currentContext last r
-                        | None -> yield! Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileFull scope.currentContext r
-                    last <- Some r
-                ]
+                if List.isEmpty r.Children then
+                    Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileEpilog scope
+                else
+                    [ for r in r.Children do
+                        match last with
+                            | Some last -> yield! Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileDelta scope last r
+                            | None -> yield! Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileFull scope r
+                        last <- Some r
+                    ]
 
             let myStats = ref FrameStatistics.Zero
             let stats = scope.stats
@@ -177,6 +180,9 @@ module RenderProgram =
         let compileFull scope r =
             compileDelta scope None r
 
+        let compileEpilog (scope : CompilerInfo) =
+            Aardvark.Rendering.GL.Compiler.DeltaCompiler.compileEpilog scope |> List.map Mod.force |> List.concat |> List.toArray
+
     module Native =
         let private instructionToCall (i : Instruction) : NativeCall =
             let compiled = ExecutionContext.compile i
@@ -186,7 +192,22 @@ module RenderProgram =
             let scope = { scope with stats = ref FrameStatistics.Zero }
             let inner = FragmentHandler.native 6
 
+            
+
             let handler = FragmentHandler.warpDifferential instructionToCall ExecutionContext.callToInstruction (compileDelta scope) inner
+
+//            let epilog = Compiler.compileEpilog scope
+//
+//            let handler () =
+//                let h = handler()
+//                
+//                let code =
+//                    epilog |> Array.map instructionToCall |> ASM.assembleCalls 0
+//
+//                let c = Array.append code h.epilog.Memory.UInt8Array
+//                h.epilog.Write(c)
+//                h.writeNext h.prolog h.epilog |> ignore
+//                h
 
             { new WrappedRenderProgram(AdaptiveProgram.custom comparer handler input) with
                 override x.Run() =

@@ -1,22 +1,33 @@
 ﻿namespace Aardvark.Rendering.GL.Compiler
 
+#nowarn "9"
+
 open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
+open Microsoft.FSharp.NativeInterop
 
 type MetaInstruction = IMod<list<Instruction>>
 
 type CompilerState =
     {
+        allDrawBuffersCount : int
+        allDrawBuffers      : nativeint
         currentContext      : IMod<ContextHandle>
         instructions        : list<MetaInstruction>
     }
+
+    member x.AllDrawBuffersSet : Set<int> =
+        x.allDrawBuffers |> NativePtr.ofNativeInt |> NativePtr.toArray x.allDrawBuffersCount |> Set.ofArray
+
 
 type Compiled<'a> = { runCompile : CompilerState -> CompilerState * 'a }
 
 [<AutoOpen>]
 module ``Compiled Builder`` =
+    let compilerState = { runCompile = fun s -> s, s }
+
     type CompiledBuilder() =
     
         member x.Bind(m : Compiled<'a>, f : 'a -> Compiled<'b>) =

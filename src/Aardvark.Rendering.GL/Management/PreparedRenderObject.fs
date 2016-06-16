@@ -38,6 +38,8 @@ type PreparedRenderObject =
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
         
         ColorAttachmentCount : int
+        DrawBufferCount : int
+        DrawBuffers : nativeint
         ColorBufferMasks : Option<list<V4i>>
         DepthBufferMask : bool
         StencilBufferMask : bool
@@ -50,6 +52,12 @@ type PreparedRenderObject =
 
         mutable IsDisposed : bool
     } 
+
+    member x.DrawBufferSet : Option<Set<int>> =
+        if x.DrawBufferCount >= 0 then
+            x.DrawBuffers |> NativePtr.ofNativeInt |> NativePtr.toArray x.DrawBufferCount |> Set.ofArray |> Some
+        else
+            None
 
     interface IRenderObject with
         member x.RenderPass = x.RenderPass
@@ -137,8 +145,11 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         if not x.IsDisposed then
+
             x.Activation.Dispose()
             x.IsDisposed <- true
+            if x.DrawBufferCount >= 0 then
+                System.Runtime.InteropServices.Marshal.FreeHGlobal x.DrawBuffers
             x.VertexArray.Dispose() 
             x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
             x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
@@ -191,6 +202,8 @@ module PreparedRenderObject =
             VertexArray = Unchecked.defaultof<_>
             VertexAttributeValues = Map.empty
             ColorAttachmentCount = 0
+            DrawBufferCount = -1
+            DrawBuffers = 0n
             ColorBufferMasks = None
             DepthBufferMask = true
             StencilBufferMask = true
@@ -201,6 +214,14 @@ module PreparedRenderObject =
         }  
 
     let clone (o : PreparedRenderObject) =
+        let drawBuffers = 
+            if o.DrawBufferCount < 0 then 0n
+            else
+                let size = sizeof<int> * o.DrawBufferCount
+                let ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal size
+                System.Runtime.InteropServices.Marshal.Copy(o.DrawBuffers, ptr, size)
+                ptr
+
         let res = 
             {
                 Activation = { new IDisposable with member x.Dispose() = () }
@@ -220,6 +241,8 @@ module PreparedRenderObject =
                 VertexArray = o.VertexArray
                 VertexAttributeValues = o.VertexAttributeValues
                 ColorAttachmentCount = o.ColorAttachmentCount
+                DrawBufferCount = o.DrawBufferCount
+                DrawBuffers = drawBuffers
                 ColorBufferMasks = o.ColorBufferMasks
                 DepthBufferMask = o.DepthBufferMask
                 StencilBufferMask = o.StencilBufferMask
@@ -445,6 +468,31 @@ type ResourceManagerExtensions private() =
                 | _ ->
                     None
 
+
+        let drawBuffers, drawBufferCount =
+            match rj.WriteBuffers with
+                | Some b ->
+                    let isAll = fboSignature.ColorAttachments |> Map.toSeq |> Seq.forall (fun (_,(sem,_)) -> Set.contains sem b)
+                    if isAll then
+                        (0n, -1)
+                    else
+                        let active =
+                            attachments
+                                |> List.filter (fun (_,(s,_)) -> Set.contains s b) 
+                                |> List.map (fun (i,_) -> int OpenTK.Graphics.OpenGL4.FramebufferAttachment.ColorAttachment0 + i)
+                                |> Set.ofList
+                                |> Set.toArray
+
+
+                        let ptr = NativePtr.alloc active.Length
+                        for i in 0..active.Length-1 do
+                            NativePtr.set ptr i active.[i]
+
+                        (NativePtr.toNativeInt ptr, active.Length)
+
+                | None ->
+                    (0n, -1)
+
         let depthMask =
             match rj.WriteBuffers with
                 | Some b -> Set.contains DefaultSemantic.Depth b
@@ -511,6 +559,8 @@ type ResourceManagerExtensions private() =
                 VertexArray = vao
                 VertexAttributeValues = attributeValues
                 ColorAttachmentCount = attachmentCount
+                DrawBufferCount = drawBufferCount
+                DrawBuffers = drawBuffers
                 ColorBufferMasks = colorMasks
                 DepthBufferMask = depthMask
                 StencilBufferMask = stencilMask

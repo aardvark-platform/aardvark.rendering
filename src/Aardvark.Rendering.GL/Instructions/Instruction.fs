@@ -68,6 +68,7 @@ type InstructionCode =
     | DepthMask                     = 54
     | ColorMask                     = 55
     | StencilMask                   = 56
+    | DrawBuffers                   = 57
 
 
 /// <summary>
@@ -185,3 +186,6 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
 
     static member ColorMask (index : int) (r : int) (g : int) (b : int) (a : int) =
         Instruction(InstructionCode.ColorMask, [|index :> obj; r :> obj; g :> obj; b :> obj; a :> obj|])
+
+    static member DrawBuffers (n : int) (ptr : nativeint) =
+        Instruction(InstructionCode.DrawBuffers, [|n :> obj; ptr :> obj |])

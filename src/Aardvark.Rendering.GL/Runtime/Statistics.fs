@@ -240,9 +240,3 @@ type OpenGlQuery(target : QueryTarget) =
         res + (children |> List.sumBy (fun q -> q.Value))
 
             
-type RenderTaskScope =
-    {
-        currentContext  : IMod<ContextHandle>
-        stats           : ref<FrameStatistics>
-    }
-

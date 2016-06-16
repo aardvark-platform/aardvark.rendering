@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Rendering.GL
 
+#nowarn "9"
+
 open System
 open System.Linq
 open System.Diagnostics
@@ -12,7 +14,7 @@ open Aardvark.Base.Incremental
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL.Compiler
 open System.Runtime.CompilerServices
-
+open Microsoft.FSharp.NativeInterop
 
 module RenderTasks =
     open System.Collections.Generic
@@ -23,13 +25,30 @@ module RenderTasks =
         inherit AdaptiveObject()
         let mutable isDisposed = false
         let currentContext = Mod.init Unchecked.defaultof<ContextHandle>
-        let scope =  { currentContext = currentContext; stats = ref FrameStatistics.Zero }
+        let drawBuffers, drawBufferCount = 
+            let arr = 
+                fboSignature.ColorAttachments 
+                    |> Map.toSeq 
+                    |> Seq.collect (fun (i,(s,_)) -> 
+                        if s = DefaultSemantic.Colors then [int FramebufferAttachment.BackLeft; int FramebufferAttachment.ColorAttachment0 + i]
+                        else [int FramebufferAttachment.ColorAttachment0 + i]
+                    ) 
+                    |> Set.ofSeq
+                    |> Set.toArray
+
+            let ptr = NativePtr.alloc arr.Length
+            for i in 0..arr.Length-1 do
+                NativePtr.set ptr i arr.[i]
+
+            (NativePtr.toNativeInt ptr, arr.Length)
+
+        let scope =  { currentContext = currentContext; stats = ref FrameStatistics.Zero; drawBuffers = drawBuffers; drawBufferCount = drawBufferCount }
         let mutable frameId = 0UL
-        let drawBuffers = 
-            fboSignature.ColorAttachments 
-                |> Map.toList 
-                |> List.map (fun (i,_) -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
-                |> List.toArray
+//        let drawBuffers = 
+//            fboSignature.ColorAttachments 
+//                |> Map.toList 
+//                |> List.map (fun (i,_) -> int DrawBuffersEnum.ColorAttachment0 + i |> unbox<DrawBuffersEnum>)
+//                |> List.toArray
         let renderTaskLock = RenderTaskLock()
 
         let beforeRender = new System.Reactive.Subjects.Subject<unit>()
@@ -37,6 +56,9 @@ module RenderTasks =
 
         member x.BeforeRender = beforeRender
         member x.AfterRender = afterRender
+
+        member internal x.DrawBuffers = drawBuffers
+        member internal x.DrawBufferCount = drawBufferCount
 
         member private x.pushDebugOutput() =
             let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
@@ -70,9 +92,8 @@ module RenderTasks =
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
         
-                if handle <> 0 then
-                    GL.DrawBuffers(drawBuffers.Length, drawBuffers)
-                    GL.Check "DrawBuffers errored"
+                GL.DrawBuffers(drawBufferCount, NativePtr.ofNativeInt drawBuffers)
+                GL.Check "DrawBuffers errored"
 
 
                 GL.DepthMask(true)
@@ -130,6 +151,7 @@ module RenderTasks =
 
         member x.Dispose() =
             if not isDisposed then
+                System.Runtime.InteropServices.Marshal.FreeHGlobal drawBuffers
                 isDisposed <- true
                 let dummy = ref 0
                 currentContext.Outputs.Consume(dummy) |> ignore
@@ -880,13 +902,13 @@ module RenderTasks =
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
-                let s = t.Run()
-                fbo.Signature.ColorAttachments |> Map.iter (fun i _ ->
-                    GL.ColorMask(i, true, true, true, true)
-                )
+                GL.DrawBuffers(x.DrawBufferCount, NativePtr.ofNativeInt x.DrawBuffers)
                 GL.DepthMask(true)
-                GL.StencilMask(0xFFFFFFFFu)
+                let s = t.Run()
                 runStats <- s::runStats
+                
+            GL.DrawBuffers(x.DrawBufferCount, NativePtr.ofNativeInt x.DrawBuffers)
+            GL.DepthMask(true)
 
             if current = 0 then
                 GL.EndQuery(QueryTarget.PrimitivesGenerated)
