@@ -2615,7 +2615,7 @@ let main args =
 
 
         
-    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Users\Schorsch\Desktop\3d\sponza\sponza.obj"
+    let scene = Aardvark.SceneGraph.IO.Loader.Assimp.load @"C:\Aardwork\sponza_cm.obj"
     let sg = 
         Sg.AdapterNode(scene) 
             |> normalizeTo (Box3d(-V3d.III, V3d.III))
