@@ -134,26 +134,31 @@ module DeltaCompiler =
     let compileFull (me : PreparedRenderObject) =
         compileDelta PreparedRenderObject.empty me
 
-    let compileEpilog (prev : PreparedMultiRenderObject) =
+    let compileEpilog (prev : Option<PreparedMultiRenderObject>) =
         compiled {
             let! s = compilerState
             let textures = s.info.structuralChange |> Mod.map (fun () -> !s.info.usedTextureSlots)
             let ubos = s.info.structuralChange |> Mod.map (fun () -> !s.info.usedUniformBufferSlots)
 
-            if not prev.Last.DepthBufferMask then
-                yield Instruction.DepthMask 1
+            match prev with
+                | Some prev ->
+                    if not prev.Last.DepthBufferMask then
+                        yield Instruction.DepthMask 1
 
-            if not prev.Last.StencilBufferMask then
-                yield Instruction.StencilMask 0xFFFFFFFF
+                    if not prev.Last.StencilBufferMask then
+                        yield Instruction.StencilMask 0xFFFFFFFF
 
-            if Option.isSome prev.Last.DrawBuffers then
-                let! s = compilerState
-                yield Instruction.DrawBuffers s.info.drawBufferCount s.info.drawBuffers
+                    if Option.isSome prev.Last.DrawBuffers then
+                        let! s = compilerState
+                        yield Instruction.DrawBuffers s.info.drawBufferCount s.info.drawBuffers
+                | _ ->
+                    let! s = compilerState
+                    yield Instruction.DepthMask 1
+                    yield Instruction.StencilMask 0xFFFFFFFF
+                    yield Instruction.DrawBuffers s.info.drawBufferCount s.info.drawBuffers
 
-            // TODO: find max used texture-unit
             yield
                 textures |> Mod.map (fun textures ->
-                    printfn "TEX: %A" (RefSet.toList textures)
                     textures |> RefSet.toList |> List.collect (fun i ->
                         [
                             Instructions.setActiveTexture i
@@ -163,23 +168,12 @@ module DeltaCompiler =
                     )
                 )
 
-            // TODO: find max used texture-unit
             yield
                 ubos |> Mod.map (fun ubos ->
-                    printfn "UB:  %A" (RefSet.toList ubos)
                     ubos |> RefSet.toList |> List.map (fun i ->
                         Instruction.BindBufferBase (int OpenGl.Enums.BufferTarget.UniformBuffer) i 0
                     )
                 )
-
-//            for i in 0..15 do
-//                yield Instructions.setActiveTexture i
-//                yield Instruction.BindSampler i 0
-//                yield Instruction.BindTexture (int OpenGl.Enums.TextureTarget.Texture2D) 0
-//
-//            for i in 0..15 do
-//                yield Instruction.BindBufferBase (int OpenGl.Enums.BufferTarget.UniformBuffer) i 0
-
 
             yield Instruction.BindVertexArray 0
             yield Instruction.BindProgram 0

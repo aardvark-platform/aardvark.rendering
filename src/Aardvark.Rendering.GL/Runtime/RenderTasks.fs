@@ -546,15 +546,15 @@ module RenderTasks =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    type SortedGLVMProgram(parent : AbstractSubTask, objects : aset<PreparedMultiRenderObject>, createComparer : Ag.Scope -> IMod<IComparer<PreparedMultiRenderObject>>) =
+    type SortedGLVMProgram(parent : CameraSortedSubTask, objects : aset<PreparedMultiRenderObject>, createComparer : Ag.Scope -> IMod<IComparer<PreparedMultiRenderObject>>) =
         inherit AbstractRenderProgram<AdaptiveGLVMFragment>()
         static do GLVM.vmInit()
-
-        let fragments = objects |> ASet.mapUse (fun o -> new AdaptiveGLVMFragment(o, RenderProgram.Compiler.compileFull { parent.Parent.Scope with stats = ref FrameStatistics.Zero } o))
+        static let empty = new PreparedMultiRenderObject([PreparedRenderObject.empty])
+        let fragments = objects |> ASet.mapUse (fun o -> new AdaptiveGLVMFragment(o, RenderProgram.Compiler.compileFull { parent.Scope with stats = ref FrameStatistics.Zero } o))
         let fragmentReader = fragments.GetReader()
         let mutable vmStats = VMStats()
-        let mutable first : AdaptiveGLVMFragment = null
-        let mutable last : AdaptiveGLVMFragment = null
+        let last = new AdaptiveGLVMFragment(empty, RenderProgram.Compiler.compileFull parent.Scope empty)
+        let mutable first : AdaptiveGLVMFragment = last
 
         let mutable comparer = None
 
@@ -588,12 +588,12 @@ module RenderTasks =
             parent.Sorting (fun () ->
                 let ordered = x.sort fragmentReader.Content
 
-                    
+                let mutable current = null
                 for f in ordered do
-                    f.Prev <- last
-                    if isNull last then first <- f
+                    f.Prev <- current
+                    if isNull current then first <- f
                     else last.Next <- f
-                    last <- f
+                    current <- f
             )
 
         override x.Run() =
@@ -609,9 +609,10 @@ module RenderTasks =
             }
 
         override x.Dispose() =
+            last.Dispose()
             fragmentReader.Dispose()
 
-    type SortedInterpreterProgram(parent : AbstractSubTask, objects : aset<PreparedMultiRenderObject>, createComparer : Ag.Scope -> IMod<IComparer<PreparedMultiRenderObject>>) =
+    and SortedInterpreterProgram(parent : CameraSortedSubTask, objects : aset<PreparedMultiRenderObject>, createComparer : Ag.Scope -> IMod<IComparer<PreparedMultiRenderObject>>) =
         inherit AbstractRenderProgram()
 
         let reader = objects.GetReader()
@@ -656,9 +657,12 @@ module RenderTasks =
         override x.Dispose() =
             reader.Dispose()
 
-    type CameraSortedSubTask(order : RenderPassOrder, parent : AbstractRenderTask) =
+    and CameraSortedSubTask(order : RenderPassOrder, parent : AbstractRenderTask) =
         inherit AbstractSubTask(parent)
         do GLVM.vmInit()
+
+        let structuralChange = Mod.custom ignore
+        let scope = { parent.Scope with structuralChange = structuralChange }
 
         let mutable hasCameraView = false
         let mutable cameraView = Mod.constant Trafo3d.Identity
@@ -703,6 +707,7 @@ module RenderTasks =
                 program <- newProgram
                 hasProgram <- true
 
+        member x.Scope = scope
 
         override x.Perform() =
             let cfg = parent.Config.GetValue parent
@@ -741,11 +746,17 @@ module RenderTasks =
                 | Success b -> boundingBoxes.[o] <- b
                 | _ -> failwithf "[GL] could not get bounding-box for RenderObject"
 
-            transact (fun () -> objects.Add o |> ignore)
+            transact (fun () -> 
+                structuralChange.MarkOutdated()
+                objects.Add o |> ignore
+            )
 
         override x.Remove(o) =
             boundingBoxes.Remove o |> ignore
-            transact (fun () -> objects.Remove o |> ignore)
+            transact (fun () -> 
+                structuralChange.MarkOutdated()
+                objects.Remove o |> ignore
+            )
                 
 
     type RenderObjectStats() =

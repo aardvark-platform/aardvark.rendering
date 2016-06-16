@@ -133,13 +133,10 @@ module RenderProgram =
                 member x.Dispose() = ()
             }
 
-        let compileDelta (scope : CompilerInfo) (l : Option<PreparedMultiRenderObject>) (r : PreparedMultiRenderObject) =
+        let compileDeltaInternal (rel : bool) (scope : CompilerInfo) (l : Option<PreparedMultiRenderObject>) (r : PreparedMultiRenderObject) =
             if r.First.Id < 0 then
-                match l with
-                    | None ->
-                        emptyCode
-                    | Some last ->
-                        last |> DeltaCompiler.compileEpilog |> DeltaCompiler.run scope
+                if rel && Option.isNone l then emptyCode
+                else l |> DeltaCompiler.compileEpilog |> DeltaCompiler.run scope
             else
                 let code = 
                     compiled {
@@ -156,8 +153,11 @@ module RenderProgram =
                     }
                 code |> DeltaCompiler.run scope
 
+        let compileDelta (scope : CompilerInfo) (l : Option<PreparedMultiRenderObject>) (r : PreparedMultiRenderObject) =
+            compileDeltaInternal true scope l r
+
         let compileFull scope r =
-            compileDelta scope None r
+            compileDeltaInternal false scope None r
 
     module Native =
         let private instructionToCall (i : Instruction) : NativeCall =
