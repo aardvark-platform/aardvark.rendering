@@ -80,3 +80,18 @@ type RenderTargetExtensions private() =
     [<Extension>]
     static member CaptureAsync(this : IRenderTarget) =
         RenderTargetExtensions.CaptureAsync(this, this.Samples)
+
+    [<Extension>]
+    static member InstallCapture(this : IRenderControl, k : Keys) =
+        this.Keyboard.KeyDown(k).Values.Add(fun () ->
+            let take =
+                async {
+                    do! Async.SwitchToThreadPool()
+
+                    Log.line "saving screenshot"
+                    let! shot = RenderTargetExtensions.CaptureAsync(this) |> Async.AwaitTask
+                    Aardvark.Rendering.Screenshot.SaveAndUpload(shot, true)
+                }
+
+            Async.Start take
+        )

@@ -93,6 +93,15 @@ type SceneGraphExtensions =
     [<Extension>]
     static member WithEffects(sg : ISg, effects : seq<FShadeEffect>) : ISg = Sg.effect effects sg
 
+    [<Extension>]
+    static member Uniforms(sg : ISg, uniforms : IUniformProvider) : ISg = Sg.UniformApplicator(uniforms, sg) :> ISg
+
+    [<Extension>]
+    static member VertexIndices(sg : ISg, indices : IMod<Array>) : ISg = Sg.VertexIndexApplicator(indices, sg) :> ISg
+
+    [<Extension>]
+    static member VertexAttributes(sg : ISg, attributes : SymbolDict<BufferView>) : ISg = Sg.VertexAttributeApplicator(attributes, sg) :> ISg
+
 [<Extension>]
 [<AbstractClass>]
 [<Sealed>]
