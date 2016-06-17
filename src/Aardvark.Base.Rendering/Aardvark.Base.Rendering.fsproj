@@ -55,39 +55,6 @@
   </Choose>
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
-  <ItemGroup>
-    <Compile Include="RenderPass.fs" />
-    <Compile Include="GPUVendor.fs" />
-    <Compile Include="DefaultSemantic.fs" />
-    <Compile Include="IndexedGeometry.fs" />
-    <Compile Include="FrameStatistics.fs" />
-    <Compile Include="DrawCallInfo.fs" />
-    <Compile Include="Buffers.fs" />
-    <Compile Include="Textures.fs" />
-    <Compile Include="RenderObject.fs" />
-    <Compile Include="Framebuffers.fs" />
-    <Compile Include="Config.fs" />
-    <Compile Include="Runtime.fs" />
-    <Compile Include="RuntimeExtensions.fs" />
-    <Compile Include="RenderTask.fs" />
-    <Compile Include="Camera.fs" />
-    <Compile Include="ChangeableBuffer.fs" />
-    <Compile Include="GeometryPool.fs" />
-    <Compile Include="DrawCallSet.fs" />
-    <Compile Include="LoD.fs" />
-    <Compile Include="ResourceManagement.fs" />
-    <Compile Include="FShade.fs" />
-    <Compile Include="DefaultSurfaces.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Numerics" />
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-  </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
@@ -615,4 +582,56 @@
       </ItemGroup>
     </When>
   </Choose>
+  <ItemGroup>
+    <Compile Include="RenderPass.fs" />
+    <Compile Include="GPUVendor.fs" />
+    <Compile Include="DefaultSemantic.fs" />
+    <Compile Include="IndexedGeometry.fs" />
+    <Compile Include="FrameStatistics.fs" />
+    <Compile Include="DrawCallInfo.fs" />
+    <Compile Include="Buffers.fs" />
+    <Compile Include="Textures.fs" />
+    <Compile Include="RenderObject.fs" />
+    <Compile Include="Framebuffers.fs" />
+    <Compile Include="Config.fs" />
+    <Compile Include="Runtime.fs" />
+    <Compile Include="RuntimeExtensions.fs" />
+    <Compile Include="RenderTask.fs" />
+    <Compile Include="Camera.fs" />
+    <Compile Include="ChangeableBuffer.fs" />
+    <Compile Include="GeometryPool.fs" />
+    <Compile Include="DrawCallSet.fs" />
+    <Compile Include="LoD.fs" />
+    <Compile Include="ResourceManagement.fs" />
+    <Compile Include="FShade.fs" />
+    <Compile Include="DefaultSurfaces.fs" />
+    <Compile Include="DefaultSurfaces\DefaultSurfaceVertex.fs" />
+    <Compile Include="DefaultSurfaces\PointSurface.fs" />
+    <Compile Include="DefaultSurfaces\Trafo.fs" />
+    <Compile Include="DefaultSurfaces\ThickLine.fs" />
+    <Compile Include="DefaultSurfaces\ThickLineRoundCaps.fs" />
+    <Compile Include="DefaultSurfaces\ThickLineSparePointSizeCaps.fs" />
+    <Compile Include="DefaultSurfaces\PointSprite.fs" />
+    <Compile Include="DefaultSurfaces\ViewSizedPointSprites.fs" />
+    <Compile Include="DefaultSurfaces\PointSpriteFragment.fs" />
+    <Compile Include="DefaultSurfaces\UniformColor.fs" />
+    <Compile Include="DefaultSurfaces\ConstantColor.fs" />
+    <Compile Include="DefaultSurfaces\SgColor.fs" />
+    <Compile Include="DefaultSurfaces\VertexColor.fs" />
+    <Compile Include="DefaultSurfaces\SimpleLighting.fs" />
+    <Compile Include="DefaultSurfaces\Lighting.fs" />
+    <Compile Include="DefaultSurfaces\DiffuseTexture.fs" />
+    <Compile Include="DefaultSurfaces\NormalMap.fs" />
+    <Compile Include="DefaultSurfaces\TransformColor.fs" />
+    <Compile Include="DefaultSurfaces\InstanceTrafo.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
 </Project>
