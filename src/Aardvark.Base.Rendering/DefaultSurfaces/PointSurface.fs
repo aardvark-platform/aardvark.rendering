@@ -1,14 +1,14 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
-
+ 
 module PointSurface =
 
-    let pointSurface (size : IMod<V2d>) (p : Point<Vertex>) =
+    let internal pointSurface (size : IMod<V2d>) (p : Point<Vertex>) =
             triangle {
                 let pos = p.Value.pos
                 let pxyz = pos.XYZ / pos.W

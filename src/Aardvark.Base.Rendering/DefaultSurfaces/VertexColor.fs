@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module VertexColor = 
 
-    let vertexColor (v : Vertex) =
+    let internal vertexColor (v : Vertex) =
         fragment {
             return v.c
         }

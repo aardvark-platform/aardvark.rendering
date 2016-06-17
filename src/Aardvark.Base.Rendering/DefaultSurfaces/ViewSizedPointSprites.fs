@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module ViewSizedPointSprites =
     
-    let viewSizedPointSprites (p : Point<Vertex>) =
+    let internal viewSizedPointSprites (p : Point<Vertex>) =
         triangle {
             let ratio = V2d uniform.ViewportSize
             let s = uniform.PointSize * V2d(ratio.Y / ratio.X, 1.0) * 0.5

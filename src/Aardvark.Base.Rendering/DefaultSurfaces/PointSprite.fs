@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module PointSprite = 
 
-    let pointSprite (p : Point<Vertex>) =
+    let internal pointSprite (p : Point<Vertex>) =
             triangle {
                 let s = uniform.PointSize / V2d uniform.ViewportSize
                 let pos = p.Value.pos

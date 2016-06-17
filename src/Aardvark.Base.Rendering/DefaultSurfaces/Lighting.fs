@@ -1,9 +1,8 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module Lighting = 
@@ -19,7 +18,7 @@ module Lighting =
     type UniformScope with
         member x.HasSpecularColorTexture : bool = x?HasSpecularColorTexture
 
-    let lighting (twoSided : bool) (v : Vertex) =
+    let internal lighting (twoSided : bool) (v : Vertex) =
         fragment {
             let n = v.n |> Vec.normalize
             let c = uniform.CameraLocation - v.wp.XYZ |> Vec.normalize

@@ -1,9 +1,9 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
+open DefaultSurfaceVertex
 
 module InstanceTrafo = 
     
@@ -12,7 +12,7 @@ module InstanceTrafo =
         [<InstanceTrafo>] trafo : M44d
     }
 
-    let instanceTrafo (v : InstanceVertex) =
+    let internal instanceTrafo (v : InstanceVertex) =
         vertex {
             return { v with pos = v.trafo * v.pos }
         }

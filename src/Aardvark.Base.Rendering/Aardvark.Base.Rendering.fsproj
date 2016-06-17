@@ -604,7 +604,6 @@
     <Compile Include="LoD.fs" />
     <Compile Include="ResourceManagement.fs" />
     <Compile Include="FShade.fs" />
-    <Compile Include="DefaultSurfaces.fs" />
     <Compile Include="DefaultSurfaces\DefaultSurfaceVertex.fs" />
     <Compile Include="DefaultSurfaces\PointSurface.fs" />
     <Compile Include="DefaultSurfaces\Trafo.fs" />
@@ -624,6 +623,7 @@
     <Compile Include="DefaultSurfaces\NormalMap.fs" />
     <Compile Include="DefaultSurfaces\TransformColor.fs" />
     <Compile Include="DefaultSurfaces\InstanceTrafo.fs" />
+    <Compile Include="DefaultSurfaces.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

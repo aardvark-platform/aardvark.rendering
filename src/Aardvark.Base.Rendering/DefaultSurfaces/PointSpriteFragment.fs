@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module PointSpriteFragment = 
 
-    let pointSpriteFragment (v : Vertex) =
+    let internal pointSpriteFragment (v : Vertex) =
         fragment {
             let c = 2.0 * v.tc - V2d.II
             if c.Length > 1.0 then

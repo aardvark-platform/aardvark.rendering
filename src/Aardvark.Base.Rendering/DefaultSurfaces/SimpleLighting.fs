@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module SimpleLighting = 
 
-    let simpleLighting (v : Vertex) =
+    let internal simpleLighting (v : Vertex) =
         fragment {
             let n = v.n |> Vec.normalize
             let c = uniform.CameraLocation - v.wp.XYZ |> Vec.normalize

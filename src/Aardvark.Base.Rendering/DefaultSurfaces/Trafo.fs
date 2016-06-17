@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module Trafo = 
     
-    let trafo (v : Vertex) =
+    let internal trafo (v : Vertex) =
         vertex {
             let wp = uniform.ModelTrafo * v.pos
             return {

@@ -1,14 +1,14 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
+open Microsoft.FSharp.Quotations
 
 module TransformColor = 
 
-    let transformColor (f : Expr<V4d -> V4d>) (v : Vertex) =
+    let internal transformColor (f : Expr<V4d -> V4d>) (v : Vertex) =
         fragment {
             return (%f) v.c
         }

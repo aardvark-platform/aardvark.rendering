@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open ThickLine
 
 module ThickLineRoundCaps = 
     
-    let thickLineRoundCaps (v : ThickLineVertex) =
+    let internal thickLineRoundCaps (v : ThickLineVertex) =
         fragment {
             if v.lc.Y < 0.0 then
                 let tc = v.lc / V2d(1.0, v.w)

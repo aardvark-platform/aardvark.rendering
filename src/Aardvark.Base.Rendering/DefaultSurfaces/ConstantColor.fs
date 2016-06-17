@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module ConstantColor = 
 
-    let constantColor (c : C4f) (v : Vertex) =
+    let internal constantColor (c : C4f) (v : Vertex) =
         let c = c.ToV4d()
         fragment {
             return c

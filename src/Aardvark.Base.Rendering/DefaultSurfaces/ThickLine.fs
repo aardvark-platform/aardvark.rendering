@@ -1,9 +1,8 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 
 module ThickLine = 
 
@@ -16,7 +15,7 @@ module ThickLine =
 
     let Lerp (a : V4d) (b : V4d) (s : float) : V4d = failwith ""
 
-    let thickLine (line : Line<ThickLineVertex>) =
+    let internal thickLine (line : Line<ThickLineVertex>) =
         triangle {
             let t = uniform.LineWidth
             let sizeF = V3d(float uniform.ViewportSize.X, float uniform.ViewportSize.Y, 1.0)

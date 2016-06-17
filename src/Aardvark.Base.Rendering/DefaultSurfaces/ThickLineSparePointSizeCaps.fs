@@ -1,14 +1,13 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open ThickLine
 
 module ThickLineSparePointSizeCaps = 
 
-    let thickLineSparePointSizeCaps (v : ThickLineVertex) =
+    let internal thickLineSparePointSizeCaps (v : ThickLineVertex) =
         fragment {
             let r = uniform.PointSize / uniform.LineWidth
             if v.lc.Y < 0.5 then

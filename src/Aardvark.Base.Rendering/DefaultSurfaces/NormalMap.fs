@@ -1,9 +1,8 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module NormalMap =
@@ -16,7 +15,7 @@ module NormalMap =
             addressV WrapMode.Wrap
         }
 
-    let normalMap (v : Vertex) =
+    let internal normalMap (v : Vertex) =
         fragment {
             let texColor = normalSampler.Sample(v.tc).XYZ
             let texNormal = (2.0 * texColor - V3d.III) |> Vec.normalize

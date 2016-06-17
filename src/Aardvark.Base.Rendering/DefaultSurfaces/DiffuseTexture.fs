@@ -1,9 +1,8 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Base.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 open DefaultSurfaceVertex
 
 module DiffuseTexture = 
@@ -16,7 +15,7 @@ module DiffuseTexture =
             addressV WrapMode.Wrap
         }
 
-    let diffuseTexture (v : Vertex) =
+    let internal diffuseTexture (v : Vertex) =
         fragment {
             let texColor = diffuseSampler.Sample(v.tc)
             return texColor
