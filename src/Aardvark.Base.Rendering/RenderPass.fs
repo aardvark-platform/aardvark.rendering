@@ -39,10 +39,13 @@ module RenderPass =
 
     let private mainOrder = SimpleOrder.create()
     let private mainPass = mainOrder.After mainOrder.Root
+    let private lastPass = mainOrder.After mainOrder.Root
 
     let main = RenderPass("main", RenderPassOrder.Arbitrary, mainPass)
+    let last = RenderPass("last", RenderPassOrder.Arbitrary, lastPass)
 
     let after (name : string) (order : RenderPassOrder) (pass : RenderPass) =
+        if pass = last then failwithf "[RenderPass] cannot add pass after last"
         let key = mainOrder.After(pass.SortKey)
         RenderPass(name, order, key)
 

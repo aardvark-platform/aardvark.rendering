@@ -79,13 +79,17 @@ type Program =
         member x.Uniforms =
             let bu = x.UniformBlocks |> List.collect (fun b -> b.fields |> List.map (fun f -> ConversionTarget.ConvertForBuffer, f))
             let uu = x.Uniforms |> List.map (fun f -> ConversionTarget.ConvertForLocation, f)
-            bu @ uu |> List.map (fun (target, u) -> 
+            bu @ uu |> List.choose (fun (target, u) -> 
                 match u.uniformType with
                     | SamplerType ->
-                        u.semantic, typeof<ITexture>
+                        Some (u.semantic, typeof<ITexture>)
+
+                    | ImageType ->
+                        None
+
                     | _ ->
                         let t = UniformConverter.getExpectedType target u.uniformType
-                        u.semantic, t
+                        Some (u.semantic, t)
             )
 
     member x.InterfaceBlock =
@@ -217,10 +221,10 @@ module ProgramReflector =
 
         ]
 
-    let getActiveUniforms (p : int) =
+    let getActiveUniforms (p : int) (firstTexture : int) (imageSlots : Map<Symbol, int>) =
         let count = GL.GetProgram(p, GetProgramParameterName.ActiveUniforms)
         GL.Check "could not get active uniform count"
-        let binding = ref 0
+        let binding = ref firstTexture
 
         [ for i in 0..count-1 do
             let u = getActiveUniform p i
@@ -241,6 +245,15 @@ module ProgramReflector =
 
                         for i in 0..size-1 do
                             yield { u with slot = baseBinding + i; index = i }
+
+                    | ImageType ->
+                        match Map.tryFind (Symbol.Create u.semantic) imageSlots with
+                            | Some slot ->
+                                GL.Uniform1(u.location, slot)
+                                GL.Check "could not set texture-location"
+                            | None ->
+                                ()
+
                     | _ ->
                         if not (u.name.StartsWith "_main_") then
                             yield u
@@ -413,10 +426,19 @@ module ProgramExtensions =
                                 match m.Groups.["top"].Value with
                                     | "points" -> 
                                         [IndexedGeometryMode.PointList] |> Set.ofList |> Some
-                                    | "lines" | "lines_adjacency" ->
+
+                                    | "lines" ->
                                         [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
-                                    | "triangles" | "triangles_adjacency" ->
+
+                                    | "lines_adjacency" ->
+                                        [IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+
+                                    | "triangles"  ->
                                         [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
+                                    
+                                    | "triangles_adjacency" ->
+                                        [IndexedGeometryMode.TriangleAdjacencyList] |> Set.ofList |> Some
+                                    
                                     | v ->
                                        failwithf "unknown geometry shader input topology: %A" v 
                             else
@@ -442,6 +464,14 @@ module ProgramExtensions =
             let tev = code.Contains "void TEV"
             let gs = code.Contains "void GS("
             let fs = code.Contains "void PS("
+
+            let imageSlots = fboSignature.Images |> Map.toSeq |> Seq.map (fun (a,b) -> b,a) |> Map.ofSeq
+
+            let firstTexture = 
+                if Map.isEmpty fboSignature.Images then
+                    0
+                else
+                    1 + (fboSignature.Images |> Map.toSeq |> Seq.map fst |> Seq.max)
 
             let stages =
                 [
@@ -539,7 +569,7 @@ module ProgramExtensions =
                                 Handle = handle
                                 Shaders = shaders
                                 UniformBlocks = ProgramReflector.getActiveUniformBlocks handle
-                                Uniforms = ProgramReflector.getActiveUniforms handle
+                                Uniforms = ProgramReflector.getActiveUniforms handle firstTexture imageSlots
                                 UniformGetters = SymDict.empty
                                 SamplerStates = SymDict.empty
                                 Inputs = ProgramReflector.getActiveInputs handle

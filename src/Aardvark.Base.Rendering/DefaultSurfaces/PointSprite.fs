@@ -3,7 +3,6 @@
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open FShade
-open DefaultSurfaceVertex
 
 module PointSprite = 
 

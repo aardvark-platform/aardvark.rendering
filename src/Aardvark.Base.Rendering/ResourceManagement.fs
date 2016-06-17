@@ -235,8 +235,8 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                 r :> IResource<_>
             | None -> x.GetOrCreateLocal(key, create)
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
-        let key = [dataMod :> obj]
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+        let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
                 match dataMod with
@@ -314,6 +314,8 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                     }
                 )
 
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
+        x.GetOrCreate(dataMod, [], desc)
 
     member x.Count = store.Count
     member x.Clear() = store.Clear()
@@ -351,7 +353,7 @@ type ResourceInputSet() =
             | _ ->
                 resourceInfos.[kind] <- dInfo
 
-    let updateOne (x : ResourceInputSet) (r : IResource) =
+    let updateOne (x : ResourceInputSet) (r : IResource)  =
         let oldInfo = r.Info
         let ret = r.Update x
         let newInfo = r.Info
@@ -409,7 +411,9 @@ type ResourceInputSet() =
 
         if needsUpdate then
             Log.warn "adding outdated resource: %A" r.Kind
-            updateDirty x |> ignore
+            x.EvaluateAlways null (fun () -> 
+                updateDirty x |> ignore
+            )
 
     member x.Remove (r : IResource) =
         lock all (fun () ->

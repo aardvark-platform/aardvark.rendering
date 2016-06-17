@@ -38,8 +38,10 @@ type PreparedRenderObject =
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
         
         ColorAttachmentCount : int
+        DrawBuffers : Option<DrawBufferConfig>
         ColorBufferMasks : Option<list<V4i>>
         DepthBufferMask : bool
+        StencilBufferMask : bool
 
         //ClipDistanceBitmask : array<bool>
 
@@ -51,6 +53,7 @@ type PreparedRenderObject =
     } 
 
     interface IRenderObject with
+        member x.Id = x.Original.Id
         member x.RenderPass = x.RenderPass
         member x.AttributeScope = x.AttributeScope
 
@@ -136,8 +139,12 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         if not x.IsDisposed then
+
             x.Activation.Dispose()
             x.IsDisposed <- true
+            match x.DrawBuffers with
+                | Some b -> b.RemoveRef()
+                | _ -> ()
             x.VertexArray.Dispose() 
             x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
             x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
@@ -168,6 +175,7 @@ type PreparedRenderObject =
             | _ -> false
 
 
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PreparedRenderObject =
     let empty = 
@@ -189,8 +197,10 @@ module PreparedRenderObject =
             VertexArray = Unchecked.defaultof<_>
             VertexAttributeValues = Map.empty
             ColorAttachmentCount = 0
+            DrawBuffers = None
             ColorBufferMasks = None
             DepthBufferMask = true
+            StencilBufferMask = true
             IsDisposed = false
             DrawCallStats = Mod.constant NoDraw
             ResourceCount = 0
@@ -198,6 +208,13 @@ module PreparedRenderObject =
         }  
 
     let clone (o : PreparedRenderObject) =
+        let drawBuffers =
+            match o.DrawBuffers with
+                | Some b ->
+                    b.AddRef()
+                    Some b
+                | _ ->
+                    None
         let res = 
             {
                 Activation = { new IDisposable with member x.Dispose() = () }
@@ -217,8 +234,10 @@ module PreparedRenderObject =
                 VertexArray = o.VertexArray
                 VertexAttributeValues = o.VertexAttributeValues
                 ColorAttachmentCount = o.ColorAttachmentCount
+                DrawBuffers = drawBuffers
                 ColorBufferMasks = o.ColorBufferMasks
                 DepthBufferMask = o.DepthBufferMask
+                StencilBufferMask = o.StencilBufferMask
                 IsDisposed = o.IsDisposed
                 DrawCallStats = o.DrawCallStats
                 ResourceCount = o.ResourceCount
@@ -260,6 +279,7 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     member x.Last = last
 
     interface IRenderObject with
+        member x.Id = first.Id
         member x.AttributeScope = first.AttributeScope
         member x.RenderPass = first.RenderPass
 
@@ -441,9 +461,21 @@ type ResourceManagerExtensions private() =
                 | _ ->
                     None
 
+
+
+        let drawBuffers = 
+            match rj.WriteBuffers with
+                | Some set -> x.DrawBufferManager.CreateConfig(set) |> Some
+                | _ -> None
+
         let depthMask =
             match rj.WriteBuffers with
                 | Some b -> Set.contains DefaultSemantic.Depth b
+                | None -> true
+
+        let stencilMask =
+            match rj.WriteBuffers with
+                | Some b -> Set.contains DefaultSemantic.Stencil b
                 | None -> true
 
         let drawCalls =
@@ -502,8 +534,10 @@ type ResourceManagerExtensions private() =
                 VertexArray = vao
                 VertexAttributeValues = attributeValues
                 ColorAttachmentCount = attachmentCount
+                DrawBuffers = drawBuffers
                 ColorBufferMasks = colorMasks
                 DepthBufferMask = depthMask
+                StencilBufferMask = stencilMask
                 IsDisposed = false
                 DrawCallStats = drawCallStats
                 ResourceCount = -1

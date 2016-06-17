@@ -6,6 +6,7 @@ open System
 open System.Threading
 open System.Collections.Generic
 open System.Runtime.CompilerServices
+open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Base.Runtime
@@ -63,7 +64,9 @@ module OpenGLInterpreter =
         let mutable currentStencilOpBack    = V3i(-1,-1,-1)
         let mutable currentPatchVertices    = -1
         let mutable currentDepthMask        = 1
+        let mutable currentStencilMask      = 0xFFFFFFFF
         let mutable currentViewport         = Box2i.Invalid
+        let mutable currentDrawBuffers      = None
 
         let currentColorMasks               = Dictionary<int, V4i>(32)
         let currentSamplers                 = Dictionary<int, int>(32)
@@ -125,6 +128,7 @@ module OpenGLInterpreter =
             currentPatchVertices    <- -1
             currentDepthMask        <- 1
             currentViewport         <- Box2i.Invalid
+            currentDrawBuffers      <- None
 
             currentColorMasks.Clear()
             currentSamplers.Clear() 
@@ -248,6 +252,9 @@ module OpenGLInterpreter =
         member x.ShouldSetDepthMask (mask : int) =
             x.set(&currentDepthMask, mask)
 
+        member x.ShouldSetStencilMask (mask : int) =
+            x.set(&currentStencilMask, mask)
+
         member x.ShouldSetColorMask (index : int, mask : V4i) =
             match currentColorMasks.TryGetValue index with
                 | (true, o) when o = mask ->
@@ -257,6 +264,18 @@ module OpenGLInterpreter =
                     effectiveInstructions <- effectiveInstructions + 1
                     currentColorMasks.[index] <- mask
                     true
+
+        member x.ShouldSetDrawBuffers (all : Set<int>, n : int, ptr : nativeint) =
+            let ptr : nativeptr<int> = NativePtr.ofNativeInt ptr
+            let value = 
+                if n < 0 then 
+                    None
+                else
+                    let s = ptr |> NativePtr.toArray n |> Set.ofArray
+                    if s = all then None else Some s
+
+            x.set(&currentDrawBuffers, value)
+
 
         member x.ShouldSetFramebuffer(target : int, fbo : int) =
             match currentFramebuffers.TryGetValue(target) with
@@ -355,9 +374,18 @@ module OpenGLInterpreter =
             if x.ShouldSetDepthMask mask then
                 GL.DepthMask mask
 
+        member inline x.stencilMask (mask : int) =
+            if x.ShouldSetStencilMask mask then
+                GL.StencilMask mask
+
+
         member inline x.colorMask (index : int) (mask : V4i) =
             if x.ShouldSetColorMask(index, mask) then
                 GL.ColorMask index mask.X mask.Y mask.Z mask.W
+
+        member inline x.drawBuffers (all : Set<int>) (n : int) (ptr : nativeint) =
+            if x.ShouldSetDrawBuffers(all, n, ptr) then
+                GL.DrawBuffers n ptr
 
         member inline x.bindFramebuffer (target : int) (fbo : int) =
             if x.ShouldSetFramebuffer(target, fbo) then
@@ -426,6 +454,9 @@ module OpenGLObjectInterpreter =
 
         member gl.setDepthMask (mask : bool) =
             gl.depthMask (if mask then 1 else 0)
+
+        member gl.setStencilMask (mask : bool) =
+            gl.stencilMask (if mask then 0xFFFFFFFF else 0)
 
         member gl.setColorMasks (masks : list<V4i>) =
             let mutable i = 0
@@ -521,10 +552,19 @@ module OpenGLObjectInterpreter =
         member gl.render (o : PreparedRenderObject) =
             if Mod.force o.IsActive then
                 gl.setDepthMask o.DepthBufferMask
+                gl.setStencilMask o.StencilBufferMask
+
+                let allBuffers = o.FramebufferSignature.ColorAttachments |> Map.toSeq |> Seq.map fst |> Set.ofSeq
 
                 match o.ColorBufferMasks with
                     | Some masks -> gl.setColorMasks masks
                     | None -> gl.setColorMasks (List.init o.ColorAttachmentCount (fun _ -> V4i.IIII))
+
+                match o.DrawBuffers with
+                    | Some b ->
+                        gl.drawBuffers allBuffers b.Count (NativePtr.toNativeInt b.Buffers)
+                    | _ ->
+                        gl.drawBuffers allBuffers -1 0n
 
 
                 let depthMode = o.DepthTest.GetValue()
@@ -545,14 +585,7 @@ module OpenGLObjectInterpreter =
 
                 let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
-                let patchSize =
-                    match o.Mode.GetValue() with
-                        | IndexedGeometryMode.LineList -> 2
-                        | IndexedGeometryMode.PointList -> 1
-                        | IndexedGeometryMode.TriangleList -> 3
-                        | IndexedGeometryMode.LineStrip -> 2
-                        | IndexedGeometryMode.TriangleStrip -> 3
-                        | m -> failwithf "unsupported patch-mode: %A" m
+                let patchSize = o.Mode.GetValue() |> Translations.toPatchCount
 
                 let mode =
                     let igMode = o.Mode.GetValue()
@@ -662,7 +695,7 @@ module OpenGLObjectInterpreter =
 
 [<AutoOpen>]
 module ``Interpreter Extensions`` =
-    type private InterpreterProgram(scope : RenderTaskScope, content : seq<PreparedMultiRenderObject>) =
+    type private InterpreterProgram(scope : Aardvark.Rendering.GL.Compiler.CompilerInfo, content : seq<PreparedMultiRenderObject>) =
         inherit AbstractRenderProgram()
 
         override x.Update() = ()

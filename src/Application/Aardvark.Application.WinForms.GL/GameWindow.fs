@@ -351,6 +351,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
         FramebufferSignature(
             runtime,
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
+            Map.empty,
             depthSignature,
             None
         )
@@ -424,10 +425,12 @@ type GameWindow(runtime : Runtime, samples : int) as this =
                         defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                         defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size) }
 
+                        GL.ColorMask(true, true, true, true)
+                        GL.DepthMask(true)
                         GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
                         GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
                         GL.ClearDepth(1.0)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
+                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
                         let desc = OutputDescription.ofFramebuffer defaultFramebuffer
                         let res = t.Run(null, defaultOutput)

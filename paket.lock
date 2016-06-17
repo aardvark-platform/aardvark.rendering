@@ -35,9 +35,9 @@ NUGET
       Aardvark.Base.FSharp (>= 2.1)
       Aardvark.Base.Incremental (>= 2.1)
   remote: http://api.nuget.org/v3/index.json
-  specs:
     AssimpNet (3.3.1)
     BruTile (0.12)
+    Clipper (6.2.10)
     CommonMark.NET (0.12)
     DevILSharp (0.0.13)
     DockPanelSuite (2.10.0-beta2)
@@ -143,7 +143,6 @@ GROUP Build
 CONTENT: NONE
 NUGET
   remote: http://api.nuget.org/v3/index.json
-  specs:
     Chessie (0.5.1) - content: none
       FSharp.Core
     FAKE (4.28) - content: none

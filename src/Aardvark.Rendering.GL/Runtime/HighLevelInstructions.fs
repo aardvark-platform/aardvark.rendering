@@ -14,6 +14,10 @@ module Instructions =
     let setDepthMask (active : bool) =
         Instruction.DepthMask(if active then 1 else 0)
 
+    let setStencilMask (active : bool) =
+        Instruction.StencilMask(if active then 0b11111111111111111111111111111111 else 0)
+
+
     let setColorMasks (masks : list<V4i>) =
         masks |> List.mapi (fun i mask ->
             Instruction.ColorMask i mask.X mask.Y mask.Z mask.W
@@ -186,11 +190,7 @@ module Instructions =
                 Mod.constant (false, typeof<obj>) 
 
         let patchSize (mode : IndexedGeometryMode) =
-            match mode with
-                | IndexedGeometryMode.LineList -> 2
-                | IndexedGeometryMode.PointList -> 1
-                | IndexedGeometryMode.TriangleList -> 3
-                | m -> failwithf "unsupported patch-mode: %A" m
+            Translations.toPatchCount mode
 
         let instruction  =
             adaptive {
@@ -248,11 +248,7 @@ module Instructions =
                 Mod.constant (false, typeof<obj>)
 
         let patchSize (mode : IndexedGeometryMode) =
-            match mode with
-                | IndexedGeometryMode.LineList -> 2
-                | IndexedGeometryMode.PointList -> 1
-                | IndexedGeometryMode.TriangleList -> 3
-                | m -> failwithf "unsupported patch-mode: %A" m
+            Translations.toPatchCount mode
 
         let instruction  =
             adaptive {

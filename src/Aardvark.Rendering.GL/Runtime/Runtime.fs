@@ -8,7 +8,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
 
-type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
+type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
    
     let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
         let myCol = RenderbufferFormat.toColFormat mine.format
@@ -34,7 +34,7 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
     member x.ColorAttachments = colors
     member x.DepthAttachment = depth
     member x.StencilAttachment = depth
-
+    member x.Images = images
     member x.IsAssignableFrom (other : IFramebufferSignature) =
         if x.Equals other then 
             true
@@ -56,6 +56,7 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
         member x.DepthAttachment = depth
         member x.StencilAttachment = stencil
         member x.IsAssignableFrom other = x.IsAssignableFrom other
+        member x.Images = images
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
@@ -89,15 +90,17 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     interface IRuntime with
 
-        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
-            x.CreateFramebufferSignature(attachments) :> IFramebufferSignature
+        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+            x.CreateFramebufferSignature(attachments, images) :> IFramebufferSignature
 
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
 
         member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
         member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
-  
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
+
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock
@@ -154,7 +157,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             x.CreateMappedBuffer ()
 
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
 
         let depth =
@@ -177,7 +180,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 |> List.mapi (fun i t -> (i, t))
                 |> Map.ofList
 
-        FramebufferSignature(x, indexedColors, depth, stencil)
+        let images = images |> Seq.mapi (fun i s -> (i,s)) |> Map.ofSeq
+
+        FramebufferSignature(x, indexedColors, images, depth, stencil)
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
@@ -210,12 +215,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
             
-        let renderTaskLock = RenderTaskLock()
-        let man = ResourceManager(manager, ctx, Some renderTaskLock, shareTextures, shareBuffers)
-
         match eng.sorting with
             | Arbitrary | Grouping _  -> 
-                new RenderTasks.RenderTask(man, fboSignature, set, engine) :> IRenderTask
+                new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
 
             | Dynamic _ -> 
                 failwith "[SortedRenderTask] not available atm."
@@ -340,6 +342,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
         ctx.Download(unbox<Texture> t, level, slice, target)
+
+    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) =
+        ctx.DownloadStencil(unbox<Texture> t, level, slice, target)
+
+    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) =
+        ctx.DownloadDepth(unbox<Texture> t, level, slice, target)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
         ctx.Upload(unbox<Texture> t, level, slice, source)

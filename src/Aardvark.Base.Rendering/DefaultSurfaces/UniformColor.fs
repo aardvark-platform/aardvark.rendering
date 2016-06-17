@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open FShade
-open DefaultSurfaceVertex
 
 module UniformColor =
  
