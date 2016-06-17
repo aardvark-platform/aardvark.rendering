@@ -38,3 +38,6 @@ module RuntimeSgExtensions =
     
         let compile (runtime : IRuntime) (signature : IFramebufferSignature) (sg : ISg) =
             runtime.CompileRender(signature, sg)
+
+        let compile' (runtime : IRuntime) (signature : IFramebufferSignature) (config : BackendConfiguration) (sg : ISg) =
+            runtime.CompileRender(signature, config, sg)

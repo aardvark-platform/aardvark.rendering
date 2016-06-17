@@ -63,36 +63,39 @@ type MappedBuffer(ctx : Context) =
                 GL.BindBuffer(BufferTarget.CopyReadBuffer, buffer.Handle)
                 GL.Check "[MappedBuffer] could not bind old buffer"
 
-                GL.UnmapBuffer(BufferTarget.CopyReadBuffer) |> ignore
-                GL.Check "[MappedBuffer] could not unmap buffer"
+                if mappedPtr <> 0n then // if buffer was empty, we did not map the buffer
+                    GL.UnmapBuffer(BufferTarget.CopyReadBuffer) |> ignore
+                    GL.Check "[MappedBuffer] could not unmap buffer"
 
                 mappedPtr <- 0n
 
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, newBuffer)
             GL.Check "[MappedBuffer] could not bind new buffer"
 
-            GL.BufferStorage(BufferTarget.CopyWriteBuffer, nativeint newCapacity, 0n, BufferStorageFlags.MapPersistentBit ||| BufferStorageFlags.MapWriteBit ||| BufferStorageFlags.DynamicStorageBit)
-            GL.Check "[MappedBuffer] could not set buffer storage"
+            if newCapacity > 0 then
+                GL.BufferStorage(BufferTarget.CopyWriteBuffer, nativeint newCapacity, 0n, BufferStorageFlags.MapPersistentBit ||| BufferStorageFlags.MapWriteBit ||| BufferStorageFlags.DynamicStorageBit)
+                GL.Check "[MappedBuffer] could not set buffer storage"
 
-            if oldBuffer <> 0 then
-                if copySize > 0n then
-                    GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copySize)
-                    GL.Check "[MappedBuffer] could not copy buffer"
+                if oldBuffer <> 0 then
+                    if copySize > 0n then
+                        GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copySize)
+                        GL.Check "[MappedBuffer] could not copy buffer"
 
-                GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
-                GL.Check "[MappedBuffer] could unbind old buffer"
+                    GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
+                    GL.Check "[MappedBuffer] could unbind old buffer"
 
+                mappedPtr <-
+                    GL.MapBufferRange(
+                        BufferTarget.CopyWriteBuffer, 
+                        0n, 
+                        nativeint newCapacity, 
+                        BufferAccessMask.MapPersistentBit ||| BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit
+                    )
+                GL.Check "[MappedBuffer] could map buffer"
+            else 
+                mappedPtr <- 0n
 
             buffer <- Buffer(ctx, nativeint newCapacity, newBuffer)
-
-            mappedPtr <-
-                GL.MapBufferRange(
-                    BufferTarget.CopyWriteBuffer, 
-                    0n, 
-                    nativeint newCapacity, 
-                    BufferAccessMask.MapPersistentBit ||| BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit
-                )
-            GL.Check "[MappedBuffer] could map buffer"
 
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
             GL.Check "[MappedBuffer] could unbind buffer"
