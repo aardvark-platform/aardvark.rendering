@@ -2443,7 +2443,7 @@ module VolumeShader =
 
         o + minT * d
 
-    let extrudeToInf (l : Line<DefaultSurfaces.Vertex>) =
+    let extrudeToInf (l : Line<Effects.Vertex>) =
         triangle {
 
             let vp      = uniform.ViewProjTrafo
@@ -2466,7 +2466,7 @@ module VolumeShader =
             yield { l.P1 with pos = p1f }
         }
 
-    let duplicateAtInf (t : Triangle<DefaultSurfaces.Vertex>) =
+    let duplicateAtInf (t : Triangle<Effects.Vertex>) =
         triangle {
 
             let vp      = uniform.ViewProjTrafo

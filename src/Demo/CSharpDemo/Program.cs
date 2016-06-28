@@ -8,22 +8,18 @@ FShade from within C# ;)
 
 */
 
-using System;
-using Aardvark.Base;
-using Aardvark.Base.Rendering;
-using Aardvark.Base.Incremental.CSharp;
-using Aardvark.SceneGraph;
-using Aardvark.SceneGraph.CSharp;
-
 using Aardvark.Application;
 using Aardvark.Application.WinForms;
+using Aardvark.Base;
+using Aardvark.Base.Incremental;
+using Aardvark.Base.Incremental.CSharp;
 using Aardvark.Rendering.NanoVg;
-using Microsoft.FSharp.Quotations;
-using static Aardvark.Base.CSharpInterop;
+using Aardvark.SceneGraph.CSharp;
+using System;
+using System.ComponentModel;
 using System.Windows.Forms;
 using WeifenLuo.WinFormsUI.Docking;
-using Aardvark.Base.Incremental;
-using System.ComponentModel;
+using Effects = Aardvark.Base.Rendering.Effects;
 
 namespace CSharpDemo
 {
@@ -196,23 +192,13 @@ namespace CSharpDemo
 
             var quadSg = quad.ToSg();
 
-            // This is one of the hardest parts in C#. Our FShade interface is rather generic and
-            // works super awesome in F#. In C# however, without proper type inference doing simple function
-            // calls suddenly requires a Phd in CS. Therefore, and especially since shaders cannot be written
-            // in C# anyways, write application setup and shader code in F# ;)
-            // Or don't use FShade. FShade simply does not work in without functional language 
-            // features such as type inference and function currying.
-            Func<DefaultSurfaces.Vertex, FSharpExpr<V4d>> whiteShader =
-                    HighFun.ApplyArg0<C4f, DefaultSurfaces.Vertex, FSharpExpr<V4d>>(
-                        DefaultSurfaces.constantColor, C4f.White);
-            Func<DefaultSurfaces.Vertex, FSharpExpr<DefaultSurfaces.Vertex>> trafo = c => DefaultSurfaces.trafo(c);
+            var whiteShader = Effects.ConstantColor.Effect(C4f.White);
 
-            var sg =
+            var trafo = Effects.Trafo.Effect;
+
+            var sg = 
                 quadSg
-                .WithEffects(new[] {
-                        Aardvark.Base.Rendering.FShadeInterop.toEffect(FSharpFuncUtil.Create(trafo)),
-                        Aardvark.Base.Rendering.FShadeInterop.toEffect(FSharpFuncUtil.Create(whiteShader)),
-                })
+                .WithEffects(new[] {trafo, whiteShader })
                 .ViewTrafo(viewTrafo.Select(t => t.ViewTrafo))
                 .ProjTrafo(perspective.Select(t => t.ProjTrafo()));
 

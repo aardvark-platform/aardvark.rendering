@@ -17,6 +17,12 @@ type GeometryExtensions =
     [<Extension>]
     static member ToSg(ig : IndexedGeometry) = ig |> Sg.ofIndexedGeometry
 
+type QuickUniformHolder(values : SymbolDict<IMod>) =
+    interface IUniformProvider with
+        member x.TryGetUniform (scope,name) = let (success, value) = values.TryGetValue(name)
+                                              if success then Some value else None
+        member x.Dispose() = ()
+
 [<Extension>]
 [<AbstractClass>]
 [<Sealed>]
@@ -92,6 +98,21 @@ type SceneGraphExtensions =
 
     [<Extension>]
     static member WithEffects(sg : ISg, effects : seq<FShadeEffect>) : ISg = Sg.effect effects sg
+
+    [<Extension>]
+    static member Uniform(sg : ISg, name : Symbol, value : IMod) : ISg = Sg.UniformApplicator(name, value, sg) :> ISg
+
+    [<Extension>]
+    static member Uniform(sg : ISg, uniforms : IUniformProvider) : ISg = Sg.UniformApplicator(uniforms, sg) :> ISg
+
+    [<Extension>]
+    static member Uniform(sg : ISg, uniforms : SymbolDict<IMod>) : ISg = Sg.UniformApplicator(new QuickUniformHolder(uniforms), sg) :> ISg
+
+    [<Extension>]
+    static member VertexIndices(sg : ISg, indices : IMod<Array>) : ISg = Sg.VertexIndexApplicator(indices, sg) :> ISg
+
+    [<Extension>]
+    static member VertexAttributes(sg : ISg, attributes : SymbolDict<BufferView>) : ISg = Sg.VertexAttributeApplicator(attributes, sg) :> ISg
 
 [<Extension>]
 [<AbstractClass>]

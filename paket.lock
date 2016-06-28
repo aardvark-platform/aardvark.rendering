@@ -1,5 +1,6 @@
 NUGET
   remote: https://vrvis.myget.org/F/aardvark_public
+  specs:
     Aardvark.Base (2.1.3)
       DevILSharp (>= 0.0.11 < 0.1)
     Aardvark.Base.Essentials (2.1.3)
@@ -148,7 +149,7 @@ NUGET
     FSharp.Core (4.0.0.1) - content: none
     Mono.Cecil (0.9.5.4) - content: none
     Newtonsoft.Json (8.0.3) - content: none
-    Paket.Core (3.1.1) - content: none
+    Paket.Core (3.1.3) - content: none
       Chessie
       FSharp.Core
       Mono.Cecil
@@ -156,6 +157,7 @@ NUGET
     SourceLink.Fake (1.1) - content: none
 GITHUB
   remote: vrvis/Aardvark.Fake
+  specs:
     FULLPROJECT (7c479e6e1818b2b868bd2443e79c7afbc68d872f)
       FAKE (< 5.0)
       Mono.Cecil (<= 0.9.5.4)

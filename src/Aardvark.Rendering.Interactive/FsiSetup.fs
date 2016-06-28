@@ -77,6 +77,8 @@ module FsiSetup =
         win.Visible <- true 
         win.RenderTask <- task
 
+        win.InstallCapture(Keys.F12)
+
         win :> IRenderControl
 
     let closeWindow (c : IRenderControl) =
@@ -147,6 +149,8 @@ module FsiSetup =
 
         win.Text <- @"Aardvark rocks \o/"
         win.Visible <- true
+
+        win.InstallCapture(Keys.F12)
 
         win.Keyboard.KeyDown(Keys.G).Values.Add(fun d ->
             System.GC.Collect()
