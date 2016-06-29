@@ -550,7 +550,7 @@ module OpenGLObjectInterpreter =
                     failwithf "no uniform-setter for: %A" loc
 
         member gl.render (o : PreparedRenderObject) =
-            if Mod.force o.IsActive then
+            if (not <| isNull o.IsActive) && Mod.force o.IsActive then // empty objects make null here. Further investigate
                 gl.setDepthMask o.DepthBufferMask
                 gl.setStencilMask o.StencilBufferMask
 
