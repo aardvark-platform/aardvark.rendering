@@ -596,9 +596,14 @@ module RenderTasks =
                     if isNull current then first <- f
                     else current.Next <- f
                     current <- f
+
+                if not <| isNull current then current.Next <- last
+
             )
 
         override x.Run() =
+            
+
             vmStats.TotalInstructions <- 0
             vmStats.RemovedInstructions <- 0
             if not (isNull first) then
