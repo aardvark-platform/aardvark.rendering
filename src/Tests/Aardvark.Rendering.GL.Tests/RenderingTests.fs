@@ -545,29 +545,29 @@ module RenderingTests =
 
         let pureRenderTime = sw.Elapsed.TotalSeconds / float iterations
 
-        Telemetry.reset()
-        Log.line "starting update test"
-        let mutable iterations = 0
-        let sw = Stopwatch()
-        sw.Start()
-        while sw.Elapsed.TotalSeconds < 20.0 || iterations < 50 do
-            transact(fun () -> Mod.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
-            clear.Run fbo |> ignore
-            task.Run fbo |> ignore
-            iterations <- iterations + 1
-        sw.Stop()
-
-        let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
-            
-
-        let updateTime = updateAndRenderTime - pureRenderTime
-
-        Log.line "total:        %.2ffps" (1.0 / updateAndRenderTime)
-        Log.line "rendering:    %.2ffps" (1.0 / pureRenderTime)
-        Log.line "updates:      %.2ffps" (1.0 / updateTime)
-
-        let rep = Telemetry.resetAndGetReport()
-        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
+//        Telemetry.reset()
+//        Log.line "starting update test"
+//        let mutable iterations = 0
+//        let sw = Stopwatch()
+//        sw.Start()
+//        while sw.Elapsed.TotalSeconds < 20.0 || iterations < 50 do
+//            transact(fun () -> Mod.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
+//            clear.Run fbo |> ignore
+//            task.Run fbo |> ignore
+//            iterations <- iterations + 1
+//        sw.Stop()
+//
+//        let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
+//            
+//
+//        let updateTime = updateAndRenderTime - pureRenderTime
+//
+//        Log.line "total:        %.2ffps" (1.0 / updateAndRenderTime)
+//        Log.line "rendering:    %.2ffps" (1.0 / pureRenderTime)
+//        Log.line "updates:      %.2ffps" (1.0 / updateTime)
+//
+//        let rep = Telemetry.resetAndGetReport()
+//        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
 
         ()
 
@@ -650,28 +650,28 @@ module RenderingTests =
 
 
 
-        Telemetry.reset()
-        Log.line "starting update test"
-        let mutable iterations = 0
-        let sw = Stopwatch()
-        let disp = System.Collections.Generic.List()
-        sw.Start()
-        while sw.Elapsed.TotalSeconds < 20.0 do
-            let t = runtime.CompileRender(signature,renderJobs)
-            clear.Run fbo |> ignore
-            t.Run fbo |> ignore
-            iterations <- iterations + 1
-            disp.Add t
-        sw.Stop()
-
-        for t in disp do
-            t.Dispose()
-        let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
-            
-        Log.line "compile + render: %.2fs" (updateAndRenderTime)
-
-        let rep = Telemetry.resetAndGetReport()
-        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
+//        Telemetry.reset()
+//        Log.line "starting update test"
+//        let mutable iterations = 0
+//        let sw = Stopwatch()
+//        let disp = System.Collections.Generic.List()
+//        sw.Start()
+//        while sw.Elapsed.TotalSeconds < 20.0 do
+//            let t = runtime.CompileRender(signature,renderJobs)
+//            clear.Run fbo |> ignore
+//            t.Run fbo |> ignore
+//            iterations <- iterations + 1
+//            disp.Add t
+//        sw.Stop()
+//
+//        for t in disp do
+//            t.Dispose()
+//        let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
+//            
+//        Log.line "compile + render: %.2fs" (updateAndRenderTime)
+//
+//        let rep = Telemetry.resetAndGetReport()
+//        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
 
         ()
 
@@ -801,7 +801,7 @@ module RenderingTests =
             let pi = runtime.Download(color, PixFormat.ByteRGBA)
             pi.SaveAsImage(@"C:\Aardwork\urdar.png")
             OpenTK.Graphics.OpenGL4.GL.Sync()
-            Telemetry.reset()
+            //Telemetry.reset()
             Log.line "starting update test"
             let mutable iterations = 0
             let sw = Stopwatch()

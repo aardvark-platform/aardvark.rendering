@@ -75,7 +75,8 @@ type MappedBuffer(ctx : Context) =
             GL.Check "[MappedBuffer] could not set buffer storage"
 
             if oldBuffer <> 0 then
-                GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copySize)
+                if copySize > 0n then
+                    GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copySize)
                 GL.Check "[MappedBuffer] could not copy buffer"
 
                 GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
