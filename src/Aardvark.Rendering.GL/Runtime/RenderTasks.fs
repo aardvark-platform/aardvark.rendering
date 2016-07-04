@@ -560,6 +560,8 @@ module RenderTasks =
 
         let mutable comparer = None
 
+        let mutable disposeCnt = 0
+
         let getComparer (f : seq<AdaptiveGLVMFragment>) =
             match comparer with
                 | Some cmp -> cmp
@@ -598,11 +600,13 @@ module RenderTasks =
                     current <- f
 
                 if not <| isNull current then current.Next <- last
-
+                else first <- last
             )
 
         override x.Run() =
             
+            if disposeCnt > 0 then
+                failwithf "Running disposed glvmprogram"
 
             vmStats.TotalInstructions <- 0
             vmStats.RemovedInstructions <- 0
@@ -616,8 +620,11 @@ module RenderTasks =
             }
 
         override x.Dispose() =
-            last.Dispose()
-            fragmentReader.Dispose()
+            if Interlocked.Increment &disposeCnt = 1 then
+                last.Dispose()
+                fragmentReader.Dispose()    
+            else
+                Log.warn "double dispose"
 
     and SortedInterpreterProgram(parent : CameraSortedSubTask, objects : aset<PreparedMultiRenderObject>, createComparer : Ag.Scope -> IMod<IComparer<PreparedMultiRenderObject>>) =
         inherit AbstractRenderProgram()
