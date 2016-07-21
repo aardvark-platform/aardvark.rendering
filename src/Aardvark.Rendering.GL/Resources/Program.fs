@@ -295,9 +295,9 @@ module ProgramReflector =
                             GL.Check "could not get program resource"
                             let outputType = p |> unbox<ActiveAttribType>
 
-//                            let mutable prop = ProgramProperty.ArraySize
-//                            let _,size = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
-//                            GL.Check "could not get program resource"
+                            let mutable prop = ProgramProperty.ArraySize
+                            let _,size = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
+                            GL.Check "could not get program resource"
 
                             let location = GL.GetFragDataLocation(p, name)
                             GL.GetError() |> ignore
@@ -390,15 +390,12 @@ module ProgramExtensions =
         else def + newCode
 
 
-    let private outputSuffixes = [""; "Out"; "Frag"; "Pixel"; "Fragment"]
+    let private outputSuffixes = ["{0}"; "{0}Out"; "{0}Frag"; "Pixel{0}"; "{0}Pixel"; "{0}Fragment"]
+    let private geometryOutputSuffixes = ["{0}"; "{0}Out"; "{0}Geometry"; "{0}TessControl"; "{0}TessEval"; "Geometry{0}"; "TessControl{0}"; "TessEval{0}"]
 
-    type Aardvark.Rendering.GL.Context with
 
-        member x.CreateUniformBuffer(block : UniformBlock) =
-            let fields = block.fields |> List.map activeUniformToField
-            x.CreateUniformBuffer(block.size, fields)
-
-        member x.TryCompileShader(stage : ShaderStage, code : string, entryPoint : string) =
+    module ShaderCompiler = 
+        let tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (x : Context) =
             using x.ResourceLock (fun _ ->
                 let code = code.Replace(sprintf "%s(" entryPoint, "main(")
                 
@@ -458,20 +455,12 @@ module ProgramExtensions =
 
             )
 
-        member x.TryCompileProgram(fboSignature : IFramebufferSignature, code : string) =
+        let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
             let vs = code.Contains "void VS("
             let tcs = code.Contains "void TCS("
             let tev = code.Contains "void TEV"
             let gs = code.Contains "void GS("
-            let fs = code.Contains "void PS("
-
-            let imageSlots = fboSignature.Images |> Map.toSeq |> Seq.map (fun (a,b) -> b,a) |> Map.ofSeq
-
-            let firstTexture = 
-                if Map.isEmpty fboSignature.Images then
-                    0
-                else
-                    1 + (fboSignature.Images |> Map.toSeq |> Seq.map fst |> Seq.max)
+            let fs = withFragment && code.Contains "void PS("
 
             let stages =
                 [
@@ -489,121 +478,259 @@ module ProgramExtensions =
                 let results =
                     stages |> List.map (fun (def, entry, stage) ->
                         let codeWithDefine = addPreprocessorDefine def code
-                        stage, x.TryCompileShader(stage, codeWithDefine, entry)
+                        stage, tryCompileShader stage codeWithDefine entry x
                     )
 
                 let errors = results |> List.choose (fun (stage,r) -> match r with | Error e -> Some(stage,e) | _ -> None)
                 if List.isEmpty errors then
                     let shaders = results |> List.choose (function (_,Success r) -> Some r | _ -> None)
-
-                    addProgram x
-                    let handle = GL.CreateProgram()
-                    GL.Check "could not create program"
-
-                    for s in shaders do
-                        GL.AttachShader(handle, s.Handle)
-                        GL.Check "could not attach shader to program"
-
-                    GL.LinkProgram(handle)
-                    GL.Check "could not link program"
-
-                    let status = GL.GetProgram(handle, GetProgramParameterName.LinkStatus)
-                    let log = GL.GetProgramInfoLog(handle)
-                    GL.Check "could not get program log"
-
-
-                    if status = 1 then
-                        let outputs =
-                            fboSignature.ColorAttachments 
-                                |> Map.toList
-                                |> List.map (fun (location, (semantic, signature)) ->
-                                    let name = semantic.ToString()
-                                    let suffixes = ["{0}"; "{0}Out"; "{0}Frag"; "Pixel{0}"; "{0}Pixel"; "{0}Fragment"]
-                            
-                                    let outputNameAndIndex = 
-                                        suffixes |> List.tryPick (fun s ->
-                                            let outputName = String.Format(s, name)
-                                            let index = GL.GetFragDataIndex(handle, outputName)
-                                            GL.Check "could not get FragDataIndex"
-                                            if index >= 0 then Some (outputName, index)
-                                            else None
-                                        )
-
-                            
-
-                                    match outputNameAndIndex with
-                                        | Some (outputName, index) ->
-                                            GL.BindFragDataLocation(handle, location, semantic.ToString())
-                                            GL.Check "could not bind FragData location"
-
-                                            { attributeIndex = location; size = 1; name = outputName; semantic = semantic.ToString(); attributeType = ActiveAttribType.FloatVec4 }
-                                        | None ->
-                                            failwithf "could not get desired program-output: %A" semantic
-                                )
-
-                        // after modifying the frag-locations the program needs to be linked again
-                        GL.LinkProgram(handle)
-                        GL.Check "could not link program"
-
-                        for s in shaders do
-                            GL.DeleteShader(s.Handle)
-                            s.Handle <- -1
-                            GL.Check "could not delete shader"
-
-                        let status = GL.GetProgram(handle, GetProgramParameterName.LinkStatus)
-                        let log = GL.GetProgramInfoLog(handle)
-                        GL.Check "could not get program log"
-
-                        if status = 1 then
-
-                            GL.UseProgram(handle)
-                            GL.Check "could not bind program"
-
-                            let supported = 
-                                shaders |> List.tryPick (fun s -> s.SupportedModes)
-
-
-                            let result = {
-                                Context = x
-                                Code = code
-                                Handle = handle
-                                Shaders = shaders
-                                UniformBlocks = ProgramReflector.getActiveUniformBlocks handle
-                                Uniforms = ProgramReflector.getActiveUniforms handle firstTexture imageSlots
-                                UniformGetters = SymDict.empty
-                                SamplerStates = SymDict.empty
-                                Inputs = ProgramReflector.getActiveInputs handle
-                                Outputs = outputs
-                                SupportedModes = supported
-                            }
-
-                            GL.UseProgram(0)
-                            GL.Check "could not unbind program"
-
-                            Success result
-                        else
-                            let log =
-                                if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
-                                else log
-
-                            Error log
-
-                    else
-                        let log =
-                            if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
-                            else log
-
-                        Error log
+                    Success shaders
                 else
                     let err = errors |> List.map (fun (stage, e) -> sprintf "%A:\r\n%s" stage (String.indent 1 e)) |> String.concat "\r\n\r\n" 
                     Error err
+            
+            )
+
+        let setFragDataLocations (fboSignature : IFramebufferSignature) (handle : int) (x : Context) =
+            using x.ResourceLock (fun _ ->
+                fboSignature.ColorAttachments 
+                    |> Map.toList
+                    |> List.map (fun (location, (semantic, signature)) ->
+                        let name = semantic.ToString()
+
+                        let outputNameAndIndex = 
+                            outputSuffixes |> List.tryPick (fun s ->
+                                let outputName = String.Format(s, name)
+                                let index = GL.GetFragDataIndex(handle, outputName)
+                                GL.Check "could not get FragDataIndex"
+                                if index >= 0 then Some (outputName, index)
+                                else None
+                            )
+
+                            
+
+                        match outputNameAndIndex with
+                            | Some (outputName, index) ->
+                                GL.BindFragDataLocation(handle, location, semantic.ToString())
+                                GL.Check "could not bind FragData location"
+
+                                { attributeIndex = location; size = 1; name = outputName; semantic = semantic.ToString(); attributeType = ActiveAttribType.FloatVec4 }
+                            | None ->
+                                failwithf "could not get desired program-output: %A" semantic
+                    )
+            )
+
+        let setTransformFeedbackVaryings (wantedSemantics : list<Symbol>) (p : int) (x : Context) =
+            using x.ResourceLock (fun _ ->
+                try
+                    let outputCount = GL.GetProgramInterface(p, ProgramInterface.ProgramOutput, ProgramInterfaceParameter.ActiveResources)
+                    GL.Check "could not get active-output count"
+
+                    let outputs = 
+                        [ for i in 0..outputCount-1 do
+                            let mutable l = 0
+                            let builder = System.Text.StringBuilder(1024)
+                            GL.GetProgramResourceName(p, ProgramInterface.ProgramOutput, i, 1024, &l, builder)
+                            GL.Check "could not get program resource name"
+                            let name = builder.ToString()
+
+                            let mutable prop = ProgramProperty.Type
+                            let _,p = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
+                            GL.Check "could not get program resource"
+                            let outputType = p |> unbox<ActiveAttribType>
+
+                            let mutable prop = ProgramProperty.ArraySize
+                            let _,size = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
+                            GL.Check "could not get program resource"
+
+
+                            let attrib = { attributeIndex = i; size = 1; name = name; semantic = name; attributeType = outputType }
+                            Log.line "found: %A" attrib
+                            yield attrib
+
+                        ]   
+                    
+                    let outputs =
+                        let outputMap =
+                            outputs 
+                                |> List.map (fun o -> o.name, o)
+                                |> Map.ofList
+
+                        wantedSemantics |> List.map (fun sem ->
+                            let output = 
+                                geometryOutputSuffixes |> List.tryPick (fun fmt ->
+                                    let name = String.Format(fmt, string sem)
+                                    Map.tryFind name outputMap
+                                )
+
+                            match output with
+                                | Some o -> o
+                                | _ -> failwithf "[GL] could not get geometry-output %A" sem
+
+                        )
+
+
+                    let varyings = 
+                        outputs 
+                            |> List.map (fun o -> o.name)
+                            |> List.toArray
+
+                    GL.TransformFeedbackVaryings(p, varyings.Length, varyings, TransformFeedbackMode.InterleavedAttribs)
+                    GL.Check "could not set feedback varyings"
+
+                    outputs
+
+                with e ->
+                    []
+
+            )
+
+        let tryLinkProgram (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (imageSlots : Map<Symbol, int>) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
+            GL.LinkProgram(handle)
+            GL.Check "could not link program"
+
+         
+            let status = GL.GetProgram(handle, GetProgramParameterName.LinkStatus)
+            let log = GL.GetProgramInfoLog(handle)
+            GL.Check "could not get program log"
+
+
+            if status = 1 then
+                let outputs = findOutputs handle x
+
+                // after modifying the frag-locations the program needs to be linked again
+                GL.LinkProgram(handle)
+                GL.Check "could not link program"
+
+//                for s in shaders do
+//                    GL.DeleteShader(s.Handle)
+//                    s.Handle <- -1
+//                    GL.Check "could not delete shader"
+
+                let status = GL.GetProgram(handle, GetProgramParameterName.LinkStatus)
+                let log = GL.GetProgramInfoLog(handle)
+                GL.Check "could not get program log"
+
+                if status = 1 then
+
+                    GL.UseProgram(handle)
+                    GL.Check "could not bind program"
+
+                    let supported = 
+                        shaders |> List.tryPick (fun s -> s.SupportedModes)
+
+
+                    let result = {
+                        Context = x
+                        Code = code
+                        Handle = handle
+                        Shaders = shaders
+                        UniformBlocks = ProgramReflector.getActiveUniformBlocks handle
+                        Uniforms = ProgramReflector.getActiveUniforms handle firstTexture imageSlots
+                        UniformGetters = SymDict.empty
+                        SamplerStates = SymDict.empty
+                        Inputs = ProgramReflector.getActiveInputs handle
+                        Outputs = outputs
+                        SupportedModes = supported
+                    }
+
+                    GL.UseProgram(0)
+                    GL.Check "could not unbind program"
+
+                    Success result
+                else
+                    let log =
+                        if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
+                        else log
+
+                    Error log
+
+            else
+                let log =
+                    if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
+                    else log
+
+                Error log
+
+    type Aardvark.Rendering.GL.Context with
+
+        member x.CreateUniformBuffer(block : UniformBlock) =
+            let fields = block.fields |> List.map activeUniformToField
+            x.CreateUniformBuffer(block.size, fields)
+
+        member x.TryCompileShader(stage : ShaderStage, code : string, entryPoint : string) =
+            x |> ShaderCompiler.tryCompileShader stage code entryPoint
+
+
+        member x.TryCompileProgram(fboSignature : IFramebufferSignature, code : string) =
+            using x.ResourceLock (fun _ ->
+                match x |> ShaderCompiler.tryCompileShaders true code with
+                    | Success shaders ->
+
+                        let imageSlots = fboSignature.Images |> Map.toSeq |> Seq.map (fun (a,b) -> b,a) |> Map.ofSeq
+
+                        let firstTexture = 
+                            if Map.isEmpty fboSignature.Images then
+                                0
+                            else
+                                1 + (fboSignature.Images |> Map.toSeq |> Seq.map fst |> Seq.max)
+
+                        addProgram x
+                        let handle = GL.CreateProgram()
+                        GL.Check "could not create program"
+
+                        for s in shaders do
+                            GL.AttachShader(handle, s.Handle)
+                            GL.Check "could not attach shader to program"
+
+                        match x |> ShaderCompiler.tryLinkProgram handle code shaders firstTexture imageSlots (ShaderCompiler.setFragDataLocations fboSignature) with
+                            | Success program ->
+                                Success program
+                            | Error err ->
+                                Error err
+
+                    
+                    | Error err ->
+                        Error err
+            )
+
+        member x.TryCompileTransformFeedbackProgram(wantedSemantics : list<Symbol>, code : string) =
+            using x.ResourceLock (fun _ ->
+                match x |> ShaderCompiler.tryCompileShaders false code with
+                    | Success shaders ->
+                        let shaders = shaders |> List.filter (fun s -> s.Stage <> ShaderStage.Pixel)
+
+                        addProgram x
+                        let handle = GL.CreateProgram()
+                        GL.Check "could not create program"
+
+                        for s in shaders do
+                            GL.AttachShader(handle, s.Handle)
+                            GL.Check "could not attach shader to program"
+
+             
+                        match x |> ShaderCompiler.tryLinkProgram handle code shaders 0 Map.empty (ShaderCompiler.setTransformFeedbackVaryings wantedSemantics) with
+                            | Success program ->
+                                Success program
+                            | Error err ->
+                                Error err
+
+                    
+                    | Error err ->
+                        Error err
             )
 
         member x.CompileProgram(fboSignature : IFramebufferSignature, code : string) =
             match x.TryCompileProgram(fboSignature, code) with
                 | Success p -> p
                 | Error e ->
-                    failwithf "Shader compiler returned errors: %s" e
+                    failwithf "[GL] shader compiler returned errors: %s" e
+
+        member x.CompileTransformFeedbackProgram(wantedSemantics : list<Symbol>, code : string) =
+            match x.TryCompileTransformFeedbackProgram(wantedSemantics, code) with
+                | Success p -> p
+                | Error e ->
+                    failwithf "[GL] shader compiler returned errors: %s" e
 
         member x.Delete(p : Program) =
             using x.ResourceLock (fun _ ->
