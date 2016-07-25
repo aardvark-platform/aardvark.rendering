@@ -40,8 +40,6 @@ let exec (cmd : string) =
         failwith err
 
 
-
-
 let execute (file : string) (outFile : string) (args : string[]) =
     let time = exec file
     let now = DateTime.Now
@@ -57,43 +55,39 @@ let execute (file : string) (outFile : string) (args : string[]) =
     File.AppendAllLines(outFile, [line])
     ()
 
+let show (dataFile : string) =
+    let lines = File.ReadAllLines dataFile
+    let points = 
+        lines |> Array.map (fun l ->
+            let parts = l.Split(';')
+            let t = parts.[1] |> DateTime.Parse
+            let v = parts.[parts.Length-1] |> Double.Parse
+            t,v
+        )
+    let dashGrid = 
+        Grid( 
+            LineColor = Color.Gainsboro, 
+            LineDashStyle = ChartDashStyle.Dash 
+        )
+
+    let label = new LabelStyle(Format = "0.000\" ms\"")
+
+
+    let chart = 
+        Chart.Line(points)
+            |> Chart.WithArea.AxisY(MajorGrid = dashGrid, LabelStyle = label)
+            |> Chart.WithArea.AxisX(MajorGrid = dashGrid)
+            |> Chart.WithSeries.Marker(Size = 10, Style = MarkerStyle.Diamond)
+            |> Chart.WithTitle(Text = "Execution Time", InsideArea = false)
+
+            
+    let f = chart.ShowChart()
+    Application.Run f
+
 let main () =
     match args with
-        | [| "show"; file |] ->
-            let lines = File.ReadAllLines file
-            let points = 
-                lines |> Array.map (fun l ->
-                    let parts = l.Split(';')
-                    let t = parts.[1] |> DateTime.Parse
-                    let v = parts.[parts.Length-1] |> Double.Parse
-                    t,v
-                )
-            let dashGrid = 
-                Grid( 
-                    LineColor = Color.Gainsboro, 
-                    LineDashStyle = ChartDashStyle.Dash 
-                )
-
-            let label = new LabelStyle(Format = "0.000\" ms\"")
-
-
-            let chart = 
-                Chart.Line(points)
-                    |> Chart.WithArea.AxisY(MajorGrid = dashGrid, LabelStyle = label)
-                    |> Chart.WithArea.AxisX(MajorGrid = dashGrid)
-                    |> Chart.WithSeries.Marker(Size = 10, Style = MarkerStyle.Diamond)
-                    |> Chart.WithTitle(Text = "Execution Time", InsideArea = false)
-
-//            let chart = 
-//                Chart.Column(
-//                    points |> Seq.map snd,
-//                    Title = "Execution Time [ms]",
-//                    Labels = (points |> Seq.map (fun (d,_) -> d.ToString("yyyy-MM-dd HH:mm:ss")))
-//                )
-            
-            let f = chart.ShowChart()
-            Application.Run f
-            ()
+        | [| "show" | "Show"; file |] ->
+            show file
         | _ ->
             execute args.[0] args.[1] (Array.skip 2 args)
 
