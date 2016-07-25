@@ -1,6 +1,5 @@
 NUGET
   remote: https://vrvis.myget.org/F/aardvark_public
-  specs:
     Aardvark.Base (2.1.3)
       DevILSharp (>= 0.0.11 < 0.1)
     Aardvark.Base.Essentials (2.1.3)
@@ -45,6 +44,7 @@ NUGET
       DockPanelSuite (>= 2.10.0-beta2)
     DockPanelSuite.ThemeVS2013Blue (2.10.0-beta2)
       DockPanelSuite (>= 2.10.0-beta2)
+    FSharp.Charting (0.90.14)
     FSharp.Compiler.Service (2.0.0.6)
     FSharp.Core (4.0.0.1)
     FSharp.Quotations.Evaluator (1.0.7)
@@ -157,9 +157,8 @@ NUGET
     SourceLink.Fake (1.1) - content: none
 GITHUB
   remote: vrvis/Aardvark.Fake
-  specs:
     FULLPROJECT (7c479e6e1818b2b868bd2443e79c7afbc68d872f)
-      FAKE (< 5.0)
-      Mono.Cecil (<= 0.9.5.4)
-      Paket.Core (< 4.0)
+      FAKE
+      Mono.Cecil
+      Paket.Core
       SourceLink.Fake
