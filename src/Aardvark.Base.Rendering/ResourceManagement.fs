@@ -76,7 +76,7 @@ type IResource =
     abstract member RemoveRef : unit -> unit
     abstract member Update : caller : IAdaptiveObject -> FrameStatistics
     abstract member Kind : ResourceKind
-
+    abstract member IsDisposed : bool
     abstract member Info : ResourceInfo
 
 
@@ -111,6 +111,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
     abstract member Destroy : 'h -> unit
     abstract member GetInfo : 'h -> ResourceInfo
 
+    member x.IsDisposed = Option.isNone current
 
     member x.Info = info
 
@@ -170,6 +171,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
         member x.Dispose() = x.RemoveRef()
 
     interface IResource<'h> with
+        member x.IsDisposed = x.IsDisposed
         member x.Kind = kind
         member x.AddRef() = x.AddRef()
         member x.RemoveRef() = x.RemoveRef()
@@ -320,6 +322,32 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
     member x.Count = store.Count
     member x.Clear() = store.Clear()
 
+type ConstantResource<'h when 'h : equality>(kind : ResourceKind, handle : 'h) =
+    inherit ConstantObject()
+
+    let h = Mod.constant handle
+
+    member x.Handle = handle
+
+    override x.GetHashCode() = handle.GetHashCode()
+
+    override x.Equals o =
+        match o with
+            | :? ConstantResource<'h> as o -> o.Handle = x.Handle
+            | _ -> false
+
+    interface IDisposable with
+        member x.Dispose() = ()
+
+    interface IResource<'h> with
+        member x.IsDisposed = false
+        member x.Kind = kind
+        member x.AddRef() = ()
+        member x.RemoveRef() = ()
+        member x.Handle = h
+        member x.Update caller = FrameStatistics.Zero
+        member x.Info = ResourceInfo.Zero
+
 type InputSet(o : IAdaptiveObject) =
     let l = obj()
     let inputs = ReferenceCountingSet<IAdaptiveObject>()
@@ -367,8 +395,8 @@ type ResourceInputSet() =
                 x.Dirty <- HashSet()
                 d
 
-            if level = 0 then
-                dirty.IntersectWith all
+//            if level = 0 then
+//                dirty.IntersectWith all
 
             if level > 4 && dirty.Count > 0 then
                 Log.warn "nested shit"
@@ -376,7 +404,8 @@ type ResourceInputSet() =
             let mutable stats = stats
             if dirty.Count > 0 then
                 for d in dirty do
-                    stats <- stats + updateOne x d
+                    if not d.IsDisposed then
+                        stats <- stats + updateOne x d
 
                 run (level + 1) stats
             else
@@ -431,7 +460,7 @@ type ResourceInputSet() =
         { updateStats with
             ResourceSize = resourceInfo.AllocatedSize
             PhysicalResourceCount = float all.Count 
-            ResourceCounts = all |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k, float v) |> Map.ofSeq
+            ResourceCounts = Map.empty //all |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k, float v) |> Map.ofSeq
         }
 
     member x.Dispose () =
