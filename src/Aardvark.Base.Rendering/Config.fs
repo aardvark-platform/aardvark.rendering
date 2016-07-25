@@ -78,14 +78,14 @@ module Projections =
         rj.Surface :> IMod
 
     let diffuseTexture (rj : RenderObject) =
-        match rj.Uniforms.TryGetUniform (rj.AttributeScope, DefaultSemantic.DiffuseColorCoordinates) with
+        match rj.Uniforms.TryGetUniform (rj.AttributeScope, DefaultSemantic.DiffuseColorTexture) with
             | Some t -> t
             | _ -> empty
 
     let indices (rj : RenderObject) =
         match rj.Indices with
-            | null -> empty
-            | i -> i :> IMod
+            | Some i -> i.Buffer :> IMod
+            | None -> empty
 
     let standard = [ surface; diffuseTexture; indices ]
 

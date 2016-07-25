@@ -46,14 +46,12 @@ module Sg =
         new(semantic : Symbol, value : BufferView, child : ISg)       = VertexAttributeApplicator(Map.ofList [semantic, value], Mod.constant child)
         new(values : SymbolDict<BufferView>, child : ISg)             = VertexAttributeApplicator(values |> Seq.map (fun (KeyValue(k,v)) -> k,v) |> Map.ofSeq, Mod.constant child)
 
-    type VertexIndexApplicator(value : IMod<Array>, child : IMod<ISg>) =
+    type VertexIndexApplicator(value : BufferView, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Value = value
 
-        new(value : IMod<Array>, child : ISg)         = VertexIndexApplicator(value, Mod.constant child)
-        new(value : IEvent<Array>, child : IMod<ISg>) = VertexIndexApplicator(Mod.fromEvent value, child)
-        new(value : IEvent<Array>, child : ISg)       = VertexIndexApplicator(Mod.fromEvent value, Mod.constant child)
+        new(value : BufferView, child : ISg)         = VertexIndexApplicator(value, Mod.constant child)
 
     type InstanceAttributeApplicator(values : Map<Symbol, BufferView>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)

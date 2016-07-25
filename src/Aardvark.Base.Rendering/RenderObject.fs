@@ -67,7 +67,7 @@ type RenderObject =
         mutable FillMode            : IMod<FillMode>
         mutable StencilMode         : IMod<StencilMode>
                 
-        mutable Indices             : IMod<Array>
+        mutable Indices             : Option<BufferView>
         mutable InstanceAttributes  : IAttributeProvider
         mutable VertexAttributes    : IAttributeProvider
                 
@@ -102,7 +102,7 @@ type RenderObject =
           BlendMode = null
           FillMode = null
           StencilMode = null
-          Indices = null
+          Indices = None
           InstanceAttributes = null
           VertexAttributes = null
           Uniforms = null
@@ -155,7 +155,7 @@ module RenderObjectExtensions =
           BlendMode = null
           FillMode = null
           StencilMode = null
-          Indices = null
+          Indices = None
           InstanceAttributes = emptyAttributes
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms

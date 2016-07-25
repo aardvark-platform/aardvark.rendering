@@ -13,13 +13,13 @@ module AttributeExtensions =
         member x.FaceVertexCount : IMod<int> = x?FaceVertexCount
         member x.VertexAttributes : Map<Symbol, BufferView> = x?VertexAttributes
         member x.InstanceAttributes : Map<Symbol, BufferView> = x?InstanceAttributes
-        member x.VertexIndexArray : IMod<Array> = x?VertexIndexArray
+        member x.VertexIndexBuffer : Option<BufferView> = x?VertexIndexBuffer
 
     module Semantic =
         let faceVertexCount (s : ISg) : IMod<int> = s?FaceVertexCount
         let vertexAttributes (s : ISg) : Map<Symbol, BufferView> = s?VertexAttributes
         let instanceAttributes (s : ISg) : Map<Symbol, BufferView> = s?InstanceAttributes
-        let vertexIndexArray (s : ISg) : IMod<Array> = s?VertexIndexArray
+        let vertexIndexBuffer (s : ISg) : Option<BufferView> = s?VertexIndexBuffer
 
 module AttributeSemantics =
 
@@ -30,39 +30,50 @@ module AttributeSemantics =
         static let zero = Mod.constant 0
         let (~%) (m : Map<Symbol, BufferView>) = m
 
+        static let bufferViewCount (view : BufferView) =
+            let elementSize = System.Runtime.InteropServices.Marshal.SizeOf view.ElementType
+            view.Buffer |> Mod.map (fun b ->
+                match b with
+                    | :? INativeBuffer as b -> (b.SizeInBytes - view.Offset) / elementSize
+                    | :? NullBuffer as b -> 0
+                    | _ -> failwithf "[Sg] could not determine buffer-size: %A" b
+            )
+
+
         member x.FaceVertexCount (root : Root<ISg>) =
             root.Child?FaceVertexCount <- zero
 
         member x.FaceVertexCount (app : Sg.VertexIndexApplicator) =
-            app.Child?FaceVertexCount <- app.Value |> Mod.map (fun a -> a.Length)
+            app.Child?FaceVertexCount <- app.Value |> bufferViewCount
 
         member x.FaceVertexCount (app : Sg.VertexAttributeApplicator) =
-            let res = app.VertexIndexArray
+            let res = app.VertexIndexBuffer
 
-            if res <> emptyIndex then
-                app.Child?FaceVertexCount <- app.FaceVertexCount
-            else
-                match Map.tryFind DefaultSemantic.Positions app.Values with
-                    | Some pos ->
-                        app.Child?FaceVertexCount <- 
-                            pos.Buffer 
-                                |> Mod.bind (fun buffer ->
-                                    match buffer with
-                                        | :? ArrayBuffer as a ->
-                                            Mod.constant (a.Data.Length - pos.Offset)
+            match res with
+                | Some b ->
+                    app.Child?FaceVertexCount <- app.FaceVertexCount
+                | _ -> 
+                    match Map.tryFind DefaultSemantic.Positions app.Values with
+                        | Some pos ->
+                            app.Child?FaceVertexCount <- 
+                                pos.Buffer 
+                                    |> Mod.bind (fun buffer ->
+                                        match buffer with
+                                            | :? ArrayBuffer as a ->
+                                                Mod.constant (a.Data.Length - pos.Offset)
             
-                                        | _ -> app.FaceVertexCount
-                                   )
-                    | _ -> app.Child?FaceVertexCount <- app.FaceVertexCount
+                                            | _ -> app.FaceVertexCount
+                                       )
+                        | _ -> app.Child?FaceVertexCount <- app.FaceVertexCount
 
         member x.InstanceAttributes(root : Root<ISg>) = 
             root.Child?InstanceAttributes <- %Map.empty
 
-        member x.VertexIndexArray(e : Root<ISg>) =
-            e.Child?VertexIndexArray <- emptyIndex
+        member x.VertexIndexBuffer(e : Root<ISg>) =
+            e.Child?VertexIndexBuffer <- Option<BufferView>.None
 
-        member x.VertexIndexArray(v : Sg.VertexIndexApplicator) =
-            v.Child?VertexIndexArray <- v.Value
+        member x.VertexIndexBuffer(v : Sg.VertexIndexApplicator) =
+            v.Child?VertexIndexBuffer <- Some v.Value
 
         member x.VertexAttributes(e : Root<ISg>) =
             e.Child?VertexAttributes <- %Map.empty

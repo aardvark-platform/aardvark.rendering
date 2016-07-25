@@ -416,13 +416,14 @@ type ResourceManagerExtensions private() =
 
         // create the index buffer (if present)
         let index =
-            if isNull rj.Indices then None
-            else 
-                x.CreateBuffer rj.Indices |> Some
+            match rj.Indices with
+                | Some i -> x.CreateBuffer i.Buffer |> Some
+                | None -> None
+
 
         let indirect =
             if isNull rj.IndirectBuffer then None
-            else x.CreateIndirectBuffer(not (isNull rj.Indices), rj.IndirectBuffer) |> Some
+            else x.CreateIndirectBuffer(Option.isSome rj.Indices, rj.IndirectBuffer) |> Some
 
         // create the VertexArrayObject
         let vao =

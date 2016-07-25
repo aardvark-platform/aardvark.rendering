@@ -193,7 +193,7 @@ module Assimp =
 
                             let sg =
                                 if indexArray <> null then
-                                    Sg.VertexIndexApplicator(Mod.constant (indexArray :> Array), sg) :> ISg
+                                    Sg.VertexIndexApplicator(BufferView.ofArray indexArray, sg) :> ISg
                                 else
                                     sg
 

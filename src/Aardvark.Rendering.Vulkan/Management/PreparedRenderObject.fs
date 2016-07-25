@@ -258,8 +258,11 @@ type ResourceMangerExtensions private() =
 
                 let indexBuffer =
                     match ro.Indices with
-                        | null -> None
-                        | indices -> x.CreateBuffer(ro.Indices, VkBufferUsageFlags.IndexBufferBit) |> Some
+                        | Some view -> x.CreateBuffer(view.Buffer, VkBufferUsageFlags.IndexBufferBit) |> Some
+                        | None -> None
+//                    match ro.Indices with
+//                        | null -> None
+//                        | indices -> x.CreateBuffer(ro.Indices, VkBufferUsageFlags.IndexBufferBit) |> Some
 
 
                 let indirect =

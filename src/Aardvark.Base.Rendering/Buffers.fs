@@ -27,6 +27,7 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
                 o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
             | _ -> false
 
+
 type NullBuffer(value : V4f) =
     interface IBuffer
 
@@ -95,7 +96,6 @@ type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
                 n.Ptr = ptr && n.SizeInBytes = sizeInBytes
             | _ -> false
 
-
 type IMappedBuffer =
     inherit IMod<IBuffer>
     inherit IDisposable
@@ -106,3 +106,11 @@ type IMappedBuffer =
     abstract member Capacity : int
     abstract member Resize : newCapacity : int -> unit
     abstract member OnDispose : IObservable<unit>
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module BufferView =
+    
+    let ofArray (arr : Array) =
+        let t = arr.GetType().GetElementType()
+        BufferView(Mod.constant (ArrayBuffer arr :> IBuffer), t)
