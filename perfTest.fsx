@@ -45,7 +45,7 @@ let exec (cmd : string) =
 
 let execute (file : string) (outFile : string) =
     Fake.TraceListener.listeners.Clear()
-    let status = Fake.Git.CommandHelper.runSimpleGitCommand "." "log -1 --pretty=format:%an;%ae;%ai;%H HEAD"
+    let status = Fake.Git.CommandHelper.runSimpleGitCommand Environment.CurrentDirectory "log -1 --pretty=format:%an;%ae;%ai;%H HEAD"
     
     printfn "%A" status
 
