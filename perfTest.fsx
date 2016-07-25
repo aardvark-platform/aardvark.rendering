@@ -2,6 +2,8 @@
 #r "System.Windows.Forms.dll"
 #r "System.Windows.Forms.DataVisualization.dll"
 #r "packages/FSharp.Charting/lib/net40/FSharp.Charting.dll"
+#r "packages/build/FAKE/tools/FakeLib.dll"
+
 
 
 open System
@@ -11,6 +13,7 @@ open System.Diagnostics
 open FSharp.Charting
 open System.Windows.Forms
 open System.Windows.Forms.DataVisualization.Charting
+open Fake
 
 #if INTERACTIVE
 let args = Environment.GetCommandLineArgs() |> Array.skip 2
@@ -40,15 +43,21 @@ let exec (cmd : string) =
         failwith err
 
 
-let execute (file : string) (outFile : string) (args : string[]) =
+let execute (file : string) (outFile : string) =
+    Fake.TraceListener.listeners.Clear()
+    let status = Fake.Git.CommandHelper.runSimpleGitCommand "." "log -1 --pretty=format:%an;%ae;%ai;%H HEAD"
+    
+    printfn "%A" status
+
     let time = exec file
     let now = DateTime.Now
     let now = now.ToString("yyyy-MM-dd HH:mm:ss.fffffff")
     let all = 
-        Array.concat [
-            [| Environment.MachineName; now |]
-            args
-            [| time |]
+        [
+            Environment.MachineName
+            now 
+            status
+            time
         ]
     
     let line = all |> String.concat ";"
@@ -88,8 +97,11 @@ let main () =
     match args with
         | [| "show" | "Show"; file |] ->
             show file
+        | [| executable; output|] ->
+            execute executable output
+
         | _ ->
-            execute args.[0] args.[1] (Array.skip 2 args)
+            failwith "asdasd"
 
 do main()
 
