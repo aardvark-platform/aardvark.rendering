@@ -86,9 +86,9 @@ module PerformanceTest =
             task.Run(fbo) |> ignore
         sw.Stop()
 
-        let tex = fbo.Attachments.[DefaultSemantic.Colors] |> unbox<BackendTextureOutputView>
-        let img = app.Runtime.Download(tex.texture)
-        img.SaveAsImage @"C:\Users\Schorsch\Desktop\cubes.jpg"
+        // let tex = fbo.Attachments.[DefaultSemantic.Colors] |> unbox<BackendTextureOutputView>
+        // let img = app.Runtime.Download(tex.texture)
+        // img.SaveAsImage @"C:\Users\Schorsch\Desktop\cubes.jpg"
 
 
         let str = sprintf "%.5f" (sw.Elapsed.TotalMilliseconds / float iter)
