@@ -41,15 +41,14 @@ module PerformanceTest =
                 yield Sg.trafo (nextTrafo () |> Mod.constant) candidates.[r]
             ] |> Sg.group
 
-        let transparency = RenderPass.after "nam" RenderPassOrder.BackToFront RenderPass.main
-       
         let sg =
             objects
                 |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
                 |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
-                |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect ]
-                //|> Sg.pass transparency
-                //|> Sg.blendMode (Mod.constant BlendMode.Blend)
+                |> Sg.effect [ 
+                    DefaultSurfaces.trafo |> toEffect
+                    DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect 
+                ]
 
         let config = BackendConfiguration.NativeOptimized
         win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects()) //|> DefaultOverlays.withStatistics

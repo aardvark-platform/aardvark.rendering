@@ -335,5 +335,6 @@ module GLExtensionsPossiblyNotWorkingEverywhere =
                         Log.warn "[GL] wait failed"
                     | _ -> ()
             else
+                Log.warn "[GL] flush/finish"
                 GL.Flush()
                 GL.Finish()

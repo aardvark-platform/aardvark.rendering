@@ -413,7 +413,7 @@ type ResourceInputSet() =
 
         run 0 FrameStatistics.Zero
 
-
+    let mutable resourceCounts = Map.empty
 
     member x.ResourceInfo = resourceInfo
     member x.ResourceInfos = resourceInfos :> IDictionary<_,_>
@@ -425,6 +425,10 @@ type ResourceInputSet() =
             lock all (fun () ->
                 if all.Add r then
                     lock r (fun () ->
+                        match Map.tryFind r.Kind resourceCounts with
+                            | Some old -> resourceCounts <- Map.add r.Kind (old + 1.0) resourceCounts
+                            | None -> resourceCounts <- Map.add r.Kind 1.0 resourceCounts
+
                         applyResourceInfo r.Kind ResourceInfo.Zero r.Info
                         if r.OutOfDate then 
                             x.Dirty.Add r |> ignore
@@ -448,6 +452,10 @@ type ResourceInputSet() =
         lock all (fun () ->
 
             if all.Remove r then
+                match Map.tryFind r.Kind resourceCounts with
+                    | Some old when old > 1.0 -> resourceCounts <- Map.add r.Kind (old - 1.0) resourceCounts
+                    | _ -> resourceCounts <- Map.remove r.Kind resourceCounts
+
                 x.Dirty.Remove r |> ignore
                 lock r (fun () -> r.Outputs.Remove x |> ignore)
                 applyResourceInfo r.Kind r.Info ResourceInfo.Zero
@@ -460,7 +468,7 @@ type ResourceInputSet() =
         { updateStats with
             ResourceSize = resourceInfo.AllocatedSize
             PhysicalResourceCount = float all.Count 
-            ResourceCounts = Map.empty //all |> Seq.countBy (fun r -> r.Kind) |> Seq.map (fun (k,v) -> k, float v) |> Map.ofSeq
+            ResourceCounts = resourceCounts
         }
 
     member x.Dispose () =
