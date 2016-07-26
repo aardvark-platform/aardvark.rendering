@@ -157,7 +157,7 @@ NUGET
     SourceLink.Fake (1.1) - content: none
 GITHUB
   remote: vrvis/Aardvark.Fake
-    FULLPROJECT (7c479e6e1818b2b868bd2443e79c7afbc68d872f)
+    FULLPROJECT (02b5eed0eb2794184e049cc6c9ee548da8879cac)
       FAKE
       Mono.Cecil
       Paket.Core
