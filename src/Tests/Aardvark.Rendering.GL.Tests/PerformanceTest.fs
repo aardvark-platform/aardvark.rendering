@@ -221,6 +221,94 @@ module RenderTaskPerformance =
 
         win.Run()
     
+module StartupPerformance =
+
+    let runConsole () =
+
+        Aardvark.Init()
+
+        use app = new OpenGlApplication()
+        
+        let cameraView = CameraView.LookAt(180.0 * V3d.III, V3d.OOO, V3d.OOI)
+        let cameraProj = Frustum.perspective 60.0 0.1 1000.0 1.0
+                
+        let colorBuffer = app.Runtime.CreateTexture(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1, 1)
+        let depthBuffer = app.Runtime.CreateRenderbuffer(V2i(1024, 1024), RenderbufferFormat.Depth24Stencil8, 1)
+
+        let fboSig = 
+            app.Runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+
+        let fbo = 
+            app.Runtime.CreateFramebuffer(fboSig, [
+                                            DefaultSemantic.Colors, { texture = colorBuffer; level = 0; slice = 0 } :> IFramebufferOutput
+                                            DefaultSemantic.Depth, depthBuffer :> IFramebufferOutput
+                                        ])
+
+        let effect = app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect ]) :> ISurface
+
+        let test (n : int, cfg : BackendConfiguration) =
+
+            Report.BeginTimed("{0} objects one-shot rendering", n)
+
+            Report.BeginTimed("Generating Geometries")
+            let objects = 
+                [| for _ in 1 .. n do yield (Sphere.solidSphere C4b.Red 1) |]
+            Report.End() |> ignore
+
+            let scale = 100.0
+            let rnd = Random()
+            let nextTrafo () =
+                let x,y,z = rnd.NextDouble(), rnd.NextDouble(), rnd.NextDouble()
+                Trafo3d.Translation(x*scale,y*scale,z*scale) 
+
+            let objectsSg = 
+                [ for x in objects do
+                    yield Sg.trafo (nextTrafo () |> Mod.constant) x
+                ] |> Sg.group
+
+            let sg =
+                objectsSg
+                    |> Sg.viewTrafo (Mod.constant cameraView.ViewTrafo)
+                    |> Sg.projTrafo (Mod.constant (Frustum.projTrafo cameraProj))
+                    |> Sg.surface (Mod.constant effect)
+
+            Report.BeginTimed("Gathering render objects")
+            let renderObjects = ASet.toArray (sg.RenderObjects())
+            Report.End() |> ignore
+
+            Report.BeginTimed("Preparing render objects")
+            let preparedRenderObjects = renderObjects.Map (fun x -> app.Runtime.PrepareRenderObject(fboSig, x) :> IRenderObject)
+            Report.End() |> ignore
+
+            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            
+            Report.BeginTimed("RenderTask Execution 1")
+            let rs = renderTask.Run(fbo).Statistics
+            Report.End() |> ignore
+
+            Report.BeginTimed("RenderTask Execution 2")
+            let rs = renderTask.Run(fbo).Statistics
+            Report.End() |> ignore
+
+            Report.Line("Stats: DC={0} Instr={1} Prim={2}", rs.DrawCallCount, rs.InstructionCount, rs.PrimitiveCount)
+
+            Report.End() |> ignore
+            Report.Line()
+
+        let config = BackendConfiguration.NativeOptimized
+        
+        test(1000, config)
+
+        test(5000, config)
+
+        test(10000, config)
+
+        test(20000, config)
+
     
 (*
 unscientific approximate numbers on GTX980
