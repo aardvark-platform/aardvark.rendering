@@ -17,16 +17,18 @@ open Fake
 
 #if INTERACTIVE
 let args = Environment.GetCommandLineArgs() |> Array.skip 2
+System.Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 #else
 let args = Environment.GetCommandLineArgs() |> Array.skip 1
 #endif
 
 let bin = Path.Combine(Environment.CurrentDirectory, "bin", "Release")
 
-let exec (cmd : string) =
+let execArgs (cmd : string) args =
     let info = 
         ProcessStartInfo(
             FileName = Path.Combine(bin, cmd),
+            Arguments = args,
             WorkingDirectory = bin,
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -42,6 +44,7 @@ let exec (cmd : string) =
         printfn "ERROR: %s" err
         failwith err
 
+let exec cmd = execArgs cmd ""
 
 let execute (file : string) (outFile : string) =
     Fake.TraceListener.listeners.Clear()
@@ -93,6 +96,17 @@ let show (dataFile : string) =
     let f = chart.ShowChart()
     Application.Run f
 
+
+let testStartupPerformance () =
+    let outFile = "startupResults.csv"
+    if File.Exists outFile |> not then
+        File.AppendAllLines(outFile, [| "config; objects; time; "|])
+    for n in [ 1000; 5000; 10000; 15000; 20000; 30000; 50000] do
+        for config in 0 .. 5 do
+            printfn "running test for n: %d and config: %d" n config
+            let r = execArgs "Aardvark.Rendering.GL.Tests.exe" (sprintf "%d %d" n config)
+            File.AppendAllLines(outFile, [| r |])
+
 let main () =
     match args with
         | [| "show" | "Show"; file |] ->
@@ -103,6 +117,6 @@ let main () =
         | _ ->
             failwith "asdasd"
 
-do main()
+//do main()
 
 

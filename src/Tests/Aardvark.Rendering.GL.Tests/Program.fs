@@ -9,5 +9,5 @@ let main args =
 
     //PerformanceTests.PerformanceTest.runConsole()
     //Examples.PerformanceTest.run()
-    PerformanceTests.StartupPerformance.runConsole()
+    PerformanceTests.StartupPerformance.runConsole args
     0
