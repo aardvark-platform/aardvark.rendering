@@ -23,6 +23,7 @@ nuget CommonMark.NET                     ~> 0.12.0
 nuget FsUnit                             ~> 2.1.0
 nuget NUnit                              ~> 3.2.0
 nuget NUnit.Console                      ~> 3.2.0
+nuget FSharp.Charting                    ~> 0.90.14
 
 group Build
 content: none

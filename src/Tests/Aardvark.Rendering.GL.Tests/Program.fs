@@ -7,6 +7,7 @@ let main args =
     //RenderingTests.``[GL] memory leak test``()
     //MultipleStageAgMemoryLeakTest.run() |> ignore
 
-    PerformanceTests.RenderTaskPerformance.run()
+    //PerformanceTests.PerformanceTest.runConsole()
     //Examples.PerformanceTest.run()
+    PerformanceTests.StartupPerformance.runConsole args
     0
