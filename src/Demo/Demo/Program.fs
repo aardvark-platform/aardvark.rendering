@@ -194,7 +194,7 @@ module Assimp =
 
                             let sg =
                                 if indexArray <> null then
-                                    Sg.VertexIndexApplicator(Mod.constant (indexArray :> Array), sg) :> ISg
+                                    Sg.VertexIndexApplicator(BufferView.ofArray indexArray, sg) :> ISg
                                 else
                                     sg
 
@@ -943,7 +943,7 @@ module TriangleSet =
                     let indices = ro.Indices
 
                     let positionType = positions.ElementType
-                    let indexType = if isNull ro.Indices then typeof<int> else indices.GetValue().GetType().GetElementType()
+                    let indexType = match ro.Indices with | Some i -> i.ElementType | _ -> typeof<int> //if isNull ro.Indices then typeof<int> else indices.GetValue().GetType().GetElementType()
                     
                     let toInt : Array -> int[] = PrimitiveValueConverter.arrayConverter indexType
                     let toV3d : Array -> V3d[] = PrimitiveValueConverter.arrayConverter positionType
@@ -954,8 +954,14 @@ module TriangleSet =
                             let modelTrafo = modelTrafo.GetValue self |> unbox<Trafo3d>
                             let positions = positions.Buffer.GetValue self
                             let indices =
-                                if isNull indices then null
-                                else indices.GetValue self |> toInt
+                                match indices with
+                                    | Some i -> 
+                                        match i.Buffer.GetValue() with
+                                            | :? ArrayBuffer as ab -> ab.Data |> toInt
+                                            | _ -> null
+                                    | _ -> null
+//                                if isNull indices then null
+//                                else indices.GetValue self |> toInt
 
                             match positions with
                                 | :? ArrayBuffer as ab ->
@@ -1041,7 +1047,7 @@ module TriangleSet =
                     let indices = ro.Indices
 
                     let positionType = positions.ElementType
-                    let indexType = if isNull ro.Indices then typeof<int> else indices.GetValue().GetType().GetElementType()
+                    let indexType = match ro.Indices with | Some i -> i.ElementType | _ -> typeof<int> //if isNull ro.Indices then typeof<int> else indices.GetValue().GetType().GetElementType()
                     
                     let toInt : Array -> int[] = PrimitiveValueConverter.arrayConverter indexType
                     let toV3d : Array -> V3d[] = PrimitiveValueConverter.arrayConverter positionType
@@ -1052,9 +1058,12 @@ module TriangleSet =
                             let modelTrafo = modelTrafo.GetValue self |> unbox<Trafo3d>
                             let positions = positions.Buffer.GetValue self
                             let indices =
-                                if isNull indices then null
-                                else indices.GetValue self |> toInt
-
+                                match indices with
+                                    | Some i -> 
+                                        match i.Buffer.GetValue() with
+                                            | :? ArrayBuffer as ab -> ab.Data |> toInt
+                                            | _ -> null
+                                    | _ -> null
                             let newTriangles =
                                 match positions with
                                     | :? ArrayBuffer as ab ->

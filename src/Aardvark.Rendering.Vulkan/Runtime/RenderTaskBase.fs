@@ -68,7 +68,7 @@ type AbstractRenderTask(runtime : IRuntime, context : Context, renderPass : Rend
         x.EvaluateAlways caller (fun () ->
             let stats = x.Run (renderPass, outputs)
             frameId <- frameId + 1UL
-            RenderingResult(outputs.framebuffer, stats)
+            stats
         )
 
     abstract member Run : RenderPass * OutputDescription -> FrameStatistics
@@ -84,7 +84,7 @@ type AbstractRenderTask(runtime : IRuntime, context : Context, renderPass : Rend
 
     interface IRenderTask with
         member x.Runtime = Some runtime
-        member x.FramebufferSignature = renderPass :> IFramebufferSignature
+        member x.FramebufferSignature = Some (renderPass :> IFramebufferSignature)
         member x.Run(caller, outputs) = x.Run(caller, outputs)
         member x.FrameId = frameId
 

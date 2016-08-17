@@ -170,6 +170,7 @@ module SgFSharp =
             Sg.DepthWriteMaskApplicator(depthWriteEnabled, Mod.constant sg)
 
         let private arrayModCache = ConditionalWeakTable<IMod, IMod<Array>>()
+        let private bufferModCache = ConditionalWeakTable<IMod, BufferView>()
 
         let private modOfArray (m : IMod<'a[]>) =
             match arrayModCache.TryGetValue (m :> IMod) with
@@ -179,19 +180,28 @@ module SgFSharp =
                     arrayModCache.Add(m, r)
                     r
 
+        let private bufferOfArray (m : IMod<'a[]>) =
+            match bufferModCache.TryGetValue (m :> IMod) with
+                | (true, r) -> r
+                | _ -> 
+                    let b = m |> Mod.map (fun a -> ArrayBuffer a :> IBuffer)
+                    let r = BufferView(b, typeof<'a>)
+                    bufferModCache.Add(m, r)
+                    r
+
         let vertexAttribute<'a when 'a : struct> (s : Symbol) (value : IMod<'a[]>) (sg : ISg) =
             let view = BufferView(value |> Mod.map (fun data -> ArrayBuffer(data) :> IBuffer), typeof<'a>)
             Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
 
         let index<'a when 'a : struct> (value : IMod<'a[]>) (sg : ISg) =
-            Sg.VertexIndexApplicator(modOfArray value, sg) :> ISg
+            Sg.VertexIndexApplicator(bufferOfArray value, sg) :> ISg
 
         let vertexAttribute'<'a when 'a : struct> (s : Symbol) (value : 'a[]) (sg : ISg) =
             let view = BufferView(Mod.constant (ArrayBuffer(value :> Array) :> IBuffer), typeof<'a>)
             Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
 
         let index'<'a when 'a : struct> (value : 'a[]) (sg : ISg) =
-            Sg.VertexIndexApplicator(Mod.constant (value :> Array), sg) :> ISg
+            Sg.VertexIndexApplicator(BufferView.ofArray value, sg) :> ISg
 
         let vertexBuffer (s : Symbol) (view : BufferView) (sg : ISg) =
             Sg.VertexAttributeApplicator(s, view, sg) :> ISg
@@ -241,8 +251,8 @@ module SgFSharp =
                 )
 
             let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call,g.Mode)) :> ISg
-            if index <> null then
-                Sg.VertexIndexApplicator(Mod.constant index, sg) :> ISg
+            if not (isNull index) then
+                Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg
             else
                 sg
 
@@ -353,7 +363,7 @@ module SgFSharp =
 
             let sg = Sg.VertexAttributeApplicator(views, Sg.RenderNode(call,g.Mode)) :> ISg
             if index <> null then
-                Sg.VertexIndexApplicator(Mod.constant index, sg) :> ISg
+                Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg
             else
                 sg
 
@@ -386,7 +396,7 @@ module SgFSharp =
         
             let sg =
                 if index <> null then
-                    Sg.VertexIndexApplicator(Mod.constant index, sg) :> ISg
+                    Sg.VertexIndexApplicator(BufferView.ofArray  index, sg) :> ISg
                 else
                     sg
 

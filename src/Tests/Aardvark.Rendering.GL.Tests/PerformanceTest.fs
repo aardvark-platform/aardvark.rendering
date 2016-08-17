@@ -214,7 +214,7 @@ module RenderTaskPerformance =
                 for i in 0 .. 100 do
                     for (r,fbo) in renderTasks do
                         r.Run output.framebuffer |> ignore
-                RenderingResult(output.framebuffer, FrameStatistics.Zero)
+                FrameStatistics.Zero
             )
 
         win.RenderTask <- DefaultOverlays.withStatistics customTask
@@ -223,7 +223,15 @@ module RenderTaskPerformance =
     
 module StartupPerformance =
 
-    let runConsole () =
+    let runConsole args =
+
+        let out = Console.Out
+        //Console.SetOut(IO.TextWriter.Null)
+        
+        let n,wantedConfig = 
+            match args with
+                |  [| n; config; |] -> Int32.Parse n, Int32.Parse config
+                | _ -> failwith "wrong args"
 
         Aardvark.Init()
 
@@ -284,14 +292,19 @@ module StartupPerformance =
             let preparedRenderObjects = renderObjects.Map (fun x -> app.Runtime.PrepareRenderObject(fboSig, x) :> IRenderObject)
             Report.End() |> ignore
 
+            printfn "start your engine!!!"
+            Console.ReadLine() |> ignore
             let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
             
+            let sw = System.Diagnostics.Stopwatch()
             Report.BeginTimed("RenderTask Execution 1")
-            let rs = renderTask.Run(fbo).Statistics
+            sw.Start()
+            let rs = renderTask.Run(fbo)
+            sw.Stop()
             Report.End() |> ignore
 
             Report.BeginTimed("RenderTask Execution 2")
-            let rs = renderTask.Run(fbo).Statistics
+            let rs = renderTask.Run(fbo)
             Report.End() |> ignore
 
             Report.Line("Stats: DC={0} Instr={1} Prim={2}", rs.DrawCallCount, rs.InstructionCount, rs.PrimitiveCount)
@@ -299,15 +312,39 @@ module StartupPerformance =
             Report.End() |> ignore
             Report.Line()
 
-        let config = BackendConfiguration.NativeOptimized
+            sw.Elapsed.TotalSeconds
+
+        let config = BackendConfiguration.UnmanagedUnoptimized
         
-        test(1000, config)
+        let config = 
+            match wantedConfig with
+                | 0 -> BackendConfiguration.NativeOptimized
+                | 1 -> BackendConfiguration.NativeUnoptimized
+                | 2 -> BackendConfiguration.UnmanagedOptimized
+                | 3 -> BackendConfiguration.UnmanagedUnoptimized
+                | 4 -> BackendConfiguration.ManagedOptimized
+                | 5 -> BackendConfiguration.ManagedUnoptimized
+                | _ -> failwith "unknown config"
+    
 
-        test(5000, config)
+        if false then
+            let initialRun = test(n, config)
 
-        test(10000, config)
+            Console.SetOut(out)
+            printfn "%d;%d;%f" wantedConfig n initialRun
 
-        test(20000, config)
+        else 
+            test(50000, config) |> ignore
+
+        //test(10000, config)
+
+        //test(20000, config)
+
+        
+        // 5000 ; 1.263
+        // 10000; 1.768
+        // 15000; 3.588
+        // 20000; 4.699
 
     
 (*

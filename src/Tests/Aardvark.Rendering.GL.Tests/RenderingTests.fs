@@ -520,7 +520,7 @@ module RenderingTests =
 
         clear.Run fbo |> ignore
         let stats = task.Run fbo
-        Log.line "%.0f objects" stats.Statistics.DrawCallCount
+        Log.line "%.0f objects" stats.DrawCallCount
 
 
         runtime.GenerateMipMaps(color)
@@ -641,7 +641,7 @@ module RenderingTests =
         OpenTK.Graphics.OpenGL4.GL.Sync()
         let stats = task.Run fbo
         OpenTK.Graphics.OpenGL4.GL.Sync()
-        Log.line "%.0f objects" stats.Statistics.DrawCallCount
+        Log.line "%.0f objects" stats.DrawCallCount
         let pi = runtime.Download(color, PixFormat.ByteRGBA)
         pi.SaveAsImage(@"C:\Aardwork\gugu.png")
         OpenTK.Graphics.OpenGL4.GL.Sync()
@@ -797,7 +797,7 @@ module RenderingTests =
             OpenTK.Graphics.OpenGL4.GL.Sync()
             let stats = task.Run fbo
             OpenTK.Graphics.OpenGL4.GL.Sync()
-            Log.line "%.0f objects" stats.Statistics.DrawCallCount
+            Log.line "%.0f objects" stats.DrawCallCount
             let pi = runtime.Download(color, PixFormat.ByteRGBA)
             pi.SaveAsImage(@"C:\Aardwork\urdar.png")
             OpenTK.Graphics.OpenGL4.GL.Sync()
@@ -874,7 +874,7 @@ module RenderingTests =
                 BlendMode = Mod.constant Aardvark.Base.Rendering.BlendMode.Blend
                 FillMode = Mod.constant Aardvark.Base.Rendering.FillMode.Fill
                 StencilMode = Mod.constant Aardvark.Base.Rendering.StencilMode.Disabled
-                Indices = Mod.constant ([|0;1;2; 0;2;3|] :> Array)
+                Indices = BufferView.ofArray [|0;1;2; 0;2;3|] |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider
                 Uniforms = emptyUniforms

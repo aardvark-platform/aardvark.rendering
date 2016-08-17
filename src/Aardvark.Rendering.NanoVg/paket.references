@@ -1,5 +1,5 @@
+Aardvark.Base.Runtime
 Aardvark.Base.Incremental
 FSharp.Quotations.Evaluator 
-FShade
+FShade.Core
 NanoVgSharp
-Aardvark.Base.Runtime

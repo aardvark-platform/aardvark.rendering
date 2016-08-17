@@ -12,12 +12,12 @@ module RenderObject =
     let ofScope (scope : Ag.Scope) =
         let rj = RenderObject.Create()
             
-        let indexArray = scope?VertexIndexArray
+        let indexBufferView = scope?VertexIndexBuffer
         let isActive = scope?IsActive
         let renderPass = scope?RenderPass
 
         rj.AttributeScope <- scope 
-        rj.Indices <- if indexArray = AttributeSemantics.emptyIndex then null else indexArray 
+        rj.Indices <- indexBufferView
          
         rj.IsActive <- isActive
         rj.RenderPass <- renderPass

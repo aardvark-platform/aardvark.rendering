@@ -1,5 +1,5 @@
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
 FSharp.Quotations.Evaluator 
-FShade
+FShade.Core
 FsUnit

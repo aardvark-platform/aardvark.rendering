@@ -305,7 +305,7 @@ module private RefCountedResources =
             member x.Release() = x.Release()
 
     type AdaptiveRenderingResult(task : IRenderTask, target : IMod<IFramebuffer>) =
-        inherit Mod.AbstractMod<RenderingResult>()
+        inherit Mod.AbstractMod<IFramebuffer>()
 
         let mutable refCount = 0
         let mutable stats = FrameStatistics.Zero
@@ -320,9 +320,9 @@ module private RefCountedResources =
                 failwith "pull on AdaptiveRenderingResult without reference!!"
 
             let fbo = target.GetValue x
-            let res =task.Run(x, OutputDescription.ofFramebuffer fbo)
-            stats <- res.Statistics
-            res
+            let res = task.Run(x, OutputDescription.ofFramebuffer fbo)
+            stats <- res
+            fbo
 
         override x.Inputs =
             seq {
@@ -344,7 +344,7 @@ module private RefCountedResources =
                     | Some t -> t.Release()
                     | None -> ()
 
-        interface IOutputMod<RenderingResult> with
+        interface IOutputMod<IFramebuffer> with
             member x.LastStatistics = 
                 match targetRef with 
                     | Some m -> stats + m.LastStatistics 
@@ -353,14 +353,14 @@ module private RefCountedResources =
             member x.Acquire() = x.Acquire()
             member x.Release() = x.Release()
 
-    type AdaptiveOutputTexture(semantic : Symbol, res : IMod<RenderingResult>) =
+    type AdaptiveOutputTexture(semantic : Symbol, res : IMod<IFramebuffer>) =
         inherit Mod.AbstractMod<ITexture>()
 
         let mutable refCount = 0
 
         let resultRef =
             match res with
-                | :? IOutputMod<RenderingResult> as r -> Some r
+                | :? IOutputMod<IFramebuffer> as r -> Some r
                 | _ -> None
 
         override x.Compute() =
@@ -369,7 +369,7 @@ module private RefCountedResources =
 
             let res = res.GetValue x
 
-            match Map.tryFind semantic res.Framebuffer.Attachments with
+            match Map.tryFind semantic res.Attachments with
                 | Some (:? BackendTextureOutputView as t) ->
                     t.texture :> ITexture
                 | _ ->
@@ -495,7 +495,7 @@ type RuntimeFramebufferExtensions private() =
         AdaptiveRenderingResult(this, output) :> IMod<_>
 
     [<Extension>]
-    static member GetOutputTexture (this : IMod<RenderingResult>, semantic : Symbol) =
+    static member GetOutputTexture (this : IMod<IFramebuffer>, semantic : Symbol) =
         AdaptiveOutputTexture(semantic, this) :> IMod<_>
 
 [<AbstractClass>]
@@ -504,17 +504,19 @@ type AbstractRenderTask() =
 
     let mutable frameId = 0UL
 
-    abstract member FramebufferSignature : IFramebufferSignature
+    abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
-    abstract member Perform : OutputDescription -> FrameStatistics
+    abstract member Run : OutputDescription -> FrameStatistics
     abstract member Dispose : unit -> unit
+
+    
 
     member x.FrameId = frameId
     member x.Run(caller : IAdaptiveObject, out : OutputDescription) =
         x.EvaluateAlways caller (fun () ->
-            let stats = x.Perform(out)
+            let stats = x.Run(out)
             frameId <- frameId + 1UL
-            RenderingResult(out.framebuffer, stats)
+            stats
         )
 
     interface IDisposable with
@@ -524,7 +526,7 @@ type AbstractRenderTask() =
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Runtime = x.Runtime
         member x.FrameId = frameId
-        member x.Run(caller, out) = RenderingResult(out.framebuffer, FrameStatistics.Zero)
+        member x.Run(caller, out) = x.Run(caller, out)
 
 
 
@@ -539,109 +541,91 @@ module RenderTask =
         static member Instance = instance
 
         interface IRenderTask with
-            member x.FramebufferSignature = null
+            member x.FramebufferSignature = None
             member x.Dispose() = ()
-            member x.Run(caller, fbo) = RenderingResult(fbo.framebuffer, FrameStatistics.Zero)
+            member x.Run(caller, fbo) = FrameStatistics.Zero
             member x.Runtime = None
             member x.FrameId = 0UL
 
-    type SequentialRenderTask(f : RenderingResult -> RenderingResult, tasks : IRenderTask[]) as this =
-        inherit AdaptiveObject()
+    type SequentialRenderTask(f : FrameStatistics -> FrameStatistics, tasks : IRenderTask[]) as this =
+        inherit AbstractRenderTask()
 
         do for t in tasks do t.AddOutput this
 
         let signature =
             lazy (
-                let signatures = tasks |> Array.map (fun t -> t.FramebufferSignature) |> Array.filter (not << isNull)
+                let signatures = tasks |> Array.choose (fun t -> t.FramebufferSignature)
 
-                if signatures.Length = 0 then null
-                elif signatures.Length = 1 then signatures.[0]
+                if signatures.Length = 0 then None
+                elif signatures.Length = 1 then Some signatures.[0]
                 else 
                     let s0 = signatures.[0]
                     let all = signatures |> Array.forall (fun s -> s0.IsAssignableFrom s0)
-                    if all then s0
+                    if all then Some s0
                     else failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A" signatures
             )
 
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
-        let mutable frameId = 0UL
-
         member x.Tasks = tasks
 
-        interface IRenderTask with
-            member x.FramebufferSignature = signature.Value
-            member x.Run(caller, fbo) =
-                x.EvaluateAlways caller (fun () ->
-                    let mutable stats = FrameStatistics.Zero
-                    for t in tasks do
-                        let res = t.Run(x, fbo)
-                        frameId <- max frameId t.FrameId
-                        stats <- stats + res.Statistics
+        override x.Dispose() =
+            for t in tasks do t.RemoveOutput x
 
-                    RenderingResult(fbo.framebuffer, stats) |> f
-                )
+        override x.Run(output) =
+            let mutable stats = FrameStatistics.Zero
+            for t in tasks do
+                let res = t.Run(x, output)
+                stats <- stats + res
 
-            member x.Dispose() =
-                for t in tasks do t.RemoveOutput this
+            stats |> f
 
-            member x.Runtime = runtime
+        override x.FramebufferSignature = signature.Value
+        override x.Runtime = runtime
 
-            member x.FrameId = frameId
 
         new(tasks : IRenderTask[]) = new SequentialRenderTask(id, tasks)
 
-    type private ModRenderTask(input : IMod<IRenderTask>) as this =
-        inherit AdaptiveObject()
-        do input.AddOutput this
+    type private ModRenderTask(input : IMod<IRenderTask>) =
+        inherit AbstractRenderTask()
         let mutable inner : Option<IRenderTask> = None
-        let mutable frameId = 0UL
 
-        interface IRenderTask with
-            member x.FramebufferSignature = 
-                let v = input.GetValue x
-                v.FramebufferSignature
+        override x.FramebufferSignature = 
+            let v = input.GetValue x
+            v.FramebufferSignature
 
-            member x.Run(caller, fbo) =
-                x.EvaluateAlways caller (fun () ->
-                    x.OutOfDate <- true
-                    let ni = input.GetValue x
+        override x.Run(fbo) =
+            let ni = input.GetValue x
 
+            match inner with
+                | Some oi when oi = ni -> ()
+                | _ ->
                     match inner with
-                        | Some oi when oi = ni -> ()
-                        | _ ->
-                            match inner with
-                                | Some oi -> oi.RemoveOutput x
-                                | _ -> ()
+                        | Some oi -> oi.RemoveOutput x
+                        | _ -> ()
 
-                            ni.AddOutput x
+                    ni.AddOutput x
 
-                    inner <- Some ni
-                    frameId <- ni.FrameId
-                    ni.Run(x, fbo)
-                )
+            inner <- Some ni
+            ni.Run(x, fbo)
 
-            member x.Dispose() =
-                input.RemoveOutput x
-                match inner with
-                    | Some i -> 
-                        i.RemoveOutput x
-                        inner <- None
-                    | _ -> ()
+        override x.Dispose() =
+            input.RemoveOutput x
+            match inner with
+                | Some i -> 
+                    i.RemoveOutput x
+                    inner <- None
+                | _ -> ()
 
-            member x.Runtime = input.GetValue(x).Runtime
+        override x.Runtime = input.GetValue(x).Runtime
             
-            member x.FrameId = frameId
-
     type private AListRenderTask(tasks : alist<IRenderTask>) as this =
-        inherit AdaptiveObject()
+        inherit AbstractRenderTask()
         let reader = tasks.GetReader()
         do reader.AddOutput this
 
-        let mutable signature = null
+        let mutable signature : Option<IFramebufferSignature> = None
         let mutable runtime = None
         let tasks = ReferenceCountingSet()
-
-        let mutable frameId = 0UL
 
         let add (t : IRenderTask) =
             if tasks.Add t then
@@ -651,14 +635,12 @@ module RenderTask =
 
                 let innerSig = t.FramebufferSignature
                 
-                if isNull innerSig then
-                    ()
-                elif isNull signature then
-                    signature <- innerSig
-                elif not (signature.IsAssignableFrom innerSig) then
-                    failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A vs. %A" signature innerSig
-                    
-                t.AddOutput this
+                match signature, innerSig with
+                    | Some s, Some i -> 
+                        if not (s.IsAssignableFrom i) then
+                            failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A vs. %A" signature innerSig
+                    | _-> signature <- innerSig
+
 
         let remove (t : IRenderTask) =
             if tasks.Remove t then
@@ -678,62 +660,48 @@ module RenderTask =
 
             this.OutOfDate <- wasOutOfDate
 
-        interface IRenderTask with
-            member x.FramebufferSignature =
-                lock this (fun () -> processDeltas())
-                signature
+        override x.FramebufferSignature =
+            lock this (fun () -> processDeltas())
+            signature
 
-            member x.Run(caller, fbo) =
-                x.EvaluateAlways caller (fun () ->
-                    processDeltas()
+        override x.Run(fbo) =
+            processDeltas()
 
-                    // run all tasks
-                    let mutable stats = FrameStatistics.Zero
+            // run all tasks
+            let mutable stats = FrameStatistics.Zero
 
-                    // TODO: order may be invalid
-                    for (_,t) in reader.Content.All do
-                        let res = t.Run(x, fbo)
-                        frameId <- max frameId t.FrameId
-                        stats <- stats + res.Statistics
+            // TODO: order may be invalid
+            for (_,t) in reader.Content.All do
+                let res = t.Run(x, fbo)
+                stats <- stats + res
 
-                    // return the accumulated statistics
-                    RenderingResult(fbo.framebuffer, stats)
-                )
+            // return the accumulated statistics
+            stats
 
-            member x.Dispose() =
-                reader.RemoveOutput this
-                reader.Dispose()
+        override x.Dispose() =
+            reader.RemoveOutput this
+            reader.Dispose()
 
-                for i in tasks do
-                    i.RemoveOutput x
-                tasks.Clear()
+            for i in tasks do
+                i.RemoveOutput x
+            tasks.Clear()
                 
-            member x.Runtime =
-                lock this (fun () -> processDeltas())
-                runtime
+        override x.Runtime =
+            lock this (fun () -> processDeltas())
+            runtime
 
-            member x.FrameId = frameId
-
-    type private CustomRenderTask(f : afun<IRenderTask * OutputDescription, RenderingResult>) as this =
-        inherit AdaptiveObject()
+    type private CustomRenderTask(f : afun<IRenderTask * OutputDescription, FrameStatistics>) as this =
+        inherit AbstractRenderTask()
         do f.AddOutput this
-        interface IRenderTask with
-            member x.FramebufferSignature = null
-            member x.Run(caller, fbo) =
-                x.EvaluateAlways caller (fun () ->
-                    f.Evaluate (x,(x :> IRenderTask,fbo))
-                )
 
-            member x.Dispose() =
-                f.RemoveOutput this
-                
-            member x.Runtime =
-                None
+        override x.FramebufferSignature = None
+        override x.Run(fbo) = f.Evaluate (x,(x :> IRenderTask,fbo))
+        override x.Dispose() = f.RemoveOutput this 
+        override x.Runtime = None
             
-            member x.FrameId = 0UL
 
     type private FinalizerRenderTask(inner : IRenderTask) =
-        inherit AdaptiveObject()
+        inherit AbstractRenderTask()
         let mutable inner = inner
 
         member private x.Dispose(disposing : bool) =
@@ -745,53 +713,42 @@ module RenderTask =
             try x.Dispose false
             with _ -> ()
 
-        interface IDisposable with
-            member x.Dispose() = x.Dispose true
-
-        interface IRenderTask with
-            member x.Run(caller, fbo) = inner.Run(caller, fbo)
-            member x.FrameId = inner.FrameId
-            member x.FramebufferSignature = inner.FramebufferSignature
-            member x.Runtime = inner.Runtime
+        override x.Dispose() = x.Dispose true
+        override x.Run(fbo) = inner.Run(x, fbo)
+        override x.FramebufferSignature = inner.FramebufferSignature
+        override x.Runtime = inner.Runtime
 
     type private BeforeAfterRenderTask(before : Option<unit -> unit>, after : Option<unit -> unit>, inner : IRenderTask) =
-        inherit AdaptiveObject()
+        inherit AbstractRenderTask()
 
         member x.Before = before
         member x.After = after
         member x.Inner = inner
 
-        interface IRenderTask with
-            member x.FramebufferSignature = inner.FramebufferSignature
-            member x.Run(caller, fbo) =
-                x.EvaluateAlways caller (fun () ->
+        override x.FramebufferSignature = inner.FramebufferSignature
+        override x.Run(fbo) =
+            match before with
+                | Some before -> before()
+                | None -> ()
 
-                    match before with
-                        | Some before -> before()
-                        | None -> ()
+            let res = inner.Run(x, fbo)
 
-                    let res = inner.Run(x, fbo)
+            match after with
+                | Some after -> after()
+                | None -> ()
 
-                    match after with
-                        | Some after -> after()
-                        | None -> ()
+            res
 
-                    res
-                )
-
-            member x.Dispose() = 
-                inner.RemoveOutput x
-                inner.Dispose()
-            member x.Runtime = inner.Runtime
-            member x.FrameId = inner.FrameId
+        override x.Dispose() = inner.RemoveOutput x
+        override x.Runtime = inner.Runtime
 
 
     let empty = EmptyRenderTask.Instance
 
-    let ofAFun (f : afun<IRenderTask * OutputDescription, RenderingResult>) =
+    let ofAFun (f : afun<IRenderTask * OutputDescription, FrameStatistics>) =
         new CustomRenderTask(f) :> IRenderTask
 
-    let custom (f : IRenderTask * OutputDescription -> RenderingResult) =
+    let custom (f : IRenderTask * OutputDescription -> FrameStatistics) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
     let before (f : unit -> unit) (t : IRenderTask) =
@@ -837,26 +794,24 @@ module RenderTask =
     let ofASet (s : aset<IRenderTask>) =
         new AListRenderTask(s |> ASet.sortWith (fun a b -> compare a.Id b.Id)) :> IRenderTask
 
-    let mapResult (f : RenderingResult -> RenderingResult) (t : IRenderTask) =
-        new SequentialRenderTask(f, [|t|]) :> IRenderTask
-
-    let mapStatistics (f : FrameStatistics -> FrameStatistics) (t : IRenderTask) =
-        t |> mapResult (fun r -> RenderingResult(r.Framebuffer, f r.Statistics))
+    let map (f : FrameStatistics -> FrameStatistics) (t : IRenderTask) =
+        new SequentialRenderTask(f, [|t|])  :> IRenderTask
 
     let withFinalize (t : IRenderTask) =
         match t with
             | :? FinalizerRenderTask -> t
             | _ -> new FinalizerRenderTask(t) :> IRenderTask
 
-    let getResult (sem : Symbol) (t : IMod<RenderingResult>) =
-        t.GetOutputTexture sem
 
-    let renderTo (target : IMod<IFramebuffer>) (task : IRenderTask) : IMod<RenderingResult> =
+    let renderTo (target : IMod<IFramebuffer>) (task : IRenderTask) : IMod<IFramebuffer> =
         task.RenderTo target
+
+    let getResult (sem : Symbol) (t : IMod<IFramebuffer>) =
+        t.GetOutputTexture sem
 
     let renderSemantics (sem : Set<Symbol>) (size : IMod<V2i>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
-        let signature = task.FramebufferSignature
+        let signature = task.FramebufferSignature.Value
 
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
         let fbo = runtime.CreateFramebuffer(signature, sem, size)
@@ -887,7 +842,7 @@ module RenderTask =
             let task = 
                 custom (fun (self, out) -> 
                     Log.line "%s" str
-                    RenderingResult(out.framebuffer, FrameStatistics.Zero)
+                    FrameStatistics.Zero
                 )
 
             task
@@ -908,7 +863,7 @@ module ``RenderTask Builder`` =
             let task = 
                 RenderTask.custom (fun (self, out) -> 
                     f()
-                    RenderingResult(out.framebuffer, FrameStatistics.Zero)
+                    FrameStatistics.Zero
                 )
             (AList.single task)::c()
 

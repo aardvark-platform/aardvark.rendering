@@ -107,7 +107,7 @@ type MappedBuffer(ctx : Context) =
             true
         else false
 
-    member x.Write(sourcePtr, offset, size) =   
+    member x.Write(sourcePtr : IntPtr, offset : int, size : int) =   
         resourceLocked (fun () -> 
             if size + offset > int buffer.SizeInBytes then failwith "insufficient buffer size"
             Marshal.Copy(sourcePtr, mappedPtr + nativeint offset, size)
@@ -124,7 +124,7 @@ type MappedBuffer(ctx : Context) =
             )
         )
 
-    member x.Read(targetPtr, offset, size) =   
+    member x.Read(targetPtr : IntPtr, offset : int, size : int) =   
         Marshal.Copy(mappedPtr + nativeint offset, targetPtr, size)
 
     member x.Capacity = int buffer.SizeInBytes

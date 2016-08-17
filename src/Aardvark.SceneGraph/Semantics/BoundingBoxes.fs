@@ -99,15 +99,21 @@ module BoundingBoxes =
                         let positions = ab.Data |> unbox<V3f[]>
 
                         let! trafo = node.ModelTrafo
-                        match node.VertexIndexArray with
-                            | a when a = Aardvark.SceneGraph.Semantics.AttributeSemantics.emptyIndex -> 
+                        match node.VertexIndexBuffer with
+                            | None -> 
                                     return positions |> Array.map (fun p -> trafo.Forward.TransformPos(V3d p)) |> boxFromArray
-                            | indices ->
-                                    let! indices = indices
-                                    let filteredPositions = if indices.GetType().GetElementType() = typeof<uint16> 
-                                                            then indices |> unbox<uint16[]> |> Array.map (fun i -> positions.[int i])
-                                                            else indices |> unbox<int[]> |> Array.map (fun i -> positions.[i])
-                                    return filteredPositions |> Array.map (fun p -> trafo.Forward.TransformPos(V3d p)) |> boxFromArray
+                            | Some indices ->
+                                let! indices = indices.Buffer
+                                match indices with
+                                    | :? ArrayBuffer as b ->
+                                        let indices = b.Data
+                                        let filteredPositions = if indices.GetType().GetElementType() = typeof<uint16> 
+                                                                then indices |> unbox<uint16[]> |> Array.map (fun i -> positions.[int i])
+                                                                else indices |> unbox<int[]> |> Array.map (fun i -> positions.[i])
+                                        return filteredPositions |> Array.map (fun p -> trafo.Forward.TransformPos(V3d p)) |> boxFromArray
+                                    | _ ->
+                                        return failwithf "unknown IBuffer for indices: %A" indices
+                                            
 
                     | _ ->
                         return failwithf "unknown IBuffer for positions: %A" buffer
@@ -146,13 +152,20 @@ module BoundingBoxes =
                     | :? ArrayBuffer as ab ->
                         let positions = ab.Data |> unbox<V3f[]>
 
-                        match node.VertexIndexArray with
-                            | a when a = Aardvark.SceneGraph.Semantics.AttributeSemantics.emptyIndex -> 
+                        match node.VertexIndexBuffer with
+                            | None -> 
                                     return positions |> boxFromArray
-                            | indices ->
-                                    let! indices = indices
-                                    let indices = indices |> unbox<int[]>
-                                    return indices |> Array.map (fun (i : int) -> positions.[i]) |> boxFromArray
+                            | Some indices ->
+                                let! indices = indices.Buffer
+                                match indices with
+                                    | :? ArrayBuffer as b ->
+                                        let indices = b.Data
+                                        let filteredPositions = if indices.GetType().GetElementType() = typeof<uint16> 
+                                                                then indices |> unbox<uint16[]> |> Array.map (fun i -> positions.[int i])
+                                                                else indices |> unbox<int[]> |> Array.map (fun i -> positions.[i])
+                                        return filteredPositions |> boxFromArray
+                                    | _ ->
+                                        return failwithf "unknown IBuffer for indices: %A" indices
                     | _ ->
                         return failwithf "unknown IBuffer for positions: %A" buffer
             }

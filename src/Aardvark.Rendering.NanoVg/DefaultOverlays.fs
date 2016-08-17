@@ -352,7 +352,7 @@ module DefaultOverlays =
                     let res = inner.Run(x,f)
 
                     if not isUseless then
-                        realStats.Emit res.Statistics
+                        realStats.Emit res
 
                     overlay.Run(f) |> ignore
 

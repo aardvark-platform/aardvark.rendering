@@ -157,8 +157,13 @@ module Loader =
                         ro.VertexAttributes <- mesh
                         ro.Mode <- Mod.constant mesh.geometry.Mode
                         ro.DrawCallInfos <- Mod.constant [call]
-                        if indexed then ro.Indices <- BufferView.ofArray mesh.geometry.IndexArray |> Some
-                        else ro.Indices <- None
+                        if indexed then 
+                            let index = mesh.geometry.IndexArray
+                            let t = index.GetType().GetElementType()
+                            let b = Mod.constant (ArrayBuffer index :> IBuffer)
+                            ro.Indices <- Some (BufferView(b, t))
+                        else 
+                            ro.Indices <- None
 
                         ASet.single (ro :> IRenderObject)
 

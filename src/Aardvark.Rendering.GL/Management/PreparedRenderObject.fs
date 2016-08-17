@@ -416,13 +416,14 @@ type ResourceManagerExtensions private() =
 
         // create the index buffer (if present)
         let index =
-            if isNull rj.Indices then None
-            else 
-                x.CreateBuffer rj.Indices |> Some
+            match rj.Indices with
+                | Some i -> x.CreateBuffer i.Buffer |> Some
+                | None -> None
+
 
         let indirect =
             if isNull rj.IndirectBuffer then None
-            else x.CreateIndirectBuffer(not (isNull rj.Indices), rj.IndirectBuffer) |> Some
+            else x.CreateIndirectBuffer(Option.isSome rj.Indices, rj.IndirectBuffer) |> Some
 
         // create the VertexArrayObject
         let vao =
@@ -500,9 +501,15 @@ type ResourceManagerExtensions private() =
                     | Some ib ->
                         // we don't want to update the indirect-buffer but we need to depend on it
                         lock ib (fun () -> ib.Outputs.Add self |> ignore)
-                        let ib = ib.Handle.GetValue(self)
-                        let calls = ib.Count |> NativePtr.read
-                        IndirectDraw calls
+                        match isNull ib.Handle with
+                        | false ->
+                            let ib = ib.Handle.GetValue(self)
+                            match Unchecked.equals (ib :> obj) null with
+                            | false ->
+                                let calls = ib.Count |> NativePtr.read
+                                IndirectDraw calls
+                            | true -> DrawCallStats.NoDraw //where is the value
+                        | true -> DrawCallStats.NoDraw //wtf is going on
 
                     | None ->
                         let calls = drawCalls.Handle.GetValue(self)

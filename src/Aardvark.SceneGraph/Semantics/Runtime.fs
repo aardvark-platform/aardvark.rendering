@@ -14,8 +14,3 @@ module RuntimeSemantics =
 
     type ISg with
         member x.Runtime : IRuntime = x?Runtime
-
-    [<Semantic>]
-    type RuntimeSem() =
-        member x.Runtime(e : Sg.Environment) =
-            e.Child?Runtime <- e.Runtime

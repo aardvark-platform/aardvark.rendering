@@ -605,17 +605,18 @@ module OpenGLObjectInterpreter =
                         Translations.toGLMode realMode
 
                 let indexType =
-                    if isNull o.Original.Indices then
-                        0
-                    else
-                        let indexType = o.Original.Indices.GetValue().GetType().GetElementType()
-                        if indexType = typeof<byte> then int OpenGl.Enums.IndexType.UnsignedByte
-                        elif indexType = typeof<uint16> then int OpenGl.Enums.IndexType.UnsignedShort
-                        elif indexType = typeof<uint32> then int OpenGl.Enums.IndexType.UnsignedInt
-                        elif indexType = typeof<sbyte> then int OpenGl.Enums.IndexType.UnsignedByte
-                        elif indexType = typeof<int16> then int OpenGl.Enums.IndexType.UnsignedShort
-                        elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
-                        else failwithf "unsupported index type: %A"  indexType
+                    match o.Original.Indices with
+                        | None -> 0
+                        | Some view ->
+
+                            let indexType = view.ElementType
+                            if indexType = typeof<byte> then int OpenGl.Enums.IndexType.UnsignedByte
+                            elif indexType = typeof<uint16> then int OpenGl.Enums.IndexType.UnsignedShort
+                            elif indexType = typeof<uint32> then int OpenGl.Enums.IndexType.UnsignedInt
+                            elif indexType = typeof<sbyte> then int OpenGl.Enums.IndexType.UnsignedByte
+                            elif indexType = typeof<int16> then int OpenGl.Enums.IndexType.UnsignedShort
+                            elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
+                            else failwithf "unsupported index type: %A"  indexType
 
                 gl.bindProgram program.Handle
 

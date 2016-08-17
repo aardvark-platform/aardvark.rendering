@@ -24,7 +24,7 @@ type AirState =
         fillMode            : IMod<FillMode>
         stencilMode         : IMod<StencilMode>
         
-        indices             : IMod<Array>
+        indices             : Option<BufferView>
         instanceAttributes  : Map<Symbol, BufferView>
         vertexAttributes    : Map<Symbol, BufferView>
         
@@ -393,14 +393,14 @@ type Air private() =
     // ================================================================================================================
     // Index Buffer
     // ================================================================================================================
-    static member BindIndexBuffer(index : IMod<Array>) =
-        modify (fun s -> { s with indices = index })
+    static member BindIndexBuffer(index : BufferView) =
+        modify (fun s -> { s with indices = Some index })
 
-    static member BindIndexBuffer(index : Array) =
+    static member BindIndexBuffer(index : 'a[]) =
         if isNull index then
-            modify (fun s -> { s with indices = null })
+            modify (fun s -> { s with indices = None })
         else
-            modify (fun s -> { s with indices = Mod.constant index })
+            modify (fun s -> { s with indices = BufferView(Mod.constant (ArrayBuffer index :> IBuffer), typeof<'a>) |> Some })
 
 
     // ================================================================================================================

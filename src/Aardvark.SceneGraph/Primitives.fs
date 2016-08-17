@@ -17,7 +17,192 @@ open Aardvark.Base.Incremental
 [<AutoOpen>]
 module SgPrimitives =
 
-   
+    module private Sphere =
+        
+        let private cube = 
+            let V3d(x : int,y : int,z : int) = V3d(x,y,z).Normalized
+            [|
+                // +Z
+                Triangle3d(V3d(1, 1, 1), V3d(-1, -1, 1), V3d(1, -1, 1))
+                Triangle3d(V3d(-1, -1, 1), V3d(1, 1, 1), V3d(-1, 1, 1))
+
+                // -Z
+                Triangle3d(V3d(-1, -1, -1), V3d(1, 1, -1), V3d(1, -1, -1))
+                Triangle3d(V3d(1, 1, -1), V3d(-1, -1, -1), V3d(-1, 1, -1))
+
+
+                // +Y
+                Triangle3d(V3d(-1, 1, -1), V3d(1, 1, 1), V3d(1, 1, -1))
+                Triangle3d(V3d(1, 1, 1), V3d(-1, 1, -1), V3d(-1, 1, 1))
+
+                // -Y
+                Triangle3d(V3d(1, -1, 1), V3d(-1, -1, -1), V3d(1, -1, -1))
+                Triangle3d(V3d(-1, -1, -1), V3d(1, -1, 1), V3d(-1, -1, 1))
+
+                // +X
+                Triangle3d(V3d(1, 1, 1), V3d(1, -1, -1), V3d(1, 1, -1))
+                Triangle3d(V3d(1, -1, -1), V3d(1, 1, 1), V3d(1, -1, 1))
+
+                // -X
+                Triangle3d(V3d(-1, -1, -1), V3d(-1, 1, 1), V3d(-1, 1, -1))
+                Triangle3d(V3d(-1, 1, 1), V3d(-1, -1, -1), V3d(-1, -1, 1))
+
+            |]
+
+        let private subdivide (tris : Triangle3d[]) =
+            [|
+                for t in tris do
+                    let mid = 0.5 * (t.P0 + t.P1) |> Vec.normalize
+
+                    yield Triangle3d(t.P1, t.P2, mid)
+                    yield Triangle3d(t.P2, t.P0, mid)
+            |]
+
+        let private sphereSg (tris : Triangle3d[]) =
+            let positions : V3f[] = Array.zeroCreate (3 * tris.Length)
+            let normals : V3f[]  = Array.zeroCreate (3 * tris.Length)
+            let coords : V2f[]  = Array.zeroCreate (3 * tris.Length)
+
+            let mutable i = 0
+            for (t : Triangle3d) in tris do
+                let p0 = t.P0
+                let p1 = t.P1
+                let p2 = t.P2
+                positions.[i + 0] <- V3f p0
+                positions.[i + 1] <- V3f p1
+                positions.[i + 2] <- V3f p2
+                normals.[i + 0] <- V3f p0.Normalized
+                normals.[i + 1] <- V3f p1.Normalized
+                normals.[i + 2] <- V3f p2.Normalized
+                coords.[i + 0] <- p0.SphericalFromCartesian() |> V2f
+                coords.[i + 1] <- p1.SphericalFromCartesian() |> V2f
+                coords.[i + 2] <- p2.SphericalFromCartesian() |> V2f
+
+                i <- i + 3
+            let geometry = 
+                IndexedGeometry(
+                    Mode = IndexedGeometryMode.TriangleList,
+                    IndexedAttributes =
+                        SymDict.ofList [
+                            DefaultSemantic.Positions, positions :> Array
+                            DefaultSemantic.Normals, normals :> Array
+                            DefaultSemantic.DiffuseColorCoordinates, coords :> Array
+                        ]
+                )
+
+            Sg.ofIndexedGeometry geometry
+
+
+        let private spheres =
+            Seq.initInfinite id
+                |> Seq.scan (fun last _ -> subdivide last) cube
+                |> Seq.map sphereSg
+                |> Seq.cache
+
+        let get (level : int) =
+            spheres |> Seq.item level
+
+    module private Cylinder =
+        
+        let private create (tess : int) =
+            
+            let indices = System.Collections.Generic.List<int>()
+            let positions = System.Collections.Generic.List<V3d>()
+            let normals = System.Collections.Generic.List<V3d>()
+
+            let icb = 0
+            let ict = 1
+
+            let step = Constant.PiTimesTwo / float tess
+
+            // bottom cap
+            positions.Add V3d.Zero
+            normals.Add -V3d.OOI
+            let ic = positions.Count - 1
+            let mutable phi = 0.0
+            let mutable last = ic + tess
+            for i in 0 .. tess - 1 do
+                let i = ic + i + 1
+                let p = V3d(cos phi, sin phi, 0.0)
+                positions.Add p
+                normals.Add -V3d.OOI
+                indices.Add i; indices.Add last; indices.Add ic
+                last <- i
+                phi <- phi + step
+
+
+            // top cap
+            positions.Add V3d.OOI
+            normals.Add V3d.OOI
+            let ic = positions.Count - 1
+            let mutable phi = 0.0
+            let mutable last = ic + tess
+            for i in 0 .. tess - 1 do
+                let i = ic + i + 1
+                let p = V3d(cos phi, sin phi, 1.0)
+                positions.Add p
+                normals.Add V3d.OOI
+                indices.Add last; indices.Add i; indices.Add ic
+                last <- i
+                phi <- phi + step
+
+            // side faces
+            let ic = positions.Count - 1
+            let mutable phi = 0.0
+            let mutable lt = ic + 1 + 2 * tess - 1
+            let mutable lb = ic + 1 + 2 * tess - 2
+            for i in 0 .. tess - 1 do
+                let ib = 1 + ic + 2 * i
+                let it = ib + 1
+
+                let c = cos phi
+                let s = sin phi
+                let b = V3d(c, s, 0.0)
+                let t = V3d(c, s, 1.0)
+                positions.Add b; normals.Add (V3d(c,s,0.0))
+                positions.Add t; normals.Add (V3d(c,s,0.0))
+
+
+                // lb ib lt
+                // lt ib it
+
+                indices.Add lb; indices.Add ib; indices.Add lt
+                indices.Add lt; indices.Add ib; indices.Add it
+
+                
+                lt <- it
+                lb <- ib
+
+                phi <- phi + step
+
+            let indices = indices.ToArray()
+            let positions = positions.MapToArray(fun v -> V3f v)
+            let normals = normals.MapToArray(fun v -> V3f v)
+
+
+            let geometry = 
+                IndexedGeometry(
+                    Mode = IndexedGeometryMode.TriangleList,
+                    IndexArray = indices,
+                    IndexedAttributes =
+                        SymDict.ofList [
+                            DefaultSemantic.Positions, positions :> Array
+                            DefaultSemantic.Normals, normals :> Array
+                        ]
+                )
+
+            Sg.ofIndexedGeometry geometry
+
+
+        let private cache = Dict<int, ISg>()
+
+        let get (tess : int) =
+            lock cache (fun () ->
+                cache.GetOrCreate(tess, fun tess -> create tess)
+            )
+
+
+
 
     module Sg =
         open Aardvark.Base.Incremental.Operators
@@ -205,4 +390,29 @@ module SgPrimitives =
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
 
-        
+        let unitSphere (level : int) (color : IMod<C4b>) =
+            Sphere.get level
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
+
+        let sphere (level : int) (color : IMod<C4b>) (radius : IMod<float>)  =
+            Sphere.get level
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
+                |> Sg.trafo (radius |> Mod.map Trafo3d.Scale)
+
+        let unitSphere' (level : int) (color : C4b) =
+            unitSphere level (Mod.constant color)
+
+        let sphere' (level : int) (color : C4b) (radius : float) =
+            sphere level (Mod.constant color) (Mod.constant radius)
+
+        let cylinder (tess : int) (color : IMod<C4b>) (radius : IMod<float>) (height : IMod<float>) =
+            let trafo = Mod.map2 (fun r h -> Trafo3d.Scale(r,r,h)) radius height
+            Cylinder.get tess
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
+                |> Sg.trafo trafo
+
+        let cylinder' (tess : int) (color : C4b) (radius : float) (height : float) =
+            let trafo = Trafo3d.Scale(radius,radius,height)
+            Cylinder.get tess
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color.ToC4f() |> V4f |> Mod.constant)
+                |> Sg.transform trafo
