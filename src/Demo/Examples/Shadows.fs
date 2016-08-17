@@ -300,8 +300,9 @@ module Shadows =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         let renderTask =  Sg.compile win.Runtime win.FramebufferSignature sg
         let composedTask = 
+            
             match renderTask with
-                | :? Aardvark.Rendering.GL.RenderTasks.AbstractRenderTask as a -> 
+                | :? Aardvark.Rendering.GL.RenderTasks.AbstractOpenGlRenderTask as a -> 
 //                     a.BeforeRender.Add (fun _ -> 
 //                                OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
 //                            )
@@ -311,7 +312,7 @@ module Shadows =
                        ()
                 | :? Aardvark.Base.RenderTask.SequentialRenderTask as s -> 
                     match s.Tasks.[0] with
-                        | :? Aardvark.Rendering.GL.RenderTasks.AbstractRenderTask as a -> 
+                        | :? Aardvark.Rendering.GL.RenderTasks.AbstractOpenGlRenderTask as a -> 
                             a.BeforeRender.Add (fun _ -> 
                                 OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
                             )

@@ -214,7 +214,7 @@ module RenderTaskPerformance =
                 for i in 0 .. 100 do
                     for (r,fbo) in renderTasks do
                         r.Run output.framebuffer |> ignore
-                RenderingResult(output.framebuffer, FrameStatistics.Zero)
+                FrameStatistics.Zero
             )
 
         win.RenderTask <- DefaultOverlays.withStatistics customTask

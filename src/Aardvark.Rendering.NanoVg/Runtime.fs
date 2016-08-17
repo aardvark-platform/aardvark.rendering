@@ -442,11 +442,11 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         )
 
     interface IRenderTask with
-        member x.FramebufferSignature = null
+        member x.FramebufferSignature = None
         member x.Runtime = runtime :> IRuntime |> Some
         member x.Run(caller, fbo) = 
             x.Run(caller, fbo)
-            RenderingResult(fbo.framebuffer, FrameStatistics.Zero)
+            FrameStatistics.Zero
 
         member x.Dispose() =
             x.Dispose()

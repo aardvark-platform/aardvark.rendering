@@ -21,8 +21,8 @@ module RenderTasks =
 
 
     [<AbstractClass>]
-    type AbstractRenderTask(manager : ResourceManager, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
-        inherit AdaptiveObject()
+    type AbstractOpenGlRenderTask(manager : ResourceManager, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
+        inherit AbstractRenderTask()
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
         let manager = ResourceManager(manager.Context, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
@@ -45,7 +45,6 @@ module RenderTasks =
                 structuralChange = structureChanged
             }
 
-        let mutable frameId = 0UL
 //        let drawBuffers = 
 //            fboSignature.ColorAttachments 
 //                |> Map.toList 
@@ -65,8 +64,6 @@ module RenderTasks =
             let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
             let c = config.GetValue x
             if c.useDebugOutput then
-                if frameId = 0UL then
-                    Log.warn "debug output enabled"
                 match ContextHandle.Current with
                     | Some v -> v.AttachDebugOutputIfNeeded()
                     | None -> Report.Warn("No active context handle in RenderTask.Run")
@@ -148,70 +145,57 @@ module RenderTasks =
         abstract member Perform : Framebuffer -> FrameStatistics
         abstract member Release : unit -> unit
 
-        member x.Dispose() =
+        member x.Config = config
+        member x.Context = ctx
+        member x.Scope = scope
+        member x.RenderTaskLock = renderTaskLock
+        member x.ResourceManager = manager
+
+        override x.Dispose() =
             if not isDisposed then
                 isDisposed <- true
                 let dummy = ref 0
                 currentContext.Outputs.Consume(dummy) |> ignore
                 x.Release()
-
-        member x.Config = config
-        member x.Context = ctx
-        member x.FramebufferSignature = fboSignature
-        member x.Scope = scope
-        member x.RenderTaskLock = renderTaskLock
-        member x.ResourceManager = manager
-
-        member x.Run(caller : IAdaptiveObject, desc : OutputDescription) =
+        override x.FramebufferSignature = Some fboSignature
+        override x.Runtime = Some ctx.Runtime
+        override x.Run(desc : OutputDescription) =
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| fboSignature.IsAssignableFrom fbo.Signature then
                 failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
 
-            x.EvaluateAlways caller (fun () ->
-                x.OutOfDate <- true
+            use token = ctx.ResourceLock 
+            if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
+                transact (fun () -> Mod.change currentContext ctx.CurrentContextHandle.Value)
 
-                use token = ctx.ResourceLock 
-                if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
-                    transact (fun () -> Mod.change currentContext ctx.CurrentContextHandle.Value)
-
-                let fbo =
-                    match fbo with
-                        | :? Framebuffer as fbo -> fbo
-                        | _ -> failwithf "unsupported framebuffer: %A" fbo
+            let fbo =
+                match fbo with
+                    | :? Framebuffer as fbo -> fbo
+                    | _ -> failwithf "unsupported framebuffer: %A" fbo
 
 
-                let debugState = x.pushDebugOutput()
-                let fboState = x.pushFbo desc
+            let debugState = x.pushDebugOutput()
+            let fboState = x.pushFbo desc
 
-                let innerStats = 
-                    renderTaskLock.Run (fun () -> 
-                        beforeRender.OnNext()
-                        let r = x.Perform fbo
-                        afterRender.OnNext()
-                        r
-                    )
+            let innerStats = 
+                renderTaskLock.Run (fun () -> 
+                    beforeRender.OnNext()
+                    let r = x.Perform fbo
+                    afterRender.OnNext()
+                    r
+                )
 
-                x.popFbo (desc, fboState)
-                x.popDebugOutput debugState
+            x.popFbo (desc, fboState)
+            x.popDebugOutput debugState
 
                 
 
-                GL.BindVertexArray 0
-                GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
+            GL.BindVertexArray 0
+            GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
             
 
-                frameId <- frameId + 1UL
-                innerStats + !scope.stats
-            )
+            innerStats + !scope.stats
 
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
-
-        interface IRenderTask with
-            member x.Run(a : IAdaptiveObject, b : OutputDescription) = RenderingResult(b.framebuffer, x.Run(a,b))
-            member x.FrameId = frameId
-            member x.FramebufferSignature = fboSignature
-            member x.Runtime = Some ctx.Runtime
             
 
     [<AbstractClass>]
@@ -307,7 +291,7 @@ module RenderTasks =
                 let right = project r
                 compare left right
 
-    type StaticOrderSubTask(parent : AbstractRenderTask) =
+    type StaticOrderSubTask(parent : AbstractOpenGlRenderTask) =
         inherit AbstractSubTask(parent)
         static let empty = new PreparedMultiRenderObject([PreparedRenderObject.empty])
         let objects = CSet.ofList [empty]
@@ -671,7 +655,7 @@ module RenderTasks =
         override x.Dispose() =
             reader.Dispose()
 
-    and CameraSortedSubTask(order : RenderPassOrder, parent : AbstractRenderTask) =
+    and CameraSortedSubTask(order : RenderPassOrder, parent : AbstractOpenGlRenderTask) =
         inherit AbstractSubTask(parent)
         do GLVM.vmInit()
 
@@ -859,7 +843,7 @@ module RenderTasks =
             member x.GetValue caller = x.GetValue caller
 
     type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
-        inherit AbstractRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
+        inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
         
         let ctx = man.Context
         let resources = new Aardvark.Base.Rendering.ResourceInputSet()
@@ -989,97 +973,82 @@ module RenderTasks =
 
 
     type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
-        inherit AdaptiveObject()
+        inherit AbstractRenderTask()
 
-        let mutable frameId = 0UL
-
-        member x.Run(caller : IAdaptiveObject, desc : OutputDescription) =
+        override x.Run(desc : OutputDescription) =
             let fbo = desc.framebuffer
             using ctx.ResourceLock (fun _ ->
-                x.EvaluateAlways caller (fun () ->
 
-                    let old = Array.create 4 0
-                    let mutable oldFbo = 0
-                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-                    OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+                let old = Array.create 4 0
+                let mutable oldFbo = 0
+                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
+                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
 
-                    let handle = fbo.GetHandle null |> unbox<int>
+                let handle = fbo.GetHandle null |> unbox<int>
 
-                    if ExecutionContext.framebuffersSupported then
-                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                        GL.Check "could not bind framebuffer"
-                    elif handle <> 0 then
-                        failwithf "cannot render to texture on this OpenGL driver"
-
-                    GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+                if ExecutionContext.framebuffersSupported then
+                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                     GL.Check "could not bind framebuffer"
+                elif handle <> 0 then
+                    failwithf "cannot render to texture on this OpenGL driver"
 
-                    let depthValue = depth.GetValue x
-                    let colorValues = color.GetValue x
+                GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
+                GL.Check "could not bind framebuffer"
+
+                let depthValue = depth.GetValue x
+                let colorValues = color.GetValue x
                     
-                    colorValues |> List.iteri (fun i _ ->
-                        GL.ColorMask(i, true, true, true, true)
-                    )
-                    GL.DepthMask(true)
-                    GL.StencilMask(0xFFFFFFFFu)
+                colorValues |> List.iteri (fun i _ ->
+                    GL.ColorMask(i, true, true, true, true)
+                )
+                GL.DepthMask(true)
+                GL.StencilMask(0xFFFFFFFFu)
 
-                    match colorValues, depthValue with
-                        | [Some c], Some depth ->
-                            GL.ClearColor(c.R, c.G, c.B, c.A)
-                            GL.ClearDepth(depth)
-                            GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                match colorValues, depthValue with
+                    | [Some c], Some depth ->
+                        GL.ClearColor(c.R, c.G, c.B, c.A)
+                        GL.ClearDepth(depth)
+                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
                         
-                        | [Some c], None ->
-                            GL.ClearColor(c.R, c.G, c.B, c.A)
-                            GL.Clear(ClearBufferMask.ColorBufferBit)
+                    | [Some c], None ->
+                        GL.ClearColor(c.R, c.G, c.B, c.A)
+                        GL.Clear(ClearBufferMask.ColorBufferBit)
 
-                        | l, Some depth when List.forall Option.isNone l ->
-                            GL.ClearDepth(depth)
-                            GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                        | l, d ->
+                    | l, Some depth when List.forall Option.isNone l ->
+                        GL.ClearDepth(depth)
+                        GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                    | l, d ->
                             
-                            let mutable i = 0
-                            for c in l do
-                                match c with
-                                    | Some c ->
-                                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
-                                        GL.ClearColor(c.R, c.G, c.B, c.A)
-                                        GL.Clear(ClearBufferMask.ColorBufferBit)
-                                    | None ->
-                                        ()
-                                i <- i + 1
-
-                            match d with
-                                | Some depth -> 
-                                    GL.ClearDepth(depth)
-                                    GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                        let mutable i = 0
+                        for c in l do
+                            match c with
+                                | Some c ->
+                                    GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
+                                    GL.ClearColor(c.R, c.G, c.B, c.A)
+                                    GL.Clear(ClearBufferMask.ColorBufferBit)
                                 | None ->
                                     ()
+                            i <- i + 1
+
+                        match d with
+                            | Some depth -> 
+                                GL.ClearDepth(depth)
+                                GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                            | None ->
+                                ()
 
 
-                    if ExecutionContext.framebuffersSupported then
-                        GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
+                if ExecutionContext.framebuffersSupported then
+                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
 
-                    GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-                    GL.Check "could not bind framebuffer"
-
-                    frameId <- frameId + 1UL
-
-                    RenderingResult(fbo, FrameStatistics.Zero)
-                )
+                GL.Viewport(old.[0], old.[1], old.[2], old.[3])
+                GL.Check "could not bind framebuffer"
+                FrameStatistics.Zero
             )
 
-        member x.Dispose() =
+        override x.Dispose() =
             color.RemoveOutput x
             depth.RemoveOutput x
+        override x.FramebufferSignature = fboSignature |> Some
+        override x.Runtime = runtime |> Some
 
-        interface IRenderTask with
-            member x.FramebufferSignature = fboSignature
-            member x.Runtime = runtime |> Some
-            member x.Run(caller, fbo) =
-                x.Run(caller, fbo)
-
-            member x.Dispose() =
-                x.Dispose()
-
-            member x.FrameId = frameId

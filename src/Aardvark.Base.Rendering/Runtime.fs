@@ -78,9 +78,9 @@ type IRuntime =
 and IRenderTask =
     inherit IDisposable
     inherit IAdaptiveObject
-    abstract member FramebufferSignature : IFramebufferSignature
+    abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
-    abstract member Run : IAdaptiveObject * OutputDescription -> RenderingResult
+    abstract member Run : IAdaptiveObject * OutputDescription -> FrameStatistics
     abstract member FrameId : uint64
 
 and [<AllowNullLiteral>] IFramebufferSignature =
@@ -99,10 +99,6 @@ and IFramebuffer =
     abstract member Size : V2i
     abstract member GetHandle : IAdaptiveObject -> obj
     abstract member Attachments : Map<Symbol, IFramebufferOutput>
-
-and RenderingResult(f : IFramebuffer, stats : FrameStatistics) =
-    member x.Framebuffer = f
-    member x.Statistics = stats
 
 and [<Flags>]ColorWriteMask = 
     | Red = 0x1
@@ -201,7 +197,7 @@ type BinarySurface(shaders : Map<ShaderStage, BinaryShader>) =
 
 
 type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<OutputDescription>) =
-    inherit Mod.AbstractMod<RenderingResult>()
+    inherit Mod.AbstractMod<OutputDescription * FrameStatistics>()
 
     member x.Task = task
     member x.Framebuffer = fbo
@@ -214,7 +210,8 @@ type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<OutputDescription>) =
 
     override x.Compute() =
         let handle = fbo.GetValue x
-        task.Run(x, handle)
+        let stats = task.Run(x, handle)
+        handle, stats
 
 type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
     inherit Mod.AbstractMod<ITexture>()
@@ -231,13 +228,13 @@ type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
     override x.Compute() =
         lock res (fun () ->
             let wasOutDated = res.OutOfDate
-            let res = res.GetValue x
+            let (output, stats) = res.GetValue x
             if wasOutDated then
-                lastStats <- res.Statistics
+                lastStats <- stats
             else
                 lastStats <- FrameStatistics.Zero
                     
-            match Map.tryFind semantic res.Framebuffer.Attachments with
+            match Map.tryFind semantic output.framebuffer.Attachments with
                 | Some o ->
                     match o with
                         | :? BackendTextureOutputView as o ->
