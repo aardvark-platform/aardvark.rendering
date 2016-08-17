@@ -331,23 +331,6 @@ module Sg =
         member x.Mode = mode
         member x.AttributeTypes = attributeTypes
 
-    type Environment (runtime : IRuntime, viewTrafo : IMod<Trafo3d>, projTrafo : IMod<Trafo3d>, viewSize : IMod<V2i>, child : IMod<ISg>) =
-        inherit AbstractApplicator(child)
-
-        member x.Runtime = runtime
-        member x.ViewTrafo = viewTrafo
-        member x.ProjTrafo = projTrafo
-        member x.ViewSize = viewSize
-
-        member x.Scene = child
-
-        new(runtime : IRuntime, viewTrafo : IEvent<Trafo3d>, projTrafo : IEvent<Trafo3d>, viewSize : IEvent<V2i>, child : ISg) =
-            Environment(runtime, Mod.fromEvent viewTrafo, Mod.fromEvent projTrafo, Mod.fromEvent viewSize, Mod.constant child)
-        new(runtime : IRuntime, viewTrafo : IEvent<Trafo3d>, projTrafo : IEvent<Trafo3d>, viewSize : IEvent<V2i>, child : IMod<ISg>) =
-            Environment(runtime, Mod.fromEvent viewTrafo, Mod.fromEvent projTrafo, Mod.fromEvent viewSize, child)
-        new(runtime : IRuntime, viewTrafo : IMod<Trafo3d>, projTrafo : IMod<Trafo3d>, viewSize : IMod<V2i>, child : ISg) =
-            Environment(runtime, viewTrafo, projTrafo, viewSize, Mod.constant child)
-
 
 module SceneGraphCompletenessCheck =
     open System.Text.RegularExpressions
