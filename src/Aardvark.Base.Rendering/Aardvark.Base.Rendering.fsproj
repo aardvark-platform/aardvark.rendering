@@ -88,6 +88,7 @@
     <Compile Include="DefaultSurfaces\PointSurface.fs" />
     <Compile Include="DefaultSurfaces\Trafo.fs" />
     <Compile Include="DefaultSurfaces\ThickLine.fs" />
+    <Compile Include="DefaultSurfaces\ThickLineWithCulling.fs" />
     <Compile Include="DefaultSurfaces\ThickLineRoundCaps.fs" />
     <Compile Include="DefaultSurfaces\ThickLineSparePointSizeCaps.fs" />
     <Compile Include="DefaultSurfaces\PointSprite.fs" />

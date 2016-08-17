@@ -39,6 +39,12 @@ type SceneGraphExtensions =
     static member ProjTrafo(sg : ISg, proj : IMod<Trafo3d>) = Sg.projTrafo proj sg
 
     [<Extension>]
+    static member Trafo(sg : ISg, modelTrafo : IMod<Trafo3d>) = Sg.trafo modelTrafo sg
+
+    [<Extension>]
+    static member Trafo(sg : ISg, modelTrafo : Trafo3d) = Sg.trafo (Mod.constant modelTrafo) sg
+
+    [<Extension>]
     static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(Mod.constant surface, sg) :> ISg
 
     [<Extension>]
