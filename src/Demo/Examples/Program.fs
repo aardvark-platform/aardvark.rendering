@@ -21,8 +21,8 @@ let main args =
     //Examples.Shadows.run()
     //Examples.GeometrySet.run()
     Examples.LoD.run()
-    //Examples.Polygons.run()
-    //Examples.TicTacToe.run()
+    //Examples.Polygons.run()           attention: this one is currently broken due to package refactoring
+    //Examples.TicTacToe.run()          attention: this one is currently broken due to package refactoring
     //Examples.AssimpInterop.run()
     //Examples.Shadows.run()
     0
