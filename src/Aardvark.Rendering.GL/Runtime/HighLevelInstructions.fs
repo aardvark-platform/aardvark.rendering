@@ -180,14 +180,17 @@ module Instructions =
                 | _ -> []
         )
 
-    let drawIndirect (program : Program) (indexArray : IMod<System.Array>) (buffer : IResource<IndirectBuffer>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
+    let drawIndirect (program : Program) (indexBuffer : Option<BufferView>) (buffer : IResource<IndirectBuffer>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
         let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
-        let indexType = 
-            if indexArray <> null then
-                indexArray |> Mod.map (fun ia -> (ia <> null, if ia <> null then ia.GetType().GetElementType() else typeof<obj>))
-            else
-                Mod.constant (false, typeof<obj>) 
+        let indexed, indexType = 
+            match indexBuffer with
+                | Some view -> true, view.ElementType
+                | _ -> false, typeof<obj>
+//            if indexArray <> null then
+//                indexArray |> Mod.map (fun ia -> (ia <> null, if ia <> null then ia.GetType().GetElementType() else typeof<obj>))
+//            else
+//                Mod.constant (false, typeof<obj>) 
 
         let patchSize (mode : IndexedGeometryMode) =
             Translations.toPatchCount mode
@@ -196,7 +199,6 @@ module Instructions =
             adaptive {
                 let! buffer = buffer.Handle
                 let! igMode = mode
-                let! (indexed, indexType) = indexType
                 let count = NativePtr.toNativeInt buffer.Count
                 let mode =
                     if hasTess then int OpenGl.Enums.DrawMode.Patches
@@ -238,14 +240,17 @@ module Instructions =
                 [i]
         )
 
-    let draw (program : Program) (indexArray : IMod<System.Array>) (call : IMod<list<DrawCallInfo>>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
+    let draw (program : Program) (indexBuffer : Option<BufferView>) (call : IMod<list<DrawCallInfo>>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =
         let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
-        let indexType = 
-            if indexArray <> null then
-                indexArray |> Mod.map (fun ia -> (ia <> null, if ia <> null then ia.GetType().GetElementType() else typeof<obj>))
-            else
-                Mod.constant (false, typeof<obj>)
+        let indexed, indexType = 
+            match indexBuffer with
+                | Some view -> true, view.ElementType
+                | None -> false, typeof<obj>
+//            if indexArray <> null then
+//                indexArray |> Mod.map (fun ia -> (ia <> null, if ia <> null then ia.GetType().GetElementType() else typeof<obj>))
+//            else
+//                Mod.constant (false, typeof<obj>)
 
         let patchSize (mode : IndexedGeometryMode) =
             Translations.toPatchCount mode
@@ -253,7 +258,6 @@ module Instructions =
         let instruction  =
             adaptive {
                 let! igMode = mode
-                let! (indexed, indexType) = indexType
                 let! (isActive) = isActive
 
                 let! calls = call

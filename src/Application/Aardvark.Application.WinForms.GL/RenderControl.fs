@@ -185,7 +185,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                             t.Run(null, defaultOutput)
                         )
                         
-                        statistics.Emit res.Statistics
+                        statistics.Emit res
                         
 //                        let sw = System.Diagnostics.Stopwatch()
 //                        sw.Start()

@@ -109,7 +109,7 @@ type SceneGraphExtensions =
     static member Uniform(sg : ISg, uniforms : SymbolDict<IMod>) : ISg = Sg.UniformApplicator(new QuickUniformHolder(uniforms), sg) :> ISg
 
     [<Extension>]
-    static member VertexIndices(sg : ISg, indices : IMod<Array>) : ISg = Sg.VertexIndexApplicator(indices, sg) :> ISg
+    static member VertexIndices(sg : ISg, indices : BufferView) : ISg = Sg.VertexIndexApplicator(indices, sg) :> ISg
 
     [<Extension>]
     static member VertexAttributes(sg : ISg, attributes : SymbolDict<BufferView>) : ISg = Sg.VertexAttributeApplicator(attributes, sg) :> ISg

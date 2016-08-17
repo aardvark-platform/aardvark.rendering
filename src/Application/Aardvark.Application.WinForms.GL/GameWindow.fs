@@ -435,7 +435,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
                         let desc = OutputDescription.ofFramebuffer defaultFramebuffer
                         let res = t.Run(null, defaultOutput)
                         
-                        statistics.Emit res.Statistics
+                        statistics.Emit res
                         
 //                        let sw = System.Diagnostics.Stopwatch()
 //                        sw.Start()

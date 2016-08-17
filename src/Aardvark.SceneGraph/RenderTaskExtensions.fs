@@ -107,7 +107,7 @@ module RenderTask =
                 BlendMode = Mod.constant BlendMode.Blend
                 FillMode = Mod.constant FillMode.Fill
                 StencilMode = Mod.constant StencilMode.Disabled
-                Indices = Mod.constant ([|0;1;2; 0;2;3|] :> Array)
+                Indices = BufferView(Mod.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider
                 Uniforms = emptyUniforms
@@ -120,8 +120,8 @@ module RenderTask =
 
     let cache (t : IRenderTask) : IRenderTask =
         
-        match t.Runtime with
-            | Some runtime ->
+        match t.Runtime, t.FramebufferSignature with
+            | Some runtime, Some signature ->
                 
                 let size = Mod.init V2i.II
 
@@ -133,7 +133,7 @@ module RenderTask =
                         RenderObjects.create color depth :> IRenderObject
                     ]
 
-                let composeTask = runtime.CompileRender(t.FramebufferSignature, compose)
+                let composeTask = runtime.CompileRender(signature, compose)
 
 
                 RenderTask.ofList [
@@ -141,18 +141,18 @@ module RenderTask =
                         if target.framebuffer.Size <> size.Value then
                             transact (fun () -> Mod.change size target.framebuffer.Size)
 
-                        RenderingResult(target.framebuffer, FrameStatistics.Zero)
+                        FrameStatistics.Zero
                     )
                     composeTask
                 ]
 
-            | None ->
+            | _, _ ->
                 Log.warn "[RenderTask] unable to cache RenderTask since it has no Runtime"
                 t
 
     let postProcess (effect : list<FShadeEffect>) (t : IRenderTask) =
-        match t.Runtime with
-            | Some runtime ->
+        match t.Runtime, t.FramebufferSignature with
+            | Some runtime, Some signature ->
                 
                 let size = Mod.init V2i.II
 
@@ -166,7 +166,7 @@ module RenderTask =
                         }:> IRenderObject
                     ]
 
-                let composeTask = runtime.CompileRender(t.FramebufferSignature, compose)
+                let composeTask = runtime.CompileRender(signature, compose)
 
 
                 RenderTask.ofList [
@@ -174,11 +174,11 @@ module RenderTask =
                         if target.framebuffer.Size <> size.Value then
                             transact (fun () -> Mod.change size target.framebuffer.Size)
 
-                        RenderingResult(target.framebuffer, FrameStatistics.Zero)
+                        FrameStatistics.Zero
                     )
                     composeTask
                 ]
 
-            | None ->
-                Log.warn "[RenderTask] unable to cache RenderTask since it has no Runtime"
+            | _ ->
+                Log.warn "[RenderTask] unable to postProcess RenderTask since it has no Runtime"
                 t

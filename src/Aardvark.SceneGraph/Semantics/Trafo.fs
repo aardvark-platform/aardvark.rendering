@@ -159,12 +159,6 @@ module TrafoSemantics =
         member x.ProjTrafo(r : Root<ISg>) =
             r.Child?ProjTrafo <- rootTrafo
 
-        member x.ViewTrafo(e : Sg.Environment) =
-            e.Child?ViewTrafo <- e.ViewTrafo
-
-        member x.ProjTrafo(e : Sg.Environment) =
-            e.Child?ProjTrafo <- e.ProjTrafo
-
 
         member x.ModelTrafoInv(s : obj) =
             s.ModelTrafo |> inverse
@@ -194,3 +188,17 @@ module TrafoSemantics =
 
         member x.ModelViewProjTrafoInv(s : obj) =
             s.ModelViewProjTrafo |> inverse
+
+module UniformRules =
+    open Microsoft.FSharp.Quotations
+    open TrafoSemantics
+    let private uniform<'a> (name : string) : Expr<IMod<'a>> =
+        Expr.Var(Var(name, typeof<IMod<'a>>)) |> Expr.Cast
+
+    let ModelTrafo = uniform<Trafo3d> "ModelTrafo"
+    let ViewTrafo = uniform<Trafo3d> "ViewTrafo"
+    let ProjTrafo = uniform<Trafo3d> "ProjTrafo"
+
+    let ViewProjTrafo = <@ %ViewTrafo <*> %ProjTrafo @>
+    let ModelViewTrafo = <@ %ModelTrafo <*> %ViewTrafo @>
+

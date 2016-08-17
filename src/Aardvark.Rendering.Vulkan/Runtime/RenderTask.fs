@@ -124,14 +124,14 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
             q.WaitIdle()
             context.DefaultQueue.Release q
 
-            RenderingResult(fbo, FrameStatistics.Zero)
+            FrameStatistics.Zero
         )
 
     interface IRenderTask with
         member x.Run(c,o) = x.Run(c,o)
         member x.Dispose() = ()
         member x.FrameId = 0UL
-        member x.FramebufferSignature = renderPass :> _
+        member x.FramebufferSignature = Some (renderPass :> _)
         member x.Runtime = Some manager.Runtime
 
 

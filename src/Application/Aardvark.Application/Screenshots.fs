@@ -13,8 +13,7 @@ module Screenshot =
 
     let renderToImage (samples : int) (size : V2i) (task : IRenderTask) =
         let runtime = task.Runtime.Value
-
-        let signature = task.FramebufferSignature
+        let signature = task.FramebufferSignature.Value
 
         let (_,color) = signature.ColorAttachments |> Map.find 0
 
@@ -26,11 +25,11 @@ module Screenshot =
         //use lock = runtime.ContextLock
         let color = runtime.CreateRenderbuffer(size, color.format, samples)
         let depth = runtime.CreateRenderbuffer(size, depth, samples)
-        use clear = runtime.CompileClear(task.FramebufferSignature, ~~C4f(0.0f,0.0f,0.0f,0.0f), ~~1.0)
+        use clear = runtime.CompileClear(signature, ~~C4f(0.0f,0.0f,0.0f,0.0f), ~~1.0)
 
         use fbo = 
             runtime.CreateFramebuffer(
-                task.FramebufferSignature,
+                signature,
                 Map.ofList [
                     DefaultSemantic.Colors, (color :> IFramebufferOutput)
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
