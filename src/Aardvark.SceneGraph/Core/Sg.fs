@@ -218,6 +218,7 @@ module Sg =
     type WriteBuffersApplicator(buffers : Option<Set<Symbol>>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
         member x.WriteBuffers = buffers
+        new(buffers : Option<Set<Symbol>>, child : ISg) = WriteBuffersApplicator(buffers, Mod.constant child)
 
     type ColorWriteMaskApplicator(maskRgba : IMod<bool*bool*bool*bool>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)

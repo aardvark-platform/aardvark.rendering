@@ -120,6 +120,16 @@ type SceneGraphExtensions =
     [<Extension>]
     static member VertexAttributes(sg : ISg, attributes : SymbolDict<BufferView>) : ISg = Sg.VertexAttributeApplicator(attributes, sg) :> ISg
 
+    [<Extension>]
+    static member Pass(sg : ISg, renderPass : RenderPass) : ISg = Sg.PassApplicator(renderPass, sg) :> ISg
+
+    [<Extension>]
+    static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<Symbol>) : ISg = Sg.WriteBuffersApplicator(Some (Set.ofSeq bufferIdentifiers), sg) :> ISg
+    
+    [<Extension>]
+    static member OnOff(sg : ISg, on : IMod<bool>) : ISg = Sg.OnOffNode(on, sg) :> ISg
+
+
 [<Extension>]
 [<AbstractClass>]
 [<Sealed>]
