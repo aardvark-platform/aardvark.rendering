@@ -125,6 +125,9 @@ type SceneGraphExtensions =
 
     [<Extension>]
     static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<Symbol>) : ISg = Sg.WriteBuffersApplicator(Some (Set.ofSeq bufferIdentifiers), sg) :> ISg
+
+    [<Extension>]
+    static member WriteBuffers(sg : ISg, [<ParamArray>] bufferIdentifiers: Symbol[]) : ISg = Sg.WriteBuffersApplicator(Some (Set.ofArray bufferIdentifiers), sg) :> ISg
     
     [<Extension>]
     static member OnOff(sg : ISg, on : IMod<bool>) : ISg = Sg.OnOffNode(on, sg) :> ISg
