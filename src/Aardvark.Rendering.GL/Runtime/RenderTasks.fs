@@ -976,6 +976,15 @@ module RenderTasks =
 
             subtasks <- Map.empty
 
+        override x.Use (f : unit -> 'a) =
+            lock x (fun () ->
+                x.RenderTaskLock.Update (fun () ->
+                    lock resources (fun () ->
+                        f()
+                    )
+                )
+            )
+
 
     type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
         inherit AbstractRenderTask()
@@ -1056,4 +1065,6 @@ module RenderTasks =
             depth.RemoveOutput x
         override x.FramebufferSignature = fboSignature |> Some
         override x.Runtime = runtime |> Some
+
+        override x.Use f = lock x f
 

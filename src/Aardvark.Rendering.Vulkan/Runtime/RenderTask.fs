@@ -133,7 +133,7 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
         member x.FrameId = 0UL
         member x.FramebufferSignature = Some (renderPass :> _)
         member x.Runtime = Some manager.Runtime
-
+        member x.Use f = lock x f
 
 
 type RenderTask(manager : ResourceManager, fboSignature : RenderPass, objects : aset<IRenderObject>, config : BackendConfiguration) as this =

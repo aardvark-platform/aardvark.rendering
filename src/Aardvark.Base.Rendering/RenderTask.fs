@@ -508,7 +508,7 @@ type AbstractRenderTask() =
     abstract member Runtime : Option<IRuntime>
     abstract member Run : OutputDescription -> FrameStatistics
     abstract member Dispose : unit -> unit
-
+    abstract member Use : (unit -> 'a) -> 'a
     
 
     member x.FrameId = frameId
@@ -527,7 +527,7 @@ type AbstractRenderTask() =
         member x.Runtime = x.Runtime
         member x.FrameId = frameId
         member x.Run(caller, out) = x.Run(caller, out)
-
+        member x.Use f = x.Use f
 
 
 module RenderTask =
@@ -546,6 +546,7 @@ module RenderTask =
             member x.Run(caller, fbo) = FrameStatistics.Zero
             member x.Runtime = None
             member x.FrameId = 0UL
+            member x.Use f = f()
 
     type SequentialRenderTask(f : FrameStatistics -> FrameStatistics, tasks : IRenderTask[]) as this =
         inherit AbstractRenderTask()
@@ -568,6 +569,15 @@ module RenderTask =
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
         member x.Tasks = tasks
 
+        override x.Use(f : unit -> 'a) =
+            lock x (fun () ->
+                let rec run (i : int) =
+                    if i >= tasks.Length then f()
+                    else tasks.[i].Use (fun () -> run (i + 1))
+
+                run 0
+            )
+
         override x.Dispose() =
             for t in tasks do t.RemoveOutput x
 
@@ -588,6 +598,14 @@ module RenderTask =
     type private ModRenderTask(input : IMod<IRenderTask>) =
         inherit AbstractRenderTask()
         let mutable inner : Option<IRenderTask> = None
+
+
+        override x.Use(f : unit -> 'a) =
+            lock x (fun () ->
+                lock input (fun () ->
+                    input.GetValue().Use f
+                )
+            )
 
         override x.FramebufferSignature = 
             let v = input.GetValue x
@@ -660,6 +678,18 @@ module RenderTask =
 
             this.OutOfDate <- wasOutOfDate
 
+        override x.Use (f : unit -> 'a) =
+            lock x (fun () ->
+                processDeltas()
+                let l = reader.Content.All |> Seq.toList
+                
+                let rec run (l : list<ISortKey * IRenderTask>) =
+                    match l with
+                        | [] -> f()
+                        | (_,h) :: rest -> h.Use (fun () -> run rest)
+
+                run l
+            )
         override x.FramebufferSignature =
             lock this (fun () -> processDeltas())
             signature
@@ -698,7 +728,7 @@ module RenderTask =
         override x.Run(fbo) = f.Evaluate (x,(x :> IRenderTask,fbo))
         override x.Dispose() = f.RemoveOutput this 
         override x.Runtime = None
-            
+        override x.Use f = lock x f
 
     type private FinalizerRenderTask(inner : IRenderTask) =
         inherit AbstractRenderTask()
@@ -713,6 +743,12 @@ module RenderTask =
             try x.Dispose false
             with _ -> ()
 
+        
+        override x.Use f = 
+            lock x (fun () ->
+                inner.Use f
+            )
+
         override x.Dispose() = x.Dispose true
         override x.Run(fbo) = inner.Run(x, fbo)
         override x.FramebufferSignature = inner.FramebufferSignature
@@ -724,6 +760,11 @@ module RenderTask =
         member x.Before = before
         member x.After = after
         member x.Inner = inner
+
+        override x.Use f =
+            lock x (fun () ->
+                inner.Use f
+            )
 
         override x.FramebufferSignature = inner.FramebufferSignature
         override x.Run(fbo) =

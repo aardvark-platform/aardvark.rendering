@@ -452,6 +452,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
             x.Dispose()
 
         member x.FrameId = frameId
+        member x.Use f = lock x f
 
 [<Extension; AbstractClass; Sealed>]
 type LowLevelRuntimeExtensions private() =

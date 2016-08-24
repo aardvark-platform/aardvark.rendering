@@ -368,6 +368,7 @@ module DefaultOverlays =
 
             member x.FrameId = frameId
 
+            member x.Use f = lock x (fun () -> inner.Use f)
 
     let withStatistics (t : IRenderTask) =
         match t.Runtime with
