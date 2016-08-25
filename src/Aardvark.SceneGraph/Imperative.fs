@@ -25,6 +25,7 @@ type AirState =
         stencilMode         : IMod<StencilMode>
         
         indices             : Option<BufferView>
+        indirect            : Option<IMod<IBuffer>>
         instanceAttributes  : Map<Symbol, BufferView>
         vertexAttributes    : Map<Symbol, BufferView>
         
@@ -136,7 +137,8 @@ module AirState =
             blendMode           = ro.BlendMode
             fillMode            = ro.FillMode
             stencilMode         = ro.StencilMode
-                              
+                  
+            indirect            = if isNull ro.IndirectBuffer then None else Some ro.IndirectBuffer
             indices             = ro.Indices
             instanceAttributes  = Map.empty
             vertexAttributes    = Map.empty
@@ -235,7 +237,15 @@ type Air private() =
                 let ro = RenderObject.Clone state.scope
 
                 ro.IsActive <- state.isActive
-                ro.DrawCallInfos <- state.drawCallInfos
+
+                match state.drawCallInfos with
+                    | null -> 
+                        match state.indirect with
+                            | Some b -> ro.IndirectBuffer <- b
+                            | None -> failwith "sadasdas"
+                    | infos ->
+                        ro.DrawCallInfos <- infos
+
                 ro.Mode <- state.mode
                 ro.Surface <- state.surface
                 ro.DepthTest <- state.depthTest
@@ -608,6 +618,12 @@ type Air private() =
     static member Draw(infos : IMod<list<DrawCallInfo>>) =
         air {
             do! modify (fun s -> { s with drawCallInfos = infos })
+            do! emit
+        }
+
+    static member DrawIndirect(b : IMod<IBuffer>) =
+        air {
+            do! modify (fun s -> { s with indirect = Some b; drawCallInfos = null })
             do! emit
         }
 

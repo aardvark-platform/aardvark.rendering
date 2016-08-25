@@ -175,7 +175,7 @@ module Shadows =
             return fun f -> f + dt.TotalSeconds * 0.6
         }
   
-    let angle = AFun.integrate rotation 0.0
+    let angle = Mod.constant 0.0 //AFun.integrate rotation 0.0
     let lightSpaceView =
         angle |> Mod.map (fun angle -> Trafo3d.RotationZ(angle) * (shadowCam |> CameraView.viewTrafo))
     let lightSpaceViewProjTrafo = lightSpaceView |> Mod.map (fun view -> view * (shadowProj |> Frustum.projTrafo))
@@ -288,8 +288,8 @@ module Shadows =
             |> Sg.texture DefaultSemantic.DiffuseColorTexture shadowDepth
 
             |> Sg.andAlso (
-                box C4b.Red (Box3d.FromCenterAndSize(V3d.OOO,V3d.III * 0.1)) |> Sg.ofIndexedGeometry |> Sg.trafo (lightPos |> Mod.map Trafo3d.Translation)
-                 |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect ]
+                Sg.cone' 32 C4b.Red 0.1 0.5 |> Sg.trafo (lightPos |> Mod.map Trafo3d.Translation)
+                 |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect; DefaultSurfaces.simpleLighting |> toEffect ]
              )
 
             |> Sg.viewTrafo (viewTrafo win   |> Mod.map CameraView.viewTrafo )
