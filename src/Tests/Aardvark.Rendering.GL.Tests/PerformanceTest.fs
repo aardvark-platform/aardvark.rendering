@@ -231,7 +231,7 @@ module RenderTaskPerformance =
                 for i in 0 .. 100 do
                     for (r,fbo) in renderTasks do
                         r.Run output.framebuffer |> ignore
-                RenderingResult(output.framebuffer, FrameStatistics.Zero)
+                FrameStatistics.Zero
             )
 
         win.RenderTask <- DefaultOverlays.withStatistics customTask
@@ -319,16 +319,16 @@ module StartupPerformance =
             let sw = System.Diagnostics.Stopwatch()
             Report.BeginTimed("Preparing Task")
             sw.Start()
-            let rs = renderTask.Prepare(null)
+            let rs = renderTask.Run(fbo)
             Report.End() |> ignore
 
             Report.BeginTimed("RenderTask Execution 1")
-            let rs = renderTask.Run(fbo).Statistics
+            let rs = renderTask.Run(fbo)
             sw.Stop()
             Report.End() |> ignore
 
             Report.BeginTimed("RenderTask Execution 2")
-            let rs = renderTask.Run(fbo).Statistics
+            let rs = renderTask.Run(fbo)
             Report.End() |> ignore
 
             Report.Line("Stats: DC={0} Instr={1} Prim={2}", rs.DrawCallCount, rs.InstructionCount, rs.PrimitiveCount)
@@ -459,13 +459,13 @@ module IsActiveFlagPerformance =
             let sw = System.Diagnostics.Stopwatch()
             Report.BeginTimed("RenderTask Execution 1")
             sw.Start()
-            let rs = renderTask.Run(fbo).Statistics
+            let rs = renderTask.Run(fbo)
             sw.Stop()
             Report.End() |> ignore
 
             let renderOnce () =
                 sw.Restart()
-                let r = renderTask.Run(fbo).Statistics
+                let r = renderTask.Run(fbo)
                 sw.Stop()
                 sw.Elapsed.TotalSeconds
 
