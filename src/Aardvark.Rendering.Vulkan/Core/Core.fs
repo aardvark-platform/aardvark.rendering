@@ -16,7 +16,7 @@ type Instance(appName : string, appVersion : Version, layers : list<string>, ext
     inherit Resource()
 
     static let globalLayers : Lazy<list<VkLayerProperties>> =
-        Lazy (fun () -> 
+        Lazy<list<VkLayerProperties>> (fun () -> 
             let mutable layerCount = 0u
             VkRaw.vkEnumerateInstanceLayerProperties(&&layerCount, NativePtr.zero) |> check "vkGetGlobalLayerProperties"
 
