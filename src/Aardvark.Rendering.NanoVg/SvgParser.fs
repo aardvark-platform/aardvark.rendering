@@ -204,7 +204,7 @@ module Svg =
 
         module PathParser = 
             open System.Text.RegularExpressions
-            open Aardvark.Base.Monads.State
+            open Aardvark.Base.Monads.StateOld
             type PathState = { text : Text; pos : V2d; lastC2 : Option<V2d>; lastCommand : Option<string> }
 
             let charRx = Regex @"^[a-zA-Z]"
