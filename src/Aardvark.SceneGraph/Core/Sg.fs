@@ -35,6 +35,20 @@ module Sg =
 
         new(call : IEvent<DrawCallInfo>, mode : IEvent<IndexedGeometryMode>) = RenderNode(Mod.fromEvent call, Mod.fromEvent mode)
         new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(Mod.constant call, Mod.constant mode)
+        new(count : int, mode : IndexedGeometryMode) = RenderNode(Mod.constant (DrawCallInfo(
+                                                                                    FaceVertexCount = count,
+                                                                                    InstanceCount = 1,
+                                                                                    FirstIndex = 0,
+                                                                                    FirstInstance = 0,
+                                                                                    BaseVertex = 0
+                                                                                )) , Mod.constant mode)
+        new(count : IMod<int>, mode : IndexedGeometryMode) = RenderNode(Mod.map (fun x -> DrawCallInfo(
+                                                                                            FaceVertexCount = x,
+                                                                                            InstanceCount = 1,
+                                                                                            FirstIndex = 0,
+                                                                                            FirstInstance = 0,
+                                                                                            BaseVertex = 0
+                                                                                )) count , Mod.constant mode)
     
     type VertexAttributeApplicator(values : Map<Symbol, BufferView>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
