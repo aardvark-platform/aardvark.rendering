@@ -13,7 +13,9 @@ open Aardvark.SceneGraph.Semantics
 open System.Diagnostics
 open Aardvark.Rendering.GL
 open OpenTK.Graphics.OpenGL4
-module PerformanceTest =
+
+
+module RandomCubesPerformanceTest =
 
     let runConsole () =
         let out = Console.Out
@@ -100,8 +102,6 @@ module PerformanceTest =
 
         ()
 
-
-
     let run () =
 
         Aardvark.Init()
@@ -142,6 +142,23 @@ module PerformanceTest =
         win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects()) |> DefaultOverlays.withStatistics
 
         win.Run()
+
+    (*
+        unscientific approximate numbers on GTX980
+        25k objects:
+        managedOptimized 12  fps => 300k draw calls
+        nativeoptimized  30  fps => 750k draw calls
+        glvm/opt         30  fps => 750k draw calls
+        glvm/nopt        15  fps => 375k draw calls
+        interpreter      0.22fps => 5.5k draw calls
+
+
+        5k sorted
+        30 => 150k
+
+        renderTasks:
+        6 fps, 100 * 10 per frame * 20 objects => 120k draw calls
+     *)
 
 module RenderTaskPerformance =
 
@@ -214,7 +231,7 @@ module RenderTaskPerformance =
                 for i in 0 .. 100 do
                     for (r,fbo) in renderTasks do
                         r.Run output.framebuffer |> ignore
-                FrameStatistics.Zero
+                RenderingResult(output.framebuffer, FrameStatistics.Zero)
             )
 
         win.RenderTask <- DefaultOverlays.withStatistics customTask
@@ -256,15 +273,19 @@ module StartupPerformance =
                                             DefaultSemantic.Depth, depthBuffer :> IFramebufferOutput
                                         ])
 
-        let effect = app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect ]) :> ISurface
+        let effect = 
+            using app.Context.ResourceLock (fun _ -> 
+                app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect ]) :> ISurface
+            )
 
         let test (n : int, cfg : BackendConfiguration) =
 
             Report.BeginTimed("{0} objects one-shot rendering", n)
 
             Report.BeginTimed("Generating Geometries")
+            let geo = Sphere.solidSphere C4b.Red 1
             let objects = 
-                [| for _ in 1 .. n do yield (Sphere.solidSphere C4b.Red 1) |]
+                [| for _ in 1 .. n do yield geo |]
             Report.End() |> ignore
 
             let scale = 100.0
@@ -295,16 +316,19 @@ module StartupPerformance =
             printfn "start your engine!!!"
             Console.ReadLine() |> ignore
             let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
-            
             let sw = System.Diagnostics.Stopwatch()
-            Report.BeginTimed("RenderTask Execution 1")
+            Report.BeginTimed("Preparing Task")
             sw.Start()
-            let rs = renderTask.Run(fbo)
+            let rs = renderTask.Prepare(null)
+            Report.End() |> ignore
+
+            Report.BeginTimed("RenderTask Execution 1")
+            let rs = renderTask.Run(fbo).Statistics
             sw.Stop()
             Report.End() |> ignore
 
             Report.BeginTimed("RenderTask Execution 2")
-            let rs = renderTask.Run(fbo)
+            let rs = renderTask.Run(fbo).Statistics
             Report.End() |> ignore
 
             Report.Line("Stats: DC={0} Instr={1} Prim={2}", rs.DrawCallCount, rs.InstructionCount, rs.PrimitiveCount)
@@ -314,7 +338,7 @@ module StartupPerformance =
 
             sw.Elapsed.TotalSeconds
 
-        let config = BackendConfiguration.UnmanagedUnoptimized
+        let config = BackendConfiguration.NativeOptimized
         
         let config = 
             match wantedConfig with
@@ -327,7 +351,7 @@ module StartupPerformance =
                 | _ -> failwith "unknown config"
     
 
-        if false then
+        if true then
             let initialRun = test(n, config)
 
             Console.SetOut(out)
@@ -336,30 +360,141 @@ module StartupPerformance =
         else 
             test(50000, config) |> ignore
 
-        //test(10000, config)
+module IsActiveFlagPerformance = 
+    
+    open FShade
 
-        //test(20000, config)
+    let run args =
+
+        let out = Console.Out
+        //Console.SetOut(IO.TextWriter.Null)
+        
+        let n,wantedConfig = 
+            match args with
+                |  [| n; config; |] -> Int32.Parse n, Int32.Parse config
+                | _ -> failwith "wrong args"
+
+        Aardvark.Init()
+
+        use app = new OpenGlApplication()
+        
+        let cameraView = CameraView.LookAt(180.0 * V3d.III, V3d.OOO, V3d.OOI)
+        let cameraProj = Frustum.perspective 60.0 0.1 1000.0 1.0
+                
+        let colorBuffer = app.Runtime.CreateTexture(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1, 1)
+        let depthBuffer = app.Runtime.CreateRenderbuffer(V2i(1024, 1024), RenderbufferFormat.Depth24Stencil8, 1)
+
+        let fboSig = 
+            app.Runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+
+        let fbo = 
+            app.Runtime.CreateFramebuffer(fboSig, [
+                                            DefaultSemantic.Colors, { texture = colorBuffer; level = 0; slice = 0 } :> IFramebufferOutput
+                                            DefaultSemantic.Depth, depthBuffer :> IFramebufferOutput
+                                        ])
+
+        let bla (v : Effects.Vertex)= 
+            fragment {
+                let a : V4d = uniform?Blah
+                return a
+            }
+
+        let effect = app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; bla |> toEffect ]) :> ISurface
+
+        let test (n : int, cfg : BackendConfiguration) =
+
+            Report.BeginTimed("{0} objects one-shot rendering", n)
+
+            Report.BeginTimed("Generating Geometries")
+
+            let r = System.Random()
+            let isActives = Array.init n (fun _ -> Mod.init (r.NextDouble() > 0.5))
+            let sphere = Sphere.solidSphere C4b.Red 1
+            let objects = 
+                [| for i in 1 .. n - 1 do 
+                    let sg = Sg.onOff isActives.[i] sphere
+                    yield Sg.uniform "Blah" (Mod.init C4b.Red) sg 
+                |]
+            Report.End() |> ignore
+
+            let scale = 100.0
+            let rnd = Random()
+            let nextTrafo () =
+                let x,y,z = rnd.NextDouble(), rnd.NextDouble(), rnd.NextDouble()
+                Trafo3d.Translation(x*scale,y*scale,z*scale) 
+
+            let objectsSg = 
+                [ for x in objects do
+                    yield Sg.trafo (nextTrafo () |> Mod.constant) x
+                ] |> Sg.group
+
+            let sg =
+                objectsSg
+                    |> Sg.viewTrafo (Mod.constant cameraView.ViewTrafo)
+                    |> Sg.projTrafo (Mod.constant (Frustum.projTrafo cameraProj))
+                    |> Sg.surface (Mod.constant effect)
+
+            Report.BeginTimed("Gathering render objects")
+            let renderObjects = ASet.toArray (sg.RenderObjects())
+            Report.End() |> ignore
+
+            Report.BeginTimed("Preparing render objects")
+            let preparedRenderObjects = renderObjects.Map (fun x -> app.Runtime.PrepareRenderObject(fboSig, x) :> IRenderObject)
+            Report.End() |> ignore
+
+            printfn "start your engine!!!"
+            //Console.ReadLine() |> ignore
+
+            let secondRenderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            secondRenderTask.Run(fbo) |> ignore
+            secondRenderTask.Dispose()
+
+            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            
+
+            let sw = System.Diagnostics.Stopwatch()
+            Report.BeginTimed("RenderTask Execution 1")
+            sw.Start()
+            let rs = renderTask.Run(fbo).Statistics
+            sw.Stop()
+            Report.End() |> ignore
+
+            let renderOnce () =
+                sw.Restart()
+                let r = renderTask.Run(fbo).Statistics
+                sw.Stop()
+                sw.Elapsed.TotalSeconds
+
+
+            let secondFrame = renderOnce() 
+            printfn "Second frame took: %f seconds" secondFrame 
+
+            renderOnce, isActives
 
         
-        // 5000 ; 1.263
-        // 10000; 1.768
-        // 15000; 3.588
-        // 20000; 4.699
+        let n = 10000
+        let renderFrame,isActiveFlags = test (n, BackendConfiguration.Interpreted)
+
+        let path = "isActivePerformance4.Managed.csv"
+        if System.IO.File.Exists(path) |> not then
+            System.IO.File.WriteAllLines(path, [| "n;time(s);time transact (s);" |])
+
+
+        let sw = System.Diagnostics.Stopwatch()
+        let r = System.Random()
+        for i in 0 .. 1000 .. n - 1 do
+            sw.Restart()
+            transact (fun () -> 
+            for o in 0 .. i - 1 do
+                Mod.change isActiveFlags.[o] (not isActiveFlags.[o].Value)
+            )
+            sw.Stop()
+            let elapsed = renderFrame()
+            printfn "changing %d isActiveFlags took: %f, transact: %f s" i elapsed sw.Elapsed.TotalSeconds
+            System.IO.File.AppendAllLines(path,[| sprintf "%d;%f;%f" i elapsed sw.Elapsed.TotalSeconds |])
 
     
-(*
-unscientific approximate numbers on GTX980
-25k objects:
-managedOptimized 12  fps => 300k draw calls
-nativeoptimized  30  fps => 750k draw calls
-glvm/opt         30  fps => 750k draw calls
-glvm/nopt        15  fps => 375k draw calls
-interpreter      0.22fps => 5.5k draw calls
-
-
-5k sorted
-30 => 150k
-
-renderTasks:
-6 fps, 100 * 10 per frame * 20 objects => 120k draw calls
-*)
