@@ -232,6 +232,7 @@
       </PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="glvm.cpp" />
+    <ClCompile Include="HGL.cpp" />
     <ClCompile Include="State.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
