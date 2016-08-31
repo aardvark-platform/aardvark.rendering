@@ -968,7 +968,10 @@ DllExport(void) hglSetStencilMode(StencilMode* mode)
 	endtrace("a")
 }
 
-
+DllExport(void) hglBindVertexArray(int* vao)
+{
+	glBindVertexArray(*vao);
+}
 
 
 

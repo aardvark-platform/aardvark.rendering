@@ -42,6 +42,7 @@ type PreparedRenderObject =
         StencilMode : IResource<StencilModeHandle>
 
         mutable VertexArray : IResource<VertexArrayObject>
+        VertexArrayHandle : Option<IResource<nativeptr<int>>>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
         
         ColorAttachmentCount : int
@@ -100,8 +101,12 @@ type PreparedRenderObject =
                 | Some ib -> yield ib :> _
                 | _ -> yield x.DrawCallInfos :> _
 
-            yield x.VertexArray :> _ 
 
+            yield x.VertexArray :> _ 
+            match x.VertexArrayHandle with
+                | Some r -> yield r :> _
+                | _ -> ()
+            
             yield x.IsActive :> _
             yield x.BeginMode :> _
             
@@ -142,6 +147,9 @@ type PreparedRenderObject =
             | _ -> x.DrawCallInfos.Update(caller) |> add
 
         x.VertexArray.Update(caller) |> add
+        match x.VertexArrayHandle with
+            | Some r -> r.Update(caller) |> add
+            | _ -> ()
 
         x.IsActive.Update(caller) |> add
         x.BeginMode.Update(caller) |> add
@@ -239,6 +247,7 @@ module PreparedRenderObject =
             PolygonMode = Unchecked.defaultof<_>
             BlendMode = Unchecked.defaultof<_>
             StencilMode = Unchecked.defaultof<_>
+            VertexArrayHandle = None
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -284,6 +293,7 @@ module PreparedRenderObject =
                 PolygonMode  = o.PolygonMode 
                 BlendMode  = o.BlendMode 
                 StencilMode  = o.StencilMode 
+                VertexArrayHandle = None
             }  
 
         for r in res.Resources do
@@ -486,6 +496,7 @@ type ResourceManagerExtensions private() =
         let attributeValues =
             buffers 
                 |> List.map (fun (i,v,_,_) ->
+
                     i, v.Buffer |> Mod.map (fun v ->
                         match v with
                             | :? NullBuffer as nb -> 
@@ -609,6 +620,7 @@ type ResourceManagerExtensions private() =
                 PolygonMode = polygonMode
                 BlendMode = blendMode
                 StencilMode = stencilMode
+                VertexArrayHandle = None
 
             }
 

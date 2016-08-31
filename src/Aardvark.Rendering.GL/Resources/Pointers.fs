@@ -173,4 +173,3 @@ module PointerContextExtensions =
         member x.Delete(handle : StencilModeHandle) =
             NativePtr.free handle.Pointer
 
-

@@ -378,7 +378,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
 
-
     let uniformBufferManagers = 
         match parent with
             | Some p -> p.UniformBufferManagers
