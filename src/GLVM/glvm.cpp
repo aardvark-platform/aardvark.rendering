@@ -32,8 +32,8 @@ static PROC getProc(LPCSTR name)
 }
 
 #endif
-#define trace(a) printf(a)
-#define endtrace(a) { printf("%s: %d\n", (a), glGetError()); glFlush(); glFinish(); }
+#define trace(a) {} //printf(a)
+#define endtrace(a)  {} //{ printf("%s: %d\n", (a), glGetError()); glFlush(); glFinish(); }
 
 
 
@@ -765,31 +765,31 @@ DllExport(void) hglDrawElements(int* isActive, BeginMode* mode, GLenum indexType
 		{
 			auto offset = int64_t(info->FirstIndex * sizeof(int));
 
-			GLint ibo, size;
-			glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &ibo);
-			glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &size);
-			printf("ibo %d: %d\n", ibo, size);
+			//GLint ibo, size;
+			//glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &ibo);
+			//glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &size);
+			//printf("ibo %d: %d\n", ibo, size);
 
-			auto ptr = (int*)glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, size, GL_MAP_READ_BIT);
+			//auto ptr = (int*)glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, size, GL_MAP_READ_BIT);
 
-			int maxIndex = -1;
-			int minIndex = 100000000;
-			for(int i = 0; i < size / 4; i++)
-			{ 
-				maxIndex = max(maxIndex, ptr[i]);
-				minIndex = min(minIndex, ptr[i]);
-			}
-			printf("index: (%d,%d)\n", minIndex, maxIndex);
-			glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+			//int maxIndex = -1;
+			//int minIndex = 100000000;
+			//for(int i = 0; i < size / 4; i++)
+			//{ 
+			//	maxIndex = max(maxIndex, ptr[i]);
+			//	minIndex = min(minIndex, ptr[i]);
+			//}
+			//printf("index: (%d,%d)\n", minIndex, maxIndex);
+			//glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
 			if (info->BaseVertex == 0)
 			{
-				printf("glDrawElements(%d, %d, %d, %p)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset);
+				//printf("glDrawElements(%d, %d, %d, %p)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset);
 				glDrawElements(m, info->FaceVertexCount, indexType, (GLvoid*)offset);
 			}
 			else
 			{
-				printf("glDrawElementsBaseVertex(%d, %d, %d, %p, %d)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
+				//printf("glDrawElementsBaseVertex(%d, %d, %d, %p, %d)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
 				glDrawElementsBaseVertex(m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
 			}
 		}

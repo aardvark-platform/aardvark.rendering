@@ -68,8 +68,8 @@ type DrawCallInfoListHandle =
         val mutable public Pointer : nativeptr<DrawCallInfoList>
 
         member x.Count
-            with get() : int = NativePtr.read (NativePtr.cast x.Pointer)
-            and set (v : int) = NativePtr.write (NativePtr.cast x.Pointer) v
+            with get() = NativePtr.read<int64> (NativePtr.cast x.Pointer) |> int
+            and set (v : int) = NativePtr.write (NativePtr.cast x.Pointer) (int64 v)
 
         member x.Infos
             with get() : nativeptr<DrawCallInfo> = NativeInt.read (NativePtr.toNativeInt x.Pointer + 8n)

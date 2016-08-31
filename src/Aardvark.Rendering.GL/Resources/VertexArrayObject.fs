@@ -107,6 +107,11 @@ module VertexArrayObjectExtensions =
         GL.BindVertexArray 0
         GL.Check "could not unbind VertexArrayObjects"
 
+        GL.BindBuffer(BufferTarget.ElementArrayBuffer, 0)
+        GL.Check "could not unbind element buffer"
+
+        
+
     type Context with
         member x.CreateVertexArrayObject(index : Buffer, attributes : list<int * AttributeDescription>) =
             addVirtualVao x
