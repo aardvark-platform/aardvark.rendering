@@ -550,7 +550,7 @@ module OpenGLObjectInterpreter =
                     failwithf "no uniform-setter for: %A" loc
 
         member gl.render (o : PreparedRenderObject) =
-            if (not <| isNull o.IsActive) && Mod.force o.IsActive then // empty objects make null here. Further investigate
+            if (not <| isNull o.Original.IsActive) && Mod.force o.Original.IsActive then // empty objects make null here. Further investigate
                 gl.setDepthMask o.DepthBufferMask
                 gl.setStencilMask o.StencilBufferMask
 
@@ -567,11 +567,12 @@ module OpenGLObjectInterpreter =
                         gl.drawBuffers allBuffers -1 0n
 
 
-                let depthMode = o.DepthTest.GetValue()
-                let fillMode = o.FillMode.GetValue()
-                let cullMode = o.CullMode.GetValue()
-                let blendMode = o.BlendMode.GetValue()
-                let stencilMode = o.StencilMode.GetValue()
+
+                let depthMode = o.Original.DepthTest.GetValue()
+                let fillMode = o.Original.FillMode.GetValue()
+                let cullMode = o.Original.CullMode.GetValue()
+                let blendMode = o.Original.BlendMode.GetValue()
+                let stencilMode = o.Original.StencilMode.GetValue()
 
                 gl.setDepthTestMode depthMode
                 gl.setFillMode fillMode
@@ -585,10 +586,10 @@ module OpenGLObjectInterpreter =
 
                 let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
 
-                let patchSize = o.Mode.GetValue() |> Translations.toPatchCount
+                let patchSize = o.Original.Mode.GetValue() |> Translations.toPatchCount
 
                 let mode =
-                    let igMode = o.Mode.GetValue()
+                    let igMode = o.Original.Mode.GetValue()
 
                     if hasTess then 
                         int OpenGl.Enums.DrawMode.Patches
@@ -671,7 +672,7 @@ module OpenGLObjectInterpreter =
                                 gl.multiDrawArraysIndirect mode 0n cnt ib.Stride
 
                     | None ->
-                        let calls = o.DrawCallInfos.Handle.GetValue()
+                        let calls = o.Original.DrawCallInfos.GetValue()
                         if indexed then
                             for c in calls do
                                 if c.InstanceCount = 1 then

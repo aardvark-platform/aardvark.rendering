@@ -135,6 +135,17 @@ module ExecutionContext =
             | InstructionCode.ColorMask                     -> OpenGl.Pointers.ColorMask
             | InstructionCode.DrawBuffers                   -> OpenGl.Pointers.DrawBuffers
 
+            | InstructionCode.HDrawArrays                   -> OpenGl.Pointers.HDrawArrays
+            | InstructionCode.HDrawElements                 -> OpenGl.Pointers.HDrawElements
+            | InstructionCode.HDrawArraysIndirect           -> OpenGl.Pointers.HDrawArraysIndirect
+            | InstructionCode.HDrawElementsIndirect         -> OpenGl.Pointers.HDrawElementsIndirect
+            | InstructionCode.HSetDepthTest                 -> OpenGl.Pointers.HSetDepthTest
+            | InstructionCode.HSetCullFace                  -> OpenGl.Pointers.HSetCullFace
+            | InstructionCode.HSetPolygonMode               -> OpenGl.Pointers.HSetPolygonMode
+            | InstructionCode.HSetBlendMode                 -> OpenGl.Pointers.HSetBlendMode
+            | InstructionCode.HSetStencilMode               -> OpenGl.Pointers.HSetStencilMode
+
+
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 
 
@@ -198,6 +209,17 @@ module ExecutionContext =
             OpenGl.Pointers.StencilMask, fun args -> Instruction(InstructionCode.StencilMask, args)
             OpenGl.Pointers.ColorMask, fun args -> Instruction(InstructionCode.ColorMask, args)
             OpenGl.Pointers.DrawBuffers, fun args -> Instruction(InstructionCode.DrawBuffers, args)
+
+
+            OpenGl.Pointers.HDrawArrays, fun args -> Instruction(InstructionCode.HDrawArrays, args)
+            OpenGl.Pointers.HDrawElements, fun args -> Instruction(InstructionCode.HDrawElements, args)
+            OpenGl.Pointers.HDrawArraysIndirect, fun args -> Instruction(InstructionCode.HDrawArraysIndirect, args)
+            OpenGl.Pointers.HDrawElementsIndirect, fun args -> Instruction(InstructionCode.HDrawElementsIndirect, args)
+            OpenGl.Pointers.HSetDepthTest, fun args -> Instruction(InstructionCode.HSetDepthTest, args)
+            OpenGl.Pointers.HSetCullFace, fun args -> Instruction(InstructionCode.HSetCullFace, args)
+            OpenGl.Pointers.HSetPolygonMode, fun args -> Instruction(InstructionCode.HSetPolygonMode, args)
+            OpenGl.Pointers.HSetBlendMode, fun args -> Instruction(InstructionCode.HSetBlendMode, args)
+            OpenGl.Pointers.HSetStencilMode, fun args -> Instruction(InstructionCode.HSetStencilMode, args)
         ]
 
     let callToInstruction (ptr : nativeint, args : obj[]) =

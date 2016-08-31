@@ -47,19 +47,19 @@ module DeltaCompiler =
                         yield Instruction.DrawBuffers b.Count (NativePtr.toNativeInt b.Buffers)
 
             //set all modes if needed
-            if prev.DepthTest <> me.DepthTest && me.DepthTest <> null then
-                yield Instructions.setDepthTest me.DepthTest
+            if prev.DepthTestMode <> me.DepthTestMode then
+                yield Instructions.setDepthTest me.DepthTestMode
 
-            if prev.FillMode <> me.FillMode && me.FillMode <> null then
-                yield Instructions.setFillMode me.FillMode
+            if prev.PolygonMode <> me.PolygonMode then
+                yield Instructions.setPolygonMode me.PolygonMode
 
-            if prev.CullMode <> me.CullMode && me.CullMode <> null then
+            if prev.CullMode <> me.CullMode then
                 yield Instructions.setCullMode me.CullMode
 
-            if prev.BlendMode <> me.BlendMode && me.BlendMode <> null then
+            if prev.BlendMode <> me.BlendMode then
                 yield Instructions.setBlendMode me.BlendMode
 
-            if prev.StencilMode <> me.StencilMode && me.StencilMode <> null then
+            if prev.StencilMode <> me.StencilMode then
                 yield Instructions.setStencilMode me.StencilMode
 
             // bind the program (if needed)
@@ -122,12 +122,29 @@ module DeltaCompiler =
             // TODO: surface assumed to be constant here
             let prog = me.Program.Handle.GetValue()
 
+            let isActive = me.IsActive.Handle |> Mod.force
+            let beginMode = me.BeginMode.Handle |> Mod.force
             match me.IndirectBuffer with
-                | Some ib ->
-                    yield Instructions.bindIndirectBuffer ib
-                    yield Instructions.drawIndirect prog me.Original.Indices ib me.Mode me.IsActive
-                | _ ->
-                    yield Instructions.draw prog me.Original.Indices me.DrawCallInfos.Handle me.Mode me.IsActive
+                | Some indirect ->
+                    match me.IndexBuffer with
+                        | Some (it,_) ->
+                            yield
+                                indirect.Handle |> Mod.map (fun i -> 
+                                    [ Instruction.HDrawElementsIndirect isActive beginMode (int it) i.Count i.Stride i.Buffer.Handle]
+                                )
+                        | None ->
+                            yield
+                                indirect.Handle |> Mod.map (fun i -> 
+                                    [ Instruction.HDrawArraysIndirect isActive beginMode i.Count i.Stride i.Buffer.Handle]
+                                )
+
+                | None ->
+                    let calls = me.DrawCallInfos.Handle |> Mod.force
+                    match me.IndexBuffer with
+                        | Some (it,_) ->
+                            yield Instruction.HDrawElements isActive beginMode (int it) calls
+                        | None ->
+                            yield Instruction.HDrawArrays isActive beginMode calls
 
         }   
 

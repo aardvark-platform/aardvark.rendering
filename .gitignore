@@ -25,3 +25,7 @@ src/GLVM/*.so
 /src/Demo/Examples/polygons.dgml
 /src/Demo/Examples/tictactoe.dgml
 /perfTest.exe
+/src/*.opendb
+/src/*.db
+/lib/Native/Aardvark.Rendering.GL/windows/AMD64/glvm.iobj
+/lib/Native/Aardvark.Rendering.GL/windows/AMD64/glvm.ipdb

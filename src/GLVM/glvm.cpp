@@ -32,6 +32,10 @@ static PROC getProc(LPCSTR name)
 }
 
 #endif
+#define trace(a) printf(a)
+#define endtrace(a) { printf("%s: %d\n", (a), glGetError()); glFlush(); glFinish(); }
+
+
 
 static bool initialized = false;
 
@@ -90,6 +94,7 @@ DllExport(void) vmInit()
 	glGetBufferParameteriv = (PFNGLGETBUFFERPARAMETERIVPROC)getProc("glGetBufferParameteriv");
 
 	glDrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)getProc("glDrawElementsInstanced");
+
 
 }
 
@@ -650,6 +655,318 @@ DllExport(void) vmRun(Fragment* frag, VMMode mode, Statistics& stats)
 
 
 
+
+
+
+
+typedef struct {
+	int FaceVertexCount;
+	int InstanceCount;
+	int FirstIndex;
+	int FirstInstance;
+	int BaseVertex;
+} DrawCallInfo;
+
+typedef struct {
+	int64_t Count;
+	DrawCallInfo* Infos;
+} DrawCallInfoList;
+
+typedef  struct {
+	int  Count;
+	int  InstanceCount;
+	int  First;
+	int  BaseInstance;
+} DrawArraysIndirectCommand;
+
+typedef  struct {
+	int  Count;
+	int  InstanceCount;
+	int  FirstIndex;
+	int  BaseVertex;
+	int  BaseInstance;
+} DrawElementsIndirectCommand;
+
+typedef struct {
+	int Enabled;
+	GLenum SourceFactor;
+	GLenum DestFactor;
+	GLenum Operation;
+	GLenum SourceFactorAlpha;
+	GLenum DestFactorAlpha;
+	GLenum OperationAlpha;
+} BlendMode;
+
+typedef struct {
+	int Enabled;
+	GLenum CmpFront;
+	int32_t MaskFront;
+	uint32_t ReferenceFront;
+	GLenum CmpBack;
+	int32_t MaskBack;
+	uint32_t ReferenceBack;
+	GLenum OpFrontSF;
+	GLenum OpFrontDF;
+	GLenum OpFrontPass;
+	GLenum OpBackSF;
+	GLenum OpBackDF;
+	GLenum OpBackPass;
+} StencilMode;
+
+typedef struct {
+	GLenum Mode;
+	int PatchVertices;
+} BeginMode;
+
+
+DllExport(void) hglDrawArrays(int* isActive, BeginMode* mode, DrawCallInfoList* infos)
+{
+	trace("hglDrawArrays\n");
+	if (!*isActive) return;
+
+	auto cnt = (int)infos->Count;
+	auto info = infos->Infos;
+	auto m = mode->Mode;
+	auto v = mode->PatchVertices;
+	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
+
+	for (int i = 0; i < cnt; i++, info += 1)
+	{
+		if (info->InstanceCount != 1 || info->FirstInstance != 0)
+		{
+			glDrawArraysInstancedBaseInstance(m, info->FirstIndex, info->FaceVertexCount, info->InstanceCount, info->FirstInstance);
+		}
+		else
+		{
+			glDrawArrays(m, info->FirstIndex, info->FaceVertexCount);
+		}
+	}
+	endtrace("hglDrawArrays")
+}
+
+DllExport(void) hglDrawElements(int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos)
+{
+	trace("hglDrawElements\n");
+	if (!*isActive) return;
+
+	auto cnt = infos->Count;
+	auto info = infos->Infos;
+	auto m = mode->Mode;
+	auto v = mode->PatchVertices;
+	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
+
+	for (int i = 0; i < cnt; i++, info += 1)
+	{
+		if (info->InstanceCount != 1 || info->FirstInstance != 0)
+		{
+			glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)info->FirstIndex, info->InstanceCount, info->BaseVertex, info->FirstInstance);
+		}
+		else
+		{
+			auto offset = int64_t(info->FirstIndex * sizeof(int));
+
+			GLint ibo, size;
+			glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &ibo);
+			glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &size);
+			printf("ibo %d: %d\n", ibo, size);
+
+			auto ptr = (int*)glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, size, GL_MAP_READ_BIT);
+
+			int maxIndex = -1;
+			int minIndex = 100000000;
+			for(int i = 0; i < size / 4; i++)
+			{ 
+				maxIndex = max(maxIndex, ptr[i]);
+				minIndex = min(minIndex, ptr[i]);
+			}
+			printf("index: (%d,%d)\n", minIndex, maxIndex);
+			glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+
+			if (info->BaseVertex == 0)
+			{
+				printf("glDrawElements(%d, %d, %d, %p)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset);
+				glDrawElements(m, info->FaceVertexCount, indexType, (GLvoid*)offset);
+			}
+			else
+			{
+				printf("glDrawElementsBaseVertex(%d, %d, %d, %p, %d)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
+				glDrawElementsBaseVertex(m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
+			}
+		}
+	}
+	endtrace("a")
+}
+
+DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* count, GLint stride, GLuint buffer)
+{
+	trace("hglDrawArraysIndirect\n");
+	auto m = mode->Mode;
+	auto v = mode->PatchVertices;
+	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
+
+	if (glMultiDrawArraysIndirect == nullptr)
+	{	
+		GLint size = 0;
+		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
+		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
+		auto indirect = (DrawArraysIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
+		auto drawcount = *count;
+		GLsizei n;
+		for (n = 0; n < drawcount; n++)
+		{
+			const DrawArraysIndirectCommand  *cmd;
+			if (stride != 0)
+			{
+				cmd = (DrawArraysIndirectCommand*)((char*)indirect + n * stride);
+			}
+			else
+			{
+				cmd = (DrawArraysIndirectCommand*)indirect + n;
+			}
+
+			glDrawArraysInstancedBaseInstance(m, cmd->First, cmd->Count, cmd->InstanceCount, cmd->BaseInstance);
+		}
+	
+		glUnmapBuffer(GL_COPY_READ_BUFFER);
+		glBindBuffer(GL_COPY_READ_BUFFER, 0);
+	}
+	else
+	{
+		auto cnt = *count;
+		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
+		glMultiDrawArraysIndirect(m, nullptr, cnt, stride);
+		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+	}
+	endtrace("a")
+}
+
+DllExport(void) hglDrawElementsIndirect(int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLint stride, GLuint buffer)
+{
+	trace("hglDrawElementsIndirect\n");
+	auto m = mode->Mode;
+	auto v = mode->PatchVertices;
+	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
+
+	if (glMultiDrawElementsIndirect == nullptr)
+	{
+		GLint size = 0;
+		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
+		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
+		auto indirect = (DrawElementsIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
+		auto drawcount = *count;
+
+		GLsizei n;
+		for (n = 0; n < drawcount; n++)
+		{
+			const DrawElementsIndirectCommand  *cmd;
+			if (stride != 0)
+			{
+				cmd = (const DrawElementsIndirectCommand  *)((char*)indirect + n * stride);
+			}
+			else
+			{
+				cmd = (const DrawElementsIndirectCommand  *)indirect + n;
+			}
+
+			glDrawElementsInstancedBaseVertexBaseInstance(
+				m,
+				cmd->Count,
+				indexType,
+				(void*) (cmd->FirstIndex * sizeof(int)), // TODO: proper size of indexType
+				cmd->InstanceCount,
+				cmd->BaseVertex,
+				cmd->BaseInstance
+			);
+		}
+
+		glUnmapBuffer(GL_COPY_READ_BUFFER);
+		glBindBuffer(GL_COPY_READ_BUFFER, 0);
+	}
+	else
+	{
+		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
+		glMultiDrawElementsIndirect(m, indexType, nullptr, *count, stride);
+		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+	}
+	endtrace("a")
+}
+
+
+DllExport(void) hglSetDepthTest(GLenum* mode)
+{
+	trace("hglSetDepthTest\n");
+	auto m = *mode;
+	if (m == 0)
+	{
+		glDisable(GL_DEPTH_TEST);
+	}
+	else
+	{
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(m);
+	}
+	endtrace("a")
+}
+
+DllExport(void) hglSetCullFace(GLenum* face)
+{
+	trace("hglSetCullFace\n");
+	auto f = *face;
+	if (f == 0)
+	{
+		glDisable(GL_CULL_FACE);
+	}
+	else
+	{
+		glEnable(GL_CULL_FACE);
+		glCullFace(f);
+	}
+	endtrace("a")
+}
+
+DllExport(void) hglSetPolygonMode(GLenum* mode)
+{
+	trace("hglSetPolygonMode\n");
+	glPolygonMode(GL_FRONT_AND_BACK, *mode);
+	endtrace("a")
+}
+
+DllExport(void) hglSetBlendMode(BlendMode* mode)
+{
+	trace("hglSetBlendMode\n");
+	if (!mode->Enabled)
+	{
+		glDisable(GL_BLEND);
+	}
+	else
+	{
+		glEnable(GL_BLEND);
+		glBlendFuncSeparate(mode->SourceFactor, mode->DestFactor, mode->SourceFactorAlpha, mode->DestFactorAlpha);
+		glBlendEquationSeparate(mode->Operation, mode->OperationAlpha);
+	}
+	endtrace("a")
+
+}
+
+DllExport(void) hglSetStencilMode(StencilMode* mode)
+{
+	trace("hglSetStencilMode\n");
+	if (!mode->Enabled)
+	{
+		glDisable(GL_STENCIL_TEST);
+	}
+	else
+	{
+		glEnable(GL_STENCIL_TEST);
+
+		glStencilFuncSeparate(GL_FRONT, mode->CmpFront, mode->ReferenceFront, mode->MaskFront);
+		glStencilOpSeparate(GL_FRONT, mode->OpFrontSF, mode->OpFrontDF, mode->OpFrontPass);
+
+		glStencilFuncSeparate(GL_BACK, mode->CmpBack, mode->ReferenceBack, mode->MaskBack);
+		glStencilOpSeparate(GL_BACK, mode->OpBackSF, mode->OpBackDF, mode->OpBackPass);
+	}
+	endtrace("a")
+}
 
 
 

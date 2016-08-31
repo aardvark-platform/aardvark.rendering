@@ -432,6 +432,11 @@ module OpenGl =
          else
               address
 
+    let getGLVMProcAddress =
+        let lib = DynamicLinker.loadLibrary "glvm"
+        fun (name : string) ->
+            let ptr = lib.GetFunction(name).Handle
+            ptr
 
     /// <summary>
     /// wraps the given ptr as function efficiently
@@ -665,6 +670,19 @@ module OpenGl =
         let VertexAttrib3f = getProcAddress "glVertexAttrib3f"
         let VertexAttrib4f = getProcAddress "glVertexAttrib4f"
 
+
+        let HDrawArrays = getGLVMProcAddress "hglDrawArrays"
+        let HDrawElements = getGLVMProcAddress "hglDrawElements"
+        let HDrawArraysIndirect = getGLVMProcAddress "hglDrawArraysIndirect"
+        let HDrawElementsIndirect = getGLVMProcAddress "hglDrawElementsIndirect"
+        let HSetDepthTest = getGLVMProcAddress "hglSetDepthTest"
+        let HSetCullFace = getGLVMProcAddress "hglSetCullFace"
+        let HSetPolygonMode = getGLVMProcAddress "hglSetPolygonMode"
+        let HSetBlendMode = getGLVMProcAddress "hglSetBlendMode"
+        let HSetStencilMode = getGLVMProcAddress "hglSetStencilMode"
+
+
+
         let private pointerNames = 
             [ BindVertexArray, "glBindVertexArray" 
               BindProgram, "glUseProgram" 
@@ -727,6 +745,17 @@ module OpenGl =
               DepthMask, "glDepthMask"
               ColorMask, "glColorMaski"
               DrawBuffers, "glDrawBuffers"
+
+              HDrawArrays, "hglDrawArrays"
+              HDrawElements, "hglDrawElements"
+              HDrawArraysIndirect, "hglDrawArraysIndirect"
+              HDrawElementsIndirect, "hglDrawElementsIndirect"
+              HSetDepthTest, "hglSetDepthTest"
+              HSetCullFace, "hglSetCullFace"
+              HSetPolygonMode, "hglSetPolygonMode"
+              HSetBlendMode, "hglSetBlendMode"
+              HSetStencilMode, "hglSetStencilMode"
+
 
             ] |> Map.ofList
 
@@ -805,3 +834,7 @@ module OpenGl =
         let StencilMask : int -> unit = wrap Pointers.StencilMask
         let ColorMask : int -> int  -> int -> int -> int -> unit = wrap Pointers.ColorMask
         let DrawBuffers : int -> nativeint -> unit = wrap Pointers.DrawBuffers
+
+//        let HDrawArrays : nativeint -> nativeint -> nativeint -> unit = wrap Pointers.HDrawArrays
+//        let HDrawElements : nativeint -> nativeint -> int -> nativeint -> unit = wrap Pointers.HDrawElements
+//        let HDrawArraysIndirect : nativeint -> nativeint -> nativeint -> int -> int -> unit = wrap Pointers.HDrawArraysIndirect

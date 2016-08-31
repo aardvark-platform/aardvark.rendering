@@ -65,6 +65,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     let mutable ctx = ctx
     let mutable manager = if ctx <> null then ResourceManager(ctx, None, shareTextures, shareBuffers) else null
 
+    do if not (isNull ctx) then using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+
     new(ctx) = new Runtime(ctx, false, false)
 
     member x.SupportsUniformBuffers =
@@ -75,6 +77,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         and set c = 
             ctx <- c
             manager <- ResourceManager(ctx, None, shareTextures, shareBuffers)
+            using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+
             //compiler <- Compiler.Compiler(x, c)
             //currentRuntime <- Some (x :> IRuntime)
 

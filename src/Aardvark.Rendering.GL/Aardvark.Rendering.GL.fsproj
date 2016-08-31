@@ -60,6 +60,7 @@
     <Compile Include="Core\PrimitiveValueConverter.fs" />
     <Compile Include="Core\InternalFormat.fs" />
     <Compile Include="Core\RefSet.fs" />
+    <Compile Include="Core\ModeHandles.fs" />
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\Instruction.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
@@ -75,6 +76,7 @@
     <Compile Include="Resources\Program.fs" />
     <Compile Include="Resources\Renderbuffer.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
+    <Compile Include="Resources\Pointers.fs" />
     <Compile Include="Resources\StreamingTexture.fs" />
     <Compile Include="Resources\MappedBuffer.fs" />
     <Compile Include="Management\SurfaceCompilers.fs" />

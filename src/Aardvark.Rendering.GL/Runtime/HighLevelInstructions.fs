@@ -23,77 +23,21 @@ module Instructions =
             Instruction.ColorMask i mask.X mask.Y mask.Z mask.W
         )
 
-    let setDepthTest (m : IMod<DepthTestMode>) =
-        m |> Mod.map (fun dt ->
-            if dt <> DepthTestMode.None then
-                [ 
-                    Instruction.Enable(int OpenGl.Enums.State.DepthTest)
-                    Instruction.DepthFunc(Translations.toGLComparison dt) 
-                ]
-            else
-                [ Instruction.Disable(int OpenGl.Enums.State.DepthTest) ]
-        )
+    let setDepthTest (m : IResource<DepthTestModeHandle>) =
+        m.Handle |> Mod.force |> Instruction.HSetDepthTest |> List.singleton |> Mod.constant
 
-    let setFillMode (m : IMod<FillMode>) =
-        m |> Mod.map (fun fm -> 
-            [ Instruction.PolygonMode (int OpenGl.Enums.Face.FrontAndBack) (Translations.toGLPolygonMode fm) ]
-        )
 
-    let setCullMode (m : IMod<CullMode>) =
-        m |> Mod.map (fun cm -> 
-            if cm <> CullMode.None then
-                [ 
-                    Instruction.Enable(int OpenGl.Enums.State.CullFace)
-                    Instruction.CullFace(Translations.toGLFace cm) 
-                ]
-            else
-                [ Instruction.Disable(int OpenGl.Enums.State.CullFace) ]
-        )
+    let setPolygonMode (m : IResource<PolygonModeHandle>) =
+        m.Handle |> Mod.force |> Instruction.HSetPolygonMode |> List.singleton |> Mod.constant
 
-    let setBlendMode (m : IMod<BlendMode>) =
-        m |> Mod.map (fun bm -> 
-            //TODO: actually depending on the Framebuffer (premultiplied alpha)
-            if bm.Enabled then
-                let src = Translations.toGLFactor bm.SourceFactor
-                let dst = Translations.toGLFactor bm.DestinationFactor
-                let op = Translations.toGLOperation bm.Operation
+    let setCullMode (m : IResource<CullModeHandle>) =        
+        m.Handle |> Mod.force |> Instruction.HSetCullFace |> List.singleton |> Mod.constant
 
-                let srcA = Translations.toGLFactor bm.SourceAlphaFactor
-                let dstA = Translations.toGLFactor bm.DestinationAlphaFactor
-                let opA = Translations.toGLOperation bm.AlphaOperation
+    let setBlendMode (m : IResource<BlendModeHandle>) =
+        m.Handle |> Mod.force |> Instruction.HSetBlendMode |> List.singleton |> Mod.constant
 
-                [ 
-                    Instruction.Enable(int OpenGl.Enums.State.Blend)
-                    Instruction.BlendFuncSeparate src dst srcA dstA
-                    Instruction.BlendEquationSeparate op opA
-                ]
-            else
-                [ Instruction.Disable(int OpenGl.Enums.State.Blend) ]
-        )
-
-    let setStencilMode (m : IMod<StencilMode>) =
-        m |> Mod.map (fun sm -> 
-            //TODO: actually depending on the Framebuffer (premultiplied alpha)
-            if sm.IsEnabled then
-                let cmpFront = Translations.toGLFunction sm.CompareFront.Function
-                let cmpBack= Translations.toGLFunction sm.CompareBack.Function
-                let opFrontSF = Translations.toGLStencilOperation sm.OperationFront.StencilFail
-                let opBackSF = Translations.toGLStencilOperation sm.OperationBack.StencilFail
-                let opFrontDF = Translations.toGLStencilOperation sm.OperationFront.DepthFail
-                let opBackDF = Translations.toGLStencilOperation sm.OperationBack.DepthFail
-                let opFrontP = Translations.toGLStencilOperation sm.OperationFront.DepthPass
-                let opBackP = Translations.toGLStencilOperation sm.OperationBack.DepthPass
-
-                [ 
-                    Instruction.Enable(int OpenGl.Enums.State.StencilTest) 
-                    Instruction.StencilFuncSeparate(int OpenGl.Enums.Face.Front) cmpFront sm.CompareFront.Reference (int sm.CompareFront.Mask)
-                    Instruction.StencilFuncSeparate(int OpenGl.Enums.Face.Back) cmpBack sm.CompareBack.Reference (int sm.CompareBack.Mask)
-                    Instruction.StencilOpSeparate(int OpenGl.Enums.Face.Front) opFrontSF opFrontDF opFrontP
-                    Instruction.StencilOpSeparate(int OpenGl.Enums.Face.Back) opBackSF opBackDF opBackP
-                ]
-            else
-                [ Instruction.Disable(int OpenGl.Enums.State.StencilTest) ]
-        )
+    let setStencilMode (m : IResource<StencilModeHandle>) =
+        m.Handle |> Mod.force |> Instruction.HSetStencilMode |> List.singleton |> Mod.constant
 
     let bindProgram (p : IResource<Program>) =
         p.Handle |> Mod.map (fun r -> Instruction.BindProgram(r.Handle))
