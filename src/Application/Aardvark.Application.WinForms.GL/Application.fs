@@ -10,7 +10,8 @@ open Aardvark.Application
 
 
 type OpenGlApplication() =
-    do OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
+    do Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
+       OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
        try 
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException)
        with e -> Report.Warn("Could not set SetUnhandledExceptionMode.")

@@ -6,6 +6,7 @@ open Rendering.Examples
 [<EntryPoint>]
 [<STAThread>]
 let main args =
+    // Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
     //Vulkan.Lod.run()  
     //Vulkan.Simple.run()  
 
