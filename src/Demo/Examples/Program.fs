@@ -19,9 +19,9 @@ let main args =
     //Examples.Render2TexturePrimitiveFloat.run()
     //Examples.PostProcessing.run()
     //Examples.Shadows.run()
-    //Examples.Maya.run()
+    Examples.Maya.run()
     //Examples.GeometrySet.run()
-    Examples.LoD.run()
+    //Examples.LoD.run()
     //Examples.Polygons.run()           attention: this one is currently broken due to package refactoring
     //Examples.TicTacToe.run()          attention: this one is currently broken due to package refactoring
     //Examples.AssimpInterop.run()
