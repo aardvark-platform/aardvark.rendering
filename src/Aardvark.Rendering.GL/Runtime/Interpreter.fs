@@ -687,8 +687,10 @@ module OpenGLObjectInterpreter =
                                 elif c.InstanceCount > 0 then
                                     gl.drawArraysInstanced mode c.FirstIndex c.FaceVertexCount c.InstanceCount
 
+                #if DEBUG
                 OpenTK.Graphics.OpenGL4.GL.Flush()
                 OpenTK.Graphics.OpenGL4.GL.Finish()
+                #endif
 
 
         member gl.render (o : PreparedMultiRenderObject) =

@@ -191,9 +191,11 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
     member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) = 
-        match SurfaceCompilers.compile ctx signature s with
-            | Success prog -> prog
-            | Error e -> failwith e
+        using ctx.ResourceLock (fun d -> 
+            match SurfaceCompilers.compile ctx signature s with
+                | Success prog -> prog  
+                | Error e -> failwith e
+        )
 
     member x.DeleteTexture (t : Texture) = 
         ctx.Delete t

@@ -58,7 +58,7 @@ module MarkdownConfig =
 
 module Markdown =
     open Aardvark.Base.Monads
-    open Aardvark.Base.Monads.State
+    open Aardvark.Base.Monads.StateOld
 
     type LayoutState = 
         {
