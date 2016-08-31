@@ -11,8 +11,8 @@ open Aardvark.Rendering.GL
 open Aardvark.Application
 
 
-type OpenGlApplication() =
-    do Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
+type OpenGlApplication(forceNvidia : bool) =
+    do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
 
     let runtime = new Runtime()
@@ -51,6 +51,8 @@ type OpenGlApplication() =
                 glctx.MakeCurrent(null)
                 ctx.CurrentContextHandle <- None
                 ContextHandle.Current <- None
+
+    new() = new OpenGlApplication(true)
 
     member x.Context = ctx
     member x.Runtime = runtime
