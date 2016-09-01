@@ -163,7 +163,7 @@ module Pooling =
         let getInstanceBuffer (sym : Symbol) =
             instanceBuffers.GetOrCreate(sym, fun sym -> new ManagedBuffer(runtime))
 
-        member x.IsEmpty = isEmpty :> IMod<_>
+        member x.IsEmpty = isEmpty :> IMod<>_
 
         member x.Add(g : AdaptiveGeometry) =
             let ds = List()
