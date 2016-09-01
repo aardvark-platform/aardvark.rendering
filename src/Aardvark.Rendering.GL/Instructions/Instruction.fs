@@ -210,7 +210,7 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
         Instruction(InstructionCode.HDrawArraysIndirect, [| isActive.Pointer :> obj; mode.Pointer :> obj; count :> obj; stride :> obj; buffer :> obj |])
 
     static member HDrawElementsIndirect (isActive : IsActiveHandle) (mode : BeginModeHandle) (indexType : int) (count : nativeptr<int>) (stride : int) (buffer : int) =
-        Instruction(InstructionCode.HDrawArraysIndirect, [| isActive.Pointer :> obj; mode.Pointer :> obj; indexType :> obj; count :> obj; stride :> obj; buffer :> obj |])
+        Instruction(InstructionCode.HDrawElementsIndirect, [| isActive.Pointer :> obj; mode.Pointer :> obj; indexType :> obj; count :> obj; stride :> obj; buffer :> obj |])
 
     static member HSetDepthTest (test : DepthTestModeHandle) =
         Instruction(InstructionCode.HSetDepthTest, [| test.Pointer :> obj |])

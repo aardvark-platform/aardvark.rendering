@@ -14,7 +14,7 @@ open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-
+open Aardvark.Rendering.NanoVg
 
 module Pooling =
     open System.Collections.Generic
@@ -30,6 +30,32 @@ module Pooling =
             uniforms         : SymbolDict<IMod>
             vertexAttributes : SymbolDict<BufferView>
         }
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module AdaptiveGeometry =
+        let ofIndexedGeometry (ig : IndexedGeometry) =
+            let anyAtt = (ig.IndexedAttributes |> Seq.head).Value
+
+            let index =
+                match ig.IndexArray with
+                    | null -> 
+                        let cnt = anyAtt.Length
+                        Array.init cnt id :> Array
+                    | index ->
+                        index
+
+            let vertexCount =
+                anyAtt.Length
+                
+    
+            {
+                mode = ig.Mode
+                faceVertexCount = index.Length
+                vertexCount = vertexCount
+                indices = BufferView.ofArray index
+                uniforms = SymDict.empty
+                vertexAttributes = ig.IndexedAttributes |> SymDict.map (fun _ -> BufferView.ofArray)
+            }
 
     type Pool =
         abstract member Add : AdaptiveGeometry -> DrawCallInfo
@@ -51,7 +77,7 @@ module Pooling =
 
     type Conv<'a, 'b> private() =
         static let toModArray (input : IMod) : IMod<Array> =
-            let converter = PrimitiveValueConverter.converter 
+            let converter = PrimitiveValueConverter.converter : 'a -> 'b
             let arr = Array.CreateInstance(typeof<'b>, 1)
             input |> unbox<IMod<'a>> |> Mod.map (fun v -> v |> converter |> Array.singleton :> Array)
 
@@ -93,6 +119,10 @@ module Pooling =
             let count = range.Size + 1
             let data = BufferView.download 0 count data
 
+            let min = (range.Min + count) * s
+            if store.Capacity < min then
+                store.Resize(Fun.NextPowerOfTwo min)
+
             let writer = MappedBufferWriter(store, data, range.Min, s)
             writer.Write x
 
@@ -114,6 +144,11 @@ module Pooling =
             let t, s = getElementTypeAndSize contentType
             let count = 1
             let data = data |> conv contentType t
+
+            
+            let min = (index + 1) * s
+            if store.Capacity < min then
+                store.Resize(Fun.NextPowerOfTwo min)
 
             let writer = MappedBufferWriter(store, data, index, s)
             writer.Write x
@@ -149,6 +184,7 @@ module Pooling =
             member x.GetValue c = x.GetValue c
 
     type ManagedPool(runtime : IRuntime) =
+        let mutable count = 0
         let indexManager = MemoryManager.createNop()
         let vertexManager = MemoryManager.createNop()
         let instanceManager = MemoryManager.createNop()
@@ -163,7 +199,7 @@ module Pooling =
         let getInstanceBuffer (sym : Symbol) =
             instanceBuffers.GetOrCreate(sym, fun sym -> new ManagedBuffer(runtime))
 
-        member x.IsEmpty = isEmpty :> IMod<>_
+        member x.IsEmpty = isEmpty :> IMod<_>
 
         member x.Add(g : AdaptiveGeometry) =
             let ds = List()
@@ -185,13 +221,22 @@ module Pooling =
             let indexRange = Range1i(int indexPtr.Offset, int indexPtr.Offset + fvc - 1)
             indexBuffer.Add(indexRange, g.indices) |> ds.Add
 
+            count <- count + 1
+            if count = 1 then
+                transact (fun () -> isEmpty.Value <- false)
+
             let disposable =
                 { new IDisposable with
                     member x.Dispose() =
+                        count <- count - 1
+                        if count = 0 then
+                            transact (fun () -> isEmpty.Value <- true)
+
                         for d in ds do d.Dispose()
                         vertexManager.Free vertexPtr
                         instanceManager.Free instancePtr
                         indexManager.Free indexPtr
+
                 }
 
             let call =
@@ -225,10 +270,81 @@ module Pooling =
                         | _ -> None
             }
 
+        member x.IndexBuffer =
+            BufferView(indexBuffer, indexBuffer.ElementType)
+
+    module Sg =
+        type PoolNode(pool : ManagedPool, calls : aset<DrawCallInfo>) =
+            interface ISg
+            member x.Pool = pool
+            member x.Calls = calls
+
+        let pool (pool : ManagedPool) (calls : aset<DrawCallInfo>) =
+            PoolNode(pool, calls) :> ISg
+
+    [<Aardvark.Base.Ag.Semantic>]
+    type PoolSem() =
+        member x.RenderObjects(p : Sg.PoolNode) =
+            aset {
+                let pool = p.Pool
+                let! empty = pool.IsEmpty
+                if not empty then
+                    let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
+
+                    ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+                    ro.Indices <- Some pool.IndexBuffer
+                    ro.VertexAttributes <- pool.VertexBuffers
+                    ro.InstanceAttributes <- pool.InstanceBuffers
+                    ro.IndirectBuffer <- p.Calls |> ASet.toMod |> Mod.map (fun calls -> calls |> Seq.toArray |> ArrayBuffer :> IBuffer)
+                    //ro.DrawCallInfos <- p.Calls |> ASet.toMod |> Mod.map Seq.toList
+                    yield ro :> IRenderObject
+                    
+            }
+
+
+    let testSg (r : IRuntime) =
+        let pool = ManagedPool r
+
+        let geometry (pos : V3d) =
+            let g = Primitives.unitSphere 0 |> AdaptiveGeometry.ofIndexedGeometry
+            g.uniforms.[Sym.ofString "Hugo"] <- Mod.constant ((M44d.Translation pos * M44d.Scale 0.1) |> M44f.op_Explicit)
+            g
+
+        let s = 30.0
+        let drawCalls =
+            [    
+                for x in -s .. s do
+                    for y in -s .. s do
+                        for z in -s .. s do
+                            let call,_ = pool.Add (geometry (V3d(x,y,z)))
+                            yield call
+                    
+            ]
+
+        //let call, _ = Primitives.unitSphere 5 |> AdaptiveGeometry.ofIndexedGeometry |> pool.Add
+
+        Sg.pool pool (ASet.ofList drawCalls)
+
+
 module Maya = 
 
     module Shader =
         open FShade
+
+        type HugoVertex = 
+            {
+                [<Semantic("Hugo")>] m : M44d
+                [<Position>] p : V4d
+            }
+
+        let hugoShade (v : HugoVertex) =
+            vertex {
+                return { v 
+                    with 
+                        p = v.m * v.p 
+                }
+            }
+
         type Vertex = 
             {
                 [<Semantic("ThingTrafo")>] m : M44d
@@ -287,7 +403,7 @@ module Maya =
               |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
 
-        let viewTrafo = Mod.constant view //DefaultCameraController.control win.Mouse win.Keyboard win.Time view
+        let viewTrafo = DefaultCameraController.control win.Mouse win.Keyboard win.Time view
 
       
 
@@ -362,6 +478,17 @@ module Maya =
                 do! Air.DrawIndirect drawCallInfos
             }
 
+        let sg =
+            let test = 
+                Pooling.testSg app.Runtime
+                |> Sg.effect [
+                    Shader.hugoShade |> toEffect
+                    DefaultSurfaces.trafo |> toEffect
+                    DefaultSurfaces.constantColor C4f.Red |> toEffect
+                    DefaultSurfaces.simpleLighting |> toEffect
+                ]
+            test
+
         let camera = Mod.map2 (fun v p -> { cameraView = v; frustum = p }) viewTrafo perspective
         let pickRay = Mod.map2 Camera.pickRay camera win.Mouse.Position
         let trafo = Mod.init Trafo3d.Identity
@@ -421,7 +548,7 @@ module Maya =
                 // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
                 |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
-        use task = sg |> Sg.compile win.Runtime win.FramebufferSignature
-        win.RenderTask <- task
+        use task = app.Runtime.CompileRender(win.FramebufferSignature, { BackendConfiguration.NativeOptimized with useDebugOutput = true }, sg)
+        win.RenderTask <- task |> DefaultOverlays.withStatistics
         win.Run()
 

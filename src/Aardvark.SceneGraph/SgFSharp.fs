@@ -400,7 +400,7 @@ module SgFSharp =
                 else
                     sg
 
-            let m44Trafos = trafos |> Mod.map (fun a -> a |> Array.map (fun (t : Trafo3d) -> (M44f.op_Explicit t.Forward).Transposed) :> Array)
+            let m44Trafos = trafos |> Mod.map (fun a -> a |> Array.map (fun (t : Trafo3d) -> (M44f.op_Explicit t.Forward)) :> Array)
             let m44View = BufferView(m44Trafos |> Mod.map (fun a -> ArrayBuffer a :> IBuffer), typeof<M44f>)
 
             Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
