@@ -17,6 +17,7 @@ open Aardvark.Application.WinForms
 open Aardvark.Rendering.NanoVg
 
 module Pooling =
+    open System.Threading
     open System.Collections.Generic
     open System.Runtime.InteropServices
     open System.Reflection
@@ -27,8 +28,8 @@ module Pooling =
             faceVertexCount  : int
             vertexCount      : int
             indices          : BufferView
-            uniforms         : SymbolDict<IMod>
-            vertexAttributes : SymbolDict<BufferView>
+            uniforms         : Map<Symbol, IMod>
+            vertexAttributes : Map<Symbol, BufferView>
         }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -53,8 +54,8 @@ module Pooling =
                 faceVertexCount = index.Length
                 vertexCount = vertexCount
                 indices = BufferView.ofArray index
-                uniforms = SymDict.empty
-                vertexAttributes = ig.IndexedAttributes |> SymDict.map (fun _ -> BufferView.ofArray)
+                uniforms = Map.empty
+                vertexAttributes = ig.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
             }
 
     type Pool =
@@ -81,6 +82,7 @@ module Pooling =
             let arr = Array.CreateInstance(typeof<'b>, 1)
             input |> unbox<IMod<'a>> |> Mod.map (fun v -> v |> converter |> Array.singleton :> Array)
 
+
         static member Instance = toModArray
 
     let private convCache = Dict<Type * Type, IMod -> IMod<Array>>()
@@ -90,6 +92,18 @@ module Pooling =
             let p = t.GetProperty("Instance", BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Static)
             p.GetValue(null) |> unbox<IMod -> IMod<Array>>
         ))
+
+    type GeometrySignature =
+        {
+            mode                : IndexedGeometryMode
+            vertexBufferTypes   : Map<Symbol, Type>
+            uniformTypes        : Map<Symbol, Type>
+            indexType           : Type
+        }
+
+    type Attributes = Map<Symbol, BufferView>
+    type Uniforms = Map<Symbol, IMod>
+
 
     type ManagedBuffer(runtime : IRuntime) =
         inherit DirtyTrackingAdaptiveObject<MappedBufferWriter>()
@@ -183,21 +197,53 @@ module Pooling =
         interface IMod<IBuffer> with
             member x.GetValue c = x.GetValue c
 
-    type ManagedPool(runtime : IRuntime) =
+    type LayoutManager<'a>() =
+        let manager = MemoryManager.createNop()
+        let store = Dict<'a, managedptr>()
+        let cnts = Dict<managedptr, 'a * ref<int>>()
+
+
+        member x.Alloc(key : 'a, size : int) =
+            match store.TryGetValue key with
+                | (true, v) -> 
+                    let _,r = cnts.[v]
+                    Interlocked.Increment &r.contents |> ignore
+                    v
+                | _ ->
+                    let v = manager.Alloc size
+                    let r = ref 1
+                    cnts.[v] <- (key,r)
+                    store.[key] <- (v)
+                    v
+
+        member x.Free(value : managedptr) =
+            match cnts.TryGetValue value with
+                | (true, (k,r)) ->
+                    if Interlocked.Decrement &r.contents = 0 then
+                        cnts.Remove value |> ignore
+                        store.Remove k |> ignore
+                | _ ->
+                    ()
+
+
+    type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
         let mutable count = 0
-        let indexManager = MemoryManager.createNop()
-        let vertexManager = MemoryManager.createNop()
-        let instanceManager = MemoryManager.createNop()
+        let indexManager = LayoutManager<BufferView>()
+        let vertexManager = LayoutManager<Attributes>()
+        let instanceManager = LayoutManager<Uniforms>()
+
         let indexBuffer = new ManagedBuffer(runtime)
         let vertexBuffers = SymbolDict<ManagedBuffer>()
         let instanceBuffers = SymbolDict<ManagedBuffer>()
         let isEmpty = Mod.init true
+
 
         let getVertexBuffer (sym : Symbol) =
             vertexBuffers.GetOrCreate(sym, fun sym -> new ManagedBuffer(runtime))
 
         let getInstanceBuffer (sym : Symbol) =
             instanceBuffers.GetOrCreate(sym, fun sym -> new ManagedBuffer(runtime))
+
 
         member x.IsEmpty = isEmpty :> IMod<_>
 
@@ -206,18 +252,18 @@ module Pooling =
             let fvc = g.faceVertexCount
             let vertexCount = g.vertexCount
             
-            let vertexPtr = vertexManager.Alloc vertexCount
+            let vertexPtr = vertexManager.Alloc(g.vertexAttributes, vertexCount)
             let vertexRange = Range1i(int vertexPtr.Offset, int vertexPtr.Offset + vertexCount - 1)
             for (KeyValue(k,v)) in g.vertexAttributes do
                  let target = getVertexBuffer k
                  target.Add(vertexRange, v) |> ds.Add
 
-            let instancePtr = instanceManager.Alloc 1
+            let instancePtr = instanceManager.Alloc(g.uniforms, 1)
             for (KeyValue(k,v)) in g.uniforms do
                  let target = getInstanceBuffer k
                  target.Add(int instancePtr.Offset, v) |> ds.Add
 
-            let indexPtr = indexManager.Alloc fvc
+            let indexPtr = indexManager.Alloc(g.indices, fvc)
             let indexRange = Range1i(int indexPtr.Offset, int indexPtr.Offset + fvc - 1)
             indexBuffer.Add(indexRange, g.indices) |> ds.Add
 
@@ -303,12 +349,20 @@ module Pooling =
 
 
     let testSg (r : IRuntime) =
-        let pool = ManagedPool r
+
+        let signature =
+            {
+                mode                = IndexedGeometryMode.TriangleList
+                vertexBufferTypes   = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
+                uniformTypes        = Map.ofList [ Symbol.Create "Hugo", typeof<M44f> ]
+                indexType           = typeof<int>
+            }
+
+        let pool = ManagedPool(r, signature)
 
         let geometry (pos : V3d) =
             let g = Primitives.unitSphere 0 |> AdaptiveGeometry.ofIndexedGeometry
-            g.uniforms.[Sym.ofString "Hugo"] <- Mod.constant ((M44d.Translation pos * M44d.Scale 0.1) |> M44f.op_Explicit)
-            g
+            { g with uniforms = Map.add (Sym.ofString "Hugo") (Mod.constant ((M44d.Translation pos * M44d.Scale 0.1) |> M44f.op_Explicit) :> IMod) g.uniforms }
 
         let s = 30.0
         let drawCalls =
