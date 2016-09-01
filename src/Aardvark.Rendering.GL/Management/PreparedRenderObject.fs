@@ -161,9 +161,9 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         if not x.IsDisposed then
+            x.IsDisposed <- true
 
             x.Activation.Dispose()
-            x.IsDisposed <- true
             match x.DrawBuffers with
                 | Some b -> b.RemoveRef()
                 | _ -> ()
@@ -447,6 +447,8 @@ type ResourceManagerExtensions private() =
         let buffers =
             prog.Inputs 
                 |> List.map (fun v ->
+                    let expected = AttributeType.getExpectedType v.attributeType
+
                     match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                         | Some value ->
                             let dep = x.CreateBuffer(value.Buffer)
@@ -463,6 +465,7 @@ type ResourceManagerExtensions private() =
                                         | _ -> 
                                             failwithf "could not get attribute %A" v.semantic
                    )
+
 
         // create the index buffer (if present)
         let index =

@@ -16,7 +16,214 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 
 
+module Pooling =
+    open System.Collections.Generic
+    open System.Runtime.InteropServices
+    open System.Reflection
 
+    type AdaptiveGeometry =
+        {
+            mode             : IndexedGeometryMode
+            faceVertexCount  : int
+            vertexCount      : int
+            indices          : BufferView
+            uniforms         : SymbolDict<IMod>
+            vertexAttributes : SymbolDict<BufferView>
+        }
+
+    type Pool =
+        abstract member Add : AdaptiveGeometry -> DrawCallInfo
+        abstract member Remove : AdaptiveGeometry -> unit
+        
+        abstract member TryGetAttribute : Symbol -> Option<BufferView>
+        abstract member IndexBuffer : BufferView
+
+    type MappedBufferWriter(store : IMappedBuffer, data : IMod<Array>, offset : int, elementSize : int) =
+        inherit AdaptiveObject()
+
+        member x.Write(caller : IAdaptiveObject) =
+            x.EvaluateIfNeeded caller () (fun () ->
+                let data = data.GetValue x
+                let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                try store.Write(gc.AddrOfPinnedObject(), offset * elementSize, data.Length * elementSize)
+                finally gc.Free()
+            )
+
+    type Conv<'a, 'b> private() =
+        static let toModArray (input : IMod) : IMod<Array> =
+            let converter = PrimitiveValueConverter.converter 
+            let arr = Array.CreateInstance(typeof<'b>, 1)
+            input |> unbox<IMod<'a>> |> Mod.map (fun v -> v |> converter |> Array.singleton :> Array)
+
+        static member Instance = toModArray
+
+    let private convCache = Dict<Type * Type, IMod -> IMod<Array>>()
+    let conv (inputType : Type) (outputType : Type) : IMod -> IMod<Array> =
+        convCache.GetOrCreate((inputType, outputType), System.Func<_,_>(fun (inputType, outputType) ->
+            let t = typedefof<Conv<_,_>>.MakeGenericType [|inputType; outputType|]
+            let p = t.GetProperty("Instance", BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Static)
+            p.GetValue(null) |> unbox<IMod -> IMod<Array>>
+        ))
+
+    type ManagedBuffer(runtime : IRuntime) =
+        inherit DirtyTrackingAdaptiveObject<MappedBufferWriter>()
+
+        let store = runtime.CreateMappedBuffer()
+
+        let mutable elementTypeAndSize = None
+
+        let getElementTypeAndSize (viewType : Type) =
+            match elementTypeAndSize with
+                | Some (t,s) ->
+                    if viewType <> t then failwith "sadasd"
+                    (t,s)
+                | None ->
+                    let t = viewType
+                    let s = System.Runtime.InteropServices.Marshal.SizeOf t
+                    elementTypeAndSize <- Some (t,s)
+                    (t,s)
+        
+        member x.ElementType = 
+            match elementTypeAndSize with
+                | Some (t,_) -> t
+                | _ -> failwith ""
+
+        member x.Add(range : Range1i, data : BufferView) =
+            let t, s = getElementTypeAndSize data.ElementType
+            let count = range.Size + 1
+            let data = BufferView.download 0 count data
+
+            let writer = MappedBufferWriter(store, data, range.Min, s)
+            writer.Write x
+
+            { new IDisposable with
+                member __.Dispose() =
+                    lock x (fun () ->
+                        x.Dirty.Remove writer |> ignore
+                        let mutable foo = 0
+                        writer.Outputs.Consume(&foo) |> ignore
+                    )
+            }
+
+        member x.Add(index : int, data : IMod) =
+            let contentType =
+                match data.GetType() with
+                    | ModOf t -> t
+                    | _ -> failwith ""
+
+            let t, s = getElementTypeAndSize contentType
+            let count = 1
+            let data = data |> conv contentType t
+
+            let writer = MappedBufferWriter(store, data, index, s)
+            writer.Write x
+
+            { new IDisposable with
+                member __.Dispose() =
+                    lock x (fun () ->
+                        x.Dirty.Remove writer |> ignore
+                        let mutable foo = 0
+                        writer.Outputs.Consume(&foo) |> ignore
+                    )
+            }      
+
+        member x.GetValue(caller : IAdaptiveObject) =
+            x.EvaluateAlways' caller (fun dirty ->
+                for d in dirty do
+                    d.Write(x)
+
+                store.GetValue(x)
+            )
+
+        member x.Dispose() =
+            store.Dispose()
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+        interface IMod with
+            member x.IsConstant = false
+            member x.GetValue c = x.GetValue c :> obj
+
+        interface IMod<IBuffer> with
+            member x.GetValue c = x.GetValue c
+
+    type ManagedPool(runtime : IRuntime) =
+        let indexManager = MemoryManager.createNop()
+        let vertexManager = MemoryManager.createNop()
+        let instanceManager = MemoryManager.createNop()
+        let indexBuffer = new ManagedBuffer(runtime)
+        let vertexBuffers = SymbolDict<ManagedBuffer>()
+        let instanceBuffers = SymbolDict<ManagedBuffer>()
+        let isEmpty = Mod.init true
+
+        let getVertexBuffer (sym : Symbol) =
+            vertexBuffers.GetOrCreate(sym, fun sym -> new ManagedBuffer(runtime))
+
+        let getInstanceBuffer (sym : Symbol) =
+            instanceBuffers.GetOrCreate(sym, fun sym -> new ManagedBuffer(runtime))
+
+        member x.IsEmpty = isEmpty :> IMod<_>
+
+        member x.Add(g : AdaptiveGeometry) =
+            let ds = List()
+            let fvc = g.faceVertexCount
+            let vertexCount = g.vertexCount
+            
+            let vertexPtr = vertexManager.Alloc vertexCount
+            let vertexRange = Range1i(int vertexPtr.Offset, int vertexPtr.Offset + vertexCount - 1)
+            for (KeyValue(k,v)) in g.vertexAttributes do
+                 let target = getVertexBuffer k
+                 target.Add(vertexRange, v) |> ds.Add
+
+            let instancePtr = instanceManager.Alloc 1
+            for (KeyValue(k,v)) in g.uniforms do
+                 let target = getInstanceBuffer k
+                 target.Add(int instancePtr.Offset, v) |> ds.Add
+
+            let indexPtr = indexManager.Alloc fvc
+            let indexRange = Range1i(int indexPtr.Offset, int indexPtr.Offset + fvc - 1)
+            indexBuffer.Add(indexRange, g.indices) |> ds.Add
+
+            let disposable =
+                { new IDisposable with
+                    member x.Dispose() =
+                        for d in ds do d.Dispose()
+                        vertexManager.Free vertexPtr
+                        instanceManager.Free instancePtr
+                        indexManager.Free indexPtr
+                }
+
+            let call =
+                DrawCallInfo(
+                    FaceVertexCount = fvc,
+                    FirstIndex = int indexPtr.Offset,
+                    FirstInstance = int instancePtr.Offset,
+                    InstanceCount = 1,
+                    BaseVertex = int vertexPtr.Offset
+                )
+
+            call, disposable
+
+        member x.VertexBuffers =
+            { new IAttributeProvider with
+                member x.Dispose() = ()
+                member x.All = Seq.empty
+                member x.TryGetAttribute(sem : Symbol) =
+                    match vertexBuffers.TryGetValue sem with
+                        | (true, v) -> Some (BufferView(v, v.ElementType))
+                        | _ -> None
+            }
+
+        member x.InstanceBuffers =
+            { new IAttributeProvider with
+                member x.Dispose() = ()
+                member x.All = Seq.empty
+                member x.TryGetAttribute(sem : Symbol) =
+                    match instanceBuffers.TryGetValue sem with
+                        | (true, v) -> Some (BufferView(v, v.ElementType))
+                        | _ -> None
+            }
 
 module Maya = 
 
@@ -25,7 +232,7 @@ module Maya =
         type Vertex = 
             {
                 [<Semantic("ThingTrafo")>] m : M44d
-                [<Semantic("ThingNormalTrafo")>] nm : M44d
+                [<Semantic("ThingNormalTrafo")>] nm : M33d
                 [<Position>] p : V4d
                 [<Normal>] n : V3d
             }
@@ -35,7 +242,7 @@ module Maya =
                 return { v 
                     with 
                         p = v.m * v.p 
-                        n = (v.nm * V4d(v.n, 0.0)).XYZ
+                        n = v.nm * v.n
                 }
             }
 
@@ -71,7 +278,7 @@ module Maya =
         Ag.initialize()
         Aardvark.Init()
         use app = new OpenGlApplication()
-        let win = app.CreateSimpleRenderWindow(1)
+        use win = app.CreateSimpleRenderWindow(1)
         win.Text <- "Aardvark rocks \\o/"
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
@@ -111,12 +318,12 @@ module Maya =
             render |> Mod.map (fun l -> l |> List.mapi (fun i (_,g,_) -> rangeToInfo i g) |> List.toArray |> ArrayBuffer :> IBuffer)
 
         let trafos =
-            let buffer = render |> Mod.map (fun v -> v |> List.map (fun (t,_,_) -> t.Forward.Transposed |> M44f.op_Explicit) |> List.toArray |> ArrayBuffer :> IBuffer) 
+            let buffer = render |> Mod.map (fun v -> v |> List.map (fun (t,_,_) -> t.Forward |> M44f.op_Explicit) |> List.toArray |> ArrayBuffer :> IBuffer) 
             BufferView(buffer, typeof<M44f>)
 
         let normalTrafos =
-            let buffer = render |> Mod.map (fun v -> v |> List.map (fun (t,_,_) -> t.Backward |> M44f.op_Explicit) |> List.toArray |> ArrayBuffer :> IBuffer) 
-            BufferView(buffer, typeof<M44f>)
+            let buffer = render |> Mod.map (fun v -> v |> List.map (fun (t,_,_) -> t.Backward.Transposed.UpperLeftM33() |> M33f.op_Explicit) |> List.toArray |> ArrayBuffer :> IBuffer) 
+            BufferView(buffer, typeof<M33f>)
 
 
         let colors =
@@ -214,6 +421,7 @@ module Maya =
                 // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
                 |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
-        win.RenderTask <- sg |> Sg.compile win.Runtime win.FramebufferSignature
+        use task = sg |> Sg.compile win.Runtime win.FramebufferSignature
+        win.RenderTask <- task
         win.Run()
 

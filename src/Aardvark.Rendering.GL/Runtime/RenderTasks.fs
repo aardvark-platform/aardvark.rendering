@@ -904,6 +904,7 @@ module RenderTasks =
                         old.Dispose()
                         for r in all do resources.Remove r
                         callStats.Remove ro
+                        ro.Activation <- old
                 }
 
             ro

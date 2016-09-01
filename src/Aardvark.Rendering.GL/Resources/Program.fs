@@ -146,7 +146,7 @@ module ProgramReflector =
 
     let samplerHackRegex = System.Text.RegularExpressions.Regex("_samplerState[0-9]+(\[[0-9]+\])?$")
 
-    let getActiveUniform (p : int) (slot : int) =
+    let getActiveUniform (expectsRowMajorMatrices : bool) (p : int) (slot : int) =
         let mutable length = 0
         let mutable size = 0
         let mutable uniformType = ActiveUniformType.Float
@@ -157,8 +157,11 @@ module ProgramReflector =
         let mutable slot = slot
         let mutable stride = 0
         GL.GetActiveUniforms(p, 1, &slot, ActiveUniformParameter.UniformArrayStride, &stride)
+        GL.Check "could not get active uniform"
 
-
+        let mutable isRowMajor = 0
+        GL.GetActiveUniforms(p, 1, &slot, ActiveUniformParameter.UniformIsRowMajor, &isRowMajor)
+        let isRowMajor = if expectsRowMajorMatrices then isRowMajor = 0 else isRowMajor <> 0
         GL.Check "could not get active uniform"
 
         let location = GL.GetUniformLocation(p, name)
@@ -167,9 +170,9 @@ module ProgramReflector =
         if semantic <> name 
         then Log.warn "replaced uniform semantic value (%s -> %s), this might be an error or due to usage of lins." name semantic
 
-        { slot = slot; index = 0; location = location; name = name; semantic = semantic; samplerState = None; size = size; uniformType = uniformType; offset = -1; arrayStride = stride; isRowMajor = false }
+        { slot = slot; index = 0; location = location; name = name; semantic = semantic; samplerState = None; size = size; uniformType = uniformType; offset = -1; arrayStride = stride; isRowMajor = isRowMajor }
 
-    let getActiveUniformBlocks (p : int) =
+    let getActiveUniformBlocks (expectsRowMajorMatrices : bool) (p : int) =
         [
             let blockCount = GL.GetProgram(p, GetProgramParameterName.ActiveUniformBlocks)
             GL.Check "could not get active uniforms"
@@ -193,7 +196,7 @@ module ProgramReflector =
                 let referencedBy = getActiveUniformBlockReferences p b
 
 
-                let fields = uniformIndices |> Array.map (getActiveUniform p)
+                let fields = uniformIndices |> Array.map (getActiveUniform expectsRowMajorMatrices p)
 
                 let offsets = Array.create fieldCount -1
                 GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformOffset, offsets);
@@ -207,12 +210,8 @@ module ProgramReflector =
                 GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformSize, sizes);
                 GL.Check "could not get field offsets for uniform block"
 
-                let rowMajor = Array.create fieldCount 0
-                GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformIsRowMajor, rowMajor);
-                GL.Check "could not get field majorities for uniform block"
-
                 for i in 0..fields.Length-1 do
-                    fields.[i] <- { fields.[i] with offset = offsets.[i]; arrayStride = strides.[i]; size = sizes.[i]; isRowMajor = (rowMajor.[i] = 1) }
+                    fields.[i] <- { fields.[i] with offset = offsets.[i]; arrayStride = strides.[i]; size = sizes.[i] }
 
                 GL.UniformBlockBinding(p, b, b)
                 GL.Check "could not set uniform buffer binding"
@@ -221,13 +220,13 @@ module ProgramReflector =
 
         ]
 
-    let getActiveUniforms (p : int) (firstTexture : int) (imageSlots : Map<Symbol, int>) =
+    let getActiveUniforms (expectsRowMajorMatrices : bool) (p : int) (firstTexture : int) (imageSlots : Map<Symbol, int>) =
         let count = GL.GetProgram(p, GetProgramParameterName.ActiveUniforms)
         GL.Check "could not get active uniform count"
         let binding = ref firstTexture
 
         [ for i in 0..count-1 do
-            let u = getActiveUniform p i
+            let u = getActiveUniform expectsRowMajorMatrices p i
             
             if u.location >= 0 then
                 match u.uniformType with
@@ -593,7 +592,7 @@ module ProgramExtensions =
 
             )
 
-        let tryLinkProgram (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (imageSlots : Map<Symbol, int>) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
+        let tryLinkProgram (expectsRowMajorMatrices : bool) (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (imageSlots : Map<Symbol, int>) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
             GL.LinkProgram(handle)
             GL.Check "could not link program"
 
@@ -633,8 +632,8 @@ module ProgramExtensions =
                         Code = code
                         Handle = handle
                         Shaders = shaders
-                        UniformBlocks = ProgramReflector.getActiveUniformBlocks handle
-                        Uniforms = ProgramReflector.getActiveUniforms handle firstTexture imageSlots
+                        UniformBlocks = ProgramReflector.getActiveUniformBlocks expectsRowMajorMatrices handle
+                        Uniforms = ProgramReflector.getActiveUniforms expectsRowMajorMatrices handle firstTexture imageSlots
                         UniformGetters = SymDict.empty
                         SamplerStates = SymDict.empty
                         Inputs = ProgramReflector.getActiveInputs handle
@@ -670,7 +669,7 @@ module ProgramExtensions =
             x |> ShaderCompiler.tryCompileShader stage code entryPoint
 
 
-        member x.TryCompileProgram(fboSignature : IFramebufferSignature, code : string) =
+        member x.TryCompileProgram(fboSignature : IFramebufferSignature, expectsRowMajorMatrices : bool, code : string) =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders true code with
                     | Success shaders ->
@@ -691,7 +690,7 @@ module ProgramExtensions =
                             GL.AttachShader(handle, s.Handle)
                             GL.Check "could not attach shader to program"
 
-                        match x |> ShaderCompiler.tryLinkProgram handle code shaders firstTexture imageSlots (ShaderCompiler.setFragDataLocations fboSignature) with
+                        match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders firstTexture imageSlots (ShaderCompiler.setFragDataLocations fboSignature) with
                             | Success program ->
                                 Success program
                             | Error err ->
@@ -702,7 +701,7 @@ module ProgramExtensions =
                         Error err
             )
 
-        member x.TryCompileTransformFeedbackProgram(wantedSemantics : list<Symbol>, code : string) =
+        member x.TryCompileTransformFeedbackProgram(wantedSemantics : list<Symbol>, expectsRowMajorMatrices : bool, code : string) =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders false code with
                     | Success shaders ->
@@ -717,7 +716,7 @@ module ProgramExtensions =
                             GL.Check "could not attach shader to program"
 
              
-                        match x |> ShaderCompiler.tryLinkProgram handle code shaders 0 Map.empty (ShaderCompiler.setTransformFeedbackVaryings wantedSemantics) with
+                        match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders 0 Map.empty (ShaderCompiler.setTransformFeedbackVaryings wantedSemantics) with
                             | Success program ->
                                 Success program
                             | Error err ->
@@ -728,14 +727,14 @@ module ProgramExtensions =
                         Error err
             )
 
-        member x.CompileProgram(fboSignature : IFramebufferSignature, code : string) =
-            match x.TryCompileProgram(fboSignature, code) with
+        member x.CompileProgram(fboSignature : IFramebufferSignature, expectsRowMajorMatrices : bool, code : string) =
+            match x.TryCompileProgram(fboSignature, expectsRowMajorMatrices, code) with
                 | Success p -> p
                 | Error e ->
                     failwithf "[GL] shader compiler returned errors: %s" e
 
-        member x.CompileTransformFeedbackProgram(wantedSemantics : list<Symbol>, code : string) =
-            match x.TryCompileTransformFeedbackProgram(wantedSemantics, code) with
+        member x.CompileTransformFeedbackProgram(wantedSemantics : list<Symbol>, expectsRowMajorMatrices : bool, code : string) =
+            match x.TryCompileTransformFeedbackProgram(wantedSemantics, expectsRowMajorMatrices, code) with
                 | Success p -> p
                 | Error e ->
                     failwithf "[GL] shader compiler returned errors: %s" e

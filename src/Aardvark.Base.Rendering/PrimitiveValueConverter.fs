@@ -990,6 +990,10 @@ module PrimitiveValueConverter =
             inherit FSharpFunc<'a, 'c>()
             override x.Invoke(a : 'a) = g (f a)
 
+        type IdLambda<'a>() =
+            inherit FSharpFunc<'a, 'a>()
+            override x.Invoke(v : 'a) = v
+
 
         let compose (f : obj) (g : obj) =
             let ft = f.GetType()
@@ -1014,6 +1018,10 @@ module PrimitiveValueConverter =
             match transposeMapping.TryGetValue r with
                 | (true, transpose) -> compose f transpose
                 | _ -> f
+
+        let idFunction (t : Type) =
+            let t = typedefof<IdLambda<_>>.MakeGenericType [| t |]
+            Activator.CreateInstance(t)
 
     let rec getConverter (inType : Type) (outType : Type) =
         if outType.IsArray && inType.IsArray then
@@ -1085,12 +1093,30 @@ module PrimitiveValueConverter =
         ArrayConverterCache.Get(inputType, outputType)
 
     let private uniformCache = Dict<bool * Type * Type, obj>()
-    let getUniformConverter (rowMajor : bool) (inType : Type) (outType : Type) =
-        let key = (rowMajor, inType, outType)
-        uniformCache.GetOrCreate(key, fun (rowMajor, inType, outType) ->
-            if rowMajor then getConverter inType outType
-            else getConverter inType outType |> withTranspose
+    let getUniformConverter (transpose : bool) (inType : Type) (outType : Type) =
+        let key = (transpose, inType, outType)
+        lock uniformCache (fun () ->
+            uniformCache.GetOrCreate(key, fun (rowMajor, inType, outType) ->
+                if transpose then getConverter inType outType |> withTranspose
+                else getConverter inType outType
+            )
         )
+
+    let private idFunctions = Dict<Type, obj>()
+    let getIdentityConverter (t : Type) =
+        lock idFunctions (fun () ->
+            idFunctions.GetOrCreate(t, fun t -> idFunction t)
+        )
+
+    let getTransposeConverter (t : Type) =
+        match transposeMapping.TryGetValue t with
+            | (true, v) -> v
+            | _ -> getIdentityConverter t
+
+    let isTransposable (t : Type) =
+        transposeMapping.ContainsKey t
+
+
 
     let converter<'a, 'b> : 'a -> 'b =
         if typeof<'a> = typeof<'b> then
@@ -1103,10 +1129,14 @@ module PrimitiveValueConverter =
         if inputType = typeof<'a> then unbox
         else ArrayConverterCache<'a>.Get(inputType)
 
-    let uniformConverter<'a, 'b> (rowMajor : bool) : 'a -> 'b =
-        if rowMajor && typeof<'a> = typeof<'b> then
+    let uniformConverter<'a, 'b> (transpose : bool) : 'a -> 'b =
+        if not transpose && typeof<'a> = typeof<'b> then
             let f = id : 'a -> 'a
             f |> unbox
         else
-            getUniformConverter rowMajor typeof<'a> typeof<'b> |> unbox
+            getUniformConverter transpose typeof<'a> typeof<'b> |> unbox
 
+    let transpose<'a> : 'a -> 'a =
+        getTransposeConverter typeof<'a> |> unbox
+
+    let transposable<'a> = isTransposable typeof<'a>

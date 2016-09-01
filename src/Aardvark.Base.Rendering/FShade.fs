@@ -205,7 +205,7 @@ module FShadeInterop =
                 createBindings = false
                 createDescriptorSets = false
                 createInputLocations = true
-                createRowMajorMatrices = false
+                expectRowMajorMatrices = true
                 createPerStageUniforms = false
                 flipHandedness = false
                 depthRange = Range1d(-1.0,1.0)
@@ -221,7 +221,7 @@ module FShadeInterop =
                 createBindings = false
                 createDescriptorSets = false
                 createInputLocations = false
-                createRowMajorMatrices = false
+                expectRowMajorMatrices = true
                 createPerStageUniforms = false
                 flipHandedness = false
                 depthRange = Range1d(-1.0,1.0)
@@ -238,7 +238,7 @@ module FShadeInterop =
                 createBindings = false
                 createDescriptorSets = false
                 createInputLocations = false
-                createRowMajorMatrices = false
+                expectRowMajorMatrices = true
                 createPerStageUniforms = false
                 flipHandedness = false
                 depthRange = Range1d(-1.0,1.0)
@@ -254,7 +254,7 @@ module FShadeInterop =
                 createBindings = true
                 createDescriptorSets = true
                 createInputLocations = true
-                createRowMajorMatrices = true
+                expectRowMajorMatrices = true
                 createPerStageUniforms = true
                 flipHandedness = true
                 depthRange = Range1d(0.0,1.0)
@@ -340,7 +340,7 @@ module FShadeInterop =
                                                     ()
 
                                             let bs = getOrCreateSurface code 
-                                            let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplerStates, semanticMap) 
+                                            let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplerStates, semanticMap, glslConfig.expectRowMajorMatrices) 
                                             cache.[signature] <- result
                                             result
     

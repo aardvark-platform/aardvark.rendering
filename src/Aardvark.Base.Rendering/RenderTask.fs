@@ -579,7 +579,7 @@ module RenderTask =
             )
 
         override x.Dispose() =
-            for t in tasks do t.RemoveOutput x
+            for t in tasks do t.Dispose()
 
         override x.Run(output) =
             let mutable stats = FrameStatistics.Zero
@@ -618,7 +618,7 @@ module RenderTask =
                 | Some oi when oi = ni -> ()
                 | _ ->
                     match inner with
-                        | Some oi -> oi.RemoveOutput x
+                        | Some oi -> oi.Dispose()
                         | _ -> ()
 
                     ni.AddOutput x
@@ -630,7 +630,7 @@ module RenderTask =
             input.RemoveOutput x
             match inner with
                 | Some i -> 
-                    i.RemoveOutput x
+                    i.Dispose()
                     inner <- None
                 | _ -> ()
 
@@ -662,7 +662,7 @@ module RenderTask =
 
         let remove (t : IRenderTask) =
             if tasks.Remove t then
-                t.RemoveOutput this
+                t.Dispose()
 
         let processDeltas() =
             // TODO: EvaluateAlways should ensure that self is OutOfDate since
@@ -713,7 +713,7 @@ module RenderTask =
             reader.Dispose()
 
             for i in tasks do
-                i.RemoveOutput x
+                i.Dispose()
             tasks.Clear()
                 
         override x.Runtime =
@@ -780,7 +780,7 @@ module RenderTask =
 
             res
 
-        override x.Dispose() = inner.RemoveOutput x
+        override x.Dispose() = inner.Dispose()
         override x.Runtime = inner.Runtime
 
 

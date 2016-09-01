@@ -208,9 +208,9 @@ module UniformPaths =
     // Test
 
 
-    let private createLeafTransformation (rowMajor : bool) (outputType : Type) (input : Expr) =
+    let private createLeafTransformation (transpose : bool) (outputType : Type) (input : Expr) =
         if input.Type <> outputType then
-            let converter = PrimitiveValueConverter.getUniformConverter rowMajor input.Type outputType
+            let converter = PrimitiveValueConverter.getUniformConverter transpose input.Type outputType
             let f = Expr.Value(converter, converter.GetType())
             Expr.Application(f, input)
         else
@@ -267,7 +267,7 @@ module UniformPaths =
 
     let private cache = Dictionary<UniformPath * Type * Type, obj>()
 
-    let compileUniformPathUntyped (rowMajor : bool) (path : UniformPath) (inputType : Type) (outputType : Type) =
+    let compileUniformPathUntyped (transpose : bool) (path : UniformPath) (inputType : Type) (outputType : Type) =
         lock cache (fun () ->
             let key = (path, inputType, outputType)
             match cache.TryGetValue key with
@@ -276,11 +276,11 @@ module UniformPaths =
                     let result = 
                         match path with
                             | ValuePath _ -> 
-                                PrimitiveValueConverter.getUniformConverter rowMajor inputType outputType
+                                PrimitiveValueConverter.getUniformConverter transpose inputType outputType
                             | _ -> 
                                 let input = Var("input", inputType)
                                 let e = createUniformPath (Expr.Var input) path
-                                let lambda = Expr.Lambda(input, createLeafTransformation rowMajor outputType e)
+                                let lambda = Expr.Lambda(input, createLeafTransformation transpose outputType e)
                                 lambda.CompileUntyped()
                     cache.[key] <- result
                     result
@@ -408,11 +408,13 @@ module UnmanagedUniformWriters =
 
                         let creators = 
                             fields |> List.map (fun f ->
+                                let transpose = not f.isRowMajor
+
                                 let tTarget = UniformConverter.getExpectedType target f.uniformType
                                 if f.count = 1 then
                                         
                                     if tSource <> tTarget then
-                                        let converter = UniformPaths.compileUniformPathUntyped f.isRowMajor f.path tSource tTarget
+                                        let converter = UniformPaths.compileUniformPathUntyped transpose f.path tSource tTarget
 
                                         let tWriter = typedefof<ConversionWriter<int,int>>.MakeGenericType [|tSource; tTarget|]
                                         let ctor = tWriter.GetConstructor [|tMod; typeof<int>; converter.GetType()|]

@@ -95,19 +95,22 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     interface IControl with
         member x.IsInvalid = needsRedraw
         member x.Invalidate() =
-            if not renderContiuously then
+            if not x.IsDisposed && not renderContiuously then
                 if not needsRedraw then
                     needsRedraw <- true
                     x.Invalidate()
 
         member x.Paint() =
-            if not renderContiuously then
+            if not x.IsDisposed && not renderContiuously then
                 use g = x.CreateGraphics()
                 use e = new PaintEventArgs(g, x.ClientRectangle)
                 x.InvokePaint(x, e)
 
         member x.Invoke f =
-            base.Invoke (new System.Action(f)) |> ignore
+            if not x.IsDisposed then 
+                base.Invoke (new System.Action(f)) |> ignore
+            else
+                f()
 
     member private x.ForceRedraw() =
         if renderContiuously then () 
