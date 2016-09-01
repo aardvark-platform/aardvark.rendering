@@ -3,6 +3,9 @@
 open System
 open Aardvark.Base.Incremental
 open System.Runtime.InteropServices
+open Microsoft.FSharp.NativeInterop
+
+#nowarn "9"
 
 type IBuffer = interface end
 
@@ -26,7 +29,6 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
             | :? BufferView as o ->
                 o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
             | _ -> false
-
 
 type NullBuffer(value : V4f) =
     interface IBuffer
@@ -114,3 +116,76 @@ module BufferView =
     let ofArray (arr : Array) =
         let t = arr.GetType().GetElementType()
         BufferView(Mod.constant (ArrayBuffer arr :> IBuffer), t)
+
+
+    [<AbstractClass>]
+    type private Reader() =
+        static let cache = Dict<Type, Reader>()
+        
+        static member Get (t : Type) =
+            cache.GetOrCreate(t, fun t ->
+                let rt = typedefof<Reader<int>>.MakeGenericType [|t|]
+                let instance = Activator.CreateInstance rt
+                instance |> unbox<Reader>
+            )
+
+        abstract member Read : ptr : nativeint * count : int * stride : int -> Array
+        abstract member Initialize : 'a * int -> Array
+
+    and private Reader<'a when 'a : unmanaged>() =
+        inherit Reader()
+
+        override x.Read(ptr : nativeint, count : int, stride : int) =
+            let arr : 'a[] = Array.zeroCreate count
+
+            if stride = 0 || stride = sizeof<'a> then
+                let size = count * sizeof<'a>
+                let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+                try NativeInt.memcpy ptr (gc.AddrOfPinnedObject()) size
+                finally gc.Free()
+            else
+                let step = nativeint stride
+                let mutable current = ptr
+                for i in 0 .. count - 1 do
+                    arr.[i] <- NativeInt.read current
+                    current <- current + step
+
+            arr :> Array
+
+        override x.Initialize (value : 'x, count : int) =
+            let conv = PrimitiveValueConverter.converter<'x, 'a> 
+            Array.create count (conv value) :> Array
+
+    let download (startIndex : int) (count : int) (view : BufferView) =
+        let elementType = view.ElementType
+        let elementSize = Marshal.SizeOf elementType
+        let reader = Reader.Get elementType
+        let offset = view.Offset + elementSize * startIndex
+
+        let stride =
+            if view.Stride = 0 then elementSize
+            else view.Stride
+
+        view.Buffer |> Mod.map (fun b -> 
+            match b with
+                | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
+                    if count = a.Data.Length then 
+                        a.Data
+                    else
+                        let res = Array.CreateInstance(elementType, count)
+                        Array.Copy(a.Data, res, count)
+                        res
+
+                | :? INativeBuffer as b ->
+                    let available = (b.SizeInBytes - view.Offset) / elementSize
+                    if count > available then
+                        raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements")
+
+                    b.Use (fun ptr -> reader.Read(ptr + nativeint offset, count, stride))
+
+                | :? NullBuffer as nb ->
+                    reader.Initialize(nb.Value, count)
+
+                | _ ->
+                    failwith "[BufferView] unknown buffer-type"
+        )

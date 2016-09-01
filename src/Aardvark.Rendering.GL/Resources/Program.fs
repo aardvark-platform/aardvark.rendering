@@ -355,7 +355,15 @@ module ProgramExtensions =
             if m.Success then m.Groups.["name"].Value
             else u.semantic
 
-        { UniformField.semantic = sem; UniformField.path = parsePath u.name; UniformField.offset = u.offset; arrayStride = u.arrayStride; UniformField.uniformType = u.uniformType; UniformField.count = u.size }
+        { 
+            UniformField.semantic = sem
+            UniformField.path = parsePath u.name
+            UniformField.offset = u.offset
+            arrayStride = u.arrayStride
+            UniformField.uniformType = u.uniformType
+            UniformField.isRowMajor = u.isRowMajor
+            UniformField.count = u.size 
+        }
 
     type ActiveUniform with
         member x.UniformField = activeUniformToField x
@@ -373,7 +381,7 @@ module ProgramExtensions =
     let private addPreprocessorDefine (define : string) (code : string) =
         let replaced = ref false
         let def = sprintf "#define %s\r\n" define
-        let layout = "layout(row_major) uniform;\r\n"
+        let layout = "" //"layout(row_major) uniform;\r\n"
 
         let newCode = 
             versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->

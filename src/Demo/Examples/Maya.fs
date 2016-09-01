@@ -15,6 +15,9 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
 
+
+
+
 module Maya = 
 
     module Shader =
@@ -64,9 +67,9 @@ module Maya =
 
     
     let run () =
+
         Ag.initialize()
         Aardvark.Init()
-
         use app = new OpenGlApplication()
         let win = app.CreateSimpleRenderWindow(1)
         win.Text <- "Aardvark rocks \\o/"
