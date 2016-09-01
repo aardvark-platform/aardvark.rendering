@@ -226,3 +226,6 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
 
     static member HSetStencilMode (mode : StencilModeHandle) =
         Instruction(InstructionCode.HSetStencilMode, [| mode.Pointer :> obj |])
+
+    static member HBindVertexArray (arr : nativeint) =
+        Instruction(InstructionCode.BindVertexArray, [| Aardvark.Base.Ptr32 arr :> obj |])

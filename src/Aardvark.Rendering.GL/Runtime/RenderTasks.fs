@@ -866,28 +866,27 @@ module RenderTasks =
                 vaoCache.GetOrCreate(
                     [this.Scope.currentContext :> obj; ro.VertexArray.Handle :> obj],
                     (fun () ->
-                        { new Resource<nativeptr<int>>(ResourceKind.Unknown) with
-                            member x.Create (old) = 
+                        { new Resource<nativeint>(ResourceKind.Unknown) with
+                            override x.Create (old) = 
                                 let ctx = this.Scope.currentContext.GetValue x
                                 let handle = ro.VertexArray.Handle.GetValue x
-                                let ptr = NativePtr.alloc 1
-                                NativePtr.write ptr handle.Handle
-                                ptr, FrameStatistics.Zero
+                                match old with
+                                    | Some old ->
+                                        NativeInt.write old handle.Handle
+                                        old, FrameStatistics.Zero
 
-                            member x.Destroy handle = NativePtr.free handle
-                            member x.GetInfo handle = ResourceInfo.Zero
+                                    | None -> 
+                                        let ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal sizeof<int>
+                                        NativeInt.write ptr handle.Handle
+                                        ptr, FrameStatistics.Zero
+
+                            override x.Destroy handle = System.Runtime.InteropServices.Marshal.FreeHGlobal handle
+                            override x.GetInfo handle = ResourceInfo.Zero
                         }
                     )
                 )
 
-            let ro = { ro with VertexArrayHandle = Some res }
-//                vaoCache.GetOrCreate(r, {
-//                    create = fun b      -> let ptr = NativePtr.alloc 1 in NativePtr.write ptr b; ptr
-//                    update = fun h b    -> NativePtr.write h b; h
-//                    delete = fun h      -> NativePtr.free h
-//                    info =   fun h      -> ResourceInfo.Zero
-//                    kind = ResourceKind.Unknown
-//                })
+            let ro = { ro with VertexArrayHandle = res }
 
 
             let all = ro.Resources |> Seq.toList
@@ -907,7 +906,7 @@ module RenderTasks =
                         callStats.Remove ro
                 }
 
-            { ro with VertexArrayHandle = Some res }
+            ro
 
         let rec prepareRenderObject (ro : IRenderObject) =
             match ro with

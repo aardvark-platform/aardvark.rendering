@@ -24,20 +24,20 @@ module Instructions =
         )
 
     let setDepthTest (m : IResource<DepthTestModeHandle>) =
-        m.Handle |> Mod.force |> Instruction.HSetDepthTest |> List.singleton |> Mod.constant
+        m.Handle |> Mod.force |> Instruction.HSetDepthTest
 
 
     let setPolygonMode (m : IResource<PolygonModeHandle>) =
-        m.Handle |> Mod.force |> Instruction.HSetPolygonMode |> List.singleton |> Mod.constant
+        m.Handle |> Mod.force |> Instruction.HSetPolygonMode
 
     let setCullMode (m : IResource<CullModeHandle>) =        
-        m.Handle |> Mod.force |> Instruction.HSetCullFace |> List.singleton |> Mod.constant
+        m.Handle |> Mod.force |> Instruction.HSetCullFace
 
     let setBlendMode (m : IResource<BlendModeHandle>) =
-        m.Handle |> Mod.force |> Instruction.HSetBlendMode |> List.singleton |> Mod.constant
+        m.Handle |> Mod.force |> Instruction.HSetBlendMode
 
     let setStencilMode (m : IResource<StencilModeHandle>) =
-        m.Handle |> Mod.force |> Instruction.HSetStencilMode |> List.singleton |> Mod.constant
+        m.Handle |> Mod.force |> Instruction.HSetStencilMode 
 
     let bindProgram (p : IResource<Program>) =
         p.Handle |> Mod.map (fun r -> Instruction.BindProgram(r.Handle))

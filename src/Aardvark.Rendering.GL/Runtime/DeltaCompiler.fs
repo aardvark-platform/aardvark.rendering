@@ -109,7 +109,8 @@ module DeltaCompiler =
 
             // bind the VAO (if needed)
             if prev.VertexArray <> me.VertexArray then
-                yield Instructions.bindVertexArray me.VertexArray
+                let ptr = me.VertexArrayHandle.Handle |> Mod.force 
+                yield Instruction.HBindVertexArray ptr
 
             // bind vertex attribute default values
             for (id,v) in Map.toSeq me.VertexAttributeValues do

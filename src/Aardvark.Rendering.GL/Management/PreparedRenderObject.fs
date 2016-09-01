@@ -42,7 +42,7 @@ type PreparedRenderObject =
         StencilMode : IResource<StencilModeHandle>
 
         mutable VertexArray : IResource<VertexArrayObject>
-        VertexArrayHandle : Option<IResource<nativeptr<int>>>
+        VertexArrayHandle : IResource<nativeint>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
         
         ColorAttachmentCount : int
@@ -103,10 +103,8 @@ type PreparedRenderObject =
 
 
             yield x.VertexArray :> _ 
-            match x.VertexArrayHandle with
-                | Some r -> yield r :> _
-                | _ -> ()
-            
+            if not (isNull (x.VertexArrayHandle :> obj)) then
+                yield x.VertexArrayHandle :> _
             yield x.IsActive :> _
             yield x.BeginMode :> _
             
@@ -147,9 +145,9 @@ type PreparedRenderObject =
             | _ -> x.DrawCallInfos.Update(caller) |> add
 
         x.VertexArray.Update(caller) |> add
-        match x.VertexArrayHandle with
-            | Some r -> r.Update(caller) |> add
-            | _ -> ()
+        if not (isNull (x.VertexArrayHandle :> obj)) then
+            x.VertexArrayHandle.Update(caller) |> add
+
 
         x.IsActive.Update(caller) |> add
         x.BeginMode.Update(caller) |> add
@@ -247,7 +245,7 @@ module PreparedRenderObject =
             PolygonMode = Unchecked.defaultof<_>
             BlendMode = Unchecked.defaultof<_>
             StencilMode = Unchecked.defaultof<_>
-            VertexArrayHandle = None
+            VertexArrayHandle = Unchecked.defaultof<_>
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -293,7 +291,7 @@ module PreparedRenderObject =
                 PolygonMode  = o.PolygonMode 
                 BlendMode  = o.BlendMode 
                 StencilMode  = o.StencilMode 
-                VertexArrayHandle = None
+                VertexArrayHandle = o.VertexArrayHandle
             }  
 
         for r in res.Resources do
@@ -620,7 +618,7 @@ type ResourceManagerExtensions private() =
                 PolygonMode = polygonMode
                 BlendMode = blendMode
                 StencilMode = stencilMode
-                VertexArrayHandle = None
+                VertexArrayHandle = Unchecked.defaultof<_>
 
             }
 
