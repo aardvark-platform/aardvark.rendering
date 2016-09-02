@@ -10,11 +10,6 @@ open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 
-type DrawCallStats =
-    | NoDraw
-    | DirectDraw of count : int * instances : int
-    | IndirectDraw of count : int
-
 [<CustomEquality;CustomComparison>]
 type PreparedRenderObject =
     {
@@ -52,11 +47,6 @@ type PreparedRenderObject =
         StencilBufferMask : bool
 
 
-
-
-        //ClipDistanceBitmask : array<bool>
-
-        DrawCallStats : IMod<DrawCallStats>
         mutable ResourceCount : int
         mutable ResourceCounts : Map<ResourceKind, int>
 
@@ -234,7 +224,6 @@ module PreparedRenderObject =
             DepthBufferMask = true
             StencilBufferMask = true
             IsDisposed = false
-            DrawCallStats = Mod.constant NoDraw
             ResourceCount = 0
             ResourceCounts = Map.empty
             IsActive = Unchecked.defaultof<_>
@@ -279,7 +268,6 @@ module PreparedRenderObject =
                 DepthBufferMask = o.DepthBufferMask
                 StencilBufferMask = o.StencilBufferMask
                 IsDisposed = o.IsDisposed
-                DrawCallStats = o.DrawCallStats
                 ResourceCount = o.ResourceCount
                 ResourceCounts = o.ResourceCounts
 
@@ -307,11 +295,6 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
             | h::_ -> h
 
     let last = children |> List.last
-
-    let drawCallStats =
-        children |> List.map (fun c -> c.DrawCallStats) |> Mod.mapN Seq.toList
-
-    member x.DrawCallStats = drawCallStats
 
     member x.Children = children
 
@@ -557,32 +540,6 @@ type ResourceManagerExtensions private() =
         let blendMode = x.CreateBlendMode rj.BlendMode
         let stencilMode = x.CreateStencilMode rj.StencilMode
 
-        let drawCallStats =
-            Mod.custom (fun self ->
-                match indirect with
-                    | Some ib ->
-                        // we don't want to update the indirect-buffer but we need to depend on it
-                        lock ib (fun () -> ib.Outputs.Add self |> ignore)
-                        match isNull ib.Handle with
-                        | false ->
-                            let ib = ib.Handle.GetValue(self)
-                            match Unchecked.equals (ib :> obj) null with
-                            | false ->
-                                let calls = ib.Count |> NativePtr.read
-                                IndirectDraw calls
-                            | true -> DrawCallStats.NoDraw //where is the value
-                        | true -> DrawCallStats.NoDraw //wtf is going on
-
-                    | None ->
-                        let mutable instances = 0
-                        let calls = drawCalls.Handle.GetValue(self)
-                        for i in 0 .. calls.Count - 1 do
-                            let info = NativePtr.get calls.Infos i
-                            instances <- instances + info.InstanceCount
-                        let calls = calls.Count
-                        DirectDraw (calls, instances)
-            )
-
 
 
         // finally return the PreparedRenderObject
@@ -609,7 +566,6 @@ type ResourceManagerExtensions private() =
                 DepthBufferMask = depthMask
                 StencilBufferMask = stencilMask
                 IsDisposed = false
-                DrawCallStats = drawCallStats
                 ResourceCount = -1
                 ResourceCounts = Map.empty
 

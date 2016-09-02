@@ -165,7 +165,7 @@ module RenderProgram =
             compiled.functionPointer, compiled.args
 
         let optimized scope comparer input =
-            let scope = { scope with stats = ref FrameStatistics.Zero }
+            //let scope = { scope with stats = ref FrameStatistics.Zero }
             let inner = FragmentHandler.native 6
 
             
@@ -182,28 +182,33 @@ module RenderProgram =
 //                h.epilog.Write(c)
 //                h.writeNext h.prolog h.epilog |> ignore
 //                h
-
-            { new WrappedRenderProgram(AdaptiveProgram.custom comparer handler input) with
+            let inner = AdaptiveProgram.custom comparer handler input
+            { new WrappedRenderProgram(inner) with
                 override x.Run() =
                     x.RunInner()
-                    !scope.stats
+                    { FrameStatistics.Zero with 
+                        ActiveInstructionCount = float inner.NativeCallCount 
+                        InstructionCount = float inner.NativeCallCount 
+                    }
             } :> IRenderProgram
 
         let unoptimized scope comparer input =
-            let scope = { scope with stats = ref FrameStatistics.Zero }
             let inner = FragmentHandler.native 6
 
             let handler = FragmentHandler.wrapSimple instructionToCall ExecutionContext.callToInstruction (compileFull scope) inner
 
-            { new WrappedRenderProgram(AdaptiveProgram.custom comparer handler input) with
+            let inner = AdaptiveProgram.custom comparer handler input
+            { new WrappedRenderProgram(inner) with
                 override x.Run() =
                     x.RunInner()
-                    !scope.stats
+                    { FrameStatistics.Zero with 
+                        ActiveInstructionCount = float inner.NativeCallCount 
+                        InstructionCount = float inner.NativeCallCount 
+                    }
             } :> IRenderProgram
 
     module GLVM =
         let private glvmBase scope needsPrev mode comparer input =
-            let scope = { scope with stats = ref FrameStatistics.Zero }
             GLVM.vmInit()
 
             let vmStats = ref (VMStats())
@@ -264,11 +269,11 @@ module RenderProgram =
                 override x.Run() =
                     x.RunInner()
 
-                    let baseStats = !scope.stats
                     let vmStats = !vmStats
 
-                    { baseStats with
-                        ActiveInstructionCount = baseStats.ActiveInstructionCount - float vmStats.RemovedInstructions
+                    { FrameStatistics.Zero with
+                        InstructionCount = float vmStats.TotalInstructions
+                        ActiveInstructionCount = float vmStats.TotalInstructions - float vmStats.RemovedInstructions
                     }
             } :> IRenderProgram
 
@@ -309,7 +314,6 @@ module RenderProgram =
                     ExecutionContext.run i
 
         let optimized scope comparer input =
-            let scope = { scope with stats = ref FrameStatistics.Zero }
             let handler () =
                 let prolog = ManagedFragment [||]
                 let epilog = ManagedFragment [||]
@@ -332,14 +336,17 @@ module RenderProgram =
                     disassemble = fun f -> f.Instructions |> Array.toList
                 }  
 
-            { new WrappedRenderProgram(AdaptiveProgram.custom comparer handler input) with
+            let inner = AdaptiveProgram.custom comparer handler input
+            { new WrappedRenderProgram(inner) with
                 override x.Run() =
                     x.RunInner()
-                    !scope.stats
+                    { FrameStatistics.Zero with 
+                        ActiveInstructionCount = float inner.NativeCallCount 
+                        InstructionCount = float inner.NativeCallCount 
+                    }
             } :> IRenderProgram
 
         let unoptimized scope comparer input =
-            let scope = { scope with stats = ref FrameStatistics.Zero }
             let handler () =
                 let prolog = ManagedFragment [||]
                 let epilog = ManagedFragment [||]
@@ -362,10 +369,14 @@ module RenderProgram =
                     disassemble = fun f -> f.Instructions |> Array.toList
                 }  
 
-            { new WrappedRenderProgram(AdaptiveProgram.custom comparer handler input) with
+            let inner = AdaptiveProgram.custom comparer handler input
+            { new WrappedRenderProgram(inner) with
                 override x.Run() =
                     x.RunInner()
-                    !scope.stats
+                    { FrameStatistics.Zero with 
+                        ActiveInstructionCount = float inner.NativeCallCount 
+                        InstructionCount = float inner.NativeCallCount 
+                    }
             } :> IRenderProgram
 
     module Debug =
@@ -384,7 +395,6 @@ module RenderProgram =
                 ExecutionContext.debug i
 
         let optimized scope comparer input =
-            let scope = { scope with stats = ref FrameStatistics.Zero }
             let handler () =
                 let prolog = ManagedFragment [||]
                 let epilog = ManagedFragment [||]
@@ -407,14 +417,17 @@ module RenderProgram =
                     disassemble = fun f -> f.Instructions |> Array.toList
                 }  
 
-            { new WrappedRenderProgram(AdaptiveProgram.custom comparer handler input) with
+            let inner = AdaptiveProgram.custom comparer handler input
+            { new WrappedRenderProgram(inner) with
                 override x.Run() =
                     x.RunInner()
-                    !scope.stats
+                    { FrameStatistics.Zero with 
+                        ActiveInstructionCount = float inner.NativeCallCount 
+                        InstructionCount = float inner.NativeCallCount 
+                    }
             } :> IRenderProgram
 
         let unoptimized scope comparer input =
-            let scope = { scope with stats = ref FrameStatistics.Zero }
             let handler () =
                 let prolog = ManagedFragment [||]
                 let epilog = ManagedFragment [||]
@@ -437,8 +450,12 @@ module RenderProgram =
                     disassemble = fun f -> f.Instructions |> Array.toList
                 }  
 
-            { new WrappedRenderProgram(AdaptiveProgram.custom comparer handler input) with
+            let inner = AdaptiveProgram.custom comparer handler input
+            { new WrappedRenderProgram(inner) with
                 override x.Run() =
                     x.RunInner()
-                    !scope.stats
+                    { FrameStatistics.Zero with 
+                        ActiveInstructionCount = float inner.NativeCallCount 
+                        InstructionCount = float inner.NativeCallCount 
+                    }
             } :> IRenderProgram

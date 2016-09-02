@@ -13,7 +13,8 @@ type MetaInstruction = IMod<list<Instruction>>
 
 type CompilerInfo =
     {
-        stats : ref<FrameStatistics>
+        //stats : ref<FrameStatistics>
+        runtimeStats : nativeptr<V2i>
         currentContext : IMod<ContextHandle>
         drawBuffers : nativeint
         drawBufferCount : int
@@ -27,6 +28,7 @@ type CompilerInfo =
 
 type CompilerState =
     {
+        runtimeStats        : nativeptr<V2i>
         info                : CompilerInfo
         instructions        : list<MetaInstruction>
         disposeActions      : list<unit -> unit>

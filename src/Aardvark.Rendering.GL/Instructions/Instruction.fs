@@ -200,17 +200,17 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
         Instruction(InstructionCode.DrawBuffers, [|n :> obj; ptr :> obj |])
 
 
-    static member HDrawArrays (isActive : IsActiveHandle) (mode : BeginModeHandle) (infos : DrawCallInfoListHandle) =
-        Instruction(InstructionCode.HDrawArrays, [|isActive.Pointer :> obj; mode.Pointer :> obj; infos.Pointer :> obj |])
+    static member HDrawArrays (runtimeStats : nativeint) (isActive : IsActiveHandle) (mode : BeginModeHandle) (infos : DrawCallInfoListHandle) =
+        Instruction(InstructionCode.HDrawArrays, [| runtimeStats :> obj; isActive.Pointer :> obj; mode.Pointer :> obj; infos.Pointer :> obj |])
 
-    static member HDrawElements (isActive : IsActiveHandle) (mode : BeginModeHandle) (indexType : int) (infos : DrawCallInfoListHandle) =
-        Instruction(InstructionCode.HDrawElements, [|isActive.Pointer :> obj; mode.Pointer :> obj; indexType :> obj; infos.Pointer :> obj |])
+    static member HDrawElements (runtimeStats : nativeint) (isActive : IsActiveHandle) (mode : BeginModeHandle) (indexType : int) (infos : DrawCallInfoListHandle) =
+        Instruction(InstructionCode.HDrawElements, [| runtimeStats :> obj; isActive.Pointer :> obj; mode.Pointer :> obj; indexType :> obj; infos.Pointer :> obj |])
 
-    static member HDrawArraysIndirect (isActive : IsActiveHandle) (mode : BeginModeHandle) (count : nativeptr<int>) (stride : int) (buffer : int) =
-        Instruction(InstructionCode.HDrawArraysIndirect, [| isActive.Pointer :> obj; mode.Pointer :> obj; count :> obj; stride :> obj; buffer :> obj |])
+    static member HDrawArraysIndirect (runtimeStats : nativeint) (isActive : IsActiveHandle) (mode : BeginModeHandle) (count : nativeptr<int>) (stride : int) (buffer : int) =
+        Instruction(InstructionCode.HDrawArraysIndirect, [| runtimeStats :> obj; isActive.Pointer :> obj; mode.Pointer :> obj; count :> obj; stride :> obj; buffer :> obj |])
 
-    static member HDrawElementsIndirect (isActive : IsActiveHandle) (mode : BeginModeHandle) (indexType : int) (count : nativeptr<int>) (stride : int) (buffer : int) =
-        Instruction(InstructionCode.HDrawElementsIndirect, [| isActive.Pointer :> obj; mode.Pointer :> obj; indexType :> obj; count :> obj; stride :> obj; buffer :> obj |])
+    static member HDrawElementsIndirect (runtimeStats : nativeint) (isActive : IsActiveHandle) (mode : BeginModeHandle) (indexType : int) (count : nativeptr<int>) (stride : int) (buffer : int) =
+        Instruction(InstructionCode.HDrawElementsIndirect, [| runtimeStats :> obj; isActive.Pointer :> obj; mode.Pointer :> obj; indexType :> obj; count :> obj; stride :> obj; buffer :> obj |])
 
     static member HSetDepthTest (test : DepthTestModeHandle) =
         Instruction(InstructionCode.HSetDepthTest, [| test.Pointer :> obj |])

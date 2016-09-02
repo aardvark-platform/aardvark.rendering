@@ -566,17 +566,17 @@ module Pooling =
                     Sem.Hugo, Mod.constant trafo :> IMod
                 ]
 
-        let s = 4.0
+        let s = 20.0
 
         let renderset (geometries : aset<AdaptiveGeometry>) =
-            let calls = geometries |> ASet.map (fun v -> pool.Add v) |> ASet.map (fun c -> c.Call)
+            let calls = geometries |> ASet.mapUse (fun v -> pool.Add v) |> ASet.map (fun c -> c.Call)
             Sg.pool pool calls
 
         let all =
             [    
-                for x in -s .. s do
-                    for y in -s .. s do
-                        for z in -s .. s do
+                for x in -s / 2.0 .. s / 2.0 do
+                    for y in -s / 2.0 .. s / 2.0 do
+                        for z in -s / 2.0 .. s / 2.0 do
                             yield geometry (V3d(x,y,z))
                     
             ]
@@ -754,7 +754,6 @@ module Maya =
 
         let sg =
             Sg.air {
-
                 do! Air.BindEffect [
                         Shader.thingTrafo |> toEffect
                         DefaultSurfaces.trafo |> toEffect

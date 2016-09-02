@@ -657,7 +657,10 @@ DllExport(void) vmRun(Fragment* frag, VMMode mode, Statistics& stats)
 
 
 
-
+typedef struct {
+	int DrawCalls;
+	int EffectiveDrawCalls;
+} RuntimeStats;
 
 typedef struct {
 	int FaceVertexCount;
@@ -719,10 +722,13 @@ typedef struct {
 } BeginMode;
 
 
-DllExport(void) hglDrawArrays(int* isActive, BeginMode* mode, DrawCallInfoList* infos)
+DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos)
 {
 	trace("hglDrawArrays\n");
 	if (!*isActive) return;
+
+	stats->DrawCalls++;
+	stats->EffectiveDrawCalls++;
 
 	auto cnt = (int)infos->Count;
 	auto info = infos->Infos;
@@ -744,10 +750,13 @@ DllExport(void) hglDrawArrays(int* isActive, BeginMode* mode, DrawCallInfoList* 
 	endtrace("hglDrawArrays")
 }
 
-DllExport(void) hglDrawElements(int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos)
+DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos)
 {
 	trace("hglDrawElements\n");
 	if (!*isActive) return;
+
+	stats->DrawCalls++;
+	stats->EffectiveDrawCalls++;
 
 	auto cnt = infos->Count;
 	auto info = infos->Infos;
@@ -797,13 +806,16 @@ DllExport(void) hglDrawElements(int* isActive, BeginMode* mode, GLenum indexType
 	endtrace("a")
 }
 
-DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* count, GLint stride, GLuint buffer)
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLint* count, GLint stride, GLuint buffer)
 {
 	trace("hglDrawArraysIndirect\n");
 
 	auto active = *isActive;
 	auto drawcount = *count;
 	if (!active || !drawcount) return;
+
+	stats->DrawCalls++;
+	stats->EffectiveDrawCalls += drawcount;
 
 	auto m = mode->Mode;
 	auto v = mode->PatchVertices;
@@ -844,12 +856,15 @@ DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* cou
 	endtrace("a")
 }
 
-DllExport(void) hglDrawElementsIndirect(int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLint stride, GLuint buffer)
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLint stride, GLuint buffer)
 {
 	trace("hglDrawElementsIndirect\n");
 	auto drawcount = *count;
 	auto active = *isActive;
 	if (!active || !drawcount)return;
+
+	stats->DrawCalls++;
+	stats->EffectiveDrawCalls += drawcount;
 
 	auto m = mode->Mode;
 	auto v = mode->PatchVertices;
