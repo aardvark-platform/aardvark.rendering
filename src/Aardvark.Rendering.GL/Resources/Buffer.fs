@@ -385,9 +385,10 @@ module BufferExtensions =
                     removeBuffer x (int64 buffer.SizeInBytes)
                     addBuffer x (int64 nativeSize)
                     buffer.SizeInBytes <- nativeSize
-                    GL.BufferData(BufferTarget.ArrayBuffer, nativeSize, src, BufferUsageHint.DynamicDraw)
+                    let source = if nativeSize = 0n then 0n else src
+                    GL.BufferData(BufferTarget.ArrayBuffer, nativeSize, source, BufferUsageHint.DynamicDraw)
                     GL.Check "failed to set buffer data"
-                else
+                elif nativeSize <> 0n then
                     let target = GL.MapBufferRange(BufferTarget.ArrayBuffer, 0n, nativeSize, BufferAccessMask.MapWriteBit)
                     GL.Check "failed to map buffer for writing"
 

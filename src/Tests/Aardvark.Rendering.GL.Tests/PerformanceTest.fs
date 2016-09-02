@@ -476,8 +476,8 @@ module IsActiveFlagPerformance =
             renderOnce, isActives
 
         
-        let n = 10000
-        let renderFrame,isActiveFlags = test (n, BackendConfiguration.Interpreted)
+        let n = 50000
+        let renderFrame,isActiveFlags = test (n, BackendConfiguration.NativeOptimized)
 
         let path = "isActivePerformance4.Managed.csv"
         if System.IO.File.Exists(path) |> not then

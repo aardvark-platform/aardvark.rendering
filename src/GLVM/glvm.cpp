@@ -741,17 +741,18 @@ DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mod
 	trace("hglDrawArrays\n");
 	if (!*isActive) return;
 
-	stats->DrawCalls++;
-	stats->EffectiveDrawCalls++;
-
 	auto cnt = (int)infos->Count;
 	auto info = infos->Infos;
 	auto m = mode->Mode;
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
 
+
+	stats->DrawCalls+=cnt;
+
 	for (int i = 0; i < cnt; i++, info += 1)
 	{
+		stats->EffectiveDrawCalls += info->InstanceCount;
 		if (info->InstanceCount != 1 || info->FirstInstance != 0)
 		{
 			glDrawArraysInstancedBaseInstance(m, info->FirstIndex, info->FaceVertexCount, info->InstanceCount, info->FirstInstance);
@@ -769,17 +770,17 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	trace("hglDrawElements\n");
 	if (!*isActive) return;
 
-	stats->DrawCalls++;
-	stats->EffectiveDrawCalls++;
-
 	auto cnt = infos->Count;
 	auto info = infos->Infos;
 	auto m = mode->Mode;
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
 
+	stats->DrawCalls+=cnt;
 	for (int i = 0; i < cnt; i++, info += 1)
 	{
+		stats->EffectiveDrawCalls += info->InstanceCount;
+
 		if (info->InstanceCount != 1 || info->FirstInstance != 0)
 		{
 			glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)info->FirstIndex, info->InstanceCount, info->BaseVertex, info->FirstInstance);
@@ -787,23 +788,6 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 		else
 		{
 			auto offset = int64_t(info->FirstIndex * sizeof(int));
-
-			//GLint ibo, size;
-			//glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &ibo);
-			//glGetBufferParameteriv(GL_ELEMENT_ARRAY_BUFFER, GL_BUFFER_SIZE, &size);
-			//printf("ibo %d: %d\n", ibo, size);
-
-			//auto ptr = (int*)glMapBufferRange(GL_ELEMENT_ARRAY_BUFFER, 0, size, GL_MAP_READ_BIT);
-
-			//int maxIndex = -1;
-			//int minIndex = 100000000;
-			//for(int i = 0; i < size / 4; i++)
-			//{ 
-			//	maxIndex = max(maxIndex, ptr[i]);
-			//	minIndex = min(minIndex, ptr[i]);
-			//}
-			//printf("index: (%d,%d)\n", minIndex, maxIndex);
-			//glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 
 			if (info->BaseVertex == 0)
 			{
