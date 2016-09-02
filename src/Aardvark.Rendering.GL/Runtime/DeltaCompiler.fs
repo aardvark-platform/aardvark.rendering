@@ -134,12 +134,12 @@ module DeltaCompiler =
                         | Some (it,_) ->
                             yield
                                 indirect.Handle |> Mod.map (fun i -> 
-                                    [ Instruction.HDrawElementsIndirect stats isActive beginMode (int it) i.Count i.Stride i.Buffer.Handle]
+                                    [ Instruction.HDrawElementsIndirect stats isActive beginMode (int it) i.Count i.Buffer.Handle]
                                 )
                         | None ->
                             yield
                                 indirect.Handle |> Mod.map (fun i -> 
-                                    [ Instruction.HDrawArraysIndirect stats isActive beginMode i.Count i.Stride i.Buffer.Handle]
+                                    [ Instruction.HDrawArraysIndirect stats isActive beginMode i.Count i.Buffer.Handle]
                                 )
 
                 | None ->
@@ -196,7 +196,7 @@ module DeltaCompiler =
                     )
                 )
 
-            yield Instruction.BindVertexArray 0
+            //yield Instruction.BindVertexArray 0
             yield Instruction.BindProgram 0
             yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer) 0
 

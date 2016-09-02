@@ -179,24 +179,24 @@ module VertexArrayObjectExtensions =
 
             vao.Update(newInitFun)
 
-
-    module ExecutionContext =
-        let bindVertexArray (vao : VertexArrayObject) =
-            seq {
-                if ExecutionContext.vertexArrayObjectsSupported then
-                    // simply use the VAO handle if supported
-                    yield Instruction.BindVertexArray vao.Handle
-
-                else
-                    // bind all attributes (buffers and view-properties)
-                    for (index, att) in vao.Bindings do
-                        yield! ExecutionContext.bindVertexAttribute index att
-
-                    // bind the index-buffer (if available)
-                    match vao.Index with
-                        | Some index -> yield! ExecutionContext.bindBuffer BufferTarget.ElementArrayBuffer index
-                        | None -> yield! ExecutionContext.unbindBuffer BufferTarget.ElementArrayBuffer
-            }
+//
+//    module ExecutionContext =
+//        let bindVertexArray (vao : VertexArrayObject) =
+//            seq {
+//                if ExecutionContext.vertexArrayObjectsSupported then
+//                    // simply use the VAO handle if supported
+//                    yield Instruction.BindVertexArray vao.Handle
+//
+//                else
+//                    // bind all attributes (buffers and view-properties)
+//                    for (index, att) in vao.Bindings do
+//                        yield! ExecutionContext.bindVertexAttribute index att
+//
+//                    // bind the index-buffer (if available)
+//                    match vao.Index with
+//                        | Some index -> yield! ExecutionContext.bindBuffer BufferTarget.ElementArrayBuffer index
+//                        | None -> yield! ExecutionContext.unbindBuffer BufferTarget.ElementArrayBuffer
+//            }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VertexArrayObject =

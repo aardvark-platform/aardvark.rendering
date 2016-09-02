@@ -483,6 +483,7 @@ module RenderTasks =
                     | [| a; b; c |] -> GLVM.vmAppend3(frag, id, i.Operation, a, b, c)
                     | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, i.Operation, a, b, c, d)
                     | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
+                    | [| a; b; c; d; e; f |] -> GLVM.vmAppend6(frag, id, i.Operation, a, b, c, d, e, f)
                     | _ -> failwithf "invalid instruction: %A" i
 
         let dirtyBlocks = HashSet blocksWithContent

@@ -16,6 +16,71 @@
 
 #endif
 
+
+typedef struct {
+	int DrawCalls;
+	int EffectiveDrawCalls;
+} RuntimeStats;
+
+typedef struct {
+	int FaceVertexCount;
+	int InstanceCount;
+	int FirstIndex;
+	int FirstInstance;
+	int BaseVertex;
+} DrawCallInfo;
+
+typedef struct {
+	int64_t Count;
+	DrawCallInfo* Infos;
+} DrawCallInfoList;
+
+typedef  struct {
+	int  Count;
+	int  InstanceCount;
+	int  First;
+	int  BaseInstance;
+} DrawArraysIndirectCommand;
+
+typedef  struct {
+	int  Count;
+	int  InstanceCount;
+	int  FirstIndex;
+	int  BaseVertex;
+	int  BaseInstance;
+} DrawElementsIndirectCommand;
+
+typedef struct {
+	int Enabled;
+	GLenum SourceFactor;
+	GLenum DestFactor;
+	GLenum Operation;
+	GLenum SourceFactorAlpha;
+	GLenum DestFactorAlpha;
+	GLenum OperationAlpha;
+} BlendMode;
+
+typedef struct {
+	int Enabled;
+	GLenum CmpFront;
+	int32_t MaskFront;
+	uint32_t ReferenceFront;
+	GLenum CmpBack;
+	int32_t MaskBack;
+	uint32_t ReferenceBack;
+	GLenum OpFrontSF;
+	GLenum OpFrontDF;
+	GLenum OpFrontPass;
+	GLenum OpBackSF;
+	GLenum OpBackDF;
+	GLenum OpBackPass;
+} StencilMode;
+
+typedef struct {
+	GLenum Mode;
+	int PatchVertices;
+} BeginMode;
+
 class State
 {
 private:
@@ -45,6 +110,12 @@ private:
 	std::unordered_map<int, std::tuple<intptr_t, intptr_t, intptr_t>> currentBuffer;
 	std::unordered_map<intptr_t, bool> modes;
 	
+	GLenum* hDepthTest;
+	GLenum* hCullFace;
+	GLenum* hPolygonMode;
+	BlendMode* hBlendMode;
+	StencilMode* hStencilMode;
+
 
 public:
 
@@ -74,6 +145,12 @@ public:
 	bool ShouldSetStencilMask(intptr_t depthMask);
 	bool ShouldSetColorMask(intptr_t index, intptr_t r, intptr_t g, intptr_t b, intptr_t a);
 	bool ShouldSetDrawBuffers(GLuint n, const GLenum* buffers);
+
+	bool HShouldSetDepthTest(GLenum* test);
+	bool HShouldSetCullFace(GLenum* face);
+	bool HShouldSetPolygonMode(GLenum* mode);
+	bool HShouldSetBlendMode(BlendMode* mode);
+	bool HShouldSetStencilMode(StencilMode* mode);
 
 	int GetRemovedInstructions();
 };

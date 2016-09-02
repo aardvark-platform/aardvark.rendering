@@ -68,6 +68,9 @@ module GLVM =
 
     [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmAppend5(FragmentPtr left, int block, InstructionCode code, nativeint arg0, nativeint arg1, nativeint arg2, nativeint arg3, nativeint arg4)
+    
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
+    extern void vmAppend6(FragmentPtr left, int block, InstructionCode code, nativeint arg0, nativeint arg1, nativeint arg2, nativeint arg3, nativeint arg4, nativeint arg5)
 
     [<DllImport(lib, CallingConvention = CallingConvention.Cdecl)>]
     extern void vmClear(FragmentPtr frag)

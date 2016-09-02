@@ -31,3 +31,5 @@ src/GLVM/*.so
 /lib/Native/Aardvark.Rendering.GL/windows/AMD64/glvm.ipdb
 /lib/Native/Aardvark.Rendering.GL/windows/x86/glvm.iobj
 /lib/Native/Aardvark.Rendering.GL/windows/x86/glvm.ipdb
+/lib/Native/Aardvark.Rendering.GL/windows/AMD64/glvm.ilk
+/src/ipch/GLVM-7bf6b518/*.ipch

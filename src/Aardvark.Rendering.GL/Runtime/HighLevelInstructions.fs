@@ -92,31 +92,6 @@ module Instructions =
             [ Instruction.BindTexture target r.Handle ]
         )
 
-    let bindVertexArray (vao : IResource<VertexArrayObject>) =
-        if ExecutionContext.vertexArrayObjectsSupported then
-            vao.Handle |> Mod.map (fun r -> 
-                fun (ctx : ContextHandle) -> 
-                    [Instruction.BindVertexArray(r.Handle)]
-            )
-        else
-            vao.Handle |> Mod.map (fun r -> 
-                fun (ctx : ContextHandle) ->
-                    [
-                        for (i,b) in r.Bindings do
-                            yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ArrayBuffer) b.Buffer.Handle
-                            yield Instruction.EnableVertexAttribArray i
-                            if b.BaseType = typeof<C4b> then
-                                yield Instruction.VertexAttribPointer i 0x80E1 (int b.VertexAttributeType) b.Normalized b.Stride (nativeint b.Offset)
-                            else
-                                yield Instruction.VertexAttribPointer i b.Dimension (int b.VertexAttributeType) b.Normalized b.Stride (nativeint b.Offset)
-
-          
-                        match r.Index with
-                            | Some i -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) i.Handle
-                            | None -> yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer) 0
-                    ]
-            )
-    
     let bindVertexAttribValue (index : int) (value : IMod<Option<V4f>>) =
         value |> Mod.map (fun v ->
             match v with

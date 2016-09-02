@@ -220,8 +220,13 @@ module RenderProgram =
                 o.Arguments |> Array.map (fun arg ->
                     match arg with
                         | :? int as i -> nativeint i
+                        | :? int64 as i -> nativeint i
                         | :? nativeint as i -> i
                         | :? float32 as f -> BitConverter.ToInt32(BitConverter.GetBytes(f), 0) |> nativeint
+                        | :? PtrArgument as p ->
+                            match p with
+                                | Ptr32 p -> p
+                                | Ptr64 p -> p
                         | _ -> failwith "invalid argument"
                 )
 
@@ -233,6 +238,7 @@ module RenderProgram =
                         | [| a; b; c |] -> GLVM.vmAppend3(frag, id, i.Operation, a, b, c)
                         | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, i.Operation, a, b, c, d)
                         | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
+                        | [| a; b; c; d; e; f |] -> GLVM.vmAppend6(frag, id, i.Operation, a, b, c, d, e, f)
                         | _ -> failwithf "invalid instruction: %A" i
 
             let handler() =
