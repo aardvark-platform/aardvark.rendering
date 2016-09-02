@@ -16,34 +16,37 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.Rendering.NanoVg
 
+#nowarn "9"
+#nowarn "51"
+
 module Pooling =
     open System.Threading
     open System.Collections.Generic
     open System.Runtime.InteropServices
+    open System.Runtime.CompilerServices
     open System.Reflection
+    open Microsoft.FSharp.NativeInterop
 
     type AdaptiveGeometry =
         {
             mode             : IndexedGeometryMode
             faceVertexCount  : int
             vertexCount      : int
-            indices          : BufferView
+            indices          : Option<BufferView>
             uniforms         : Map<Symbol, IMod>
             vertexAttributes : Map<Symbol, BufferView>
         }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module AdaptiveGeometry =
-        let ofIndexedGeometry (ig : IndexedGeometry) =
+
+        let ofIndexedGeometry (uniforms : list<Symbol * IMod>) (ig : IndexedGeometry) =
             let anyAtt = (ig.IndexedAttributes |> Seq.head).Value
 
-            let index =
+            let faceVertexCount, index =
                 match ig.IndexArray with
-                    | null -> 
-                        let cnt = anyAtt.Length
-                        Array.init cnt id :> Array
-                    | index ->
-                        index
+                    | null -> anyAtt.Length, None
+                    | index -> index.Length, Some (BufferView.ofArray index)
 
             let vertexCount =
                 anyAtt.Length
@@ -51,153 +54,293 @@ module Pooling =
     
             {
                 mode = ig.Mode
-                faceVertexCount = index.Length
+                faceVertexCount = faceVertexCount
                 vertexCount = vertexCount
-                indices = BufferView.ofArray index
-                uniforms = Map.empty
+                indices = index
+                uniforms = Map.ofList uniforms
                 vertexAttributes = ig.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
             }
-
-    type Pool =
-        abstract member Add : AdaptiveGeometry -> DrawCallInfo
-        abstract member Remove : AdaptiveGeometry -> unit
-        
-        abstract member TryGetAttribute : Symbol -> Option<BufferView>
-        abstract member IndexBuffer : BufferView
-
-    type MappedBufferWriter(store : IMappedBuffer, data : IMod<Array>, offset : int, elementSize : int) =
-        inherit AdaptiveObject()
-
-        member x.Write(caller : IAdaptiveObject) =
-            x.EvaluateIfNeeded caller () (fun () ->
-                let data = data.GetValue x
-                let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                try store.Write(gc.AddrOfPinnedObject(), offset * elementSize, data.Length * elementSize)
-                finally gc.Free()
-            )
-
-    type Conv<'a, 'b> private() =
-        static let toModArray (input : IMod) : IMod<Array> =
-            let converter = PrimitiveValueConverter.converter : 'a -> 'b
-            let arr = Array.CreateInstance(typeof<'b>, 1)
-            input |> unbox<IMod<'a>> |> Mod.map (fun v -> v |> converter |> Array.singleton :> Array)
-
-
-        static member Instance = toModArray
-
-    let private convCache = Dict<Type * Type, IMod -> IMod<Array>>()
-    let conv (inputType : Type) (outputType : Type) : IMod -> IMod<Array> =
-        convCache.GetOrCreate((inputType, outputType), System.Func<_,_>(fun (inputType, outputType) ->
-            let t = typedefof<Conv<_,_>>.MakeGenericType [|inputType; outputType|]
-            let p = t.GetProperty("Instance", BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Static)
-            p.GetValue(null) |> unbox<IMod -> IMod<Array>>
-        ))
 
     type GeometrySignature =
         {
             mode                : IndexedGeometryMode
+            indexType           : Type
             vertexBufferTypes   : Map<Symbol, Type>
             uniformTypes        : Map<Symbol, Type>
-            indexType           : Type
         }
 
     type Attributes = Map<Symbol, BufferView>
     type Uniforms = Map<Symbol, IMod>
 
+    type IManagedBufferWriter =
+        inherit IAdaptiveObject
+        abstract member Write : IAdaptiveObject -> unit
 
-    type ManagedBuffer(runtime : IRuntime) =
-        inherit DirtyTrackingAdaptiveObject<MappedBufferWriter>()
+    type IManagedBuffer =
+        inherit IDisposable
+        inherit IMod<IBuffer>
+        abstract member Clear : unit -> unit
+        abstract member Capacity : int
+        abstract member Set : Range1i * byte[] -> unit
+        abstract member Add : Range1i * BufferView -> IDisposable
+        abstract member Add : int * IMod -> IDisposable
+        abstract member ElementType : Type
 
-        let store = runtime.CreateMappedBuffer()
+    type IManagedBuffer<'a when 'a : unmanaged> =
+        inherit IManagedBuffer
+        abstract member Count : int
+        abstract member Item : int -> 'a with get, set
+        abstract member Set : Range1i * 'a[] -> unit
 
-        let mutable elementTypeAndSize = None
+    [<AutoOpen>]
+    module private ManagedBufferImplementation =
 
-        let getElementTypeAndSize (viewType : Type) =
-            match elementTypeAndSize with
-                | Some (t,s) ->
-                    if viewType <> t then failwith "sadasd"
-                    (t,s)
-                | None ->
-                    let t = viewType
-                    let s = System.Runtime.InteropServices.Marshal.SizeOf t
-                    elementTypeAndSize <- Some (t,s)
-                    (t,s)
-        
-        member x.ElementType = 
-            match elementTypeAndSize with
-                | Some (t,_) -> t
-                | _ -> failwith ""
+        type ManagedBuffer<'a when 'a : unmanaged>(runtime : IRuntime) =
+            inherit DirtyTrackingAdaptiveObject<ManagedBufferWriter>()
+            static let asize = sizeof<'a>
+            let store = runtime.CreateMappedBuffer()
 
-        member x.Add(range : Range1i, data : BufferView) =
-            let t, s = getElementTypeAndSize data.ElementType
-            let count = range.Size + 1
-            let data = BufferView.download 0 count data
+            let bufferWriters = Dict<BufferView, ManagedBufferWriter<'a>>()
+            let uniformWriters = Dict<IMod, ManagedBufferSingleWriter<'a>>()
 
-            let min = (range.Min + count) * s
-            if store.Capacity < min then
-                store.Resize(Fun.NextPowerOfTwo min)
+            member x.Clear() =
+                store.Resize 0
 
-            let writer = MappedBufferWriter(store, data, range.Min, s)
-            writer.Write x
+            member x.Add(range : Range1i, view : BufferView) =
+                lock x (fun () ->
+                    let count = range.Size + 1
 
-            { new IDisposable with
-                member __.Dispose() =
-                    lock x (fun () ->
-                        x.Dirty.Remove writer |> ignore
+                    let writer = 
+                        bufferWriters.GetOrCreate(view, fun view ->
+                            let remove w =
+                                x.Dirty.Remove w |> ignore
+                                bufferWriters.Remove view |> ignore
+
+                            let data = BufferView.download 0 count view
+                            let real : IMod<'a[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
+                            let w = new ManagedBufferWriter<'a>(remove, real, store)
+                            x.Dirty.Add w |> ignore
+                            w
+                        )
+
+
+                    if writer.AddRef range then
+                        let min = (range.Min + count) * asize
+                        if store.Capacity < min then
+                            store.Resize(Fun.NextPowerOfTwo min)
+
+                        lock writer (fun () -> 
+                            if not writer.OutOfDate then
+                                writer.Write(range)
+                        )
+
+                    { new IDisposable with
+                        member x.Dispose() =
+                            writer.RemoveRef range |> ignore
+                    }
+                )
+
+            member x.Add(index : int, data : IMod) =
+                lock x (fun () ->
+                    let mutable isNew = false
+                    let writer =
+                        uniformWriters.GetOrCreate(data, fun data ->
+                            isNew <- true
+                            let remove w =
+                                x.Dirty.Remove w |> ignore
+                                uniformWriters.Remove data |> ignore
+
+                            let real : IMod<'a> = data |> PrimitiveValueConverter.convertValue
+                            let w = new ManagedBufferSingleWriter<'a>(remove, real, store)
+                            x.Dirty.Add w |> ignore
+                            w
+                        )
+ 
+                    let range = Range1i(index, index)
+                    if writer.AddRef range then
+                        let min = (index + 1) * asize
+                        if store.Capacity < min then
+                            store.Resize(Fun.NextPowerOfTwo min)
+                            
+                        lock writer (fun () -> 
+                            if not writer.OutOfDate then
+                                writer.Write(range)
+                        )
+
+
+                        
+                    { new IDisposable with
+                        member x.Dispose() =
+                            writer.RemoveRef range |> ignore
+                    }
+                )
+
+            member x.Set(range : Range1i, value : byte[]) =
+                let count = range.Size + 1
+                let e = (range.Min + count) * asize
+                if store.Capacity < e then
+                    store.Resize(Fun.NextPowerOfTwo e)
+
+                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+                try
+                    let ptr = gc.AddrOfPinnedObject()
+                    let lv = value.Length
+                    let mutable remaining = count * asize
+                    let mutable offset = range.Min * asize
+                    while remaining >= lv do
+                        store.Write(ptr, offset, lv)
+                        offset <- offset + lv
+                        remaining <- remaining - lv
+
+                    if remaining > 0 then
+                        store.Write(ptr, offset, remaining)
+
+                finally
+                    gc.Free()
+
+            member x.Set(index : int, value : 'a) =
+                let e = (index + 1) * asize
+                if store.Capacity < e then
+                    store.Resize(Fun.NextPowerOfTwo e)
+
+                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+                try store.Write(gc.AddrOfPinnedObject(), index * asize, asize)
+                finally gc.Free()
+
+            member x.Get(index : int) =
+                let mutable res = Unchecked.defaultof<'a>
+                store.Read(&&res |> NativePtr.toNativeInt, index * asize, sizeof<'a>)
+                res
+
+            member x.Set(range : Range1i, value : 'a[]) =
+                let e = (range.Max + 1) * asize
+                if store.Capacity < e then
+                    store.Resize(Fun.NextPowerOfTwo e)
+
+                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+                try store.Write(gc.AddrOfPinnedObject(), range.Min * asize, (range.Size + 1) * asize)
+                finally gc.Free()
+
+            member x.GetValue(caller : IAdaptiveObject) =
+                x.EvaluateAlways' caller (fun dirty ->
+                    for d in dirty do
+                        d.Write(x)
+                    store.GetValue(x)
+                )
+
+            member x.Capacity = store.Capacity
+            member x.Count = store.Capacity / asize
+
+            member x.Dispose() =
+                store.Dispose()
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+            interface IMod with
+                member x.IsConstant = false
+                member x.GetValue c = x.GetValue c :> obj
+
+            interface IMod<IBuffer> with
+                member x.GetValue c = x.GetValue c
+
+            interface IManagedBuffer with
+                member x.Clear() = x.Clear()
+                member x.Add(range : Range1i, view : BufferView) = x.Add(range, view)
+                member x.Add(index : int, data : IMod) = x.Add(index, data)
+                member x.Set(range : Range1i, value : byte[]) = x.Set(range, value)
+                member x.Capacity = x.Capacity
+                member x.ElementType = typeof<'a>
+
+            interface IManagedBuffer<'a> with
+                member x.Count = x.Count
+                member x.Item
+                    with get i = x.Get i
+                    and set i v = x.Set(i,v)
+                member x.Set(range : Range1i, value : 'a[]) = x.Set(range, value)
+
+        and [<AbstractClass>] ManagedBufferWriter(remove : ManagedBufferWriter -> unit) =
+            inherit AdaptiveObject()
+            let mutable refCount = 0
+            let targetRegions = ReferenceCountingSet<Range1i>()
+
+            abstract member Write : Range1i -> unit
+            abstract member Release : unit -> unit
+
+            member x.AddRef(range : Range1i) : bool =
+                lock x (fun () ->
+                    targetRegions.Add range
+                )
+
+            member x.RemoveRef(range : Range1i) : bool = 
+                lock x (fun () ->
+                    targetRegions.Remove range |> ignore
+                    if targetRegions.Count = 0 then
+                        x.Release()
+                        remove x
                         let mutable foo = 0
-                        writer.Outputs.Consume(&foo) |> ignore
-                    )
-            }
+                        x.Outputs.Consume(&foo) |> ignore
+                        true
+                    else
+                        false
+                )
 
-        member x.Add(index : int, data : IMod) =
-            let contentType =
-                match data.GetType() with
-                    | ModOf t -> t
-                    | _ -> failwith ""
+            member x.Write(caller : IAdaptiveObject) =
+                x.EvaluateIfNeeded caller () (fun () ->
+                    for r in targetRegions do
+                        x.Write(r)
+                )
 
-            let t, s = getElementTypeAndSize contentType
-            let count = 1
-            let data = data |> conv contentType t
+            interface IManagedBufferWriter with
+                member x.Write c = x.Write c
 
+        and ManagedBufferWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : IMod<'a[]>, store : IMappedBuffer) =
+            inherit ManagedBufferWriter(remove)
+            static let asize = sizeof<'a>
+
+            override x.Release() = ()
+
+            override x.Write(target) =
+                let v = data.GetValue(x)
+                let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
+                try 
+                    store.Write(gc.AddrOfPinnedObject(), target.Min * asize, v.Length * asize)
+                finally 
+                    gc.Free()
+
+        and ManagedBufferSingleWriter<'a when 'a : unmanaged>(remove : ManagedBufferWriter -> unit, data : IMod<'a>, store : IMappedBuffer) =
+            inherit ManagedBufferWriter(remove)
+            static let asize = sizeof<'a>
             
-            let min = (index + 1) * s
-            if store.Capacity < min then
-                store.Resize(Fun.NextPowerOfTwo min)
+            override x.Release() = ()
 
-            let writer = MappedBufferWriter(store, data, index, s)
-            writer.Write x
+            override x.Write(target) =
+                let v = data.GetValue(x)
+                let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
+                try store.Write(gc.AddrOfPinnedObject(), target.Min * asize, asize)
+                finally gc.Free()
 
-            { new IDisposable with
-                member __.Dispose() =
-                    lock x (fun () ->
-                        x.Dirty.Remove writer |> ignore
-                        let mutable foo = 0
-                        writer.Outputs.Consume(&foo) |> ignore
-                    )
-            }      
+    module ManagedBuffer =
 
-        member x.GetValue(caller : IAdaptiveObject) =
-            x.EvaluateAlways' caller (fun dirty ->
-                for d in dirty do
-                    d.Write(x)
+        let private ctorCache = Dict<Type, ConstructorInfo>()
 
-                store.GetValue(x)
+        let private ctor (t : Type) =
+            ctorCache.GetOrCreate(t, fun t ->
+                let tb = typedefof<ManagedBuffer<int>>.MakeGenericType [|t|]
+                tb.GetConstructor(
+                    BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static ||| BindingFlags.CreateInstance,
+                    Type.DefaultBinder,
+                    [| typeof<IRuntime> |],
+                    null
+                )
             )
 
-        member x.Dispose() =
-            store.Dispose()
+        let create (t : Type) (runtime : IRuntime) =
+            let ctor = ctor t
+            ctor.Invoke [| runtime |] |> unbox<IManagedBuffer>
 
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
 
-        interface IMod with
-            member x.IsConstant = false
-            member x.GetValue c = x.GetValue c :> obj
-
-        interface IMod<IBuffer> with
-            member x.GetValue c = x.GetValue c
-
-    type LayoutManager<'a>() =
+    type private LayoutManager<'a>() =
         let manager = MemoryManager.createNop()
         let store = Dict<'a, managedptr>()
         let cnts = Dict<managedptr, 'a * ref<int>>()
@@ -216,36 +359,64 @@ module Pooling =
                     store.[key] <- (v)
                     v
 
+
+        member x.TryAlloc(key : 'a, size : int) =
+            match store.TryGetValue key with
+                | (true, v) -> 
+                    let _,r = cnts.[v]
+                    Interlocked.Increment &r.contents |> ignore
+                    false, v
+                | _ ->
+                    let v = manager.Alloc size
+                    let r = ref 1
+                    cnts.[v] <- (key,r)
+                    store.[key] <- (v)
+                    true, v
+
         member x.Free(value : managedptr) =
             match cnts.TryGetValue value with
                 | (true, (k,r)) ->
                     if Interlocked.Decrement &r.contents = 0 then
+                        manager.Free value
                         cnts.Remove value |> ignore
                         store.Remove k |> ignore
                 | _ ->
                     ()
 
 
+    type ManagedDrawCall(call : DrawCallInfo, release : IDisposable) =
+        member x.Call = call
+        
+        member x.Dispose() = release.Dispose()
+        interface IDisposable with
+            member x.Dispose() = release.Dispose()
+
     type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
+        static let zero : byte[] = Array.zeroCreate 128
         let mutable count = 0
-        let indexManager = LayoutManager<BufferView>()
+        let indexManager = LayoutManager<Option<BufferView> * int>()
         let vertexManager = LayoutManager<Attributes>()
         let instanceManager = LayoutManager<Uniforms>()
 
-        let indexBuffer = new ManagedBuffer(runtime)
-        let vertexBuffers = SymbolDict<ManagedBuffer>()
-        let instanceBuffers = SymbolDict<ManagedBuffer>()
-        let isEmpty = Mod.init true
-
+        let indexBuffer = new ManagedBuffer<int>(runtime) :> IManagedBuffer<int>
+        let vertexBuffers = signature.vertexBufferTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime) |> SymDict.ofSeq
+        let instanceBuffers = signature.uniformTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime) |> SymDict.ofSeq
 
         let getVertexBuffer (sym : Symbol) =
-            vertexBuffers.GetOrCreate(sym, fun sym -> new ManagedBuffer(runtime))
+            vertexBuffers.GetOrCreate(sym, fun sym -> 
+                match Map.tryFind sym signature.vertexBufferTypes with
+                    | Some t -> runtime |> ManagedBuffer.create t
+                    | None -> failwithf "[Pool] cannot get attribute type for %A" sym
+            )
 
         let getInstanceBuffer (sym : Symbol) =
-            instanceBuffers.GetOrCreate(sym, fun sym -> new ManagedBuffer(runtime))
+            instanceBuffers.GetOrCreate(sym, fun sym ->
+                match Map.tryFind sym signature.uniformTypes with
+                    | Some t -> runtime |> ManagedBuffer.create t
+                    | None -> failwithf "[Pool] cannot get attribute type for %A" sym
+            )
 
-
-        member x.IsEmpty = isEmpty :> IMod<_>
+        let vertexDisposables = Dictionary<BufferView, IDisposable>()
 
         member x.Add(g : AdaptiveGeometry) =
             let ds = List()
@@ -254,35 +425,42 @@ module Pooling =
             
             let vertexPtr = vertexManager.Alloc(g.vertexAttributes, vertexCount)
             let vertexRange = Range1i(int vertexPtr.Offset, int vertexPtr.Offset + vertexCount - 1)
-            for (KeyValue(k,v)) in g.vertexAttributes do
-                 let target = getVertexBuffer k
-                 target.Add(vertexRange, v) |> ds.Add
+            for (k,t) in Map.toSeq signature.vertexBufferTypes do
+                let target = getVertexBuffer k
+                match Map.tryFind k g.vertexAttributes with
+                    | Some v -> target.Add(vertexRange, v) |> ds.Add
+                    | None -> target.Set(vertexRange, zero)
 
             let instancePtr = instanceManager.Alloc(g.uniforms, 1)
-            for (KeyValue(k,v)) in g.uniforms do
-                 let target = getInstanceBuffer k
-                 target.Add(int instancePtr.Offset, v) |> ds.Add
+            let instanceIndex = int instancePtr.Offset
+            for (k,t) in Map.toSeq signature.uniformTypes do
+                let target = getInstanceBuffer k
+                match Map.tryFind k g.uniforms with
+                    | Some v -> target.Add(instanceIndex, v) |> ds.Add
+                    | None -> target.Set(Range1i(instanceIndex, instanceIndex), zero)
 
-            let indexPtr = indexManager.Alloc(g.indices, fvc)
+            let isNew, indexPtr = indexManager.TryAlloc((g.indices, fvc), fvc)
             let indexRange = Range1i(int indexPtr.Offset, int indexPtr.Offset + fvc - 1)
-            indexBuffer.Add(indexRange, g.indices) |> ds.Add
+            match g.indices with
+                | Some v -> indexBuffer.Add(indexRange, v) |> ds.Add
+                | None -> if isNew then indexBuffer.Set(indexRange, Array.init fvc id)
 
             count <- count + 1
-            if count = 1 then
-                transact (fun () -> isEmpty.Value <- false)
 
             let disposable =
                 { new IDisposable with
-                    member x.Dispose() =
-                        count <- count - 1
-                        if count = 0 then
-                            transact (fun () -> isEmpty.Value <- true)
-
-                        for d in ds do d.Dispose()
-                        vertexManager.Free vertexPtr
-                        instanceManager.Free instancePtr
-                        indexManager.Free indexPtr
-
+                    member __.Dispose() = 
+                        lock x (fun () ->
+                            count <- count - 1
+                            if count = 0 then 
+                                for b in vertexBuffers.Values do b.Clear()
+                                for b in instanceBuffers.Values do b.Clear()
+                                indexBuffer.Clear() 
+                            for d in ds do d.Dispose()
+                            vertexManager.Free vertexPtr
+                            instanceManager.Free instancePtr
+                            indexManager.Free indexPtr
+                        )
                 }
 
             let call =
@@ -294,9 +472,9 @@ module Pooling =
                     BaseVertex = int vertexPtr.Offset
                 )
 
-            call, disposable
+            new ManagedDrawCall(call, disposable)
 
-        member x.VertexBuffers =
+        member x.VertexAttributes =
             { new IAttributeProvider with
                 member x.Dispose() = ()
                 member x.All = Seq.empty
@@ -306,7 +484,7 @@ module Pooling =
                         | _ -> None
             }
 
-        member x.InstanceBuffers =
+        member x.InstanceAttributes =
             { new IAttributeProvider with
                 member x.Dispose() = ()
                 member x.All = Seq.empty
@@ -318,6 +496,22 @@ module Pooling =
 
         member x.IndexBuffer =
             BufferView(indexBuffer, indexBuffer.ElementType)
+
+    [<AbstractClass; Sealed; Extension>]
+    type IRuntimePoolExtensions private() =
+
+        [<Extension>]
+        static member CreateManagedPool(this : IRuntime, signature : GeometrySignature) =
+            new ManagedPool(this, signature)
+
+        [<Extension>]
+        static member CreateManagedBuffer<'a when 'a : unmanaged>(this : IRuntime) : IManagedBuffer<'a> =
+            new ManagedBuffer<'a>(this) :> IManagedBuffer<'a>
+
+        [<Extension>]
+        static member CreateManagedBuffer(this : IRuntime, elementType : Type) : IManagedBuffer =
+            this |> ManagedBuffer.create elementType
+
 
     module Sg =
         type PoolNode(pool : ManagedPool, calls : aset<DrawCallInfo>) =
@@ -333,51 +527,102 @@ module Pooling =
         member x.RenderObjects(p : Sg.PoolNode) =
             aset {
                 let pool = p.Pool
-                let! empty = pool.IsEmpty
-                if not empty then
-                    let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
+                let ro = Aardvark.SceneGraph.Semantics.RenderObject.create()
 
-                    ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
-                    ro.Indices <- Some pool.IndexBuffer
-                    ro.VertexAttributes <- pool.VertexBuffers
-                    ro.InstanceAttributes <- pool.InstanceBuffers
-                    ro.IndirectBuffer <- p.Calls |> ASet.toMod |> Mod.map (fun calls -> calls |> Seq.toArray |> ArrayBuffer :> IBuffer)
-                    //ro.DrawCallInfos <- p.Calls |> ASet.toMod |> Mod.map Seq.toList
-                    yield ro :> IRenderObject
+                ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+                ro.Indices <- Some pool.IndexBuffer
+                ro.VertexAttributes <- pool.VertexAttributes
+                ro.InstanceAttributes <- pool.InstanceAttributes
+                ro.IndirectBuffer <- p.Calls |> ASet.toMod |> Mod.map (fun calls -> calls |> Seq.toArray |> ArrayBuffer :> IBuffer)
+                //ro.DrawCallInfos <- p.Calls |> ASet.toMod |> Mod.map Seq.toList
+                yield ro :> IRenderObject
                     
             }
 
+    module Sem =
+        let Hugo = Symbol.Create "Hugo"
 
-    let testSg (r : IRuntime) =
-
-        let signature =
-            {
-                mode                = IndexedGeometryMode.TriangleList
-                vertexBufferTypes   = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
-                uniformTypes        = Map.ofList [ Symbol.Create "Hugo", typeof<M44f> ]
-                indexType           = typeof<int>
+    let testSg (w : IRenderControl) (r : IRuntime) =
+        
+        let pool =
+            r.CreateManagedPool {
+                mode = IndexedGeometryMode.TriangleList
+                indexType = typeof<int>
+                vertexBufferTypes = 
+                    Map.ofList [ 
+                        DefaultSemantic.Positions, typeof<V4f>
+                        DefaultSemantic.Normals, typeof<V3f> 
+                    ]
+                uniformTypes = 
+                    Map.ofList [ 
+                        Sem.Hugo, typeof<M44f> 
+                    ]
             }
 
-        let pool = ManagedPool(r, signature)
+        let geometry (pos : V3d) =  
+            let trafo = Trafo3d.Scale 0.1 * Trafo3d.Translation pos
+            Primitives.unitSphere 4
+                |> AdaptiveGeometry.ofIndexedGeometry [
+                    Sem.Hugo, Mod.constant trafo :> IMod
+                ]
 
-        let geometry (pos : V3d) =
-            let g = Primitives.unitSphere 0 |> AdaptiveGeometry.ofIndexedGeometry
-            { g with uniforms = Map.add (Sym.ofString "Hugo") (Mod.constant ((M44d.Translation pos * M44d.Scale 0.1) |> M44f.op_Explicit) :> IMod) g.uniforms }
+        let s = 4.0
 
-        let s = 30.0
-        let drawCalls =
+        let renderset (geometries : aset<AdaptiveGeometry>) =
+            let calls = geometries |> ASet.map (fun v -> pool.Add v) |> ASet.map (fun c -> c.Call)
+            Sg.pool pool calls
+
+        let all =
             [    
                 for x in -s .. s do
                     for y in -s .. s do
                         for z in -s .. s do
-                            let call,_ = pool.Add (geometry (V3d(x,y,z)))
-                            yield call
+                            yield geometry (V3d(x,y,z))
                     
             ]
 
-        //let call, _ = Primitives.unitSphere 5 |> AdaptiveGeometry.ofIndexedGeometry |> pool.Add
+        let geometries =
+            CSet.ofList all
 
-        Sg.pool pool (ASet.ofList drawCalls)
+        let initial = geometries.Count
+        let random = Random()
+        w.Keyboard.DownWithRepeats.Values.Add(fun k ->
+            if k = Keys.X then
+                for i in 1 .. (initial / 20) do
+                    if geometries.Count > 0 then
+                        let arr = geometries |> Seq.toArray
+                        let idx = random.Next(arr.Length)
+
+                        let g = arr.[idx]
+                        transact (fun () ->
+                            geometries.Remove g |> ignore
+                        )
+
+            if k = Keys.T then
+                transact (fun () ->
+                    geometries.Clear()
+                )
+
+            if k = Keys.R then
+                transact (fun () ->
+                    geometries.Clear()
+                    geometries.UnionWith all
+                )
+                
+        )
+
+        let mode = Mod.init FillMode.Fill
+        w.Keyboard.KeyDown(Keys.K).Values.Add (fun () ->
+            transact (fun () ->
+                mode.Value <- 
+                    match mode.Value with
+                        | FillMode.Fill -> FillMode.Line
+                        | _ -> FillMode.Fill
+            )
+        )
+
+        renderset geometries
+            |> Sg.fillMode mode
 
 
 module Maya = 
@@ -534,7 +779,7 @@ module Maya =
 
         let sg =
             let test = 
-                Pooling.testSg app.Runtime
+                Pooling.testSg win app.Runtime
                 |> Sg.effect [
                     Shader.hugoShade |> toEffect
                     DefaultSurfaces.trafo |> toEffect

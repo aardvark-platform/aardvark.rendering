@@ -6,7 +6,7 @@ open Aardvark.Base
 open System.Reflection
 open System.Runtime.InteropServices
 open Microsoft.FSharp.Reflection
-
+open Aardvark.Base.Incremental
 
 
 module PrimitiveValueConverter =
@@ -199,8 +199,8 @@ module PrimitiveValueConverter =
             ( fun (b : V2f)        -> V3d(float b.X, float b.Y, 0.0) ) :> obj
             ( fun (b : V2f)        -> V4i(int b.X, int b.Y, 0, 0) ) :> obj
             ( fun (b : V2f)        -> V4l(int64 b.X, int64 b.Y, 0L, 0L) ) :> obj
-            ( fun (b : V2f)        -> V4f(b.X, b.Y, 0.0f, 0.0f) ) :> obj
-            ( fun (b : V2f)        -> V4d(float b.X, float b.Y, 0.0, 0.0) ) :> obj
+            ( fun (b : V2f)        -> V4f(b.X, b.Y, 0.0f, 1.0f) ) :> obj
+            ( fun (b : V2f)        -> V4d(float b.X, float b.Y, 0.0, 1.0) ) :> obj
 
             // V2d -> other vectors
             ( fun (b : V2d)        -> V2i b ) :> obj
@@ -213,8 +213,8 @@ module PrimitiveValueConverter =
             ( fun (b : V2d)        -> V3d(b.X, b.Y, 0.0) ) :> obj
             ( fun (b : V2d)        -> V4i(int b.X, int b.Y, 0, 0) ) :> obj
             ( fun (b : V2d)        -> V4l(int64 b.X, int64 b.Y, 0L, 0L) ) :> obj
-            ( fun (b : V2d)        -> V4f(float32 b.X, float32 b.Y, 0.0f, 0.0f) ) :> obj
-            ( fun (b : V2d)        -> V4d(b.X, b.Y, 0.0, 0.0) ) :> obj
+            ( fun (b : V2d)        -> V4f(float32 b.X, float32 b.Y, 0.0f, 1.0f) ) :> obj
+            ( fun (b : V2d)        -> V4d(b.X, b.Y, 0.0, 1.0) ) :> obj
 
         ]
 
@@ -247,8 +247,8 @@ module PrimitiveValueConverter =
             ( fun (b : V3f)        -> V3d b) :> obj
             ( fun (b : V3f)        -> V4i(int b.X, int b.Y, int b.Z, 0)) :> obj
             ( fun (b : V3f)        -> V4l(int64 b.X, int64 b.Y, int64 b.Z, 0L)) :> obj
-            ( fun (b : V3f)        -> V4f(b.X, b.Y, b.Z, 0.0f)) :> obj
-            ( fun (b : V3f)        -> V4d(float b.X, float b.Y, float b.Z, 0.0)) :> obj
+            ( fun (b : V3f)        -> V4f(b.X, b.Y, b.Z, 1.0f)) :> obj
+            ( fun (b : V3f)        -> V4d(float b.X, float b.Y, float b.Z, 1.0)) :> obj
 
             // V3d -> other vectors
             ( fun (b : V3d)        -> V3i b) :> obj
@@ -257,8 +257,8 @@ module PrimitiveValueConverter =
             ( fun (b : V3d)        -> b) :> obj
             ( fun (b : V3d)        -> V4i(int b.X, int b.Y, int b.Z, 0)) :> obj
             ( fun (b : V3d)        -> V4l(int64 b.X, int64 b.Y, int64 b.Z, 0L)) :> obj
-            ( fun (b : V3d)        -> V4f(float32 b.X, float32 b.Y, float32 b.Z, 0.0f)) :> obj
-            ( fun (b : V3d)        -> V4d(b.X, b.Y, b.Z, 0.0)) :> obj
+            ( fun (b : V3d)        -> V4f(float32 b.X, float32 b.Y, float32 b.Z, 1.0f)) :> obj
+            ( fun (b : V3d)        -> V4d(b.X, b.Y, b.Z, 1.0)) :> obj
 
         ]
 
@@ -994,6 +994,10 @@ module PrimitiveValueConverter =
             inherit FSharpFunc<'a, 'a>()
             override x.Invoke(v : 'a) = v
 
+        type UnboxLambda<'a>() =
+            inherit FSharpFunc<obj, 'a>()
+            override x.Invoke(v : obj) = unbox<'a> v
+
 
         let compose (f : obj) (g : obj) =
             let ft = f.GetType()
@@ -1023,12 +1027,16 @@ module PrimitiveValueConverter =
             let t = typedefof<IdLambda<_>>.MakeGenericType [| t |]
             Activator.CreateInstance(t)
 
+        let unboxFunction (t : Type) =
+            let t = typedefof<UnboxLambda<_>>.MakeGenericType [| t |]
+            Activator.CreateInstance(t)
+
     let rec getConverter (inType : Type) (outType : Type) =
-        if outType.IsArray && inType.IsArray then
-            match mapping.TryGet(inType, outType) with
-                | (true, conv) ->
-                    conv
-                | _ -> 
+        match mapping.TryGet(inType, outType) with
+            | (true, conv) ->
+                conv
+            | _ ->
+                if outType.IsArray && inType.IsArray then
                     let inType' = inType.GetElementType()
                     let outType' = outType.GetElementType()
                     let innerConv = getConverter inType' outType'
@@ -1046,11 +1054,7 @@ module PrimitiveValueConverter =
                     mapping.Add(inType, outType, conv)
                     conv
 
-        else
-            match mapping.TryGet(inType, outType) with
-                | (true, conv) ->
-                    conv
-                | _ ->
+                else
                     failwithf "unknown conversion from %A to %A" inType.FullName outType.FullName
 
     type private ArrayConverterCache<'a>() =
@@ -1087,7 +1091,6 @@ module PrimitiveValueConverter =
                         ctor.Invoke [|conv|] |> unbox<Array -> Array>
                 ) )
             )
-
 
     let getArrayConverter (inputType : Type) (outputType : Type) : Array -> Array =
         ArrayConverterCache.Get(inputType, outputType)
@@ -1140,3 +1143,50 @@ module PrimitiveValueConverter =
         getTransposeConverter typeof<'a> |> unbox
 
     let transposable<'a> = isTransposable typeof<'a>
+
+    [<AbstractClass>]
+    type private AdaptiveConverter<'a>() =
+        abstract member Convert : IMod -> IMod<'a>
+        abstract member Convert : IMod<Array> -> IMod<'a[]>
+
+    type private AdaptiveConverter<'a, 'b> private() =
+        inherit AdaptiveConverter<'b>()
+        static let conv = converter<'a, 'b>
+        static let instance = AdaptiveConverter<'a, 'b>()
+
+        static member Instance = instance
+
+        override x.Convert (m : IMod) =
+            m |> unbox<IMod<'a>> |> Mod.map conv
+
+        override x.Convert (m : IMod<Array>) =
+            m |> Mod.map (fun arr -> arr |> unbox<'a[]> |> Array.map conv)
+
+    let private staticFieldCache = Dict<Type * string, obj>()
+    let private getStaticField (name : string) (t : Type) : 'a =
+        staticFieldCache.GetOrCreate((t, name), fun (t, name) ->
+            let p = t.GetProperty(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+            p.GetValue(null)
+        ) |> unbox<'a>
+
+    let convertArray (inputElementType : Type) (m : IMod<Array>) : IMod<'a[]> =
+        if inputElementType = typeof<'a> then
+            m |> Mod.map (fun a -> unbox a)
+        else
+            let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputElementType; typeof<'a> |]
+            let converter : AdaptiveConverter<'a> = tconv |> getStaticField "Instance"
+            converter.Convert(m)
+
+    let convertValue (m : IMod) : IMod<'a> =
+        let inputType =
+            match m.GetType() with
+                | ModOf t -> t
+                | _ -> failwith ""
+
+        if inputType = typeof<'a> then
+            unbox m
+        else
+            let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; typeof<'a> |]
+            let converter : AdaptiveConverter<'a> = tconv |> getStaticField "Instance"
+            converter.Convert(m)
+

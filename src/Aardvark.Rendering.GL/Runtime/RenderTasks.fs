@@ -816,29 +816,30 @@ module RenderTasks =
                 | _ -> ()
 
         member x.GetValue(caller : IAdaptiveObject) =
-            x.EvaluateAlways' caller (fun dirty ->
-                if x.OutOfDate then
-                    for d in dirty do
-                        let value = d.GetValue x
-                        match oldValues.TryGetValue d with
-                            | (true, old) -> 
-                                remove old
-                                add value
-                            | _ ->
-                                () // removed
-
-                        oldValues.[d] <- value
-                                
-                let add = Interlocked.Exchange(&added, 0) 
-                let rem = Interlocked.Exchange(&removed, 0)
-                { FrameStatistics.Zero with 
-                    DrawCallCount = float drawCalls
-                    EffectiveDrawCallCount = float effectiveCalls 
-                    VirtualResourceCount = float resourceCount
-                    AddedRenderObjects = float add
-                    RemovedRenderObjects = float rem
-                }
-            )
+            FrameStatistics.Zero
+//            x.EvaluateAlways' caller (fun dirty ->
+//                if x.OutOfDate then
+//                    for d in dirty do
+//                        let value = d.GetValue x
+//                        match oldValues.TryGetValue d with
+//                            | (true, old) -> 
+//                                remove old
+//                                add value
+//                            | _ ->
+//                                () // removed
+//
+//                        oldValues.[d] <- value
+//                                
+//                let add = Interlocked.Exchange(&added, 0) 
+//                let rem = Interlocked.Exchange(&removed, 0)
+//                { FrameStatistics.Zero with 
+//                    DrawCallCount = float drawCalls
+//                    EffectiveDrawCallCount = float effectiveCalls 
+//                    VirtualResourceCount = float resourceCount
+//                    AddedRenderObjects = float add
+//                    RemovedRenderObjects = float rem
+//                }
+//            )
 
         interface IMod with
             member x.IsConstant = false
@@ -854,7 +855,7 @@ module RenderTasks =
         let resources = new Aardvark.Base.Rendering.ResourceInputSet()
         let inputSet = InputSet(this) 
         let resourceUpdateWatch = OpenGlStopwatch()
-        let callStats = RenderObjectStats()
+        let callStats = Mod.constant FrameStatistics.Zero //RenderObjectStats()
         let structuralChange = Mod.init ()
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
@@ -892,7 +893,7 @@ module RenderTasks =
             let all = ro.Resources |> Seq.toList
             for r in all do resources.Add r
 
-            callStats.Add ro
+            //callStats.Add ro
 
             
 
@@ -903,7 +904,7 @@ module RenderTasks =
                         res.Dispose()
                         old.Dispose()
                         for r in all do resources.Remove r
-                        callStats.Remove ro
+                        //callStats.Remove ro
                         ro.Activation <- old
                 }
 
@@ -993,7 +994,7 @@ module RenderTasks =
             stats + 
             !this.Scope.stats + 
             (runStats |> List.sumBy (fun l -> l.Value)) +
-            callStats.GetValue() +
+            callStats.GetValue(x) +
             { FrameStatistics.Zero with
                 ResourceUpdateSubmissionTime = resourceUpdateWatch.ElapsedCPU
                 ResourceUpdateTime = resourceUpdateWatch.ElapsedGPU
