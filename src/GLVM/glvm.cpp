@@ -800,6 +800,11 @@ DllExport(void) hglDrawElements(int* isActive, BeginMode* mode, GLenum indexType
 DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* count, GLint stride, GLuint buffer)
 {
 	trace("hglDrawArraysIndirect\n");
+
+	auto active = *isActive;
+	auto drawcount = *count;
+	if (!active || !drawcount) return;
+
 	auto m = mode->Mode;
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
@@ -810,7 +815,7 @@ DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* cou
 		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
 		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
 		auto indirect = (DrawArraysIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
-		auto drawcount = *count;
+		
 		GLsizei n;
 		for (n = 0; n < drawcount; n++)
 		{
@@ -832,9 +837,8 @@ DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* cou
 	}
 	else
 	{
-		auto cnt = *count;
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-		glMultiDrawArraysIndirect(m, nullptr, cnt, stride);
+		glMultiDrawArraysIndirect(m, nullptr, drawcount, stride);
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 	}
 	endtrace("a")
@@ -843,6 +847,10 @@ DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* cou
 DllExport(void) hglDrawElementsIndirect(int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLint stride, GLuint buffer)
 {
 	trace("hglDrawElementsIndirect\n");
+	auto drawcount = *count;
+	auto active = *isActive;
+	if (!active || !drawcount)return;
+
 	auto m = mode->Mode;
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
@@ -853,8 +861,6 @@ DllExport(void) hglDrawElementsIndirect(int* isActive, BeginMode* mode, GLenum i
 		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
 		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
 		auto indirect = (DrawElementsIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
-		auto drawcount = *count;
-
 		GLsizei n;
 		for (n = 0; n < drawcount; n++)
 		{
@@ -885,7 +891,7 @@ DllExport(void) hglDrawElementsIndirect(int* isActive, BeginMode* mode, GLenum i
 	else
 	{
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-		glMultiDrawElementsIndirect(m, indexType, nullptr, *count, stride);
+		glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, stride);
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 	}
 	endtrace("a")
