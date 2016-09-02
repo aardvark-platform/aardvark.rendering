@@ -1,5 +1,4 @@
-﻿namespace Aardvark.Rendering.GL
-
+﻿namespace Aardvark.Base
 
 open System
 open System.Collections.Generic
@@ -7,6 +6,8 @@ open Aardvark.Base
 open System.Reflection
 open System.Runtime.InteropServices
 open Microsoft.FSharp.Reflection
+open Aardvark.Base.Incremental
+
 
 module PrimitiveValueConverter =
     let private trafoToM44f(t : Trafo3d) =
@@ -198,8 +199,8 @@ module PrimitiveValueConverter =
             ( fun (b : V2f)        -> V3d(float b.X, float b.Y, 0.0) ) :> obj
             ( fun (b : V2f)        -> V4i(int b.X, int b.Y, 0, 0) ) :> obj
             ( fun (b : V2f)        -> V4l(int64 b.X, int64 b.Y, 0L, 0L) ) :> obj
-            ( fun (b : V2f)        -> V4f(b.X, b.Y, 0.0f, 0.0f) ) :> obj
-            ( fun (b : V2f)        -> V4d(float b.X, float b.Y, 0.0, 0.0) ) :> obj
+            ( fun (b : V2f)        -> V4f(b.X, b.Y, 0.0f, 1.0f) ) :> obj
+            ( fun (b : V2f)        -> V4d(float b.X, float b.Y, 0.0, 1.0) ) :> obj
 
             // V2d -> other vectors
             ( fun (b : V2d)        -> V2i b ) :> obj
@@ -212,8 +213,8 @@ module PrimitiveValueConverter =
             ( fun (b : V2d)        -> V3d(b.X, b.Y, 0.0) ) :> obj
             ( fun (b : V2d)        -> V4i(int b.X, int b.Y, 0, 0) ) :> obj
             ( fun (b : V2d)        -> V4l(int64 b.X, int64 b.Y, 0L, 0L) ) :> obj
-            ( fun (b : V2d)        -> V4f(float32 b.X, float32 b.Y, 0.0f, 0.0f) ) :> obj
-            ( fun (b : V2d)        -> V4d(b.X, b.Y, 0.0, 0.0) ) :> obj
+            ( fun (b : V2d)        -> V4f(float32 b.X, float32 b.Y, 0.0f, 1.0f) ) :> obj
+            ( fun (b : V2d)        -> V4d(b.X, b.Y, 0.0, 1.0) ) :> obj
 
         ]
 
@@ -246,8 +247,8 @@ module PrimitiveValueConverter =
             ( fun (b : V3f)        -> V3d b) :> obj
             ( fun (b : V3f)        -> V4i(int b.X, int b.Y, int b.Z, 0)) :> obj
             ( fun (b : V3f)        -> V4l(int64 b.X, int64 b.Y, int64 b.Z, 0L)) :> obj
-            ( fun (b : V3f)        -> V4f(b.X, b.Y, b.Z, 0.0f)) :> obj
-            ( fun (b : V3f)        -> V4d(float b.X, float b.Y, float b.Z, 0.0)) :> obj
+            ( fun (b : V3f)        -> V4f(b.X, b.Y, b.Z, 1.0f)) :> obj
+            ( fun (b : V3f)        -> V4d(float b.X, float b.Y, float b.Z, 1.0)) :> obj
 
             // V3d -> other vectors
             ( fun (b : V3d)        -> V3i b) :> obj
@@ -256,8 +257,8 @@ module PrimitiveValueConverter =
             ( fun (b : V3d)        -> b) :> obj
             ( fun (b : V3d)        -> V4i(int b.X, int b.Y, int b.Z, 0)) :> obj
             ( fun (b : V3d)        -> V4l(int64 b.X, int64 b.Y, int64 b.Z, 0L)) :> obj
-            ( fun (b : V3d)        -> V4f(float32 b.X, float32 b.Y, float32 b.Z, 0.0f)) :> obj
-            ( fun (b : V3d)        -> V4d(b.X, b.Y, b.Z, 0.0)) :> obj
+            ( fun (b : V3d)        -> V4f(float32 b.X, float32 b.Y, float32 b.Z, 1.0f)) :> obj
+            ( fun (b : V3d)        -> V4d(b.X, b.Y, b.Z, 1.0)) :> obj
 
         ]
 
@@ -900,6 +901,36 @@ module PrimitiveValueConverter =
         ]
 
 
+    let private transposeFunctions =
+        [
+            ( fun (m : M22d) -> m.Transposed ) :> obj
+            ( fun (m : M22f) -> m.Transposed ) :> obj
+            ( fun (m : M22i) -> m.Transposed ) :> obj
+            ( fun (m : M22l) -> m.Transposed ) :> obj
+
+            ( fun (m : M33d) -> m.Transposed ) :> obj
+            ( fun (m : M33f) -> m.Transposed ) :> obj
+            ( fun (m : M33i) -> m.Transposed ) :> obj
+            ( fun (m : M33l) -> m.Transposed ) :> obj
+
+            ( fun (m : M23d) -> M23d(m.M00, m.M10, m.M02, m.M01, m.M11, m.M12 ) ) :> obj
+            ( fun (m : M23f) -> M23f(m.M00, m.M10, m.M02, m.M01, m.M11, m.M12 ) ) :> obj
+            ( fun (m : M23i) -> M23i(m.M00, m.M10, m.M02, m.M01, m.M11, m.M12 ) ) :> obj
+            ( fun (m : M23l) -> M23l(m.M00, m.M10, m.M02, m.M01, m.M11, m.M12 ) ) :> obj
+
+
+            ( fun (m : M44d) -> m.Transposed ) :> obj
+            ( fun (m : M44f) -> m.Transposed ) :> obj
+            ( fun (m : M44i) -> m.Transposed ) :> obj
+            ( fun (m : M44l) -> m.Transposed ) :> obj
+            
+            ( fun (m : M34d) -> M34d(m.M00, m.M10, m.M20, m.M03, m.M01, m.M11, m.M21, m.M13, m.M02, m.M12, m.M22, m.M23) ) :> obj
+            ( fun (m : M34f) -> M34f(m.M00, m.M10, m.M20, m.M03, m.M01, m.M11, m.M21, m.M13, m.M02, m.M12, m.M22, m.M23) ) :> obj
+            ( fun (m : M34i) -> M34i(m.M00, m.M10, m.M20, m.M03, m.M01, m.M11, m.M21, m.M13, m.M02, m.M12, m.M22, m.M23) ) :> obj
+            ( fun (m : M34l) -> M34l(m.M00, m.M10, m.M20, m.M03, m.M01, m.M11, m.M21, m.M13, m.M02, m.M12, m.M22, m.M23) ) :> obj
+        ]
+
+
     type private ConversionMapping<'a>() =
         let store = Dict<Type, Dict<Type, 'a>>()
 
@@ -920,6 +951,7 @@ module PrimitiveValueConverter =
                 | _ ->
                     false
 
+
     let private createCompiledMap (l : list<obj>) =
         let result = ConversionMapping()
 
@@ -931,30 +963,99 @@ module PrimitiveValueConverter =
 
     let private mapping = createCompiledMap allConversions
 
-    type private ArrayMapLambda<'a, 'b>(converter : 'a -> 'b) =
-        inherit FSharpFunc<Array, 'b[]>()
+    let private transposeMapping =
+        let dict = Dictionary<Type, obj>()
+        for f in transposeFunctions do
+            let t = f.GetType()
+            let (arg, ret) = FSharpType.GetFunctionElements t
+            dict.[arg] <- f
+        dict
 
-        override x.Invoke(arr : Array) =
-            arr |> unbox |> Array.map converter
 
-    let getConverter (inType : Type) (outType : Type) =
-        if outType.IsArray then 
-            failwith "arrays are currently not implemented"
-        else
-            match mapping.TryGet(inType, outType) with
-                | (true, conv) ->
+    [<AutoOpen>]
+    module private Lambdas =
+        type ArrayMapLambda<'a, 'b>(converter : 'a -> 'b) =
+            inherit FSharpFunc<Array, 'b[]>()
+
+            override x.Invoke(arr : Array) =
+                arr |> unbox |> Array.map converter
+
+        type UntypedArrayMapLambda<'a, 'b>(converter : 'a -> 'b) =
+            inherit FSharpFunc<Array, Array>()
+
+            override x.Invoke(arr : Array) =
+                arr |> unbox |> Array.map converter :> Array
+    
+        type ComposedLambda<'a, 'b, 'c>(f : 'a -> 'b, g : 'b -> 'c) =
+            inherit FSharpFunc<'a, 'c>()
+            override x.Invoke(a : 'a) = g (f a)
+
+        type IdLambda<'a>() =
+            inherit FSharpFunc<'a, 'a>()
+            override x.Invoke(v : 'a) = v
+
+        type UnboxLambda<'a>() =
+            inherit FSharpFunc<obj, 'a>()
+            override x.Invoke(v : obj) = unbox<'a> v
+
+
+        let compose (f : obj) (g : obj) =
+            let ft = f.GetType()
+            let gt = g.GetType()
+            let (a,b) = FSharpType.GetFunctionElements ft
+            let (b',c) = FSharpType.GetFunctionElements gt
+            if b <> b' then failwith "[PrimitiveValueConverter] cannot compose functions"
+            let t = typedefof<ComposedLambda<_,_,_>>.MakeGenericType [| a; b; c |]
+            let ctor = 
+                t.GetConstructor(
+                    BindingFlags.NonPublic ||| BindingFlags.Instance ||| BindingFlags.CreateInstance ||| BindingFlags.Public ||| BindingFlags.Static, 
+                    Type.DefaultBinder, 
+                    [| ft; gt|], 
+                    null
+                )
+
+            ctor.Invoke [| f; g |]
+
+        let withTranspose (f : obj) =
+            let ft = f.GetType()
+            let (_,r) = FSharpType.GetFunctionElements ft
+            match transposeMapping.TryGetValue r with
+                | (true, transpose) -> compose f transpose
+                | _ -> f
+
+        let idFunction (t : Type) =
+            let t = typedefof<IdLambda<_>>.MakeGenericType [| t |]
+            Activator.CreateInstance(t)
+
+        let unboxFunction (t : Type) =
+            let t = typedefof<UnboxLambda<_>>.MakeGenericType [| t |]
+            Activator.CreateInstance(t)
+
+    let rec getConverter (inType : Type) (outType : Type) =
+        match mapping.TryGet(inType, outType) with
+            | (true, conv) ->
+                conv
+            | _ ->
+                if outType.IsArray && inType.IsArray then
+                    let inType' = inType.GetElementType()
+                    let outType' = outType.GetElementType()
+                    let innerConv = getConverter inType' outType'
+
+                    let tconv = typedefof<ArrayMapLambda<_,_>>.MakeGenericType [| inType'; outType' |] 
+                    let ctor = 
+                        tconv.GetConstructor(
+                            BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.CreateInstance, 
+                            Type.DefaultBinder, 
+                            [| innerConv.GetType() |],
+                            null
+                        )
+
+                    let conv = ctor.Invoke [|innerConv|]
+                    mapping.Add(inType, outType, conv)
                     conv
-                | _ ->
+
+                else
                     failwithf "unknown conversion from %A to %A" inType.FullName outType.FullName
-
-    let converter<'a, 'b> : 'a -> 'b =
-        if typeof<'a> = typeof<'b> then
-            let f = id : 'a -> 'a
-            f |> unbox
-        else
-            getConverter typeof<'a> typeof<'b> |> unbox
-
-
 
     type private ArrayConverterCache<'a>() =
         static let conv = Dict<Type, Array -> 'a[]>()
@@ -973,7 +1074,119 @@ module PrimitiveValueConverter =
                 ) )
             )
 
+    type private ArrayConverterCache() =
+        static let conv = Dict<Type * Type, Array -> Array>()
+        static let t = typedefof<UntypedArrayMapLambda<_,_>>
 
+        static member Get (inputType : Type, outputType : Type) =
+            lock conv (fun () ->
+                let key = (inputType, outputType)
+                conv.GetOrCreate(key, Func<Type * Type, Array -> Array>(fun (inputType, outputType) ->
+                    if inputType = outputType then
+                        id
+                    else
+                        let t = t.MakeGenericType [| inputType; outputType |]
+                        let ctor = t.GetConstructor(BindingFlags.NonPublic ||| BindingFlags.Instance ||| BindingFlags.CreateInstance ||| BindingFlags.Public ||| BindingFlags.Static, Type.DefaultBinder, [| FSharpType.MakeFunctionType(inputType, outputType) |], null)
+                        let conv = getConverter inputType outputType
+                        ctor.Invoke [|conv|] |> unbox<Array -> Array>
+                ) )
+            )
+
+    let getArrayConverter (inputType : Type) (outputType : Type) : Array -> Array =
+        ArrayConverterCache.Get(inputType, outputType)
+
+    let private uniformCache = Dict<bool * Type * Type, obj>()
+    let getUniformConverter (transpose : bool) (inType : Type) (outType : Type) =
+        let key = (transpose, inType, outType)
+        lock uniformCache (fun () ->
+            uniformCache.GetOrCreate(key, fun (rowMajor, inType, outType) ->
+                if transpose then getConverter inType outType |> withTranspose
+                else getConverter inType outType
+            )
+        )
+
+    let private idFunctions = Dict<Type, obj>()
+    let getIdentityConverter (t : Type) =
+        lock idFunctions (fun () ->
+            idFunctions.GetOrCreate(t, fun t -> idFunction t)
+        )
+
+    let getTransposeConverter (t : Type) =
+        match transposeMapping.TryGetValue t with
+            | (true, v) -> v
+            | _ -> getIdentityConverter t
+
+    let isTransposable (t : Type) =
+        transposeMapping.ContainsKey t
+
+
+
+    let converter<'a, 'b> : 'a -> 'b =
+        if typeof<'a> = typeof<'b> then
+            let f = id : 'a -> 'a
+            f |> unbox
+        else
+            getConverter typeof<'a> typeof<'b> |> unbox
 
     let arrayConverter<'a> (inputType : Type) : Array -> 'a[] =
-        ArrayConverterCache<'a>.Get(inputType)
+        if inputType = typeof<'a> then unbox
+        else ArrayConverterCache<'a>.Get(inputType)
+
+    let uniformConverter<'a, 'b> (transpose : bool) : 'a -> 'b =
+        if not transpose && typeof<'a> = typeof<'b> then
+            let f = id : 'a -> 'a
+            f |> unbox
+        else
+            getUniformConverter transpose typeof<'a> typeof<'b> |> unbox
+
+    let transpose<'a> : 'a -> 'a =
+        getTransposeConverter typeof<'a> |> unbox
+
+    let transposable<'a> = isTransposable typeof<'a>
+
+    [<AbstractClass>]
+    type private AdaptiveConverter<'a>() =
+        abstract member Convert : IMod -> IMod<'a>
+        abstract member Convert : IMod<Array> -> IMod<'a[]>
+
+    type private AdaptiveConverter<'a, 'b> private() =
+        inherit AdaptiveConverter<'b>()
+        static let conv = converter<'a, 'b>
+        static let instance = AdaptiveConverter<'a, 'b>()
+
+        static member Instance = instance
+
+        override x.Convert (m : IMod) =
+            m |> unbox<IMod<'a>> |> Mod.map conv
+
+        override x.Convert (m : IMod<Array>) =
+            m |> Mod.map (fun arr -> arr |> unbox<'a[]> |> Array.map conv)
+
+    let private staticFieldCache = Dict<Type * string, obj>()
+    let private getStaticField (name : string) (t : Type) : 'a =
+        staticFieldCache.GetOrCreate((t, name), fun (t, name) ->
+            let p = t.GetProperty(name, BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public)
+            p.GetValue(null)
+        ) |> unbox<'a>
+
+    let convertArray (inputElementType : Type) (m : IMod<Array>) : IMod<'a[]> =
+        if inputElementType = typeof<'a> then
+            m |> Mod.map (fun a -> unbox a)
+        else
+            let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputElementType; typeof<'a> |]
+            let converter : AdaptiveConverter<'a> = tconv |> getStaticField "Instance"
+            converter.Convert(m)
+
+    let convertValue (m : IMod) : IMod<'a> =
+        let inputType =
+            match m.GetType() with
+                | ModOf t -> t
+                | _ -> failwith ""
+
+        if inputType = typeof<'a> then
+            unbox m
+        else
+            let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; typeof<'a> |]
+            let converter : AdaptiveConverter<'a> = tconv |> getStaticField "Instance"
+            converter.Convert(m)
+

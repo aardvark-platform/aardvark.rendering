@@ -119,7 +119,18 @@ typedef enum {
 	DepthMask = 54,
 	ColorMask = 55,
 	StencilMask = 56,
-	DrawBuffers = 57
+	DrawBuffers = 57,
+
+	HDrawArrays = 100,
+	HDrawElements = 101,
+	HDrawArraysIndirect = 102,
+	HDrawElementsIndirect = 103,
+	HSetDepthTest = 104,
+	HSetCullFace = 105,
+	HSetPolygonMode = 106,
+	HSetBlendMode = 107,
+	HSetStencilMode = 108
+
 
 } InstructionCode;
 
@@ -138,6 +149,7 @@ typedef struct {
 	intptr_t Arg2;
 	intptr_t Arg3;
 	intptr_t Arg4;
+	intptr_t Arg5;
 } Instruction;
 
 // a fragment consists of a substructured vector of instructions
@@ -166,6 +178,18 @@ DllExport(void) vmAppend2(Fragment* frag, int block, InstructionCode code, intpt
 DllExport(void) vmAppend3(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2);
 DllExport(void) vmAppend4(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3);
 DllExport(void) vmAppend5(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3, intptr_t arg4);
+DllExport(void) vmAppend6(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3, intptr_t arg4, intptr_t arg5);
 DllExport(void) vmClear(Fragment* frag);
 DllExport(void) vmRunSingle(Fragment* frag);
 DllExport(void) vmRun(Fragment* frag, VMMode mode, Statistics& stats);
+
+DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos);
+DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos);
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLint* count, GLuint buffer);
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLuint buffer);
+DllExport(void) hglSetDepthTest(GLenum* mode);
+DllExport(void) hglSetCullFace(GLenum* face);
+DllExport(void) hglSetPolygonMode(GLenum* mode);
+DllExport(void) hglSetBlendMode(BlendMode* mode);
+DllExport(void) hglSetStencilMode(StencilMode* mode);
+DllExport(void) hglBindVertexArray(int* vao);

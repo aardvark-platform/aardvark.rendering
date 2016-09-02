@@ -10,11 +10,6 @@ open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 
-type DrawCallStats =
-    | NoDraw
-    | DirectDraw of count : int * instances : int
-    | IndirectDraw of count : int
-
 [<CustomEquality;CustomComparison>]
 type PreparedRenderObject =
     {
@@ -42,6 +37,7 @@ type PreparedRenderObject =
         StencilMode : IResource<StencilModeHandle>
 
         mutable VertexArray : IResource<VertexArrayObject>
+        VertexArrayHandle : IResource<nativeint>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
         
         ColorAttachmentCount : int
@@ -51,11 +47,6 @@ type PreparedRenderObject =
         StencilBufferMask : bool
 
 
-
-
-        //ClipDistanceBitmask : array<bool>
-
-        DrawCallStats : IMod<DrawCallStats>
         mutable ResourceCount : int
         mutable ResourceCounts : Map<ResourceKind, int>
 
@@ -100,8 +91,10 @@ type PreparedRenderObject =
                 | Some ib -> yield ib :> _
                 | _ -> yield x.DrawCallInfos :> _
 
-            yield x.VertexArray :> _ 
 
+            yield x.VertexArray :> _ 
+            if not (isNull (x.VertexArrayHandle :> obj)) then
+                yield x.VertexArrayHandle :> _
             yield x.IsActive :> _
             yield x.BeginMode :> _
             
@@ -142,6 +135,9 @@ type PreparedRenderObject =
             | _ -> x.DrawCallInfos.Update(caller) |> add
 
         x.VertexArray.Update(caller) |> add
+        if not (isNull (x.VertexArrayHandle :> obj)) then
+            x.VertexArrayHandle.Update(caller) |> add
+
 
         x.IsActive.Update(caller) |> add
         x.BeginMode.Update(caller) |> add
@@ -155,9 +151,9 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         if not x.IsDisposed then
+            x.IsDisposed <- true
 
             x.Activation.Dispose()
-            x.IsDisposed <- true
             match x.DrawBuffers with
                 | Some b -> b.RemoveRef()
                 | _ -> ()
@@ -228,7 +224,6 @@ module PreparedRenderObject =
             DepthBufferMask = true
             StencilBufferMask = true
             IsDisposed = false
-            DrawCallStats = Mod.constant NoDraw
             ResourceCount = 0
             ResourceCounts = Map.empty
             IsActive = Unchecked.defaultof<_>
@@ -239,6 +234,7 @@ module PreparedRenderObject =
             PolygonMode = Unchecked.defaultof<_>
             BlendMode = Unchecked.defaultof<_>
             StencilMode = Unchecked.defaultof<_>
+            VertexArrayHandle = Unchecked.defaultof<_>
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -272,7 +268,6 @@ module PreparedRenderObject =
                 DepthBufferMask = o.DepthBufferMask
                 StencilBufferMask = o.StencilBufferMask
                 IsDisposed = o.IsDisposed
-                DrawCallStats = o.DrawCallStats
                 ResourceCount = o.ResourceCount
                 ResourceCounts = o.ResourceCounts
 
@@ -284,6 +279,7 @@ module PreparedRenderObject =
                 PolygonMode  = o.PolygonMode 
                 BlendMode  = o.BlendMode 
                 StencilMode  = o.StencilMode 
+                VertexArrayHandle = o.VertexArrayHandle
             }  
 
         for r in res.Resources do
@@ -299,11 +295,6 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
             | h::_ -> h
 
     let last = children |> List.last
-
-    let drawCallStats =
-        children |> List.map (fun c -> c.DrawCallStats) |> Mod.mapN Seq.toList
-
-    member x.DrawCallStats = drawCallStats
 
     member x.Children = children
 
@@ -439,6 +430,8 @@ type ResourceManagerExtensions private() =
         let buffers =
             prog.Inputs 
                 |> List.map (fun v ->
+                    let expected = AttributeType.getExpectedType v.attributeType
+
                     match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                         | Some value ->
                             let dep = x.CreateBuffer(value.Buffer)
@@ -455,6 +448,7 @@ type ResourceManagerExtensions private() =
                                         | _ -> 
                                             failwithf "could not get attribute %A" v.semantic
                    )
+
 
         // create the index buffer (if present)
         let index =
@@ -486,6 +480,7 @@ type ResourceManagerExtensions private() =
         let attributeValues =
             buffers 
                 |> List.map (fun (i,v,_,_) ->
+
                     i, v.Buffer |> Mod.map (fun v ->
                         match v with
                             | :? NullBuffer as nb -> 
@@ -545,32 +540,6 @@ type ResourceManagerExtensions private() =
         let blendMode = x.CreateBlendMode rj.BlendMode
         let stencilMode = x.CreateStencilMode rj.StencilMode
 
-        let drawCallStats =
-            Mod.custom (fun self ->
-                match indirect with
-                    | Some ib ->
-                        // we don't want to update the indirect-buffer but we need to depend on it
-                        lock ib (fun () -> ib.Outputs.Add self |> ignore)
-                        match isNull ib.Handle with
-                        | false ->
-                            let ib = ib.Handle.GetValue(self)
-                            match Unchecked.equals (ib :> obj) null with
-                            | false ->
-                                let calls = ib.Count |> NativePtr.read
-                                IndirectDraw calls
-                            | true -> DrawCallStats.NoDraw //where is the value
-                        | true -> DrawCallStats.NoDraw //wtf is going on
-
-                    | None ->
-                        let mutable instances = 0
-                        let calls = drawCalls.Handle.GetValue(self)
-                        for i in 0 .. calls.Count - 1 do
-                            let info = NativePtr.get calls.Infos i
-                            instances <- instances + info.InstanceCount
-                        let calls = calls.Count
-                        DirectDraw (calls, instances)
-            )
-
 
 
         // finally return the PreparedRenderObject
@@ -597,7 +566,6 @@ type ResourceManagerExtensions private() =
                 DepthBufferMask = depthMask
                 StencilBufferMask = stencilMask
                 IsDisposed = false
-                DrawCallStats = drawCallStats
                 ResourceCount = -1
                 ResourceCounts = Map.empty
 
@@ -609,6 +577,7 @@ type ResourceManagerExtensions private() =
                 PolygonMode = polygonMode
                 BlendMode = blendMode
                 StencilMode = stencilMode
+                VertexArrayHandle = Unchecked.defaultof<_>
 
             }
 

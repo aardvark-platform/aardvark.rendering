@@ -548,7 +548,7 @@ module IndirectBufferExtensions =
     let private postProcessDrawCallBuffer (indexed : bool) (b : Buffer) =
         let callCount = int b.SizeInBytes / sizeof<DrawCallInfo>
 
-        if indexed then
+        if indexed && callCount > 0 then
             using b.Context.ResourceLock (fun _ ->
                 GL.BindBuffer(BufferTarget.ArrayBuffer, b.Handle)
                 GL.Check "could not bind buffer"

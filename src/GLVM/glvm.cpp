@@ -149,27 +149,32 @@ DllExport(void) vmClearBlock(Fragment* frag, int block)
 
 DllExport(void) vmAppend1(Fragment* frag, int block, InstructionCode code, intptr_t arg0)
 {
-	frag->Instructions[block].push_back({ code, arg0, 0, 0, 0, 0 });
+	frag->Instructions[block].push_back({ code, arg0, 0, 0, 0, 0, 0 });
 }
 
 DllExport(void) vmAppend2(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1)
 {
-	frag->Instructions[block].push_back({ code, arg0, arg1, 0, 0, 0 });
+	frag->Instructions[block].push_back({ code, arg0, arg1, 0, 0, 0, 0 });
 }
 
 DllExport(void) vmAppend3(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2)
 {
-	frag->Instructions[block].push_back({ code, arg0, arg1, arg2, 0, 0 });
+	frag->Instructions[block].push_back({ code, arg0, arg1, arg2, 0, 0, 0 });
 }
 
 DllExport(void) vmAppend4(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3)
 {
-	frag->Instructions[block].push_back({ code, arg0, arg1, arg2, arg3, 0 });
+	frag->Instructions[block].push_back({ code, arg0, arg1, arg2, arg3, 0, 0 });
 }
 
 DllExport(void) vmAppend5(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3, intptr_t arg4)
 {
-	frag->Instructions[block].push_back({ code, arg0, arg1, arg2, arg3, arg4 });
+	frag->Instructions[block].push_back({ code, arg0, arg1, arg2, arg3, arg4, 0 });
+}
+
+DllExport(void) vmAppend6(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3, intptr_t arg4, intptr_t arg5)
+{
+	frag->Instructions[block].push_back({ code, arg0, arg1, arg2, arg3, arg4, arg5 });
 }
 
 DllExport(void) vmClear(Fragment* frag)
@@ -182,7 +187,7 @@ void runInstruction(Instruction* i)
 	switch (i->Code)
 	{
 	case BindVertexArray:
-		glBindVertexArray((GLuint)i->Arg0);
+		glBindVertexArray(*(GLuint*)i->Arg0);
 		break;
 	case BindProgram:
 		glUseProgram((GLuint)i->Arg0);
@@ -331,6 +336,35 @@ void runInstruction(Instruction* i)
 	case DrawBuffers:
 		glDrawBuffers((GLuint)i->Arg0, (const GLenum*)i->Arg1);
 		break;
+
+	case HDrawArrays:
+		hglDrawArrays((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (DrawCallInfoList*)i->Arg3);
+		break;
+	case HDrawElements:
+		hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
+		break;
+	case HDrawArraysIndirect:
+		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (int*)i->Arg3, (GLuint)i->Arg4);
+		break;
+	case HDrawElementsIndirect:
+		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (int*)i->Arg4, (GLuint)i->Arg5);
+		break;
+	case HSetDepthTest:
+		hglSetDepthTest((GLenum*)i->Arg0);
+		break;
+	case HSetCullFace:
+		hglSetCullFace((GLenum*)i->Arg0);
+		break;
+	case HSetPolygonMode:
+		hglSetPolygonMode((GLenum*)i->Arg0);
+		break;
+	case HSetBlendMode:
+		hglSetBlendMode((BlendMode*)i->Arg0);
+		break;
+	case HSetStencilMode:
+		hglSetStencilMode((StencilMode*)i->Arg0);
+		break;
+
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
 		break;
@@ -377,9 +411,9 @@ Statistics runRedundancyChecks(Fragment* frag)
 				switch (i->Code)
 				{
 				case BindVertexArray:
-					if (state.ShouldSetVertexArray(arg0))
+					if (state.ShouldSetVertexArray(*(GLuint*)arg0))
 					{
-						glBindVertexArray((GLuint)arg0);
+						glBindVertexArray(*(GLuint*)arg0);
 					}
 					break;
 				case BindProgram:
@@ -599,6 +633,54 @@ Statistics runRedundancyChecks(Fragment* frag)
 					glMultiDrawElementsIndirect((GLenum)i->Arg0, (GLenum)i->Arg1, (const void*)i->Arg2, *((GLsizei*)i->Arg3), (GLsizei)i->Arg4);
 					break;
 
+
+
+				case HDrawArrays:
+					hglDrawArrays((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (DrawCallInfoList*)i->Arg3);
+					break;
+				case HDrawElements:
+					hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
+					break;
+				case HDrawArraysIndirect:
+					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (int*)i->Arg3, (GLuint)i->Arg4);
+					break;
+				case HDrawElementsIndirect:
+					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (int*)i->Arg4, (GLuint)i->Arg5);
+					break;
+
+				case HSetDepthTest:
+					if (state.HShouldSetDepthTest((GLenum*)i->Arg0))
+					{
+						hglSetDepthTest((GLenum*)i->Arg0);
+					}
+					break;
+				case HSetCullFace:
+					if (state.HShouldSetCullFace((GLenum*)i->Arg0))
+					{
+						hglSetCullFace((GLenum*)i->Arg0);
+					}
+					break;
+				case HSetPolygonMode:
+					if (state.HShouldSetPolygonMode((GLenum*)i->Arg0))
+					{
+						hglSetPolygonMode((GLenum*)i->Arg0);
+					}
+					break;
+				case HSetBlendMode:
+					if (state.HShouldSetBlendMode((BlendMode*)i->Arg0))
+					{
+						hglSetBlendMode((BlendMode*)i->Arg0);
+					}
+					break;
+				case HSetStencilMode:
+					if (state.HShouldSetStencilMode((StencilMode*)i->Arg0))
+					{
+						hglSetStencilMode((StencilMode*)i->Arg0);
+					}
+					break;
+
+
+
 				default:
 					printf("unknown instruction code: %d\n", i->Code);
 					break;
@@ -634,7 +716,6 @@ DllExport(void) vmRunSingle(Fragment* frag)
 
 DllExport(void) vmRun(Fragment* frag, VMMode mode, Statistics& stats)
 {
-	//DebugBreak();
 	if (!initialized)
 	{
 		printf("vm not initialized\n");
@@ -655,74 +736,13 @@ DllExport(void) vmRun(Fragment* frag, VMMode mode, Statistics& stats)
 
 
 
-
-
-
-
-typedef struct {
-	int FaceVertexCount;
-	int InstanceCount;
-	int FirstIndex;
-	int FirstInstance;
-	int BaseVertex;
-} DrawCallInfo;
-
-typedef struct {
-	int64_t Count;
-	DrawCallInfo* Infos;
-} DrawCallInfoList;
-
-typedef  struct {
-	int  Count;
-	int  InstanceCount;
-	int  First;
-	int  BaseInstance;
-} DrawArraysIndirectCommand;
-
-typedef  struct {
-	int  Count;
-	int  InstanceCount;
-	int  FirstIndex;
-	int  BaseVertex;
-	int  BaseInstance;
-} DrawElementsIndirectCommand;
-
-typedef struct {
-	int Enabled;
-	GLenum SourceFactor;
-	GLenum DestFactor;
-	GLenum Operation;
-	GLenum SourceFactorAlpha;
-	GLenum DestFactorAlpha;
-	GLenum OperationAlpha;
-} BlendMode;
-
-typedef struct {
-	int Enabled;
-	GLenum CmpFront;
-	int32_t MaskFront;
-	uint32_t ReferenceFront;
-	GLenum CmpBack;
-	int32_t MaskBack;
-	uint32_t ReferenceBack;
-	GLenum OpFrontSF;
-	GLenum OpFrontDF;
-	GLenum OpFrontPass;
-	GLenum OpBackSF;
-	GLenum OpBackDF;
-	GLenum OpBackPass;
-} StencilMode;
-
-typedef struct {
-	GLenum Mode;
-	int PatchVertices;
-} BeginMode;
-
-
-DllExport(void) hglDrawArrays(int* isActive, BeginMode* mode, DrawCallInfoList* infos)
+DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos)
 {
 	trace("hglDrawArrays\n");
 	if (!*isActive) return;
+
+	stats->DrawCalls++;
+	stats->EffectiveDrawCalls++;
 
 	auto cnt = (int)infos->Count;
 	auto info = infos->Infos;
@@ -744,10 +764,13 @@ DllExport(void) hglDrawArrays(int* isActive, BeginMode* mode, DrawCallInfoList* 
 	endtrace("hglDrawArrays")
 }
 
-DllExport(void) hglDrawElements(int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos)
+DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos)
 {
 	trace("hglDrawElements\n");
 	if (!*isActive) return;
+
+	stats->DrawCalls++;
+	stats->EffectiveDrawCalls++;
 
 	auto cnt = infos->Count;
 	auto info = infos->Infos;
@@ -797,9 +820,17 @@ DllExport(void) hglDrawElements(int* isActive, BeginMode* mode, GLenum indexType
 	endtrace("a")
 }
 
-DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* count, GLint stride, GLuint buffer)
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLint* count, GLuint buffer)
 {
 	trace("hglDrawArraysIndirect\n");
+
+	auto active = *isActive;
+	auto drawcount = *count;
+	if (!active || !drawcount) return;
+
+	stats->DrawCalls++;
+	stats->EffectiveDrawCalls += drawcount;
+
 	auto m = mode->Mode;
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
@@ -810,19 +841,12 @@ DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* cou
 		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
 		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
 		auto indirect = (DrawArraysIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
-		auto drawcount = *count;
+		
 		GLsizei n;
 		for (n = 0; n < drawcount; n++)
 		{
 			const DrawArraysIndirectCommand  *cmd;
-			if (stride != 0)
-			{
-				cmd = (DrawArraysIndirectCommand*)((char*)indirect + n * stride);
-			}
-			else
-			{
-				cmd = (DrawArraysIndirectCommand*)indirect + n;
-			}
+			cmd = (DrawArraysIndirectCommand*)(indirect + n * 20);
 
 			glDrawArraysInstancedBaseInstance(m, cmd->First, cmd->Count, cmd->InstanceCount, cmd->BaseInstance);
 		}
@@ -832,17 +856,23 @@ DllExport(void) hglDrawArraysIndirect(int* isActive, BeginMode* mode, GLint* cou
 	}
 	else
 	{
-		auto cnt = *count;
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-		glMultiDrawArraysIndirect(m, nullptr, cnt, stride);
+		glMultiDrawArraysIndirect(m, nullptr, drawcount, 20);
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 	}
 	endtrace("a")
 }
 
-DllExport(void) hglDrawElementsIndirect(int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLint stride, GLuint buffer)
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLuint buffer)
 {
 	trace("hglDrawElementsIndirect\n");
+	auto drawcount = *count;
+	auto active = *isActive;
+	if (!active || !drawcount)return;
+
+	stats->DrawCalls++;
+	stats->EffectiveDrawCalls += drawcount;
+
 	auto m = mode->Mode;
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
@@ -853,20 +883,11 @@ DllExport(void) hglDrawElementsIndirect(int* isActive, BeginMode* mode, GLenum i
 		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
 		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
 		auto indirect = (DrawElementsIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
-		auto drawcount = *count;
-
 		GLsizei n;
 		for (n = 0; n < drawcount; n++)
 		{
 			const DrawElementsIndirectCommand  *cmd;
-			if (stride != 0)
-			{
-				cmd = (const DrawElementsIndirectCommand  *)((char*)indirect + n * stride);
-			}
-			else
-			{
-				cmd = (const DrawElementsIndirectCommand  *)indirect + n;
-			}
+			cmd = (const DrawElementsIndirectCommand  *)indirect + n;
 
 			glDrawElementsInstancedBaseVertexBaseInstance(
 				m,
@@ -885,7 +906,7 @@ DllExport(void) hglDrawElementsIndirect(int* isActive, BeginMode* mode, GLenum i
 	else
 	{
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-		glMultiDrawElementsIndirect(m, indexType, nullptr, *count, stride);
+		glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, 0);
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 	}
 	endtrace("a")
@@ -968,7 +989,10 @@ DllExport(void) hglSetStencilMode(StencilMode* mode)
 	endtrace("a")
 }
 
-
+DllExport(void) hglBindVertexArray(int* vao)
+{
+	glBindVertexArray(*vao);
+}
 
 
 

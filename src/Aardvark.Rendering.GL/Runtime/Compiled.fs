@@ -13,7 +13,8 @@ type MetaInstruction = IMod<list<Instruction>>
 
 type CompilerInfo =
     {
-        stats : ref<FrameStatistics>
+        //stats : ref<FrameStatistics>
+        runtimeStats : nativeptr<V2i>
         currentContext : IMod<ContextHandle>
         drawBuffers : nativeint
         drawBufferCount : int
@@ -27,6 +28,7 @@ type CompilerInfo =
 
 type CompilerState =
     {
+        runtimeStats        : nativeptr<V2i>
         info                : CompilerInfo
         instructions        : list<MetaInstruction>
         disposeActions      : list<unit -> unit>
@@ -74,13 +76,13 @@ module ``Compiled Builder`` =
 
 
         member x.Yield(m : list<Instruction>) =
-            m |> Mod.constant |> x.Yield
+            { runCompile = fun s -> {s with instructions = s.instructions @ [Mod.constant m]}, ()}
 
-        member x.Yield(m : IMod<ContextHandle -> list<Instruction>>) =
-            { runCompile = fun s ->
-                let i = Mod.map2 (fun f ctx -> f ctx) m s.info.currentContext
-                { s with instructions = s.instructions @ [i] }, ()
-            }
+//        member x.Yield(m : IMod<ContextHandle -> list<Instruction>>) =
+//            { runCompile = fun s ->
+//                let i = Mod.map2 (fun f ctx -> f ctx) m s.info.currentContext
+//                { s with instructions = s.instructions @ [i] }, ()
+//            }
 
         member x.Yield(m : IMod<Instruction>) =
             m |> Mod.map (fun i -> [i]) |> x.Yield
@@ -88,18 +90,18 @@ module ``Compiled Builder`` =
 
 
         member x.Yield(m : Instruction) =
-            [m] |> Mod.constant |> x.Yield
+            { runCompile = fun s -> {s with instructions = s.instructions @ [Mod.constant [m]]}, ()}
 
         member x.Return(u : unit) =
             { runCompile = fun s ->
                 s,()
             }
 
-        member x.Yield(m : IMod<ContextHandle -> Instruction>) =
-            { runCompile = fun s ->
-                let i = Mod.map2 (fun f ctx -> [f ctx]) m s.info.currentContext
-                { s with instructions = s.instructions @ [i] }, ()
-            }
+//        member x.Yield(m : IMod<ContextHandle -> Instruction>) =
+//            { runCompile = fun s ->
+//                let i = Mod.map2 (fun f ctx -> [f ctx]) m s.info.currentContext
+//                { s with instructions = s.instructions @ [i] }, ()
+//            }
 
         member x.Zero() = { runCompile = fun s -> s, () }
 
