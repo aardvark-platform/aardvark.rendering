@@ -79,6 +79,7 @@
     <Compile Include="Vulkan.fs" />
     <Compile Include="Fonts.fs" />
     <Compile Include="Playground.fs" />
+    <Compile Include="Proc.fs" />
     <Compile Include="Maya.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />

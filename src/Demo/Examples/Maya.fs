@@ -15,6 +15,7 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.Rendering.NanoVg
+open Aardvark.Base.Monads.State
 
 #nowarn "9"
 #nowarn "51"
@@ -776,16 +777,16 @@ module Maya =
                 do! Air.DrawIndirect drawCallInfos
             }
 
-        let sg =
-            let test = 
-                Pooling.testSg win app.Runtime
-                |> Sg.effect [
-                    Shader.hugoShade |> toEffect
-                    DefaultSurfaces.trafo |> toEffect
-                    DefaultSurfaces.constantColor C4f.Red |> toEffect
-                    DefaultSurfaces.simpleLighting |> toEffect
-                ]
-            test
+//        let sg =
+//            let test = 
+//                Pooling.testSg win app.Runtime
+//                |> Sg.effect [
+//                    Shader.hugoShade |> toEffect
+//                    DefaultSurfaces.trafo |> toEffect
+//                    DefaultSurfaces.constantColor C4f.Red |> toEffect
+//                    DefaultSurfaces.simpleLighting |> toEffect
+//                ]
+//            test
 
         let camera = Mod.map2 (fun v p -> { cameraView = v; frustum = p }) viewTrafo perspective
         let pickRay = Mod.map2 Camera.pickRay camera win.Mouse.Position
@@ -837,11 +838,115 @@ module Maya =
                 moving := ControllerPart.None
         )
 
+        let w = Event.ofObservable (win.Keyboard.KeyDown(Keys.W).Values) |> Event.map (constF ( V2d.OI))
+        let a = Event.ofObservable (win.Keyboard.KeyDown(Keys.A).Values) |> Event.map (constF (-V2d.IO))
+        let s = Event.ofObservable (win.Keyboard.KeyDown(Keys.S).Values) |> Event.map (constF (-V2d.OI))
+        let d = Event.ofObservable (win.Keyboard.KeyDown(Keys.D).Values) |> Event.map (constF ( V2d.IO))
+        let w' = Event.ofObservable (win.Keyboard.KeyUp(Keys.W).Values) |> Event.map (constF (-V2d.OI))
+        let a' = Event.ofObservable (win.Keyboard.KeyUp(Keys.A).Values) |> Event.map (constF ( V2d.IO))
+        let s' = Event.ofObservable (win.Keyboard.KeyUp(Keys.S).Values) |> Event.map (constF ( V2d.OI))
+        let d' = Event.ofObservable (win.Keyboard.KeyUp(Keys.D).Values) |> Event.map (constF (-V2d.IO))
+
+        let changeSpeed =
+            Proc.any [
+                Proc.ofEvent w; Proc.ofEvent a; Proc.ofEvent s; Proc.ofEvent d;
+                Proc.ofEvent w'; Proc.ofEvent a'; Proc.ofEvent s'; Proc.ofEvent d';
+            ]
+
+        let wsad =     
+            proc {  
+                let mutable speed = V2d.Zero
+                while true do
+                    try
+                        do! until [ changeSpeed ]
+
+//                        if speed = V2d.Zero then
+//                            do! Proc.never
+//                        else
+                        for dt in Proc.dt do
+                            do! State.modify (fun (s : CameraView) -> 
+                                let v = speed.X * s.Right + speed.Y * s.Forward
+                                CameraView.withLocation (s.Location + dt.TotalSeconds * 0.5 * v) s
+                            )
+
+                    with delta ->
+                        speed <- speed + delta
+            }
+
+        let down = win.Mouse.Down.Values |> Event.ofObservable |> Event.filter (fun e -> e = MouseButtons.Left)
+        let up = win.Mouse.Up.Values |> Event.ofObservable |> Event.filter (fun e -> e = MouseButtons.Left)
+        let move = win.Mouse.Move.Values |> Event.ofObservable
+        let look =
+            proc {
+                while true do
+                    let! d = down
+                    try
+                        do! until [ Proc.ofEvent up ]
+                        for (o, n) in move do
+                            let delta = n.Position - o.Position
+                            let! v = 
+                                state {
+                                    do! State.modify (fun (s : CameraView) ->
+                                        let trafo =
+                                            M44d.Rotation(s.Right, float delta.Y * -0.001) *
+                                            M44d.Rotation(s.Sky, float delta.X * -0.001)
+
+                                        let newForward = trafo.TransformDir s.Forward |> Vec.normalize
+                                        s.WithForward(newForward)
+                                    )
+                                    return 1
+                                }
+                            return ()
+
+
+                    with _ ->
+                        ()
+            }
+
+        
+        let scroll = win.Mouse.Scroll.Values |> Event.ofObservable
+        let zoom =
+            proc {
+                let mutable speed = 0.0
+                while true do
+                    try
+                        do! until [ Proc.ofEvent scroll ]
+
+                        let rec scrooly () : Proc<_,unit> =
+                            proc {
+                                let! dt = Proc.dt
+                                do! State.modify (fun (s : CameraView) -> 
+                                    let v = speed * s.Forward
+                                    let res = CameraView.withLocation (s.Location + dt.TotalSeconds *0.1 * v) s
+                                    speed <- speed * Fun.Pow(0.004, dt.TotalSeconds)
+                                    res
+                                )
+
+                                if abs speed > 0.5 then return! scrooly ()
+                                else return! Proc.never
+                            }
+
+                        do! scrooly()
+
+                    with delta ->
+                        speed <- speed + delta
+            }
+            
+
+        let all =
+            Proc.par [ 
+                look
+                zoom
+                wsad  
+            ]
+
+        let camera = Proc.toMod view all
+
         let sg =
             sg
                 |> Sg.trafo trafo
                 // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
-                |> Sg.viewTrafo (viewTrafo |> Mod.map CameraView.viewTrafo ) 
+                |> Sg.viewTrafo (camera |> Mod.map CameraView.viewTrafo ) 
                 // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
                 // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
                 |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
