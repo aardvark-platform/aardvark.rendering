@@ -860,14 +860,14 @@ module Maya =
                     try
                         do! until [ changeSpeed ]
 
-//                        if speed = V2d.Zero then
-//                            do! Proc.never
-//                        else
-                        for dt in Proc.dt do
-                            do! State.modify (fun (s : CameraView) -> 
-                                let v = speed.X * s.Right + speed.Y * s.Forward
-                                CameraView.withLocation (s.Location + dt.TotalSeconds * 0.5 * v) s
-                            )
+                        if speed = V2d.Zero then
+                            do! Proc.never
+                        else
+                            for dt in Proc.dt do
+                                do! State.modify (fun (s : CameraView) -> 
+                                    let v = speed.X * s.Right + speed.Y * s.Forward
+                                    CameraView.withLocation (s.Location + dt.TotalSeconds * 0.5 * v) s
+                                )
 
                     with delta ->
                         speed <- speed + delta
@@ -888,8 +888,8 @@ module Maya =
                                 state {
                                     do! State.modify (fun (s : CameraView) ->
                                         let trafo =
-                                            M44d.Rotation(s.Right, float delta.Y * -0.001) *
-                                            M44d.Rotation(s.Sky, float delta.X * -0.001)
+                                            M44d.Rotation(s.Right, float delta.Y * -0.01) *
+                                            M44d.Rotation(s.Sky, float delta.X * -0.01)
 
                                         let newForward = trafo.TransformDir s.Forward |> Vec.normalize
                                         s.WithForward(newForward)

@@ -192,6 +192,18 @@ module Pattern =
             r |> map' Choice2Of2
         ]
 
+    let par (l : Pattern) (r : Pattern) =
+        let dt = l.DependsOnTime || r.DependsOnTime
+        let rel = PersistentHashSet.union l.Relevant r.Relevant
+        { new Pattern<Option<obj> * Option<obj>>() with
+            member x.DependsOnTime = dt
+            member x.Relevant = rel
+            member x.Match(state, source, value) =
+                match l.MatchUntyped(state, source, value), r.MatchUntyped(state, source, value) with
+                    | None, None -> None
+                    | l, r -> Some (l, r)
+        }
+
 [<AbstractClass>]
 type Event<'a>() = 
     abstract member run : ProcState<'s> -> EventResult<'a>
@@ -327,53 +339,9 @@ module Proc =
         )
 
 
-    let rec private anyRV (l' : ProcResult<'s, 'a>) (r : Proc<'s, 'a>)  =
-        { run =
-            state {
-                match l' with
-                    | Finished l -> 
-                        return Finished l
+    let delay (r : ProcResult<'s, 'a>) =
+        { run = State.value r }
 
-                    | Continue(lp, lcont) ->
-                        let! r' = r.run
-                        match r' with
-                            | Finished r -> 
-                                return Finished r
-
-                            | Continue(rp, rcont) ->
-                                let p = Pattern.choice' lp rp
-                                return Continue(p, fun o ->
-                                    match unbox<Choice<obj, obj>> o with
-                                        | Choice1Of2 l -> anyVR (lcont l) r'
-                                        | Choice2Of2 r -> anyRV l' (rcont r)
-                                )
-                            
-            }
-        }
-
-    and private anyVR (l : Proc<'s, 'a>) (r' : ProcResult<'s, 'a>) =
-        { run =
-            state {
-                let! l' = l.run
-                match l' with
-                    | Finished l -> 
-                        return Finished l
-
-                    | Continue(lp, lcont) ->
-                        match r' with
-                            | Finished r -> 
-                                return Finished r
-
-                            | Continue(rp, rcont) ->
-                                let p = Pattern.choice' lp rp
-                                return Continue(p, fun o ->
-                                    match unbox<Choice<obj, obj>> o with
-                                        | Choice1Of2 l -> anyVR (lcont l) r'
-                                        | Choice2Of2 r -> anyRV l' (rcont r)
-                                )
-                            
-            }
-        }
 
     let rec any' (l : Proc<'s, 'a>) (r : Proc<'s, 'a>)  =
         { run =
@@ -394,8 +362,8 @@ module Proc =
                                 let p = Pattern.choice' lp rp
                                 return Continue(p, fun o ->
                                     match unbox<Choice<obj, obj>> o with
-                                        | Choice1Of2 l -> anyVR (lcont l) r'
-                                        | Choice2Of2 r -> anyRV l' (rcont r)
+                                        | Choice1Of2 l -> any' (lcont l) (delay r')
+                                        | Choice2Of2 r -> any' (delay l') (rcont r)
                                 )
                             
             }
@@ -414,45 +382,8 @@ module Proc =
                     res <- any' res r
                 res
 
-    let rec private parRV (l' : ProcResult<'s, unit>) (r : Proc<'s, unit>) =
-        { run =
-            state {
-                let! r' = r.run
 
-                match l', r' with
-                    | Finished (), r' -> return r'
-                    | l', Finished() -> return l'
-                    | Continue(lp,lc), Continue(rp,rc) ->
-                        return Continue(Pattern.choice' lp rp, fun o ->
-                            let o = unbox<Choice<obj, obj>> o
-                            match o with
-                                | Choice1Of2 a -> parVR (lc a) r'
-                                | Choice2Of2 a -> parRV l' (rc a)
-                        )
-
-            }
-        }
-
-    and private parVR (l : Proc<'s, unit>) (r' : ProcResult<'s, unit>) =
-        { run =
-            state {
-                let! l' = l.run
-
-                match l', r' with
-                    | Finished (), r' -> return r'
-                    | l', Finished() -> return l'
-                    | Continue(lp,lc), Continue(rp,rc) ->
-                        return Continue(Pattern.choice' lp rp, fun o ->
-                            let o = unbox<Choice<obj, obj>> o
-                            match o with
-                                | Choice1Of2 a -> parVR (lc a) r'
-                                | Choice2Of2 a -> parRV l' (rc a)
-                        )
-
-            }
-        }
-
-    let par' (l : Proc<'s, unit>) (r : Proc<'s, unit>) = // (ls : list<Proc<'s, unit>>) =
+    let rec par' (l : Proc<'s, unit>) (r : Proc<'s, unit>) = // (ls : list<Proc<'s, unit>>) =
         { run =
             state {
                 let! l' = l.run
@@ -462,11 +393,13 @@ module Proc =
                     | Finished (), r' -> return r'
                     | l', Finished() -> return l'
                     | Continue(lp,lc), Continue(rp,rc) ->
-                        return Continue(Pattern.choice' lp rp, fun o ->
-                            let o = unbox<Choice<obj, obj>> o
+                        return Continue(Pattern.par lp rp, fun o ->
+                            let o = unbox<Option<obj> * Option<obj>> o
                             match o with
-                                | Choice1Of2 a -> parVR (lc a) r'
-                                | Choice2Of2 a -> parRV l' (rc a)
+                                | Some l, Some r -> par' (lc l) (rc r)
+                                | None, Some r -> par' (delay l') (rc r)
+                                | Some l, None -> par' (lc l) (delay r')
+                                | _ -> par' (delay l') (delay r')
                         )
 
             }
@@ -516,7 +449,7 @@ module Proc =
         let self() = repeatWhile guard body
         guard |> bind (fun v -> if v then append body (self()) else value ())
 
-    let delay (f : unit -> Proc<'s, 'a>) =
+    let private delay' (f : unit -> Proc<'s, 'a>) =
         { run =
             state {
                 return! f().run
@@ -524,7 +457,7 @@ module Proc =
         }
 
     let rec foreach (elements : Proc<'s, 'a>) (body : 'a -> Proc<'s, unit>) : Proc<'s, unit> =
-        append (bind body elements) (delay (fun () -> foreach elements body))
+        append (bind body elements) (delay' (fun () -> foreach elements body))
 
     let guarded (guard : Proc<'s, 'a>) (inner : Proc<'s, 'b>) =
         let cancelOrM = choice guard inner
