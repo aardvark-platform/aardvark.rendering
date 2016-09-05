@@ -846,7 +846,7 @@ module Maya =
                 // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
                 |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
 
-        use task = app.Runtime.CompileRender(win.FramebufferSignature, { BackendConfiguration.NativeOptimized with useDebugOutput = true }, sg)
+        use task = app.Runtime.CompileRender(win.FramebufferSignature, { BackendConfiguration.ManagedOptimized with useDebugOutput = true }, sg)
         win.RenderTask <- task |> DefaultOverlays.withStatistics
         win.Run()
 

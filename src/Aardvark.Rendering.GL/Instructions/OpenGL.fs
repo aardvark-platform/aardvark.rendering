@@ -835,6 +835,13 @@ module OpenGl =
         let ColorMask : int -> int  -> int -> int -> int -> unit = wrap Pointers.ColorMask
         let DrawBuffers : int -> nativeint -> unit = wrap Pointers.DrawBuffers
 
-//        let HDrawArrays : nativeint -> nativeint -> nativeint -> unit = wrap Pointers.HDrawArrays
-//        let HDrawElements : nativeint -> nativeint -> int -> nativeint -> unit = wrap Pointers.HDrawElements
-//        let HDrawArraysIndirect : nativeint -> nativeint -> nativeint -> int -> int -> unit = wrap Pointers.HDrawArraysIndirect
+        let HDrawArrays : nativeint -> nativeint -> nativeint -> nativeint -> unit = wrap Pointers.HDrawArrays
+        let HDrawElements : nativeint -> nativeint -> nativeint -> int -> nativeint -> unit = wrap Pointers.HDrawElements
+        let HDrawArraysIndirect : nativeint -> nativeint -> nativeint -> nativeint -> int -> unit = wrap Pointers.HDrawArraysIndirect
+        let HDrawElementsIndirect : nativeint -> nativeint -> nativeint -> int -> nativeint -> int -> unit = wrap Pointers.HDrawElementsIndirect
+        let HSetDepthTest : nativeint -> unit = wrap Pointers.HSetDepthTest
+        let HSetCullFace : nativeint -> unit = wrap Pointers.HSetCullFace
+        let HSetPolygonMode : nativeint -> unit = wrap Pointers.HSetPolygonMode
+        let HSetBlendMode : nativeint -> unit = wrap Pointers.HSetBlendMode
+        let HSetStencilMode : nativeint -> unit = wrap Pointers.HSetStencilMode
+

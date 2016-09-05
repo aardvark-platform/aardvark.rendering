@@ -250,7 +250,7 @@ module ExecutionContext =
         let inline int64 id = i.Arguments.[id] |> unbox<int64>
         let inline ptr id = i.Arguments.[id] |> unbox<nativeint>
 
-        let drawCount (id : int) =
+        let readInt (id : int) =
             match i.Arguments.[id] with
                 | :? Aardvark.Base.PtrArgument as p -> 
                     match p with
@@ -260,7 +260,7 @@ module ExecutionContext =
                 | _ -> failwith "bad draw call count"
 
         match i.Operation with
-            | InstructionCode.BindVertexArray          -> OpenGl.Unsafe.BindVertexArray(int 0)
+            | InstructionCode.BindVertexArray          -> OpenGl.Unsafe.BindVertexArray(readInt 0)
             | InstructionCode.BindProgram              -> OpenGl.Unsafe.BindProgram(int 0)
             | InstructionCode.ActiveTexture            -> OpenGl.Unsafe.ActiveTexture(int 0)
             | InstructionCode.BindSampler              -> OpenGl.Unsafe.BindSampler (int 0) (int 1)
@@ -314,9 +314,19 @@ module ExecutionContext =
             | InstructionCode.DrawBuffers              -> OpenGl.Unsafe.DrawBuffers (int 0) (ptr 1) 
 
             | InstructionCode.MultiDrawArraysIndirect  -> 
-                OpenGl.Unsafe.MultiDrawArraysIndirect (int 0) (ptr 1) (drawCount 2) (int 3)
+                OpenGl.Unsafe.MultiDrawArraysIndirect (int 0) (ptr 1) (readInt 2) (int 3)
             | InstructionCode.MultiDrawElementsIndirect  -> 
-                OpenGl.Unsafe.MultiDrawElementsIndirect (int 0) (int 1) (ptr 2) (drawCount 3) (int 4)
+                OpenGl.Unsafe.MultiDrawElementsIndirect (int 0) (int 1) (ptr 2) (readInt 3) (int 4)
+
+            | InstructionCode.HDrawArrays -> OpenGl.Unsafe.HDrawArrays (ptr 0) (ptr 1) (ptr 2) (ptr 3)
+            | InstructionCode.HDrawElements -> OpenGl.Unsafe.HDrawElements (ptr 0) (ptr 1) (ptr 2) (int 3) (ptr 4)
+            | InstructionCode.HDrawArraysIndirect -> OpenGl.Unsafe.HDrawArraysIndirect (ptr 0) (ptr 1) (ptr 2) (ptr 3) (int 4)
+            | InstructionCode.HDrawElementsIndirect -> OpenGl.Unsafe.HDrawElementsIndirect (ptr 0) (ptr 1) (ptr 2) (int 3) (ptr 4) (int 5)
+            | InstructionCode.HSetDepthTest -> OpenGl.Unsafe.HSetDepthTest (ptr 0) 
+            | InstructionCode.HSetCullFace -> OpenGl.Unsafe.HSetCullFace (ptr 0) 
+            | InstructionCode.HSetPolygonMode -> OpenGl.Unsafe.HSetPolygonMode (ptr 0) 
+            | InstructionCode.HSetBlendMode -> OpenGl.Unsafe.HSetBlendMode (ptr 0) 
+            | InstructionCode.HSetStencilMode -> OpenGl.Unsafe.HSetStencilMode (ptr 0) 
 
             | InstructionCode.GetError                 -> ()
             | _ -> failwithf "unknown instruction: %A" i
