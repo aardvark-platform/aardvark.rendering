@@ -369,7 +369,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
         ) 
     let mutable defaultOutput = defaultFramebuffer |> OutputDescription.ofFramebuffer
 
-    let avgFrameTime = RunningMean(10)
+    let avgFrameTime = RunningMean(3)
     let sizes = Mod.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
     let time = Mod.custom (fun s -> DateTime.Now + TimeSpan.FromSeconds(avgFrameTime.Average))
     let mutable first = true
@@ -379,8 +379,8 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 
     let startupTime = System.Diagnostics.Stopwatch()
 
-
-    
+   
+    let frameWatch = System.Diagnostics.Stopwatch()
 
     do mouse.SetControl this
        keyboard.SetControl this
@@ -392,6 +392,8 @@ type GameWindow(runtime : Runtime, samples : int) as this =
     member x.Sizes = sizes :> IMod<_>
 
     member x.Time = time :> IMod<_>
+
+    member x.AverageFrameTime = MicroTime(TimeSpan.FromSeconds avgFrameTime.Average)
 
     override x.OnLoad(e) =
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
@@ -407,6 +409,8 @@ type GameWindow(runtime : Runtime, samples : int) as this =
      
     override x.OnRenderFrame(e) =
         if loaded then
+            frameWatch.Restart()
+
             if contextHandle = null then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
 
@@ -416,8 +420,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
             match task with
                 | Some t ->
                     using (ctx.RenderingLock contextHandle) (fun _ ->
-                        let sw = System.Diagnostics.Stopwatch()
-                        sw.Start()
+                        
 
                         if size <> sizes.Value then
                             transact (fun () -> Mod.change sizes size)
@@ -436,31 +439,22 @@ type GameWindow(runtime : Runtime, samples : int) as this =
                         let res = t.Run(null, defaultOutput)
                         
                         statistics.Emit res
-                        
-//                        let sw = System.Diagnostics.Stopwatch()
-//                        sw.Start()
-//                        while sw.Elapsed.TotalMilliseconds < 10.0 do 1;
-
-                        if first then
-                            startupTime.Stop()
-                            printfn "startup time: %As" sw.Elapsed.TotalSeconds
-
 
                         x.SwapBuffers()
-                        //System.Threading.Thread.Sleep(200)
-
-                        if not first then
-                            avgFrameTime.Add(sw.Elapsed.TotalSeconds)
 
                         if not time.OutOfDate then
                             transact (fun () -> time.MarkOutdated())
-                        first <- false
+                        
                     )
 
                 | None ->
                     if size <> sizes.Value then
                         transact (fun () -> Mod.change sizes size)
    
+            if not first then
+                avgFrameTime.Add(frameWatch.Elapsed.TotalSeconds)
+            first <- false
+
    
     member x.Mouse = mouse :> IMouse
     member x.Keyboard = keyboard :> IKeyboard     

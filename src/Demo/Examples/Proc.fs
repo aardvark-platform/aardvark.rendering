@@ -1,6 +1,8 @@
 ﻿namespace Aardvark.Base.Incremental
 
 open System
+open System.Collections.Generic
+open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Base.Monads.State
 
@@ -55,6 +57,8 @@ module Temp =
 
         member x.Ticks = ticks
 
+type Bottom =
+    class end
 
 type ProcState<'s> =
     {
@@ -110,6 +114,23 @@ module Pattern =
         interface IObservable with
             member x.Subscribe f = inner.Subscribe(fun v -> v :> obj |> f)
 
+    type private M<'a>(inner : IMod<'a>) =
+        member private x.Inner = inner
+
+        override x.GetHashCode() = inner.GetHashCode()
+        override x.Equals o =
+            match o with
+                | :? M<'a> as o -> inner = o.Inner 
+                | _ -> false
+
+        interface IObservable with
+            member x.Subscribe f = 
+                let mutable first = true
+                inner |> Mod.unsafeRegisterCallbackKeepDisposable (fun v -> 
+                    if first then first <- false
+                    else v :> obj |> f
+                )
+
     type private TimePattern private() =
         inherit Pattern<Time>()
 
@@ -122,6 +143,15 @@ module Pattern =
             if isNull source then Some s.time
             else None
 
+    type private AnyPattern private() =
+        inherit Pattern<unit>()
+
+        static let instance = AnyPattern() :> Pattern<unit>
+        static member Instance = instance
+
+        override x.DependsOnTime = false
+        override x.Relevant = PersistentHashSet.empty
+        override x.Match(_,_,_) = Some ()
 
     let time = TimePattern.Instance
 
@@ -140,6 +170,21 @@ module Pattern =
                     | _ -> 
                         None
         }
+
+    let ofMod (source : IMod<'a>) =
+        let source = M(source) :> IObservable
+        let set = PersistentHashSet.singleton source
+        { new Pattern<'a>() with
+            member x.DependsOnTime = false
+            member x.Relevant = set
+            member x.Match(state, s, v) =
+                match v with
+                    | :? 'a as v when Object.Equals(source,s) ->
+                        Some v
+                    | _ -> 
+                        None
+        }
+
 
     let rec map (f : 'a -> 'b) (m : Pattern<'a>) =
         { new Pattern<'b>() with
@@ -204,6 +249,46 @@ module Pattern =
                     | l, r -> Some (l, r)
         }
 
+
+    let all (ps : list<Pattern>) : Pattern<list<Option<obj>>> =
+        match ps with
+            | [] -> AnyPattern.Instance |> map (fun _ -> [])
+            | [p] -> p |> map' (fun v -> [Some v])
+            | many ->
+                let rel = many |> List.map (fun p -> p.Relevant) |> PersistentHashSet.unionMany
+                let dt = many |> List.exists (fun p -> p.DependsOnTime)
+
+                { new Pattern<list<Option<obj>>>() with
+                    member x.DependsOnTime = dt
+                    member x.Relevant = rel
+                    member x.Match(state, source, value) =
+                        let res = many |> List.map (fun p -> p.MatchUntyped(state, source, value))
+                        if List.exists Option.isSome res then
+                            Some res
+                        else
+                            None
+                }
+
+    let rec any' (patterns : list<Pattern>) =
+        let dt = patterns |> List.exists (fun p -> p.DependsOnTime)
+        let relevant = patterns |> List.map (fun p -> p.Relevant) |> PersistentHashSet.unionMany
+        { new Pattern<int * obj>() with
+            member x.DependsOnTime = dt
+            member x.Relevant = relevant
+
+            member x.Match(state, source, value) =
+                let rec run (i : int) (ps : list<Pattern>) =
+                    match ps with
+                        | [] -> None
+                        | p :: rest ->
+                            match p.MatchUntyped(state, source, value) with
+                                | Some v -> Some (i,v)
+                                | None -> run (i + 1) rest
+
+                run 0 patterns
+        }       
+
+
 [<AbstractClass>]
 type Event<'a>() = 
     abstract member run : ProcState<'s> -> EventResult<'a>
@@ -213,16 +298,16 @@ and EventResult<'a> =
     | EContinue of Pattern * (obj -> Event<'a>)
 
 and Proc<'s, 'a> = { run : State<ProcState<'s>, ProcResult<'s, 'a>> } with
-    member x.Check(a : 'a -> bool) =
+    member x.Filter(a : 'a -> bool) =
         { run =
             state {
                 let! r = x.run
                 match r with
                     | Finished v ->
-                        if a v then return Finished true
-                        else return! x.Check(a).run
+                        if a v then return Finished a
+                        else return! x.Filter(a).run
                     | Continue(p, c) ->
-                        return Continue(p, fun o -> c(o).Check a)
+                        return Continue(p, fun o -> c(o).Filter a)
             }
         }
 
@@ -234,9 +319,16 @@ and Assertion<'s, 'a> =
     private
         | That of list<Proc<'s, 'a>>
 
+type Value<'s, 'a> = { current : 'a; next : Option<Proc<'s, Value<'s, 'a>>> }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Event =
+
+
+    let private ofResult (r : EventResult<'a>) =
+        { new Event<'a>() with
+            member x.run s = r 
+        }
 
     let value (v : 'a) =
         { new Event<'a>() with
@@ -258,27 +350,81 @@ module Event =
                     | EContinue(p,cont) -> EContinue(p, cont >> map f)
         }
 
-    let rec choose (f : 'a -> Option<'b>) (a : Event<'a>) =
+    let rec bind (f : 'a -> Event<'b>) (m : Event<'a>) =
         { new Event<'b>() with
-            member x.run s = 
-                match a.run s with
-                    | EFinished v -> 
-                        match f v with
-                            | Some r -> EFinished r
-                            | None -> (choose f a).run s
-
-                    | EContinue(p,cont) -> EContinue(p, cont >> choose f)
+            member x.run(s) =
+                match m.run(s) with
+                    | EFinished v -> f(v).run(s)
+                    | EContinue(p,c) -> EContinue(p, c >> bind f)
         }
 
-    let filter (f : 'a -> bool) (a : Event<'a>) =
-        choose (fun v -> if f v then Some v else None) a
+    let rec choose (f : 'a -> Option<'b>) (a : Event<'a>) =
+        a |> bind (fun v -> match f v with | Some v -> value v | None -> choose f a)
 
+    let rec filter (f : 'a -> bool) (a : Event<'a>) =
+        a |> bind (fun v -> if f v then value v else filter f a)
+
+    let ignore (m : Event<'a>) =
+        m |> map ignore
+
+    let rec any (es : list<Event<'a>>) =
+        { new Event<'a>() with
+            member x.run s =
+                let rec run (p : list<Event<'a>>) =
+                    match p with
+                        | [] -> Choice2Of2 []
+                        | head :: rest ->
+                            let r = head.run s
+                            match r with
+                                | EFinished v -> Choice1Of2 v
+                                | EContinue(p,c) ->
+                                    let rest = run rest
+                                    match rest with
+                                        | Choice1Of2 v -> Choice1Of2 v
+                                        | Choice2Of2 ps -> Choice2Of2 ((r,p,c)::ps)
+
+                                             
+                let res = run es
+                match res with
+                    | Choice1Of2 v -> 
+                        EFinished v
+
+                    | Choice2Of2 ps ->
+                        let p = Pattern.any' (List.map (fun (_,p,_) -> p) ps)
+                        EContinue(p, fun res ->
+                            let idx,m = unbox<int * obj> res
+
+                            let next = 
+                                ps |> List.mapi (fun i (r,p,c) ->
+                                    if i = idx then c m
+                                    else ofResult r
+                                )
+
+                            any next
+                        )
+
+        }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Proc =
+
+    let private ofResult (r : ProcResult<'s, 'a>) =
+        { run = State.value r }
+
+    let internal fix (f : ref<'a> -> 'a) : 'a =
+        let r = ref Unchecked.defaultof<'a>
+        r := f r
+        !r
+
+    /// creates a proc returning the given value immediately
     let value (v : 'a) =
        { run = State.value (Finished v) }
 
+    /// a proc never returning a value
+    let never<'s, 'a> : Proc<'s, 'a> =
+        { run = State.value (Continue(Pattern.never, fun o -> failwith ""))}
+
+    /// creates a proc using the given event
     let rec ofEvent (e : Event<'a>) : Proc<'s, 'a> =
         { run =
             state {
@@ -289,25 +435,25 @@ module Proc =
             }
         }
 
+    /// a proc returning the current time immediately
     let now<'s> : Proc<'s, Time> =
         { run = State.get |> State.map (fun s -> Finished s.time) }
 
+    /// a proc waiting for the next time-step
     let nextTime<'s> : Proc<'s,Time> =
         { run = State.value ( Continue( Pattern.time, fun _ -> now) ) }
 
+    /// a proc waiting for the next time-step and returning the elapsed time
     let dt<'s> : Proc<'s, MicroTime> =   
-        let getTime =
-            state {
-                let! s = State.get
-                return s.time
-            }
         { run = 
+            let getTime = State.get |> State.map (fun s -> s.time)
             state {
                 let! t = getTime
                 return Continue(Pattern.time, fun o -> { run = getTime |> State.map (fun n -> n - t |> Finished) })
             }
         } 
 
+    /// applies a computation to the result of a proc
     let rec map (f : 'a -> 'b) (m : Proc<'s, 'a>) =
         { run =
             state {
@@ -318,10 +464,7 @@ module Proc =
             }
         }
 
-    let never<'s, 'a> : Proc<'s, 'a> =
-        { run = State.value (Continue(Pattern.never, fun o -> failwith ""))}
-
-
+    /// applies a monadic computation to the result of a proc
     let rec bind (f : 'a -> Proc<'s, 'b>) (m : Proc<'s, 'a>) =
         { run =
             state {
@@ -332,88 +475,94 @@ module Proc =
             }
         }
 
-    let rec filter (f : 'a -> bool) (m : Proc<'s, 'a>) =
-        m |> bind (fun v ->
-            if f v then value v
-            else filter f m
-        )
 
-
-    let delay (r : ProcResult<'s, 'a>) =
-        { run = State.value r }
-
-
-    let rec any' (l : Proc<'s, 'a>) (r : Proc<'s, 'a>)  =
-        { run =
-            state {
-                let! l' = l.run
-
-                match l' with
-                    | Finished l -> 
-                        return Finished l
-
-                    | Continue(lp, lcont) ->
-                        let! r' = r.run
-                        match r' with
-                            | Finished r -> 
-                                return Finished r
-
-                            | Continue(rp, rcont) ->
-                                let p = Pattern.choice' lp rp
-                                return Continue(p, fun o ->
-                                    match unbox<Choice<obj, obj>> o with
-                                        | Choice1Of2 l -> any' (lcont l) (delay r')
-                                        | Choice2Of2 r -> any' (delay l') (rcont r)
-                                )
-                            
-            }
-        }
-
-
-    let choice (l : Proc<'s, 'a>) (r : Proc<'s, 'b>) =
-        any' (map Choice1Of2 l) (map Choice2Of2 r)
-
-    let any (ls : list<Proc<'s, 'a>>) =
+    /// returns the value of the first proc being finished
+    /// NOTE: when multiple procs are finished it returns the first one in list-order
+    let rec any (ls : list<Proc<'s, 'a>>) =
         match ls with
             | [] -> never
-            | h :: rest ->
-                let mutable res = h
-                for r in rest do
-                    res <- any' res r
-                res
+            | [p] -> p
+            | _ -> 
+                let rec run (p : list<Proc<'s, 'a>>) =
+                    state {
+                        match p with
+                            | [] -> return Choice2Of2 []
+                            | head :: rest ->
+                                let! r = head.run
+                                match r with
+                                    | Finished v -> return Choice1Of2 v
+                                    | Continue(p,c) ->
+                                        let! rest = run rest
+                                        match rest with
+                                            | Choice1Of2 v -> return Choice1Of2 v
+                                            | Choice2Of2 ps -> return Choice2Of2 ((r,p,c)::ps)
+                                             
+                    }
 
+                { run =
+                    state {
+                        let! res = run ls
+                        match res with
+                            | Choice1Of2 v -> 
+                                return Finished v
 
-    let rec par' (l : Proc<'s, unit>) (r : Proc<'s, unit>) = // (ls : list<Proc<'s, unit>>) =
-        { run =
-            state {
-                let! l' = l.run
-                let! r' = r.run
+                            | Choice2Of2 ps ->
+                                let p = Pattern.any' (List.map (fun (_,p,_) -> p) ps)
+                                return Continue(p, fun res ->
+                                    let idx,m = unbox<int * obj> res
 
-                match l', r' with
-                    | Finished (), r' -> return r'
-                    | l', Finished() -> return l'
-                    | Continue(lp,lc), Continue(rp,rc) ->
-                        return Continue(Pattern.par lp rp, fun o ->
-                            let o = unbox<Option<obj> * Option<obj>> o
-                            match o with
-                                | Some l, Some r -> par' (lc l) (rc r)
-                                | None, Some r -> par' (delay l') (rc r)
-                                | Some l, None -> par' (lc l) (delay r')
-                                | _ -> par' (delay l') (delay r')
-                        )
+                                    let next = 
+                                        ps |> List.mapi (fun i (r,p,c) ->
+                                            if i = idx then c m
+                                            else ofResult r
+                                        )
 
-            }
-        }
+                                    any next
+                                )
+                    }
+                }
 
-    let par (l : list<Proc<'s, unit>>) =
+    /// a proc which is done when all the given ones are too.
+    let rec par (l : list<Proc<'s, unit>>) =
         match l with
-            | [] -> never
-            | h :: rest ->
-                let mutable res = h
-                for e in rest do
-                    res <- par' res e
-                res
+            | [] -> value ()
+            | [p] -> p
+            | _ -> 
+                { run =
+                    state {
+                        let! conts = 
+                            l |> List.chooseS (fun p -> 
+                                state {
+                                    let! r = p.run
+                                    match r with
+                                        | Finished () -> return None
+                                        | Continue(p,c) -> return Some(r,p,c)
+                                }
+                            )
 
+                        match conts with
+                            | [] -> 
+                                return Finished ()
+
+                            | [(_,p,c)] ->
+                                return Continue(p,c)
+
+                            | many ->
+                                let p = Pattern.all (List.map (fun (_,p,_) -> p) conts)
+                                return Continue(p, fun o ->
+                                    let matches = unbox<list<Option<obj>>> o
+                                    List.map2 (fun (r,_,c) m -> match m with | Some v -> c v | None -> ofResult r) conts matches
+                                        |> par
+                                )
+
+                    }
+                }
+
+    /// a proc returning the first value being ready
+    let choice (l : Proc<'s, 'a>) (r : Proc<'s, 'b>) =
+        any [ map Choice1Of2 l; map Choice2Of2 r ]
+
+    /// a proc waiting for l to exit and then starting r
     let rec append (l : Proc<'s, unit>) (r : Proc<'s, 'a>) =
         { run =
             state {
@@ -424,188 +573,91 @@ module Proc =
             }
         }
 
-    let repeatUntil (guard : Proc<'s, 'a>) (body : Proc<'s, unit>) =
-        let cancelOrM = choice guard body
+    let repeatWhile (guard : Proc<'s, bool>) (body : Proc<'s, unit>) =
+        fix (fun self ->
+            guard |> bind (fun v -> if v then append body !self else value ())
+        )
 
-        let rec repeatUntil (m : Proc<'s, Choice<'a, unit>>) =
-            { run =
-                state {
-                    let! r = m.run
-                    match r with
-                        | Finished v ->
-                            match v with
-                                | Choice1Of2 a -> return Finished ()
-                                | Choice2Of2 () -> return! repeatUntil(cancelOrM).run
-
-                        | Continue(p, c) ->
-                            return Continue(p, c >> bind (function Choice1Of2 _ -> value () | _ -> repeatUntil cancelOrM))
-
-                }
-            }
-
-        repeatUntil cancelOrM
-
-    let rec repeatWhile (guard : Proc<'s, bool>) (body : Proc<'s, unit>) =
-        let self() = repeatWhile guard body
-        guard |> bind (fun v -> if v then append body (self()) else value ())
-
-    let private delay' (f : unit -> Proc<'s, 'a>) =
+    let delay (f : unit -> Proc<'s, 'a>) =
         { run =
             state {
                 return! f().run
             }
         }
 
-    let rec foreach (elements : Proc<'s, 'a>) (body : 'a -> Proc<'s, unit>) : Proc<'s, unit> =
-        append (bind body elements) (delay' (fun () -> foreach elements body))
+    let foreach (elements : Proc<'s, 'a>) (body : 'a -> Proc<'s, unit>) : Proc<'s, unit> =
+        fix (fun self ->
+            append (bind body elements) (delay (fun () -> !self))
+        )
 
-    let guarded (guard : Proc<'s, 'a>) (inner : Proc<'s, 'b>) =
-        let cancelOrM = choice guard inner
+    let repeat (inner : Proc<'s, unit>) =
+        fix (fun self ->
+            append inner (delay (fun () -> !self))
+        )
 
-        let rec guarded (m : Proc<'s, Choice<'a, 'b>>) =
-            { run =
-                state {
-                    let! r = m.run
-                    match r with
-                        | Finished v ->
-                            return Finished v
-//                            match v with
-//                                | Choice1Of2 _ -> return Finished (Choice2Of2 
-//                                | Choice2Of2 v -> return Finished (Some v)
-                    
-                        | Continue(p,c) ->
-                            return Continue(p, c >> guarded)
-                }
-            }
+    let choose (f : 'a -> Option<'b>) (m : Proc<'s, 'a>) =
+        fix (fun self ->
+            m |> bind (fun v -> match f v with | Some v -> value v | None -> !self)
+        )
 
-        guarded cancelOrM 
+    let filter (f : 'a -> bool) (m : Proc<'s, 'a>) =
+        fix (fun self ->
+            m |> bind (fun v -> if f v then value v else !self)
+        )
 
-    let rec repeat (inner : Proc<'s, unit>) =
-        { run =
-            state {
-                let! v = inner.run
-                match v with
-                    | Finished () -> return! repeat(inner).run
-                    | Continue(p,cont) -> return Continue(p, fun o -> append (cont o) (repeat inner))
-            }
-        }
-
-    let inline check (b : ^b -> bool) (v : ^a) =
-        (^a : (member Check : (^b -> bool) -> ^x ) (v, b))
-
-    let inline occurs (v : ^a)  =
-        v |> check (fun b' -> true)
-
-    let inline eq (v : ^a) (b : ^b) =
-        v |> check (fun b' -> b' = b)
-
-    let inline neq (v : ^a) (b : ^b) =
-        v |> check (fun b' -> b' <> b)
-
-
-    open System.Collections.Generic
-
-    type private MultiDict<'k, 'v when 'k : equality>() =
-        let store = Dictionary<'k, List<'v>>()
-
-        member x.ContainsKey (key : 'k) =
-            store.ContainsKey key
-
-        member x.Add(key : 'k, value : 'v) =
-            let list = 
-                match store.TryGetValue key with
-                    | (true, l) -> l
-                    | _ ->
-                        let list = List()
-                        store.[key] <- list
-                        list
-
-            list.Add value
-
-        member x.Keys = store.Keys
-
-        interface System.Collections.IEnumerable with
-            member x.GetEnumerator() = store.GetEnumerator() :> _
-
-        interface System.Collections.Generic.IEnumerable<KeyValuePair<'k, List<'v>>> with
-            member x.GetEnumerator() = store.GetEnumerator() :> _
-
-    type private Runner<'s>(state : 's) =
+    type private Runner<'s>(adjustTime : Time -> Time, state : 's, proc : Proc<'s, unit>) as this =
         inherit Mod.AbstractMod<'s>()
 
         let subscriptions = Dictionary<IObservable, IDisposable>()
 
-        let mutable pending : MultiDict<Pattern, obj -> Proc<'s, unit>> = MultiDict()
+        let mutable pending : Option<Pattern * (obj -> Proc<'s, unit>)> = None
         let queue = Queue<IObservable * obj * Time>()
         let mutable state = { time = Time.Now; userState = state }
         let mutable dependsOnTime = false
 
+        let push (source : IObservable) (value : obj) =
+            lock this (fun () -> queue.Enqueue(source, value, Time.Now))
+            transact (fun () -> this.MarkOutdated())
 
-        let now () = Time.Now
-
-        override x.Compute() =
-            x.Evaluate()
-            
-            if dependsOnTime then
-                AdaptiveObject.Time.Outputs.Add x |> ignore
-            
-            state.userState
-
-        member private x.Push(source : IObservable, value : obj) =
-            queue.Enqueue(source, value, now())
-            transact (fun () -> x.MarkOutdated())
-
-        member x.Enqueue(sf : Proc<'s, unit>) =
-            lock x (fun () ->
-                match sf.run.Run(&state) with
-                    | Finished _ -> ()
-                    | Continue(p, cont) ->
-                        pending.Add(p, cont)
-
-                        if p.DependsOnTime then
-                            dependsOnTime <- true
-
-                        for r in p.Relevant do
-                            if not (subscriptions.ContainsKey r) then
-                                subscriptions.[r] <- r.Subscribe(fun o -> x.Push(r, o))
-            )
-                            
-        member private x.Step() =
-            lock x (fun () ->
-                while queue.Count > 0 do
-                    let (s,e,t) = queue.Dequeue()
-                    state <- { state with time = t }
-
+        let processEvent (source : IObservable) (value : obj) =
+            match pending with
+                | Some (p,cont) ->
                     let mutable dt = false
-                    let mutable newPending = MultiDict()
-                    let mutable tconts = 0
-                    for KeyValue(p, conts) in pending do
-                        match p.MatchUntyped(state,s,e) with
-                            | Some v -> 
-                                if isNull s then
-                                    tconts <- tconts + 1
+                    let mutable newPending = None
+                    match p.MatchUntyped(state,source,value) with
+                        | Some v -> 
 
-                                for cont in conts do
-                                    let c = cont v
-                                    match c.run.Run(&state) with
-                                        | Continue(p,c) ->
-                                            newPending.Add(p, c)
-                                            dt <- dt || p.DependsOnTime
-                                        | _ ->
-                                            ()
-                            | None ->
-                                for cont in conts do
-                                    newPending.Add(p,cont)
+                            let c = cont v
+                            match c.run.Run(&state) with
+                                | Continue(p,c) ->
+                                    newPending <- Some (p,c)
                                     dt <- dt || p.DependsOnTime
+                                | _ ->
+                                    ()
+                        | None ->
+                            newPending <- Some (p,cont)
+                            dt <- dt || p.DependsOnTime
 
 
-                    let oldEvents   = pending.Keys |> Seq.collect (fun p -> p.Relevant) |> HashSet
-                    let newEvents   = newPending.Keys |> Seq.collect (fun p -> p.Relevant) |> HashSet
-                    let removed     = oldEvents |> Seq.filter (newEvents.Contains >> not) |> Seq.toList
-                    let added       = newEvents |> Seq.filter (oldEvents.Contains >> not) |> Seq.toList
+
+                    let added, removed =
+                        match pending, newPending with
+                            | Some (o,_), Some (n,_) ->
+                                let added = n.Relevant |> Seq.filter (fun v -> PersistentHashSet.contains v o.Relevant |> not) |> Seq.toList
+                                let removed = o.Relevant |> Seq.filter (fun v -> PersistentHashSet.contains v n.Relevant |> not) |> Seq.toList
+                                added, removed
+
+                            | None, Some (n,_) ->
+                                Seq.toList n.Relevant, []
+
+                            | Some (o,_), None ->
+                                [], Seq.toList o.Relevant
+
+                            | None, None ->
+                                [], []
 
                     for a in added do
-                        subscriptions.[a] <- a.Subscribe(fun o -> x.Push(a, o))
+                        subscriptions.[a] <- a.Subscribe(fun o -> push a o)
 
                     for r in removed do
                         match subscriptions.TryGetValue r with
@@ -617,34 +669,121 @@ module Proc =
                     pending <- newPending
                     dependsOnTime <- dt
 
-            )
+                | None -> 
+                    dependsOnTime <- false
+                    subscriptions.Values |> Seq.iter (fun d -> d.Dispose())
+                    subscriptions.Clear()
+                    queue.Clear()
 
-        member x.Evaluate() =
-            lock x (fun () ->
-                queue.Enqueue(null, null, now ())
-                x.Step()
-            )
+        let setTime (t : Time) =
+            if t > state.time then
+                state <- { state with time = t }
+                if dependsOnTime then processEvent null null
 
-        member x.State = x :> IMod<_>
+        let step (tTarget : Time) =
+            while queue.Count > 0 do
+                let (s,e,t) = queue.Dequeue()
+                setTime t
+                processEvent s e
 
-    let toMod (s : 's) (p : Proc<'s,unit>) =
-        let r = Runner<'s>(s)
-        r.Enqueue p
-        r.State
+            setTime tTarget
+                    
+        do match proc.run.Run(&state) with
+            | Finished _ -> ()
+            | Continue(p, cont) ->
+                pending <- Some (p,cont)
+
+                if p.DependsOnTime then
+                    dependsOnTime <- true
+
+                for r in p.Relevant do
+                    if not (subscriptions.ContainsKey r) then
+                        subscriptions.[r] <- r.Subscribe(fun o -> push r o)
+
+//        open System
+//        let run () =
+//            let sw = System.Diagnostics.Stopwatch()
+//            let rec run (cnt : int) (current : TimeSpan) =
+//                let s = sw.Elapsed
+//                if s <> current then
+//                    if cnt < 100 then
+//                        printfn "%.3fµs" (float (s.Ticks - current.Ticks) / 10.0)
+//                        run (cnt + 1) s
+//                else
+//                    run cnt current
+//            System.Threading.Tasks.Task.Factory.StartNew (fun () -> run 0 TimeSpan.Zero) |> ignore
+//            sw.Start()
+
+        override x.Compute() =
+            let now = adjustTime Time.Now
+            step now
+            
+            if dependsOnTime then
+                AdaptiveObject.Time.Outputs.Add x |> ignore
+            
+            state.userState
+
+    let toMod (adjustTime : Time -> Time) (s : 's) (p : Proc<'s,unit>) =
+        Runner<'s>(adjustTime, s, p) :> IMod<_>
 
     let inline ignore (m : Proc<'s, 'a>) =
         map ignore m
 
+//
+//    let rec bindValue' (f : 'a -> Proc<'s, unit>) (m : Value<'s, 'a>) : Value<'s, 'x> =
+//        let current = m.current |> f
+//        choice current m.next |> bind (fun r ->
+//            match r with
+//                | Choice1Of2 () -> m.next |> bind (fun v -> bindValue f v)
+//                | Choice2Of2 v -> bindValue f v
+//        )
+
+    let nextValue (m : IMod<'a>) : Proc<'s, 'a> =
+        { run =
+            state {
+                return Continue(Pattern.ofMod m, fun v -> v |> unbox<'a> |> value)
+            }
+        }
+
+    let rec bindValue (f : 'a -> Proc<'s, 'b>) (m : Value<'s, 'a>) : Proc<'s, 'b> =
+        let current = m.current |> f
+        match m.next with
+            | None -> current
+            | Some n ->
+                choice current n |> bind (fun r ->
+                    match r with
+                        | Choice1Of2 _ -> n |> bind (fun v -> bindValue f v)
+                        | Choice2Of2 v -> bindValue f v
+                )
+
+    let rec bindMod (f : 'a -> Proc<'s, unit>) (m : IMod<'a>) : Proc<'s, 'b> =
+        let current = m |> Mod.force |> f
+        choice current (nextValue m) |> bind (fun r ->
+            match r with
+                | Choice1Of2 () -> (nextValue m) |> bind (fun v -> bindMod f m)
+                | Choice2Of2 v -> bindMod f m
+        )
+
+    let rec fold (f : 'x -> 'a -> 'x) (initial : 'x) (m : Proc<'s, 'a>) : Value<'s, 'x> =
+        { 
+            current = initial
+            next = m |> map (fun v -> (fold f (f initial v) m)) |> Some
+        }
+
+    //let fold (f : 'x -> 'a -> 'x) (initial : 'x) (m : Proc<'s, 'a>) : Proc<'s, 'x> =
+        
+    //type Value<'s, 'a> = { current : 'a; next : Proc<'s, Value<'s, 'a>> }
+
 
 [<AutoOpen>]
-module ``SF Builders`` =
+module ``Proc Builders`` =
 
-    let inline (.=) a b = Proc.eq a b
-    let inline (.<>) a b = Proc.neq a b
-    let inline (.>) a b = a |> Proc.check (fun a -> a > b)
-    let inline (.<) a b = a |> Proc.check (fun a -> a < b)
-    let inline (.>=) a b = a |> Proc.check (fun a -> a >= b)
-    let inline (.<=) a b = a |> Proc.check (fun a -> a >= b)
+    let inline (.=) a b = a |> Proc.filter (fun a -> a = b)
+    let inline (.<>) a b = a |> Proc.filter (fun a -> a <> b)
+    let inline (.>) a b = a |> Proc.filter (fun a -> a > b)
+    let inline (.<) a b = a |> Proc.filter (fun a -> a < b)
+    let inline (.>=) a b = a |> Proc.filter (fun a -> a >= b)
+    let inline (.<=) a b = a |> Proc.filter (fun a -> a >= b)
 
     type ProcBuilder() =
         let lift (f : 'a -> 'b) (m : State<'s, 'a>) =
@@ -663,20 +802,30 @@ module ``SF Builders`` =
         member x.Bind(m : Proc<'s, 'a>, f : 'a -> Proc<'s, 'b>) =
             Proc.bind f m
 
+        member x.Bind(m : Value<'s, 'a>, f : 'a -> Proc<'s, unit>) =
+            Proc.bindValue f m
+
+        member x.Bind(m : IMod<'a>, f : 'a -> Proc<'s, unit>) =
+            Proc.bindMod f m
+
+
         member x.Bind(m : State<'s, 'a>, f : 'a -> Proc<'s, 'b>) =
             Proc.bind f { run = m |> lift Finished }
+
+        member x.Bind(m : 's -> 's, f : unit -> Proc<'s, 'b>) =
+            Proc.bind f { run = m |> State.modify |> lift Finished }
 
         member x.Return(v : 'a) = 
             Proc.value v
 
         member x.ReturnFrom(sf : Proc<'s, 'a>) =
             sf
-
-        member x.ReturnFrom(sf : Event<'a>) =
-            Proc.ofEvent sf
-
-        member x.ReturnFrom(s : State<'s, 'a>) =
-            { run = s |> lift Finished }
+//
+//        member x.ReturnFrom(sf : Event<'a>) =
+//            Proc.ofEvent sf
+//
+//        member x.ReturnFrom(s : State<'s, 'a>) =
+//            { run = s |> lift Finished }
 
         member x.TryWith(m : Assertion<'s,'x> * Proc<'s, 'a>, comp : 'x -> Proc<'s, 'a>) : Proc<'s, 'a> =
             let (That assertions), body = m
@@ -686,7 +835,7 @@ module ``SF Builders`` =
                     | [a] -> a
                     | _ -> assertions |> Proc.any
 
-            Proc.guarded guard body |> Proc.bind (fun v ->
+            Proc.choice guard body |> Proc.bind (fun v ->
                 match v with
                     | Choice1Of2 v -> comp v
                     | Choice2Of2 v -> Proc.value v
@@ -743,4 +892,29 @@ module ``SF Builders`` =
                 return 2
         }
 
+
+[<AutoOpen>]
+module ``Extendend Proc Stuff`` =
+
+    type ProcStartStopBuilder<'s>(run : Proc<'s, unit> -> Proc<'s, unit>) =
+        inherit ProcBuilder()
+
+        member x.Run(m : Proc<'s, unit>) =
+            run m
+        
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module Proc =
+        let startStop (start : Proc<'s, _>) (stop : Proc<'s, _>) =
+            ProcStartStopBuilder<'s>(fun body ->
+                start |> Proc.bind (fun _ ->
+                    Proc.fix (fun self ->
+                        Proc.choice stop body |> Proc.bind (fun r ->
+                            match r with
+                                | Choice1Of2 v -> Proc.value ()
+                                | Choice2Of2 () -> !self
+                        )
+                    )
+                ) |> Proc.repeat
+            )
 

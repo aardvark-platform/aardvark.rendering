@@ -626,6 +626,168 @@ module Pooling =
             |> Sg.fillMode mode
 
 
+module Controller =
+    open Aardvark.Base.Incremental.Operators
+    type StartStop<'a> = { start : Event<'a>; stop : Event<'a> }
+    type Config =
+        {
+            look        : StartStop<unit>
+            pan         : StartStop<unit>
+            zoom        : StartStop<unit>
+            forward     : IMod<bool>
+            backward    : IMod<bool>
+            right       : IMod<bool>
+            left        : IMod<bool>
+            move        : Event<PixelPosition * PixelPosition>
+            scroll      : Event<float>
+        }
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module Config =
+        let wsad (rc : IRenderControl) =
+            let lDown       = rc.Mouse.Down.Values |> Event.ofObservable |> Event.filter (fun m -> m = MouseButtons.Left) |> Event.ignore
+            let lUp         = rc.Mouse.Up.Values |> Event.ofObservable |> Event.filter (fun m -> m = MouseButtons.Left) |> Event.ignore
+            let mDown       = rc.Mouse.Down.Values |> Event.ofObservable |> Event.filter (fun m -> m = MouseButtons.Middle) |> Event.ignore
+            let mUp         = rc.Mouse.Up.Values |> Event.ofObservable |> Event.filter (fun m -> m = MouseButtons.Middle) |> Event.ignore
+            let rDown       = rc.Mouse.Down.Values |> Event.ofObservable |> Event.filter (fun m -> m = MouseButtons.Right) |> Event.ignore
+            let rUp         = rc.Mouse.Up.Values |> Event.ofObservable |> Event.filter (fun m -> m = MouseButtons.Right) |> Event.ignore
+            
+            let scroll      = rc.Mouse.Scroll.Values |> Event.ofObservable
+            let move        = rc.Mouse.Move.Values |> Event.ofObservable
+
+            {
+                look        = { start = lDown; stop = lUp }
+                pan         = { start = mDown; stop = mUp }
+                zoom        = { start = rDown; stop = rUp }
+                forward     = rc.Keyboard.IsDown(Keys.W)
+                backward    = rc.Keyboard.IsDown(Keys.S)
+                right       = rc.Keyboard.IsDown(Keys.D)
+                left        = rc.Keyboard.IsDown(Keys.A)
+                move        = move
+                scroll      = scroll
+            }
+
+    let move (c : Config) = 
+        proc {  
+            let! speed = 
+                (c.forward   %?  V2d.OI %. V2d.OO) %+
+                (c.backward  %? -V2d.OI %. V2d.OO) %+
+                (c.left      %? -V2d.IO %. V2d.OO) %+ 
+                (c.right     %?  V2d.IO %. V2d.OO)
+
+            if speed <> V2d.Zero then
+                for dt in Proc.dt do
+                    do! fun (cam : CameraView) -> 
+                        let direction = 
+                            speed.X * cam.Right + 
+                            speed.Y * cam.Forward
+
+                        let delta = 0.5 * direction * dt.TotalSeconds
+
+                        cam.WithLocation(cam.Location + delta)
+        }
+
+    let look (c : Config) =
+        Proc.startStop (Proc.ofEvent c.look.start) (Proc.ofEvent c.look.stop) {
+            for (o, n) in c.move do
+                let delta = n.Position - o.Position
+                do! State.modify (fun (s : CameraView) ->
+                    let trafo =
+                        M44d.Rotation(s.Right, float delta.Y * -0.01) *
+                        M44d.Rotation(s.Sky, float delta.X * -0.01)
+
+                    let newForward = trafo.TransformDir s.Forward |> Vec.normalize
+                    s.WithForward(newForward)
+                )
+        }
+//        proc {
+//            while true do
+//                let! d = c.look.start
+//                try
+//                    do! until [ Proc.ofEvent c.look.stop ]
+//                    for (o, n) in c.move do
+//                        let delta = n.Position - o.Position
+//                        do! State.modify (fun (s : CameraView) ->
+//                            let trafo =
+//                                M44d.Rotation(s.Right, float delta.Y * -0.01) *
+//                                M44d.Rotation(s.Sky, float delta.X * -0.01)
+//
+//                            let newForward = trafo.TransformDir s.Forward |> Vec.normalize
+//                            s.WithForward(newForward)
+//                        )
+//
+//
+//                with _ ->
+//                    ()
+//        }
+
+    let scroll (c : Config) =
+        proc {
+            let mutable speed = 0.0
+            while true do
+                try
+                    do! until [ Proc.ofEvent c.scroll ]
+
+                    let rec scrooly() =
+                        proc {
+                            let! dt = Proc.dt
+                            do! State.modify (fun (s : CameraView) -> 
+                                let v = speed * s.Forward
+                                let res = CameraView.withLocation (s.Location + dt.TotalSeconds *0.1 * v) s
+                                speed <- speed * Fun.Pow(0.004, dt.TotalSeconds)
+                                res
+                            )
+
+                            if abs speed > 0.5 then return! scrooly()
+                            else return! Proc.never
+                        }
+
+                    do! scrooly()
+
+                with delta ->
+                    speed <- speed + delta
+        }
+            
+    let pan (c : Config) =
+        proc {
+            while true do
+                let! d = c.pan.start
+                try
+                    do! until [ Proc.ofEvent c.pan.stop ]
+                    for (o, n) in c.move do
+                        let delta = n.Position - o.Position
+                        do! State.modify (fun (s : CameraView) ->
+                            let step = 0.05 * (s.Down * float delta.Y + s.Right * float delta.X)
+                            s.WithLocation(s.Location + step)
+                        )
+
+
+                with _ ->
+                    ()
+        }
+
+    let zoom (c : Config) =
+        proc {
+            while true do
+                let! d = c.zoom.start
+                try
+                    do! until [ Proc.ofEvent c.zoom.stop ]
+                    for (o, n) in c.move do
+                        let delta = n.Position - o.Position
+                        do! State.modify (fun (s : CameraView) ->
+                            let step = -0.05 * (s.Forward * float delta.Y)
+                            s.WithLocation(s.Location + step)
+                        )
+
+
+                with _ ->
+                    ()
+        }
+    
+    let control (c : Config) =
+        Proc.par [ look c; scroll c; move c; pan c; zoom c ]
+
+
 module Maya = 
 
     module Shader =
@@ -694,8 +856,10 @@ module Maya =
         Ag.initialize()
         Aardvark.Init()
         use app = new OpenGlApplication()
-        use win = app.CreateSimpleRenderWindow(1)
-        win.Text <- "Aardvark rocks \\o/"
+        use win = app.CreateGameWindow()
+        //use win = app.CreateSimpleRenderWindow(1)
+        //win.VSync <- OpenTK.VSyncMode.On
+        //win.Text <- "Aardvark rocks \\o/"
 
         let view = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
         let perspective = 
@@ -797,161 +961,126 @@ module Maya =
 //            printfn "%A" c
 //        ) |> ignore
 
-        let mutable lastRay = pickRay.GetValue()
-        let  moving = ref ControllerPart.None
-        win.Mouse.Down.Values.Add (fun b ->
-            if b = MouseButtons.Left then
-                let c = controlledAxis.GetValue()
-                lastRay <- pickRay.GetValue()
-                moving := c
-                printfn "down %A" c
-        )
-
-        win.Mouse.Move.Values.Add (fun m ->
-            match !moving with
-                | ControllerPart.None -> ()
-                | p ->
-                    printfn "move"
-                    let t = trafo.GetValue()
-                    let pickRay = pickRay.GetValue()
-                    
-                    let ray = pickRay.Transformed(t.Backward)
-                    let last = lastRay.Transformed(t.Backward)
-
-                    let delta = 
-                        match p with
-                            | ControllerPart.X -> 
-                                V3d(ray.Intersect(Plane3d.ZPlane).X - last.Intersect(Plane3d.ZPlane).X, 0.0, 0.0)
-                            | ControllerPart.Y -> 
-                                V3d(0.0, ray.Intersect(Plane3d.ZPlane).Y - last.Intersect(Plane3d.ZPlane).Y, 0.0)
-                            | _ -> 
-                                V3d(0.0, 0.0, ray.Intersect(Plane3d.XPlane).Z - last.Intersect(Plane3d.XPlane).Z)
-                    printfn "%A" delta
-                    transact (fun () ->
-                        trafo.Value <- t * Trafo3d.Translation(delta)
-                    )
-
-                    lastRay <- pickRay
-        )
-        win.Mouse.Up.Values.Add (fun b ->
-            if b = MouseButtons.Left then
-                moving := ControllerPart.None
-        )
-
-        let w = Event.ofObservable (win.Keyboard.KeyDown(Keys.W).Values) |> Event.map (constF ( V2d.OI))
-        let a = Event.ofObservable (win.Keyboard.KeyDown(Keys.A).Values) |> Event.map (constF (-V2d.IO))
-        let s = Event.ofObservable (win.Keyboard.KeyDown(Keys.S).Values) |> Event.map (constF (-V2d.OI))
-        let d = Event.ofObservable (win.Keyboard.KeyDown(Keys.D).Values) |> Event.map (constF ( V2d.IO))
-        let w' = Event.ofObservable (win.Keyboard.KeyUp(Keys.W).Values) |> Event.map (constF (-V2d.OI))
-        let a' = Event.ofObservable (win.Keyboard.KeyUp(Keys.A).Values) |> Event.map (constF ( V2d.IO))
-        let s' = Event.ofObservable (win.Keyboard.KeyUp(Keys.S).Values) |> Event.map (constF ( V2d.OI))
-        let d' = Event.ofObservable (win.Keyboard.KeyUp(Keys.D).Values) |> Event.map (constF (-V2d.IO))
-
-        let changeSpeed =
-            Proc.any [
-                Proc.ofEvent w; Proc.ofEvent a; Proc.ofEvent s; Proc.ofEvent d;
-                Proc.ofEvent w'; Proc.ofEvent a'; Proc.ofEvent s'; Proc.ofEvent d';
-            ]
-
-        let wsad =     
-            proc {  
-                let mutable speed = V2d.Zero
-                while true do
-                    try
-                        do! until [ changeSpeed ]
-
-                        if speed = V2d.Zero then
-                            do! Proc.never
-                        else
-                            for dt in Proc.dt do
-                                do! State.modify (fun (s : CameraView) -> 
-                                    let v = speed.X * s.Right + speed.Y * s.Forward
-                                    CameraView.withLocation (s.Location + dt.TotalSeconds * 0.5 * v) s
-                                )
-
-                    with delta ->
-                        speed <- speed + delta
-            }
-
-        let down = win.Mouse.Down.Values |> Event.ofObservable |> Event.filter (fun e -> e = MouseButtons.Left)
-        let up = win.Mouse.Up.Values |> Event.ofObservable |> Event.filter (fun e -> e = MouseButtons.Left)
-        let move = win.Mouse.Move.Values |> Event.ofObservable
-        let look =
-            proc {
-                while true do
-                    let! d = down
-                    try
-                        do! until [ Proc.ofEvent up ]
-                        for (o, n) in move do
-                            let delta = n.Position - o.Position
-                            let! v = 
-                                state {
-                                    do! State.modify (fun (s : CameraView) ->
-                                        let trafo =
-                                            M44d.Rotation(s.Right, float delta.Y * -0.01) *
-                                            M44d.Rotation(s.Sky, float delta.X * -0.01)
-
-                                        let newForward = trafo.TransformDir s.Forward |> Vec.normalize
-                                        s.WithForward(newForward)
-                                    )
-                                    return 1
-                                }
-                            return ()
+//        let mutable lastRay = pickRay.GetValue()
+//        let  moving = ref ControllerPart.None
+//        win.Mouse.Down.Values.Add (fun b ->
+//            if b = MouseButtons.Left then
+//                let c = controlledAxis.GetValue()
+//                lastRay <- pickRay.GetValue()
+//                moving := c
+//                printfn "down %A" c
+//        )
+//
+//        win.Mouse.Move.Values.Add (fun m ->
+//            match !moving with
+//                | ControllerPart.None -> ()
+//                | p ->
+//                    printfn "move"
+//                    let t = trafo.GetValue()
+//                    let pickRay = pickRay.GetValue()
+//                    
+//                    let ray = pickRay.Transformed(t.Backward)
+//                    let last = lastRay.Transformed(t.Backward)
+//
+//                    let delta = 
+//                        match p with
+//                            | ControllerPart.X -> 
+//                                V3d(ray.Intersect(Plane3d.ZPlane).X - last.Intersect(Plane3d.ZPlane).X, 0.0, 0.0)
+//                            | ControllerPart.Y -> 
+//                                V3d(0.0, ray.Intersect(Plane3d.ZPlane).Y - last.Intersect(Plane3d.ZPlane).Y, 0.0)
+//                            | _ -> 
+//                                V3d(0.0, 0.0, ray.Intersect(Plane3d.XPlane).Z - last.Intersect(Plane3d.XPlane).Z)
+//                    printfn "%A" delta
+//                    transact (fun () ->
+//                        trafo.Value <- t * Trafo3d.Translation(delta)
+//                    )
+//
+//                    lastRay <- pickRay
+//        )
+//        win.Mouse.Up.Values.Add (fun b ->
+//            if b = MouseButtons.Left then
+//                moving := ControllerPart.None
+//        )
 
 
-                    with _ ->
-                        ()
-            }
-
+        let wsad = Controller.Config.wsad win
         
-        let scroll = win.Mouse.Scroll.Values |> Event.ofObservable
-        let zoom =
-            proc {
-                let mutable speed = 0.0
-                while true do
-                    try
-                        do! until [ Proc.ofEvent scroll ]
-
-                        let rec scrooly () : Proc<_,unit> =
-                            proc {
-                                let! dt = Proc.dt
-                                do! State.modify (fun (s : CameraView) -> 
-                                    let v = speed * s.Forward
-                                    let res = CameraView.withLocation (s.Location + dt.TotalSeconds *0.1 * v) s
-                                    speed <- speed * Fun.Pow(0.004, dt.TotalSeconds)
-                                    res
-                                )
-
-                                if abs speed > 0.5 then return! scrooly ()
-                                else return! Proc.never
-                            }
-
-                        do! scrooly()
-
-                    with delta ->
-                        speed <- speed + delta
-            }
-            
+        let sepp = win.Keyboard.KeyDown(Keys.Y).Values |> Event.ofObservable |> Proc.ofEvent
+        let switchMode = win.Keyboard.KeyDown(Keys.X).Values |> Event.ofObservable |> Proc.ofEvent
+        let isActive = 
+            switchMode |> Proc.fold (fun a () -> not a) true
 
         let all =
-            Proc.par [ 
-                look
-                zoom
-                wsad  
-            ]
+            let inner = Controller.control wsad 
+            proc {
+                let! active = isActive
+                if active then
+                    do! inner
+            }
+//            let switchMode = win.Keyboard.KeyDown(Keys.X).Values |> Event.ofObservable |> Proc.ofEvent
+//            Proc.whenever 
+//                switchMode 
+//                true
+//                (fun () active -> not active)
+//                (fun active -> 
+//                    if active then Controller.control wsad 
+//                    else Proc.never
+//                )
 
-        let camera = Proc.toMod view all
+        let rand = Random()
+
+        let sleepMs = ref 0
+        let mutable cnt = 0
+        let adjust (t : Time) =
+            cnt <- cnt + 1
+            sleepMs := rand.Next(1, 40)
+
+            t + MicroTime(TimeSpan.FromMilliseconds (20.0 + float !sleepMs))
+
+        let cam = Proc.toMod adjust view all
+
+//        let camera = Mod.init view
+//        let runner =
+//            async {
+//                do! Async.SwitchToNewThread()
+//                while true do
+//                    let v = Mod.force cam
+//                    transact (fun () -> camera.Value <- v)
+//                    do! Async.Sleep 1
+//            }
+//        Async.Start runner
+
+
+        //let camera = view |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
 
         let sg =
             sg
                 |> Sg.trafo trafo
                 // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
-                |> Sg.viewTrafo (camera |> Mod.map CameraView.viewTrafo ) 
+                |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo ) 
                 // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
                 // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
                 |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+                |> Sg.uniform "LightLocation" (Mod.constant (V3d.III * 10.0))
+        use task = app.Runtime.CompileRender(win.FramebufferSignature, { BackendConfiguration.NativeOptimized with useDebugOutput = false }, sg)
+        
 
-        use task = app.Runtime.CompileRender(win.FramebufferSignature, { BackendConfiguration.ManagedOptimized with useDebugOutput = true }, sg)
+        
+        let busywait(wanted : int) = 
+            let sw = System.Diagnostics.Stopwatch()
+            sw.Start()
+            while int sw.Elapsed.TotalMilliseconds < wanted do ()
+            sw.Stop()
+
+        let busywait(wanted : int) =
+            System.Threading.Thread.Sleep(wanted)
+
+        let task = 
+            RenderTask.ofList [
+                task
+                RenderTask.custom (fun (self, o) -> busywait !sleepMs; FrameStatistics.Zero)
+            ]
+        
         win.RenderTask <- task |> DefaultOverlays.withStatistics
         win.Run()
 
