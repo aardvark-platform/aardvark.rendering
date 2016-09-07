@@ -228,6 +228,7 @@ module RenderTasks =
 
         member x.Parent = parent
 
+        abstract member Update : unit -> FrameStatistics
         abstract member Perform : unit -> FrameStatistics
         abstract member Dispose : unit -> unit
         abstract member Add : PreparedMultiRenderObject -> unit
@@ -395,12 +396,16 @@ module RenderTasks =
                 hasProgram <- true
                 currentConfig <- config
 
-        override x.Perform() =
+        override x.Update() =
             let config = parent.Config.GetValue parent
             reinit x config
 
-            let updateStats = 
-                x.ProgramUpdate (fun () -> program.Update parent)
+            //TODO
+            let programStats = x.ProgramUpdate (fun () -> program.Update parent)
+            FrameStatistics.Zero
+
+        override x.Perform() =
+            x.Update() |> ignore
 
             let stats = 
                 x.Execution (fun () -> program.Run())
@@ -717,12 +722,17 @@ module RenderTasks =
 
         member x.Scope = scope
 
-        override x.Perform() =
+        override x.Update() = 
             let cfg = parent.Config.GetValue parent
             reinit x cfg
 
             let updateStats = 
                 x.ProgramUpdate (fun () -> program.Update parent)
+            FrameStatistics.Zero
+
+
+        override x.Perform() =
+            x.Update() |> ignore
 
             let stats = 
                 x.Execution (fun () -> program.Run())
@@ -865,13 +875,9 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-
-
-        override x.Perform(fbo : Framebuffer) =
+        let update ( x : AbstractOpenGlRenderTask ) =
             let mutable stats = FrameStatistics.Zero
             let deltas = preparedObjectReader.GetDelta x
-
-            x.ResourceManager.DrawBufferManager.Write(fbo)
 
             resourceUpdateWatch.Restart()
             stats <- stats + resources.Update(x)
@@ -890,6 +896,25 @@ module RenderTasks =
                         let task = getSubTask v.RenderPass
                         task.Remove v
 
+            { stats with
+                ResourceUpdateSubmissionTime = resourceUpdateWatch.ElapsedCPU
+                ResourceUpdateTime = resourceUpdateWatch.ElapsedGPU
+            } 
+
+
+        override x.Update() =
+            let mutable stats = update x
+
+            let mutable runStats = []
+            for (_,t) in Map.toSeq subtasks do
+                stats <- stats + t.Update()
+
+            stats
+
+        override x.Perform(fbo : Framebuffer) =
+            let updateStats = update x
+
+            x.ResourceManager.DrawBufferManager.Write(fbo)
 
             let mutable current = 0
             let mutable query =  0 //GL.GenQuery()
@@ -908,11 +933,9 @@ module RenderTasks =
             let mutable primitives = primitivesGenerated.Value
 
 
-            stats + 
+            updateStats + 
             (runStats |> List.sumBy (fun l -> l.Value)) +
             { FrameStatistics.Zero with
-                ResourceUpdateSubmissionTime = resourceUpdateWatch.ElapsedCPU
-                ResourceUpdateTime = resourceUpdateWatch.ElapsedGPU
                 PrimitiveCount = float primitives
             }
 
@@ -938,6 +961,7 @@ module RenderTasks =
     type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
         inherit AbstractRenderTask()
 
+        override x.Update() = FrameStatistics.Zero
         override x.Run(desc : OutputDescription) =
             let fbo = desc.framebuffer
             using ctx.ResourceLock (fun _ ->

@@ -506,6 +506,7 @@ type AbstractRenderTask() =
 
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
+    abstract member Update : unit -> FrameStatistics
     abstract member Run : OutputDescription -> FrameStatistics
     abstract member Dispose : unit -> unit
     abstract member Use : (unit -> 'a) -> 'a
@@ -518,6 +519,10 @@ type AbstractRenderTask() =
             frameId <- frameId + 1UL
             stats
         )
+    member x.Update(caller : IAdaptiveObject) =
+        x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () -> 
+            x.Update()
+        )
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -526,6 +531,7 @@ type AbstractRenderTask() =
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Runtime = x.Runtime
         member x.FrameId = frameId
+        member x.Update(caller) = x.Update(caller)
         member x.Run(caller, out) = x.Run(caller, out)
         member x.Use f = x.Use f
 
@@ -543,6 +549,7 @@ module RenderTask =
         interface IRenderTask with
             member x.FramebufferSignature = None
             member x.Dispose() = ()
+            member x.Update(caller) = FrameStatistics.Zero
             member x.Run(caller, fbo) = FrameStatistics.Zero
             member x.Runtime = None
             member x.FrameId = 0UL
@@ -581,6 +588,14 @@ module RenderTask =
         override x.Dispose() =
             for t in tasks do t.Dispose()
 
+        override x.Update() =
+            let mutable stats = FrameStatistics.Zero
+            for t in tasks do
+                let res = t.Update(x)
+                stats <- stats + res
+
+            stats |> f
+
         override x.Run(output) =
             let mutable stats = FrameStatistics.Zero
             for t in tasks do
@@ -599,19 +614,7 @@ module RenderTask =
         inherit AbstractRenderTask()
         let mutable inner : Option<IRenderTask> = None
 
-
-        override x.Use(f : unit -> 'a) =
-            lock x (fun () ->
-                lock input (fun () ->
-                    input.GetValue().Use f
-                )
-            )
-
-        override x.FramebufferSignature = 
-            let v = input.GetValue x
-            v.FramebufferSignature
-
-        override x.Run(fbo) =
+        let updateInner x =
             let ni = input.GetValue x
 
             match inner with
@@ -624,6 +627,25 @@ module RenderTask =
                     ni.AddOutput x
 
             inner <- Some ni
+            ni
+
+        override x.Use(f : unit -> 'a) =
+            lock x (fun () ->
+                lock input (fun () ->
+                    input.GetValue().Use f
+                )
+            )
+
+        override x.FramebufferSignature = 
+            let v = input.GetValue x
+            v.FramebufferSignature
+
+        override x.Update() =
+            let ni = updateInner x
+            ni.Update(x)
+
+        override x.Run(fbo) =
+            let ni = updateInner x
             ni.Run(x, fbo)
 
         override x.Dispose() =
@@ -694,6 +716,17 @@ module RenderTask =
             lock this (fun () -> processDeltas())
             signature
 
+        override x.Update() =
+            processDeltas ()
+
+            let mutable stats = FrameStatistics.Zero
+
+            for (_,t) in reader.Content.All do
+                let res = t.Update(x)
+                stats <- stats + res
+
+            stats
+
         override x.Run(fbo) =
             processDeltas()
 
@@ -727,6 +760,7 @@ module RenderTask =
         override x.FramebufferSignature = None
         override x.Run(fbo) = f.Evaluate (x,(x :> IRenderTask,fbo))
         override x.Dispose() = f.RemoveOutput this 
+        override x.Update() = FrameStatistics.Zero
         override x.Runtime = None
         override x.Use f = lock x f
 
@@ -751,6 +785,7 @@ module RenderTask =
 
         override x.Dispose() = x.Dispose true
         override x.Run(fbo) = inner.Run(x, fbo)
+        override x.Update() = inner.Update x
         override x.FramebufferSignature = inner.FramebufferSignature
         override x.Runtime = inner.Runtime
 
@@ -767,6 +802,7 @@ module RenderTask =
             )
 
         override x.FramebufferSignature = inner.FramebufferSignature
+        override x.Update() = inner.Update x
         override x.Run(fbo) =
             match before with
                 | Some before -> before()

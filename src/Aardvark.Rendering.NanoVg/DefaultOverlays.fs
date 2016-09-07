@@ -343,6 +343,11 @@ module DefaultOverlays =
 
             member x.Runtime = inner.Runtime
 
+            member x.Update(caller) =
+                x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () -> 
+                    inner.Update x
+                )
+
             member x.Run(caller, f) =
                 notRendering.Reset()
                 installTick x

@@ -80,6 +80,7 @@ and IRenderTask =
     inherit IAdaptiveObject
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
+    abstract member Update : IAdaptiveObject -> FrameStatistics
     abstract member Run : IAdaptiveObject * OutputDescription -> FrameStatistics
     abstract member FrameId : uint64
     abstract member Use : (unit -> 'a) -> 'a
