@@ -934,3 +934,116 @@ module RenderingTests =
                     printfn "GL memory: %A" runtime.Context.MemoryUsage
                 )
         ()
+
+module UseTest =
+    
+    let bla () =
+        Ag.initialize()
+        Aardvark.Init()
+
+        use runtime = new Runtime()
+        use ctx = new Context(runtime)
+        runtime.Context <- ctx
+
+        let size = V2i(1024,1024)
+        
+        let color0 = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
+        let color1 = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
+        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+
+
+        let signature =
+            runtime.CreateFramebufferSignature [
+                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            ]
+
+        let fbo0 = 
+            runtime.CreateFramebuffer(
+                signature, 
+                Map.ofList [
+                    DefaultSemantic.Colors, ({ texture = color0; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                ]
+            ) 
+
+        let fbo1 = 
+            runtime.CreateFramebuffer(
+                signature, 
+                Map.ofList [
+                    DefaultSemantic.Colors, ({ texture = color1; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                ]
+            ) 
+
+        let o0 = OutputDescription.ofFramebuffer fbo0
+        let o1 = OutputDescription.ofFramebuffer fbo1
+
+
+        let cam = CameraView.lookAt (V3d.III * 3.0) V3d.Zero V3d.OOI
+        let model = Mod.init Trafo3d.Identity
+        let view = Mod.init cam
+        let sg =
+            Sg.box' C4b.White (Box3d(-V3d.III, V3d.III))
+                |> Sg.effect [
+                    DefaultSurfaces.trafo |> toEffect
+                    DefaultSurfaces.constantColor C4f.White |> toEffect
+                ]
+                |> Sg.trafo model
+                |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
+                |> Sg.projTrafo (Frustum.perspective 60.0 0.1 100.0 1.0 |> Frustum.projTrafo |> Mod.constant)
+
+        
+        use clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
+        use render = runtime.CompileRender(signature, sg)
+        let task = RenderTask.ofList [ clear; render ]
+
+        let render (cam0 : CameraView) (cam1 : CameraView) =
+            task.Use (fun () ->
+                transact (fun () -> view.Value <- cam0)
+                task.Run(o0) |> ignore
+
+                transact (fun () -> view.Value <- cam1)
+                task.Run(o1) |> ignore
+            )
+
+        let trafos =  [| Trafo3d.Scale 0.1 ; Trafo3d.Scale 1.0 |]
+        let changer =
+            async {
+                do! Async.SwitchToNewThread()
+                let mutable i = 0
+                while true do
+                    transact (fun () -> model.Value <- trafos.[i])
+                    i <- (i + 1) % 2
+            }
+        Async.Start changer
+
+        let cam0 = CameraView.lookAt (V3d.III * 3.0) V3d.Zero V3d.OOI
+        let cam1 = CameraView.lookAt (-V3d.III * 3.0) V3d.Zero V3d.OOI
+        for i in 0 .. 20 do
+            render cam0 cam1
+
+            let p0 = runtime.Download(color0, PixFormat.ByteRGBA) |> unbox<PixImage<byte>>
+            let pp1 = runtime.Download(color1, PixFormat.ByteRGBA) |> unbox<PixImage<byte>>
+            let p1 = PixImage<byte>(pp1.Format, pp1.Volume.Transformed(ImageTrafo.MirrorY).ToImage())
+
+            let m0 = p0.GetMatrix<C4b>()
+            let m1 = p1.GetMatrix<C4b>()
+
+            let mutable iter = 0
+            printfn "storing: %A" i
+            p0.SaveAsImage(sprintf @"C:\Users\schorsch\Desktop\urdar\p%d_left.tif" i)
+            p1.SaveAsImage(sprintf @"C:\Users\schorsch\Desktop\urdar\p%d_right.tif" i)
+
+            let equal = m0.InnerProduct(m1, (=), true, (&&)) 
+            if not equal then
+                p0.SaveAsImage @"C:\Users\schorsch\Desktop\p0.tif"
+                p1.SaveAsImage @"C:\Users\schorsch\Desktop\p1.tif"
+                failwith "unequal"
+            ()
+
+
+
+
+
+        ()

@@ -927,7 +927,7 @@ module RenderTasks =
 
         override x.Use (f : unit -> 'a) =
             lock x (fun () ->
-                x.RenderTaskLock.Update (fun () ->
+                x.RenderTaskLock.Run (fun () ->
                     lock resources (fun () ->
                         f()
                     )

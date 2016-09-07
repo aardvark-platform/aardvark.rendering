@@ -691,35 +691,15 @@ module Controller =
         Proc.startStop (Proc.ofEvent c.look.start) (Proc.ofEvent c.look.stop) {
             for (o, n) in c.move do
                 let delta = n.Position - o.Position
-                do! State.modify (fun (s : CameraView) ->
+                do! fun (s : CameraView) ->
                     let trafo =
                         M44d.Rotation(s.Right, float delta.Y * -0.01) *
                         M44d.Rotation(s.Sky, float delta.X * -0.01)
 
                     let newForward = trafo.TransformDir s.Forward |> Vec.normalize
                     s.WithForward(newForward)
-                )
         }
-//        proc {
-//            while true do
-//                let! d = c.look.start
-//                try
-//                    do! until [ Proc.ofEvent c.look.stop ]
-//                    for (o, n) in c.move do
-//                        let delta = n.Position - o.Position
-//                        do! State.modify (fun (s : CameraView) ->
-//                            let trafo =
-//                                M44d.Rotation(s.Right, float delta.Y * -0.01) *
-//                                M44d.Rotation(s.Sky, float delta.X * -0.01)
-//
-//                            let newForward = trafo.TransformDir s.Forward |> Vec.normalize
-//                            s.WithForward(newForward)
-//                        )
-//
-//
-//                with _ ->
-//                    ()
-//        }
+
 
     let scroll (c : Config) =
         proc {
@@ -728,21 +708,22 @@ module Controller =
                 try
                     do! until [ Proc.ofEvent c.scroll ]
 
-                    let rec scrooly() =
+                    let interpolate =
                         proc {
                             let! dt = Proc.dt
-                            do! State.modify (fun (s : CameraView) -> 
+                            do! fun (s : CameraView) -> 
                                 let v = speed * s.Forward
                                 let res = CameraView.withLocation (s.Location + dt.TotalSeconds *0.1 * v) s
                                 speed <- speed * Fun.Pow(0.004, dt.TotalSeconds)
                                 res
-                            )
 
-                            if abs speed > 0.5 then return! scrooly()
-                            else return! Proc.never
+                            if abs speed > 0.5 then 
+                                do! self
+                            else 
+                                do! Proc.never
                         }
 
-                    do! scrooly()
+                    do! interpolate
 
                 with delta ->
                     speed <- speed + delta
@@ -1078,7 +1059,7 @@ module Maya =
         let task = 
             RenderTask.ofList [
                 task
-                RenderTask.custom (fun (self, o) -> busywait !sleepMs; FrameStatistics.Zero)
+                //RenderTask.custom (fun (self, o) -> busywait !sleepMs; FrameStatistics.Zero)
             ]
         
         win.RenderTask <- task |> DefaultOverlays.withStatistics
