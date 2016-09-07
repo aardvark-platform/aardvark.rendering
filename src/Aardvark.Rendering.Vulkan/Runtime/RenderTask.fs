@@ -128,6 +128,7 @@ type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors :
         )
 
     interface IRenderTask with
+        member x.Update(c) = FrameStatistics.Zero
         member x.Run(c,o) = x.Run(c,o)
         member x.Dispose() = ()
         member x.FrameId = 0UL

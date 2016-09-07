@@ -57,14 +57,12 @@ module Temp =
 
         member x.Ticks = ticks
 
-type Bottom =
-    class end
-
 type ProcState<'s> =
     {
         time : Time
         userState : 's
     }
+
 
 [<AllowNullLiteral>]
 type IObservable =
@@ -770,9 +768,6 @@ module Proc =
             next = m |> map (fun v -> (fold f (f initial v) m)) |> Some
         }
 
-    //let fold (f : 'x -> 'a -> 'x) (initial : 'x) (m : Proc<'s, 'a>) : Proc<'s, 'x> =
-        
-    //type Value<'s, 'a> = { current : 'a; next : Proc<'s, Value<'s, 'a>> }
 
 
 [<AutoOpen>]
@@ -784,6 +779,125 @@ module ``Proc Builders`` =
     let inline (.<) a b = a |> Proc.filter (fun a -> a < b)
     let inline (.>=) a b = a |> Proc.filter (fun a -> a >= b)
     let inline (.<=) a b = a |> Proc.filter (fun a -> a >= b)
+
+    type ProcBuilder<'s, 'a, 'r> = private { build : Proc<'s, 'r> -> Proc<'s, 'a> }
+
+    type NewProcBuilder() =
+        let lift (f : 'a -> 'b) (m : State<'s, 'a>) =
+            { new State<ProcState<'s>, 'b>() with
+                member x.Run(state) =
+                    let mutable u = state.userState
+                    let res = m.Run(&u)
+                    state <- { state with userState = u }
+                    let v = f res
+                    v
+            }
+
+        member x.Bind(m : Proc<'s, 'a>, f : 'a -> ProcBuilder<'s, 'b, 'r>) =
+            { build = fun self ->
+                m |> Proc.bind (fun v -> f(v).build self)
+            }
+
+        member x.Bind(m : ProcBuilder<'s, 'a, 'r>, f : 'a -> ProcBuilder<'s, 'b, 'r>) =
+            { build = fun self ->
+                m.build self |> Proc.bind (fun v -> f(v).build self)
+            }
+
+        member x.Bind(m : Event<'a>, f : 'a -> ProcBuilder<'s, 'b, 'r>) =
+            { build = fun self ->
+                m |> Proc.ofEvent |> Proc.bind (fun v -> f(v).build self)
+            }
+
+        member x.Bind(m : Value<'s, 'a>, f : 'a -> ProcBuilder<'s, unit, 'r>) =
+            { build = fun self ->
+                m |> Proc.bindValue (fun v -> f(v).build self)
+            }
+
+        member x.Bind(m : IMod<'a>, f : 'a -> ProcBuilder<'s, unit, 'r>) =
+            { build = fun self ->
+                m |> Proc.bindMod (fun v -> f(v).build self)
+            }
+
+        member x.Bind(m : State<'s, 'a>, f : 'a -> ProcBuilder<'s, 'b, 'r>) =
+            { build = fun self ->
+                { run = m |> lift Finished } |> Proc.bind (fun v -> f(v).build self)
+            }
+
+        member x.Bind(m : 's -> 's, f : unit -> ProcBuilder<'s, 'b, 'r>) =
+            { build = fun self ->
+                { run = m |> State.modify |> lift Finished } |> Proc.bind (fun v -> f(v).build self)
+            }
+
+        member x.Return(v : 'a) =
+            { build = fun self ->
+                Proc.value v
+            }
+
+        member x.ReturnFrom(sf : Proc<'s, 'a>) =
+            { build = fun self -> sf }
+
+        member x.ReturnFrom(sf : ProcBuilder<'s, 'r, 'r>) =
+            { build = fun self -> sf.build self }
+
+
+        member x.Run(b : ProcBuilder<'s, 'a, 'a>) =
+            Proc.fix (fun self ->
+                b.build (Proc.delay (fun () -> !self))
+            )
+
+        member x.TryWith(m : Assertion<'s,'x> * ProcBuilder<'s, 'a, 'r>, comp : 'x -> ProcBuilder<'s, 'a, 'r>) : ProcBuilder<'s, 'a, 'r> =
+            { build = fun self ->
+                let (That assertions), body = m
+
+                let guard = 
+                    match assertions with
+                        | [a] -> a
+                        | _ -> assertions |> Proc.any
+
+                Proc.choice guard (body.build self) |> Proc.bind (fun v ->
+                    match v with
+                        | Choice1Of2 v -> comp(v).build self
+                        | Choice2Of2 v -> Proc.value v
+                )
+            }
+
+        member x.Bind(b : Assertion<'s, 'x>, m : unit -> ProcBuilder<'s, 'a, 'r>) =
+            b, m()
+
+        member x.Delay(f : unit -> Assertion<'s, 'x> * ProcBuilder<'s, 'a, 'r>) = f()
+
+        member x.For(m : Proc<'s, 'a>, f : 'a -> ProcBuilder<'s, unit, 'r>) : ProcBuilder<'s, unit, 'r> =
+            { build = fun self -> Proc.foreach m (fun v -> f(v).build self) }
+
+        member x.For(m : Event<'a>, f : 'a -> ProcBuilder<'s, unit, 'r>) : ProcBuilder<'s, unit, 'r> =
+            { build = fun self -> Proc.foreach (Proc.ofEvent m) (fun v -> f(v).build self) }
+
+
+        member x.While(guard : unit -> Proc<'s, bool>, body : ProcBuilder<'s, unit, 'r>) =
+            { build = fun self -> Proc.repeatWhile (guard()) (body.build self) }
+
+        member x.While(guard : unit -> bool, body : ProcBuilder<'s, unit, 'r>) =
+            x.While((fun () -> { run = state { return guard() |> Finished } }), body)
+
+        member x.While(guard : unit -> Event<bool>, body : ProcBuilder<'s, unit, 'r>) =
+            x.While((fun () -> Proc.ofEvent (guard())), body)
+
+
+        member x.Delay(f : unit -> ProcBuilder<'s, 'a, 'r>) =
+            { build = fun self ->
+                { run = state { return! f().build(self).run } }
+            }
+
+
+        member x.Combine(l : ProcBuilder<'s, unit, 'r>, r : ProcBuilder<'s, 'a, 'r>) =
+            { build = fun self ->
+                Proc.append (l.build self) (r.build self)
+            }
+
+        member x.Zero() = { build = fun self -> Proc.value () }
+
+    let self = { build = fun self -> self }
+
 
     type ProcBuilder() =
         let lift (f : 'a -> 'b) (m : State<'s, 'a>) =
@@ -875,7 +989,7 @@ module ``Proc Builders`` =
 
         member x.Zero() = Proc.value ()
 
-    let proc = ProcBuilder()
+    let proc = NewProcBuilder()
 
     let until (v : list<Proc<'s, 'a>>) = That v
 
@@ -918,3 +1032,9 @@ module ``Extendend Proc Stuff`` =
                 ) |> Proc.repeat
             )
 
+
+        let fix (body : Proc<'s, 'a> -> Proc<'s, 'a>) : Proc<'s, 'a> =
+            let r = ref Unchecked.defaultof<_>
+            let self = Proc.delay (fun () -> !r)
+            r := body self
+            !r

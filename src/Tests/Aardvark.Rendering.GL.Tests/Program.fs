@@ -10,5 +10,6 @@ let main args =
     //PerformanceTests.PerformanceTest.runConsole()
     //Examples.PerformanceTest.run()
     //PerformanceTests.StartupPerformance.runConsole args
-    PerformanceTests.IsActiveFlagPerformance.run args
+    //PerformanceTests.IsActiveFlagPerformance.run args
+    UseTest.bla()
     0
