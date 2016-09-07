@@ -24,7 +24,7 @@ NUGET
       System.Reactive.Core (>= 3.0 < 3.1)
       System.Reactive.Interfaces (>= 3.0 < 3.1)
       System.Reactive.Linq (>= 3.0 < 3.1)
-    FShade.Core (2.2.3)
+    FShade.Core (2.3.0)
       Aardvark.Base (>= 2.2 < 2.3)
       Aardvark.Base.FSharp (>= 2.2 < 2.3)
     GLSLangSharp (0.2.4)
