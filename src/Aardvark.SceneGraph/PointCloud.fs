@@ -648,7 +648,7 @@ module PointCloudRenderObjectSemantics =
 
             let calls = h.DrawCallInfos
 
-            obj.IndirectBuffer <- calls |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
+            obj.IndirectBuffer <- calls |> Mod.map (fun a -> (ArrayBuffer(a) :> IBuffer, -1))
             obj.Activate <- h.Activate
             obj.VertexAttributes <- h.Attributes
             obj.Mode <- Mod.constant IndexedGeometryMode.PointList

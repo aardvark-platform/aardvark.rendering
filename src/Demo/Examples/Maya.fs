@@ -326,13 +326,15 @@ module Pooling =
         let private ctorCache = Dict<Type, ConstructorInfo>()
 
         let private ctor (t : Type) =
-            ctorCache.GetOrCreate(t, fun t ->
-                let tb = typedefof<ManagedBuffer<int>>.MakeGenericType [|t|]
-                tb.GetConstructor(
-                    BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static ||| BindingFlags.CreateInstance,
-                    Type.DefaultBinder,
-                    [| typeof<IRuntime> |],
-                    null
+            lock ctorCache (fun () ->
+                ctorCache.GetOrCreate(t, fun t ->
+                    let tb = typedefof<ManagedBuffer<int>>.MakeGenericType [|t|]
+                    tb.GetConstructor(
+                        BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static ||| BindingFlags.CreateInstance,
+                        Type.DefaultBinder,
+                        [| typeof<IRuntime> |],
+                        null
+                    )
                 )
             )
 
@@ -418,6 +420,9 @@ module Pooling =
             )
 
         let vertexDisposables = Dictionary<BufferView, IDisposable>()
+
+
+        member x.Runtime = runtime
 
         member x.Add(g : AdaptiveGeometry) =
             let ds = List()
@@ -513,6 +518,67 @@ module Pooling =
         static member CreateManagedBuffer(this : IRuntime, elementType : Type) : IManagedBuffer =
             this |> ManagedBuffer.create elementType
 
+    
+    type DrawCallBuffer(runtime : IRuntime, indexed : bool, input : aset<DrawCallInfo>) =
+        inherit Mod.AbstractMod<IBuffer * int>()
+
+        let r = input.GetReader()
+        let indices = Dict<DrawCallInfo, int>()
+        let calls = List<DrawCallInfo>()
+        let store = runtime.CreateManagedBuffer<DrawCallInfo>()
+
+        let convert (call : DrawCallInfo) =
+            if indexed then
+                DrawCallInfo(
+                    FaceVertexCount = call.FaceVertexCount,
+                    InstanceCount = call.InstanceCount,
+                    FirstIndex = call.FirstIndex,
+                    FirstInstance = call.BaseVertex,
+                    BaseVertex = call.FirstInstance
+                )
+            else
+                call
+
+        let add(call : DrawCallInfo) =
+            if indices.ContainsKey call then 
+                false
+            else
+                let count = calls.Count
+                indices.[call] <- count
+                calls.Add call
+                store.[count] <- convert call
+                true
+
+        let remove(call : DrawCallInfo) =
+            match indices.TryRemove call with
+                | (true, index) ->
+                    if calls.Count = 1 then
+                        calls.Clear()
+                    elif index = calls.Count-1 then
+                        calls.RemoveAt index
+                    else
+                        let lastIndex = calls.Count - 1
+                        let last = calls.[lastIndex]
+                        indices.[last] <- index
+                        calls.[index] <- last
+                        store.[index] <- convert last
+                        calls.RemoveAt lastIndex
+
+                    true
+                | _ ->
+                    false
+
+        override x.Compute() =
+            let delta = r.GetDelta x
+            for d in delta do
+                match d with
+                    | Add v -> add v |> ignore
+                    | Rem v -> remove v |> ignore
+
+            let b = store.GetValue x
+            b, calls.Count
+
+
 
     module Sg =
         type PoolNode(pool : ManagedPool, calls : aset<DrawCallInfo>) =
@@ -534,7 +600,7 @@ module Pooling =
                 ro.Indices <- Some pool.IndexBuffer
                 ro.VertexAttributes <- pool.VertexAttributes
                 ro.InstanceAttributes <- pool.InstanceAttributes
-                ro.IndirectBuffer <- p.Calls |> ASet.toMod |> Mod.map (fun calls -> calls |> Seq.toArray |> ArrayBuffer :> IBuffer)
+                ro.IndirectBuffer <- DrawCallBuffer(pool.Runtime, true, p.Calls) // |> ASet.toMod |> Mod.map (fun calls -> calls |> Seq.toArray |> ArrayBuffer :> IBuffer)
                 //ro.DrawCallInfos <- p.Calls |> ASet.toMod |> Mod.map Seq.toList
                 yield ro :> IRenderObject
                     
@@ -922,16 +988,16 @@ module Maya =
                 do! Air.DrawIndirect drawCallInfos
             }
 
-//        let sg =
-//            let test = 
-//                Pooling.testSg win app.Runtime
-//                |> Sg.effect [
-//                    Shader.hugoShade |> toEffect
-//                    DefaultSurfaces.trafo |> toEffect
-//                    DefaultSurfaces.constantColor C4f.Red |> toEffect
-//                    DefaultSurfaces.simpleLighting |> toEffect
-//                ]
-//            test
+        let sg =
+            let test = 
+                Pooling.testSg win app.Runtime
+                |> Sg.effect [
+                    Shader.hugoShade |> toEffect
+                    DefaultSurfaces.trafo |> toEffect
+                    DefaultSurfaces.constantColor C4f.Red |> toEffect
+                    DefaultSurfaces.simpleLighting |> toEffect
+                ]
+            test
 
         let camera = Mod.map2 (fun v p -> { cameraView = v; frustum = p }) viewTrafo perspective
         let pickRay = Mod.map2 Camera.pickRay camera win.Mouse.Position

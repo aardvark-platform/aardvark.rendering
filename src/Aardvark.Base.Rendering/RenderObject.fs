@@ -215,7 +215,7 @@ type RenderObject =
         mutable RenderPass          : RenderPass
                 
         mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
-        mutable IndirectBuffer      : IMod<IBuffer>
+        mutable IndirectBuffer      : IMod<IBuffer * int>
         mutable Mode                : IMod<IndexedGeometryMode>
         
 

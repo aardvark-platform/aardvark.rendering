@@ -1736,7 +1736,7 @@ module Rewrite =
                     }
 
                 ro.VertexAttributes <- cache.VertexBuffers
-                ro.IndirectBuffer <- indirectAndOffsets |> Mod.map fst
+                ro.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (a,_) -> a, -1)
                 ro.InstanceAttributes <- instanceAttributes
                 ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
 

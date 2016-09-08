@@ -189,8 +189,10 @@ module BufferExtensions =
             if b.Handle = 0 then failwith "cannot update null buffer"
             match data with
                 | :? ArrayBuffer as ab -> x.Upload(b, ab.Data)
+
                 | :? Buffer as bb ->
                     if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
+
                 | :? NullBuffer ->
                     failwith "cannot create null buffer out of non-null buffer"
 
@@ -601,19 +603,26 @@ module IndirectBufferExtensions =
             x.Delete(buffer.Buffer)
             NativePtr.free buffer.Count
 
-        member x.UploadIndirect(buffer : IndirectBuffer, indexed : bool, data : IBuffer) =
+        member x.UploadIndirect(buffer : IndirectBuffer, indexed : bool, data : IBuffer, count : int) =
             using x.ResourceLock (fun _ ->
                 x.Upload(buffer.Buffer, data)
-                let callCount = postProcessDrawCallBuffer indexed buffer.Buffer
-                NativePtr.write buffer.Count callCount
+                if count < 0 then
+                    let callCount = postProcessDrawCallBuffer indexed buffer.Buffer
+                    NativePtr.write buffer.Count callCount
+                else
+                    NativePtr.write buffer.Count count
             )
 
-        member x.CreateIndirect(indexed : bool, data : IBuffer) =
+        member x.CreateIndirect(indexed : bool, data : IBuffer, count : int) =
             using x.ResourceLock (fun _ ->
                 let buffer = x.CreateBuffer(data)
-                let callCount = postProcessDrawCallBuffer indexed buffer
                 let cnt = NativePtr.alloc 1
-                NativePtr.write cnt callCount
+                if count < 0 then
+                    let callCount = postProcessDrawCallBuffer indexed buffer
+                    NativePtr.write cnt callCount
+                else
+                    NativePtr.write cnt count
+
                 IndirectBuffer(buffer, cnt, sizeof<DrawCallInfo>)
             )
 

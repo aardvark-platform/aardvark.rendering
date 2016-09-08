@@ -468,12 +468,18 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IBuffer>) =
-        indirectBufferCache.GetOrCreate<IBuffer>(data, [indexed :> obj], {
-            create = fun b      -> ctx.CreateIndirect(indexed, b)
-            update = fun h b    -> ctx.UploadIndirect(h, indexed, b); h
-            delete = fun h      -> ctx.Delete h
-            info =   fun h      -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
+    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IBuffer * int>) =
+        let r = x.CreateBuffer(data |> Mod.map fst)
+
+        let getHandle() =
+            r.Update(null) |> ignore
+            r.Handle.GetValue(null)
+
+        indirectBufferCache.GetOrCreate<IBuffer * int>(data, [indexed :> obj], {
+            create = fun (b,c)   -> ctx.CreateIndirect(indexed, getHandle(), c)
+            update = fun h (b,c) -> ctx.UploadIndirect(h, indexed, getHandle(), c); h
+            delete = fun h       -> NativePtr.free h.Count; r.Dispose()
+            info =   fun h       -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
             kind = ResourceKind.IndirectBuffer
         })
 
