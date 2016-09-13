@@ -9,6 +9,11 @@ open Microsoft.FSharp.NativeInterop
 
 type IBuffer = interface end
 
+type IIndirectBuffer =
+    abstract member Buffer : IBuffer
+    abstract member Count : int
+
+
 type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
     member x.Buffer = b
     member x.ElementType = elementType
@@ -98,16 +103,61 @@ type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
                 n.Ptr = ptr && n.SizeInBytes = sizeInBytes
             | _ -> false
 
+type IndirectBuffer(b : IBuffer, count : int) =
+    member x.Buffer = b
+    member x.Count = count
+
+    interface IIndirectBuffer with
+        member x.Buffer = b
+        member x.Count = count
+
+
+open System.Threading
+type RenderTaskLock() =
+    let rw = new ReaderWriterLockSlim()
+    member x.Run f = ReaderWriterLock.write rw f
+    member x.Update f = ReaderWriterLock.read rw f
+
+type ILockedResource =
+    abstract member AddLock     : RenderTaskLock -> unit
+    abstract member RemoveLock  : RenderTaskLock -> unit
+
+type IMappedIndirectBuffer =
+    inherit IMod<IIndirectBuffer>
+    inherit IDisposable
+    inherit ILockedResource
+
+    abstract member Indexed : bool
+    abstract member Capacity : int
+    abstract member Count : int with get, set
+    abstract member Item : int -> DrawCallInfo with get, set
+    abstract member Resize : int -> unit
+
 type IMappedBuffer =
     inherit IMod<IBuffer>
     inherit IDisposable
+    inherit ILockedResource
 
-    abstract member Write : ptr : nativeint * offset : int * sizeInBytes : int -> unit
-    abstract member Read : ptr : nativeint * offset : int * sizeInBytes : int -> unit
+    abstract member Write : ptr : nativeint * offset : nativeint * sizeInBytes : nativeint -> unit
+    abstract member Read : ptr : nativeint * offset : nativeint * sizeInBytes : nativeint -> unit
+    abstract member UseWrite : offset : nativeint * sizeInBytes : nativeint * (nativeint -> 'a) -> 'a
+    abstract member UseRead : offset : nativeint * sizeInBytes : nativeint * (nativeint -> 'a) -> 'a
 
-    abstract member Capacity : int
-    abstract member Resize : newCapacity : int -> unit
+    abstract member Capacity : nativeint
+    abstract member Resize : newCapacity : nativeint -> unit
     abstract member OnDispose : IObservable<unit>
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module IndirectBuffer =
+    let ofArray (arr : DrawCallInfo[]) =
+        IndirectBuffer(ArrayBuffer arr, arr.Length) :> IIndirectBuffer
+
+    let ofList (l : list<DrawCallInfo>) =
+        l |> List.toArray |> ofArray
+
+    let count (b : IIndirectBuffer) = b.Count
+    
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

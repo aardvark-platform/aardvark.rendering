@@ -34,8 +34,14 @@ type IPreparedRenderObject =
     abstract member Update : IAdaptiveObject -> unit
     abstract member Original : Option<RenderObject>
 
+[<AllowNullLiteral>]
+type IResourceManager =
+    abstract member CreateSurface : signature : IFramebufferSignature * surface : IMod<ISurface> -> IResource<IBackendSurface>
+    abstract member CreateBuffer : buffer : IMod<IBuffer> -> IResource<IBackendBuffer>
+    abstract member CreateTexture : texture : IMod<ITexture> -> IResource<IBackendTexture>
 
-type IRuntime =
+and IRuntime =
+    abstract member ResourceManager : IResourceManager
     abstract member ContextLock : IDisposable
 
     abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * Set<Symbol> -> IFramebufferSignature
@@ -60,6 +66,7 @@ type IRuntime =
     abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
     abstract member CreateMappedBuffer : unit -> IMappedBuffer
+    abstract member CreateMappedIndirectBuffer : indexed : bool -> IMappedIndirectBuffer
 
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit
@@ -121,12 +128,7 @@ and OutputDescription =
         stencilMaskBack : uint32
     }
 
-open System.Threading
-type RenderTaskLock() =
-    let rw = new ReaderWriterLockSlim()
-    member x.Run f = ReaderWriterLock.write rw f
-    member x.Update f = 
-        ReaderWriterLock.read rw f
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module OutputDescription =

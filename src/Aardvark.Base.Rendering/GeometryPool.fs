@@ -84,7 +84,7 @@ module private TypedBuffers =
                 ReaderWriterLock.write lockObj (fun () ->
                     if sizeInElements <> count then
                         match elementTypeAndSize with
-                            | Some(_,s) -> buffer.Resize(int (s * count))
+                            | Some(_,s) -> buffer.Resize(s * count)
                             | _ -> ()
                         sizeInElements <- count
                 )
@@ -102,7 +102,7 @@ module private TypedBuffers =
                                 | None -> 
                                     let t = data.GetType().GetElementType()
                                     let s = nativeint (Marshal.SizeOf t)
-                                    buffer.Resize(int <| s * sizeInElements)
+                                    buffer.Resize(s * sizeInElements)
                                     elementTypeAndSize <- Some(t,s)
                                     s
                                 | Some(_,s) ->
@@ -117,7 +117,7 @@ module private TypedBuffers =
             let arr = GCHandle.Alloc(data,GCHandleType.Pinned)
             try 
                 ReaderWriterLock.read lockObj (fun () ->   // why is here read? it works
-                    buffer.Write(arr.AddrOfPinnedObject(), int offsetInBytes, int sizeInBytes)
+                    buffer.Write(arr.AddrOfPinnedObject(), offsetInBytes, sizeInBytes)
                 )
             finally 
                 arr.Free()

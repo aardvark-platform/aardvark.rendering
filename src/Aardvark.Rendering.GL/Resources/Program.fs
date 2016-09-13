@@ -63,6 +63,13 @@ type Program =
        Inputs : list<ActiveAttribute>
        Outputs : list<ActiveAttribute>
        SupportedModes : Option<Set<IndexedGeometryMode>>
+
+       [<DefaultValue>]
+       mutable _inputs : Option<list<string * Type>>
+       [<DefaultValue>]
+       mutable _outputs : Option<list<string * Type>>
+       [<DefaultValue>]
+       mutable _uniforms : Option<list<string * Type>>
     } with
 
     interface IBackendSurface with
@@ -71,26 +78,46 @@ type Program =
         member x.SamplerStates = x.SamplerStates
 
         member x.Inputs = 
-            x.Inputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+            match x._inputs with
+                | None -> 
+                    let r = x.Inputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+                    x._inputs <- Some r
+                    r
+                | Some r ->
+                    r
 
         member x.Outputs = 
-            x.Outputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+            match x._outputs with
+                | None ->
+                    let r = x.Outputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+                    x._outputs <- Some r
+                    r
+                | Some r ->
+                    r
 
         member x.Uniforms =
-            let bu = x.UniformBlocks |> List.collect (fun b -> b.fields |> List.map (fun f -> ConversionTarget.ConvertForBuffer, f))
-            let uu = x.Uniforms |> List.map (fun f -> ConversionTarget.ConvertForLocation, f)
-            bu @ uu |> List.choose (fun (target, u) -> 
-                match u.uniformType with
-                    | SamplerType ->
-                        Some (u.semantic, typeof<ITexture>)
+            match x._uniforms with
+                | None ->
+                    let bu = x.UniformBlocks |> List.collect (fun b -> b.fields |> List.map (fun f -> ConversionTarget.ConvertForBuffer, f))
+                    let uu = x.Uniforms |> List.map (fun f -> ConversionTarget.ConvertForLocation, f)
+                    
+                    let res = 
+                        bu @ uu |> List.choose (fun (target, u) -> 
+                            match u.uniformType with
+                                | SamplerType ->
+                                    Some (u.semantic, typeof<ITexture>)
 
-                    | ImageType ->
-                        None
+                                | ImageType ->
+                                    None
 
-                    | _ ->
-                        let t = UniformConverter.getExpectedType target u.uniformType
-                        Some (u.semantic, t)
-            )
+                                | _ ->
+                                    let t = UniformConverter.getExpectedType target u.uniformType
+                                    Some (u.semantic, t)
+                        )
+                    x._uniforms <- Some res
+                    res
+                | Some r ->
+                    r
 
     member x.InterfaceBlock =
         let uniformBlocks = 

@@ -54,6 +54,11 @@ module ExecutionContext =
     /// </summary>
     let syncSupported = OpenGl.getProcAddress "glFenceSync" <> 0n
 
+    /// <summary>
+    /// determines whether the current OpenGL implementation supports buffer storage (persistently mappable)
+    /// </summary>
+    let bufferStorageSupported = OpenGl.getProcAddress "glBufferStorage" <> 0n
+
 
     /// <summary>
     /// determines whether the given instruction-code can be performed on

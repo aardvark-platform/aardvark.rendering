@@ -93,6 +93,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        
+        member x.ResourceManager = manager :> IResourceManager
 
         member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
             x.CreateFramebufferSignature(attachments, images) :> IFramebufferSignature
@@ -160,6 +162,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateMappedBuffer()  =
             x.CreateMappedBuffer ()
 
+        member x.CreateMappedIndirectBuffer(indexed)  =
+            x.CreateMappedIndirectBuffer (indexed)
+
 
     member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
@@ -196,6 +201,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 | Success prog -> prog  
                 | Error e -> failwith e
         )
+
+
 
     member x.DeleteTexture (t : Texture) = 
         ctx.Delete t
@@ -406,6 +413,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         ctx.CreateRenderbuffer(size, format, samples)
 
     member x.CreateMappedBuffer() : IMappedBuffer =
-        new MappedBuffer(ctx) :> _
+        ctx.CreateMappedBuffer()
+
+
+    member x.CreateMappedIndirectBuffer(indexed : bool) : IMappedIndirectBuffer =
+        ctx.CreateMappedIndirectBuffer(indexed)
 
     new() = new Runtime(null)

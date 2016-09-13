@@ -162,16 +162,6 @@ module ChangeableResources =
         createFramebuffer  runtime signature  ( color |> Mod.map (fun s -> { texture = s; slice = 0; level = 0 } :> IFramebufferOutput) |> Some ) ( Mod.cast depth |> Some )
 
 
-type IOutputMod<'a> =
-    inherit IMod<'a>
-    abstract member LastStatistics : FrameStatistics
-    abstract member Acquire : unit -> unit
-    abstract member Release : unit -> unit
-
-type ILockedResource =
-    abstract member AddLock     : RenderTaskLock -> unit
-    abstract member RemoveLock  : RenderTaskLock -> unit
-
 [<AutoOpen>]
 module private RefCountedResources = 
     type ChangeableFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =

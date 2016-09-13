@@ -94,6 +94,7 @@ module TrafoSemantics =
 
     let mulCache = BinaryWeakCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
     let invCache = UnaryWeakCache (Mod.map (fun (t : Trafo3d) -> t.Inverse))
+    let btCache = UnaryWeakCache (Mod.map (fun (t : Trafo3d) -> t.Backward.Transposed.UpperLeftM33()))
 
     let (<*>) a b = 
         if a = rootTrafo then b
@@ -188,6 +189,12 @@ module TrafoSemantics =
 
         member x.ModelViewProjTrafoInv(s : obj) =
             s.ModelViewProjTrafo |> inverse
+
+        member x.NormalMatrix(s : obj) : IMod<M33d> = 
+            let t : IMod<Trafo3d> = s?ModelTrafo()
+            btCache.Invoke t
+
+
 
 module UniformRules =
     open Microsoft.FSharp.Quotations

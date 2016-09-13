@@ -78,8 +78,7 @@ module Sg =
                                     BaseVertex = 0
                                 )
                                 )
-                            |> ArrayBuffer
-                            :> IBuffer
+                            |> IndirectBuffer.ofArray
 
                     let offsets = 
                         List.zip renderText.offsets renderText.scales
@@ -114,7 +113,7 @@ module Sg =
             shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- Mod.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
-            shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i,-1)
+            shapes.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (i,_,_) -> i)
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- Mod.constant IndexedGeometryMode.TriangleList
             shapes.Surface <- Mod.constant cache.Surface

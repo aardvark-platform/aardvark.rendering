@@ -154,13 +154,19 @@ type MappedBufferOld(ctx : Context) =
 
     member x.OnDispose = onDispose :> IObservable<_>
 
+    interface ILockedResource with
+        member x.AddLock _ = failwith "not implemented"
+        member x.RemoveLock _ = failwith "not implemented"
+
     interface IMappedBuffer with
         member x.Dispose() = x.Dispose()
-        member x.Write(ptr, off, size) = x.Write(ptr, off, size)
-        member x.Read(ptr, off, size) = x.Read(ptr, off, size)
-        member x.Resize(size) = x.Resize(size)
-        member x.Capacity = x.Capacity
+        member x.Write(ptr, off, size) = x.Write(ptr, int off, int size)
+        member x.Read(ptr, off, size) = x.Read(ptr, int off, int size)
+        member x.Resize(size) = x.Resize(int size)
+        member x.Capacity = nativeint x.Capacity
         member x.OnDispose = x.OnDispose
+        member x.UseRead(_,_,_) = failwith "not implemented"
+        member x.UseWrite(_,_,_) = failwith "not implemented"
 
     override x.Compute() =
         create()
@@ -232,10 +238,16 @@ type MappedBuffer(ctx : Context) =
 
         buffer :> IBuffer
 
+    interface ILockedResource with
+        member x.AddLock _ = failwith "not implemented"
+        member x.RemoveLock _ = failwith "not implemented"
+
     interface IMappedBuffer with
         member x.Dispose() = x.Dispose()
-        member x.Write(ptr, off, size) = x.Write(ptr, off, size)
-        member x.Read(ptr, off, size) = x.Read(ptr, off, size)
-        member x.Resize(size) = x.Resize(size)
-        member x.Capacity = x.Capacity
+        member x.Write(ptr, off, size) = x.Write(ptr, int off, int size)
+        member x.Read(ptr, off, size) = x.Read(ptr, int off, int size)
+        member x.Resize(size) = x.Resize(int size)
+        member x.Capacity = nativeint x.Capacity
         member x.OnDispose = x.OnDispose
+        member x.UseRead(_,_,_) = failwith "not implemented"
+        member x.UseWrite(_,_,_) = failwith "not implemented"

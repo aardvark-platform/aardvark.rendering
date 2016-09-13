@@ -8,6 +8,15 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 
 
+
+type IOutputMod<'a> =
+    inherit IMod<'a>
+    abstract member LastStatistics : FrameStatistics
+    abstract member Acquire : unit -> unit
+    abstract member Release : unit -> unit
+
+
+
 type ResourceInfo = 
     struct
         val mutable public AllocatedSize : Mem

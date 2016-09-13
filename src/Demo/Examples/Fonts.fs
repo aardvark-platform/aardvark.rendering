@@ -1712,8 +1712,7 @@ module Rewrite =
                                         BaseVertex = 0
                                     )
                                    )
-                                |> ArrayBuffer
-                                :> IBuffer
+                                |> IndirectBuffer.ofArray
 
                         let offsets = 
                             arr |> Array.map (fst >> V2f.op_Explicit)
@@ -1736,7 +1735,7 @@ module Rewrite =
                     }
 
                 ro.VertexAttributes <- cache.VertexBuffers
-                ro.IndirectBuffer <- indirectAndOffsets |> Mod.map (fun (a,_) -> a, -1)
+                ro.IndirectBuffer <- indirectAndOffsets |> Mod.map fst
                 ro.InstanceAttributes <- instanceAttributes
                 ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
 

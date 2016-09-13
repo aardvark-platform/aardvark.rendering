@@ -75,6 +75,7 @@
     <Compile Include="RenderObject.fs" />
     <Compile Include="Framebuffers.fs" />
     <Compile Include="Config.fs" />
+    <Compile Include="ResourceManagement.fs" />
     <Compile Include="Runtime.fs" />
     <Compile Include="RuntimeExtensions.fs" />
     <Compile Include="RenderTask.fs" />
@@ -83,7 +84,6 @@
     <Compile Include="GeometryPool.fs" />
     <Compile Include="DrawCallSet.fs" />
     <Compile Include="LoD.fs" />
-    <Compile Include="ResourceManagement.fs" />
     <Compile Include="FShade.fs" />
     <Compile Include="DefaultSurfaces\Vertex.fs" />
     <Compile Include="DefaultSurfaces\PointSurface.fs" />

@@ -220,7 +220,7 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
 
     let alignedSize = (size + 255) &&& ~~~255
 
-    let buffer = new MappedBuffer(ctx)
+    let buffer = ctx.CreateMappedBuffer()
     do renderTaskInfo |> Option.iter buffer.AddLock
     let manager = MemoryManager.createNop()
 
@@ -260,12 +260,13 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
                                 | None ->
                                     block <- manager.Alloc alignedSize
                                     ReaderWriterLock.write rw (fun () ->
-                                        if buffer.Capacity <> manager.Capacity then buffer.Resize(manager.Capacity)
+                                        let mcap = nativeint manager.Capacity
+                                        if buffer.Capacity <> mcap then buffer.Resize(mcap)
                                     )
                                     UniformBufferView(buffer, block.Offset, nativeint block.Size)
 
                         ReaderWriterLock.read rw (fun () ->
-                            buffer.Use(handle.Offset, handle.Size, fun ptr ->
+                            buffer.UseWrite(handle.Offset, handle.Size, fun ptr ->
                                 for (_,w) in writers do w.Write(x, ptr)
                             )
                         )
@@ -274,7 +275,7 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
                     member x.Destroy h =
                         manager.Free block
                         if manager.AllocatedBytes = 0 then
-                            buffer.Resize 0
+                            buffer.Resize 0n
 
                 }
         )
@@ -344,6 +345,30 @@ and DrawBufferManager (signature : IFramebufferSignature) =
 
 
 
+type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource<'a>) =
+    inherit AdaptiveDecorator(inner)
+    let handle = inner.Handle |> Mod.cast
+
+    member x.Inner = inner
+
+    override x.GetHashCode() = inner.GetHashCode()
+    override x.Equals o = 
+        match o with
+            | :? CastResource<'a,'b> as o -> inner.Equals o.Inner
+            | _ -> false
+
+    interface IResource with
+        member x.Dispose() = inner.Dispose()
+        member x.AddRef() = inner.AddRef()
+        member x.RemoveRef() = inner.RemoveRef()
+        member x.Update(caller) = inner.Update(caller)
+        member x.Info = inner.Info
+        member x.IsDisposed = inner.IsDisposed
+        member x.Kind = inner.Kind
+
+    interface IResource<'b> with
+        member x.Handle = handle
+
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     
@@ -407,6 +432,21 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     new(parent, ctx, lock, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, lock, shareTextures, shareBuffers)
     new(ctx, lock, shareTextures, shareBuffers) = ResourceManager(None, ctx, lock, shareTextures, shareBuffers)
 
+    interface IResourceManager with
+        member x.CreateSurface(signature, surf) =
+            let res = x.CreateSurface(signature, surf)
+            new CastResource<_, _>(res) :> IResource<_>
+
+        member x.CreateBuffer (data : IMod<IBuffer>) =
+            let res = x.CreateBuffer(data)
+            new CastResource<_, _>(res) :> IResource<_>
+
+        member x.CreateTexture (data : IMod<ITexture>) =
+            let res = x.CreateTexture(data)
+            new CastResource<_, _>(res) :> IResource<_>
+
+
+
     member x.DrawBufferManager = drawBufferManager.Value
     member x.Context = ctx
 
@@ -468,18 +508,12 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IBuffer * int>) =
-        let r = x.CreateBuffer(data |> Mod.map fst)
-
-        let getHandle() =
-            r.Update(null) |> ignore
-            r.Handle.GetValue(null)
-
-        indirectBufferCache.GetOrCreate<IBuffer * int>(data, [indexed :> obj], {
-            create = fun (b,c)   -> ctx.CreateIndirect(indexed, getHandle(), c)
-            update = fun h (b,c) -> ctx.UploadIndirect(h, indexed, getHandle(), c); h
-            delete = fun h       -> NativePtr.free h.Count; r.Dispose()
-            info =   fun h       -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
+    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IIndirectBuffer>) =
+        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed], {
+            create = fun b   -> ctx.CreateIndirect(indexed, b)
+            update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
+            delete = fun h   -> ctx.Delete h
+            info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
             kind = ResourceKind.IndirectBuffer
         })
 
