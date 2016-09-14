@@ -591,6 +591,355 @@ module Pooling =
         static member CreateManagedBuffer(this : IRuntime, elementType : Type) : IManagedBuffer =
             this |> ManagedBuffer.create elementType
 
+        [<Extension>]
+        static member CreateDrawCallBuffer(this : IRuntime, indexed : bool) =
+            new DrawCallBuffer(this, indexed)
+
+    module LodAgain =
+        open Aardvark.SceneGraph.Semantics
+        open System.Threading.Tasks
+
+        type ILodData =
+            abstract member BoundingBox : Box3d
+            abstract member Traverse : (LodDataNode -> (LodDataNode -> list<'a>) -> 'a) -> 'a
+            abstract member GetData : node : LodDataNode -> Async<Option<IndexedGeometry>>
+                  
+
+        type LodNode(signature : GeometrySignature, data : ILodData) =
+            interface ISg
+            member x.Signature = signature
+            member x.Data = data
+
+        let disposeOnCancel<'a when 'a :> IDisposable> (f : unit -> 'a) : Async<'a> =
+            async {
+                let mutable call = None
+                let! _ = Async.OnCancel(fun () -> call |> Option.iter Disposable.dispose)
+                let r = f()
+                call <- Some (r :> IDisposable)
+                return r
+            }
+
+        type AsyncMod<'a>(inner : IMod<'a>) =
+            inherit Mod.AbstractMod<'a>()
+
+            let sem = new SemaphoreSlim(1)
+
+            override x.Mark() =
+                sem.Release() |> ignore
+                true
+
+            override x.Compute() =
+                inner.GetValue(x)
+
+            member x.GetValueAsync() =
+                async {
+                    let! _ = Async.AwaitIAsyncResult (sem.WaitAsync())
+                    return x.GetValue()
+                }
+
+        type RoseTree<'a> =
+            | Empty
+            | Leaf of 'a
+            | Node of 'a * list<RoseTree<'a>>
+
+        type Loady<'a, 'b>(tag : 'b, trigger : MVar<unit>, release : 'a -> unit, run : Async<'a>) =
+            let mutable task : Option<Task<'a>> = None
+            let mutable cancel = new CancellationTokenSource()
+
+            let run =
+                async {
+                    let! r = run
+                    MVar.put trigger ()
+                    return r
+                }
+
+            member x.Tag = tag
+
+            member x.Peek =
+                match task with
+                    | Some t when t.IsCompleted -> Some t.Result
+                    | _ -> None
+
+            member x.Start() =
+                match task with
+                    | None ->
+                        let t = Async.StartAsTask(run, cancellationToken = cancel.Token)
+                        task <- Some t
+                    | Some _ -> 
+                        ()
+
+            member x.Stop() =
+                match task with
+                    | Some t ->
+                        if t.IsCompleted then
+                            release t.Result
+                        elif t.IsCanceled || t.IsFaulted then
+                            ()
+                        else
+                            cancel.Cancel()
+                            t.ContinueWith (fun (t : Task<'a>) ->
+                                if t.IsCompleted then
+                                    release t.Result
+                            ) |> ignore
+
+                        cancel.Dispose()
+                        task <- None
+                    | _ ->
+                        ()
+                 
+        module Loady =
+            let start (tag : 'b) (trigger : MVar<unit>) (run : Async<Option<'a>>) =
+                let l = Loady(tag, trigger, Option.iter (fun a -> (a :> IDisposable).Dispose()), run)
+                l.Start()
+                l
+
+        module RoseTree =
+            let rec traverse<'a, 'b> (equal : 'b -> 'a -> bool) (create : 'a -> 'b) (destroy : 'b -> unit) (ref : RoseTree<'b>) (t : RoseTree<'a>) : RoseTree<'b> =
+                let traverse = traverse equal create destroy
+
+                match ref, t with
+                    | Empty, Empty -> 
+                        Empty
+
+                    | Empty, Leaf v ->
+                        v |> create |> Leaf
+
+                    | Empty, Node(v, children) ->
+                        let n = v |> create
+                        Node(n, children |> List.map (traverse Empty))
+
+                    | Leaf v, Empty ->
+                        destroy v
+                        Empty
+
+                    | Leaf l, Leaf r ->
+                        if equal l r then 
+                            Leaf l
+                        else 
+                            destroy l
+                            r |> create |> Leaf
+
+                    | Leaf l, Node(r, children) ->
+                        if equal l r then
+                            Node(l, children |> List.map (traverse Empty))
+                        else
+                            destroy l
+                            let n = r |> create
+                            Node(n, children |> List.map (traverse Empty))
+
+                    | Node(v,c), Empty ->
+                        destroy v
+                        c |> List.iter (fun c -> traverse c Empty |> ignore)
+                        Empty
+
+                    | Node(v,c), Leaf r ->
+                        c |> List.iter (fun c -> traverse c Empty |> ignore)
+                        if equal v r then
+                            Leaf v
+                        else
+                            destroy v
+                            r |> create |> Leaf
+                                            
+                    | Node(lv,lc), Node(rv,rc) ->
+                        if equal lv rv then
+                            Node(lv, List.map2 traverse lc rc)
+                        else
+                            destroy lv
+                            let nv = rv |> create
+                            Node(nv, List.map2 traverse lc rc)
+    
+    
+
+
+        [<Aardvark.Base.Ag.Semantic>]
+        type LodSem() =
+            static let nop = { new IDisposable with member x.Dispose() = () }
+
+
+            member x.RenderObjects(n : LodNode) =
+                let runtime = n.Runtime
+                let data = n.Data
+
+                let good (n : LodDataNode) =
+                    if n.level < 2 then false
+                    else true
+
+                
+
+                // create a pool and a DrawCallBuffer
+                let pool        = runtime.CreateManagedPool n.Signature
+                let callBuffer  = runtime.CreateDrawCallBuffer true
+
+                let vp = Mod.map2 (fun a b -> (a,b)) n.ViewTrafo n.ProjTrafo
+                let vp = AsyncMod(vp)
+
+                let load (n : LodDataNode) =
+                    async {
+                        let! geometry = data.GetData n
+                        
+                        match geometry with
+                            | Some g ->
+                                let! call = disposeOnCancel (fun () -> pool.Add(AdaptiveGeometry.ofIndexedGeometry [] g))
+                                return Some call
+                            | None ->
+                                return None
+                    }
+
+                let trigger = MVar.empty()
+                
+                let traverse (ref : RoseTree<Loady<Option<ManagedDrawCall>, LodDataNode>>) (t : RoseTree<LodDataNode>) =
+                    RoseTree.traverse<_, Loady<_,_>> (fun a b -> a.Tag = b) (fun a -> a |> load |> Loady.start a trigger) (fun l -> l.Stop()) ref t
+                  
+                let mutable currentLoady = Empty
+
+                let runnerShitFuck =
+                    async {
+                        do! Async.SwitchToNewThread()
+
+                        while true do
+                            let! view, proj = vp.GetValueAsync()
+                            let tree = 
+                                data.Traverse(fun n children ->
+                                    if good n then
+                                        Leaf n
+                                    else
+                                        Node(n, children n)
+                                )
+
+                            currentLoady <- traverse currentLoady tree
+                            MVar.put trigger ()
+                    }
+
+                let runnerShitFuck2 =
+                    async {
+                        do! Async.SwitchToNewThread()
+
+                        let mutable oldLoady = Empty
+                        while true do
+                            do! MVar.takeAsync trigger
+                            let newLoady = currentLoady
+                            let isReady (l : RoseTree<Loady<_,_>>) =
+                                match l with
+                                    | Empty -> true
+                                    | Leaf v -> v.Peek |> Option.isSome
+                                    | Node(v, _) -> v.Peek |> Option.isSome
+
+
+                            let create (l : Loady<_,_>) =
+                                let r = l.Peek
+                                match r with
+                                    | Some (Some v) -> callBuffer.Add v |> ignore
+                                    | _ -> ()
+                                r
+
+                            let destroy (l : Option<_>) =
+                                match l with
+                                    | Some (Some v) ->
+                                        callBuffer.Remove v |> ignore
+                                    | _ ->
+                                        ()
+
+                            oldLoady <- RoseTree.traverse<Loady<_,_>, Option<_>> (fun b a -> a.Peek = b) create destroy oldLoady newLoady
+                    }
+                
+                Async.Start runnerShitFuck
+                Async.Start runnerShitFuck2
+
+                let ro = RenderObject.create()
+
+                ro.Mode <- Mod.constant n.Signature.mode
+                ro.Indices <- Some pool.IndexBuffer
+                ro.VertexAttributes <- pool.VertexAttributes
+                ro.InstanceAttributes <- pool.InstanceAttributes
+                ro.IndirectBuffer <- callBuffer
+
+
+                ASet.single (ro :> IRenderObject)
+
+
+        let rand = Random()
+        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
+
+        type DummyDataProvider(root : Box3d) =
+            static let toNode (level : int) (b : Box3d) =
+                { id = b; level = level; bounds = b; inner = true; granularity = Fun.Cbrt(b.Volume / 100.0); render = true}
+
+            let children (b : Box3d) =
+                let l = b.Min
+                let u = b.Max
+                let c = b.Center
+                [
+                    Box3d(V3d(l.X, l.Y, l.Z), V3d(c.X, c.Y, c.Z))
+                    Box3d(V3d(c.X, l.Y, l.Z), V3d(u.X, c.Y, c.Z))
+                    Box3d(V3d(l.X, c.Y, l.Z), V3d(c.X, u.Y, c.Z))
+                    Box3d(V3d(c.X, c.Y, l.Z), V3d(u.X, u.Y, c.Z))
+                    Box3d(V3d(l.X, l.Y, c.Z), V3d(c.X, c.Y, u.Z))
+                    Box3d(V3d(c.X, l.Y, c.Z), V3d(u.X, c.Y, u.Z))
+                    Box3d(V3d(l.X, c.Y, c.Z), V3d(c.X, u.Y, u.Z))
+                    Box3d(V3d(c.X, c.Y, c.Z), V3d(u.X, u.Y, u.Z))
+                ]
+
+            interface ILodData with
+                member x.BoundingBox = root
+
+                member x.Traverse f =
+                    let rec traverse (level : int) (b : Box3d) =
+                        let box = b
+                        let n = 100.0
+                        let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n); render = true}
+
+                        if level > 10 then
+                            f node (fun _ -> [])
+                        else
+                            f node (fun n -> n.id |> unbox |> children |> List.map (traverse (level + 1)))
+
+                    traverse 0 root
+
+                member x.GetData (cell : LodDataNode) =
+                    async {
+                        //do! Async.SwitchToThreadPool()
+                        let box = cell.bounds
+                        let points = 
+                            [| for x in 0 .. 9 do
+                                 for y in 0 .. 9 do
+                                    for z in 0 .. 9 do
+                                        yield V3d(x,y,z)*0.1*box.Size + box.Min |> V3f.op_Explicit
+                             |]
+                        let colors = Array.create points.Length (randomColor())
+                        let mutable a = 0
+                        return Some <| IndexedGeometry(Mode = unbox a, IndexedAttributes = SymDict.ofList [ DefaultSemantic.Positions, points :> Array; DefaultSemantic.Colors, colors :> System.Array])
+                    }
+
+
+        let test() =
+            let data = DummyDataProvider(Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 20.0))
+
+            let signature =
+                {
+                    mode                = IndexedGeometryMode.PointList
+                    indexType           = typeof<int>
+                    vertexBufferTypes   = 
+                        Map.ofList [
+                            DefaultSemantic.Positions, typeof<V3f>
+                            DefaultSemantic.Colors, typeof<C4b>
+                        ]
+                    uniformTypes        = Map.empty
+                }
+
+            let node = LodNode(signature, data)
+
+            node :> ISg
+                |> Sg.effect [
+                    DefaultSurfaces.trafo |> toEffect
+                    DefaultSurfaces.vertexColor |> toEffect
+                ]
+
+
+
+
+
+
+
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Optimizer =
@@ -947,6 +1296,150 @@ module Pooling =
 
         Sg.set geometries
             |> Sg.fillMode mode
+
+    
+    type IList = interface end
+    type Nil() = interface IList
+    type Cons(head : int, tail : IList) =
+        interface IList
+        member x.Head = head
+        member x.Tail = tail
+
+    type Scope private() =
+        static let instance = Scope()
+        static member Instance = instance
+
+    let scope = Scope.Instance
+
+    let (?) (s : 'x) (name : string) : 'a =
+        failwith ""
+
+    [<ReflectedDefinition>]
+    type Semmy =
+        static member Index() = 
+            0
+
+        static member Index(a : Cons) =
+            scope?Index + a.Head
+
+        static member Sum(a : Nil) = 0
+        static member Sum(a : Cons) = a.Head / scope?Index + a.Tail?Sum()
+
+        static member All(a : Nil) = ASet.empty
+        static member All(a : Cons) =
+            aset {
+                yield a.Head
+                yield! a.Tail?All()
+            }
+
+
+
+    open System.Reflection
+    open Microsoft.FSharp.Quotations
+
+    type Type with
+        member x.AllStaticMethods = x.GetMethods(BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
+
+    let bla() =
+        let functions = 
+            typeof<Semmy>.AllStaticMethods
+                |> Array.choose (fun mi ->
+                    match Expr.TryGetReflectedDefinition mi with
+                        | Some def -> Some (mi.Name,def)
+                        | _ -> None
+                )
+                |> Seq.groupBy fst |> Seq.map (fun (g,vs) -> g, vs |> Seq.map snd |> Seq.toList)
+                |> Map.ofSeq
+
+        for (n,fs) in Map.toSeq functions do
+            Log.start "%s" n
+            for f in fs do
+                Log.line "%A" f
+            Log.stop()
+        ()
+
+
+//    module CodeGen =
+//        open Microsoft.FSharp.Quotations
+//
+//        let generate (sems : Map<string, list<Type * Expr>>)
+
+    type SumScope =
+        {
+            scope : list<obj>
+            index : int
+        }
+
+    type SemmyGen =
+
+        static member Index(scope : list<obj>) =
+            match scope with
+                | [] -> 0
+                | h :: rest -> 
+                    match h with
+                        | :? Cons as c -> c.Head + SemmyGen.Index(rest)
+                        | _ -> SemmyGen.Index(rest)
+
+        static member Sum1(scope : list<obj>, a : Nil) = 0
+        static member Sum1(scope : list<obj>, a : Cons) = a.Head / SemmyGen.Index(scope) + SemmyGen.Sum1((a :> obj) :: scope, a.Tail)
+
+        static member Sum1(scope : list<obj>, a : obj) =
+            match a with
+                | :? Nil as n -> SemmyGen.Sum1(scope, n)
+                | :? Cons as n -> SemmyGen.Sum1(scope, n)
+                | _ -> failwith ""
+
+        static member Sum1(a : obj) =
+            SemmyGen.Sum1([], a)
+
+        static member Sum(scope : SumScope, a : Nil) = 0
+        static member Sum(scope : SumScope, a : Cons) = 
+            let childScope = { scope with scope = (a :> obj) :: scope.scope }
+            let childScope = { childScope with index = scope.index + a.Head }
+            a.Head / scope.index + SemmyGen.Sum(childScope, a.Tail)
+
+        static member Sum(scope : SumScope, a : obj) =
+            match a with
+                | :? Nil as n -> SemmyGen.Sum(scope, n)
+                | :? Cons as n -> SemmyGen.Sum(scope, n)
+                | _ -> failwith ""
+
+        static member Sum(a : obj) =
+            SemmyGen.Sum({ scope = []; index = 0 }, a)
+
+
+    module Visitor =
+        [<AbstractClass>]
+        type Visitor<'a>() =
+            abstract member Visit : Cons -> 'a
+            abstract member Visit : Nil -> 'a
+
+        and INode =
+            abstract member Accept : Visitor<'a> -> 'a
+
+        and IList = inherit INode
+        and Nil() =
+            interface IList with
+                member x.Accept(v) = v.Visit(x)
+
+        and Cons(head : int, tail : IList) =
+            interface IList with
+                member x.Accept(v) = v.Visit(x)
+
+            member x.Head = head
+            member x.Tail = tail
+
+        type SumVisitor() =
+            inherit Visitor<int>()
+            override x.Visit(c : Cons) = c.Head + c.Tail.Accept x
+            override x.Visit(n : Nil) = 0
+        
+        type LengthVisitor() =
+            inherit Visitor<int>()
+            override x.Visit(c : Cons) = 1 + c.Tail.Accept x
+            override x.Visit(n : Nil) = 0
+        
+
 
 
 module ASP =
@@ -1320,7 +1813,6 @@ module Maya =
     open Aardvark.SceneGraph.Semantics
     
     let run () =
-        ASP.test()
 
 
         Ag.initialize()
@@ -1412,15 +1904,16 @@ module Maya =
             }
 
         let sg =
-            let test = 
-                Pooling.testSg win app.Runtime
-                |> Sg.effect [
-                    Shader.hugoShade |> toEffect
-                    DefaultSurfaces.trafo |> toEffect
-                    DefaultSurfaces.constantColor C4f.Red |> toEffect
-                    DefaultSurfaces.simpleLighting |> toEffect
-                ]
-            test
+//            let test = 
+//                Pooling.testSg win app.Runtime
+//                |> Sg.effect [
+//                    Shader.hugoShade |> toEffect
+//                    DefaultSurfaces.trafo |> toEffect
+//                    DefaultSurfaces.constantColor C4f.Red |> toEffect
+//                    DefaultSurfaces.simpleLighting |> toEffect
+//                ]
+//            test
+            Pooling.LodAgain.test()
 
         
         let camera = Mod.map2 (fun v p -> { cameraView = v; frustum = p }) viewTrafo perspective
@@ -1534,10 +2027,10 @@ module Maya =
                 |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
                 |> Sg.uniform "LightLocation" (Mod.constant (V3d.III * 10.0))
         
-        let objects = sg.RenderObjects() |> Pooling.Optimizer.optimize app.Runtime win.FramebufferSignature
+        //let objects = sg.RenderObjects() |> Pooling.Optimizer.optimize app.Runtime win.FramebufferSignature
 
         
-        use task = app.Runtime.CompileRender(win.FramebufferSignature, { BackendConfiguration.NativeOptimized with useDebugOutput = false }, objects)
+        use task = app.Runtime.CompileRender(win.FramebufferSignature, { BackendConfiguration.NativeOptimized with useDebugOutput = false }, sg)
         
 
         
