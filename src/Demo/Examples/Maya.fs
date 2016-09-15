@@ -555,6 +555,7 @@ module Pooling =
                 false
 
         interface ILockedResource with
+            member x.Use f = store.Use f
             member x.AddLock l = store.AddLock l
             member x.RemoveLock l = store.RemoveLock l
 

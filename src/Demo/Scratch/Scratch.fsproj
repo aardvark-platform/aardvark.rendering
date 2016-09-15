@@ -51,9 +51,10 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Tools\Rendering.fs" />
     <Compile Include="Staging\Time.fs" />
     <Compile Include="Staging\Proc.fs" />
-    <Compile Include="Tools\Rendering.fs" />
+    <Compile Include="Staging\GeometryPool.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

@@ -179,6 +179,9 @@ module MappedBufferImplementations =
                 onDispose.OnNext()
                 onDispose.Dispose()
 
+        member x.Use(f : unit -> 'a) =
+            resourceLocked f
+
         member x.AddLock (r : RenderTaskLock) =
             lock locks (fun () ->
                 locks.Add r |> ignore
@@ -200,6 +203,7 @@ module MappedBufferImplementations =
             member x.UseWrite(offset, size, f) = x.UseWrite(offset, size, f)
 
         interface ILockedResource with
+            member x.Use (f : unit -> 'a) = x.Use f
             member x.AddLock (r : RenderTaskLock) = x.AddLock r
             member x.RemoveLock (r : RenderTaskLock) = x.RemoveLock r
 
@@ -383,6 +387,9 @@ module MappedBufferImplementations =
                 locks.Remove r |> ignore
             )
 
+        member x.Use(f : unit -> 'a) =
+            resourceLocked f
+
         interface IMappedBuffer with
             member x.Write(sourcePtr, offset, size) = x.Write(sourcePtr,offset,size)
             member x.Read(targetPtr, offset, size) = x.Read(targetPtr,offset,size)
@@ -394,16 +401,20 @@ module MappedBufferImplementations =
             member x.UseWrite(offset, size, f) = x.UseWrite(offset, size, f)
 
         interface ILockedResource with
+            member x.Use (f : unit -> 'a) = x.Use f
             member x.AddLock (r : RenderTaskLock) = x.AddLock r
             member x.RemoveLock (r : RenderTaskLock) = x.RemoveLock r
+
 
 
 [<AutoOpen>]
 module ``MappedBuffer Context Extensions`` =
     type Context with
         member x.CreateMappedBuffer() =
-            if ExecutionContext.bufferStorageSupported then new MappedBufferImplementations.MappedBuffer(x) :> IMappedBuffer
-            else new MappedBufferImplementations.FakeMappedBuffer(x) :> IMappedBuffer
+            using x.ResourceLock (fun _ ->
+                if ExecutionContext.bufferStorageSupported then new MappedBufferImplementations.MappedBuffer(x) :> IMappedBuffer
+                else new MappedBufferImplementations.FakeMappedBuffer(x) :> IMappedBuffer
+            )
 
 type MappedIndirectBuffer(ctx : Context, indexed : bool) =
     inherit Mod.AbstractMod<IIndirectBuffer>()
@@ -460,6 +471,7 @@ type MappedIndirectBuffer(ctx : Context, indexed : bool) =
         IndirectBuffer(inner, count, 20, indexed) :> IIndirectBuffer
 
     interface ILockedResource with
+        member x.Use f = buffer.Use f
         member x.AddLock l = buffer.AddLock l
         member x.RemoveLock l = buffer.RemoveLock l
 

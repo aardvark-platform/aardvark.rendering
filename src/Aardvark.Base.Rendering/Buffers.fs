@@ -119,6 +119,7 @@ type RenderTaskLock() =
     member x.Update f = ReaderWriterLock.read rw f
 
 type ILockedResource =
+    abstract member Use         : (unit -> 'a) -> 'a
     abstract member AddLock     : RenderTaskLock -> unit
     abstract member RemoveLock  : RenderTaskLock -> unit
 
