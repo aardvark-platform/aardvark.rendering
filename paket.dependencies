@@ -9,7 +9,7 @@ nuget GLSLangSharp                       ~> 0.2.4
      
 nuget FSharp.Quotations.Evaluator        ~> 1.0.6
 nuget FSharp.Charting                    ~> 0.90.14
-	 
+     
 nuget BruTile                            ~> 0.12.0
 nuget AssimpNet                          ~> 3.3.1
 nuget OpenHardwareMonitor                ~> 0.7.1
@@ -22,6 +22,7 @@ nuget DockPanelSuite.ThemeVS2013Blue     = 2.10.0-beta2
 nuget Poly2Tri                           ~> 1.0.1
 nuget Clipper                            ~> 6.2.10
 nuget CommonMark.NET                     ~> 0.12.0
+nuget QuotationCompiler                  ~> 0.0.7-alpha
 
 nuget FsUnit                             ~> 2.1.0
 nuget NUnit                              ~> 3.2.0
