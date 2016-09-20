@@ -11,6 +11,7 @@ open Microsoft.FSharp.Quotations.ExprShape
 open Aardvark.Base
 open QuotationCompiler
 
+
 type SemanticAttribute() = inherit Attribute()
 
 [<AutoOpen>]
@@ -173,49 +174,197 @@ module Blub =
             TypeMap<'a>(store, len)
 
 
+    module Dispatcher =
+        let ofLambdas<'b, 'r> (lambdas : list<obj>) : Dispatcher<'b, 'r> =
+            let methods =
+                lambdas 
+                |> List.map (fun l ->
+                    let t = l.GetType()
+                    let best = t.GetMethods() |> Array.filter (fun mi -> mi.Name = "Invoke") |> Array.maxBy (fun mi -> mi.GetParameters().Length)
+                    let p = best.GetParameters()
+
+                    p.[0].ParameterType, (l, best)
+                ) 
+                |> Dictionary.ofList
+
+            let dispatcher =
+                Dispatcher<'b, 'r>(fun t ->
+                    match methods.TryGetValue t with
+                        | (true, t) -> Some t
+                        | _ -> None
+                )
+            dispatcher   
+
+    let mutable lambda = fun (a : float) -> (); a + 1.0
+
+    type IAuto =
+        abstract member Driven : int
+        abstract member Drive : unit -> int
+        
+
+    [<AbstractClass>]
+    type Auto() =
+        abstract member Driven : int
+        abstract member Drive : unit -> int
+
+        interface IAuto with
+            member x.Driven = x.Driven
+            member x.Drive() = x.Drive()
+
+    [<AbstractClass>]
+    type Teuer() =
+        abstract member Viel : int
+
+    type Ferrari() =
+        inherit Teuer()
+
+        let mutable driven = 0
+
+        override x.Viel = 100
+
+        member x.Driven = driven
+        member x.Drive() = 
+            driven <- driven + 1
+            driven
+
+        interface ICloneable with
+            member x.Clone() = obj()
+
+        interface IAuto with
+            member x.Driven = x.Driven
+            member x.Drive() = x.Drive()
+
+
+    type Fiat() =
+        //inherit Auto()
+        inherit Aardvark.Base.Incremental.AdaptiveObject()
+
+        let mutable driven = 0
+        member x.Driven = driven
+        member x.Drive() = 
+            driven <- driven + 1
+            driven
+
+        
+        interface ICountable with
+            member x.LongCount = 1L
+        
+        interface ICloneable with
+            member x.Clone() = obj()
+
+
+        interface IAuto with
+            member x.Driven = x.Driven
+            member x.Drive() = x.Drive()
+
+    type Blubber() =
+        static member Length(l : list<'a>, b : int) =
+            let res = List.length l
+            res
+
+        static member Length(v : V2i, b : int) = 
+            2
+
+    [<Demo("Bla 2")>]
+    let runner() =
+        let methods = typeof<Blubber>.GetMethods() |> Array.filter (fun mi -> mi.Name = "Length") |> Array.toList
+
+        let disp = Dispatcher.ofMethods<int, int> methods
+        disp.Invoke([1;2;3], 1) |> printfn "int: %A"
+        disp.Invoke([1.0;2.0;3.0], 1) |> printfn "double: %A"
+        disp.Invoke(V2i.Zero, 1) |> printfn "v2i: %A"
+
+
     [<Demo("Bla")>]
     let run() =
-        let m = TypeMap.ofList [typeof<Aardvark.SceneGraph.ISg>, 1; typeof<Aardvark.SceneGraph.IApplicator>, 3; typeof<Aardvark.SceneGraph.IGroup>, 2; typeof<Aardvark.SceneGraph.Sg.Group>, 5; typeof<Aardvark.SceneGraph.Sg.TrafoApplicator>, 1; typeof<Aardvark.SceneGraph.Sg.AbstractApplicator>, 1]
-        printfn "%A" m
 
-    type Dispatcher<'a> = { cases : HashMap<Type, 'a> }
+        let lambdas =
+            [
+                (fun (a : list<int>)  (offset : float)  -> 10.0) :> obj
 
-    module Dispatcher = 
-        let tryResolve (argType : Type) (d : Dispatcher<'a>) =
-            match HashMap.tryFind argType d.cases with
-                | Some v -> Some (argType, v)
-                | None ->
-                    let other = d.cases |> HashMap.toSeq |> Seq.filter (fun (t,v) -> t.IsAssignableFrom argType) |> Seq.toList
-                    match other with
-                        | [] -> None
-                        | h :: _ -> Some h
+                (fun (a : Option<int>)  (offset : float)  -> 10.0) :> obj
+                (fun (a : obj)  (offset : float)  -> 10.0) :> obj
 
-        let merge (merge : 'a -> 'a -> 'a) (l : Dispatcher<'a>) (r : Dispatcher<'a>) =
-        
-            let lt = l.cases |> HashMap.toSeq |> Seq.map fst |> PersistentHashSet.ofSeq
-            let rt = r.cases |> HashMap.toSeq |> Seq.map fst |> PersistentHashSet.ofSeq
+                (fun (a : int8)  (offset : float)  -> 10.0) :> obj
+                (fun (a : int16)  (offset : float)  -> 10.0) :> obj
+                (fun (a : int32)  (offset : float)  -> 10.0) :> obj
+                (fun (a : int64)  (offset : float)  -> 10.0) :> obj
+                (fun (a : uint8)  (offset : float)  -> 10.0) :> obj
+                (fun (a : uint16)  (offset : float)  -> 10.0) :> obj
+                (fun (a : uint32)  (offset : float)  -> 10.0) :> obj
+                (fun (a : uint64)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V2i)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V2f)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V2d)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V3i)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V3f)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V3d)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V4i)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V4f)  (offset : float)  -> 10.0) :> obj
+                (fun (a : V4d)  (offset : float)  -> 10.0) :> obj
 
-            let types = PersistentHashSet.union lt rt
+            ]
 
-            let cases = 
-                types 
-                    |> Seq.map (fun t ->
-                        match tryResolve t l, tryResolve t r with
-                            | Some (lt,lv), Some (rt, rv) -> 
-                                if lt.IsAssignableFrom rt then
-                                    lt, merge lv rv
-                                elif rt.IsAssignableFrom lt then
-                                    rt, merge lv rv
-                                else
-                                    failwith "unexpected"
-                            | Some r, None | None, Some r ->
-                                r
-                            | _ ->
-                                failwith "unexpected"
-                    )
-                    |> HashMap.ofSeq
-            { cases = cases }
+        let values = 
+            [
+                obj(); Some 1 :> obj
+                8y :> obj; 8s :> obj; 8 :> obj; 8L :> obj; 8uy :> obj; 8us :> obj; 8u :> obj; 8UL :> obj; 
+                V2i.Zero :> obj; V2f.Zero :> obj; V2d.Zero :> obj;
+                V3i.Zero :> obj; V3f.Zero :> obj; V3d.Zero :> obj;
+                V4i.Zero :> obj; V4f.Zero :> obj; V4d.Zero :> obj;
+                List.empty<int> :> obj; List<int>() :> obj
+            ]
 
+        let meth = Dispatcher.ofLambdas<float, float> lambdas
+
+
+
+        for v in values do
+            let mutable foo = Unchecked.defaultof<_>
+            meth.TryInvoke(v, 0.0, &foo) |> ignore
+
+        match meth.TryInvoke(List<int>(), 1.0) with
+            | (true, v) -> printfn "worked"
+            | _ -> printfn "as expected"
+
+        let sw = System.Diagnostics.Stopwatch()
+        let iter = 100000000
+        let mutable res = 0.0
+        let mutable a = [1]
+        sw.Start()
+        let mutable ret = 0.0
+        for i in 1..iter do
+            meth.TryInvoke(a, 0.0, &ret) |> ignore
+            res <- res + ret
+        sw.Stop()
+        printfn "good: %A %A" (sw.MicroTime / iter) (res / float iter)
+
+
+        let mutable res = 0.0
+        let mutable a = List<int>()
+        sw.Restart()
+        let mutable ret = 0.0
+        for i in 1..iter do
+            meth.TryInvoke(a, 0.0, &ret) |> ignore
+            res <- res + ret
+        sw.Stop()
+        printfn "bad:  %A %A" (sw.MicroTime / iter) (res / float iter)
+
+
+
+        let a = Activator.CreateInstance(typeof<Ferrari>) |> unbox<IAuto>
+        let b = Activator.CreateInstance(typeof<Fiat>) |> unbox<IAuto>
+
+        let mutable auto = a
+        let mutable res = 0
+        sw.Restart()
+        for i in 1..iter do
+            res <- auto.Drive()
+            if i &&& 1 = 0 then auto <- b
+            else auto <- a 
+
+        sw.Stop()
+        printfn "virt: %A %A" (sw.MicroTime / iter) (auto.Driven)
 
 
     type Root<'a> = class end
@@ -377,11 +526,9 @@ module Blub =
                 )
 
 
-            { cases = 
-                definitions
-                    |> List.map (fun sf -> sf.nodeType, sf)
-                    |> HashMap.ofList
-            }
+            definitions
+                |> List.map (fun sf -> sf.nodeType, sf)
+                |> HashMap.ofList
 
 
 
