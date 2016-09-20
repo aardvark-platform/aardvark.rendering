@@ -19,47 +19,400 @@ module Operators =
         failwith ""
 
 
-
-module Test =
+module Blub =
  
-    type TraversalState(parent : Option<TraversalState>, node : obj, values : Map<string, Option<obj>>) =
-        let mutable cache = values
-        static let root = TraversalState(None, null, Map.empty)
+    type TraversalState(parent : Option<TraversalState>, node : obj, cache : Dictionary<string, Option<obj>>) =
+        static let root = TraversalState(None, null, Dictionary.empty)
         static member Root = root
 
         member x.Parent = parent
         member x.Node = node
 
         member x.ChildState(n : obj) =
-            if isNull node then TraversalState(None, n, Map.empty)
-            else TraversalState(Some x, n, Map.empty)
+            if isNull node then TraversalState(None, n, Dictionary.empty)
+            else TraversalState(Some x, n, Dictionary.empty)
 
-        member x.ChildState(n : obj, converters : list<string * (obj -> obj)>) =
-            let values = 
-                converters |> List.map (fun (name, f) ->
-                    match cache.[name] with
-                        | Some v -> name, Some (f v)
-                        | None -> name, None
-                )
-                |> Map.ofList
 
-            if isNull node then TraversalState(None, n, values)
-            else TraversalState(Some x, n, values)
+        member x.Item
+            with get (name : string) = cache.[name]
+            and set (name : string) (value : Option<obj>) = cache.[name] <- value
 
         member x.TryGet(name : string) =
-            match Map.tryFind name cache with
-                | Some v -> v
+            match cache.TryGetValue name with
+                | (true, v) -> v
+                | _ -> None
+
+        member x.GetOrCreate(name : string, f : string -> Option<'a>) =
+            match cache.TryGetValue name with
+                | (true, v) ->  v |> Option.map unbox
+                | _ ->
+                    let v = f name
+                    cache.[name] <- v |> Option.map (fun v -> v :> obj)
+                    v
+    
+
+    [<StructuredFormatDisplay("{AsString}")>]
+    type TypeMap<'a>(store : list<Type * 'a>, count : int) =
+
+        let rec tryAdd (found : ref<bool>) (t : Type) (value : 'a) (l : list<Type * 'a>) =
+            match l with
+                | [] -> [(t, value)]
+                | (tc,vc) :: rest ->
+
+                    let ta = t.IsInterface || t = typeof<obj>
+                    let tca = tc.IsInterface || tc = typeof<obj>
+
+                    if not ta && tca then 
+                        (t,value) :: (tc, vc) :: rest
+                    elif not tca && tca then
+                        (tc,vc) :: (tryAdd found t value rest)
+                    else
+                        if tc = t then 
+                            found := true
+                            (tc,value) :: rest
+                        elif tc.IsAssignableFrom t then
+                            (t,value) :: (tc, vc) :: rest
+                        
+                        elif t.IsAssignableFrom tc then
+                            (tc,vc) :: (tryAdd found t value rest)
+
+                        else
+                            (tc,vc) :: (tryAdd found t value rest)
+
+        member x.Add(t : Type, value : 'a) =
+            if count = 0 then
+                TypeMap<'a>([t,value], 1)
+            else
+                
+                let found = ref false
+                let l = tryAdd found t value store
+                if !found then x
+                else TypeMap<'a>(l, count + 1)
+             
+        member internal x.List = store
+        member private x.Store = store
+        member x.Count = count
+
+        member private x.AsString =
+            store |> List.map (fun (t,v) -> sprintf "(%s, %A)" (Aardvark.Base.ReflectionHelpers.getPrettyName t) v) |> String.concat "; " |> sprintf "[%s]"
+                
+        override x.ToString() = x.AsString
+
+        override x.GetHashCode() = store |> Seq.fold (fun h (t,v) -> HashCode.Combine(h, t.GetHashCode() ^^^ (v :> obj).GetHashCode())) 0
+
+        override x.Equals(o) =
+            match o with
+                | :? TypeMap<'a> as o -> 
+                    if count = o.Count then
+                        Seq.forall2 (fun (tl,vl) (tr, vr) -> tl = tr && Object.Equals(vl, vr)) store o.Store
+                    else
+                        false
+                | _ ->
+                    false
+
+        interface System.Collections.IEnumerable with
+            member x.GetEnumerator() = (store :> seq<_>).GetEnumerator() :> System.Collections.IEnumerator
+
+        interface IEnumerable<Type * 'a> with
+            member x.GetEnumerator() = (store :> seq<_>).GetEnumerator() :> IEnumerator<_>
+
+    module TypeMap =
+        type private EmptyImpl<'a>() =
+            static let instance = TypeMap<'a>([], 0)
+            static member Instance = instance
+
+        let empty<'a> = EmptyImpl<'a>.Instance
+
+        let add (t : Type) (value : 'a) (m : TypeMap<'a>) = m.Add(t,value)
+        let count (m : TypeMap<'a>) = m.Count
+        let toSeq (m : TypeMap<'a>) = m.List :> seq<_>
+        let toList (m : TypeMap<'a>) = m.List 
+        let toArray (m : TypeMap<'a>) = m.List |> List.toArray
+
+        let ofSeq (l : seq<Type * 'a>) =
+            let mutable res = empty
+            for (t,v) in l do
+                res <- add t v res
+            res
+
+        let ofList (l : list<Type * 'a>) =
+            let mutable res = empty
+            for (t,v) in l do
+                res <- add t v res
+            res
+
+        let ofArray (l : array<Type * 'a>) =
+            ofSeq l
+
+        let map (f : Type -> 'a -> 'b) (m : TypeMap<'a>) =
+            TypeMap<'b>(m.List |> List.map (fun (t,v) -> t, f t v), m.Count)
+
+        let choose (f : Type -> 'a -> Option<'b>) (m : TypeMap<'a>) =
+            let mutable len = 0
+            let store = 
+                m.List |> List.choose (fun (t,v) ->
+                    match f t v with
+                        | Some r -> 
+                            len <- len + 1
+                            Some (t,r)
+                        | None ->
+                            None
+                )
+            TypeMap<'b>(store, len)
+
+        let filter (f : Type -> 'a -> bool) (m : TypeMap<'a>) =
+            let mutable len = 0
+            let store = 
+                m.List |> List.filter (fun (t,v) ->
+                    if f t v then
+                        len <- len + 1
+                        true
+                    else
+                        false
+                )
+            TypeMap<'a>(store, len)
+
+
+    [<Demo("Bla")>]
+    let run() =
+        let m = TypeMap.ofList [typeof<Aardvark.SceneGraph.ISg>, 1; typeof<Aardvark.SceneGraph.IApplicator>, 3; typeof<Aardvark.SceneGraph.IGroup>, 2; typeof<Aardvark.SceneGraph.Sg.Group>, 5; typeof<Aardvark.SceneGraph.Sg.TrafoApplicator>, 1; typeof<Aardvark.SceneGraph.Sg.AbstractApplicator>, 1]
+        printfn "%A" m
+
+    type Dispatcher<'a> = { cases : HashMap<Type, 'a> }
+
+    module Dispatcher = 
+        let tryResolve (argType : Type) (d : Dispatcher<'a>) =
+            match HashMap.tryFind argType d.cases with
+                | Some v -> Some (argType, v)
+                | None ->
+                    let other = d.cases |> HashMap.toSeq |> Seq.filter (fun (t,v) -> t.IsAssignableFrom argType) |> Seq.toList
+                    match other with
+                        | [] -> None
+                        | h :: _ -> Some h
+
+        let merge (merge : 'a -> 'a -> 'a) (l : Dispatcher<'a>) (r : Dispatcher<'a>) =
+        
+            let lt = l.cases |> HashMap.toSeq |> Seq.map fst |> PersistentHashSet.ofSeq
+            let rt = r.cases |> HashMap.toSeq |> Seq.map fst |> PersistentHashSet.ofSeq
+
+            let types = PersistentHashSet.union lt rt
+
+            let cases = 
+                types 
+                    |> Seq.map (fun t ->
+                        match tryResolve t l, tryResolve t r with
+                            | Some (lt,lv), Some (rt, rv) -> 
+                                if lt.IsAssignableFrom rt then
+                                    lt, merge lv rv
+                                elif rt.IsAssignableFrom lt then
+                                    rt, merge lv rv
+                                else
+                                    failwith "unexpected"
+                            | Some r, None | None, Some r ->
+                                r
+                            | _ ->
+                                failwith "unexpected"
+                    )
+                    |> HashMap.ofSeq
+            { cases = cases }
+
+
+
+    type Root<'a> = class end
+    
+    type SemanticFunctionKind =
+        | Inherit
+        | Synthesize
+
+    type SemanticFunction =
+        {
+            name        : string
+            kind        : SemanticFunctionKind
+            strictInh   : Set<string>
+            strictSyn   : Set<string>
+            original    : MethodInfo
+            isRoot      : bool
+            nodeType    : Type
+            valueType   : Type
+            definition  : Expr
+        }
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module SemanticFunction =
+        
+        let private all = BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.Static ||| BindingFlags.CreateInstance
+        let private prettyName (t : Type) =
+            Aardvark.Base.ReflectionHelpers.getPrettyName t
+
+        let private methodName (m : MethodInfo) =
+            let t = prettyName m.DeclaringType
+            let args = m.GetParameters() |> Array.map (fun p -> sprintf "%s : %s" p.Name (prettyName p.ParameterType)) |> String.concat ", "
+            sprintf "%s.%s(%s)" t m.Name args
+
+        let private instances = Dict<Type, obj>()
+        let private getInstance (t : Type) =
+            instances.GetOrCreate(t, fun t ->
+                let ctor = t.GetConstructor(all, Type.DefaultBinder, CallingConventions.Any, [||], null)
+                if isNull ctor then
+                    failwithf "[Ag] cannot create semantic-type '%s' (no empty constructor)" (prettyName t)
+
+                ctor.Invoke [||]
+            )
+
+
+        let ofSeq (name : string) (methods : seq<MethodInfo>) =
+            let methods = Seq.toList methods
+
+            // try to get definitions for all methods
+            let definitions = 
+                methods |> List.choose (fun mi ->
+                    if mi.IsGenericMethodDefinition || mi.GetParameters().Length <> 1 then
+                        Log.warn "[Ag] ill-formed semantic function '%s' (skipping)" (methodName mi)
+                        None
+                    else
+                        match Expr.TryGetReflectedDefinition mi with
+                            | Some d -> 
+                                Some {
+                                    name        = mi.Name
+                                    kind        = Synthesize
+                                    strictInh   = Set.empty
+                                    strictSyn   = Set.empty
+                                    original    = mi
+                                    isRoot      = false
+                                    nodeType    = mi.GetParameters().[0].ParameterType
+                                    valueType   = mi.ReturnType
+                                    definition  = d
+                                }
+                            | _ ->
+                                Log.warn "[Ag] could not get definition for '%s' (skipping)" (methodName mi)
+                                None
+                )
+
+            // remove all 'this' references from the methods and replace them with an appropriate 
+            // cached instance (created on demand)
+            let definitions = 
+                definitions |> List.map (fun sf ->
+                    { sf with
+                        definition =
+                            match sf.definition with
+                                | Lambda(v,b) when v.Type.IsDefined(typeof<SemanticAttribute>) -> 
+                                    b.Substitute (fun vi -> if v = vi then Some (Expr.Value(getInstance v.Type, v.Type)) else None)
+                                | e -> 
+                                    e
+                    }
+                )
+
+            
+            // replace all attribute-lookups with traversal-calls and add the traversal argument
+            // to all semantic functions
+            let definitions = 
+                let convert (t : Type) (e : Expr) = Expr.Coerce(e, t)
+
+                let rec getInfo (strictInh : HashSet<string>) (strictSyn : HashSet<string>) (attType : ref<Type>) (kind : ref<SemanticFunctionKind>) (e : Expr) =
+                    match e with
+                        | Application(Call(None, mi, [o; Value(:? string as nn, _)]), Value(_)) when mi.Name = "op_Dynamic" ->
+                            // syn case
+                            kind := Synthesize
+                            strictSyn.Add nn |> ignore
+                   
+
+                        | Call(None, mi, [o; Value(:? string as nn, _)]) when mi.Name = "op_Dynamic" ->
+                            strictInh.Add nn |> ignore
+
+                        | Call(None, mi, [_; value]) when mi.Name = "op_LessLessEquals" ->
+                            attType := value.Type
+
+
+                        | ShapeVar(v) ->
+                            ()
+
+                        | ShapeLambda(v,b) ->
+                            getInfo strictInh strictSyn attType kind b
+
+                        | ShapeCombination(o, args) ->
+                            args |> List.iter (getInfo strictInh strictSyn attType kind)
+
+
+                definitions |> List.choose (fun d ->
+                    match d.definition with
+                        | Lambda(nodeVar,body) ->
+                            let kind = ref Synthesize
+                            let strictInh = HashSet()
+                            let strictSyn = HashSet()
+                            let attType = ref body.Type
+                            getInfo strictInh strictSyn attType kind body
+                            strictInh.Remove d.name |> ignore
+              
+                            let (|RootVar|_|) (v : Var) = 
+                                let t = v.Type
+                                if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Root<_>> then
+                                    let t = t.GetGenericArguments().[0]
+                                    Some t
+                                else
+                                    None
+
+                            let isRoot, nodeVar =
+                                match nodeVar with
+                                    | RootVar t ->
+                                        true, Var("caller", t)
+                                    | _ -> 
+                                        false, nodeVar
+                      
+
+                            let res = 
+                                { d with 
+                                    definition = Expr.Lambda(nodeVar, body) 
+                                    kind = !kind
+                                    strictInh = Set.ofSeq strictInh
+                                    strictSyn = Set.ofSeq strictSyn
+                                    isRoot = isRoot
+                                    nodeType = nodeVar.Type
+                                    valueType = !attType
+                                }
+                            Some res
+
+                        | _ ->
+                            None
+                    
+                )
+
+
+            { cases = 
+                definitions
+                    |> List.map (fun sf -> sf.nodeType, sf)
+                    |> HashMap.ofList
+            }
+
+
+
+module Test =
+ 
+    type TraversalState(parent : Option<TraversalState>, node : obj, cache : Dictionary<string, Option<obj>>) =
+        static let root = TraversalState(None, null, Dictionary.empty)
+        static member Root = root
+
+        member x.Parent = parent
+        member x.Node = node
+
+        member x.ChildState(n : obj) =
+            if isNull node then TraversalState(None, n, Dictionary.empty)
+            else TraversalState(Some x, n, Dictionary.empty)
+
+
+        member x.TryGet(name : string) =
+            match cache.TryGetValue name with
+                | (true, v) -> v
                 | _ -> None
 
         member x.Set(name : string, value : Option<obj>) =
-            cache <- Map.add name value cache
+            cache.[name] <- value
 
         member x.GetOrCreate(name : string, f : string -> Option<'a>) =
-            match Map.tryFind name cache with
-                | Some v -> v |> Option.map unbox
-                | None ->
+            match cache.TryGetValue name with
+                | (true, v) ->  v |> Option.map unbox
+                | _ ->
                     let v = f name
-                    cache <- Map.add name (v |> Option.map (fun v -> v :> obj)) cache
+                    cache.[name] <- v |> Option.map (fun v -> v :> obj)
                     v
 
 
@@ -72,22 +425,27 @@ module Test =
 
 
     type ITraversal<'a> =
+        abstract member RunUnit : obj -> unit
         abstract member Run : obj -> 'a
         abstract member WithState : TraversalState -> ITraversal<'a>
         abstract member State : TraversalState
 
-    [<Struct>]
-    type SynthesizeTraversal<'a>(syn : SynthesizeTraversal<'a> -> obj -> Option<'a>, state : TraversalState) =
+
+    type SynthesizeTraversal<'a>(syn : SynthesizeTraversal<'a> -> obj -> Option<'a>, state : TraversalState, strict : TraversalState -> obj -> unit) =
 
         member x.State : TraversalState = 
             state
 
         member x.WithState (state : TraversalState) =
-            SynthesizeTraversal<'a>(syn, state)
+            SynthesizeTraversal<'a>(syn, state, strict)
 
         member x.Run(o : obj) =
-            syn (x.WithState (state.ChildState o)) o |> Option.get
- 
+            let childState = state.ChildState o
+            strict childState o
+            syn (x.WithState childState) o |> Option.get
+
+        member x.RunUnit(o : obj) : unit =
+            failwith "not supported"
 
         member x.GetValue<'a>(name : string) =
             match state.TryGet(name) with
@@ -96,17 +454,15 @@ module Test =
 
         interface ITraversal<'a> with
             member x.Run(o) = x.Run(o)
+            member x.RunUnit(o) = x.RunUnit(o)
             member x.WithState s = x.WithState s :> ITraversal<_>
             member x.State = x.State
-                
 
-
-    [<Struct>]
     type InheritTraversal<'a>(name : string, inh : InheritTraversal<'a> -> obj -> Option<'a>, root : InheritTraversal<'a> -> obj -> Option<'a>, state : TraversalState) =
 
         member private x.create o name =
             match state.Parent with
-                | Some p -> inh (x.WithState p) o
+                | Some p -> inh (x.WithState p) p.Node
                 | None -> root x o
 
         member x.State : TraversalState = 
@@ -118,17 +474,20 @@ module Test =
         member x.Run(o : obj) =
             state.GetOrCreate(name, x.create o) |> Option.get
  
- 
+        member x.RunUnit(o : obj) =
+            state.GetOrCreate(name, x.create o) |> ignore
+
+        member x.GetValue<'a>(name : string) =
+            match state.TryGet(name) with
+                | Some (:? 'a as v) -> v
+                | _ -> failwith ""
 
         interface ITraversal<'a> with
             member x.Run(o) = x.Run(o)
+            member x.RunUnit(o) = x.RunUnit(o)
             member x.WithState s = x.WithState s :> ITraversal<_>
             member x.State = x.State
                 
-
-                      
-
-    
     type IList =
         abstract member Sum : TraversalState -> int
 
@@ -147,17 +506,17 @@ module Test =
         member x.Head = h
         member x.Tail = t
 
+    let state : TraversalState = TraversalState.Root
 
     [<Semantic; ReflectedDefinition>]
     type Sems() =
 
+
         member x.Sum(n : Nil) : int =
-            0
+            n?Index - n?Blubber + n?Bla - n?Gabbl + n?Gobbl
 
         member x.Sum(c : Cons) =
             c.Head + c.Tail?Sum()
-
-
 
         member x.Index(l : Root<IList>) = 
             inh <<= 0
@@ -166,8 +525,38 @@ module Test =
             let id = c?Index
             inh <<= id + 1
     
-    
-    
+
+        member x.Blubber(l : Root<IList>) = 
+            inh <<= 0
+
+        member x.Blubber(c : Cons) = 
+            let id = c?Blubber
+            inh <<= id + 1   
+
+        member x.Bla(l : Root<IList>) = 
+            inh <<= 0
+
+        member x.Bla(c : Cons) = 
+            let id = c?Bla
+            inh <<= id + 1   
+
+        member x.Gabbl(l : Root<IList>) = 
+            inh <<= 0
+
+        member x.Gabbl(c : Cons) = 
+            let id = c?Gabbl
+            inh <<= id + 1   
+
+
+        member x.Gobbl(l : Root<IList>) = 
+            inh <<= 0
+
+        member x.Gobbl(c : Cons) = 
+            let id = c?Gobbl
+            inh <<= id + 1   
+
+
+
     type SemanticFunctionKind =
         | Inherit
         | Synthesize
@@ -250,6 +639,50 @@ module Test =
                     }
                 )
 
+
+            let definitions =
+                definitions |> List.map (fun sf ->
+                    let rec retType (e : Expr) =
+                        match e with
+                            | Call(None, mi, [_; value]) when mi.Name = "op_LessLessEquals" ->
+                                value.Type
+
+
+                            | Value(v,t) -> t
+
+
+                            | Var(v) ->
+                                v.Type
+
+                            | Lambda(v,b) ->
+                                retType b
+
+                            | Sequential(_,r) ->
+                                retType r
+
+                            | Let(_,_,b) ->
+                                retType b
+
+                            | Coerce(_,t) ->
+                                t
+
+                            | IfThenElse(_,i,_) -> retType i
+
+                            | WhileLoop(_,_) -> typeof<unit>
+
+                            | ForIntegerRangeLoop(_,_,_,_) -> typeof<unit>
+
+                            | Call(_,mi,_) -> mi.ReturnType
+
+                            | Application(b, arg) ->
+                                retType b
+
+                            | e -> 
+                                failwithf "unknown expression %A" e
+                
+                    { sf with valueType = retType sf.definition }
+
+                )
             
             
             // replace all attribute-lookups with traversal-calls and add the traversal argument
@@ -260,20 +693,21 @@ module Test =
                     Expr.Call(t, t.Type.GetMethod "WithState", [Expr.PropertyGet(self, self.Type.GetProperty "State")])
 
                 let convert (t : Type) (e : Expr) = Expr.Coerce(e, t)
-                let rec substituteAttributeLookups (self : ref<Option<Var>>) (strictInh : HashSet<string>) (strictSyn : HashSet<string>) (kind : ref<SemanticFunctionKind>) (e : Expr) =
+                
+                let stateProp = 
+                    match <@ state @> with
+                        | PropertyGet(None, pi, []) -> pi
+                        | _ -> failwith ""
+             
+
+                let rec substituteAttributeLookups (traversal : Var) (strictInh : HashSet<string>) (strictSyn : HashSet<string>) (kind : ref<SemanticFunctionKind>) (e : Expr) =
                     match e with
+
+                        | PropertyGet(None, pi, []) when pi = stateProp ->
+                            Expr.PropertyGet(Expr.Var traversal, traversal.Type.GetProperty "State")
+
                         | Application(Call(None, mi, [o; Value(:? string as nn, _)]), Value(_)) when mi.Name = "op_Dynamic" ->
                             // syn case
-
-                            let traversal =
-                                match !self with
-                                    | Some t -> t
-                                    | None ->
-                                        let t = typedefof<ITraversal<_>>.MakeGenericType [|e.Type|]
-                                        let v = Var("traversal", t)
-                                        self := Some v
-                                        v
-
                             kind := Synthesize
                             strictSyn.Add nn |> ignore
                             if nn = name then
@@ -290,25 +724,26 @@ module Test =
 
                         | Call(None, mi, [_; value]) when mi.Name = "op_LessLessEquals" ->
                             kind := Inherit
-                            substituteAttributeLookups self strictInh strictSyn kind value
+                            substituteAttributeLookups traversal strictInh strictSyn kind value
 
 
                         | ShapeVar(v) ->
                             e
 
                         | ShapeLambda(v,b) ->
-                            Expr.Lambda(v, substituteAttributeLookups self strictInh strictSyn kind b)
+                            Expr.Lambda(v, substituteAttributeLookups traversal strictInh strictSyn kind b)
 
                         | ShapeCombination(o, args) ->
-                            RebuildShapeCombination(o, args |> List.map (substituteAttributeLookups self strictInh strictSyn kind))
+                            RebuildShapeCombination(o, args |> List.map (substituteAttributeLookups traversal strictInh strictSyn kind))
 
 
                 definitions |> List.map (fun d ->
                     let mutable kind = ref Synthesize
                     let strictInh = HashSet()
                     let strictSyn = HashSet()
-                    let self = ref None
-                    let def = substituteAttributeLookups self strictInh strictSyn kind d.definition
+                    let traversal = Var("traversal", typedefof<ITraversal<_>>.MakeGenericType [|d.valueType|])
+
+                    let def = substituteAttributeLookups traversal strictInh strictSyn kind d.definition
                     strictInh.Remove d.name |> ignore
               
                     let (|RootVar|_|) (v : Var) = 
@@ -329,13 +764,6 @@ module Test =
                                     
 
                     let nodeType, retType = FSharpType.GetFunctionElements(def.Type)
-
-                    let traversal = 
-                        match !self with
-                            | Some t -> t
-                            | None -> 
-                                let t = typedefof<ITraversal<_>>.MakeGenericType [| retType |]
-                                Var("traversal", t)
             
 
                     { d with 
@@ -360,9 +788,10 @@ module Test =
                 | [] -> failwithf "[Ag] could not create semantic function for '%s'" (methodName m)
                 | sf :: _ -> sf
 
-    let mutable private traversals : obj[] = null
+    let mutable traversals : obj[] = null
 
-    
+    type Helper =
+        static member Lazy (f : unit -> 'a) = Lazy<'a>(f)
 
     [<Demo("Ag")>]
     let generate2() =
@@ -425,6 +854,16 @@ module Test =
             
             let run t = typedefof<ITraversal<_>>.MakeGenericType([|t|]).GetMethod("Run")
 
+
+            let runInherit (t : Type) (n : string) =
+                if n = name then
+                    Expr.Call(Expr.Var traversal, run t, [Expr.Var node])
+                else
+                    let t = getTraversal n t
+                    let t = Expr.Call(t, t.Type.GetMethod "WithState", [Expr.PropertyGet(Expr.Var traversal, traversal.Type.GetProperty "State")])
+
+                    Expr.Call(t, t.Type.GetMethod "Run", [Expr.Var node])
+
             let rec build (sfs : list<SemanticFunction>) =
                 match sfs with
                     | [] ->
@@ -450,15 +889,8 @@ module Test =
                                         if Set.contains n strictInh then
                                             let get = traversalGetValue.MakeGenericMethod [| v.Type |]
                                             Expr.Call(Expr.Var traversal, get, [Expr.Value n])
-
                                         else
-                                            if n = name then
-                                                let get = run v.Type
-                                                Expr.Call(Expr.Var traversal, get, [Expr.Var node])
-                                            else
-                                                let t = getTraversal n v.Type
-                                                let get = run v.Type
-                                                Expr.Call(t, get, [Expr.Var node])
+                                            runInherit v.Type n
 
                                     v, replacement
                                    )
@@ -492,6 +924,15 @@ module Test =
 
             kind, retType, lambda
 
+
+
+        let functionTypes =
+            functions |> Dictionary.map (fun name sfs ->
+                let types = sfs |> List.map (fun s -> s.valueType) |> HashSet
+                if types.Count = 1 then types |> Seq.head
+                else failwith "sadsadsdsad"
+            )
+
         for (name, sfs) in Dictionary.toSeq functions do
             let rootSfs, sfs = sfs |> List.partition(fun sf -> sf.isRoot)
 
@@ -502,6 +943,7 @@ module Test =
                     |> List.map (fun sf -> sf.strictInh)                                // take all strict inh attributes
                     |> Set.intersectMany                                                // take only those needed by all leaf-productions
 
+            //let strict = Set.empty
 
 
             let kind, retType, dispatcher = createDispatcher strict name sfs
@@ -511,9 +953,60 @@ module Test =
                 match kind with
                     | Synthesize -> 
                         let t = typedefof<SynthesizeTraversal<_>>.MakeGenericType [|retType|]
-                        let ctor = t.GetConstructor [| dispatcher.Type; typeof<TraversalState> |]
+                        let ctor = t.GetConstructor [| dispatcher.Type; typeof<TraversalState>; typeof<TraversalState -> obj -> unit> |]
 
-                        ctor.Invoke [|f; TraversalState.Root :> obj|]
+                        let strictFs = 
+                            let state = Var("state", typeof<TraversalState>)
+                            let node = Var("node", typeof<obj>)
+
+                            let traversals =
+                                strict |> Set.toList |> List.mapi (fun i n ->
+                                    let tt = getTraversal n functionTypes.[n]
+                                    let l = typedefof<Lazy<_>>.MakeGenericType [| tt.Type |]
+                                    Var(sprintf "t%d" i, l, true), tt
+                                )
+
+
+                            let body =
+                                traversals
+                                    |> List.map (fun (v,_) ->
+                                        let prop = v.Type.GetProperty "Value"
+                                        let tt = Expr.PropertyGet(Expr.Var v, prop)
+                                        let tt = Expr.Call(tt, tt.Type.GetMethod "WithState", [Expr.Var state])
+                                        Expr.Call(tt, tt.Type.GetMethod "RunUnit", [Expr.Var node])
+                                    )
+                            
+                            let rec all (e : list<Expr>) =
+                                match e with
+                                    | [] -> Expr.Value(())
+                                    | [e] -> e
+                                    | e :: rest ->
+                                        Expr.Sequential(e, all rest)
+
+
+                            let rec lets (v : list<Var * Expr>) (b : Expr) =
+                                match v with
+                                    | [] -> b
+                                    | (v,e) :: rest -> 
+                                        let create = typeof<Helper>.GetMethod("Lazy").MakeGenericMethod [|e.Type|]
+                                        Expr.Let(v, Expr.Call(create, [Expr.Lambda(Var("unitVar", typeof<unit>), e)]), lets rest b)
+
+
+                            let lambda = 
+                                Expr.Lambda(state, 
+                                    Expr.Lambda(node, 
+                                        all body
+                                    )
+                                )
+
+                            let lambda = lets traversals lambda
+
+                            QuotationCompiler.ToDynamicAssembly(lambda, "Ag").Invoke(null, [||]) |> unbox<TraversalState -> obj -> unit>
+
+
+
+
+                        ctor.Invoke [|f; TraversalState.Root :> obj; strictFs :> obj|]
 
                     | Inherit -> 
                         let _,_,root = createDispatcher Set.empty name rootSfs
@@ -529,9 +1022,50 @@ module Test =
 
             ()
 
+
+
+
         let tsum = traversals.[indices.["Sum"]] |> unbox<ITraversal<int>>
         let res = tsum.Run(Cons(2, Cons(1, Nil())))
         printfn "%A" res
+
+
+        let rec long (n : int) =
+            if n = 0 then Nil() :> IList
+            else Cons(n, long (n-1)) :> IList
+
+
+        let len = 1000
+        let iter = 1000
+        let bla = long len
+
+        let sum x = tsum.Run(x)
+        let sw = System.Diagnostics.Stopwatch()
+        
+
+        for i in 1..10 do
+            let results = Array.zeroCreate iter
+
+            sw.Restart()
+            for i in 0..iter-1 do
+                let s = TraversalState(None, null, Dictionary.ofList ["Index", Some (0 :> obj)])
+                results.[i] <- bla.Sum(s)
+            sw.Stop()
+            Log.line "virtual: %A" (sw.MicroTime / (iter))
+            results |> Set.ofArray |> Log.line "values: %A"
+
+            let results = Array.zeroCreate iter
+
+            sw.Restart()
+            for i in 0..iter-1 do
+                results.[i] <- sum (bla)
+            sw.Stop()
+            Log.line "ag: %A" (sw.MicroTime / (iter))
+            results |> Array.map unbox<int> |> Set.ofArray |> Log.line "values: %A"
+
+
+
+
         ()
 
 //    let generate() =
