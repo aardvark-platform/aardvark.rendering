@@ -175,7 +175,7 @@ module Blub =
 
 
     module Dispatcher =
-        let ofLambdas<'b, 'r> (lambdas : list<obj>) : Dispatcher<'b, 'r> =
+        let ofLambdas<'r> (lambdas : list<obj>) : Dispatcher<'r> =
             let methods =
                 lambdas 
                 |> List.map (fun l ->
@@ -188,7 +188,7 @@ module Blub =
                 |> Dictionary.ofList
 
             let dispatcher =
-                Dispatcher<'b, 'r>(fun t ->
+                Dispatcher<'r>(fun t ->
                     match methods.TryGetValue t with
                         | (true, t) -> Some t
                         | _ -> None
@@ -257,22 +257,34 @@ module Blub =
             member x.Driven = x.Driven
             member x.Drive() = x.Drive()
 
-    type Blubber() =
-        static member Length(l : list<'a>, b : int) =
-            let res = List.length l
-            res
+    type Blubber(a : int) =
+        member x.Length(l : list<'a>, bla : obj) =
+            a
 
-        static member Length(v : V2i, b : int) = 
-            2
+        member x.Length(v : V2i, bla : obj) = 
+            a
 
     [<Demo("Bla 2")>]
     let runner() =
-        let methods = typeof<Blubber>.GetMethods() |> Array.filter (fun mi -> mi.Name = "Length") |> Array.toList
+        let b = Blubber(10) :> obj
+        let methods = typeof<Blubber>.GetMethods() |> Array.filter (fun mi -> mi.Name = "Length") |> Array.toList |> List.map (fun mi -> b, mi)
 
-        let disp = Dispatcher.ofMethods<int, int> methods
-        disp.Invoke([1;2;3], 1) |> printfn "int: %A"
-        disp.Invoke([1.0;2.0;3.0], 1) |> printfn "double: %A"
-        disp.Invoke(V2i.Zero, 1) |> printfn "v2i: %A"
+        let disp = Dispatcher<obj, int>.Create methods
+        disp.Invoke([1;2;3], null) |> printfn "int: %A"
+        disp.Invoke([1.0;2.0;3.0], null) |> printfn "double: %A"
+        disp.Invoke(V2i.Zero, null) |> printfn "v2i: %A"
+
+        let sw = System.Diagnostics.Stopwatch()
+        let iter = 100000000
+        let mutable res = 0
+        let mutable a = V2i.II :> obj
+        sw.Start()
+        let mutable ret = 0
+        for i in 1..iter do
+            disp.TryInvoke(a, null, &ret) |> ignore
+            res <- res + ret
+        sw.Stop()
+        printfn "good: %A %A" (sw.MicroTime / iter) (res / iter)
 
 
     [<Demo("Bla")>]
@@ -305,6 +317,34 @@ module Blub =
 
             ]
 
+        let lambdas =
+            [
+                (fun (a : list<int>)    -> 10.0) :> obj
+
+                (fun (a : Option<int>)    -> 10.0) :> obj
+                (fun (a : obj)    -> 10.0) :> obj
+
+                (fun (a : int8)    -> 10.0) :> obj
+                (fun (a : int16)    -> 10.0) :> obj
+                (fun (a : int32)    -> 10.0) :> obj
+                (fun (a : int64)    -> 10.0) :> obj
+                (fun (a : uint8)    -> 10.0) :> obj
+                (fun (a : uint16)    -> 10.0) :> obj
+                (fun (a : uint32)    -> 10.0) :> obj
+                (fun (a : uint64)    -> 10.0) :> obj
+                (fun (a : V2i)    -> 10.0) :> obj
+                (fun (a : V2f)    -> 10.0) :> obj
+                (fun (a : V2d)    -> 10.0) :> obj
+                (fun (a : V3i)    -> 10.0) :> obj
+                (fun (a : V3f)    -> 10.0) :> obj
+                (fun (a : V3d)    -> 10.0) :> obj
+                (fun (a : V4i)    -> 10.0) :> obj
+                (fun (a : V4f)    -> 10.0) :> obj
+                (fun (a : V4d)    -> 10.0) :> obj
+
+            ]
+
+
         let values = 
             [
                 obj(); Some 1 :> obj
@@ -315,15 +355,15 @@ module Blub =
                 List.empty<int> :> obj; List<int>() :> obj
             ]
 
-        let meth = Dispatcher.ofLambdas<float, float> lambdas
+        let meth = Dispatcher.ofLambdas<float> lambdas
 
 
 
         for v in values do
             let mutable foo = Unchecked.defaultof<_>
-            meth.TryInvoke(v, 0.0, &foo) |> ignore
+            meth.TryInvoke(v, &foo) |> ignore
 
-        match meth.TryInvoke(List<int>(), 1.0) with
+        match meth.TryInvoke(List<int>()) with
             | (true, v) -> printfn "worked"
             | _ -> printfn "as expected"
 
@@ -334,7 +374,7 @@ module Blub =
         sw.Start()
         let mutable ret = 0.0
         for i in 1..iter do
-            meth.TryInvoke(a, 0.0, &ret) |> ignore
+            meth.TryInvoke(a, &ret) |> ignore
             res <- res + ret
         sw.Stop()
         printfn "good: %A %A" (sw.MicroTime / iter) (res / float iter)
@@ -345,7 +385,7 @@ module Blub =
         sw.Restart()
         let mutable ret = 0.0
         for i in 1..iter do
-            meth.TryInvoke(a, 0.0, &ret) |> ignore
+            meth.TryInvoke(a, &ret) |> ignore
             res <- res + ret
         sw.Stop()
         printfn "bad:  %A %A" (sw.MicroTime / iter) (res / float iter)
