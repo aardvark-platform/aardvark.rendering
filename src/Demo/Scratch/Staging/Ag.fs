@@ -175,7 +175,7 @@ module Blub =
 
 
     module Dispatcher =
-        let ofLambdas<'r> (lambdas : list<obj>) : Dispatcher<'r> =
+        let ofLambdas<'b, 'r> (lambdas : list<obj>) : Dispatcher<'b, 'r> =
             let methods =
                 lambdas 
                 |> List.map (fun l ->
@@ -188,7 +188,7 @@ module Blub =
                 |> Dictionary.ofList
 
             let dispatcher =
-                Dispatcher<'r>(fun t ->
+                Dispatcher<'b, 'r>(fun t ->
                     match methods.TryGetValue t with
                         | (true, t) -> Some t
                         | _ -> None
@@ -292,58 +292,29 @@ module Blub =
 
         let lambdas =
             [
-                (fun (a : list<int>)  (offset : float)  -> 10.0) :> obj
+                (fun (a : list<int>)        -> 10.0) :> obj
+                (fun (a : Option<int>)      -> 10.0) :> obj
+                (fun (a : obj)              -> 11.0) :> obj
 
-                (fun (a : Option<int>)  (offset : float)  -> 10.0) :> obj
-                (fun (a : obj)  (offset : float)  -> 10.0) :> obj
-
-                (fun (a : int8)  (offset : float)  -> 10.0) :> obj
-                (fun (a : int16)  (offset : float)  -> 10.0) :> obj
-                (fun (a : int32)  (offset : float)  -> 10.0) :> obj
-                (fun (a : int64)  (offset : float)  -> 10.0) :> obj
-                (fun (a : uint8)  (offset : float)  -> 10.0) :> obj
-                (fun (a : uint16)  (offset : float)  -> 10.0) :> obj
-                (fun (a : uint32)  (offset : float)  -> 10.0) :> obj
-                (fun (a : uint64)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V2i)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V2f)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V2d)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V3i)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V3f)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V3d)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V4i)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V4f)  (offset : float)  -> 10.0) :> obj
-                (fun (a : V4d)  (offset : float)  -> 10.0) :> obj
-
-            ]
-
-        let lambdas =
-            [
-                (fun (a : list<int>)    -> 10.0) :> obj
-
-                (fun (a : Option<int>)    -> 10.0) :> obj
-                (fun (a : obj)    -> 10.0) :> obj
-
-                (fun (a : int8)    -> 10.0) :> obj
-                (fun (a : int16)    -> 10.0) :> obj
-                (fun (a : int32)    -> 10.0) :> obj
-                (fun (a : int64)    -> 10.0) :> obj
-                (fun (a : uint8)    -> 10.0) :> obj
-                (fun (a : uint16)    -> 10.0) :> obj
-                (fun (a : uint32)    -> 10.0) :> obj
-                (fun (a : uint64)    -> 10.0) :> obj
-                (fun (a : V2i)    -> 10.0) :> obj
-                (fun (a : V2f)    -> 10.0) :> obj
-                (fun (a : V2d)    -> 10.0) :> obj
-                (fun (a : V3i)    -> 10.0) :> obj
-                (fun (a : V3f)    -> 10.0) :> obj
-                (fun (a : V3d)    -> 10.0) :> obj
-                (fun (a : V4i)    -> 10.0) :> obj
-                (fun (a : V4f)    -> 10.0) :> obj
-                (fun (a : V4d)    -> 10.0) :> obj
+                (fun (a : int8)             -> 10.0) :> obj
+                (fun (a : int16)            -> 10.0) :> obj
+                (fun (a : int32)            -> 10.0) :> obj
+                (fun (a : int64)            -> 10.0) :> obj
+                (fun (a : uint8)            -> 10.0) :> obj
+                (fun (a : uint16)           -> 10.0) :> obj
+                (fun (a : uint32)           -> 10.0) :> obj
+                (fun (a : uint64)           -> 10.0) :> obj
+                (fun (a : V2i)              -> 10.0) :> obj
+                (fun (a : V2f)              -> 10.0) :> obj
+                (fun (a : V2d)              -> 10.0) :> obj
+                (fun (a : V3i)              -> 10.0) :> obj
+                (fun (a : V3f)              -> 10.0) :> obj
+                (fun (a : V3d)              -> 10.0) :> obj
+                (fun (a : V4i)              -> 10.0) :> obj
+                (fun (a : V4f)              -> 10.0) :> obj
+                (fun (a : V4d)              -> 10.0) :> obj
 
             ]
-
 
         let values = 
             [
@@ -355,17 +326,17 @@ module Blub =
                 List.empty<int> :> obj; List<int>() :> obj
             ]
 
-        let meth = Dispatcher.ofLambdas<float> lambdas
-
+        let meth = Dispatcher<float>.Create lambdas
 
 
         for v in values do
             let mutable foo = Unchecked.defaultof<_>
             meth.TryInvoke(v, &foo) |> ignore
 
-        match meth.TryInvoke(List<int>()) with
-            | (true, v) -> printfn "worked"
-            | _ -> printfn "as expected"
+
+        Log.line "table:      %A" meth.TableSize
+        Log.line "collisions: %A" meth.Collisions
+
 
         let sw = System.Diagnostics.Stopwatch()
         let iter = 100000000
@@ -377,18 +348,8 @@ module Blub =
             meth.TryInvoke(a, &ret) |> ignore
             res <- res + ret
         sw.Stop()
-        printfn "good: %A %A" (sw.MicroTime / iter) (res / float iter)
 
-
-        let mutable res = 0.0
-        let mutable a = List<int>()
-        sw.Restart()
-        let mutable ret = 0.0
-        for i in 1..iter do
-            meth.TryInvoke(a, &ret) |> ignore
-            res <- res + ret
-        sw.Stop()
-        printfn "bad:  %A %A" (sw.MicroTime / iter) (res / float iter)
+        Log.line "disp([1]):  %A (%A)" (res / float iter) (sw.MicroTime / iter)
 
 
 
@@ -404,7 +365,36 @@ module Blub =
             else auto <- a 
 
         sw.Stop()
-        printfn "virt: %A %A" (sw.MicroTime / iter) (auto.Driven)
+        Log.line "virtual:    %A" (sw.MicroTime / iter)
+
+    [<Demo("Compiled")>]
+    let run2() =
+        
+        let disp = 
+            Dispatcher<float>.Create(fun t ->
+                if t = typeof<list<int>> then (fun (value : list<int>) -> 1.0) :> obj |> Some
+                elif t = typeof<obj> then (fun (value : obj) -> 0.0) :> obj |> Some
+                else None
+            )
+
+//        disp.Invoke(1) |> Log.line "%A"
+//        disp.Invoke(2.0f) |> Log.line "%A"
+//        disp.Invoke(3.0) |> Log.line "%A"
+        disp.Invoke([1]) |> Log.line "%A"
+        disp.Invoke(obj()) |> Log.line "%A"
+
+
+        let sw = System.Diagnostics.Stopwatch()
+        let iter = 100000000
+        let mutable res = 0.0
+        let mutable a = [1]
+        sw.Start()
+        let mutable ret = 0.0
+        for i in 1..iter do
+            disp.TryInvoke(a, &ret) |> ignore
+        sw.Stop()
+
+        Log.line "disp(1.0f):  %A (%A)" (res / float iter) (sw.MicroTime / iter)
 
 
     type Root<'a> = class end
