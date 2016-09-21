@@ -272,13 +272,158 @@ module MethodTable =
 module private ``ILGenerator Extensions`` =
     open Aardvark.Base.IL
 
+    let private code = System.Collections.Concurrent.ConcurrentDictionary<MethodInfo, list<Instruction>>()
     let private inlineCode = System.Collections.Concurrent.ConcurrentDictionary<MethodInfo, list<Instruction>>()
+    let private minimalInlineCode = System.Collections.Concurrent.ConcurrentDictionary<MethodInfo, list<Instruction> * HashSet<int>>()
+
+    type MethodInfo with
+        member x.CanInline =
+            if x.Name = "Invoke" && FSharpType.IsFunction(x.DeclaringType) && not x.IsAbstract then
+                true
+            else
+                not x.IsVirtual || x.DeclaringType.IsSealed
+
+        member x.Instructions =
+            code.GetOrAdd(x, fun x -> Disassembler.disassemble(x).Body)
+
+        member x.InlineCode =
+            inlineCode.GetOrAdd(x, fun meth ->
+                let instructions = x.Instructions
+
+                let parameters = meth.GetParameters() |> Array.map (fun p -> Local(p.ParameterType))
+
+                let this = 
+                    if meth.IsStatic then None
+                    else Some(Local(meth.DeclaringType))
+
+                let arg (i : int) =
+                    match this with
+                        | Some t ->
+                            if i = 0 then t
+                            else parameters.[i-1]
+                        | _ ->
+                            parameters.[i]
+
+                let usedLocals = 
+                    instructions
+                        |> List.choose (function Ldarg a -> Some a | _ -> None)
+                        |> Set.ofList
+                        |> Set.map arg
+
+                let endLabel = Label()
+
+
+                let code =
+                    [
+                        // store all needed args to locals
+                        for p in Array.rev parameters do
+                            if Set.contains p usedLocals then yield Stloc(p)
+                            else yield Pop
+
+                        // store this to a local (if needed)
+                        match this with
+                            | Some t -> 
+                                if Set.contains t usedLocals then yield Stloc(t)
+                                else yield Pop
+                            | _ -> ()
+
+                        let mutable needsEndLabel = false
+                        let body = List.toArray instructions
+                        for i in 0..body.Length-1 do
+                            match body.[i] with
+                                | Start | Nop -> ()
+                                | Ldarg a -> yield Ldloc (arg a)
+                                | LdargA a -> yield LdlocA (arg a)
+                                | Ret -> 
+                                    if i <> body.Length-1 then 
+                                        needsEndLabel <- true
+                                        yield Jump(endLabel)
+
+                                | i -> 
+                                    yield i
+
+                        if needsEndLabel then
+                            yield Mark(endLabel)
+                    ]
+
+                code
+            )
+
+        member x.MinimalInlineCode =
+            minimalInlineCode.GetOrAdd(x, fun meth ->
+                let instructions = x.Instructions
+
+                let parameters = meth.GetParameters() |> Array.map (fun p -> Local(p.ParameterType))
+
+                let this = 
+                    if meth.IsStatic then None
+                    else Some(Local(meth.DeclaringType))
+
+                let arg (i : int) =
+                    match this with
+                        | Some t ->
+                            if i = 0 then t
+                            else parameters.[i-1]
+                        | _ ->
+                            parameters.[i]
+
+                let usedArgs = 
+                    instructions
+                        |> List.choose (function Ldarg a -> Some a | _ -> None)
+                        |> Set.ofList
+                
+                let usedLocals = usedArgs |> Set.map arg
+
+                let endLabel = Label()
+
+
+                let code =
+                    [
+                        // store all needed args to locals
+                        for p in Array.rev parameters do
+                            if Set.contains p usedLocals then yield Stloc(p)
+                            else ()
+
+                        // store this to a local (if needed)
+                        match this with
+                            | Some t -> 
+                                if Set.contains t usedLocals then yield Stloc(t)
+                                else ()
+                            | _ -> ()
+
+                        let mutable needsEndLabel = false
+                        let body = List.toArray instructions
+                        for i in 0..body.Length-1 do
+                            match body.[i] with
+                                | Start | Nop -> ()
+                                | Ldarg a -> yield Ldloc (arg a)
+                                | LdargA a -> yield LdlocA (arg a)
+                                | Ret -> 
+                                    if i <> body.Length-1 then 
+                                        needsEndLabel <- true
+                                        yield Jump(endLabel)
+
+                                | i -> 
+                                    yield i
+
+                        if needsEndLabel then
+                            yield Mark(endLabel)
+                    ]
+
+                Log.start "inlining %A" meth
+                for i in code do
+                    match i with
+                        | Start | Nop -> ()
+                        | _ -> Log.line "%A" i
+                Log.stop()
+
+                code, HashSet usedArgs
+            )
 
     type ILGenerator with
         member x.Ldc(value : nativeint) =
             if sizeof<nativeint> = 8 then x.Emit(OpCodes.Ldc_I8, int64 value)
             else x.Emit(OpCodes.Ldc_I4, int value)
-
 
         member x.ToObj(has : Type) =
             if has = typeof<obj> then
@@ -289,7 +434,6 @@ module private ``ILGenerator Extensions`` =
             elif has.IsValueType then
                 x.Emit(OpCodes.Box, has)
 
-
         member x.OfObj(should : Type) = 
 
             if should = typeof<obj> then 
@@ -299,7 +443,6 @@ module private ``ILGenerator Extensions`` =
             elif should.IsValueType then
                 x.Emit(OpCodes.Unbox_Any, should)
 
-
         member x.Convert(is : Type, should : Type) =
             if is = should then ()
             elif should = typeof<obj> then x.ToObj is
@@ -308,98 +451,13 @@ module private ``ILGenerator Extensions`` =
                 if should.IsAssignableFrom is then ()
                 else failwith "bad dispatcher method"
 
-   
-        member x.InlineCall(meth : MethodInfo) =
-            let code =
-                inlineCode.GetOrAdd(meth, fun meth ->
-                    let code = Disassembler.disassemble meth
+        member x.Inline(meth : MethodInfo) =
+            meth.InlineCode |> Assembler.assembleTo x
 
-
-
-                    let parameters = meth.GetParameters() |> Array.map (fun p -> Local(p.ParameterType))
-                    let this = 
-                        if meth.IsStatic then None
-                        else Some(Local(meth.DeclaringType))
-
-                    let arg (i : int) =
-                        match this with
-                            | Some t ->
-                                if i = 0 then t
-                                else parameters.[i-1]
-                            | _ ->
-                                parameters.[i]
-
+        member x.Call(meth : MethodInfo) =
+            if meth.IsVirtual then x.EmitCall(OpCodes.Callvirt, meth, null)
+            else x.EmitCall(OpCodes.Call, meth, null)
             
-                    let endLabel = Label()
-
-                    let usedArgs = 
-                        code.Body 
-                            |> List.choose (function Ldarg a -> Some a | _ -> None)
-                            |> Set.ofList
-                            |> Set.map arg
-
-                    let code =
-                        [
-                            // store all needed args to locals
-                            for p in Array.rev parameters do
-                                if Set.contains p usedArgs then yield Stloc(p)
-                                else yield Pop
-
-                            // store this to a local (if needed)
-                            match this with
-                                | Some t -> 
-                                    if Set.contains t usedArgs then yield Stloc(t)
-                                    else yield Pop
-                                | _ -> ()
-
-                            let mutable needsEndLabel = false
-                            let body = List.toArray code.Body
-                            for i in 0..body.Length-1 do
-                                match body.[i] with
-                                    | Start | Nop -> ()
-                                    | Ldarg a -> yield Ldloc (arg a)
-                                    | LdargA a -> yield LdlocA (arg a)
-                                    | Ret -> 
-                                        if i <> body.Length-1 then 
-                                            needsEndLabel <- true
-                                            yield Jump(endLabel)
-
-                                    | i -> 
-                                        yield i
-
-                            if needsEndLabel then
-                                yield Mark(endLabel)
-                        ]
-
-                    Log.start "inlining %A" meth
-                    for i in code do
-                        match i with
-                            | Start | Nop -> ()
-                            | _ -> Log.line "%A" i
-                    Log.stop()
-
-                    code
-                )
-
-            Assembler.assembleTo x code
-
-        member x.Call(meth : MethodInfo, tryInline : bool) =
-            let shouldInline =
-                if tryInline then
-                    if meth.Name = "Invoke" && FSharpType.IsFunction(meth.DeclaringType) && not meth.IsAbstract then
-                        true
-                    else
-                        not meth.IsVirtual || meth.DeclaringType.IsSealed
-                else
-                    false
-
-            if shouldInline then
-                x.InlineCall(meth)
-            else 
-                if meth.IsVirtual then x.EmitCall(OpCodes.Callvirt, meth, null)
-                else x.EmitCall(OpCodes.Call, meth, null)
-            
-
     type DynamicMethod with
         member x.CreateDelegate<'a>() =
             x.CreateDelegate(typeof<'a>) |> unbox<'a>
@@ -426,7 +484,6 @@ module private ``ILGenerator Extensions`` =
                 null
             )
 
-
 type private DispatcherInfo<'f> =
     class
         val mutable public self        : 'f
@@ -443,12 +500,8 @@ module private DispatcherConfig =
     let MaxCollisionPercentage = 2
 
     [<Literal>]
-    let InlineFunctionCalls = 
-        #if DEBUG
-        false
-        #else
-        true
-        #endif
+    let InlineFunctionCalls = true
+
 
     let inline LogTable (n : Dictionary<_,_>) (size : int) (collisions : int) =
         #if DEBUG
@@ -456,6 +509,7 @@ module private DispatcherConfig =
         #else
         ()
         #endif
+
 
 type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
 
@@ -567,18 +621,36 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 il.Emit(OpCodes.Ret)
             else
                 
+                if DispatcherConfig.InlineFunctionCalls && meth.CanInline then
+                    let code, usedArgs = meth.MinimalInlineCode
 
-                // load the target (if not static)
-                if not meth.IsStatic then
-                    loadTarget targetCache.[target]
-                    il.OfObj(meth.DeclaringType)
+                    let firstArg = if meth.IsStatic then 0 else 1
+                    
+                    // load the target (if required)
+                    if not meth.IsStatic && usedArgs.Contains 0 then
+                        loadTarget targetCache.[target]
+                        il.OfObj(meth.DeclaringType)
+                        
+                    // load the first argument (if required)
+                    if usedArgs.Contains firstArg then
+                        il.Emit(OpCodes.Ldloc, dyn)  
+                        il.OfObj(meth.GetParameters().[0].ParameterType)
+                        
+                    // inline the callee's code
+                    Aardvark.Base.IL.Assembler.assembleTo il code
 
-                // load all parameters from the array (and unbox them)
-                let parameters = meth.GetParameters()
-                il.Emit(OpCodes.Ldloc, dyn)  
-                il.OfObj(parameters.[0].ParameterType)
+                else
+                    // load the target (if not static)
+                    if not meth.IsStatic then
+                        loadTarget targetCache.[target]
+                        il.OfObj(meth.DeclaringType)
 
-                il.Call(meth, DispatcherConfig.InlineFunctionCalls)
+                    // load all parameters from the array (and unbox them)
+                    let parameters = meth.GetParameters()
+                    il.Emit(OpCodes.Ldloc, dyn)  
+                    il.OfObj(parameters.[0].ParameterType)
+
+                    il.Call(meth)
 
                 il.Convert(meth.ReturnType, typeof<'r>)
                 let l = il.DeclareLocal(typeof<'r>)
@@ -610,7 +682,6 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         let mutable collisions = 0
 
         if implementations.Count = 0 then
-            tableSize <- 0
             il.Emit(OpCodes.Br, errorLabel)
 
         if implementations.Count = 1 then
@@ -651,7 +722,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         il.Emit(OpCodes.Ldarg_0)
         il.Emit(OpCodes.Ldarg_2)
         il.Emit(OpCodes.Ldarg_3)
-        il.Call(rebuildMeth, false)
+        il.Call(rebuildMeth)
         il.Emit(OpCodes.Ret)
 
         let newSelf = meth.CreateDelegate<FuncRef1<Dispatcher<'r>, obj[], obj, 'r, bool>>()
@@ -866,20 +937,43 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 il.Emit(OpCodes.Ret)
             else
                 
+                if DispatcherConfig.InlineFunctionCalls && meth.CanInline then
+                    let code, usedArgs = meth.MinimalInlineCode
 
-                // load the target (if not static)
-                if not meth.IsStatic then
-                    loadTarget targetCache.[target]
-                    il.OfObj(meth.DeclaringType)
+                    let firstArg = if meth.IsStatic then 0 else 1
+                    let secondArg = firstArg + 1
 
-                // load all parameters from the array (and unbox them)
-                let parameters = meth.GetParameters()
+                    // load the target (if required)
+                    if not meth.IsStatic && usedArgs.Contains 0 then
+                        loadTarget targetCache.[target]
+                        il.OfObj(meth.DeclaringType)
 
-                il.Emit(OpCodes.Ldloc, dyn)  
-                il.OfObj(parameters.[0].ParameterType)
-                il.Emit(OpCodes.Ldarg_3)
+                    // load the first argument (if required)
+                    if usedArgs.Contains firstArg then
+                        il.Emit(OpCodes.Ldloc, dyn)  
+                        il.OfObj(meth.GetParameters().[0].ParameterType)
+                        
+                    // load the second argument (if required)
+                    if usedArgs.Contains secondArg then
+                        il.Emit(OpCodes.Ldarg_3)
 
-                il.Call(meth, DispatcherConfig.InlineFunctionCalls)
+                    // inline the callee's code
+                    Aardvark.Base.IL.Assembler.assembleTo il code
+
+                else
+                    // load the target (if not static)
+                    if not meth.IsStatic then
+                        loadTarget targetCache.[target]
+                        il.OfObj(meth.DeclaringType)
+
+                    // load all parameters from the array (and unbox them)
+                    let parameters = meth.GetParameters()
+
+                    il.Emit(OpCodes.Ldloc, dyn)  
+                    il.OfObj(parameters.[0].ParameterType)
+                    il.Emit(OpCodes.Ldarg_3)
+
+                    il.Call(meth)
 
                 il.Convert(meth.ReturnType, typeof<'r>)
                 let l = il.DeclareLocal(typeof<'r>)
@@ -912,7 +1006,6 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         let mutable collisions = 0
 
         if implementations.Count = 0 then
-            tableSize <- 0
             il.Emit(OpCodes.Br, errorLabel)
 
         if implementations.Count = 1 then
@@ -954,7 +1047,7 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         il.Emit(OpCodes.Ldarg_2)
         il.Emit(OpCodes.Ldarg_3)
         il.Emit(OpCodes.Ldarg_S, 4uy)
-        il.Call(rebuildMeth, false)
+        il.Call(rebuildMeth)
         il.Emit(OpCodes.Ret)
 
         let newSelf = meth.CreateDelegate<FuncRef1<Dispatcher<'b, 'r>, obj[], obj, 'b, 'r, bool>>()
