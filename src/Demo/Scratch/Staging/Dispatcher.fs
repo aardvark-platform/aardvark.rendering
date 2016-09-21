@@ -340,10 +340,12 @@ module private ``ILGenerator Extensions`` =
 
                     let code =
                         [
+                            // store all needed args to locals
                             for p in Array.rev parameters do
                                 if Set.contains p usedArgs then yield Stloc(p)
                                 else yield Pop
 
+                            // store this to a local (if needed)
                             match this with
                                 | Some t -> 
                                     if Set.contains t usedArgs then yield Stloc(t)
@@ -356,6 +358,7 @@ module private ``ILGenerator Extensions`` =
                                 match body.[i] with
                                     | Start | Nop -> ()
                                     | Ldarg a -> yield Ldloc (arg a)
+                                    | LdargA a -> yield LdlocA (arg a)
                                     | Ret -> 
                                         if i <> body.Length-1 then 
                                             needsEndLabel <- true
@@ -380,9 +383,17 @@ module private ``ILGenerator Extensions`` =
 
             Assembler.assembleTo x code
 
-        member x.Call(meth : MethodInfo, ?tryInline : bool) =
-            let tryInline = defaultArg tryInline false
-            if tryInline then
+        member x.Call(meth : MethodInfo, tryInline : bool) =
+            let shouldInline =
+                if tryInline then
+                    if meth.Name = "Invoke" && FSharpType.IsFunction(meth.DeclaringType) && not meth.IsAbstract then
+                        true
+                    else
+                        not meth.IsVirtual || meth.DeclaringType.IsSealed
+                else
+                    false
+
+            if shouldInline then
                 x.InlineCall(meth)
             else 
                 if meth.IsVirtual then x.EmitCall(OpCodes.Callvirt, meth, null)
@@ -430,6 +441,14 @@ module private DispatcherConfig =
 
     [<Literal>]
     let MaxCollisionPercentage = 2
+
+    [<Literal>]
+    let InlineFunctionCalls = 
+        #if DEBUG
+        false
+        #else
+        true
+        #endif
 
     let inline LogTable (n : Dictionary<_,_>) (size : int) (collisions : int) =
         #if DEBUG
@@ -559,7 +578,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 il.Emit(OpCodes.Ldloc, dyn)  
                 il.OfObj(parameters.[0].ParameterType)
 
-                il.Call(meth, true)
+                il.Call(meth, DispatcherConfig.InlineFunctionCalls)
 
                 il.Convert(meth.ReturnType, typeof<'r>)
                 let l = il.DeclareLocal(typeof<'r>)
@@ -860,7 +879,7 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 il.OfObj(parameters.[0].ParameterType)
                 il.Emit(OpCodes.Ldarg_3)
 
-                il.Call(meth, true)
+                il.Call(meth, DispatcherConfig.InlineFunctionCalls)
 
                 il.Convert(meth.ReturnType, typeof<'r>)
                 let l = il.DeclareLocal(typeof<'r>)
