@@ -270,6 +270,9 @@ module MethodTable =
 
 [<AutoOpen>]
 module private ``ILGenerator Extensions`` =
+    open Aardvark.Base.IL
+
+    let private inlineCode = System.Collections.Concurrent.ConcurrentDictionary<MethodInfo, list<Instruction>>()
 
     type ILGenerator with
         member x.Ldc(value : nativeint) =
@@ -305,7 +308,86 @@ module private ``ILGenerator Extensions`` =
                 if should.IsAssignableFrom is then ()
                 else failwith "bad dispatcher method"
 
-    
+   
+        member x.InlineCall(meth : MethodInfo) =
+            let code =
+                inlineCode.GetOrAdd(meth, fun meth ->
+                    let code = Disassembler.disassemble meth
+
+
+
+                    let parameters = meth.GetParameters() |> Array.map (fun p -> Local(p.ParameterType))
+                    let this = 
+                        if meth.IsStatic then None
+                        else Some(Local(meth.DeclaringType))
+
+                    let arg (i : int) =
+                        match this with
+                            | Some t ->
+                                if i = 0 then t
+                                else parameters.[i-1]
+                            | _ ->
+                                parameters.[i]
+
+            
+                    let endLabel = Label()
+
+                    let usedArgs = 
+                        code.Body 
+                            |> List.choose (function Ldarg a -> Some a | _ -> None)
+                            |> Set.ofList
+                            |> Set.map arg
+
+                    let code =
+                        [
+                            for p in Array.rev parameters do
+                                if Set.contains p usedArgs then yield Stloc(p)
+                                else yield Pop
+
+                            match this with
+                                | Some t -> 
+                                    if Set.contains t usedArgs then yield Stloc(t)
+                                    else yield Pop
+                                | _ -> ()
+
+                            let mutable needsEndLabel = false
+                            let body = List.toArray code.Body
+                            for i in 0..body.Length-1 do
+                                match body.[i] with
+                                    | Start | Nop -> ()
+                                    | Ldarg a -> yield Ldloc (arg a)
+                                    | Ret -> 
+                                        if i <> body.Length-1 then 
+                                            needsEndLabel <- true
+                                            yield Jump(endLabel)
+
+                                    | i -> 
+                                        yield i
+
+                            if needsEndLabel then
+                                yield Mark(endLabel)
+                        ]
+
+                    Log.start "inlining %A" meth
+                    for i in code do
+                        match i with
+                            | Start | Nop -> ()
+                            | _ -> Log.line "%A" i
+                    Log.stop()
+
+                    code
+                )
+
+            Assembler.assembleTo x code
+
+        member x.Call(meth : MethodInfo, ?tryInline : bool) =
+            let tryInline = defaultArg tryInline false
+            if tryInline then
+                x.InlineCall(meth)
+            else 
+                if meth.IsVirtual then x.EmitCall(OpCodes.Callvirt, meth, null)
+                else x.EmitCall(OpCodes.Call, meth, null)
+            
 
     type DynamicMethod with
         member x.CreateDelegate<'a>() =
@@ -477,9 +559,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 il.Emit(OpCodes.Ldloc, dyn)  
                 il.OfObj(parameters.[0].ParameterType)
 
-
-                if meth.IsVirtual then il.EmitCall(OpCodes.Callvirt, meth, null)
-                else il.EmitCall(OpCodes.Call, meth, null)
+                il.Call(meth, true)
 
                 il.Convert(meth.ReturnType, typeof<'r>)
                 let l = il.DeclareLocal(typeof<'r>)
@@ -552,7 +632,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         il.Emit(OpCodes.Ldarg_0)
         il.Emit(OpCodes.Ldarg_2)
         il.Emit(OpCodes.Ldarg_3)
-        il.EmitCall(OpCodes.Call, rebuildMeth, null)
+        il.Call(rebuildMeth, false)
         il.Emit(OpCodes.Ret)
 
         let newSelf = meth.CreateDelegate<FuncRef1<Dispatcher<'r>, obj[], obj, 'r, bool>>()
@@ -779,8 +859,8 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 il.Emit(OpCodes.Ldloc, dyn)  
                 il.OfObj(parameters.[0].ParameterType)
                 il.Emit(OpCodes.Ldarg_3)
-                if meth.IsVirtual then il.EmitCall(OpCodes.Callvirt, meth, null)
-                else il.EmitCall(OpCodes.Call, meth, null)
+
+                il.Call(meth, true)
 
                 il.Convert(meth.ReturnType, typeof<'r>)
                 let l = il.DeclareLocal(typeof<'r>)
@@ -855,7 +935,7 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         il.Emit(OpCodes.Ldarg_2)
         il.Emit(OpCodes.Ldarg_3)
         il.Emit(OpCodes.Ldarg_S, 4uy)
-        il.EmitCall(OpCodes.Call, rebuildMeth, null)
+        il.Call(rebuildMeth, false)
         il.Emit(OpCodes.Ret)
 
         let newSelf = meth.CreateDelegate<FuncRef1<Dispatcher<'b, 'r>, obj[], obj, 'b, 'r, bool>>()
