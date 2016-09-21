@@ -15,6 +15,156 @@ open QuotationCompiler
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 
+[<AutoOpen>]
+module ``Reflection Extensions`` =
+    open Microsoft.FSharp.Reflection
+
+
+    let private prettyNames =
+        Dict.ofList [
+            typeof<sbyte>, "sbyte"
+            typeof<byte>, "byte"
+            typeof<int16>, "int16"
+            typeof<uint16>, "uint16"
+            typeof<int>, "int"
+            typeof<uint32>, "uint32"
+            typeof<int64>, "int64"
+            typeof<uint64>, "uint64"
+            typeof<nativeint>, "nativeint"
+            typeof<unativeint>, "unativeint"
+
+            typeof<char>, "char"
+            typeof<string>, "string"
+
+
+            typeof<float32>, "float32"
+            typeof<float>, "float"
+            typeof<decimal>, "decimal"
+
+            typeof<obj>, "obj"
+            typeof<unit>, "unit"
+            typeof<System.Void>, "void"
+
+        ]
+
+    let private genericPrettyNames =
+        Dict.ofList [
+            typedefof<list<_>>, "list"
+            typedefof<Option<_>>, "Option"
+            typedefof<Set<_>>, "Set"
+            typedefof<Map<_,_>>, "Map"
+            typedefof<seq<_>>, "seq"
+
+        ]
+
+    let private prettyMethodNames = Dict.empty
+    let private prettyCtorNames = Dict.empty
+
+    let private idRx = System.Text.RegularExpressions.Regex @"[a-zA-Z_][a-zA-Z_0-9]*"
+
+    let rec private getPrettyNameInternal (t : Type) =
+        let res = 
+            match prettyNames.TryGetValue t with
+                | (true, n) -> n
+                | _ ->
+                    if t.IsArray then
+                        t.GetElementType() |> getPrettyNameInternal |> sprintf "%s[]"
+
+                    elif t.IsGenericParameter then
+                        sprintf "'%s" t.Name
+
+                    elif FSharpType.IsTuple t then
+                        FSharpType.GetTupleElements t |> Seq.map getPrettyNameInternal |> String.concat " * "
+
+                    elif FSharpType.IsFunction t then
+                        let (arg, res) = FSharpType.GetFunctionElements t
+
+                        sprintf "%s -> %s" (getPrettyNameInternal arg) (getPrettyNameInternal res)
+
+                    elif typeof<Aardvark.Base.INatural>.IsAssignableFrom t then
+                        let s = Aardvark.Base.Peano.getSize t
+                        sprintf "N%d" s
+
+                    elif t.IsGenericType then
+                        let args = t.GetGenericArguments() |> Seq.map getPrettyNameInternal |> String.concat ", "
+                        let bt = t.GetGenericTypeDefinition()
+                        match genericPrettyNames.TryGetValue bt with
+                            | (true, gen) ->
+                                sprintf "%s<%s>" gen args
+                            | _ ->
+                                let gen = idRx.Match bt.Name
+                                sprintf "%s<%s>" gen.Value args
+
+
+                    else
+                        t.Name
+
+        prettyNames.[t] <- res
+        res
+
+
+    let private getPrettyName (t : Type) =
+        lock prettyNames (fun () ->
+            getPrettyNameInternal t
+        )
+
+    let private getPrettyFunctionName (mi : MethodInfo) =
+        prettyMethodNames.GetOrCreate(mi, fun mi ->
+
+            if FSharpType.IsFunction mi.DeclaringType then
+                getPrettyName mi.DeclaringType
+
+            else
+
+                let decl = mi.DeclaringType |> getPrettyName
+                let args = 
+                    mi.GetParameters() 
+                        |> Array.map (fun pi -> getPrettyName pi.ParameterType)
+                        |> String.concat " * "
+
+                let gen =
+                    if mi.IsGenericMethod then 
+                        mi.GetGenericArguments()
+                            |> Array.map getPrettyName
+                            |> String.concat ", "
+                            |> sprintf "<%s>"
+                    else
+                        ""
+
+                let ret =
+                    getPrettyName mi.ReturnType
+
+                if mi.IsStatic then
+                    sprintf "static %s :: %s%s : %s -> %s" decl mi.Name gen args ret
+                else
+                    sprintf "member %s :: %s%s : %s -> %s" decl mi.Name gen args ret
+        )
+
+    let private getPrettyCtorName (ctor : ConstructorInfo) =
+        lock prettyCtorNames (fun () ->
+            prettyCtorNames.GetOrCreate(ctor, fun ctor ->
+                let t = getPrettyName ctor.DeclaringType
+                let args = ctor.GetParameters() |> Array.map (fun p -> sprintf "%s : %s" p.Name (getPrettyName p.ParameterType)) |> String.concat ", "
+        
+                sprintf "ctor %s(%s)" t args
+            )
+        )
+
+
+    type Type with
+        member x.PrettyName = getPrettyName x
+
+    type MethodInfo with
+        member x.PrettyName = getPrettyFunctionName x
+
+    type ConstructorInfo with
+        member x.PrettyName = getPrettyCtorName x
+
+
+
+
+
+
 [<StructuredFormatDisplay("{AsString}")>]
 type MethodTable(items : list<obj * MethodInfo>) =
     static let pretty (t : Type) = Aardvark.Base.ReflectionHelpers.getPrettyName t
@@ -42,29 +192,8 @@ type MethodTable(items : list<obj * MethodInfo>) =
 
     member private x.AsString =
         items 
-            |> List.map (fun (_,mi) -> 
-                let t = pretty mi.DeclaringType
-
-                let generic =
-                    if mi.IsGenericMethod then 
-                        mi.GetGenericArguments() 
-                            |> Seq.map pretty
-                            |> String.concat ", "
-                            |> sprintf "<%s>"
-                    else
-                        ""
-
-                let args =
-                    mi.GetParameters()
-                        |> Array.map (fun p -> sprintf "%s : %s" p.Name (pretty p.ParameterType))
-                        |> String.concat ", "
-
-                if FSharpType.IsFunction mi.DeclaringType then
-                    sprintf "%s" t
-                else
-                    sprintf "%s.%s%s(%s)" t mi.Name generic args
-           )
-        |> String.concat "\r\n"
+            |> List.map (fun (_,mi) -> mi.PrettyName)
+            |> String.concat "\r\n"
 
     override x.ToString() = x.AsString
 
@@ -227,7 +356,9 @@ module OverloadResolution =
 module MethodTable =
 
     let ofList (items : list<obj * MethodInfo>) = 
-        MethodTable(items)
+        let res = MethodTable(items)
+        printfn "%A" res
+        res
 
     let ofSeq (seq : seq<obj * MethodInfo>) = 
         seq |> Seq.toList |> ofList
@@ -331,7 +462,7 @@ module private ``ILGenerator Extensions`` =
                         let body = List.toArray instructions
                         for i in 0..body.Length-1 do
                             match body.[i] with
-                                | Start | Nop -> ()
+                                | Start | Nop | Tail -> ()
                                 | Ldarg a -> yield Ldloc (arg a)
                                 | LdargA a -> yield LdlocA (arg a)
                                 | Ret -> 
@@ -369,7 +500,7 @@ module private ``ILGenerator Extensions`` =
 
                 let usedArgs = 
                     instructions
-                        |> List.choose (function Ldarg a -> Some a | _ -> None)
+                        |> List.choose (function Ldarg a -> Some a | LdargA a -> Some a | _ -> None)
                         |> Set.ofList
                 
                 let usedLocals = usedArgs |> Set.map arg
@@ -395,7 +526,7 @@ module private ``ILGenerator Extensions`` =
                         let body = List.toArray instructions
                         for i in 0..body.Length-1 do
                             match body.[i] with
-                                | Start | Nop -> ()
+                                | Start | Nop | Tail -> ()
                                 | Ldarg a -> yield Ldloc (arg a)
                                 | LdargA a -> yield LdlocA (arg a)
                                 | Ret -> 
@@ -410,12 +541,12 @@ module private ``ILGenerator Extensions`` =
                             yield Mark(endLabel)
                     ]
 
-                Log.start "inlining %A" meth
-                for i in code do
-                    match i with
-                        | Start | Nop -> ()
-                        | _ -> Log.line "%A" i
-                Log.stop()
+//                Log.start "inlining %s" meth.PrettyName
+//                for i in code do
+//                    match i with
+//                        | Start | Nop -> ()
+//                        | _ -> Log.line "%A" i
+//                Log.stop()
 
                 code, HashSet usedArgs
             )
@@ -510,6 +641,11 @@ module private DispatcherConfig =
         ()
         #endif
 
+type IDispatcher =
+    abstract member TryInvoke : a : obj * [<Out>] res : byref<obj> -> bool
+
+type IDispatcher<'b> =
+    abstract member TryInvoke : a : obj * b : 'b * [<Out>] res : byref<obj> -> bool
 
 type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
 
@@ -555,7 +691,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 DispatcherConfig.LogTable implementations size collisions
                 collisions, table
             else
-                createTable (size + 1)
+                createTable (1 + size)
 
         let collisions, table = createTable implementations.Count
         minId, collisions, table
@@ -736,6 +872,15 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
             )
         
         info <- newInfo
+
+    interface IDispatcher with
+        member x.TryInvoke(a,res) =
+            let mutable r = Unchecked.defaultof<'r>
+            if x.TryInvoke(a, &r) then
+                res <- r :> obj
+                true
+            else
+                false
 
     member x.TableSize = info.tableSize
     member x.Collisions = info.collisions
@@ -1061,6 +1206,15 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
             )
         
         info <- newInfo
+
+    interface IDispatcher<'b> with
+        member x.TryInvoke(a,b,res) =
+            let mutable r = Unchecked.defaultof<'r>
+            if x.TryInvoke(a, b, &r) then
+                res <- r :> obj
+                true
+            else
+                false
 
     member x.TableSize = info.tableSize
     member x.Collisions = info.collisions

@@ -560,8 +560,6 @@ module Blub =
                 |> List.map (fun sf -> sf.nodeType, sf)
                 |> HashMap.ofList
 
-
-
 module Test =
  
     type TraversalState(parent : Option<TraversalState>, node : obj, cache : Dictionary<string, Option<obj>>) =
@@ -1245,213 +1243,385 @@ module Test =
 
         ()
 
-//    let generate() =
-//        let types = 
-//            Introspection.GetAllTypesWithAttribute<SemanticAttribute>()
-//                |> Seq.map (fun t -> t.E0)
-//                |> HashSet
-//
-//        let methods =
-//            types 
-//                |> Seq.collect (fun t -> t.GetMethods(BindingFlags.Static ||| BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.NonPublic))
-//                |> Seq.filter (fun mi -> mi.GetParameters().Length = 1 && mi.Name <> "Equals" && not mi.IsGenericMethod)
-//                |> Seq.groupBy (fun mi -> mi.Name)
-//                |> Dictionary.ofSeq
-//
-//        let functions =
-//            methods
-//                |> Dictionary.map (fun k meths -> SemanticFunction.ofSeq k (failwith "") meths)
-//
-//        let convert (t : Type) (e : Expr)  = Expr.Coerce(e, t)
-//
-//        let invoke (lambda : Expr) (self : Expr) (o : Expr) =
-//            match lambda with
-//                | Lambda(traversal,Lambda(a, b)) -> Expr.Let(traversal, self, Expr.Let(a, o, b))
-//                | _ -> failwithf "[Ag] cannot invoke semantic function %A" lambda
-//
-//        let createStateTransitions (attributes : list<string>) : TraversalState -> unit =
-//            failwith ""
-//
-//
-//        let rec createDispatcher (fallback : Expr<Traversal -> obj -> Option<obj>>) (strict : Set<string>) (sfs : list<SemanticFunction>) =
-//            let inh = sfs |> Seq.forall (fun sf -> sf.kind = Inherit)
-//            let o = Var("arg", typeof<obj>)
-//            let t = Var("t", typeof<Type>)
-//            let self = Var("self", typeof<Traversal>)
-//            let cases = FSharpType.GetUnionCases(typeof<Option<obj>>)
-//            let noneCase = cases |> Seq.find (fun c -> c.Name = "None")
-//            let someCase = cases |> Seq.find (fun c -> c.Name = "Some")
-//            let withAttribute = typeof<Traversal>.GetMethod "WithAttribute"
-//            let inhTraversal = typeof<Traversal>.GetMethod "Inherit"
-//            let stateProp = typeof<Traversal>.GetProperty "State"
-//            let getTraversal = typeof<Traversal>.GetMethod "GetValue"
-//            let setState = typeof<TraversalState>.GetMethod "Set"
-//
-//            let rec build (es : list<SemanticFunction>) =
-//                match es with
-//                    | [] -> 
-//                        invoke fallback (Expr.Var self) (Expr.Var o)
-//
-//                    | sf :: rest ->
-//                        let good = Expr.TypeTest(Expr.Var o, sf.nodeType)
-//                        
-//
-//                        let inh = 
-//                            sf.definition.GetFreeVars() 
-//                                |> Seq.map (fun v -> 
-//                                    let nn = v.Name.Substring(5)
-//                                    if Set.contains nn strict then
-//                                        let self = Expr.Var self
-//                                        v, <@@ (%%self : Traversal).GetValue(nn) |> Option.get @@> //Expr.Call(Expr.Var self, getTraversal, [Expr.Value nn])
-//                                    else
-//                                        let t = Var("newTraversal", self.Type)
-//                                        v,Expr.Let(t, Expr.Call(Expr.Var self, withAttribute, [ Expr.Value(nn) ]), 
-//                                            Expr.Call(Expr.Var t, inhTraversal, [Expr.Var o])
-//                                        )
-//                                   )
-//                                |> Map.ofSeq
-//
-//                        let def = sf.definition.Substitute(fun v -> Map.tryFind v inh)
-//                        let call = invoke def (Expr.Var self) (convert sf.nodeType (Expr.Var o))
-//                        let call = Expr.NewUnionCase(someCase, [Expr.Coerce(call, typeof<obj>)])
-//
-//       
-//                        let rest = build rest
-//                        Expr.IfThenElse(good, call, rest)
-//
-//            let dispatch = build sfs
-//
-//            let cleanSyn (e : Expr) =
-//                let dispatchers = 
-//                    strict |> Seq.map (fun s -> 
-//                        s, functions.[s] |> List.filter (fun sf -> not sf.isRoot) |> createDispatcher <@ fun (t : Traversal) o -> t.GetValue(s) @> strict
-//                    )
-//                    |> Map.ofSeq
-//
-//
-//                let rec replaceSynCalls (e : Expr) =
-//                    match e with
-//                                
-//                        | Call(Some t, mi, [o]) when mi.Name = "Synthesize" ->
-//                                    
-//                            let t = Expr.Var self
-//                            let ntv = Var("newTraversal", typeof<Traversal>)
-//                            let nt = Expr.Var ntv
-//                            let newTraversal = <@ (%%t : Traversal).WithState((%%t : Traversal).State.ChildState(%%o : obj)) @>
-//                            let values = dispatchers |> Map.map (fun n d -> invoke d nt o) |> Map.toList
-//
-//                            let rec build (v : list<string * Expr>) =
-//                                match v with
-//                                    | [] -> 
-//                                        <@@ (%%nt : Traversal).Self %%nt %%o |> Option.get @@>
-//
-//                                    | (name, value) :: rest ->
-//                                        Expr.Sequential(
-//                                            let s = <@ (%%nt : Traversal).State @>
-//                                            Expr.Call(s, setState, [Expr.Value name; value]),
-//                                            build rest
-//                                        ) 
-//
-//
-//                            Expr.Let(ntv, newTraversal, 
-//                                build values
-//                            )
-//                         
-//
-//                                    
-//
-//
-//                        | ShapeLambda(v,b) -> Expr.Lambda(v,replaceSynCalls b)
-//                        | ShapeVar(v) -> e
-//                        | ShapeCombination(o,args) -> RebuildShapeCombination(o, args |> List.map replaceSynCalls)
-//
-//
-//                replaceSynCalls e
-//
-//            Expr.Lambda(self, 
-//                Expr.Lambda(o, 
-//                    if inh then dispatch else cleanSyn dispatch
-//                )
-//            )
-//
-//
-//        for (name, sfs) in Dictionary.toSeq functions do
-//            let rootFunctions, sfs = sfs |> List.partition (fun sf -> sf.isRoot)
-//            let inh = sfs |> Seq.forall (fun sf -> sf.kind = Inherit)
-//            let invoke (lambda : Expr) (self : Expr) (o : Expr) =
-//                match lambda with
-//                    | Lambda(traversal,Lambda(a, b)) -> Expr.Let(traversal, self, Expr.Let(a, o, b))
-//                    | _ -> failwithf "[Ag] cannot invoke semantic function %A" lambda
-//
-//
-//            match sfs with
-//                | [] -> ()
-//                | _ ->
-//                    let fallback =
-//                        if inh then <@ fun (traversal : Traversal) (caller : obj) -> traversal.Inherit() |> Some @>
-//                        else <@ fun _ _ -> None @>
-//
-//                    let strict = 
-//                        if inh then Set.empty
-//                        else sfs |> Seq.map (fun sf -> sf.strictInh) |> Set.unionMany |> Set.remove name
-//
-//                    let d = createDispatcher fallback strict sfs
-//                    let dispatcher = QuotationCompiler.ToDynamicAssembly(d, "Ag").Invoke(null, [||]) |> unbox<Traversal -> obj -> Option<obj>>
-//                    Traversal.AddRule(name, dispatcher)
-//                
-//            match rootFunctions with
-//                | [] -> ()
-//                | _ ->
-//                    let rd = createDispatcher <@ fun _ _ -> None @> Set.empty rootFunctions
-//                    let rootDispatcher = QuotationCompiler.ToDynamicAssembly(rd, "Ag").Invoke(null, [||]) |> unbox<Traversal -> obj -> Option<obj>>
-//
-//                    Traversal.AddRootRule(name, rootDispatcher)
-//            
-//        
-//        let rec long (n : int) =
-//            if n = 0 then Nil() :> IList
-//            else Cons(n, long (n-1)) :> IList
-//
-//
-////        let test = sum (long 1 :> obj)
-////        Log.line "Sum(Cons(1,Nil())) = %A" test
-////        Environment.Exit 0
-//
-//        let len = 1000
-//        let iter = 1000
-//        let bla = long len
-//
-//        let sum x = Traversal.Get(x, "Sum").Synthesize(x)
-//
-//
-//        let sw = System.Diagnostics.Stopwatch()
-//        
-//
-//        for i in 1..10 do
-//            let results = Array.zeroCreate iter
-//
-//            sw.Restart()
-//            for i in 0..iter-1 do
-//                let s = TraversalState(None, null, Map.ofList ["Index", Some (0 :> obj)])
-//                results.[i] <- bla.Sum(s)
-//            sw.Stop()
-//            Log.line "virtual: %A" (sw.MicroTime / (len * iter))
-//            results |> Set.ofArray |> Log.line "values: %A"
-//
-//            let results = Array.zeroCreate iter
-//
-//            sw.Restart()
-//            for i in 0..iter-1 do
-//                results.[i] <- sum (bla)
-//            sw.Stop()
-//            Log.line "ag: %A" (sw.MicroTime / (len * iter))
-//            results |> Array.map unbox<int> |> Set.ofArray |> Log.line "values: %A"
-//
-//
-//
-//
-//        ()
-//
-//
-//
-//
+
+
+module NewestAg =
+    open Microsoft.FSharp.Quotations
+    open Microsoft.FSharp.Quotations.Patterns
+    open Microsoft.FSharp.Quotations.ExprShape
+
+    type SemanticAttribute() = inherit Attribute()
+
+    [<AutoOpen>]
+    module Operators =
+        
+        type Inh = class end
+        let inh : Inh = Unchecked.defaultof<Inh>
+
+        let (?) (o : 'a) (name : string) : 'b =
+            failwith ""
+
+        let (<<=) (m : Inh) (value : 'a) =
+            ()
+
+        let private isUnitFunction (t : Type) =
+            if t.Name.StartsWith "FSharpFunc" then
+                let (d,_) = FSharpType.GetFunctionElements t
+                d = typeof<unit>
+            else
+                false
+
+        let (|Synthesize|_|) (e : Expr) =
+            match e with
+                | Application(Call(None, mi, [o; Value(:? string as name,_)]), Value(:? unit,_)) when mi.Name = "op_Dynamic" ->
+                    Some(name, o)
+                | _ ->
+                    None
+
+        let (|Inherit|_|) (e : Expr) =
+            match e with
+                | Call(None, mi, [o; Value(:? string as name,_)]) when not (isUnitFunction e.Type) && mi.Name = "op_Dynamic" ->
+                    Some(name, o)
+                | _ ->
+                    None
+
+        let (|AssignInherit|_|) (e : Expr) =
+            match e with
+                | Call(None, mi, [_;value]) when mi.Name = "op_LessLessEquals" ->
+                    Some value
+                | _ ->
+                    None
+    
+    [<AllowNullLiteral>]
+    type Scope(parent : Option<Scope>, node : obj) =
+        static let root = Scope(None, null)
+        
+        let cache = Dictionary.empty
+        
+        static member Root = root
+
+        member x.ChildScope (child : obj) : Scope =
+            Scope(Some x, child)
+
+        member x.Parent = parent
+        member x.Node = node
+        member x.Cache = cache
+
+        override x.ToString() =
+            match parent with
+                | None -> "Root"
+                | Some p -> sprintf "%s/%s" (p.ToString()) (node.GetType().PrettyName)
+
+    type AttributeKind =
+        | None          = 0x00
+        | Inherited     = 0x01
+        | Synthesized   = 0x02
+        | Mixed         = 0x03
+
+    type SemanticFunctions =
+        {
+            index           : int
+            name            : string
+            kind            : AttributeKind
+            valueType       : Type
+            implementations : list<Expr>
+        }
+
+    
+
+    module Globals =
+        open System.Threading
+        open System.Collections.Concurrent
+        type Marker = Marker
+
+        let scope = Scope.Root
+
+        let mutable private currentIndex = -1
+        let private attributeIndices = ConcurrentDictionary<string, int>()
+
+        let mutable synDispatchers : IDispatcher<Scope>[] = null
+        let mutable inhDispatchers : IDispatcher<Scope>[] = null
+
+        let semInstances = ConcurrentDictionary<Type, obj>()
+
+        let getInstance (t : Type) =
+            semInstances.GetOrAdd(t, fun t -> Activator.CreateInstance t)
+
+        type Instance<'a> private() =
+            static let a = getInstance (typeof<'a>) |> unbox<'a>
+            static member Instance = a
+
+        let getTypedInstance<'a>() = Instance<'a>.Instance
+
+        let instance<'a> = Instance<'a>.Instance
+
+        let getAttributeIndex (name : string) =
+            attributeIndices.GetOrAdd(name, fun _ -> Interlocked.Increment(&currentIndex))
+
+        let attributeCount() = currentIndex + 1
+
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module SemanticFunctions =
+        open Aardvark.Base.Monads.Option
+
+        let private scopeProp = typeof<Globals.Marker>.DeclaringType.GetProperty("scope")
+        let private instance = typeof<Globals.Marker>.DeclaringType.GetMethod("getTypedInstance")
+
+        let (|Scope|_|) (e : Expr) =
+            match e with
+                | PropertyGet(None, p, []) when p = scopeProp ->
+                    Some ()
+                | _ ->
+                    None
+
+
+        module private List =
+            let rec mapOpt (f : 'a -> Option<'b>) (l : list<'a>) : Option<list<'b>> =
+                match l with
+                    | [] -> Some []
+                    | h :: rest ->
+                        match f h with
+                            | Some v -> 
+                                match mapOpt f rest with
+                                    | Some rest -> Some (v :: rest)
+                                    | None -> None
+                            | None ->
+                                None
+
+        let rec private isInheritFunction (e : Expr) =
+            match e with
+                | AssignInherit(_) -> true
+                | ShapeVar(_) -> false
+                | ShapeLambda(_,b) -> isInheritFunction b
+                | ShapeCombination(o, args) -> args |> List.exists isInheritFunction
+        
+        let private kind (e : Expr) =
+            if isInheritFunction e then AttributeKind.Inherited
+            else AttributeKind.Synthesized
+        
+        let ofMethods (name : string) (methods : list<MethodInfo>) =
+            option {
+                let! retType =
+                    let retTypes = methods |> List.map (fun mi -> mi.ReturnType) |> HashSet
+                    if retTypes.Count = 1 then Some (Seq.head retTypes)
+                    else None
+
+                let expressions =
+                    methods |> List.choose (fun m ->
+                        match Expr.TryGetReflectedDefinition m with
+                            | Some e -> Some e
+                            | None ->
+                                Log.warn "[Ag] could not get reflected definition for semantic function '%s'" m.PrettyName
+                                None
+                    )
+
+                let! kind = 
+                    match expressions |> List.fold (fun k e -> k ||| kind e) AttributeKind.None with
+                        | AttributeKind.Mixed | AttributeKind.None -> None
+                        | kind -> Some kind
+
+                return {
+                    index           = Globals.getAttributeIndex name
+                    name            = name
+                    kind            = kind
+                    valueType       = retType
+                    implementations = expressions
+                }
+            }
+
+        let compile (sf : SemanticFunctions) =
+
+            let td = typedefof<Dispatcher<_,_>>.MakeGenericType [| typeof<Scope>; sf.valueType |]
+            let create = td.GetMethod("Create", BindingFlags.Static ||| BindingFlags.Public, Type.DefaultBinder, [| typeof<list<obj>> |], null)
+
+            let inlineSemTypes(e : Expr) = 
+                match e with
+                    | Lambda(v,b) when v.Type.IsDefined(typeof<SemanticAttribute>) ->
+                        let value = Expr.Value(Globals.getInstance v.Type, v.Type)
+                        let value = Expr.Call(instance.MakeGenericMethod(v.Type),[])
+                        b.Substitute (fun vi -> if vi = v then Some value else None)
+                    | _ -> e
+
+
+            let lambdas = 
+                match sf.kind with
+                    | AttributeKind.Synthesized ->
+                        sf.implementations |> List.map (fun e ->
+                            match inlineSemTypes e with
+                                | Lambda(node, body) ->
+                                    
+                                    let vscope = Var("scope", typeof<Scope>)
+                                    let scope = Expr.Var vscope
+                                    let rec repair (e : Expr) =
+                                        match e with
+                                            | Scope ->
+                                                scope
+
+                                            | Synthesize(name, o) ->
+                                                let nodeObj = Expr.Coerce(o, typeof<obj>)
+                                                let index = Globals.getAttributeIndex name
+                                                let dispatcher = <@@ Globals.synDispatchers.[index] @@>
+                                                let childScope = <@@ (%%scope : Scope).ChildScope((%%nodeObj : obj)) @@>
+
+                                                let td = typedefof<Dispatcher<_,_>>.MakeGenericType [| typeof<Scope>; e.Type |]
+                                                let dispatcher = Expr.Coerce(dispatcher, td)
+                                                let invoke = td.GetMethod("Invoke")
+                                                Expr.Call(dispatcher, invoke, [o; childScope])
+
+                                            | ShapeVar _ -> e
+                                            | ShapeLambda(v,b) -> Expr.Lambda(v, repair b)
+                                            | ShapeCombination(o, args) -> RebuildShapeCombination(o, args |> List.map repair)
+
+                                    Expr.Lambda(node, Expr.Lambda(vscope, repair body))
+                                | _ ->
+                                    failwith "sadasdasdasdasd"
+                        )
+                    | _ ->
+                        failwith ""
+
+            let compiled = 
+                lambdas 
+                    |> List.map (fun e -> 
+                        //let ast = QuotationCompiler.Utilities.QuotationCompiler.ToParsedInput(e)
+
+                        //let ss = Microsoft.FSharp.Compiler.SimpleSourceCodeServices.SimpleSourceCodeServices()
+
+                        FSharp.Quotations.Evaluator.QuotationEvaluator.CompileUntyped e
+
+                        //QuotationCompiler.ToDynamicAssembly(e, "Ag").Invoke(null, [||])
+                    )
+
+            create.Invoke(null, [|compiled|]) |> unbox<IDispatcher<Scope>>
+
+    
+    type IList =
+        abstract member Sum : Scope -> int
+        abstract member Sum : unit -> int
+
+
+    
+    type Nil() = 
+        interface IList with
+            member x.Sum (s : Scope) = 0
+            member x.Sum () = 0
+
+    type Cons(head : int, tail : IList) =
+        interface IList with
+            member x.Sum s = 
+                head + tail.Sum (s.ChildScope tail)
+
+            member x.Sum() = 
+                head + tail.Sum()
+
+        member x.Head = head
+        member x.Tail = tail
+
+
+
+    let private root = Some 1
+
+    let ag = obj()
+    open Aardvark.Base.Incremental
+
+    [<Semantic; ReflectedDefinition>]
+    type Sems() =
+        let mutable a = 0
+
+        member x.A
+            with get() = a
+            and set v = a <- v
+
+
+        member x.Sum(n : Nil) = 0
+        member x.Sum(c : Cons) = c.Head + c.Tail?Sum() //c.Tail?Sum(scope)
+
+
+        member x.Set(n : Nil) = 
+            ASet.single 1
+
+        member x.Set(c : Cons) = 
+            aset {
+                yield c.Head
+                yield! c.Tail?Set()
+            }
+
+
+    [<Demo("aaaag")>]
+    let run() =
+        let functions = 
+            Introspection.GetAllTypesWithAttribute<SemanticAttribute>()
+                |> Seq.map (fun t -> t.E0)
+                |> Seq.collect (fun t -> 
+                    let all = t.GetMethods(BindingFlags.Static ||| BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.NonPublic)
+                    all |> Seq.filter (fun mi -> mi.DeclaringType = t && not (mi.Name.StartsWith "get_" || mi.Name.StartsWith "set_"))
+                   )
+                |> Seq.groupBy (fun mi -> mi.Name)
+                |> Seq.map (fun (name, mis) -> name, Seq.toList mis)
+                |> Seq.choose (fun (name, mis) -> SemanticFunctions.ofMethods name mis)
+                |> Seq.toArray
+
+        let syn, inh =
+            functions |> Array.partition (fun sf -> sf.kind = AttributeKind.Synthesized)
+            
+
+        let syns = Array.zeroCreate (Globals.attributeCount())
+        for f in functions do
+            let d = SemanticFunctions.compile f
+            syns.[f.index] <- d
+        Globals.synDispatchers <- syns
+
+
+        let disp = syns.[Globals.getAttributeIndex "Sum"] |> unbox<Dispatcher<Scope, int>>
+
+        let list = Cons(1, Cons(2, Nil()))
+        let sum n = 
+            disp.Invoke(n, Scope.Root.ChildScope n)
+
+        let disp = syns.[Globals.getAttributeIndex "Set"] |> unbox<Dispatcher<Scope, aset<int>>>
+        let set n = 
+            disp.Invoke(n, Scope.Root.ChildScope n)
+
+        let s = set list |> ASet.toList
+        printfn "%A" s
+
+        Log.line "sum = %A" (sum list)
+
+        let sem = Globals.getInstance typeof<Sems> |> unbox<Sems>
+        sem.A <- 10
+        Log.line "sum = %A" (sum list)
+
+        let rec long (n : int) =
+            if n = 0 then Nil() :> IList
+            else Cons(n, long (n-1)) :> IList
+
+        let test = long 1000
+        let testList = List.init 2001 (fun i -> 20001 - i)
+
+        let iter = 1000
+
+        let sw = System.Diagnostics.Stopwatch()
+        sw.Start()
+        for i in 1 .. iter do
+            List.sum testList |> ignore
+        sw.Stop()
+        Log.line "list: %A" (sw.MicroTime / iter)
+
+        let sw = System.Diagnostics.Stopwatch()
+        sw.Start()
+        for i in 1 .. iter do
+            test.Sum (Scope.Root.ChildScope test) |> ignore
+        sw.Stop()
+        Log.line "virt: %A" (sw.MicroTime / iter)
+
+        let sw = System.Diagnostics.Stopwatch()
+        sw.Start()
+        for i in 1 .. iter do
+            sum test |> ignore
+        sw.Stop()
+        Log.line "ag:   %A" (sw.MicroTime / iter)
+
+
+
+
+        ()
