@@ -69,6 +69,7 @@
     <Compile Include="Staging\Proc.fs" />
     <Compile Include="Staging\GeometryPool.fs" />
     <Compile Include="Staging\Dispatcher.fs" />
+    <Compile Include="Staging\QuotationCompiler.fs" />
     <Compile Include="Staging\Ag.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />

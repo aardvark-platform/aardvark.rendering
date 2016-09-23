@@ -366,12 +366,12 @@ module MethodTable =
     let ofArray (seq : array<obj * MethodInfo>) = 
         seq |> Array.toList |> ofList
 
-    let tryResolve (retType : Type) (types : Type[]) (table : MethodTable) =
+    let tryResolve  (types : Type[]) (table : MethodTable) =
         let goodOnes = 
             table.Methods
                 |> List.choose (fun mi -> 
                     match OverloadResolution.tryInstantiate mi types with
-                        | Some mi when retType.IsAssignableFrom mi.ReturnType ->
+                        | Some mi ->
                             Some (mi :> MethodBase)
                         | _ ->
                             None
@@ -551,6 +551,7 @@ module private ``ILGenerator Extensions`` =
                 code, HashSet usedArgs
             )
 
+
     type ILGenerator with
         member x.Ldc(value : nativeint) =
             if sizeof<nativeint> = 8 then x.Emit(OpCodes.Ldc_I8, int64 value)
@@ -646,6 +647,13 @@ type IDispatcher =
 
 type IDispatcher<'b> =
     abstract member TryInvoke : a : obj * b : 'b * [<Out>] res : byref<obj> -> bool
+
+type DispatcherErrorHelper =
+    static member Fail1(a : obj, b : obj) : unit =
+        failwithf "[Dispatcher] could not run with (%A, %A)" a b
+
+    static member Fail2(a : obj, b : obj) : unit =
+        failwithf "[Dispatcher] could not run with (%A, %A)" a b
 
 type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
 
@@ -925,7 +933,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         let table = MethodTable.ofList methods
         let dispatcher =
             Dispatcher<'r>(fun t ->
-                table |> MethodTable.tryResolve typeof<'r> [| t |]
+                table |> MethodTable.tryResolve [| t |]
             )
 
         dispatcher  
@@ -963,7 +971,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         Dispatcher<'r>(fun t ->
             match f t with
                 | Some e ->
-                    let lambda = QuotationCompiler.ToDynamicAssembly(e, "Dispatcher").Invoke(null, [||])
+                    let lambda = QuotationCompiler.ToObject e
                     let best =  lambda.GetType().InvokeMethod 1
                     if isNull best then None
                     else Some (lambda, best)
@@ -972,7 +980,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                     None
         )
 
-type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
+type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * MethodInfo>) =
 
     static let emptyTargets : obj[]     = Array.zeroCreate 0
     static let rebuildMeth              = typeof<Dispatcher<'b, 'r>>.GetMethod("Rebuild", BindingFlags.NonPublic ||| BindingFlags.Instance)
@@ -983,6 +991,7 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
             d.Rebuild(a,b,&res)
         )
 
+    let mutable tryGet = tryGet
     let implementations = Dictionary<Type, obj * MethodInfo>()
     let mutable info =
         DispatcherInfo(
@@ -1045,6 +1054,7 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
 
         // create a table for all instances
         let errorLabel = il.DefineLabel()
+        let noResLabel = Label()
 
         let targets = List<obj>()
         let targetCache = Dict<obj, int>()
@@ -1078,12 +1088,37 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
             il.Emit(OpCodes.Bne_Un, otherwise)
 
             if isNull meth then
+                
                 il.Emit(OpCodes.Ldc_I4_0)
                 il.Emit(OpCodes.Ret)
             else
-                
                 if DispatcherConfig.InlineFunctionCalls && meth.CanInline then
                     let code, usedArgs = meth.MinimalInlineCode
+
+
+                    let code =
+                        code |> List.collect (fun i ->
+                            let args = IL.Local(typeof<obj[]>)
+                            match i with
+                                | IL.Call(mi) when mi.Name = "Invoke" && mi.DeclaringType = typeof<Dispatcher<'b, 'r>> ->
+                                    let doneLabel = IL.Label()
+                                    [
+                                        IL.Ldarg 4
+                                        IL.Call(mi.DeclaringType.GetMethod("TryInvoke"))
+                                        IL.ConditionalJump(IL.True, doneLabel)
+                                        
+                                        IL.Ldarg 2
+                                        IL.Ldarg 3
+                                        IL.Call(typeof<DispatcherErrorHelper>.GetMethod("Fail2"))
+
+                                        IL.Mark(doneLabel)
+                                        IL.Ldarg 4
+                                        IL.LdObj(typeof<'r>)
+                                    ]
+                                | _ ->
+                                    [i]
+                        )
+
 
                     let firstArg = if meth.IsStatic then 0 else 1
                     let secondArg = firstArg + 1
@@ -1227,9 +1262,12 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 info.self.Invoke(x, info.targets, a, b, &res)
 
     member x.Invoke(a : obj, b : 'b) =
-        match x.TryInvoke(a,b) with
-            | (true, r) -> r
-            | _ -> failwithf "[Dispatcher] could not run with (%A, %A)" a b
+        let mutable foo = Unchecked.defaultof<'r>
+        x.TryInvoke(a,b,&foo) |> ignore
+        foo
+//        match x.TryInvoke(a,b) with
+//            | (true, r) -> r
+//            | _ -> failwithf "[Dispatcher] could not run with (%A, %A)" a b
 
     member private x.Rebuild(a : obj, b : 'b, res : byref<'r>) : bool =
         let dynArg = a.GetType()
@@ -1237,7 +1275,7 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
             if implementations.ContainsKey dynArg then
                 ()
             else
-                match tryGet dynArg with
+                match tryGet x dynArg with
                     | Some (target, meth) -> 
                         let parameters = meth.GetParameters()
 
@@ -1259,8 +1297,8 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
     static member Create (methods : list<obj * MethodInfo>) =
         let table = MethodTable.ofList methods
         let dispatcher =
-            Dispatcher<'b, 'r>(fun t ->
-                table |> MethodTable.tryResolve typeof<'r> [| t; typeof<'b> |]
+            Dispatcher<'b, 'r>(fun self t ->
+                table |> MethodTable.tryResolve [| t; typeof<'b> |]
             )
 
         dispatcher  
@@ -1274,9 +1312,9 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                )
             |> Dispatcher<'b, 'r>.Create
 
-    static member Create (f : Type -> Option<obj>) =
-        Dispatcher<'b, 'r>(fun t ->
-            match f t with
+    static member Create (f : Dispatcher<'b, 'r> -> Type -> Option<obj>) =
+        Dispatcher<'b, 'r>(fun s t ->
+            match f s t with
                 | Some lambda ->
                     let t = lambda.GetType()
                     let best =  lambda.GetType().InvokeMethod 2
@@ -1285,11 +1323,15 @@ type Dispatcher<'b, 'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                     None
         )
 
-    static member Compiled (f : Type -> Option<Expr>) =
-        Dispatcher<'b, 'r>(fun t ->
-            match f t with
+    static member CreateUntyped (f : obj -> Type -> Option<obj * MethodInfo>) =
+        Dispatcher<'b, 'r>(fun s t -> f (s :> obj) t)
+
+
+    static member Compiled (f : Dispatcher<'b, 'r> -> Type -> Option<Expr>) =
+        Dispatcher<'b, 'r>(fun s t ->
+            match f s t with
                 | Some e ->
-                    let lambda = QuotationCompiler.ToDynamicAssembly(e, "Dispatcher").Invoke(null, [||])
+                    let lambda = QuotationCompiler.ToObject(e, "Dispatcher")
                     let best =  lambda.GetType().InvokeMethod 2
             
                     if isNull best then  None
