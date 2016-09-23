@@ -1295,73 +1295,72 @@ module NewestAg =
                 | _ ->
                     None
     
-    [<AllowNullLiteral>]
-    type Scope(parent : Option<Scope>, node : obj) =
-        static let root = Scope(None, null)
-        
-        static let getOrCreate (k : 'k) (f : 'k -> 'v) (m : Map<'k, 'v>) =
+    module Map =
+        let inline getOrCreate (k : 'k) (f : 'k -> 'v) (m : Map<'k, 'v>) =
             match Map.tryFind k m with
                 | Some r -> r, m
                 | None ->
                     let r = f k
                     r, Map.add k r m
 
-        //let cache : IntDict<obj> = IntDict()
+    module Root =
+        let mutable dispatchers : IDispatcher[] = null
+
+    [<AllowNullLiteral>]
+    type Scope(parent : Scope, node : obj) =
+        static let root = Scope(null, null)
         let mutable cache = Map.empty
 
         static member Root = root
 
         member x.ChildScope (child : obj) : Scope =
-            if isNull node then Scope(None, child)
-            else Scope(Some x, child)
+            if isNull node then Scope(null, child)
+            else Scope(x, child)
 
         member x.Parent = parent
         member x.Node = node
         member x.Cache = cache
 
         member x.Get(i : int) =
-            cache.[i]
-
+            match Map.tryFind i cache with
+                | Some v -> v
+                | None ->
+                    if isNull parent then
+                        match Root.dispatchers.[i].TryInvoke(node) with
+                            | (true, res) ->
+                                cache <- Map.add i res cache
+                                res
+                            | _ ->
+                                failwith ""
+                    else
+                        failwith ""
+                        
+                            
         member x.Set(i : int, o : obj) =
             cache <- Map.add i o cache
-            //cache.[i] <- o
 
         member x.Inherit(i : int, disp : Dispatcher<Scope, 'r>, root : Dispatcher<'r>) =
-            let result, nc = 
-                cache |> getOrCreate i (fun i ->
-                    match parent with
-                        | Some p -> 
-                            match disp.TryInvoke(p.Node, p) with
-                                | (true, res) -> (res :> obj)
-                                | _ -> p.Inherit(i, disp, root) :> obj 
-                        | None -> 
-                            match root.TryInvoke(node) with
-                                | (true, v) -> (v :> obj)
-                                | _ -> failwith ""
-                )
-            cache <- nc
-            unbox<'r> result
+            match Map.tryFind i cache with
+                | Some r -> unbox<'r> r
+                | None ->
+                    let res = 
+                        match parent with
+                            | null -> 
+                                match root.TryInvoke(node) with
+                                    | (true, v) -> v
+                                    | _ -> failwith ""
 
-//            match cache.TryGetValue i with
-//                | (true, v) ->
-//                    match v with
-//                        | Some v -> unbox<'r> v
-//                        | None -> failwith ""
-//                | _ ->
-//                    let res = 
-//                        match parent with
-//                            | Some p -> 
-//                                match disp.TryInvoke(p.Node, p) with
-//                                    | (true, res) -> res
-//                                    | _ -> p.Inherit(i, disp, root)
-//                            | None -> root.Invoke(node)
-//                    cache.[i] <- Some (res :> obj)
-//                    res
+                            | p -> 
+                                match disp.TryInvoke(p.Node, p) with
+                                    | (true, res) -> res
+                                    | _ -> p.Inherit(i, disp, root)
+                    cache <- Map.add i (res :> obj) cache
+                    res
 
         override x.ToString() =
             match parent with
-                | None -> node.GetType().PrettyName
-                | Some p -> sprintf "%s/%s" (p.ToString()) (node.GetType().PrettyName)
+                | null -> node.GetType().PrettyName
+                | p -> sprintf "%s/%s" (p.ToString()) (node.GetType().PrettyName)
 
     type AttributeKind =
         | None          = 0x00
@@ -1370,14 +1369,25 @@ module NewestAg =
         | Mixed         = 0x03
 
 
+    type SemanticFunction =
+        {
+            name        : string
+            kind        : AttributeKind
+            original    : MethodInfo
+            nodeType    : Type
+            code        : Expr
+            isRoot      : bool
+            inherits    : Set<string>
+            synthesizes : Set<string>
+        }
+
     type SemanticFunctions =
         {
             index           : int
             name            : string
             kind            : AttributeKind
             valueType       : Type
-            implementations : list<Expr>
-            originals       : list<MethodInfo>
+            functions       : list<SemanticFunction>
         }
 
     
@@ -1394,7 +1404,6 @@ module NewestAg =
 
         let mutable synDispatchers : IDispatcher<Scope>[] = null
         let mutable inhDispatchers : IDispatcher<Scope>[] = null
-        let mutable rootDispatchers : IDispatcher[] = null
 
         let semInstances = ConcurrentDictionary<Type, obj>()
 
@@ -1415,11 +1424,29 @@ module NewestAg =
         let attributeCount() = currentIndex + 1
 
 
+        let mutable semanticFunctions = Map.empty
+
+    module SemanticGlobals =
+        let mutable synDispatchers : IDispatcher<Scope>[] = null
+        let mutable inhDispatchers : IDispatcher<Scope>[] = null
+        let mutable rootDispatchers : IDispatcher[] = null
+
+
+    type Type with
+        member x.MaybeAssignableFromSubtype(other : Type) =
+            if x.IsAssignableFrom other then true
+            else other.IsInterface
+
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module SemanticFunctions =
         open Aardvark.Base.Monads.Option
 
+
+        let private assign = Aardvark.Base.QuotationReflectionHelpers.getMethodInfo <@@ (<<=) @@>
+        let private dyn = Aardvark.Base.QuotationReflectionHelpers.getMethodInfo <@@ (?) @@>
         let private scopeProp = typeof<Globals.Marker>.DeclaringType.GetProperty("scope")
+        let private scopeGet = typeof<Scope>.GetMethod("Get", [|typeof<int>|])
+        let private scopeSet = typeof<Scope>.GetMethod("Set", [|typeof<int>; typeof<obj>|])
         let private instance = typeof<Globals.Marker>.DeclaringType.GetMethod("getTypedInstance")
         let private inheritMeth = typeof<Scope>.GetMethod "Inherit"
 
@@ -1450,33 +1477,87 @@ module NewestAg =
                 | ShapeVar(_) -> None
                 | ShapeLambda(_,b) -> tryGetInheritType b
                 | ShapeCombination(o, args) -> args |> List.tryPick tryGetInheritType
-        
-        let private kindAndType (mi : MethodInfo) (e : Expr) =
-            match tryGetInheritType e with
-                | Some t -> AttributeKind.Inherited, t
-                | None -> AttributeKind.Synthesized, mi.ReturnType
-        
+
+
+        let rec private visit (syn : HashSet<string>) (inh : HashSet<string>) (retType : byref<Type>) (kind : byref<AttributeKind>) (e : Expr) =
+            match e with
+                | AssignInherit(value) ->
+                    kind <- AttributeKind.Inherited
+                    retType <- value.Type
+                    visit syn inh &retType &kind value
+
+                | Inherit(name, o) -> 
+                    inh.Add name |> ignore
+                    visit syn inh &retType &kind o
+
+                | Synthesize(name, o) ->
+                    syn.Add name |> ignore
+                    visit syn inh &retType &kind o
+
+                | ShapeVar _ -> ()
+                | ShapeLambda(_,b) -> visit syn inh &retType &kind b
+                | ShapeCombination(o,args) -> for a in args do visit syn inh &retType &kind a
+
+
         let ofMethods (name : string) (methods : list<MethodInfo>) =
             option {
 
                 let expressions =
                     methods |> List.choose (fun m ->
-                        match Expr.TryGetReflectedDefinition m with
-                            | Some e -> Some e
-                            | None ->
-                                Log.warn "[Ag] could not get reflected definition for semantic function '%s'" m.PrettyName
-                                None
+                        if m.ReturnType.ContainsGenericParameters then
+                            Log.warn "[Ag] semantic functions may not return generic values '%s'" m.PrettyName
+                            None
+                        else
+                            match Expr.TryGetReflectedDefinition m with
+                                | Some e -> Some (m, e)
+                                | None ->
+                                    Log.warn "[Ag] could not get reflected definition for semantic function '%s'" m.PrettyName
+                                    None
                     )
 
-                let kindsAndTypes = List.map2 kindAndType methods expressions
+
+                let functions =
+                    expressions |> List.map (fun (mi, e) ->
+                        
+                        let syn = HashSet<string>()
+                        let inh = HashSet<string>()
+                        let mutable ret = mi.ReturnType
+                        let mutable kind = AttributeKind.Synthesized
+                        visit syn inh &ret &kind e
+
+                        let isRoot =
+                            let parameters = mi.GetParameters()
+                            if parameters.Length = 1 then
+                                let t = parameters.[0].ParameterType
+                                t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Root<_>>
+                            else
+                                false
+
+                        let func = 
+                            {
+                                original    = mi
+                                code        = e
+                                isRoot      = isRoot
+                                kind        = kind
+                                name        = name
+                                nodeType    = mi.GetParameters().[0].ParameterType
+                                inherits    = HashSet.toSet inh
+                                synthesizes = HashSet.toSet syn
+                            }
+
+                        ret, kind, func
+                    )
 
                 let! kind = 
-                    match kindsAndTypes |> List.fold (fun k (kk,_) -> k ||| kk) AttributeKind.None with
-                        | AttributeKind.Mixed | AttributeKind.None -> None
-                        | kind -> Some kind
+                    match functions |> List.fold (fun k (_,kk,_) -> k ||| kk) AttributeKind.None with
+                        | AttributeKind.Mixed | AttributeKind.None -> 
+                            Log.warn "[Ag] attribute '%s' has conflicting kinds (omitting)" name 
+                            None
+                        | kind -> 
+                            Some kind
 
                 let! retType =
-                    let retTypes = kindsAndTypes |> List.map snd |> HashSet
+                    let retTypes = functions |> List.map (fun (t,_,_) -> t) |> HashSet
                     if retTypes.Count = 1 then Some (Seq.head retTypes)
                     else 
                         Log.warn "[Ag] rules for %s have ambigous return types: [%s]" name (retTypes |> Seq.map (fun t -> t.PrettyName) |> String.concat "; ")
@@ -1488,10 +1569,46 @@ module NewestAg =
                     name            = name
                     kind            = kind
                     valueType       = retType
-                    implementations = expressions
-                    originals       = methods
+                    functions       = functions |> List.map (fun (_,_,f) -> f)
                 }
             }
+
+        
+        let getMoreSpecific (t : Type) (sf : SemanticFunctions) : list<SemanticFunction> =
+            let mutable foundSelf = false
+
+            let functions = 
+                sf.functions |> List.filter (fun sf ->
+                    if sf.nodeType = t then foundSelf <- true
+                    t.MaybeAssignableFromSubtype sf.nodeType
+                )
+
+            if foundSelf then
+                functions
+            else
+                //<@ fun (x : #t) -> inh <<= (x?name : 'valueType) @>
+                let autoInherit = 
+                    let assign = assign.MakeGenericMethod [|sf.valueType|]
+                    let dyn = dyn.MakeGenericMethod [| t; sf.valueType |]
+                    let self = Var("node", t)
+                    Expr.Lambda(
+                        self,
+                        Expr.Call(assign, [Expr.Value(inh); Expr.Call(dyn, [Expr.Var self; Expr.Value(sf.name)])])
+                    )
+
+                let self =
+                    {
+                        name        = sf.name
+                        kind        = sf.kind
+                        original    = null
+                        nodeType    = t
+                        code        = autoInherit
+                        isRoot      = false
+                        inherits    = Set.ofList [sf.name]
+                        synthesizes = Set.empty
+                    }
+
+                self :: functions
 
 
         let private inlineSemTypes(e : Expr) = 
@@ -1501,119 +1618,182 @@ module NewestAg =
                     b.Substitute (fun vi -> if vi = v then Some value else None)
                 | _ -> e
 
-
         let private force (msg : string) (o : Option<'a>) =
             match o with
                 | Some o -> o
                 | None -> failwith msg
 
-        let private compileNormal (attName : string) (valueType : Type) (methods : list<MethodInfo>) =
+        let private convert (self : obj) (assumeStrict : Set<string>) (sf : SemanticFunction) =
+            let td = self.GetType()
 
-            let td = typedefof<Dispatcher<_,_>>.MakeGenericType [| typeof<Scope>; valueType |]
-            let create = td.GetMethod("CreateUntyped", BindingFlags.Static ||| BindingFlags.Public, Type.DefaultBinder, [| typeof<obj -> Type -> Option<obj * MethodInfo>> |], null)
-            let dispInvoke = td.GetMethod("Invoke")
+            let code = 
+                match inlineSemTypes sf.code with
+                    | Lambda(node, body) ->   
+                        let vscope = Var("scope", typeof<Scope>)
+                        let scope = Expr.Var vscope
+                        let rec repair (e : Expr) =
+                            match e with
+                                | Scope ->
+                                    scope
 
-            let someScope, noneScope =
-                let cases = FSharpType.GetUnionCases(typeof<Option<Scope>>)
-                let s = cases |> Seq.find (fun ci -> ci.Name = "Some")
-                let n = cases |> Seq.find (fun ci -> ci.Name = "None")
-                s,n
+                                | Synthesize(name, node) ->
+                                    let node = repair node
 
-            let someObj, noneObj =
-                let cases = FSharpType.GetUnionCases(typeof<Option<obj>>)
-                let s = cases |> Seq.find (fun ci -> ci.Name = "Some")
-                let n = cases |> Seq.find (fun ci -> ci.Name = "None")
-                s,n
-
-            let toInvokable (self : obj) (mi : MethodInfo) =
-                let e = Expr.TryGetReflectedDefinition(mi) |> force "should not be possible"
-                let expression = 
-                    match inlineSemTypes e with
-                        | Lambda(node, body) ->
-                                    
-                            let vscope = Var("scope", typeof<Scope>)
-                            let scope = Expr.Var vscope
-                            let rec repair (e : Expr) =
-                                match e with
-                                    | Scope ->
-                                        scope
-
-                                    | Synthesize(name, node) ->
-                                        let node = repair node
-
-                                        if name = attName then
-                                            let self = Expr.Value(self, td)
-                                            let vo = Var("child", typeof<obj>)
-                                            let o = Expr.Var vo
-                                            Expr.Let(
-                                                vo, Expr.Coerce(node, typeof<obj>), 
-                                                Expr.Call(self, dispInvoke, [o; <@@ (%%scope : Scope).ChildScope((%%o : obj)) @@>])
-                                            )
-                                        else
-                                            let td = typedefof<Dispatcher<_,_>>.MakeGenericType [| typeof<Scope>; e.Type |]
-                                            let invoke = td.GetMethod("Invoke")
-
+                                    let dispatcher =
+                                        if name = sf.name then 
+                                            Expr.Value(self, td)
+                                        else 
                                             let index = Globals.getAttributeIndex name
                                             let dispatcher = <@@ Globals.synDispatchers.[index] @@>
-                                            let vo = Var("child", typeof<obj>)
-                                            let o = Expr.Var vo
-                            
-                                            let dispatcher = Expr.Coerce(dispatcher, td)
-                                            Expr.Let(
-                                                vo, Expr.Coerce(node, typeof<obj>), 
-                                                Expr.Call(dispatcher, invoke, [o; <@@ (%%scope : Scope).ChildScope((%%o : obj)) @@>])
-                                            )
+                                            Expr.Coerce(dispatcher, td)
 
-                                    | Inherit(name,node) ->
-                                        let node = repair node
+                                    let td = dispatcher.Type
+                                    let vo = Var("child", typeof<obj>)
+                                    let o = Expr.Var vo
+                                    let childScope = Var("childScope", typeof<Scope>)
+                                    Expr.Let(
+                                        vo, Expr.Coerce(node, typeof<obj>), 
+                                        Expr.Let(
+                                            childScope, <@@ (%%scope : Scope).ChildScope((%%o : obj)) @@>,
+                                            //
+                                            Expr.Call(dispatcher, td.GetMethod("Invoke"), [o; Expr.Var childScope])
+                                        )
+                                    )
+
+                                | Inherit(name,node) ->
+                                    let node = repair node
+
+                                    if Set.contains name assumeStrict then
+                                        let index = Globals.getAttributeIndex name
+                                        Expr.Coerce(Expr.Call(scope, scopeGet, [Expr.Value(index)]), e.Type)
+                                    else
 
                                         let inh = inheritMeth.MakeGenericMethod [|e.Type|]
-                                        let td =typedefof<Dispatcher<_,_>>.MakeGenericType [| typeof<Scope>; e.Type |]
+                                        let td = typedefof<Dispatcher<_,_>>.MakeGenericType [| typeof<Scope>; e.Type |]
                                         let tr = typedefof<Dispatcher<_>>.MakeGenericType [| e.Type |]
                                         let index = Globals.getAttributeIndex name
                                         let dispatcher = 
-                                            if name = attName then Expr.Value(self, td)
+                                            if name = sf.name then Expr.Value(self, td)
                                             else Expr.Coerce(<@@ Globals.inhDispatchers.[index] @@>, td)
-                                        let rootDispatcher = Expr.Coerce(<@@ Globals.rootDispatchers.[index] @@>, tr)
+                                        let rootDispatcher = Expr.Coerce(<@@ Root.dispatchers.[index] @@>, tr)
                                         
                                         Expr.Call(scope, inh, [Expr.Value(index); dispatcher; rootDispatcher])
 
 
-                                    | AssignInherit(value) ->
-                                        repair value
+                                | AssignInherit(value) ->
+                                    repair value
 
-                                    | ShapeVar _ -> e
-                                    | ShapeLambda(v,b) -> Expr.Lambda(v, repair b)
-                                    | ShapeCombination(o, args) -> RebuildShapeCombination(o, args |> List.map repair)
+                                | ShapeVar _ -> e
+                                | ShapeLambda(v,b) -> Expr.Lambda(v, repair b)
+                                | ShapeCombination(o, args) -> RebuildShapeCombination(o, args |> List.map repair)
 
-                            Expr.Lambda(node, Expr.Lambda(vscope, repair body))
-                        | _ ->
-                            failwith "sadasdasdasdasd"
+                        Expr.Lambda(node, Expr.Lambda(vscope, repair body))
+                        //attName, [node; vscope], repair body
+                    | _ ->
+                        failwith "sadasdasdasdasd"
 
-                let lambda = QuotationCompiler.ToObject(expression, "Ag")
-                let invoke = lambda.GetType().GetMethod("Invoke", [| mi.GetParameters().[0].ParameterType; typeof<Scope> |])
-                if isNull invoke then Log.warn "hate"
-                Some (lambda, invoke)
-       
+            { sf with code = code }
 
-            let table = methods |> List.map (fun mi -> null, mi) |> MethodTable.ofList
+        let addStrictInh (self : obj) (strict : Set<string>) (sf : SemanticFunctions) (other : SemanticFunctions) =
+            { sf with
+                functions =
+                    sf.functions |> List.collect (fun synSF ->
+                        let inhIndex = other.index
+                        let other = other |> getMoreSpecific synSF.nodeType
+                        other |> List.map (fun inhSF ->
+                            let inhSF = convert self strict inhSF
+                            match inhSF.code, synSF.code with
+                                | Lambda(ni, Lambda(si, inh)), Lambda(ns, Lambda(ss, syn)) ->
+                                    let rec inlineInh (e : Expr) =
+                                        match e with
+                                            | Let(cs, (Call(Some s, mi, [n]) as childScope), body) when mi.Name = "ChildScope" && mi.DeclaringType = typeof<Scope> ->
+                                                Expr.Let(
+                                                    cs, inlineInh childScope,
+                                                    Expr.Sequential(
+                                                        Expr.Call(Expr.Var cs, scopeSet, [Expr.Value(inhIndex); Expr.Coerce(inh, typeof<obj>)]),
+                                                        inlineInh body
+                                                    )
+                                                )
+                                                
+                                            | ShapeVar v ->
+                                                if v = ns then Expr.Var ni
+                                                elif v = ss then Expr.Var si
+                                                else e
+                                            | ShapeLambda(v,b) ->
+                                                Expr.Lambda(v, inlineInh b)
+                                            | ShapeCombination(o, args) ->
+                                                RebuildShapeCombination(o, args |> List.map inlineInh)
+
+                                    { synSF with 
+                                        nodeType = ni.Type
+                                        code = Expr.Lambda(ni, Expr.Lambda(si, inlineInh syn)) 
+                                    }
+
+                                | _ ->
+                                    failwith ""
+                        )
+
+                    )
+            }
+
+        let private compileNormal (sf : SemanticFunctions) =
+            let strictInh =
+                match sf.kind with
+                    | AttributeKind.Synthesized ->
+                        sf.functions
+                            |> List.filter (fun sf ->Set.isEmpty sf.synthesizes)
+                            |> List.map (fun sf -> sf.inherits)
+                            |> Set.intersectMany
+                    | _ ->
+                        Set.empty
+
+            let td = typedefof<Dispatcher<_,_>>.MakeGenericType [| typeof<Scope>; sf.valueType |]
+            let create = td.GetMethod("CreateUntyped", BindingFlags.Static ||| BindingFlags.Public, Type.DefaultBinder, [| typeof<obj -> Type -> Option<obj * MethodInfo>> |], null)
+            let dispInvoke = td.GetMethod("Invoke")
+
+            let createTable (self : obj) =
+                let mutable final = { sf with functions = sf.functions |> List.map (fun sf -> convert self strictInh sf) }
+                for s in strictInh do
+                    let other = Globals.semanticFunctions.[s]
+                    final <- addStrictInh self strictInh final other
+
+                let methods = 
+                    final.functions |> List.choose (fun e ->
+                        match e.code with
+                            | Lambda(n,Lambda(s, body)) -> Some (sf.name, [n;s], body)
+                            | _ -> None
+                    )
+
+                let instance, methods = QuotationCompiler.CreateInstance methods
+ 
+                MethodTable.ofList [
+                    for m in methods do
+                        yield instance, m
+                ]
+
+            let mutable table = None
+
+            let getTable (self : obj) =
+                match table with
+                    | Some t -> t
+                    | None -> 
+                        let t = createTable self
+                        table <- Some t
+                        t
 
             let resolve (self : obj) (t : Type) =
-                let good = table |> MethodTable.tryResolve [| t |]   
-                match good with
-                    | Some (_,mi) ->
-                        toInvokable self mi
-                    | None ->
-                        None
+                self |> getTable |> MethodTable.tryResolve [| t; typeof<Scope> |]   
+
 
             create.Invoke(null, [|resolve :> obj|]) |> unbox<IDispatcher<Scope>>
 
-        let private compileRoot (attName : string) (valueType : Type) (methods : list<MethodInfo>) =
+        let private compileRoot (attName : string) (valueType : Type) (methods : list<SemanticFunction>) =
             let td = typedefof<Dispatcher<_>>.MakeGenericType [| valueType |]
             let create = td.GetMethod("Create", BindingFlags.Static ||| BindingFlags.Public, Type.DefaultBinder, [| typeof<list<obj * MethodInfo>> |], null)
 
             let realMethods =
-                methods |> List.mapi (fun i mi ->
+                methods |> List.mapi (fun i sf ->
+                    let mi = sf.original
                     if mi.IsGenericMethod then
                         failwith "[Ag] root rules must not be generic"
 
@@ -1648,24 +1828,19 @@ module NewestAg =
             let arg = methods |> Array.map (fun mi -> instance,mi) |> Array.toList
             create.Invoke(null, [|arg|]) |> unbox<IDispatcher>
 
+        
+
         let compile (sf : SemanticFunctions) =
             if sf.kind = AttributeKind.Inherited then 
-                let root, other = 
-                    sf.originals |> List.partition(fun mi -> 
-                        let args = mi.GetParameters()
-                        if args.Length = 1 then
-                            let t = args.[0].ParameterType
-                            t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Root<_>>
-                        else
-                            false
-                    )
-                Globals.rootDispatchers.[sf.index] <- compileRoot sf.name sf.valueType root
-                Globals.inhDispatchers.[sf.index] <- compileNormal sf.name sf.valueType other
+                let root, other = sf.functions |> List.partition(fun f -> f.isRoot)
+                Root.dispatchers.[sf.index] <- compileRoot sf.name sf.valueType root
+                Globals.inhDispatchers.[sf.index] <- compileNormal { sf with functions = other }
             else 
-                Globals.synDispatchers.[sf.index] <- compileNormal sf.name sf.valueType sf.originals
+                Globals.synDispatchers.[sf.index] <- compileNormal sf
 
     
     type IList =
+
         abstract member Sum : Scope -> int
         abstract member Sum : unit -> int
 
@@ -1674,7 +1849,7 @@ module NewestAg =
     type Nil() = 
         interface IList with
             member x.Sum (s : Scope) =
-                s.Get(1) |> unbox<int>
+                (s.Get(1) |> unbox<int>) + (s.Get(2) |> unbox<int>)
             member x.Sum () = 0
 
     type Cons(head : int, tail : IList) =
@@ -1683,6 +1858,8 @@ module NewestAg =
                 let child = s.ChildScope tail
                 let i = s.Get(1) |> unbox<int>
                 child.Set(1, 1 + i)
+                let i = s.Get(2) |> unbox<int>
+                child.Set(2, 10 + i)
                 x.Head + x.Tail.Sum child
 
             member x.Sum() = 
@@ -1691,6 +1868,20 @@ module NewestAg =
         member x.Head = head
         member x.Tail = tail
 
+    type Blubber() = 
+        interface IList with
+            member x.Sum (s : Scope) = 0
+            member x.Sum () = 0
+
+
+    type Sepp<'a>(value : 'a) = 
+        member x.Value = value
+
+    type MyCons(h, t) =
+        inherit Cons(h,t)
+
+    type MyOtherCons(h, t) =
+        inherit Cons(h,t)
 
 
     let private root = Some 1
@@ -1700,25 +1891,39 @@ module NewestAg =
 
     [<Semantic; ReflectedDefinition>]
     type Sems() =
-        member x.Sum(n : Nil) : int = n?Index
+        member x.Value(s : Sepp<'a>) = 
+            1
 
-        member x.Sum(c : Cons) : int = c.Head + c.Tail?Sum()
+        member x.Sum(n : Nil) : int = 
+            n?Index + n?Bla
+//            let o : obj = n?Index
+//            let b : obj = n?Bla
+//            o.GetHashCode() + b.GetHashCode()
+
+        member x.Sum(c : Cons) : int = 
+            c.Head + c.Tail?Sum()
+//
+//        member x.Index(r : Root<IList>) =
+//            inh <<= obj()
+//
+//        member x.Bla(r : Root<IList>) =
+//            inh <<= obj()
+
 
         member x.Index(r : Root<IList>) =
             inh <<= 0
-
         member x.Index(c : Cons) =
             inh <<= 1 + c?Index
 
+        member x.Index(c : MyCons) =
+            inh <<= 2 + c?Index
 
-//        member x.Set(n : Nil) = 
-//            ASet.single 1
-//
-//        member x.Set(c : Cons) = 
-//            aset {
-//                yield c.Head
-//                yield! c.Tail?Set()
-//            }
+
+        member x.Bla(r : Root<IList>) =
+            inh <<= 0
+
+        member x.Bla(c : Cons) =
+            inh <<= 10 + c?Bla
 
 
     [<Demo("aaaag")>]
@@ -1727,8 +1932,8 @@ module NewestAg =
             Introspection.GetAllTypesWithAttribute<SemanticAttribute>()
                 |> Seq.map (fun t -> t.E0)
                 |> Seq.collect (fun t -> 
-                    let all = t.GetMethods(BindingFlags.Static ||| BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.NonPublic)
-                    all |> Seq.filter (fun mi -> mi.DeclaringType = t && not (mi.Name.StartsWith "get_" || mi.Name.StartsWith "set_"))
+                    let all = t.GetMethods(BindingFlags.Static ||| BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.DeclaredOnly)
+                    all |> Seq.filter (fun mi -> not (mi.Name.StartsWith "get_" || mi.Name.StartsWith "set_"))
                    )
                 |> Seq.groupBy (fun mi -> mi.Name)
                 |> Seq.map (fun (name, mis) -> name, Seq.toList mis)
@@ -1736,68 +1941,70 @@ module NewestAg =
                 |> Seq.toArray
 
 
-
         let cnt = Globals.attributeCount()
+        Globals.semanticFunctions <- functions |> Seq.map (fun sf -> sf.name,sf) |> Map.ofSeq
         Globals.synDispatchers <- Array.zeroCreate cnt
         Globals.inhDispatchers <- Array.zeroCreate cnt
-        Globals.rootDispatchers <- Array.zeroCreate cnt
+        Root.dispatchers <- Array.zeroCreate cnt
 
         for f in functions do
             SemanticFunctions.compile f
 
-
         let disp = Globals.synDispatchers.[Globals.getAttributeIndex "Sum"] |> unbox<Dispatcher<Scope, int>>
+        let sum n =
+            match disp.TryInvoke(n, Scope.Root.ChildScope n) with
+                | (true, res) -> Some res
+                | _ -> None
 
-        let list = Cons(1, Cons(2, Nil()))
-        let sum n = 
-            disp.Invoke(n, Scope.Root.ChildScope n)
+        let list = Cons(1, MyCons(2, Nil()))
         Log.line "sum = %A" (sum list)
 
+        if true then
+
+            let rec long (n : int) =
+                if n = 0 then Nil() :> IList
+                else Cons(n, long (n-1)) :> IList
+
+            let test = long 1000
+            let testList = List.init 2000 (fun i -> 2000 - i)
+
+            for i in 1..10 do
+                sum test |> ignore
 
 
-        let rec long (n : int) =
-            if n = 0 then Nil() :> IList
-            else Cons(n, long (n-1)) :> IList
+            let iter = 100000
+            let sw = System.Diagnostics.Stopwatch()
+            sw.Start()
+            for i in 1 .. iter do
+                List.sum testList |> ignore
+            sw.Stop()
+            Log.line "list: %A" (sw.MicroTime / iter)
 
-        let test = long 1000
-        let testList = List.init 2000 (fun i -> 2000 - i)
+            let sw = System.Diagnostics.Stopwatch()
+            sw.Start()
+            for i in 1 .. iter do
+                let s = Scope.Root.ChildScope test
+                s.Set(1, 0)
+                s.Set(2, 0)
+                test.Sum s |> ignore
+            sw.Stop()
+            Log.line "virt: %A" (sw.MicroTime / iter)
 
-        for i in 1..10 do
-            sum test |> ignore
+            let sw = System.Diagnostics.Stopwatch()
+            sw.Start()
+            for i in 1 .. iter do
+                disp.Invoke(test, Scope.Root.ChildScope test) |> ignore
+            sw.Stop()
+            Log.line "ag:   %A" (sw.MicroTime / iter)
 
-
-        let iter = 100000
-        let sw = System.Diagnostics.Stopwatch()
-        sw.Start()
-        for i in 1 .. iter do
-            List.sum testList |> ignore
-        sw.Stop()
-        Log.line "list: %A" (sw.MicroTime / iter)
-
-        let sw = System.Diagnostics.Stopwatch()
-        sw.Start()
-        for i in 1 .. iter do
-            let s = Scope.Root.ChildScope test
-            s.Set(1, 0)
-            test.Sum s |> ignore
-        sw.Stop()
-        Log.line "virt: %A" (sw.MicroTime / iter)
-
-        let sw = System.Diagnostics.Stopwatch()
-        sw.Start()
-        for i in 1 .. iter do
-            sum test |> ignore
-        sw.Stop()
-        Log.line "ag:   %A" (sw.MicroTime / iter)
-
-        let sw = System.Diagnostics.Stopwatch()
-        let set = [0..9999] |> HashSet
-        sw.Start()
-        for i in 1 .. iter do
-            for i in 1 .. 1000 do
-                set.Contains i |> ignore
-        sw.Stop()
-        Log.line "hash: %A" (sw.MicroTime / iter)
+            let sw = System.Diagnostics.Stopwatch()
+            let set = [0..9999] |> HashSet
+            sw.Start()
+            for i in 1 .. iter do
+                for i in 1 .. 1000 do
+                    set.Contains i |> ignore
+            sw.Stop()
+            Log.line "hash: %A" (sw.MicroTime / iter)
 
 
 

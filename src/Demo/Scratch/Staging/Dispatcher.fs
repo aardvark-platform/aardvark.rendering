@@ -1054,7 +1054,8 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
 
         // create a table for all instances
         let errorLabel = il.DefineLabel()
-        let noResLabel = Label()
+        let noResLabel = il.DefineLabel()
+        let noRes = IL.Label()
 
         let targets = List<obj>()
         let targetCache = Dict<obj, int>()
@@ -1081,6 +1082,9 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
         il.Emit(OpCodes.Stloc, dynType)
 
 
+
+
+
         let callWhenType (otherwise : Label) (t : Type) (target : obj) (meth : MethodInfo) =    
             // if the types don't match goto error
             il.Emit(OpCodes.Ldloc, dynType)
@@ -1088,14 +1092,13 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
             il.Emit(OpCodes.Bne_Un, otherwise)
 
             if isNull meth then
-                
                 il.Emit(OpCodes.Ldc_I4_0)
                 il.Emit(OpCodes.Ret)
             else
                 if DispatcherConfig.InlineFunctionCalls && meth.CanInline then
                     let code, usedArgs = meth.MinimalInlineCode
 
-
+                    
                     let code =
                         code |> List.collect (fun i ->
                             let args = IL.Local(typeof<obj[]>)
@@ -1107,9 +1110,7 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
                                         IL.Call(mi.DeclaringType.GetMethod("TryInvoke"))
                                         IL.ConditionalJump(IL.True, doneLabel)
                                         
-                                        IL.Ldarg 2
-                                        IL.Ldarg 3
-                                        IL.Call(typeof<DispatcherErrorHelper>.GetMethod("Fail2"))
+                                        IL.Leave noRes
 
                                         IL.Mark(doneLabel)
                                         IL.Ldarg 4
@@ -1138,7 +1139,16 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
                         il.Emit(OpCodes.Ldarg_3)
 
                     // inline the callee's code
-                    Aardvark.Base.IL.Assembler.assembleTo il code
+
+                    let state =
+                        { 
+                            IL.Assembler.generator = il
+                            IL.Assembler.locals = Map.empty
+                            IL.Assembler.labels = Map.ofList [noRes, noResLabel]
+                            IL.Assembler.stack = []
+                        }
+
+                    Aardvark.Base.IL.Assembler.assembleTo' state code
 
                 else
                     // load the target (if not static)
@@ -1219,6 +1229,10 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
                 buildCascade table.[i]
 
 
+        il.MarkLabel(noResLabel)
+        il.Emit(OpCodes.Ldc_I4_0)
+        il.Emit(OpCodes.Ret)
+
 
         il.MarkLabel(errorLabel)
 
@@ -1262,12 +1276,9 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
                 info.self.Invoke(x, info.targets, a, b, &res)
 
     member x.Invoke(a : obj, b : 'b) =
-        let mutable foo = Unchecked.defaultof<'r>
-        x.TryInvoke(a,b,&foo) |> ignore
-        foo
-//        match x.TryInvoke(a,b) with
-//            | (true, r) -> r
-//            | _ -> failwithf "[Dispatcher] could not run with (%A, %A)" a b
+        match x.TryInvoke(a,b) with
+            | (true, r) -> r
+            | _ -> failwithf "[Dispatcher] could not run with (%A, %A)" a b
 
     member private x.Rebuild(a : obj, b : 'b, res : byref<'r>) : bool =
         let dynArg = a.GetType()
