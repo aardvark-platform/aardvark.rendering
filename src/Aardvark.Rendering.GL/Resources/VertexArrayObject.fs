@@ -99,6 +99,7 @@ module VertexArrayObjectExtensions =
                             )
            
                 | _ ->
+                    // Zero-Handle represents a NullBuffer -> disable VertexAttributeArray
                     if (att.Buffer.Handle = 0) then
                         //GL.VertexAttrib4(id, Vector4(0.0f, 0.0f, 1.0f, 1.0f)) // this way a default can be defined
                         GL.DisableVertexAttribArray(id)

@@ -76,6 +76,7 @@
     <Compile Include="Polygons.fs" />
     <Compile Include="AssimpInterop.fs" />
     <Compile Include="HelloWorld.fs" />
+    <Compile Include="NullBufferTest.fs" />
     <Compile Include="Vulkan.fs" />
     <Compile Include="Fonts.fs" />
     <Compile Include="Playground.fs" />
