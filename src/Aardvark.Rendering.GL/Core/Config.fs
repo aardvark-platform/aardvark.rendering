@@ -21,7 +21,7 @@ module Config =
     /// <summary>
     /// The minor GL Version for default contexts
     /// </summary>
-    let MinorVersion = 0
+    let MinorVersion = 3
 
     /// <summary>
     /// The number of subsamples for default windows

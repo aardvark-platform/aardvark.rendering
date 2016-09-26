@@ -40,8 +40,8 @@ module NullBufferTest =
                     IndexedAttributes =
                         SymDict.ofList [
                             DefaultSemantic.Positions,                  [| V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |] :> Array
-                            //DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
-                            DefaultSemantic.Colors,                     [| C4b.Blue; C4b.Blue; C4b.Blue; C4b.Blue |] :> Array
+                            DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
+                            //DefaultSemantic.Colors,                     [| C4b.Blue; C4b.Blue; C4b.Blue; C4b.Blue |] :> Array
                             DefaultSemantic.DiffuseColorCoordinates,    [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] :> Array
                         ]
                 )
@@ -49,14 +49,14 @@ module NullBufferTest =
             quad |> Sg.ofIndexedGeometry
 
         // Using NullBuffer for Colors (ShaderInput slot 0) -> Draw is not performed, but no warning or error in any form
-        // USing NullBuffer for Normals (ShaderInput slot 1) -> works
+        // USing NullBuffer for Normals (ShaderI nput slot 1) -> works
         // https://community.amd.com/thread/160069
 
-        //let nullBufferColors = BufferView(Mod.constant (NullBuffer(V4f.IIII) :> IBuffer), typeof<V4f>)
-        //let quadSg = Sg.VertexAttributeApplicator(DefaultSemantic.Colors, nullBufferColors, quadSg)
+        let nullBufferColors = BufferView(Mod.constant (NullBuffer(V4f.IOII) :> IBuffer), typeof<V4f>)
+        let quadSg = Sg.VertexAttributeApplicator(DefaultSemantic.Colors, nullBufferColors, quadSg)
 
-        let nullBufferNormals = BufferView(Mod.constant (NullBuffer(V4f.OIOO) :> IBuffer), typeof<V3f>)
-        let quadSg = Sg.VertexAttributeApplicator(DefaultSemantic.Normals, nullBufferNormals, quadSg)
+//        let nullBufferNormals = BufferView(Mod.constant (NullBuffer(V4f.OIOO) :> IBuffer), typeof<V3f>)
+//        let quadSg = Sg.VertexAttributeApplicator(DefaultSemantic.Normals, nullBufferNormals, quadSg)
 
         let sg =
             quadSg 
