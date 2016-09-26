@@ -1250,8 +1250,27 @@ module NewestAg =
     open Microsoft.FSharp.Quotations
     open Microsoft.FSharp.Quotations.Patterns
     open Microsoft.FSharp.Quotations.ExprShape
+    open System.Runtime.CompilerServices
 
+    type AttributeKind =
+        | None          = 0x00
+        | Inherited     = 0x01
+        | Synthesized   = 0x02
+        | Mixed         = 0x03
+
+        
+    [<AttributeUsage(AttributeTargets.Class, AllowMultiple = false)>]
     type SemanticAttribute() = inherit Attribute()
+
+    [<AttributeUsage(AttributeTargets.Property ||| AttributeTargets.Method, AllowMultiple = false); AllowNullLiteral>]
+    type AttributeAttribute(name : string, kind : AttributeKind) =
+        inherit Attribute()
+
+        member x.Name = name
+        member x.Kind = kind
+
+        new(kind : AttributeKind) = AttributeAttribute(null, kind)
+
 
     type Root<'a> = class end
 
@@ -1261,9 +1280,11 @@ module NewestAg =
         type Inh = class end
         let inh : Inh = Unchecked.defaultof<Inh>
 
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
         let (?) (o : 'a) (name : string) : 'b =
             failwith ""
-
+            
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
         let (<<=) (m : Inh) (value : 'a) =
             ()
 
@@ -1274,10 +1295,40 @@ module NewestAg =
             else
                 false
 
+        [<AutoOpen>]
+        module LookupExtensions = 
+            open Aardvark.Base.IL
+
+            let private attributeLookupCache = System.Collections.Concurrent.ConcurrentDictionary<MethodInfo, Option<string * AttributeKind>>()
+            let private rx = System.Text.RegularExpressions.Regex @"(get_)?(?<name>[a-zA-Z_0-9]+$)"
+            let (|AttributeLookup|_|) (mi : MethodInfo) =
+                attributeLookupCache.GetOrAdd (mi, fun mi ->
+                    let att = mi.GetCustomAttribute<AttributeAttribute>()
+                    if isNull att then
+                        None
+                    else
+                        let name =
+                            if isNull att.Name then 
+                                let m = rx.Match mi.Name 
+                                if m.Success then m.Groups.["name"].Value
+                                else failwith "bad att name"
+                            else 
+                                att.Name
+                        Some(name, att.Kind)
+                )
+
+
         let (|Synthesize|_|) (e : Expr) =
             match e with
                 | Application(Call(None, mi, [o; Value(:? string as name,_)]), Value(:? unit,_)) when mi.Name = "op_Dynamic" ->
                     Some(name, o)
+                
+                | Call(None, AttributeLookup(name, AttributeKind.Synthesized), o :: _) ->
+                    Some(name, o)     
+                              
+                | Call(Some o, AttributeLookup(name, AttributeKind.Synthesized), []) ->
+                    Some(name, o) 
+                                     
                 | _ ->
                     None
 
@@ -1285,6 +1336,13 @@ module NewestAg =
             match e with
                 | Call(None, mi, [o; Value(:? string as name,_)]) when not (isUnitFunction e.Type) && mi.Name = "op_Dynamic" ->
                     Some(name, o)
+
+                | Call(None, AttributeLookup(name, AttributeKind.Inherited), [o]) ->
+                    Some(name, o)
+
+                | Call(Some o, AttributeLookup(name, AttributeKind.Inherited), []) ->
+                    Some(name, o)
+
                 | _ ->
                     None
 
@@ -1362,11 +1420,6 @@ module NewestAg =
                 | null -> node.GetType().PrettyName
                 | p -> sprintf "%s/%s" (p.ToString()) (node.GetType().PrettyName)
 
-    type AttributeKind =
-        | None          = 0x00
-        | Inherited     = 0x01
-        | Synthesized   = 0x02
-        | Mixed         = 0x03
 
 
     type SemanticFunction =
@@ -1435,6 +1488,7 @@ module NewestAg =
     type Type with
         member x.MaybeAssignableFromSubtype(other : Type) =
             if x.IsAssignableFrom other then true
+            elif other.IsAssignableFrom x then true
             else other.IsInterface
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -1563,7 +1617,6 @@ module NewestAg =
                         Log.warn "[Ag] rules for %s have ambigous return types: [%s]" name (retTypes |> Seq.map (fun t -> t.PrettyName) |> String.concat "; ")
                         None
 
-                
                 return {
                     index           = Globals.getAttributeIndex name
                     name            = name
@@ -1572,8 +1625,7 @@ module NewestAg =
                     functions       = functions |> List.map (fun (_,_,f) -> f)
                 }
             }
-
-        
+  
         let getMoreSpecific (t : Type) (sf : SemanticFunctions) : list<SemanticFunction> =
             let mutable foundSelf = false
 
@@ -1704,6 +1756,11 @@ module NewestAg =
                             let inhSF = convert self strict inhSF
                             match inhSF.code, synSF.code with
                                 | Lambda(ni, Lambda(si, inh)), Lambda(ns, Lambda(ss, syn)) ->
+                                    let nf =
+                                        if ni.Type.IsAssignableFrom ns.Type then ns
+                                        elif ns.Type.IsAssignableFrom ni.Type then ni
+                                        else failwith "[Ag] interface-inherit rules not implemented atm."
+
                                     let rec inlineInh (e : Expr) =
                                         match e with
                                             | Let(cs, (Call(Some s, mi, [n]) as childScope), body) when mi.Name = "ChildScope" && mi.DeclaringType = typeof<Scope> ->
@@ -1716,7 +1773,8 @@ module NewestAg =
                                                 )
                                                 
                                             | ShapeVar v ->
-                                                if v = ns then Expr.Var ni
+                                                if v = ns then Expr.Var nf
+                                                elif v = ni then Expr.Var nf
                                                 elif v = ss then Expr.Var si
                                                 else e
                                             | ShapeLambda(v,b) ->
@@ -1725,8 +1783,8 @@ module NewestAg =
                                                 RebuildShapeCombination(o, args |> List.map inlineInh)
 
                                     { synSF with 
-                                        nodeType = ni.Type
-                                        code = Expr.Lambda(ni, Expr.Lambda(si, inlineInh syn)) 
+                                        nodeType = nf.Type
+                                        code = Expr.Lambda(nf, Expr.Lambda(si, inlineInh syn)) 
                                     }
 
                                 | _ ->
@@ -1842,7 +1900,6 @@ module NewestAg =
     type IList =
 
         abstract member Sum : Scope -> int
-        abstract member Sum : unit -> int
 
 
     
@@ -1850,7 +1907,6 @@ module NewestAg =
         interface IList with
             member x.Sum (s : Scope) =
                 (s.Get(1) |> unbox<int>) + (s.Get(2) |> unbox<int>)
-            member x.Sum () = 0
 
     type Cons(head : int, tail : IList) =
         interface IList with
@@ -1862,16 +1918,12 @@ module NewestAg =
                 child.Set(2, 10 + i)
                 x.Head + x.Tail.Sum child
 
-            member x.Sum() = 
-                head + tail.Sum()
-
         member x.Head = head
         member x.Tail = tail
 
     type Blubber() = 
         interface IList with
             member x.Sum (s : Scope) = 0
-            member x.Sum () = 0
 
 
     type Sepp<'a>(value : 'a) = 
@@ -1884,50 +1936,68 @@ module NewestAg =
         inherit Cons(h,t)
 
 
+
+
     let private root = Some 1
 
     let ag = obj()
     open Aardvark.Base.Incremental
 
-    [<Semantic; ReflectedDefinition>]
-    type Sems() =
-        member x.Value(s : Sepp<'a>) = 
-            1
 
-        member x.Sum(n : Nil) : int = 
-            n?Index + n?Bla
-//            let o : obj = n?Index
-//            let b : obj = n?Bla
-//            o.GetHashCode() + b.GetHashCode()
+    module Exts =
+        type IList with
+            [<Attribute(AttributeKind.Synthesized)>]
+            member x.Sum() : int = x?Sum()
 
-        member x.Sum(c : Cons) : int = 
-            c.Head + c.Tail?Sum()
-//
-//        member x.Index(r : Root<IList>) =
-//            inh <<= obj()
-//
-//        member x.Bla(r : Root<IList>) =
-//            inh <<= obj()
+            [<Attribute(AttributeKind.Inherited)>]
+            member x.Index : int = x?Index
+
+            [<Attribute(AttributeKind.Inherited)>]
+            member x.Bla : int = x?Bla
+
+        [<Semantic; ReflectedDefinition>]
+        type Sems() =
+            member x.Value(s : Sepp<'a>) = 
+                1
+
+            member x.Sum(n : Nil) : int = 
+                n.Index + n.Bla
+
+            member x.Sum(c : Cons) : int = 
+                c.Head + c.Tail.Sum()
+
+            member x.Index(r : Root<IList>) =
+                inh <<= 0
+
+            member x.Index(c : Cons) =
+                inh <<= 1 + c.Index
+
+            member x.Index(c : MyCons) =
+                inh <<= 2 + c.Index
 
 
-        member x.Index(r : Root<IList>) =
-            inh <<= 0
-        member x.Index(c : Cons) =
-            inh <<= 1 + c?Index
+            member x.Bla(r : Root<IList>) =
+                inh <<= 0
 
-        member x.Index(c : MyCons) =
-            inh <<= 2 + c?Index
-
-
-        member x.Bla(r : Root<IList>) =
-            inh <<= 0
-
-        member x.Bla(c : Cons) =
-            inh <<= 10 + c?Bla
+            member x.Bla(c : Cons) =
+                inh <<= 10 + c.Bla
 
 
     [<Demo("aaaag")>]
     let run() =
+        
+//        let t = typeof<aset<int>>
+//        let att = t.GetCustomAttributes(true) |> Seq.toList
+//        let resNames = t.Assembly.GetManifestResourceNames()
+//        use r = t.Assembly.GetManifestResourceStream(resNames.[0])
+//        let buffer = Array.zeroCreate (int r.Length)
+//        r.Read(buffer, 0, buffer.Length) |> ignore
+//
+//        let test = Microsoft.FSharp.Compiler.SourceCodeServices.FSharpAssembly.LoadFiles []
+//        printfn "%A" buffer
+//
+//        Environment.Exit 0
+
         let functions = 
             Introspection.GetAllTypesWithAttribute<SemanticAttribute>()
                 |> Seq.map (fun t -> t.E0)
@@ -1958,6 +2028,9 @@ module NewestAg =
 
         let list = Cons(1, MyCons(2, Nil()))
         Log.line "sum = %A" (sum list)
+
+        
+        
 
         if true then
 
