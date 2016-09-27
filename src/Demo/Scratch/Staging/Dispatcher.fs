@@ -62,6 +62,10 @@ module ``Reflection Extensions`` =
 
     let private idRx = System.Text.RegularExpressions.Regex @"[a-zA-Z_][a-zA-Z_0-9]*"
 
+
+    open Yaaf.FSharp.Scripting
+    open Microsoft.FSharp.Compiler.SourceCodeServices
+
     let rec private getPrettyNameInternal (t : Type) =
         let res = 
             match prettyNames.TryGetValue t with
@@ -116,7 +120,6 @@ module ``Reflection Extensions`` =
 
             else
 
-                let decl = mi.DeclaringType |> getPrettyName
                 let args = 
                     mi.GetParameters() 
                         |> Array.map (fun pi -> getPrettyName pi.ParameterType)
@@ -135,9 +138,9 @@ module ``Reflection Extensions`` =
                     getPrettyName mi.ReturnType
 
                 if mi.IsStatic then
-                    sprintf "static %s :: %s%s : %s -> %s" decl mi.Name gen args ret
+                    sprintf "static %s%s : %s -> %s" mi.Name gen args ret
                 else
-                    sprintf "member %s :: %s%s : %s -> %s" decl mi.Name gen args ret
+                    sprintf "member %s%s : %s -> %s" mi.Name gen args ret
         )
 
     let private getPrettyCtorName (ctor : ConstructorInfo) =
@@ -642,11 +645,33 @@ module private DispatcherConfig =
         ()
         #endif
 
-type IDispatcher =
+type IObjectDispatcher =
     abstract member TryInvoke : a : obj * [<Out>] res : byref<obj> -> bool
 
-type IDispatcher<'b> =
+type IObjectDispatcher<'b> =
     abstract member TryInvoke : a : obj * b : 'b * [<Out>] res : byref<obj> -> bool
+
+type IDispatcher<'r> =
+    abstract member TryInvoke : a : obj * [<Out>] res : byref<'r> -> bool
+
+type IDispatcher<'b, 'r> =
+    abstract member TryInvoke : a : obj * b : 'b * [<Out>] res : byref<'r> -> bool
+
+[<AbstractClass; Sealed; Extension>]
+type DispatcherExtensions private() =
+
+    [<Extension>]
+    static member Invoke(this : IDispatcher<'r>, node : obj) =
+        match this.TryInvoke(node) with
+            | (true, res) -> res
+            | _ -> failwithf "[Dispatcher] cannot run with (%A)" node
+            
+    [<Extension>]
+    static member Invoke(this : IDispatcher<'b, 'r>, node : obj, b : 'b) =
+        match this.TryInvoke(node, b) with
+            | (true, res) -> res
+            | _ -> failwithf "[Dispatcher] cannot run with (%A, %A)" node b
+
 
 type DispatcherErrorHelper =
     static member Fail1(a : obj, b : obj) : unit =
@@ -655,7 +680,7 @@ type DispatcherErrorHelper =
     static member Fail2(a : obj, b : obj) : unit =
         failwithf "[Dispatcher] could not run with (%A, %A)" a b
 
-type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
+type Dispatcher<'r> (tryGet : obj -> Type -> Option<obj * MethodInfo>) =
 
     static let emptyTargets : obj[]     = Array.zeroCreate 0
     static let rebuildMeth              = typeof<Dispatcher<'r>>.GetMethod("Rebuild", BindingFlags.NonPublic ||| BindingFlags.Instance)
@@ -881,7 +906,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         
         info <- newInfo
 
-    interface IDispatcher with
+    interface IObjectDispatcher with
         member x.TryInvoke(a,res) =
             let mutable r = Unchecked.defaultof<'r>
             if x.TryInvoke(a, &r) then
@@ -889,6 +914,9 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
                 true
             else
                 false
+
+    interface IDispatcher<'r> with
+        member x.TryInvoke(a, res) = x.TryInvoke(a, &res)
 
     member x.TableSize = info.tableSize
     member x.Collisions = info.collisions
@@ -911,7 +939,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
             if implementations.ContainsKey dynArg then
                 ()
             else
-                match tryGet dynArg with
+                match tryGet x dynArg with
                     | Some (target, meth) -> 
                         let parameters = meth.GetParameters()
 
@@ -929,58 +957,7 @@ type Dispatcher<'r> (tryGet : Type -> Option<obj * MethodInfo>) =
         )
         x.TryInvoke(a,&res)
 
-    static member Create (methods : list<obj * MethodInfo>) =
-        let table = MethodTable.ofList methods
-        let dispatcher =
-            Dispatcher<'r>(fun t ->
-                table |> MethodTable.tryResolve [| t |]
-            )
-
-        dispatcher  
-
-    static member Create (lambdas : list<obj>) =
-        lambdas 
-            |> List.choose (fun l ->
-                let best = l.GetType().InvokeMethod 1
-                if isNull best then None
-                else Some(l, best)
-               )
-            |> Dispatcher<'r>.Create
-
-    static member Create (f : Type -> Option<obj>) =
-        Dispatcher<'r>(fun t ->
-            match f t with
-                | Some lambda ->
-                    let t = lambda.GetType()
-                    let a, res = FSharpType.GetFunctionElements t
-                    let best = 
-                        t.GetMethod(
-                            "Invoke", 
-                            BindingFlags.Public ||| BindingFlags.Instance, 
-                            Type.DefaultBinder, 
-                            CallingConventions.Any, 
-                            [| a |], 
-                            null
-                        )   
-                    Some (lambda, best)
-                | None ->
-                    None
-        )
-
-    static member Compiled (f : Type -> Option<Expr>) =
-        Dispatcher<'r>(fun t ->
-            match f t with
-                | Some e ->
-                    let lambda = QuotationCompiler.ToObject e
-                    let best =  lambda.GetType().InvokeMethod 1
-                    if isNull best then None
-                    else Some (lambda, best)
-
-                | None ->
-                    None
-        )
-
-type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * MethodInfo>) =
+type Dispatcher<'b, 'r> (tryGet : obj -> Type -> Option<obj * MethodInfo>) =
 
     static let emptyTargets : obj[]     = Array.zeroCreate 0
     static let rebuildMeth              = typeof<Dispatcher<'b, 'r>>.GetMethod("Rebuild", BindingFlags.NonPublic ||| BindingFlags.Instance)
@@ -1256,7 +1233,7 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
         
         info <- newInfo
 
-    interface IDispatcher<'b> with
+    interface IObjectDispatcher<'b> with
         member x.TryInvoke(a,b,res) =
             let mutable r = Unchecked.defaultof<'r>
             if x.TryInvoke(a, b, &r) then
@@ -1264,6 +1241,9 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
                 true
             else
                 false
+
+    interface IDispatcher<'b, 'r> with
+        member x.TryInvoke(a, b, res) = x.TryInvoke(a, b, &res)
 
     member x.TableSize = info.tableSize
     member x.Collisions = info.collisions
@@ -1304,52 +1284,3 @@ type Dispatcher<'b, 'r> (tryGet : Dispatcher<'b, 'r> -> Type -> Option<obj * Met
                         rebuild x
         )
         x.TryInvoke(a,b,&res)
-
-    static member Create (methods : list<obj * MethodInfo>) =
-        let table = MethodTable.ofList methods
-        let dispatcher =
-            Dispatcher<'b, 'r>(fun self t ->
-                table |> MethodTable.tryResolve [| t; typeof<'b> |]
-            )
-
-        dispatcher  
-
-    static member Create (lambdas : list<obj>) =
-        lambdas 
-            |> List.choose (fun l ->
-                let best = l.GetType().InvokeMethod 2
-                if isNull best then None
-                else Some (l, best)
-               )
-            |> Dispatcher<'b, 'r>.Create
-
-    static member Create (f : Dispatcher<'b, 'r> -> Type -> Option<obj>) =
-        Dispatcher<'b, 'r>(fun s t ->
-            match f s t with
-                | Some lambda ->
-                    let t = lambda.GetType()
-                    let best =  lambda.GetType().InvokeMethod 2
-                    Some (lambda, best)
-                | None ->
-                    None
-        )
-
-    static member CreateUntyped (f : obj -> Type -> Option<obj * MethodInfo>) =
-        Dispatcher<'b, 'r>(fun s t -> f (s :> obj) t)
-
-
-    static member Compiled (f : Dispatcher<'b, 'r> -> Type -> Option<Expr>) =
-        Dispatcher<'b, 'r>(fun s t ->
-            match f s t with
-                | Some e ->
-                    let lambda = QuotationCompiler.ToObject(e, "Dispatcher")
-                    let best =  lambda.GetType().InvokeMethod 2
-            
-                    if isNull best then  None
-                    else Some (lambda, best)
-
-                | None ->
-                    None
-        )
-
-
