@@ -79,6 +79,7 @@ type App private () =
     static member Keyboard = getWin().Keyboard
     static member Mouse = getWin().Mouse
     static member Time = getWin().Time
+    static member WithCam sg = withCam sg
 
     static member run (task : IRenderTask) =
         realTask.Inner <- task
@@ -117,7 +118,7 @@ type App private () =
             match res with
                 | :? ISg as s ->
                     let w = getWin()
-                    let task = app.Value.Runtime.CompileRender(w.FramebufferSignature, withCam s)
+                    let task = app.Value.Runtime.CompileRender(w.FramebufferSignature, BackendConfiguration.NativeOptimized, withCam s)
                     realTask.Inner <- task
                     w.Show()
 
