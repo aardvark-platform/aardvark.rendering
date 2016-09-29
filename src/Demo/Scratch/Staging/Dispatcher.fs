@@ -645,15 +645,21 @@ module private DispatcherConfig =
         ()
         #endif
 
+[<AllowNullLiteral>]
 type IObjectDispatcher =
     abstract member TryInvoke : a : obj * [<Out>] res : byref<obj> -> bool
-
+[<AllowNullLiteral>]
+type IObjectDispatcher2=
+    abstract member TryInvoke : a : obj * b : obj * [<Out>] res : byref<obj> -> bool
+[<AllowNullLiteral>]
 type IObjectDispatcher<'b> =
+    inherit IObjectDispatcher2
     abstract member TryInvoke : a : obj * b : 'b * [<Out>] res : byref<obj> -> bool
-
+[<AllowNullLiteral>]
 type IDispatcher<'r> =
     abstract member TryInvoke : a : obj * [<Out>] res : byref<'r> -> bool
 
+[<AllowNullLiteral>]
 type IDispatcher<'b, 'r> =
     abstract member TryInvoke : a : obj * b : 'b * [<Out>] res : byref<'r> -> bool
 
@@ -1233,8 +1239,17 @@ type Dispatcher<'b, 'r> (tryGet : obj -> Type -> Option<obj * MethodInfo>) =
         
         info <- newInfo
 
+    interface IObjectDispatcher2 with
+        member x.TryInvoke(a : obj, b : obj, res : byref<obj>) =
+            let mutable r = Unchecked.defaultof<'r>
+            if x.TryInvoke(a, unbox b, &r) then
+                res <- r :> obj
+                true
+            else
+                false
+
     interface IObjectDispatcher<'b> with
-        member x.TryInvoke(a,b,res) =
+        member x.TryInvoke(a : obj, b : 'b, res : byref<obj>) =
             let mutable r = Unchecked.defaultof<'r>
             if x.TryInvoke(a, b, &r) then
                 res <- r :> obj
