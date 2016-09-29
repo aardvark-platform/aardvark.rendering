@@ -10,6 +10,7 @@ open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 
+
 [<CustomEquality;CustomComparison>]
 type PreparedRenderObject =
     {
@@ -153,6 +154,8 @@ type PreparedRenderObject =
         if not x.IsDisposed then
             x.IsDisposed <- true
 
+            use _ = x.Context.ResourceLock
+
             x.Activation.Dispose()
             match x.DrawBuffers with
                 | Some b -> b.RemoveRef()
@@ -245,6 +248,7 @@ module PreparedRenderObject =
                     Some b
                 | _ ->
                     None
+
         let res = 
             {
                 Activation = { new IDisposable with member x.Dispose() = () }
@@ -331,6 +335,9 @@ type ResourceManagerExtensions private() =
     static member Prepare (x : ResourceManager, fboSignature : IFramebufferSignature, rj : RenderObject) : PreparedRenderObject =
         // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
+
+//        ContextHandle.Current.Value.AttachDebugOutputIfNeeded()
+//        OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.DebugOutput)
 
         let activation = rj.Activate()
 
@@ -583,4 +590,14 @@ type ResourceManagerExtensions private() =
 
         res.ResourceCount <- res.Resources |> Seq.length
         res.ResourceCounts <- res.Resources |> Seq.countBy (fun r -> r.Kind) |> Map.ofSeq
+
+
+        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.ArrayBuffer, 0)
+        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer, 0)
+        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.CopyReadBuffer, 0)
+        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.CopyWriteBuffer, 0)
+        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
+        for i in 0 .. 7 do
+            OpenTK.Graphics.OpenGL4.GL.BindBufferBase(OpenTK.Graphics.OpenGL4.BufferRangeTarget.UniformBuffer, i, 0)
+
         res
