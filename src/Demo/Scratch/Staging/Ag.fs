@@ -3218,6 +3218,16 @@ module NewestAg =
 
 
     module Ag =
+        open System.Threading
+        open System.Collections.Concurrent
+
+        let currentScope : Scope[] = Array.zeroCreate 2048
+
+
+        let inline setScope (s : Scope) =
+            let id = Thread.CurrentThread.ManagedThreadId
+            currentScope.[id] <- s
+
         let synFunction<'a> (name : string) : obj -> 'a =
             match Globals.tryGetAttributeIndex name with
                 | Some i ->
@@ -3473,7 +3483,6 @@ module NewestAg =
                                         
                                             Expr.Call(scope, inh, [Expr.Value(index); dispatcher; rootDispatcher])
 
-
                                 | AssignInherit(value) ->
                                     repair value
 
@@ -3481,7 +3490,20 @@ module NewestAg =
                                 | ShapeLambda(v,b) -> Expr.Lambda(v, repair b)
                                 | ShapeCombination(o, args) -> RebuildShapeCombination(o, args |> List.map repair)
 
-                        Expr.Lambda(node, Expr.Lambda(vscope, repair body))
+
+
+                        let setCurrent (scope : Expr) = 
+                            let s : Expr<Scope> = Expr.Coerce(scope, typeof<Scope>) |> Expr.Cast
+                            <@ Ag.setScope %s @>
+
+
+                        let body =
+                            let rep = repair body
+                            rep
+//                            if sf.kind = AttributeKind.Synthesized && Set.isEmpty sf.synthesizes then Expr.Sequential(setCurrent scope, rep)
+//                            else rep
+
+                        Expr.Lambda(node, Expr.Lambda(vscope, body))
                         //attName, [node; vscope], repair body
                     | _ ->
                         failwith "sadasdasdasdasd"
