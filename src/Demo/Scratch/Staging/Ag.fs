@@ -112,7 +112,7 @@ module Ag =
                         Some value
                     | _ ->
                         None
-
+ 
         module Globals = 
             open System.Threading
             open System.Collections.Concurrent
@@ -124,6 +124,7 @@ module Ag =
             let private attributeIndices = ConcurrentDictionary<string, int>()
             let private semInstances = ConcurrentDictionary<Type, obj>()
             let mutable private currentIndex = -1
+
 
             let getInstance (t : Type) =
                 semInstances.GetOrAdd(t, fun t -> Activator.CreateInstance t)
@@ -161,89 +162,103 @@ module Ag =
         
         let mutable semanticFunctions  = Map.empty
 
-        [<AllowNullLiteral>]
-        type Scope =
-            class
-                val mutable public Parent   : Scope
-                val mutable public Node     : obj
-                val mutable public Cache    : Map<int, Option<obj>>
+    open Implementation
 
-                member inline x.ChildScope (child : obj) : Scope =
-                    Scope(x, child)
+    [<AllowNullLiteral>]
+    type Scope =
+        class
+            val mutable public Parent   : Scope
+            val mutable public Node     : obj
+            val mutable public Cache    : Map<int, Option<obj>>
 
-
-                abstract member TryGet : int -> Option<obj>
-
-                default x.TryGet(i : int) =
-                    if isNull x.Parent then
-                        match Map.tryFind i x.Cache with
-                            | Some a -> a
-                            | _ -> 
-                                match Globals.rootDispatchers.[i].TryInvoke(x.Node) with
-                                    | (true, res) ->
-                                        x.Cache <- Map.add i (Some res) x.Cache
-                                        Some res
-                                    | _ ->
-                                        x.Cache <- Map.add i None x.Cache
-                                        None
-                    else
-                        match Map.tryFind i x.Cache with
-                            | Some c -> c
-                            | None -> None
-
-                member x.TryInheritInternal(i : int, disp : IDispatcher<Scope, 'r>, root : IDispatcher<'r>) =
-                    match x.TryGet i with
-                        | Some r -> 
-                            match r with
-                                | :? 'r as r -> Some r
-                                | _ -> None
-                        | None ->
-                            let res = 
-                                match x.Parent with
-                                    | null -> 
-                                        match root.TryInvoke(x.Node) with
-                                            | (true, v) -> Some v
-                                            | _ -> None
-
-                                    | p -> 
-                                        match disp.TryInvoke(p.Node, p) with
-                                            | (true, res) -> Some res
-                                            | _ -> p.TryInheritInternal(i, disp, root)
-                            x.Cache <- Map.add i (res |> Option.map (fun v -> v :> obj)) x.Cache
-                            res
-
-                member x.Get(i : int) =
-                    match x.TryGet i with
-                        | Some v -> v
-                        | None -> failwithf "[Ag] could not get attribute %A" i
-
-                member x.InheritInternal(i : int, disp : IDispatcher<Scope, 'r>, root : IDispatcher<'r>) =
-                    match x.TryInheritInternal(i, disp, root) with
-                        | Some res -> res
-                        | None -> failwithf "[Ag] could not inherit attribute %A" i
-
-                member x.Inherit<'r>(i : int) : 'r =
-                    let disp = Globals.inhDispatchers.[i] |> unbox<IDispatcher<Scope, 'r>>
-                    let root = Globals.rootDispatchers.[i] |> unbox<IDispatcher<'r>>
-                    x.InheritInternal(i, disp, root)
-
-                member x.TryInherit<'r>(i : int) : Option<'r> =
-                    let disp = Globals.inhDispatchers.[i] |> unbox<IDispatcher<Scope, 'r>>
-                    let root = Globals.rootDispatchers.[i] |> unbox<IDispatcher<'r>>
-                    x.TryInheritInternal(i, disp, root)
-
-                override x.ToString() =
-                    match x.Parent with
-                        | null -> x.Node.GetType().PrettyName
-                        | p -> sprintf "%s/%s" (p.ToString()) (x.Node.GetType().PrettyName)
+            member inline x.ChildScope (child : obj) : Scope =
+                Scope(x, child)
 
 
-                new(p : Scope, n : obj) = { Parent = p; Node = n; Cache = Map.empty }
-                new(n : obj) = { Parent = null; Node = n; Cache = Map.empty }
+            abstract member TryGet : int -> Option<obj>
+
+            default x.TryGet(i : int) =
+                if isNull x.Parent then
+                    match Map.tryFind i x.Cache with
+                        | Some a -> a
+                        | _ -> 
+                            match Globals.rootDispatchers.[i].TryInvoke(x.Node) with
+                                | (true, res) ->
+                                    x.Cache <- Map.add i (Some res) x.Cache
+                                    Some res
+                                | _ ->
+                                    x.Cache <- Map.add i None x.Cache
+                                    None
+                else
+                    match Map.tryFind i x.Cache with
+                        | Some c -> c
+                        | None -> None
+
+            member x.TryInheritInternal(i : int, disp : IDispatcher<Scope, 'r>, root : IDispatcher<'r>) =
+                match x.TryGet i with
+                    | Some r -> 
+                        match r with
+                            | :? 'r as r -> Some r
+                            | _ -> None
+                    | None ->
+                        let res = 
+                            match x.Parent with
+                                | null -> 
+                                    match root.TryInvoke(x.Node) with
+                                        | (true, v) -> Some v
+                                        | _ -> None
+
+                                | p -> 
+                                    match disp.TryInvoke(p.Node, p) with
+                                        | (true, res) -> Some res
+                                        | _ -> p.TryInheritInternal(i, disp, root)
+                        x.Cache <- Map.add i (res |> Option.map (fun v -> v :> obj)) x.Cache
+                        res
+
+            member x.Get(i : int) =
+                match x.TryGet i with
+                    | Some v -> v
+                    | None -> failwithf "[Ag] could not get attribute %A" i
+
+            member x.InheritInternal(i : int, disp : IDispatcher<Scope, 'r>, root : IDispatcher<'r>) =
+                match x.TryInheritInternal(i, disp, root) with
+                    | Some res -> res
+                    | None -> failwithf "[Ag] could not inherit attribute %A" i
+
+            member x.Inherit<'r>(i : int) : 'r =
+                let disp = Globals.inhDispatchers.[i] |> unbox<IDispatcher<Scope, 'r>>
+                let root = Globals.rootDispatchers.[i] |> unbox<IDispatcher<'r>>
+                x.InheritInternal(i, disp, root)
+
+            member x.TryInherit<'r>(i : int) : Option<'r> =
+                let disp = Globals.inhDispatchers.[i] |> unbox<IDispatcher<Scope, 'r>>
+                let root = Globals.rootDispatchers.[i] |> unbox<IDispatcher<'r>>
+                x.TryInheritInternal(i, disp, root)
+
+            override x.ToString() =
+                match x.Parent with
+                    | null -> x.Node.GetType().PrettyName
+                    | p -> sprintf "%s/%s" (p.ToString()) (x.Node.GetType().PrettyName)
 
 
-            end
+            new(p : Scope, n : obj) = { Parent = p; Node = n; Cache = Map.empty }
+            new(n : obj) = { Parent = null; Node = n; Cache = Map.empty }
 
+
+        end
+
+    type CurrentScope private() =
+        [<DefaultValue; ThreadStatic>]
+        static val mutable private instance : Scope
+
+        static member Instance
+            with get() = CurrentScope.instance
+            and set i = CurrentScope.instance <- i
+
+    let getScope() =
+        CurrentScope.Instance
+
+    module GenericStuff = 
         module private CodeGen =
             open System
             open System.IO
@@ -364,7 +379,7 @@ module Ag =
                 File.WriteAllText(@"C:\Users\schorsch\Desktop\scopes.fs", builder.ToString())
 
         [<AutoOpen>]
-        module GeneratedGenericStuff =
+        module Generated =
             [<AllowNullLiteral>]
             type Scope<'a>(i0 : int, parent : Scope<'a>, node : obj) =
                 inherit Scope(parent, node)
@@ -3075,457 +3090,475 @@ module Ag =
                         | [t0; t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12; t13; t14; t15; t16; t17; t18; t19; t20; t21; t22; t23; t24; t25; t26; t27; t28; t29; t30] -> typedefof<WrappedDispatcher<_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_>>.MakeGenericType [| t0; t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12; t13; t14; t15; t16; t17; t18; t19; t20; t21; t22; t23; t24; t25; t26; t27; t28; t29; t30; ret |]
                         | _ -> failwith "[Ag] too many strict arguments"
 
-        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-        module SemanticFunctions =
-            open Aardvark.Base.Monads.Option
-
-            type Type with
-                member x.MaybeAssignableFromSubtype(other : Type) =
-                    if x.IsAssignableFrom other then true
-                    elif other.IsAssignableFrom x then true
-                    else other.IsInterface
-
-            let private assign = Aardvark.Base.QuotationReflectionHelpers.getMethodInfo <@@ (<<=) @@>
-            let private dyn = Aardvark.Base.QuotationReflectionHelpers.getMethodInfo <@@ (?) @@>
-            let private scopeProp = typeof<Globals.Marker>.DeclaringType.GetProperty("scope")
-            let private instance = typeof<Globals.Marker>.DeclaringType.GetMethod("getTypedInstance")
-            let private inheritMeth = typeof<Scope>.GetMethod("InheritInternal")
-
-            let (|Scope|_|) (e : Expr) =
-                match e with
-                    | PropertyGet(None, p, []) when p = scopeProp ->
-                        Some ()
-                    | _ ->
-                        None
+    open GenericStuff
 
 
-            module private List =
-                let rec mapOpt (f : 'a -> Option<'b>) (l : list<'a>) : Option<list<'b>> =
-                    match l with
-                        | [] -> Some []
-                        | h :: rest ->
-                            match f h with
-                                | Some v -> 
-                                    match mapOpt f rest with
-                                        | Some rest -> Some (v :: rest)
-                                        | None -> None
-                                | None ->
-                                    None
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module SemanticFunctions =
+        open Aardvark.Base.Monads.Option
 
-            let rec private tryGetInheritType (e : Expr) =
-                match e with
-                    | AssignInherit(v) -> Some v.Type
-                    | ShapeVar(_) -> None
-                    | ShapeLambda(_,b) -> tryGetInheritType b
-                    | ShapeCombination(o, args) -> args |> List.tryPick tryGetInheritType
+        type Type with
+            member x.MaybeAssignableFromSubtype(other : Type) =
+                if x.IsAssignableFrom other then true
+                elif other.IsAssignableFrom x then true
+                else other.IsInterface
 
+        let private assign = Aardvark.Base.QuotationReflectionHelpers.getMethodInfo <@@ (<<=) @@>
+        let private dyn = Aardvark.Base.QuotationReflectionHelpers.getMethodInfo <@@ (?) @@>
+        let private scopeProp = typeof<Globals.Marker>.DeclaringType.GetProperty("scope")
+        let private scopeMeth = typeof<Scope>.DeclaringType.GetMethod("getScope")
+        let private instance = typeof<Globals.Marker>.DeclaringType.GetMethod("getTypedInstance")
+        let private inheritMeth = typeof<Scope>.GetMethod("InheritInternal")
 
-            let rec private visit (syn : HashSet<string>) (inh : HashSet<string>) (retType : byref<Type>) (kind : byref<AttributeKind>) (e : Expr) =
-                match e with
-                    | AssignInherit(value) ->
-                        kind <- AttributeKind.Inherited
-                        retType <- value.Type
-                        visit syn inh &retType &kind value
-
-                    | Inherit(name, o) -> 
-                        inh.Add name |> ignore
-                        visit syn inh &retType &kind o
-
-                    | Synthesize(name, o) ->
-                        syn.Add name |> ignore
-                        visit syn inh &retType &kind o
-
-                    | ShapeVar _ -> ()
-                    | ShapeLambda(_,b) -> visit syn inh &retType &kind b
-                    | ShapeCombination(o,args) -> for a in args do visit syn inh &retType &kind a
+        let (|Scope|_|) (e : Expr) =
+            match e with
+                | PropertyGet(None, p, []) when p = scopeProp ->
+                    Some ()
+                | Call(None, m, []) when m = scopeMeth ->
+                    Some ()
+                | _ ->
+                    None
 
 
-            let ofMethods (name : string) (methods : list<MethodInfo>) =
-                option {
-
-                    let expressions =
-                        methods |> List.choose (fun m ->
-                            if m.ReturnType.ContainsGenericParameters then
-                                Log.warn "[Ag] semantic functions may not return generic values '%s'" m.PrettyName
+        module private List =
+            let rec mapOpt (f : 'a -> Option<'b>) (l : list<'a>) : Option<list<'b>> =
+                match l with
+                    | [] -> Some []
+                    | h :: rest ->
+                        match f h with
+                            | Some v -> 
+                                match mapOpt f rest with
+                                    | Some rest -> Some (v :: rest)
+                                    | None -> None
+                            | None ->
                                 None
-                            else
-                                match Expr.TryGetReflectedDefinition m with
-                                    | Some e -> Some (m, e)
-                                    | None ->
-                                        Log.warn "[Ag] could not get reflected definition for semantic function '%s'" m.PrettyName
-                                        None
-                        )
 
+        let rec private tryGetInheritType (e : Expr) =
+            match e with
+                | AssignInherit(v) -> Some v.Type
+                | ShapeVar(_) -> None
+                | ShapeLambda(_,b) -> tryGetInheritType b
+                | ShapeCombination(o, args) -> args |> List.tryPick tryGetInheritType
 
-                    let functions =
-                        expressions |> List.map (fun (mi, e) ->
-                        
-                            let syn = HashSet<string>()
-                            let inh = HashSet<string>()
-                            let mutable ret = mi.ReturnType
-                            let mutable kind = AttributeKind.Synthesized
-                            visit syn inh &ret &kind e
+        let rec private visit (syn : HashSet<string>) (inh : HashSet<string>) (retType : byref<Type>) (kind : byref<AttributeKind>) (e : Expr) =
+            match e with
+                | AssignInherit(value) ->
+                    kind <- AttributeKind.Inherited
+                    retType <- value.Type
+                    visit syn inh &retType &kind value
 
-                            let isRoot =
-                                let parameters = mi.GetParameters()
-                                if parameters.Length = 1 then
-                                    let t = parameters.[0].ParameterType
-                                    t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Root<_>>
-                                else
-                                    false
+                | Inherit(name, o) -> 
+                    inh.Add name |> ignore
+                    visit syn inh &retType &kind o
 
-                            let func = 
-                                {
-                                    original    = mi
-                                    code        = e
-                                    isRoot      = isRoot
-                                    kind        = kind
-                                    name        = name
-                                    nodeType    = mi.GetParameters().[0].ParameterType
-                                    inherits    = HashSet.toSet inh
-                                    synthesizes = HashSet.toSet syn
-                                }
+                | Synthesize(name, o) ->
+                    syn.Add name |> ignore
+                    visit syn inh &retType &kind o
 
-                            ret, kind, func
-                        )
+                | ShapeVar _ -> ()
+                | ShapeLambda(_,b) -> visit syn inh &retType &kind b
+                | ShapeCombination(o,args) -> for a in args do visit syn inh &retType &kind a
 
-                    let! kind = 
-                        match functions |> List.fold (fun k (_,kk,_) -> k ||| kk) AttributeKind.None with
-                            | AttributeKind.Mixed | AttributeKind.None -> 
-                                Log.warn "[Ag] attribute '%s' has conflicting kinds (omitting)" name 
-                                None
-                            | kind -> 
-                                Some kind
+        let ofMethods (name : string) (methods : list<MethodInfo>) =
+            option {
 
-                    let! retType =
-                        let retTypes = functions |> List.map (fun (t,_,_) -> t) |> HashSet
-                        if retTypes.Count = 1 then Some (Seq.head retTypes)
-                        else 
-                            Log.warn "[Ag] rules for %s have ambigous return types: [%s]" name (retTypes |> Seq.map (fun t -> t.PrettyName) |> String.concat "; ")
+                let expressions =
+                    methods |> List.choose (fun m ->
+                        if m.ReturnType.ContainsGenericParameters then
+                            Log.warn "[Ag] semantic functions may not return generic values '%s'" m.PrettyName
                             None
-
-                    return {
-                        index           = Globals.getAttributeIndex name
-                        name            = name
-                        kind            = kind
-                        valueType       = retType
-                        functions       = functions |> List.map (fun (_,_,f) -> f)
-                    }
-                }
-  
-            let getMoreSpecific (t : Type) (sf : SemanticFunctions) : list<SemanticFunction> =
-                let mutable foundSelf = false
-
-                let functions = 
-                    sf.functions |> List.filter (fun sf ->
-                        if sf.nodeType = t then foundSelf <- true
-                        t.MaybeAssignableFromSubtype sf.nodeType
+                        else
+                            match Expr.TryGetReflectedDefinition m with
+                                | Some e -> Some (m, e)
+                                | None ->
+                                    Log.warn "[Ag] could not get reflected definition for semantic function '%s'" m.PrettyName
+                                    None
                     )
 
-                if foundSelf then
-                    functions
-                else
-                    //<@ fun (x : #t) -> inh <<= (x?name : 'valueType) @>
-                    let autoInherit = 
-                        let assign = assign.MakeGenericMethod [|sf.valueType|]
-                        let dyn = dyn.MakeGenericMethod [| t; sf.valueType |]
-                        let self = Var("node", t)
-                        Expr.Lambda(
-                            self,
-                            Expr.Call(assign, [Expr.Value(inh); Expr.Call(dyn, [Expr.Var self; Expr.Value(sf.name)])])
-                        )
 
-                    let self =
-                        {
-                            name        = sf.name
-                            kind        = sf.kind
-                            original    = null
-                            nodeType    = t
-                            code        = autoInherit
-                            isRoot      = false
-                            inherits    = Set.ofList [sf.name]
-                            synthesizes = Set.empty
-                        }
+                let functions =
+                    expressions |> List.map (fun (mi, e) ->
+                        
+                        let syn = HashSet<string>()
+                        let inh = HashSet<string>()
+                        let mutable ret = mi.ReturnType
+                        let mutable kind = AttributeKind.Synthesized
+                        visit syn inh &ret &kind e
 
-                    self :: functions
+                        let isRoot =
+                            let parameters = mi.GetParameters()
+                            if parameters.Length = 1 then
+                                let t = parameters.[0].ParameterType
+                                t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Root<_>>
+                            else
+                                false
 
+                        let func = 
+                            {
+                                original    = mi
+                                code        = e
+                                isRoot      = isRoot
+                                kind        = kind
+                                name        = name
+                                nodeType    = mi.GetParameters().[0].ParameterType
+                                inherits    = HashSet.toSet inh
+                                synthesizes = HashSet.toSet syn
+                            }
 
-            let private inlineSemTypes(e : Expr) = 
-                match e with
-                    | Lambda(v,b) when v.Type.IsDefined(typeof<SemanticAttribute>) ->
-                        let value = Expr.Value(Globals.getInstance v.Type, v.Type)
-                        b.Substitute (fun vi -> if vi = v then Some value else None)
-                    | _ -> e
+                        ret, kind, func
+                    )
 
-            let private force (msg : string) (o : Option<'a>) =
-                match o with
-                    | Some o -> o
-                    | None -> failwith msg
+                let! kind = 
+                    match functions |> List.fold (fun k (_,kk,_) -> k ||| kk) AttributeKind.None with
+                        | AttributeKind.Mixed | AttributeKind.None -> 
+                            Log.warn "[Ag] attribute '%s' has conflicting kinds (omitting)" name 
+                            None
+                        | kind -> 
+                            Some kind
 
-            let private convert (selfVar : Var) (scopeType : Type) (assumeStrict : Map<string, int>) (sf : SemanticFunction) =
-                let code = 
-                    match inlineSemTypes sf.code with
-                        | Lambda(node, body) ->   
-                            let vscope = Var("scope", scopeType)
-                            let scope = Expr.Var vscope
-                            let rec repair (e : Expr) =
-                                match e with
-                                    | Scope ->
-                                        scope
+                let! retType =
+                    let retTypes = functions |> List.map (fun (t,_,_) -> t) |> HashSet
+                    if retTypes.Count = 1 then Some (Seq.head retTypes)
+                    else 
+                        Log.warn "[Ag] rules for %s have ambigous return types: [%s]" name (retTypes |> Seq.map (fun t -> t.PrettyName) |> String.concat "; ")
+                        None
 
-                                    | Synthesize(name, node) ->
-                                        let node = repair node
-                                        let td = selfVar.Type
-                                        let dispatcher =
-                                            if name = sf.name then 
-                                                Expr.Var selfVar
-                                            else 
-                                                let index = Globals.getAttributeIndex name
-                                                let dispatcher = <@@ Globals.synDispatchers.[index] @@>
-                                                Expr.Coerce(dispatcher, td)
-
-                                        let vo = Var("child", typeof<obj>)
-                                        let o = Expr.Var vo
-                                        let childScope = Var("childScope", scopeType)
-
-                                        let invoke = td.GetMethod("Invoke") //MethodInfo.Create(td, "Invoke", [|typeof<obj>; scopeType|], e.Type)
-                                        let getChild = scopeType.GetMethod("ChildScope", BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.DeclaredOnly) //MethodInfo.Create(scope.Type, "ChildScope", [| typeof<obj> |], scope.Type)
-
-                                        Expr.Let(
-                                            vo, Expr.Coerce(node, typeof<obj>), 
-                                            Expr.Let(
-                                                childScope, Expr.Call(scope, getChild, [o]),
-                                                Expr.Call(dispatcher, invoke, [o; Expr.Var childScope])
-                                            )
-                                        )
-
-                                    | Inherit(name,node) ->
-                                        let node = repair node
-
-                                        match Map.tryFind name assumeStrict with
-                                            | Some i ->
-                                                let field = scopeType.GetField(sprintf "F%d" i)
-                                                Expr.FieldGet(scope, field)
-
-                                            | None -> 
-                                        
-                                                let inh = inheritMeth.MakeGenericMethod [|e.Type|]
-                                                let td = typedefof<Dispatcher<_,_>>.MakeGenericType [| scopeType; e.Type |]
-                                                let tr = typedefof<Dispatcher<_>>.MakeGenericType [| e.Type |]
-                                                let index = Globals.getAttributeIndex name
-                                                let dispatcher = 
-                                                    if name = sf.name then Expr.Var(selfVar)
-                                                    else Expr.Coerce(<@@ Globals.inhDispatchers.[index] @@>, td)
-                                                let rootDispatcher = Expr.Coerce(<@@ Globals.rootDispatchers.[index] @@>, tr)
-                                        
-                                                Expr.Call(scope, inh, [Expr.Value(index); dispatcher; rootDispatcher])
-
-                                    | AssignInherit(value) ->
-                                        repair value
-
-                                    | ShapeVar _ -> e
-                                    | ShapeLambda(v,b) -> Expr.Lambda(v, repair b)
-                                    | ShapeCombination(o, args) -> RebuildShapeCombination(o, args |> List.map repair)
-
-
-
-                            let body = repair body
-
-                            Expr.Lambda(node, Expr.Lambda(vscope, body))
-                            //attName, [node; vscope], repair body
-                        | _ ->
-                            failwith "sadasdasdasdasd"
-
-                { sf with code = code }
-
-            let private addStrictInh (selfVar : Var) (scopeType : Type) (strict : Map<string, int>) (sf : SemanticFunctions) (otherSF : SemanticFunctions) =
-                { sf with
-                    functions =
-                        sf.functions |> List.collect (fun synSF ->
-                            let inhIndex = otherSF.index
-                            let other = otherSF |> getMoreSpecific synSF.nodeType
-                            let field = scopeType.GetField(sprintf "F%d" strict.[otherSF.name])
-
-                            other |> List.map (fun inhSF ->
-                                let inhSF = convert selfVar scopeType strict inhSF
-                                match inhSF.code, synSF.code with
-                                    | Lambda(ni, Lambda(si, inh)), Lambda(ns, Lambda(ss, syn)) ->
-                                        let nf =
-                                            if ni.Type.IsAssignableFrom ns.Type then ns
-                                            elif ns.Type.IsAssignableFrom ni.Type then ni
-                                            else failwith "[Ag] interface-inherit rules not implemented atm."
-
-                                        let rec inlineInh (e : Expr) =
-                                            match e with
-                                                | Let(cs, (Call(Some s, mi, [n]) as childScope), body) when mi.Name = "ChildScope" && typeof<Scope>.IsAssignableFrom mi.DeclaringType ->
-                                                    Expr.Let(
-                                                        cs, inlineInh childScope,
-                                                        Expr.Sequential(
-                                                            Expr.FieldSet(Expr.Var cs, field, inh),
-                                                            //Expr.Call(Expr.Var cs, scopeSet, [Expr.Value(inhIndex); Expr.Coerce(inh, typeof<obj>)]),
-                                                            inlineInh body
-                                                        )
-                                                    )
-                                                
-                                                | ShapeVar v ->
-                                                    if v = ns then Expr.Var nf
-                                                    elif v = ni then Expr.Var nf
-                                                    elif v = ss then Expr.Var si
-                                                    else e
-                                                | ShapeLambda(v,b) ->
-                                                    Expr.Lambda(v, inlineInh b)
-                                                | ShapeCombination(o, args) ->
-                                                    RebuildShapeCombination(o, args |> List.map inlineInh)
-
-                                        { synSF with 
-                                            nodeType = nf.Type
-                                            code = Expr.Lambda(nf, Expr.Lambda(si, inlineInh syn)) 
-                                        }
-
-                                    | _ ->
-                                        failwith ""
-                            )
-
-                        )
+                return {
+                    index           = Globals.getAttributeIndex name
+                    name            = name
+                    kind            = kind
+                    valueType       = retType
+                    functions       = functions |> List.map (fun (_,_,f) -> f)
                 }
+            }
+  
+        let getMoreSpecific (t : Type) (sf : SemanticFunctions) : list<SemanticFunction> =
+            let mutable foundSelf = false
 
-            let private compileNormal (sf : SemanticFunctions) =
-                let strictInh =
-                    match sf.kind with
-                        | AttributeKind.Synthesized ->
-                            sf.functions
-                                |> List.filter (fun sf ->Set.isEmpty sf.synthesizes)
-                                |> List.map (fun sf -> sf.inherits)
-                                |> Set.intersectMany
-                        | _ ->
-                            Set.empty
+            let functions = 
+                sf.functions |> List.filter (fun sf ->
+                    if sf.nodeType = t then foundSelf <- true
+                    t.MaybeAssignableFromSubtype sf.nodeType
+                )
 
-                let inhIndices = strictInh |> Seq.mapi (fun i n -> (n,i)) |> Seq.toList
-                let types = inhIndices |> List.map (fun (n,i) -> semanticFunctions.[n].valueType)
-                let attributeIndices = strictInh |> Seq.map (fun n -> Globals.getAttributeIndex(n)) |> Seq.toList
-                let strictInh = Map.ofList inhIndices
+            if foundSelf then
+                functions
+            else
+                //<@ fun (x : #t) -> inh <<= (x?name : 'valueType) @>
+                let autoInherit = 
+                    let assign = assign.MakeGenericMethod [|sf.valueType|]
+                    let dyn = dyn.MakeGenericMethod [| t; sf.valueType |]
+                    let self = Var("node", t)
+                    Expr.Lambda(
+                        self,
+                        Expr.Call(assign, [Expr.Value(inh); Expr.Call(dyn, [Expr.Var self; Expr.Value(sf.name)])])
+                    )
 
-                let scopeType = Scope.getType types
-                let dispType = WrappedDispatcher.getType sf.valueType types
+                let self =
+                    {
+                        name        = sf.name
+                        kind        = sf.kind
+                        original    = null
+                        nodeType    = t
+                        code        = autoInherit
+                        isRoot      = false
+                        inherits    = Set.ofList [sf.name]
+                        synthesizes = Set.empty
+                    }
 
-                let dispType = dispType
-                let selfDisp = Var(sprintf "self_%s" (Guid.NewGuid().ToString("N")), dispType)
+                self :: functions
 
-                let dispatcher =
-                    let mutable final = { sf with functions = sf.functions |> List.map (fun sf -> convert selfDisp scopeType strictInh sf) }
-                    for (KeyValue(s,_)) in strictInh do
-                        let other = semanticFunctions.[s]
-                        final <- addStrictInh selfDisp scopeType strictInh final other
 
-                    let methods = 
-                        final.functions |> List.choose (fun e ->
-                            match e.code with
-                                | Lambda(n,Lambda(s, body)) -> Some (sf.name, [n;Var(s.Name, scopeType)], fun _ -> body)
-                                | _ -> None
-                        )
+        let private inlineSemTypes(e : Expr) = 
+            match e with
+                | Lambda(v,b) when v.Type.IsDefined(typeof<SemanticAttribute>) ->
+                    let value = Expr.Value(Globals.getInstance v.Type, v.Type)
+                    b.Substitute (fun vi -> if vi = v then Some value else None)
+                | _ -> e
 
-                    let tModule = 
-                        Compiler.compile {
-                            Name = sf.name
-                            Declarations =
-                            [
-                                Class {
-                                    Name = "Sem"
-                                    Arguments = [ selfDisp ]
-                                    BaseType = None
-                                    Fields = []
-                                    Members = methods
-                                }
-                            ]
-                        }
+        let private force (msg : string) (o : Option<'a>) =
+            match o with
+                | Some o -> o
+                | None -> failwith msg
 
-                    let tSem = tModule.GetNestedType("Sem")
-                    let semCtor = tSem.GetConstructors().[0]
-
-                    let mutable table = None
-                    let getTable (self : obj) =
-                        match table with
-                            | Some t -> t
-                            | None ->
-                                let instance = Activator.CreateInstance(tSem, self)
-                                let methods = tSem.GetMethods(BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.DeclaredOnly)
-                                let t = 
-                                    MethodTable.ofList [
-                                        for m in methods do
-                                            yield instance, m
-                                    ]
-                                table <- Some t
-                                t
-            
-                    let resolve (self : obj) (t : Type) =
-                        self |> getTable |> MethodTable.tryResolve [| t; scopeType |]   
-                            
-                    let tResolve = typeof<obj -> Type -> Option<obj * MethodInfo>>
-                    let tIndices = attributeIndices |> List.map (fun _ -> typeof<int>) |> List.toArray
-                
-
-                    let dispCtor = dispType.GetConstructor (Array.append tIndices [|tResolve|])
-                    let disp = dispCtor.Invoke (Array.append (List.toArray (List.map (fun a -> a :> obj) attributeIndices)) [|resolve|])
-                
-                    disp |> unbox<IObjectDispatcher2>
-
-                dispatcher
-
-            let private compileRoot (attName : string) (valueType : Type) (methods : list<SemanticFunction>) =
-                let td = typedefof<Dispatcher<_>>.MakeGenericType [| valueType |]
-                let ctor = td.GetConstructor [| typeof<obj -> Type -> Option<obj * MethodInfo>> |]
-                let realMethods =
-                    methods |> List.mapi (fun i sf ->
-                        let mi = sf.original
-                        if mi.IsGenericMethod then
-                            failwith "[Ag] root rules must not be generic"
-
-                        let e = Expr.TryGetReflectedDefinition(mi) |> force "not possible"
+        let private convert (selfVar : Var) (scopeType : Type) (assumeStrict : Map<string, int>) (sf : SemanticFunction) =
+            let code = 
+                match inlineSemTypes sf.code with
+                    | Lambda(node, body) ->   
+                        let vscope = Var("scope", scopeType)
+                        let scope = Expr.Var vscope
                         let rec repair (e : Expr) =
                             match e with
-                                | Scope -> failwith "[Ag] root rules must not use the current scope"
-                                | Synthesize(name, node) -> failwith "[Ag] root rules must not synthesize attributes"
-                                | Inherit(name) -> failwith "[Ag] root rules must not inherit attributes"
+                                | Scope ->
+                                    scope
+
+                                | Synthesize(name, node) ->
+                                    let node = repair node
+                                    let td = selfVar.Type
+                                    let dispatcher =
+                                        if name = sf.name then 
+                                            Expr.Var selfVar
+                                        else 
+                                            let index = Globals.getAttributeIndex name
+                                            let dispatcher = <@@ Globals.synDispatchers.[index] @@>
+                                            Expr.Coerce(dispatcher, td)
+
+                                    let vo = Var("child", typeof<obj>)
+                                    let o = Expr.Var vo
+                                    let childScope = Var("childScope", scopeType)
+
+                                    let invoke = td.GetMethod("Invoke") //MethodInfo.Create(td, "Invoke", [|typeof<obj>; scopeType|], e.Type)
+                                    let getChild = scopeType.GetMethod("ChildScope", BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.DeclaredOnly) //MethodInfo.Create(scope.Type, "ChildScope", [| typeof<obj> |], scope.Type)
+
+                                    Expr.Let(
+                                        vo, Expr.Coerce(node, typeof<obj>), 
+                                        Expr.Let(
+                                            childScope, Expr.Call(scope, getChild, [o]),
+                                            Expr.Call(dispatcher, invoke, [o; Expr.Var childScope])
+                                        )
+                                    )
+
+                                | Inherit(name,node) ->
+                                    let node = repair node
+
+                                    match Map.tryFind name assumeStrict with
+                                        | Some i ->
+                                            let field = scopeType.GetField(sprintf "F%d" i)
+                                            Expr.FieldGet(scope, field)
+
+                                        | None -> 
+                                        
+                                            let inh = inheritMeth.MakeGenericMethod [|e.Type|]
+                                            let td = typedefof<Dispatcher<_,_>>.MakeGenericType [| scopeType; e.Type |]
+                                            let tr = typedefof<Dispatcher<_>>.MakeGenericType [| e.Type |]
+                                            let index = Globals.getAttributeIndex name
+                                            let dispatcher = 
+                                                if name = sf.name then Expr.Var(selfVar)
+                                                else Expr.Coerce(<@@ Globals.inhDispatchers.[index] @@>, td)
+                                            let rootDispatcher = Expr.Coerce(<@@ Globals.rootDispatchers.[index] @@>, tr)
+                                        
+                                            Expr.Call(scope, inh, [Expr.Value(index); dispatcher; rootDispatcher])
 
                                 | AssignInherit(value) ->
-                                    value
+                                    repair value
 
                                 | ShapeVar _ -> e
                                 | ShapeLambda(v,b) -> Expr.Lambda(v, repair b)
                                 | ShapeCombination(o, args) -> RebuildShapeCombination(o, args |> List.map repair)
 
-                        match repair (inlineSemTypes e) with
-                            | Lambda(v,body) ->
-                                let free = body.GetFreeVars() |> Set.ofSeq
-                                let t = v.Type.GetGenericArguments().[0]
-                                if Set.isEmpty free then 
-                                    attName, [Var(v.Name, t)], body
-                                else 
-                                    failwith "[Ag] root rule does not take an argument"
-                            | _ -> 
-                                failwith "[Ag] root rule does not take an argument"
+
+
+                        let body = repair body
+
+                        let body =
+                            if sf.kind = AttributeKind.Synthesized then
+                                let s = Expr.Coerce(scope, typeof<Scope>)
+                                let old = Var("oldScope", typeof<Scope>)
+                                let set (s : Expr) = <@@ CurrentScope.Instance <- (%%s : Scope) @@>
+                                Expr.Let(
+                                    old, <@ CurrentScope.Instance @>,
+                                    Expr.TryFinally(
+                                        Expr.Sequential(set s, body),
+                                        set (Expr.Var old)
+                                    )
+                                )
+                            else
+                                body
+
+                        Expr.Lambda(node, Expr.Lambda(vscope, body))
+                        //attName, [node; vscope], repair body
+                    | _ ->
+                        failwith "sadasdasdasdasd"
+
+            { sf with code = code }
+
+        let private addStrictInh (selfVar : Var) (scopeType : Type) (strict : Map<string, int>) (sf : SemanticFunctions) (otherSF : SemanticFunctions) =
+            { sf with
+                functions =
+                    sf.functions |> List.collect (fun synSF ->
+                        let inhIndex = otherSF.index
+                        let other = otherSF |> getMoreSpecific synSF.nodeType
+                        let field = scopeType.GetField(sprintf "F%d" strict.[otherSF.name])
+
+                        other |> List.map (fun inhSF ->
+                            let inhSF = convert selfVar scopeType strict inhSF
+                            match inhSF.code, synSF.code with
+                                | Lambda(ni, Lambda(si, inh)), Lambda(ns, Lambda(ss, syn)) ->
+                                    let nf =
+                                        if ni.Type.IsAssignableFrom ns.Type then ns
+                                        elif ns.Type.IsAssignableFrom ni.Type then ni
+                                        else failwith "[Ag] interface-inherit rules not implemented atm."
+
+                                    let rec inlineInh (e : Expr) =
+                                        match e with
+                                            | Let(cs, (Call(Some s, mi, [n]) as childScope), body) when mi.Name = "ChildScope" && typeof<Scope>.IsAssignableFrom mi.DeclaringType ->
+                                                Expr.Let(
+                                                    cs, inlineInh childScope,
+                                                    Expr.Sequential(
+                                                        Expr.FieldSet(Expr.Var cs, field, inh),
+                                                        //Expr.Call(Expr.Var cs, scopeSet, [Expr.Value(inhIndex); Expr.Coerce(inh, typeof<obj>)]),
+                                                        inlineInh body
+                                                    )
+                                                )
+                                                
+                                            | ShapeVar v ->
+                                                if v = ns then Expr.Var nf
+                                                elif v = ni then Expr.Var nf
+                                                elif v = ss then Expr.Var si
+                                                else e
+                                            | ShapeLambda(v,b) ->
+                                                Expr.Lambda(v, inlineInh b)
+                                            | ShapeCombination(o, args) ->
+                                                RebuildShapeCombination(o, args |> List.map inlineInh)
+
+                                    { synSF with 
+                                        nodeType = nf.Type
+                                        code = Expr.Lambda(nf, Expr.Lambda(si, inlineInh syn)) 
+                                    }
+
+                                | _ ->
+                                    failwith ""
+                        )
+
+                    )
+            }
+
+        let private compileNormal (sf : SemanticFunctions) =
+            let strictInh =
+                match sf.kind with
+                    | AttributeKind.Synthesized ->
+                        sf.functions
+                            |> List.filter (fun sf ->Set.isEmpty sf.synthesizes)
+                            |> List.map (fun sf -> sf.inherits)
+                            |> Set.intersectMany
+                    | _ ->
+                        Set.empty
+
+            let inhIndices = strictInh |> Seq.mapi (fun i n -> (n,i)) |> Seq.toList
+            let types = inhIndices |> List.map (fun (n,i) -> semanticFunctions.[n].valueType)
+            let attributeIndices = strictInh |> Seq.map (fun n -> Globals.getAttributeIndex(n)) |> Seq.toList
+            let strictInh = Map.ofList inhIndices
+
+            let scopeType = Scope.getType types
+            let dispType = WrappedDispatcher.getType sf.valueType types
+
+            let dispType = dispType
+            let selfDisp = Var(sprintf "self_%s" (Guid.NewGuid().ToString("N")), dispType)
+
+            let dispatcher =
+                let mutable final = { sf with functions = sf.functions |> List.map (fun sf -> convert selfDisp scopeType strictInh sf) }
+                for (KeyValue(s,_)) in strictInh do
+                    let other = semanticFunctions.[s]
+                    final <- addStrictInh selfDisp scopeType strictInh final other
+
+                let methods = 
+                    final.functions |> List.choose (fun e ->
+                        match e.code with
+                            | Lambda(n,Lambda(s, body)) -> Some (sf.name, [n;Var(s.Name, scopeType)], fun _ -> body)
+                            | _ -> None
                     )
 
-                let instance,methods = QuotationCompiler.CreateInstance realMethods
+                let tModule = 
+                    Compiler.compile {
+                        Name = sf.name
+                        Declarations =
+                        [
+                            Class {
+                                Name = "Sem"
+                                Arguments = [ selfDisp ]
+                                BaseType = None
+                                Fields = []
+                                Members = methods
+                            }
+                        ]
+                    }
 
-                let table = methods |> Array.map (fun mi -> instance,mi) |> MethodTable.ofArray
+                let tSem = tModule.GetNestedType("Sem")
+                let semCtor = tSem.GetConstructors().[0]
 
+                let mutable table = None
+                let getTable (self : obj) =
+                    match table with
+                        | Some t -> t
+                        | None ->
+                            let instance = Activator.CreateInstance(tSem, self)
+                            let methods = tSem.GetMethods(BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.DeclaredOnly)
+                            let t = 
+                                MethodTable.ofList [
+                                    for m in methods do
+                                        yield instance, m
+                                ]
+                            table <- Some t
+                            t
+            
                 let resolve (self : obj) (t : Type) =
-                    MethodTable.tryResolve [| t |] table
+                    self |> getTable |> MethodTable.tryResolve [| t; scopeType |]   
+                            
+                let tResolve = typeof<obj -> Type -> Option<obj * MethodInfo>>
+                let tIndices = attributeIndices |> List.map (fun _ -> typeof<int>) |> List.toArray
+                
 
-                ctor.Invoke([|resolve|]) |> unbox<IObjectDispatcher>
+                let dispCtor = dispType.GetConstructor (Array.append tIndices [|tResolve|])
+                let disp = dispCtor.Invoke (Array.append (List.toArray (List.map (fun a -> a :> obj) attributeIndices)) [|resolve|])
+                
+                disp |> unbox<IObjectDispatcher2>
+
+            dispatcher
+
+        let private compileRoot (attName : string) (valueType : Type) (methods : list<SemanticFunction>) =
+            let td = typedefof<Dispatcher<_>>.MakeGenericType [| valueType |]
+            let ctor = td.GetConstructor [| typeof<obj -> Type -> Option<obj * MethodInfo>> |]
+            let realMethods =
+                methods |> List.mapi (fun i sf ->
+                    let mi = sf.original
+                    if mi.IsGenericMethod then
+                        failwith "[Ag] root rules must not be generic"
+
+                    let e = Expr.TryGetReflectedDefinition(mi) |> force "not possible"
+                    let rec repair (e : Expr) =
+                        match e with
+                            | Scope -> failwith "[Ag] root rules must not use the current scope"
+                            | Synthesize(name, node) -> failwith "[Ag] root rules must not synthesize attributes"
+                            | Inherit(name) -> failwith "[Ag] root rules must not inherit attributes"
+
+                            | AssignInherit(value) ->
+                                value
+
+                            | ShapeVar _ -> e
+                            | ShapeLambda(v,b) -> Expr.Lambda(v, repair b)
+                            | ShapeCombination(o, args) -> RebuildShapeCombination(o, args |> List.map repair)
+
+                    match repair (inlineSemTypes e) with
+                        | Lambda(v,body) ->
+                            let free = body.GetFreeVars() |> Set.ofSeq
+                            let t = v.Type.GetGenericArguments().[0]
+                            if Set.isEmpty free then 
+                                attName, [Var(v.Name, t)], body
+                            else 
+                                failwith "[Ag] root rule does not take an argument"
+                        | _ -> 
+                            failwith "[Ag] root rule does not take an argument"
+                )
+
+            let instance,methods = QuotationCompiler.CreateInstance realMethods
+
+            let table = methods |> Array.map (fun mi -> instance,mi) |> MethodTable.ofArray
+
+            let resolve (self : obj) (t : Type) =
+                MethodTable.tryResolve [| t |] table
+
+            ctor.Invoke([|resolve|]) |> unbox<IObjectDispatcher>
 
         
 
-            let compile (sf : SemanticFunctions) =
-                if sf.kind = AttributeKind.Inherited then 
-                    let root, other = sf.functions |> List.partition(fun f -> f.isRoot)
-                    Globals.rootDispatchers.[sf.index] <- compileRoot sf.name sf.valueType root
-                    Globals.inhDispatchers.[sf.index] <- compileNormal { sf with functions = other }
-                else 
-                    Globals.synDispatchers.[sf.index] <- compileNormal sf
+        let compile (sf : SemanticFunctions) =
+            if sf.kind = AttributeKind.Inherited then 
+                let root, other = sf.functions |> List.partition(fun f -> f.isRoot)
+                Globals.rootDispatchers.[sf.index] <- compileRoot sf.name sf.valueType root
+                Globals.inhDispatchers.[sf.index] <- compileNormal { sf with functions = other }
+            else 
+                Globals.synDispatchers.[sf.index] <- compileNormal sf
 
-    open Implementation
     let mutable private initialized = 0
     let init() =
         if System.Threading.Interlocked.Exchange(&initialized, 1) = 0 then
@@ -3573,14 +3606,14 @@ module NewestAgDemo =
     [<AllowNullLiteral>]
     type SumScope =
         class 
-            inherit Ag.Implementation.Scope
+            inherit Ag.Scope
             val mutable public Index : int
 
             member x.ChildScope(child : obj) =
                 if isNull x.Node then SumScope(null, child, Index = 0)
                 else SumScope(x, child)
 
-            new(p,n) = { inherit Ag.Implementation.Scope(p,n); Index = 0 }
+            new(p,n) = { inherit Ag.Scope(p,n); Index = 0 }
         end
 
     type IList =
@@ -3623,11 +3656,17 @@ module NewestAgDemo =
             [<Attribute(AttributeKind.Synthesized)>]
             member x.All() : list<int> = x?All()
 
+            [<Attribute(AttributeKind.Synthesized)>]
+            member x.Blubber() : int = x?Blubber()
+
             [<Attribute(AttributeKind.Inherited)>]
             member x.Index : int = x?Index
 
             [<Attribute(AttributeKind.Inherited)>]
             member x.Bla : int = x?Bla
+
+        let bla() =
+            Ag.getScope()
 
         [<Semantic>]
         type Sems =
@@ -3655,18 +3694,28 @@ module NewestAgDemo =
             static member Bla(c : Cons) =
                 inh <<= 10 + c.Bla
 
+            static member Blubber(n : Nil) : int = 
+                bla().Inherit(Ag.Implementation.Globals.getAttributeIndex "Index")
+
+            static member Blubber(c : Cons) : int = 
+                c.Tail.Blubber()
+
     [<Demo("Ag Demo")>]
     let run() =
         Ag.init()
         let all : obj -> list<int>  = Ag.getSynFunction "All"
         let sum : obj -> int        = Ag.getSynFunction "Sum"
+        let blubber : obj -> int    = Ag.getSynFunction "Blubber"
         let list = Cons(0, Cons(1, Nil()))
         Log.line "sum [0;1] = %A" (sum list)
         Log.line "all [0;1] = %A" (all list)
 
+        let scope = blubber list
+        printfn "%A" scope
+
         
 
-        if true then
+        if false then
 
             let rec long (n : int) =
                 if n = 0 then Nil() :> IList
