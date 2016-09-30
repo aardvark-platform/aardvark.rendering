@@ -3706,7 +3706,7 @@ module Ag =
                     Declarations = decls |> List.map (fun (_,_,_,f) -> f)
                 }
 
-            let allMeths = List<MethodInfo>()
+            let allMeths = List<SemanticFunctions * MethodInfo>()
             for (sf, tScope, indices, _) in decls do
                 let semType =
                     if tScope = typeof<obj> then
@@ -3723,18 +3723,41 @@ module Ag =
                         Globals.synDispatchers.[sf.index] <- compileDispatcher tScope indices t |> unbox
                         t
 
-                allMeths.AddRange (semType.GetMethods(BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.DeclaredOnly))
+                let meths = semType.GetMethods(BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.DeclaredOnly)
+                
+                allMeths.AddRange (meths |> Seq.map (fun m -> sf,m))
                  
 
             allMeths
-                |> Seq.groupBy (fun mi -> mi.Name)
+                |> Seq.sortBy (fun (sf,_) -> sf.kind)
+                |> Seq.groupBy (fun(sf, _) -> sf.name)
                 |> Seq.iter (fun (name, meths) ->
-                    Log.start "%s" name
+                    let sf,_ = meths |> Seq.head
 
-                    for m in meths do
-                        Log.line "%s" m.PrettyName
+                    let argType (mi : MethodInfo) =
+                        let p = mi.GetParameters()
+                        if p.Length = 1 then
+                            sprintf "Root<%s>" p.[0].ParameterType.PrettyName
+                        else
+                            p.[0].ParameterType.PrettyName // |> Seq.map (fun p -> p.ParameterType.PrettyName) |> String.concat " * "
 
-                    Log.stop()
+                    let args = meths |> Seq.map (fun (_,mi) -> argType mi) |> String.concat "|"
+
+                    let f =
+                        if sf.kind = AttributeKind.Synthesized then "syn"
+                        else  "inh"
+                    Log.line "%s %s(%s) : %s" f name  args sf.valueType.PrettyName
+
+
+//
+//                    for (_,m) in meths do
+//                        let p = m.GetParameters()
+//                        if p.Length = 1 then
+//                            Log.line "root(%s)" p.[0].ParameterType.PrettyName
+//                        else
+//                            let par = p.[0].ParameterType.PrettyName // |> Seq.map (fun p -> p.ParameterType.PrettyName) |> String.concat " * "
+//                            Log.line "%s (%s)" f par
+//                    Log.stop()
                 )   
 
             ()
@@ -3742,8 +3765,7 @@ module Ag =
     let mutable private initialized = 0
     let init() =
         if System.Threading.Interlocked.Exchange(&initialized, 1) = 0 then
-            let sw = System.Diagnostics.Stopwatch()
-            sw.Start()
+            Log.startTimed "initializing Ag"
             let functions = 
                 Introspection.GetAllTypesWithAttribute<SemanticAttribute>()
                     |> Seq.map (fun t -> t.E0)
@@ -3766,8 +3788,7 @@ module Ag =
 //            for sf in functions do
 //                SemanticFunctions.compile sf
             
-            sw.Stop()
-            Log.line "Ag.init took: %A" sw.MicroTime
+            Log.stop()
 
     let tryGetSynFunction<'a> (name : string) : Option<obj -> 'a> =
         match Globals.tryGetAttributeIndex name with
