@@ -19,7 +19,6 @@ open Microsoft.FSharp.NativeInterop
 [<ReferenceEquality; NoComparison>]
 type AdaptiveGeometry =
     {
-        mode             : IndexedGeometryMode
         faceVertexCount  : int
         vertexCount      : int
         indices          : Option<BufferView>
@@ -29,7 +28,6 @@ type AdaptiveGeometry =
 
 type GeometrySignature =
     {
-        mode                : IndexedGeometryMode
         indexType           : Type
         vertexBufferTypes   : Map<Symbol, Type>
         uniformTypes        : Map<Symbol, Type>
@@ -51,7 +49,6 @@ module AdaptiveGeometry =
                 
     
         {
-            mode = ig.Mode
             faceVertexCount = faceVertexCount
             vertexCount = vertexCount
             indices = index
@@ -584,13 +581,14 @@ type IRuntimePoolExtensions private() =
 module ManagedPoolSg =
 
     module Sg =
-        type PoolNode(pool : ManagedPool, calls : aset<ManagedDrawCall>) =
+        type PoolNode(pool : ManagedPool, calls : aset<ManagedDrawCall>, mode : IMod<IndexedGeometryMode>) =
             interface ISg
             member x.Pool = pool
             member x.Calls = calls
+            member x.Mode = mode
 
-        let pool (pool : ManagedPool) (calls : aset<ManagedDrawCall>) =
-            PoolNode(pool, calls) :> ISg
+        let pool (pool : ManagedPool) (calls : aset<ManagedDrawCall>) (mode : IMod<IndexedGeometryMode>)=
+            PoolNode(pool, calls, mode) :> ISg
 
 
 module ``Pool Semantics`` =
@@ -615,7 +613,7 @@ module ``Pool Semantics`` =
                         buffer.GetValue()
                     )
 
-                ro.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+                ro.Mode <- p.Mode
                 ro.Indices <- Some pool.IndexBuffer
                 ro.VertexAttributes <- pool.VertexAttributes
                 ro.InstanceAttributes <- pool.InstanceAttributes

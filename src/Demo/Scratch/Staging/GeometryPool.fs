@@ -650,7 +650,6 @@ module ``Pool Tests`` =
         let r = App.Runtime
         let pool =
             r.CreateManagedPool {
-                mode = IndexedGeometryMode.TriangleList
                 indexType = typeof<int>
                 vertexBufferTypes = 
                     Map.ofList [ 
@@ -720,7 +719,7 @@ module ``Pool Tests`` =
         )
 
         let sg = 
-            Sg.PoolNode(pool, geometries)
+            Sg.PoolNode(pool, geometries, Mod.constant IndexedGeometryMode.TriangleList)
                 |> Sg.fillMode mode
                 |> Sg.uniform "LightLocation" (Mod.constant (10.0 * V3d.III))
                 |> Sg.effect [
@@ -745,10 +744,11 @@ module Pooling =
             abstract member GetData : node : LodDataNode -> Async<Option<IndexedGeometry>>
                   
 
-        type LodNode(signature : GeometrySignature, data : ILodData) =
+        type LodNode(signature : GeometrySignature, data : ILodData, mode : IMod<IndexedGeometryMode>) =
             interface ISg
             member x.Signature = signature
             member x.Data = data
+            member x.Mode = mode
 
         let disposeOnCancel<'a when 'a :> IDisposable> (f : unit -> 'a) : Async<'a> =
             async {
@@ -1026,7 +1026,7 @@ module Pooling =
                 
                 let ro = RenderObject.create()
 
-                ro.Mode <- Mod.constant n.Signature.mode
+                ro.Mode <- n.Mode
                 ro.Indices <- Some pool.IndexBuffer
                 ro.VertexAttributes <- pool.VertexAttributes
                 ro.InstanceAttributes <- pool.InstanceAttributes
@@ -1095,7 +1095,6 @@ module Pooling =
 
             let signature =
                 {
-                    mode                = IndexedGeometryMode.PointList
                     indexType           = typeof<int>
                     vertexBufferTypes   = 
                         Map.ofList [
@@ -1105,7 +1104,7 @@ module Pooling =
                     uniformTypes        = Map.empty
                 }
 
-            let node = LodNode(signature, data)
+            let node = LodNode(signature, data, Mod.constant IndexedGeometryMode.PointList)
 
             node :> ISg
                 |> Sg.effect [
@@ -1198,7 +1197,6 @@ module Pooling =
 
                 let signature = 
                     {
-                        mode = mode
                         indexType = match ro.Indices with | Some i -> i.ElementType | _ -> typeof<int>
                         vertexBufferTypes = attributes |> List.map (fun (n,_,t) -> (n,t)) |> Map.ofList
                         uniformTypes = uniforms |> List.map (fun (n,_,t) -> (n,t)) |> Map.ofList
@@ -1217,7 +1215,6 @@ module Pooling =
 
                 let geometry =
                     {
-                        mode             = mode
                         faceVertexCount  = drawCall.FaceVertexCount
                         vertexCount      = vertexCount
                         indices          = ro.Indices

@@ -151,35 +151,41 @@ type PreparedRenderObject =
         stats
 
     member x.Dispose() =
-        if not x.IsDisposed then
-            x.IsDisposed <- true
+        lock x (fun () -> 
+            try
+                if not x.IsDisposed then
+                    x.IsDisposed <- true
 
-            use resourceLock = x.Context.ResourceLock
+                    use resourceLock = x.Context.ResourceLock
 
-            x.Activation.Dispose()
-            match x.DrawBuffers with
-                | Some b -> b.RemoveRef()
-                | _ -> ()
-            x.VertexArray.Dispose() 
-            x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
-            x.IndexBuffer |> Option.iter (fun (_,b) -> b.Dispose())
-            match x.IndirectBuffer with
-                | Some b -> b.Dispose()
-                | None -> x.DrawCallInfos.Dispose()
+                    OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
 
-            x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
-            x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
-            x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-            x.Program.Dispose() 
-            x.VertexArray <- Unchecked.defaultof<_>
+                    x.Activation.Dispose()
+                    match x.DrawBuffers with
+                        | Some b -> b.RemoveRef()
+                        | _ -> ()
+                    x.VertexArray.Dispose() 
+                    x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
+                    x.IndexBuffer |> Option.iter (fun (_,b) -> b.Dispose())
+                    match x.IndirectBuffer with
+                        | Some b -> b.Dispose()
+                        | None -> x.DrawCallInfos.Dispose()
 
-            x.IsActive.Dispose()
-            x.BeginMode.Dispose()
-            x.DepthTestMode.Dispose()
-            x.CullMode.Dispose()
-            x.PolygonMode.Dispose()
-            x.BlendMode.Dispose()
-            x.StencilMode.Dispose()
+                    x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
+                    x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
+                    x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
+                    x.Program.Dispose() 
+                    x.VertexArray <- Unchecked.defaultof<_>
+
+                    x.IsActive.Dispose()
+                    x.BeginMode.Dispose()
+                    x.DepthTestMode.Dispose()
+                    x.CullMode.Dispose()
+                    x.PolygonMode.Dispose()
+                    x.BlendMode.Dispose()
+                    x.StencilMode.Dispose()
+            with e -> Log.warn "Prepare killed!!"
+        )
         
              
 
@@ -591,13 +597,6 @@ type ResourceManagerExtensions private() =
         res.ResourceCount <- res.Resources |> Seq.length
         res.ResourceCounts <- res.Resources |> Seq.countBy (fun r -> r.Kind) |> Map.ofSeq
 
-
-        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.ArrayBuffer, 0)
-        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.ElementArrayBuffer, 0)
-        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.CopyReadBuffer, 0)
-        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.CopyWriteBuffer, 0)
-        OpenTK.Graphics.OpenGL4.GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
-        for i in 0 .. 7 do
-            OpenTK.Graphics.OpenGL4.GL.BindBufferBase(OpenTK.Graphics.OpenGL4.BufferRangeTarget.UniformBuffer, i, 0)
+        OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
 
         res

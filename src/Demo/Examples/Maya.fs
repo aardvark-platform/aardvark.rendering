@@ -643,14 +643,14 @@ module Pooling =
             | Leaf of 'a
             | Node of 'a * list<RoseTree<'a>>
 
-        type Loady<'a, 'b>(tag : 'b, trigger : MVar<unit>, release : 'a -> unit, run : Async<'a>) =
+        type Loady<'a, 'b>(tag : 'b, trigger : IAdaptiveObject, release : 'a -> unit, run : Async<'a>) =
             let mutable task : Option<Task<'a>> = None
             let mutable cancel = new CancellationTokenSource()
 
-            let run =
+            let run =  
                 async {
                     let! r = run
-                    MVar.put trigger ()
+                    transact (fun () -> trigger.MarkOutdated())
                     return r
                 }
 
@@ -689,10 +689,16 @@ module Pooling =
                         ()
                  
         module Loady =
-            let start (tag : 'b) (trigger : MVar<unit>) (run : Async<Option<'a>>) =
-                let l = Loady(tag, trigger, Option.iter (fun a -> (a :> IDisposable).Dispose()), run)
+//            let start (tag : 'b) (trigger : MVar<unit>) (run : Async<Option<'a>>) =
+//                let l = Loady(tag, trigger, Option.iter (fun a -> (a :> IDisposable).Dispose()), run)
+//                l.Start()
+//                l
+
+            let start' (tag : 'b) (trigger : IAdaptiveObject) (run : Async<'a>) =
+                let l = Loady(tag, trigger, ignore, run)
                 l.Start()
                 l
+
 
         module RoseTree =
             let rec traverse<'a, 'b> (equal : 'b -> 'a -> bool) (create : 'a -> 'b) (destroy : 'b -> unit) (ref : RoseTree<'b>) (t : RoseTree<'a>) : RoseTree<'b> =
@@ -750,6 +756,84 @@ module Pooling =
                             Node(nv, List.map2 traverse lc rc)
     
     
+            let mapAsync (create : 'a -> Async<'b>) (tree : IMod<RoseTree<'a>>) : IMod<RoseTree<'b>> =
+                let trigger = MVar.create ()
+
+                let current = ref Empty
+
+                let l = Mod.custom (fun self ->
+
+                    let equal (l : Loady<'b,'a>) (r : 'a) =
+                        l.Tag = r
+                
+                    let create (v : 'a) = 
+                        Loady.start' v self (create v)
+
+                    let destroy (v : Loady<'b, 'a>) =
+                        v.Stop()
+
+                    let t = tree.GetValue self
+
+                    let n = traverse equal create destroy !current t
+                    current := n
+                    n
+                )
+
+                let current = ref Empty
+                Mod.custom (fun self ->
+                    
+                    let lt = l.GetValue(self)
+
+                    let allReady (c : list<RoseTree<Loady<'b, 'a>>>) =
+                        c |> List.forall (fun t ->
+                            match t with
+                                | Empty -> true
+                                | Leaf v -> Option.isSome v.Peek
+                                | Node(v,_) -> Option.isSome v.Peek
+                        )
+
+                    let rec peek (t : RoseTree<Loady<'b, 'a>>) =
+                        match t with
+                            | Empty -> Empty
+                            | Leaf l ->
+                                match l.Peek with
+                                    | Some v -> Leaf v
+                                    | None -> Empty
+                            | Node(v, children) ->
+                                match v.Peek with
+                                    | Some v ->
+                                        if allReady children then
+                                            Node(v, List.map peek children)
+                                        else
+                                            Leaf(v)
+                                    | None ->
+                                        Empty
+
+                    peek lt
+
+                )
+
+            let flatten (f : IMod<RoseTree<'a>>) =
+                let old = ref Empty
+                ASet.custom (fun self -> 
+                    let current = f.GetValue self
+                    let deltas = List<_>()
+                    let create v = 
+                        deltas.Add (Add v)
+                        v
+                    let destroy v =
+                        deltas.Add (Rem v)
+
+                    let u = traverse (=) create destroy !old current
+                    old := u
+                    deltas |> CSharpList.toList
+                )
+
+                
+
+//        module PatchLod =
+//
+//            type PatchNode(p : PatchHierarchy) =
 
 
         [<Aardvark.Base.Ag.Semantic>]
@@ -787,10 +871,11 @@ module Pooling =
                     }
 
                 let trigger = MVar.empty()
+                let traverse = failwith ""
                 
-                let traverse (ref : RoseTree<Loady<Option<ManagedDrawCall>, LodDataNode>>) (t : RoseTree<LodDataNode>) =
-                    RoseTree.traverse<_, Loady<_,_>> (fun a b -> a.Tag = b) (fun a -> a |> load |> Loady.start a trigger) (fun l -> l.Stop()) ref t
-                  
+//                let traverse (ref : RoseTree<Loady<Option<ManagedDrawCall>, LodDataNode>>) (t : RoseTree<LodDataNode>) =
+//                    RoseTree.traverse<_, Loady<_,_>> (fun a b -> a.Tag = b) (fun a -> a |> load |> Loady.start a trigger) (fun l -> l.Stop()) ref t
+//                  
                 let mutable currentLoady = Empty
 
                 let runnerShitFuck =

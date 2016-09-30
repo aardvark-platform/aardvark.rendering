@@ -102,7 +102,6 @@ module Optimizer =
 
             let signature = 
                 {
-                    mode = mode
                     indexType = match ro.Indices with | Some i -> i.ElementType | _ -> typeof<int>
                     vertexBufferTypes = attributes |> List.map (fun (n,_,t) -> (n,t)) |> Map.ofList
                     uniformTypes = uniforms |> List.map (fun (n,_,t) -> (n,t)) |> Map.ofList
@@ -121,7 +120,6 @@ module Optimizer =
 
             let geometry =
                 {
-                    mode             = mode
                     faceVertexCount  = drawCall.FaceVertexCount
                     vertexCount      = vertexCount
                     indices          = ro.Indices
