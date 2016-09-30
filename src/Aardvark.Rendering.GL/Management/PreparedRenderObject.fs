@@ -154,7 +154,7 @@ type PreparedRenderObject =
         if not x.IsDisposed then
             x.IsDisposed <- true
 
-            use _ = x.Context.ResourceLock
+            use resourceLock = x.Context.ResourceLock
 
             x.Activation.Dispose()
             match x.DrawBuffers with
