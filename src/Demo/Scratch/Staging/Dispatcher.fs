@@ -360,7 +360,6 @@ module MethodTable =
 
     let ofList (items : list<obj * MethodInfo>) = 
         let res = MethodTable(items)
-        printfn "%A" res
         res
 
     let ofSeq (seq : seq<obj * MethodInfo>) = 

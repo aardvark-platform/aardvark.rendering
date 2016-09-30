@@ -44,8 +44,24 @@ module Ag =
 
         let inh = Inh.Instance
 
+        exception SemanticException of AttributeKind * string
+
+        type private IsFunction<'a> private() =
+            static let value = 
+                if FSharpType.IsFunction typeof<'a> then
+                    let (e,_) = FSharpType.GetFunctionElements typeof<'a>
+                    e = typeof<unit>
+                else
+                    false
+
+            static member Value = value
+
         [<MethodImpl(MethodImplOptions.NoInlining)>]
-        let (?) (o : 'a) (name : string) : 'b = failwith ""
+        let (?) (o : 'a) (name : string) : 'b =
+            if IsFunction<'b>.Value then
+                raise <| SemanticException(AttributeKind.Synthesized, name)
+            else
+                raise <| SemanticException(AttributeKind.Inherited, name)
             
         [<MethodImpl(MethodImplOptions.NoInlining)>]
         let (<<=) (m : Inh) (value : 'a) = ()
@@ -88,6 +104,8 @@ module Ag =
                               
                     | Call(Some o, AttributeLookup(name, AttributeKind.Synthesized), []) ->
                         Some(name, o) 
+
+
                                      
                     | _ ->
                         None
@@ -3549,8 +3567,6 @@ module Ag =
 
             ctor.Invoke([|resolve|]) |> unbox<IObjectDispatcher>
 
-        
-
         let compile (sf : SemanticFunctions) =
             if sf.kind = AttributeKind.Inherited then 
                 let root, other = sf.functions |> List.partition(fun f -> f.isRoot)
@@ -3559,9 +3575,175 @@ module Ag =
             else 
                 Globals.synDispatchers.[sf.index] <- compileNormal sf
 
+
+        let private translateNormal (sf : SemanticFunctions) =
+            let strictInh =
+                match sf.kind with
+                    | AttributeKind.Synthesized ->
+                        sf.functions
+                            |> List.filter (fun sf ->Set.isEmpty sf.synthesizes)
+                            |> List.map (fun sf -> sf.inherits)
+                            |> Set.intersectMany
+                    | _ ->
+                        Set.empty
+
+            let inhIndices = strictInh |> Seq.mapi (fun i n -> (n,i)) |> Seq.toList
+            let types = inhIndices |> List.map (fun (n,i) -> semanticFunctions.[n].valueType)
+            let attributeIndices = strictInh |> Seq.map (fun n -> Globals.getAttributeIndex(n)) |> Seq.toList
+            let strictInh = Map.ofList inhIndices
+
+            let scopeType = Scope.getType types
+            let dispType = WrappedDispatcher.getType sf.valueType types
+
+            let dispType = dispType
+            let selfDisp = Var(sprintf "self_%s" (Guid.NewGuid().ToString("N")), dispType)
+
+            let classDef =
+                let mutable final = { sf with functions = sf.functions |> List.map (fun sf -> convert selfDisp scopeType strictInh sf) }
+                for (KeyValue(s,_)) in strictInh do
+                    let other = semanticFunctions.[s]
+                    final <- addStrictInh selfDisp scopeType strictInh final other
+
+                let methods = 
+                    final.functions |> List.choose (fun e ->
+                        match e.code with
+                            | Lambda(n,Lambda(s, body)) -> Some (sf.name, [n;Var(s.Name, scopeType)], fun _ -> body)
+                            | _ -> None
+                    )
+
+                Class {
+                    Name = sf.name
+                    Arguments = [ selfDisp ]
+                    BaseType = None
+                    Fields = []
+                    Members = methods
+                }
+
+            sf, scopeType, attributeIndices, classDef  
+
+        let private translateRoot (sf : SemanticFunctions) =
+
+            let dispType = typedefof<Dispatcher<_>>.MakeGenericType [|sf.valueType|]
+
+            let dispType = dispType
+            let selfDisp = Var(sprintf "self_%s" (Guid.NewGuid().ToString("N")), dispType)
+
+            let classDef =
+                let mutable final = { sf with functions = sf.functions |> List.map (fun sf -> convert selfDisp typeof<Scope> Map.empty sf) }
+
+                let methods = 
+                    final.functions |> List.choose (fun e ->
+                        match e.code with
+                            | Lambda(n,Lambda(s, body)) -> 
+                                if n.Type.IsGenericType && n.Type.GetGenericTypeDefinition() = typedefof<Root<_>> then
+                                    Some (sf.name, [Var(n.Name, n.Type.GetGenericArguments().[0])], fun _ -> body)
+                                else
+                                    None
+                            | _ -> None
+                    )
+
+                Class {
+                    Name = sprintf "%sRoot" sf.name
+                    Arguments = [ selfDisp ]
+                    BaseType = None
+                    Fields = []
+                    Members = methods
+                }
+
+            sf, typeof<obj>, [], classDef   
+
+        let private compileDispatcher (scopeType : Type) (attributeIndices : list<int>) (tSem : Type) =
+            let ctor = tSem.GetConstructors().[0]
+            let tDisp = ctor.GetParameters().[0].ParameterType
+
+            let mutable table = None
+            let getTable (self : obj) =
+                match table with
+                    | Some t -> t
+                    | None ->
+                        let instance = Activator.CreateInstance(tSem, self)
+                        let methods = tSem.GetMethods(BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.DeclaredOnly)
+                        let t = 
+                            MethodTable.ofList [
+                                for m in methods do
+                                    yield instance, m
+                            ]
+                        table <- Some t
+                        t
+            
+            let resolve = 
+                if scopeType = typeof<obj> then 
+                    fun (self : obj) (t : Type) -> self |> getTable |> MethodTable.tryResolve [| t |] 
+                else
+                    fun (self : obj) (t : Type) -> self |> getTable |> MethodTable.tryResolve [| t; scopeType |]   
+                
+
+            let tResolve = typeof<obj -> Type -> Option<obj * MethodInfo>>
+            let tIndices = attributeIndices |> List.map (fun _ -> typeof<int>) |> List.toArray
+                
+
+            let dispCtor = tDisp.GetConstructor (Array.append tIndices [|tResolve|])
+            let disp = dispCtor.Invoke (Array.append (List.toArray (List.map (fun a -> a :> obj) attributeIndices)) [|resolve|])
+                
+            disp
+
+        let compileAll (sfs : list<SemanticFunctions>) =
+            let decls = 
+                sfs |> List.collect (fun sf ->
+                    if sf.kind = AttributeKind.Inherited then 
+                        let root, other = sf.functions |> List.partition(fun f -> f.isRoot)
+                        [
+                            translateRoot { sf with functions = root }
+                            translateNormal { sf with functions = other }
+                        ]
+                    else 
+                        [ translateNormal sf]               
+                )
+
+            let tModule =
+                Compiler.compile {
+                    Name = "Semantics"
+                    Declarations = decls |> List.map (fun (_,_,_,f) -> f)
+                }
+
+            let allMeths = List<MethodInfo>()
+            for (sf, tScope, indices, _) in decls do
+                let semType =
+                    if tScope = typeof<obj> then
+                        let t = tModule.GetNestedType (sprintf "%sRoot" sf.name)
+                        Globals.rootDispatchers.[sf.index] <- compileDispatcher tScope indices t |> unbox
+                        t
+
+                    elif sf.kind = AttributeKind.Inherited then
+                        let t = tModule.GetNestedType sf.name
+                        Globals.inhDispatchers.[sf.index] <- compileDispatcher tScope indices t |> unbox
+                        t
+                    else
+                        let t = tModule.GetNestedType sf.name
+                        Globals.synDispatchers.[sf.index] <- compileDispatcher tScope indices t |> unbox
+                        t
+
+                allMeths.AddRange (semType.GetMethods(BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.DeclaredOnly))
+                 
+
+            allMeths
+                |> Seq.groupBy (fun mi -> mi.Name)
+                |> Seq.iter (fun (name, meths) ->
+                    Log.start "%s" name
+
+                    for m in meths do
+                        Log.line "%s" m.PrettyName
+
+                    Log.stop()
+                )   
+
+            ()
+
     let mutable private initialized = 0
     let init() =
         if System.Threading.Interlocked.Exchange(&initialized, 1) = 0 then
+            let sw = System.Diagnostics.Stopwatch()
+            sw.Start()
             let functions = 
                 Introspection.GetAllTypesWithAttribute<SemanticAttribute>()
                     |> Seq.map (fun t -> t.E0)
@@ -3572,7 +3754,7 @@ module Ag =
                     |> Seq.groupBy (fun mi -> mi.Name)
                     |> Seq.map (fun (name, mis) -> name, Seq.toList mis)
                     |> Seq.choose (fun (name, mis) -> SemanticFunctions.ofMethods name mis)
-                    |> Seq.toArray
+                    |> Seq.toList
 
             let cnt = Globals.attributeCount()
             Implementation.semanticFunctions <- functions |> Seq.map (fun sf -> sf.name,sf) |> Map.ofSeq
@@ -3580,8 +3762,12 @@ module Ag =
             Globals.inhDispatchers <- Array.zeroCreate cnt
             Globals.rootDispatchers <- Array.zeroCreate cnt
 
-            for f in functions do
-                SemanticFunctions.compile f 
+            SemanticFunctions.compileAll functions
+//            for sf in functions do
+//                SemanticFunctions.compile sf
+            
+            sw.Stop()
+            Log.line "Ag.init took: %A" sw.MicroTime
 
     let tryGetSynFunction<'a> (name : string) : Option<obj -> 'a> =
         match Globals.tryGetAttributeIndex name with
@@ -3711,11 +3897,11 @@ module NewestAgDemo =
         Log.line "all [0;1] = %A" (all list)
 
         let scope = blubber list
-        printfn "%A" scope
+        printfn "blubber [0;1] = %A" scope
 
         
 
-        if false then
+        if true then
 
             let rec long (n : int) =
                 if n = 0 then Nil() :> IList
