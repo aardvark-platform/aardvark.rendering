@@ -77,6 +77,25 @@ module Pattern =
                     else v :> obj |> f
                 )
 
+    type private T<'a>(inner : System.Threading.Tasks.Task<'a>) =
+        member private x.Inner = inner
+
+        override x.GetHashCode() = inner.GetHashCode()
+        override x.Equals o =
+            match o with
+                | :? T<'a> as o -> inner = o.Inner 
+                | _ -> false
+
+        interface IObservable with
+            member x.Subscribe f = 
+                let mutable live = true
+                let c (t : System.Threading.Tasks.Task<'a>) =
+                    if live then 
+                        f (t.Result :> obj)
+
+                inner.ContinueWith(System.Action<_>(c)) |> ignore
+                { new IDisposable with member x.Dispose() = live <- false }
+
     type private TimePattern private() =
         inherit Pattern<Time>()
 
@@ -131,6 +150,19 @@ module Pattern =
                         None
         }
 
+    let ofTask (t : System.Threading.Tasks.Task<'a>) =
+        let source = T(t) :> IObservable
+        let set = PersistentHashSet.singleton source
+        { new Pattern<'a>() with
+            member x.DependsOnTime = false
+            member x.Relevant = set
+            member x.Match(state, s, v) =
+                match v with
+                    | :? 'a as v when Object.Equals(source,s) ->
+                        Some v
+                    | _ -> 
+                        None
+        }
 
     let rec map (f : 'a -> 'b) (m : Pattern<'a>) =
         { new Pattern<'b>() with
@@ -381,6 +413,14 @@ module Proc =
             }
         }
 
+    let rec ofTask (e : System.Threading.Tasks.Task<'a>) : Proc<'s, 'a> =
+        { run =
+            state {
+                let! s = State.get
+                return Continue(Pattern.ofTask e, fun o -> value (unbox<'a> o))
+            }
+        }
+
     /// a proc returning the current time immediately
     let now<'s> : Proc<'s, Time> =
         { run = State.get |> State.map (fun s -> Finished s.time) }
@@ -535,6 +575,7 @@ module Proc =
         fix (fun self ->
             append (bind body elements) (delay (fun () -> !self))
         )
+
 
     let repeat (inner : Proc<'s, unit>) =
         fix (fun self ->
@@ -746,6 +787,11 @@ module ``Proc Builders`` =
                 m |> Proc.bind (fun v -> f(v).build self)
             }
 
+        member x.Bind(m : System.Threading.Tasks.Task<'a>, f : 'a -> ProcBuilder<'s, 'b, 'r>) =
+            { build = fun self ->
+                m |> Proc.ofTask |> Proc.bind (fun v -> f(v).build self)
+            }
+
         member x.Bind(m : ProcBuilder<'s, 'a, 'r>, f : 'a -> ProcBuilder<'s, 'b, 'r>) =
             { build = fun self ->
                 m.build self |> Proc.bind (fun v -> f(v).build self)
@@ -814,6 +860,16 @@ module ``Proc Builders`` =
 
         member x.Delay(f : unit -> Assertion<'s, 'x> * ProcBuilder<'s, 'a, 'r>) = f()
 
+        member x.Delay(f : unit -> ProcBuilder<'s, 'a, 'r>) =
+            { build = fun self ->
+                { run = state { return! f().build(self).run } }
+            }
+
+        member x.For(m : seq<'a>, f : 'a -> ProcBuilder<'s, unit, 'r>) : ProcBuilder<'s, unit, 'r> =
+            { build = fun self ->
+                m |> Seq.map (fun v -> (f v).build self) |> Seq.fold Proc.append (Proc.value())
+            }
+
         member x.For(m : Proc<'s, 'a>, f : 'a -> ProcBuilder<'s, unit, 'r>) : ProcBuilder<'s, unit, 'r> =
             { build = fun self -> Proc.foreach m (fun v -> f(v).build self) }
 
@@ -830,11 +886,6 @@ module ``Proc Builders`` =
         member x.While(guard : unit -> Event<bool>, body : ProcBuilder<'s, unit, 'r>) =
             x.While((fun () -> Proc.ofEvent (guard())), body)
 
-
-        member x.Delay(f : unit -> ProcBuilder<'s, 'a, 'r>) =
-            { build = fun self ->
-                { run = state { return! f().build(self).run } }
-            }
 
 
         member x.Combine(l : ProcBuilder<'s, unit, 'r>, r : ProcBuilder<'s, 'a, 'r>) =
@@ -986,3 +1037,378 @@ module ``Extendend Proc Stuff`` =
             let self = Proc.delay (fun () -> !r)
             r := body self
             !r
+
+
+open Aardvark.Base.Incremental
+
+type ILoadTask<'a> =
+    inherit IMod<Option<'a>>
+    abstract member IsRunning : bool
+    abstract member Start : unit -> unit
+    abstract member Stop : unit -> unit
+
+module Load =
+    open System.IO
+    open System.Threading
+    open System.Reactive.Subjects
+
+    type LoadState =
+        {
+            undo : list<unit -> unit>
+        }
+
+    type Load<'a> = { run : Proc<LoadState, 'a> }
+
+    module Load =
+        let map (f : 'a -> 'b) (m : Load<'a>) =
+            { run =
+                proc {
+                    let! r = m.run
+                    return f r
+                }
+            }
+
+        let onCancel (f : unit -> unit) : Load<unit> =
+            { run =
+                proc {
+                    do! State.modify (fun s -> { s with undo = f :: s.undo})    
+                }
+            }
+
+        let disposeOnCancel<'a when 'a :> IDisposable> (d : 'a) =
+            onCancel (fun () -> (d :> IDisposable).Dispose())
+
+        let ofTask (t : System.Threading.Tasks.Task<'a>) =
+            { run = Proc.ofTask t }
+
+        let bind (f : 'a -> Load<'b>) (m : Load<'a>) =
+            { run = Proc.bind (fun v -> (f v).run) m.run }
+
+        let append (l : Load<unit>) (r : Load<'a>) =
+            { run = Proc.append l.run r.run }
+
+        let value (a : 'a) =
+            { run = Proc.value a }
+
+
+
+        type private IRunner =
+            abstract member Step : Time -> bool
+        type private Runner<'a>(initialState : LoadState, proc : Proc<LoadState, 'a>, dirty : unit -> unit) as this =
+            inherit Mod.AbstractMod<Option<'a>>()
+
+            let subscriptions = Dictionary<IObservable, IDisposable>()
+            let queue = Queue<IObservable * obj * Time>()
+            let mutable pending : Option<Pattern * (obj -> Proc<LoadState, 'a>)> = None
+            let mutable state = { time = Time.Now; userState = initialState }
+            let mutable dependsOnTime = false
+            let mutable result = None
+            let mutable isRunning = false
+
+            let push (source : IObservable) (value : obj) =
+                lock this (fun () -> 
+                    queue.Enqueue(source, value, Time.Now)
+                    dirty()
+                )
+
+            let processEvent (source : IObservable) (value : obj) =
+                match pending with
+                    | Some (p,cont) ->
+                        let mutable dt = false
+                        let mutable newPending = None
+
+                        let finished = 
+                            match p.MatchUntyped(state,source,value) with
+                                | Some v -> 
+                                    let c = cont v
+                                    match c.run.Run(&state) with
+                                        | Continue(p,c) ->
+                                            newPending <- Some (p,c)
+                                            dt <- dt || p.DependsOnTime
+                                            false
+                                        | Finished v ->
+                                            result <- Some v
+                                            transact (fun () -> this.MarkOutdated())
+                                            true
+                                | None ->
+                                    newPending <- Some (p,cont)
+                                    dt <- dt || p.DependsOnTime
+                                    false
+
+                        if finished then
+                            dependsOnTime <- false
+                            subscriptions.Values |> Seq.iter (fun d -> d.Dispose())
+                            subscriptions.Clear()
+                            queue.Clear()
+
+                            true
+
+                        else 
+                            let added, removed =
+                                match pending, newPending with
+                                    | Some (o,_), Some (n,_) ->
+                                        let added = n.Relevant |> Seq.filter (fun v -> PersistentHashSet.contains v o.Relevant |> not) |> Seq.toList
+                                        let removed = o.Relevant |> Seq.filter (fun v -> PersistentHashSet.contains v n.Relevant |> not) |> Seq.toList
+                                        added, removed
+
+                                    | None, Some (n,_) ->
+                                        Seq.toList n.Relevant, []
+
+                                    | Some (o,_), None ->
+                                        [], Seq.toList o.Relevant
+
+                                    | None, None ->
+                                        [], []
+
+                            for a in added do
+                                subscriptions.[a] <- a.Subscribe(fun o -> push a o)
+
+                            for r in removed do
+                                match subscriptions.TryGetValue r with
+                                    | (true, s) -> 
+                                        subscriptions.Remove r |> ignore
+                                        s.Dispose()
+                                    | _ -> ()
+
+                            pending <- newPending
+                            dependsOnTime <- dt
+                            false
+
+                    | None -> 
+                        dependsOnTime <- false
+                        subscriptions.Values |> Seq.iter (fun d -> d.Dispose())
+                        subscriptions.Clear()
+                        queue.Clear()
+                        true
+
+            let setTime (t : Time) =
+                if t > state.time then
+                    state <- { state with time = t }
+                    if dependsOnTime then processEvent null null
+                    else false
+                else
+                    false
+
+            let step (tTarget : Time) =
+                let mutable finished = false
+                while queue.Count > 0 do
+                    let (s,e,t) = queue.Dequeue()
+                    finished <- finished || setTime t
+                    finished <- finished || processEvent s e
+
+                finished || setTime tTarget
+                    
+            let kill() =
+                isRunning <- false
+                dependsOnTime <- false
+                subscriptions.Values |> Seq.iter (fun d -> d.Dispose())
+                subscriptions.Clear()
+                queue.Clear()
+                result <- None 
+                for u in state.userState.undo do u()
+                state <- { time = Time.Now; userState = initialState }
+
+
+            member x.Start () =
+                lock x (fun () ->
+                    if not isRunning then
+                        isRunning <- true
+                        match proc.run.Run(&state) with
+                            | Finished v ->
+                                result <- Some v
+                                transact (fun () -> x.MarkOutdated())
+
+                            | Continue(p, cont) ->
+                                pending <- Some (p,cont)
+
+                                if p.DependsOnTime then
+                                    dependsOnTime <- true
+
+                                for r in p.Relevant do
+                                    if not (subscriptions.ContainsKey r) then
+                                        subscriptions.[r] <- r.Subscribe(fun o -> push r o)
+                )
+
+            member x.Stop() =
+                lock x (fun () ->
+                    if isRunning then
+                        isRunning <- false
+                        kill()
+                )
+
+            member x.Step(t : Time) =
+                lock x (fun () ->
+                    if isRunning then
+                        step t
+                    else
+                        true
+                )
+
+            member x.IsRunning = 
+                isRunning
+
+            override x.Compute() =
+                result
+
+            interface IRunner with
+                member x.Step t = x.Step t
+
+            interface ILoadTask<'a> with
+                member x.Start() = x.Start()
+                member x.Stop() = x.Stop()
+                member x.IsRunning = x.IsRunning
+
+        type Runner(threads : int) =
+            let dirtyRunners = ConcurrentHashQueue<IRunner>()
+            let sem = new SemaphoreSlim(0)
+            let cancel = new CancellationTokenSource()
+
+            [<VolatileField>]
+            let mutable remaining = threads
+
+            let mainLoop =
+                let token = cancel.Token
+                async {
+                    try
+                        do! Async.SwitchToNewThread()
+                        while true do
+                            sem.Wait(token)
+                            match dirtyRunners.TryDequeue() with
+                                | (true, r) ->
+                                    r.Step(Time.Now) |> ignore
+                                | _ ->
+                                    ()
+                    with :? OperationCanceledException ->
+                        Interlocked.Decrement(&remaining) |> ignore
+                }
+
+            do for i in 1 .. threads do Async.Start mainLoop
+
+            new() = new Runner(1)
+
+
+            member x.Enqueue (p : Load<'a>) : ILoadTask<'a> =
+                let mutable self = Unchecked.defaultof<_>
+                let dirty() =
+                    if dirtyRunners.Enqueue (self :> IRunner) then
+                        sem.Release() |> ignore
+
+                self <- Runner<'a>({ undo = [] }, p.run, dirty)
+                self :> ILoadTask<'a>
+
+            member x.Dispose() =
+                cancel.Cancel()
+                while remaining > 0 do ()
+                sem.Dispose()
+                cancel.Dispose()
+                dirtyRunners.Clear()
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+    [<AutoOpen>]
+    module ``Load Builder`` =
+        type LoadBuilder() =
+
+            member x.Using<'a, 'b when 'a :> IDisposable> (v : 'a, f : 'a -> Load<'b>) : Load<'b> =
+                let c = Load.disposeOnCancel v
+                let body =
+                    v |> f |> Load.map(fun r ->
+                        (v :> IDisposable).Dispose()
+                        r
+                    )
+
+                Load.append c body
+
+
+            member x.Bind(m : System.Threading.Tasks.Task<'a>, f : 'a -> Load<'b>) =
+                Load.bind f (Load.ofTask m)
+
+            member x.Bind(m : Async<'a>, f : 'a -> Load<'b>) =
+                Load.bind f (Load.ofTask (Async.StartAsTask m))
+
+            member x.Bind(m : Load<'a>, f : 'a -> Load<'b>) =
+                Load.bind f m
+
+            member x.Return(v : 'a) = 
+                Load.value v
+
+            member x.Combine(l : Load<unit>, r : Load<'a>) =
+                { run =
+                    Proc.append l.run r.run
+                }
+
+            member x.Delay(f : unit -> Load<'a>) =
+                { run = Proc.delay (fun () -> f().run)}
+
+            member x.Zero() =
+                Load.value ()
+
+            member x.For(s : seq<'a>, f : 'a -> Load<unit>) =
+                { run =
+                    proc {
+                        for e in s do
+                            do! (f e).run
+                    }
+                }
+
+            member x.While(guard : unit -> bool, body : Load<unit>) =
+                { run =
+                    proc {
+                        while guard() do
+                            do! body.run
+                    }
+                }
+
+        let load = LoadBuilder() 
+
+    open System.Runtime.InteropServices
+
+    [<Demo("Load Test")>]
+    let loadTest() =
+        use r = new Load.Runner(4)
+        let mutable allocated = 0
+
+        let myLoad (file : string) =
+            load {
+                use stream = File.OpenRead(file)
+                
+                let buffer = Array.zeroCreate 4096
+                let mutable remaining = stream.Length
+
+                let ptr = Marshal.AllocHGlobal (int stream.Length)
+                Interlocked.Increment(&allocated) |> ignore
+                do! Load.onCancel (fun () -> 
+                    Interlocked.Decrement(&allocated) |> ignore
+                    Marshal.FreeHGlobal ptr
+                )
+
+
+                let mutable c = ptr
+                while remaining > 0L do
+                    let! r = stream.ReadAsync(buffer, 0, min buffer.Length (int remaining))
+                    Marshal.Copy(buffer, 0, c, int r)
+                    remaining <- remaining - int64 r
+                    c <- c + nativeint r
+
+                return ptr
+            }
+
+
+        let load = myLoad @"C:\Users\schorsch\Desktop\clipper_ver6.2.1.zip"
+        let tasks = Array.init 4096 (fun _ -> r.Enqueue load)
+
+        for t in tasks do
+            t.Start()
+
+        Console.ReadLine() |> ignore
+
+        for t in tasks do
+            t.Stop()
+
+        printfn "allocated: %A" allocated
+
+
+
+
+        ()
