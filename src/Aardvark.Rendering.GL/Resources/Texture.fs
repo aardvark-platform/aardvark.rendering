@@ -214,6 +214,229 @@ module TextureExtensions =
         ]
 
 
+    module private Devil =
+        open DevILSharp
+
+        let private pixelType =
+            lookupTable [
+                ChannelType.Byte, PixelType.Byte
+                //ChannelType.Double, PixelType.Double
+                ChannelType.Float, PixelType.Float
+                ChannelType.Half, PixelType.HalfFloat
+                ChannelType.Int, PixelType.Int
+                ChannelType.Short, PixelType.Short
+                ChannelType.UnsignedByte, PixelType.UnsignedByte
+                ChannelType.UnsignedInt, PixelType.UnsignedInt
+                ChannelType.UnsignedShort, PixelType.UnsignedShort
+            ]
+
+        let private pixelFormat =
+            lookupTable [
+                ChannelFormat.RGB, PixelFormat.Rgb
+                ChannelFormat.BGR, PixelFormat.Bgr
+                ChannelFormat.RGBA, PixelFormat.Rgba
+                ChannelFormat.BGRA, PixelFormat.Bgra
+                ChannelFormat.Luminance, PixelFormat.Luminance
+                ChannelFormat.Alpha, PixelFormat.Alpha
+                ChannelFormat.LuminanceAlpha, PixelFormat.LuminanceAlpha
+
+            ]
+
+        let private compressedFormat =
+            lookupTable [
+                (ChannelFormat.RGB, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
+                (ChannelFormat.RGBA, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
+                (ChannelFormat.RGB, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
+                (ChannelFormat.RGBA, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
+                
+                (ChannelFormat.BGR, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
+                (ChannelFormat.BGRA, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
+                (ChannelFormat.BGR, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
+                (ChannelFormat.BGRA, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
+            ]
+
+        module private PixFormat =
+            let private types =
+                lookupTable [
+                    ChannelType.Byte, typeof<int8>
+                    //ChannelType.Double, PixelType.Double
+                    ChannelType.Float, typeof<float32>
+                    ChannelType.Half, typeof<float16>
+                    ChannelType.Int, typeof<int>
+                    ChannelType.Short, typeof<int16>
+                    ChannelType.UnsignedByte, typeof<uint8>
+                    ChannelType.UnsignedInt, typeof<uint32>
+                    ChannelType.UnsignedShort, typeof<uint16>
+                ]
+
+            let private colFormat =
+                lookupTable [
+                    ChannelFormat.RGB, Col.Format.RGB
+                    ChannelFormat.BGR, Col.Format.BGR
+                    ChannelFormat.RGBA, Col.Format.RGBA
+                    ChannelFormat.BGRA, Col.Format.BGRA
+                    ChannelFormat.Luminance, Col.Format.Gray
+                    ChannelFormat.Alpha, Col.Format.Alpha
+                    ChannelFormat.LuminanceAlpha, Col.Format.GrayAlpha
+                ]
+
+            let get(fmt : ChannelFormat, t : ChannelType) =
+                match types t, colFormat fmt with
+                    | Some t, Some fmt -> PixFormat(t, fmt) |> Some
+                    | _ -> None
+
+        let uploadTexture2DLevelFile (t : Texture) (level : int) (file : string) (config : TextureParams) =
+            PixImage.InitDevil()
+            let img = IL.GenImage()
+            try
+                IL.BindImage(img)
+                IL.LoadImage(file) |> IL.check "could not load image"
+                
+
+                
+                let w = IL.GetInteger(IntName.ImageWidth)
+                let h = IL.GetInteger(IntName.ImageHeight)
+                let fmt = IL.GetInteger(IntName.ImageFormat) |> unbox<DevILSharp.ChannelFormat>
+                let pt = IL.GetDataType()
+
+                let compressedFormat =
+                    if config.wantCompressed then
+                        match compressedFormat(fmt, pt, config.wantSrgb) with
+                            | Some t -> Some t
+                            | _ -> None
+                    else
+                        None
+
+
+                match compressedFormat with
+                    | Some (fmt, ifmt) ->
+                        ILU.FlipImage() |> IL.check "could not flip image"
+                        let channels = IL.GetInteger(IntName.ImageChannels)
+                        let size = IL.GetDXTCData(0n, 0, fmt)
+                
+                        Log.line "compression: %.2f%%" (100.0 * float size / float (w * h * channels)) 
+
+                        let pbo = GL.GenBuffer()
+                        GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+                        GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
+
+                        let ptr = GL.MapBuffer(BufferTarget.PixelUnpackBuffer, BufferAccess.WriteOnly)
+                        IL.GetDXTCData(ptr, size, fmt) |> ignore
+                        GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+                        GL.BindTexture(TextureTarget.Texture2D, t.Handle)
+
+              
+                        GL.CompressedTexImage2D(TextureTarget.Texture2D, level, ifmt, w, h, 0, size, 0n)
+                        GL.BindTexture(TextureTarget.Texture2D, 0)
+                        GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+                        GL.DeleteBuffer(pbo)
+
+                        updateTexture t.Context t.SizeInBytes (int64 size)
+                        t.Format <- unbox (int ifmt)
+                        t.SizeInBytes <- int64 size
+
+                    | _ ->
+                        match PixFormat.get(fmt, pt) with
+                            | Some pixFormat ->
+                                let ifmt = TextureFormat.ofPixFormat pixFormat config
+
+                                let pixelType, pixelFormat =
+                                    match toPixelType pixFormat.Type, toPixelFormat pixFormat.Format with
+                                        | Some t, Some f -> (t,f)
+                                        | _ ->
+                                            failwith "conversion not implemented"
+
+
+                                let elementSize = pixFormat.Type.GLSize
+                                let channelCount =
+                                    match toChannelCount pixFormat.Format with
+                                        | Some c -> c
+                                        | _ -> pixFormat.ChannelCount
+                                
+                                let pbo = GL.GenBuffer()
+                                let size = int64 (elementSize * channelCount * w * h)
+                                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+                                GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
+
+                                let dst = GL.MapBuffer(BufferTarget.PixelUnpackBuffer, BufferAccess.WriteOnly)
+                                let src = IL.GetData()
+
+                                let d = channelCount * elementSize
+
+                                let srcInfo =
+                                    VolumeInfo(
+                                        0L, 
+                                        V3l(int64 w, int64 h, int64 d),
+                                        V3l(int64 d, int64 (w * d), 1L)
+                                    )
+
+                                let dstInfo = 
+                                    VolumeInfo(
+                                        srcInfo.DY * (srcInfo.SY-1L), 
+                                        srcInfo.Size, 
+                                        V3l(srcInfo.DX, -srcInfo.DY, srcInfo.DZ)
+                                    )
+
+                                let vSrc = 
+                                    NativeVolume<byte>(
+                                        NativePtr.ofNativeInt src, 
+                                        srcInfo
+                                    )
+
+                                let vDst = 
+                                    NativeVolume<byte>(
+                                        NativePtr.ofNativeInt dst, 
+                                        dstInfo
+                                    )
+
+                                NativeVolume.iter2 vSrc vDst (fun src dst -> NativePtr.write dst (NativePtr.read src))
+                                GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+
+
+                                GL.BindTexture(TextureTarget.Texture2D, t.Handle)
+                                GL.TexImage2D(TextureTarget.Texture2D, 0, unbox (int ifmt), w, h, 0, pixelFormat, pixelType, 0n)
+                                GL.BindTexture(TextureTarget.Texture2D, 0)
+
+                                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+                                GL.DeleteBuffer(pbo)
+
+                                updateTexture t.Context t.SizeInBytes size
+                                t.SizeInBytes <- size
+                                t.Format <- ifmt
+
+
+                            | _ -> 
+                                failwith "[GL] could not get PixFormat for devil-texture"
+
+
+
+
+                t.Size <- V3i(w,h,1)
+                t.Dimension <- TextureDimension.Texture2D
+                t.Count <- 1
+                t.ImmutableFormat <- false
+                t.MipMapLevels <- 1
+                t.Multisamples <- 1
+                IL.BindImage(0)
+            finally
+                IL.DeleteImage(img)
+
+        let uploadTexture2D (t : Texture) (file : string) (config : TextureParams) =
+            uploadTexture2DLevelFile t 0 file config
+
+            GL.BindTexture(TextureTarget.Texture2D, t.Handle)
+            if config.wantMipMaps then
+                GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
+                let newSize = 4L * t.SizeInBytes / 3L
+                updateTexture t.Context t.SizeInBytes newSize
+                t.SizeInBytes <- newSize
+            else
+                GL.TexParameterI(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, [| 0 |])
+                GL.TexParameterI(TextureTarget.Texture2D, TextureParameterName.TextureMaxLod, [| 0 |])
+            GL.BindTexture(TextureTarget.Texture2D, 0)
+
+
+
     [<AutoOpen>]
     module private Uploads =
 
@@ -304,7 +527,7 @@ module TextureExtensions =
 
             if sizeChanged then
                 let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits internalFormat) * size.X * size.Y) / 8
-                let sizeInBytes =  if textureParams.wantMipMaps then (sizeInBytes * 3L) / 2L else sizeInBytes
+                let sizeInBytes =  if textureParams.wantMipMaps then (sizeInBytes * 4L) / 3L else sizeInBytes
                 updateTexture t.Context t.SizeInBytes sizeInBytes
                 t.SizeInBytes <- sizeInBytes
 
@@ -978,12 +1201,13 @@ module TextureExtensions =
 
                     | FileTexture(info, file) ->
                         let t = newTexture ()
-                        if file = null then 
+                        if isNull file then 
                             t
                         else
-                            let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
-                            let mm = PixImageMipMap [|pi|]
-                            uploadTexture2D t info mm |> ignore
+                            Devil.uploadTexture2D t file info
+//                            let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
+//                            let mm = PixImageMipMap [|pi|]
+//                            uploadTexture2D t info mm |> ignore
                             t
 
                     | PixTexture2D(wantMipMaps, data) -> 
@@ -1028,9 +1252,10 @@ module TextureExtensions =
                         uploadTexture3D t info image
 
                     | FileTexture(info, file) ->
-                        let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
-                        let mm = PixImageMipMap [|pi|]
-                        uploadTexture2D t info mm |> ignore
+                        Devil.uploadTexture2D t file info
+//                        let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
+//                        let mm = PixImageMipMap [|pi|]
+//                        uploadTexture2D t info mm |> ignore
 
                     | :? NullTexture -> failwith "cannot update texture with null texture"
 
