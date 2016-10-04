@@ -78,7 +78,7 @@ module MappedBufferImplementations =
 
 
                 if newCapacity > 0n then
-                    GL.BufferStorage(BufferTarget.CopyWriteBuffer, newCapacity, 0n, BufferStorageFlags.MapPersistentBit ||| BufferStorageFlags.MapWriteBit ||| BufferStorageFlags.DynamicStorageBit)
+                    GL.BufferStorage(BufferTarget.CopyWriteBuffer, newCapacity, 0n, BufferStorageFlags.MapPersistentBit ||| BufferStorageFlags.MapWriteBit ||| BufferStorageFlags.DynamicStorageBit ||| BufferStorageFlags.MapReadBit)
                     GL.Check "[MappedBuffer] could not set buffer storage"
 
                     if oldBuffer <> 0 then
@@ -94,7 +94,7 @@ module MappedBufferImplementations =
                             BufferTarget.CopyWriteBuffer, 
                             0n, 
                             newCapacity, 
-                            BufferAccessMask.MapPersistentBit ||| BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit
+                            BufferAccessMask.MapPersistentBit ||| BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit ||| BufferAccessMask.MapReadBit
                         )
                     GL.Check "[MappedBuffer] could map buffer"
                 else 
