@@ -85,6 +85,7 @@ type App private () =
     static member Keyboard = getWin().Keyboard
     static member Mouse = getWin().Mouse
     static member Time = getWin().Time
+    static member Size = getWin().Sizes
 
     static member run (task : IRenderTask) =
         realTask.Inner <- task

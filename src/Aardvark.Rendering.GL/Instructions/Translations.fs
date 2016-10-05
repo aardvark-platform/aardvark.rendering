@@ -22,7 +22,7 @@ module Translations =
             | IndexedGeometryMode.PointList -> DrawMode.Points |> int
             | IndexedGeometryMode.TriangleAdjacencyList -> DrawMode.TrianglesAdjacency |> int
             | IndexedGeometryMode.LineAdjacencyList -> DrawMode.LinesAdjacency |> int
-            | IndexedGeometryMode.QuadList -> DrawMode.Patches |> int
+            | IndexedGeometryMode.QuadList -> DrawMode.QuadList |> int
             | _ -> failwith "not handled IndexedGeometryMode"
 
     let toPatchCount (m : IndexedGeometryMode) =

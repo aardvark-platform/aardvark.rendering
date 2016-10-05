@@ -53,6 +53,15 @@ module PGM =
                         yield V3d(offset + float x * step, offset + float y * step, 0.0)
             |]
 
+        let texcoords =
+            let offset = 0.0
+            let step = 1.0 / float (s - 1)
+            [|
+                for y in 0 .. s-1 do
+                    for x in 0 .. s-1 do
+                        yield V2d(offset + float x * step, offset + float y * step)
+            |]
+
         let indices =
             [|
                 for y in 1 .. s-1 do
@@ -72,10 +81,12 @@ module PGM =
             IndexedAttributes =
                 SymDict.ofList [
                     DefaultSemantic.Positions, positions :> Array
+                    DefaultSemantic.DiffuseColorCoordinates, texcoords :> Array
                 ]
         )
 
 
+    [<ReflectedDefinition>]
     module Shader =
         open FShade
 
@@ -143,11 +154,11 @@ module PGM =
             }
 
         let planeSize = 10.0
-        let heightScale = 1.0
-        let pixelSize = 5.0
+        let heightScale = 0.5
+        let pixelSize = 2.0
 
         [<ReflectedDefinition>]
-        let sampleHeight (world : V4d) =
+        let sampleHeight (world : V4d)  =
             let off = 1.0 / V2d heightSampler.Size
             let tc = V2d(0.5, 0.5) + world.XY / planeSize
 
@@ -159,6 +170,7 @@ module PGM =
             let wp = world + V4d(0.0, 0.0, h, 0.0)
             wp
 
+        
         [<ReflectedDefinition>]
         let sampleNormal (world : V4d) =
             let off = 1.0 / V2d heightSampler.Size
@@ -246,6 +258,76 @@ module PGM =
 
             }
 
+
+
+
+        let sampleHeight2 (world : V4d) (tc : V2d) =
+            let h = heightSampler.SampleLevel(tc, 0.0).X * heightScale
+            let wp = world + V4d(0.0, 0.0, h, 0.0)
+            wp
+
+        let project (v : V4d) =
+            let ss = v.XYZ / v.W
+            V2d uniform.ViewportSize * (V2d(ss.X * 0.5 + 0.5, 0.5 - ss.Y * 0.5))
+
+        let hTessControl (m : Patch4<Vertex>) =
+            tessControl {
+                let p0 = project m.P2.pos
+                let p1 = project m.P0.pos
+                let p2 = project m.P1.pos
+                let p3 = project m.P3.pos
+
+
+                let l0 = p1 - p0
+                let l1 = p2 - p1
+                let l2 = p3 - p2
+                let l3 = p0 - p3
+
+                let ll0 = l0.Length
+                let ll1 = l1.Length
+                let ll2 = l2.Length
+                let ll3 = l3.Length
+
+
+                let t0 = ll0 / pixelSize |> clamp 1.0 64.0
+                let t1 = ll1 / pixelSize |> clamp 1.0 64.0
+                let t2 = ll2 / pixelSize |> clamp 1.0 64.0
+                let t3 = ll3 / pixelSize |> clamp 1.0 64.0
+
+                let avg = (t0 + t1 + t2 + t3) / 4.0
+
+                let i0 = 0.5 * (t1 + t3)
+                let i1 = 0.5 * (t0 + t2)
+
+                //return { innerLevel = [|1.0; 1.0|]; outerLevel = [| 1.0; 1.0; 1.0; 1.0 |]} 
+                return { innerLevel = [|i0; i1|]; outerLevel = [| t0; t1; t2; t3 |]}  
+            }
+
+        let hTessEval (m : Patch4<Vertex>) =
+            tessEval {
+                let c = m.TessCoord.XY
+
+                let p0 = m.P0.wp * (1.0 - c.X) + m.P1.wp * c.X
+                let p1 = m.P2.wp * (1.0 - c.X) + m.P3.wp * c.X
+                let wp = p0 * (1.0 - c.Y) + p1 * c.Y
+
+                let tc0 = m.P0.tc * (1.0 - c.X) + m.P1.tc * c.X
+                let tc1 = m.P2.tc * (1.0 - c.X) + m.P3.tc * c.X
+                let tc = tc0 * (1.0 - c.Y) + tc1 * c.Y
+
+                let wp = sampleHeight2 wp tc
+
+                return {
+                    pos = uniform.ViewProjTrafo * wp
+                    wp = wp
+                    dir = V3d.OOI
+                    n = V3d.OOI
+                    tc = tc
+                }
+            }
+
+
+
     [<Demo("PGM")>]
     let run() =
         let h = PixImage.Create @"C:\Users\Schorsch\Desktop\ps_height_1k.png"
@@ -278,6 +360,38 @@ module PGM =
             |> Sg.uniform "HeightFieldTexture" tex
             |> Sg.diffuseTexture color
 
+
+    [<Demo("Height")>]
+    let run2() =
+        let h = PixImage.Create @"C:\Users\Schorsch\Desktop\ps_height_1k.png"
+        let tex = PixTexture2d(PixImageMipMap [|h|], { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
+        let color = FileTexture(@"C:\Users\Schorsch\Desktop\ps_texture_1k.png",  { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
+        
+        let mode = Mod.init FillMode.Fill
+
+        App.Keyboard.KeyDown(Keys.X).Values.Add(fun _ ->
+            transact (fun () ->
+                match mode.Value with
+                    | FillMode.Fill -> mode.Value <- FillMode.Line
+                    | _ -> mode.Value <- FillMode.Fill
+            )
+        )
+
+        
+        tessGrid 64
+            |> Sg.ofIndexedGeometry
+            |> Sg.effect [
+                DefaultSurfaces.trafo |> toEffect 
+                Shader.hTessControl |> toEffect
+                Shader.hTessEval |> toEffect
+                DefaultSurfaces.constantColor C4f.White |> toEffect
+                DefaultSurfaces.diffuseTexture |> toEffect
+//                DefaultSurfaces.simpleLighting |> toEffect 
+               ]
+            |> Sg.fillMode mode
+            |> Sg.uniform "HeightFieldTexture" tex
+            |> Sg.uniform "ViewportSize" App.Size
+            |> Sg.diffuseTexture color
 
 
 
