@@ -9,6 +9,7 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Application
 open Aardvark.Application.WinForms
+open Aardvark.Rendering.NanoVg
 
 type private ChangeableRenderTask() =
     inherit AbstractRenderTask()
@@ -127,7 +128,7 @@ type App private () =
                 | :? ISg as s ->
                     let w = getWin()
                     let task = app.Value.Runtime.CompileRender(w.FramebufferSignature, withCam s)
-                    realTask.Inner <- task
+                    realTask.Inner <- task |> DefaultOverlays.withStatistics
                     w.Show()
 
                 | :? IRenderTask as r -> 

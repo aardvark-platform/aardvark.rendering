@@ -22,6 +22,7 @@ module Translations =
             | IndexedGeometryMode.PointList -> DrawMode.Points |> int
             | IndexedGeometryMode.TriangleAdjacencyList -> DrawMode.TrianglesAdjacency |> int
             | IndexedGeometryMode.LineAdjacencyList -> DrawMode.LinesAdjacency |> int
+            | IndexedGeometryMode.QuadList -> DrawMode.Patches |> int
             | _ -> failwith "not handled IndexedGeometryMode"
 
     let toPatchCount (m : IndexedGeometryMode) =
@@ -33,6 +34,8 @@ module Translations =
             | IndexedGeometryMode.PointList -> 1
             | IndexedGeometryMode.TriangleAdjacencyList -> 2
             | IndexedGeometryMode.LineAdjacencyList -> 3
+            | IndexedGeometryMode.QuadList -> 4
+
             | _ -> failwith "not handled IndexedGeometryMode"
 
     let toGLFactor (f : ABlendFactor) =

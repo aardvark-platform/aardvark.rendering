@@ -71,6 +71,8 @@
     <Compile Include="Staging\Dispatcher.fs" />
     <Compile Include="Staging\QuotationCompiler.fs" />
     <Compile Include="Staging\Ag.fs" />
+    <Compile Include="Staging\Heap.fs" />
+    <Compile Include="PGM.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
