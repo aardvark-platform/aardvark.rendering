@@ -481,9 +481,9 @@ module PGM =
 
     [<Demo("Height")>]
     let run2() =
-        let h = PixImage.Create @"C:\Users\Schorsch\Desktop\ps_height_1k.png"
+        let h = PixImage.Create @"C:\Aardwork\ps_height_1k.png"
         let tex = PixTexture2d(PixImageMipMap [|h|], { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
-        let color = FileTexture(@"C:\Users\Schorsch\Desktop\ps_texture_1k.png",  { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
+        let color = FileTexture(@"C:\Aardwork\ps_texture_1k.png",  { TextureParams.empty with wantMipMaps = true }) :> ITexture |> Mod.constant
         
         let mode = Mod.init FillMode.Fill
 
