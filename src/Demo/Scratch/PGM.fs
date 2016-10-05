@@ -45,8 +45,8 @@ module PGM =
     let tessGrid (s : int) =
         let s = max 2 (s + 1)
         let positions =
-            let offset = -1.0
-            let step = 2.0 / float (s - 1)
+            let offset = -10.0
+            let step = 20.0 / float (s - 1)
             [|
                 for y in 0 .. s-1 do
                     for x in 0 .. s-1 do
@@ -153,9 +153,101 @@ module PGM =
                 addressV WrapMode.Clamp
             }
 
+        let heightScale = 5.0
+        let pixelSize = 30.0
+
         let planeSize = 10.0
-        let heightScale = 0.5
-        let pixelSize = 5.0
+        let texelSize = 5.0
+
+        [<AutoOpen>]
+        module Tools =
+            let dxTessCoord (c : V2d) =
+                let inner = getInnerTessLevel 0
+                let si = 1.0 / inner
+                let tessLevel = 
+                    if c.Y >= 1.0 - si then getOuterTessLevel 3
+                    elif c.Y <= si then getOuterTessLevel 1
+                    else inner
+
+                V2d(1.0 / tessLevel, 0.0)
+                
+            let dyTessCoord (c : V2d) =
+                let inner = getInnerTessLevel 1
+                let si = 1.0 / inner
+                let tessLevel = 
+                    if c.X >= 1.0 - si then getOuterTessLevel 2
+                    elif c.X <= si then getOuterTessLevel 0
+                    else inner
+            
+                V2d(0.0, 1.0 / tessLevel)
+
+
+            let interpolate2 (c : V2d) (p0 : V2d) (p1 : V2d) (p2 : V2d) (p3 : V2d) =
+                let x = clamp 0.0 1.0 c.X
+                let y = clamp 0.0 1.0 c.Y
+                let a = p0 * (1.0 - x) + p1 * x
+                let b = p2 * (1.0 - x) + p3 * x
+                a * (1.0 - y) + b * y
+
+            let interpolate3 (c : V2d) (p0 : V3d) (p1 : V3d) (p2 : V3d) (p3 : V3d) =
+                let x = clamp 0.0 1.0 c.X
+                let y = clamp 0.0 1.0 c.Y
+                let a = p0 * (1.0 - x) + p1 * x
+                let b = p2 * (1.0 - x) + p3 * x
+                a * (1.0 - y) + b * y
+
+            let interpolate4 (c : V2d) (p0 : V4d) (p1 : V4d) (p2 : V4d) (p3 : V4d) =
+                let x = clamp 0.0 1.0 c.X
+                let y = clamp 0.0 1.0 c.Y
+                let a = p0 * (1.0 - x) + p1 * x
+                let b = p2 * (1.0 - x) + p3 * x
+                a * (1.0 - y) + b * y
+
+
+
+            let gradient2 (c : V2d) (p0 : V2d) (p1 : V2d) (p2 : V2d) (p3 : V2d) =
+                let dcx = dxTessCoord c
+                let dcy = dyTessCoord c
+
+                let v00 = interpolate2 c p0 p1 p2 p3
+                let vp0 = interpolate2 (c + 0.5 * dcx) p0 p1 p2 p3
+                let vn0 = interpolate2 (c - 0.5 * dcx) p0 p1 p2 p3
+                let v0p = interpolate2 (c + 0.5 * dcy) p0 p1 p2 p3
+                let v0n = interpolate2 (c - 0.5 * dcy) p0 p1 p2 p3
+                let dx = (vp0 - vn0) / 2.0
+                let dy = (v0p - v0n) / 2.0
+
+                v00, dx, dy
+
+            let gradient3 (c : V2d) (p0 : V3d) (p1 : V3d) (p2 : V3d) (p3 : V3d) =
+                let dcx = dxTessCoord c
+                let dcy = dyTessCoord c
+
+                let v00 = interpolate3 c p0 p1 p2 p3
+                let vp0 = interpolate3 (c + 0.5 * dcx) p0 p1 p2 p3
+                let vn0 = interpolate3 (c - 0.5 * dcx) p0 p1 p2 p3
+                let v0p = interpolate3 (c + 0.5 * dcy) p0 p1 p2 p3
+                let v0n = interpolate3 (c - 0.5 * dcy) p0 p1 p2 p3
+                let dx = (vp0 - vn0) / 2.0
+                let dy = (v0p - v0n) / 2.0
+
+                v00, dx, dy
+
+            let gradient4 (c : V2d) (p0 : V4d) (p1 : V4d) (p2 : V4d) (p3 : V4d) =
+                let dcx = dxTessCoord c
+                let dcy = dyTessCoord c
+
+                let v00 = interpolate4 c p0 p1 p2 p3
+                let vp0 = interpolate4 (c + 0.5 * dcx) p0 p1 p2 p3
+                let vn0 = interpolate4 (c - 0.5 * dcx) p0 p1 p2 p3
+                let v0p = interpolate4 (c + 0.5 * dcy) p0 p1 p2 p3
+                let v0n = interpolate4 (c - 0.5 * dcy) p0 p1 p2 p3
+                let dx = (vp0 - vn0) / 2.0 
+                let dy = (v0p - v0n) / 2.0 
+
+                v00, dx, dy
+
+
 
         [<ReflectedDefinition>]
         let sampleHeight (world : V4d)  =
@@ -166,7 +258,7 @@ module PGM =
 //            let c = V2d (V2i (c / pixelSize)) * pixelSize + V2d(pixelSize / 2.0, pixelSize / 2.0)
 //            let tc = c / V2d heightSampler.Size
 
-            let h = heightSampler.SampleLevel(tc, 0.0).X * heightScale
+            let h = heightSampler.SampleLevel(tc, 0.0).X * 1.5
             let wp = world + V4d(0.0, 0.0, h, 0.0)
             wp
 
@@ -200,9 +292,9 @@ module PGM =
 
         let pgmTessControl (m : Patch4<Vertex>) =
             tessControl {
-                let p0 = sampleHeight m.P0.wp
-                let p1 = sampleHeight m.P1.wp
-                let p2 = sampleHeight m.P2.wp
+                let p0 = sampleHeight m.P2.wp
+                let p1 = sampleHeight m.P0.wp
+                let p2 = sampleHeight m.P1.wp
                 let p3 = sampleHeight m.P3.wp
 
                 let size = V2d heightSampler.Size
@@ -218,33 +310,37 @@ module PGM =
                 let ll3 = l3.Length
 
 
-                let t0 = ll0 / pixelSize |> int |> float
-                let t1 = ll1 / pixelSize |> int |> float
-                let t2 = ll2 / pixelSize |> int |> float
-                let t3 = ll3 / pixelSize |> int |> float
+                let t0 = ll0 / texelSize 
+                let t1 = ll1 / texelSize 
+                let t2 = ll2 / texelSize 
+                let t3 = ll3 / texelSize 
 
-                let avg = (t0 + t1 + t2 + t3) / 4.0
-
+                let i0 = 0.5 * (t1 + t3)
+                let i1 = 0.5 * (t0 + t2)
                 //return { innerLevel = [|1.0; 1.0|]; outerLevel = [| 1.0; 1.0; 1.0; 1.0 |]} 
-                return { innerLevel = [|avg; avg|]; outerLevel = [| t0; t1; t2; t3 |]}  
+                return { innerLevel = [|i0; i1|]; outerLevel = [| t0; t1; t2; t3 |]}  
             }
 
         let pgmTessEval (m : Patch4<Vertex>) =
             tessEval {
                 let c = m.TessCoord.XY
 
-                let p0 = m.P0.wp * (1.0 - c.X) + m.P1.wp * c.X
-                let p1 = m.P2.wp * (1.0 - c.X) + m.P3.wp * c.X
-                let wp = p0 * (1.0 - c.Y) + p1 * c.Y
+                let wp = interpolate4 c m.P0.wp m.P1.wp m.P2.wp m.P3.wp
+                let tc, dtx, dty = gradient2 c m.P0.tc m.P1.tc m.P2.tc m.P3.tc
 
-                let wp = sampleHeight wp
+
+                let h = heightSampler.SampleGrad(tc, dtx, dty).X * 1.5
+                let wp = wp + V4d(0.0, 0.0, h, 0.0)
+
+
+
 
                 return {
                     pos = uniform.ViewProjTrafo * wp
                     wp = wp
                     dir = V3d.OOI
                     n = V3d.OOI
-                    tc = V2d(0.5, 0.5) + wp.XY / planeSize
+                    tc = tc
                 }
             }
 
@@ -348,10 +444,10 @@ module PGM =
                 let min, max = bounds m.P0.wp m.P1.wp m.P2.wp m.P3.wp
                 let offscreen = boxOutsideFrustum min max uniform.ViewProjTrafo
 
-                let t0 = if offscreen then 0.0 else ll0 / pixelSize |> clamp 1.0 64.0
-                let t1 = if offscreen then 0.0 else ll1 / pixelSize |> clamp 1.0 64.0
-                let t2 = if offscreen then 0.0 else ll2 / pixelSize |> clamp 1.0 64.0
-                let t3 = if offscreen then 0.0 else ll3 / pixelSize |> clamp 1.0 64.0
+                let t0 = if offscreen then 0.0 else ll0 / pixelSize |> clamp 1.0 128.0
+                let t1 = if offscreen then 0.0 else ll1 / pixelSize |> clamp 1.0 128.0
+                let t2 = if offscreen then 0.0 else ll2 / pixelSize |> clamp 1.0 128.0
+                let t3 = if offscreen then 0.0 else ll3 / pixelSize |> clamp 1.0 128.0
 
                 let avg = (t0 + t1 + t2 + t3) / 4.0
 
@@ -362,18 +458,7 @@ module PGM =
                 return { innerLevel = [|i0; i1|]; outerLevel = [| t0; t1; t2; t3 |]}  
             }
 
-        type TessVertex =
-            {
-                [<WorldPosition>] wp : V4d
-                [<TexCoord>] tc : V2d
-                [<TessLevelInner>] tessInner : float[]
-                [<TessLevelOuter>] tessOuter : float[]
-            }
 
-        let inline int4 (cx : ^a) (cy : ^a) (p0 : ^b) (p1 : ^b) (p2 : ^b) (p3 : ^b) : ^b =
-            let x = (LanguagePrimitives.GenericOne - cx) * p0 + cx * p1
-            let y = (LanguagePrimitives.GenericOne - cx) * p2 + cx * p3
-            (LanguagePrimitives.GenericOne - cy) * x + cy * y
 
 
 
@@ -381,39 +466,19 @@ module PGM =
             tessEval {
                 let c = m.TessCoord.XY
 
-                let a = m.P0.wp * (1.0 - c.X) + m.P1.wp * c.X
-                let b = m.P2.wp * (1.0 - c.X) + m.P3.wp * c.X
-                let wp = a * (1.0 - c.Y) + b * c.Y
 
-                let a = m.P0.tc * (1.0 - c.X) + m.P1.tc * c.X
-                let b = m.P2.tc * (1.0 - c.X) + m.P3.tc * c.X
-                let tc = a * (1.0 - c.Y) + b * c.Y
+                let wp = interpolate4 c m.P0.wp m.P1.wp m.P2.wp m.P3.wp
+                let tc, dtx, dty = gradient2 c m.P0.tc m.P1.tc m.P2.tc m.P3.tc
 
-                let dx = V2d(0.5, 0.0)
-                let dy = V2d(0.0, 0.5)
-
-                let cx = c + dx
-                let a = m.P0.tc * (1.0 - cx.X) + m.P1.tc * cx.X
-                let b = m.P2.tc * (1.0 - cx.X) + m.P3.tc * cx.X
-                let tcx = a * (1.0 - cx.Y) + b * cx.Y
-
-                let cy = c + dy
-                let a = m.P0.tc * (1.0 - cy.X) + m.P1.tc * cy.X
-                let b = m.P2.tc * (1.0 - cy.X) + m.P3.tc * cy.X
-                let tcy = a * (1.0 - cy.Y) + b * cy.Y
-
-                let u = tcx - tc
-                let v = tcy - tc
-
-                let h = heightSampler.SampleGrad(tc, u, v).X * heightScale
+                let h = heightSampler.SampleGrad(tc, dtx, dty).X * heightScale
                 let wp = wp + V4d(0.0, 0.0, h, 0.0)
 
                 return {
-                    pos = uniform.ViewProjTrafo * wp
-                    wp = wp
-                    dir = V3d.OOI
-                    n = V3d.OOI
-                    tc = tc
+                    Vertex.pos = uniform.ViewProjTrafo * wp
+                    Vertex.wp = wp
+                    Vertex.dir = V3d.OOI
+                    Vertex.n = V3d.OOI
+                    Vertex.tc = tc
                 }
             }
 
@@ -429,8 +494,8 @@ module PGM =
                 let tc2 = m.P2.tc
 
 
-                let u = 0.5 * (tc1 - tc0)
-                let v = 0.5 * (tc2 - tc0)
+                let u = 1.0 * (tc1 - tc0)
+                let v = 1.0 * (tc2 - tc0)
 
                 
                 let h0 = heightSampler.SampleGrad(tc0, u, v).X * heightScale
@@ -444,6 +509,26 @@ module PGM =
                 yield { m.P1 with pos = uniform.ViewProjTrafo * wp1; wp = wp1 }
                 yield { m.P2 with pos = uniform.ViewProjTrafo * wp2; wp = wp2 }
             }
+
+        let hNormal (m : Vertex) =
+            fragment {
+                let dx = ddx m.tc
+                let dy = ddy m.tc
+
+                let off = 4.0
+
+                let h = heightSampler.SampleGrad(m.tc, dx, dy).X
+                let hx = heightSampler.SampleGrad(m.tc + off * dx, dx, dy).X
+                let hy = heightSampler.SampleGrad(m.tc + off * dy, dx, dy).X
+
+                let px = off * ddx m.wp.XY
+                let py = off * ddy m.wp.XY
+                let n = Vec.cross (V3d(px.X, px.Y, hx - h)) (V3d(py.X, py.Y, hy - h)) |> Vec.normalize
+
+
+                return { m with n = n }
+            }
+
 
 
     [<Demo("PGM")>]
@@ -463,11 +548,11 @@ module PGM =
         )
 
         
-        tessGrid 64
+        tessGrid 128
             |> Sg.ofIndexedGeometry
             |> Sg.effect [ 
                 Shader.pgmVertex |> toEffect
-                Shader.pgmHeight |> toEffect
+                //Shader.pgmHeight |> toEffect
                 Shader.pgmTessControl |> toEffect
                 Shader.pgmTessEval |> toEffect
                 Shader.pgmFragment |> toEffect
@@ -505,7 +590,8 @@ module PGM =
                 //Shader.hGeometry |> toEffect
                 DefaultSurfaces.constantColor C4f.White |> toEffect
                 DefaultSurfaces.diffuseTexture |> toEffect
-//                DefaultSurfaces.simpleLighting |> toEffect 
+                //Shader.hNormal |> toEffect
+                //DefaultSurfaces.simpleLighting |> toEffect 
                ]
             |> Sg.fillMode mode
             |> Sg.uniform "HeightFieldTexture" tex
