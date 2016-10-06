@@ -462,8 +462,8 @@ module TextureExtensions =
     [<AutoOpen>]
     module private Uploads =
 
-        let getTextureTarget (texture : Texture) =
-            match texture.Dimension, texture.IsArray, texture.IsMultisampled with
+        let getTextureTarget' (dim : TextureDimension, isArray : bool, isMS : bool) =
+            match dim, isArray, isMS with
 
                 | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"
                 | TextureDimension.Texture1D,      true,    _        -> TextureTarget.Texture1DArray
@@ -481,8 +481,10 @@ module TextureExtensions =
                 | TextureDimension.TextureCube,   true,     false    -> TextureTarget.TextureCubeMapArray
                 | TextureDimension.TextureCube,   _,        true     -> failwith "TextureCube cannot be multisampled"
 
-                | _ -> failwithf "unknown texture dimension: %A" texture.Dimension
+                | _ -> failwithf "unknown texture dimension: %A" dim
 
+        let getTextureTarget (texture : Texture) =
+            getTextureTarget' ( texture.Dimension, texture.IsArray, texture.IsMultisampled)
 
         let uploadTexture2DLevelInternal (target : TextureTarget) (t : Texture) (level : int) (image : PixImage) =
             // determine the input format and covert the image
@@ -832,6 +834,36 @@ module TextureExtensions =
             t.Dimension <- TextureDimension.Texture3D
             t.Format <- newFormat
 
+
+        let uploadNativeTexture (t : Texture) (data : INativeTexture) =
+            match data.Dimension, data.Count with
+                | TextureDimension.Texture2D, 1 ->
+                    let target = TextureTarget.Texture2D
+                    GL.BindTexture(target, t.Handle)
+
+                    let mutable totalSize = 0L
+                    for l in 0 .. data.MipMapLevels - 1 do
+                        let levelData = data.[0,l]
+                        totalSize <- totalSize + levelData.SizeInBytes
+                        levelData.Use(fun ptr ->
+                            GL.CompressedTexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, int levelData.SizeInBytes, ptr)
+                        )
+
+                    GL.TexParameterI(target, TextureParameterName.TextureMaxLevel, [|data.MipMapLevels - 1|])
+
+                    updateTexture t.Context t.SizeInBytes totalSize
+                    t.SizeInBytes <- totalSize
+                    t.Count <- 1
+                    t.Dimension <- data.Dimension
+                    t.Format <- data.Format
+                    t.ImmutableFormat <- false
+                    t.MipMapLevels <- data.MipMapLevels
+                    t.Multisamples <- 1
+                    GL.BindTexture(target, 0)
+                | _ ->
+
+                    failwith "implement me"
+            ()
 
         let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (image : PixImage) =
             let format = image.PixFormat
@@ -1255,6 +1287,11 @@ module TextureExtensions =
                     | :? Texture as o ->
                         o
 
+                    | :? INativeTexture as data ->
+                        let t = newTexture () 
+                        uploadNativeTexture t data
+                        t
+
                     | _ ->
                         failwith "unsupported texture data"
 
@@ -1277,15 +1314,15 @@ module TextureExtensions =
 
                     | FileTexture(info, file) ->
                         Devil.uploadTexture2D t file info
-//                        let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
-//                        let mm = PixImageMipMap [|pi|]
-//                        uploadTexture2D t info mm |> ignore
 
                     | :? NullTexture -> failwith "cannot update texture with null texture"
 
                     | :? Texture as o ->
                         if t.Handle <> o.Handle then
                             failwith "cannot upload to framebuffer-texture"
+
+                    | :? INativeTexture as data ->
+                        uploadNativeTexture t data
 
                     | _ ->
                         failwith "unsupported texture data"

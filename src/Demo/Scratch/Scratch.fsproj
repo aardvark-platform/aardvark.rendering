@@ -72,6 +72,7 @@
     <Compile Include="Staging\QuotationCompiler.fs" />
     <Compile Include="Staging\Ag.fs" />
     <Compile Include="Staging\Heap.fs" />
+    <Compile Include="Staging\Geometry.fs" />
     <Compile Include="PGM.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />

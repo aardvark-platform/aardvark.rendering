@@ -1,4 +1,4 @@
-﻿namespace Aardvark.SceneGraph
+﻿namespace Aardvark.SceneGraph.Pool
 
 open System
 open System.Threading
