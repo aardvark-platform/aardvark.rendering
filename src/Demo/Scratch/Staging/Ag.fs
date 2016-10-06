@@ -3889,8 +3889,7 @@ module Ag =
 
             ()
 
-    [<AutoOpen>]
-    module private Functions =
+    module Functions =
         let tryGetSynFunction<'a> (name : string) : Option<obj -> 'a> =
             match Globals.tryGetAttributeIndex name with
                 | Some i ->
@@ -3955,6 +3954,7 @@ module Ag =
                 | Some f -> f 
                 | _ -> failwithf "[Ag] could not get syn rule for '%s'" name
 
+    open Functions
 
     let inline useScope (s : Scope) (f : unit -> 'a) : 'a =
         let oldScope = CurrentScope.Instance
@@ -4184,9 +4184,9 @@ module NewestAgDemo =
     [<Demo("Ag Demo")>]
     let run() =
         Ag.init()
-        let all : obj -> list<int>  = Ag.getSynFunction "All"
-        let sum : obj -> int        = Ag.getSynFunction "Sum"
-        let blubber : obj -> int    = Ag.getSynFunction "Blubber"
+        let all : obj -> list<int>  = Ag.Functions.getSynFunction "All"
+        let sum : obj -> int        = Ag.Functions.getSynFunction "Sum"
+        let blubber : obj -> int    = Ag.Functions.getSynFunction "Blubber"
         let list = Cons(0, Cons(1, Nil()))
         Log.line "sum [0;1] = %A" (sum list)
         Log.line "all [0;1] = %A" (all list)
