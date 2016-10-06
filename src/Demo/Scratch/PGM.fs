@@ -157,7 +157,7 @@ module PGM =
         let pixelSize = 30.0
 
         let planeSize = 10.0
-        let texelSize = 5.0
+        let texelSize = 16.0
 
         [<AutoOpen>]
         module Tools =
@@ -183,22 +183,22 @@ module PGM =
 
 
             let interpolate2 (c : V2d) (p0 : V2d) (p1 : V2d) (p2 : V2d) (p3 : V2d) =
-                let x = clamp 0.0 1.0 c.X
-                let y = clamp 0.0 1.0 c.Y
+                let x = c.X //clamp 0.0 1.0 c.X
+                let y = c.Y //clamp 0.0 1.0 c.Y
                 let a = p0 * (1.0 - x) + p1 * x
                 let b = p2 * (1.0 - x) + p3 * x
                 a * (1.0 - y) + b * y
 
             let interpolate3 (c : V2d) (p0 : V3d) (p1 : V3d) (p2 : V3d) (p3 : V3d) =
-                let x = clamp 0.0 1.0 c.X
-                let y = clamp 0.0 1.0 c.Y
+                let x = c.X //clamp 0.0 1.0 c.X
+                let y = c.Y //clamp 0.0 1.0 c.Y
                 let a = p0 * (1.0 - x) + p1 * x
                 let b = p2 * (1.0 - x) + p3 * x
                 a * (1.0 - y) + b * y
 
             let interpolate4 (c : V2d) (p0 : V4d) (p1 : V4d) (p2 : V4d) (p3 : V4d) =
-                let x = clamp 0.0 1.0 c.X
-                let y = clamp 0.0 1.0 c.Y
+                let x = c.X //clamp 0.0 1.0 c.X
+                let y = c.Y //clamp 0.0 1.0 c.Y
                 let a = p0 * (1.0 - x) + p1 * x
                 let b = p2 * (1.0 - x) + p3 * x
                 a * (1.0 - y) + b * y
@@ -317,19 +317,89 @@ module PGM =
 
                 let i0 = 0.5 * (t1 + t3)
                 let i1 = 0.5 * (t0 + t2)
-                //return { innerLevel = [|1.0; 1.0|]; outerLevel = [| 1.0; 1.0; 1.0; 1.0 |]} 
+
+                //let l = 10.0
+                //return { innerLevel = [| l; l |]; outerLevel = [| l; l; l; l |]} 
                 return { innerLevel = [|i0; i1|]; outerLevel = [| t0; t1; t2; t3 |]}  
             }
+
+
+        let plane2d (p0 : V2d) (p1 : V2d) =
+            let d = p1 - p0 |> Vec.normalize
+            let n = V2d(-d.Y, d.X)
+            V3d(n.X, n.Y, -Vec.dot n p0)
+
+        let sampleRegion (c : V2d) (p0 : V2d) (p1 : V2d) (p2 : V2d) (p3 : V2d) =
+            let dcx = dxTessCoord c
+            let dcy = dyTessCoord c
+
+            let t00 = interpolate2 (c - 0.5 * dcx - 0.5 * dcy) p0 p1 p2 p3 
+            let t01 = interpolate2 (c - 0.5 * dcx + 0.5 * dcy) p0 p1 p2 p3 
+            let t10 = interpolate2 (c + 0.5 * dcx - 0.5 * dcy) p0 p1 p2 p3 
+            let t11 = interpolate2 (c + 0.5 * dcx + 0.5 * dcy) p0 p1 p2 p3 
+
+
+            let textureSize = V2d heightSampler.Size
+            let p00 = t00 * textureSize + V2d(0.5, 0.5)
+            let p01 = t01 * textureSize + V2d(0.5, 0.5)
+            let p10 = t10 * textureSize + V2d(0.5, 0.5)
+            let p11 = t11 * textureSize + V2d(0.5, 0.5)
+
+            let min =
+                V2d(
+                    min (min p00.X p01.X) (min p10.X p11.X),
+                    min (min p00.Y p01.Y) (min p10.Y p11.Y)
+                )
+
+            let max =
+                V2d(
+                    max (max p00.X p01.X) (max p10.X p11.X),
+                    max (max p00.Y p01.Y) (max p10.Y p11.Y)
+                )
+
+            let sizeF = max - min
+            let sx = (int (ceil sizeF.X)) |> clamp 1 16
+            let sy = (int (ceil sizeF.X)) |> clamp 1 16
+            let step = (max - min) / V2d(sx,sy)
+
+            let plane0 = plane2d p00 p10
+            let plane1 = plane2d p10 p11
+            let plane2 = plane2d p11 p01
+            let plane3 = plane2d p01 p00
+
+            let mutable sum = 0.0
+            let mutable cnt = 0
+            
+            let imin = V2i (min - V2d(0.5, 0.5))
+            for x in -1 .. sx + 1 do
+                for y in -1 .. sy + 1 do
+                    let c = imin + V2i(x,y)
+                    let cc = V3d(float c.X + 0.5, float c.Y + 0.5, 1.0)
+
+                    let inside =
+                        Vec.dot plane0 cc >= -0.5 &&
+                        Vec.dot plane1 cc >= -0.5 &&
+                        Vec.dot plane2 cc >= -0.5 &&
+                        Vec.dot plane3 cc >= -0.5 
+
+                    if inside then
+                        sum <- sum + heightSampler.[c].X * 1.5
+                        cnt <- cnt + 1
+
+            if cnt = 0 then 0.0
+            else sum / float cnt
+
 
         let pgmTessEval (m : Patch4<Vertex>) =
             tessEval {
                 let c = m.TessCoord.XY
-
+                //let dcx = dxTessCoord c
+                //let dcy = dyTessCoord c
+                //let h = sampleRegion c m.P0.tc m.P1.tc m.P2.tc m.P3.tc
                 let wp = interpolate4 c m.P0.wp m.P1.wp m.P2.wp m.P3.wp
-                let tc, dtx, dty = gradient2 c m.P0.tc m.P1.tc m.P2.tc m.P3.tc
+                let tc = interpolate2 c m.P0.tc m.P1.tc m.P2.tc m.P3.tc
+                let h = heightSampler.SampleLevel(tc, 0.0).X * 1.5
 
-
-                let h = heightSampler.SampleGrad(tc, dtx, dty).X * 1.5
                 let wp = wp + V4d(0.0, 0.0, h, 0.0)
 
 
