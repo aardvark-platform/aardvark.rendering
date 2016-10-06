@@ -3956,19 +3956,64 @@ module Ag =
                 | _ -> failwithf "[Ag] could not get syn rule for '%s'" name
 
 
-    let tryGetAttributeValue (n : obj) (name : string) =
+    let inline useScope (s : Scope) (f : unit -> 'a) : 'a =
+        let oldScope = CurrentScope.Instance
+        try 
+            CurrentScope.Instance <- s
+            f()
+        finally 
+            CurrentScope.Instance <- oldScope
+
+    let inline unscoped (f : unit -> 'a) = useScope null f
+
+
+    let tryGetInhAttribute (n : obj) (name : string) =
         let scope = 
             match n with
                 | :? Scope as s -> s
-                | _ -> Scope(CurrentScope.Instance, n)
+                | _ -> CurrentScope.Instance
+
+        match Globals.tryGetAttributeIndex name with
+            | Some i -> scope.TryInheritUntyped i
+            | None -> None
+
+    let tryGetSynAttribute (n : obj) (name : string) =
+        let scope, wantChild = 
+            match n with
+                | :? Scope as s -> s, false
+                | _ -> CurrentScope.Instance, true
+
+        match Globals.tryGetAttributeIndex name with
+            | Some i when i >= 0 && i < Globals.synDispatchers.Length ->
+                match Globals.synDispatchers.[i] with
+                    | null -> None
+                    | d -> 
+                        let cs = if wantChild then Scope(scope, n) else scope
+                        match d.TryInvoke(n, cs) with
+                            | (true, res) -> Some res
+                            | _ -> None
+
+            | _ -> None
+
+    let tryGetAttributeType (name : string) =
+        match Map.tryFind name semanticFunctions with
+            | Some sf -> Some sf.valueType
+            | _ -> None
+
+    let tryGetAttribute (n : obj) (name : string) =
+        let scope, wantChild = 
+            match n with
+                | :? Scope as s -> s, false
+                | _ -> CurrentScope.Instance, true
 
         match Globals.tryGetAttributeIndex name with
             | Some i when i >= 0 && i < Globals.synDispatchers.Length ->
                 match Globals.synDispatchers.[i] with
                     | null ->
                         scope.TryInheritUntyped i
-                    | d ->
-                        match d.TryInvoke(n, scope) with
+                    | d -> 
+                        let cs = if wantChild then Scope(scope, n) else scope
+                        match d.TryInvoke(n, cs) with
                             | (true, res) -> Some res
                             | _ -> None
 
@@ -3978,7 +4023,27 @@ module Ag =
             | None ->
                 None
 
+    
+    [<Obsolete("use Ag.tryGetAttribute instead")>]
+    let tryGetAttributeValue<'a> (n : obj) (name : string) : Error<'a> =
+        match tryGetAttribute n name with
+            | Some (:? 'a as v) -> Success v
+            | Some _ -> Error "[Ag] invalid attribute type"
+            | None -> Error "[Ag] could not get attribute"
 
+    [<Obsolete("use Ag.getScope instead")>]
+    let getContext() = CurrentScope.Instance
+    [<Obsolete("use Ag.useScope instead")>]
+    let setContext(v) = CurrentScope.Instance <- v
+
+    [<AutoOpen>]
+    module CapturedExtensions =
+        type Scope with
+            member x.TryGetAttributeValue(name : string) : Error<'a> =
+                match tryGetAttribute x name with
+                    | Some (:? 'a as v) -> Success v
+                    | Some _ -> Error "[Ag] invalid attribute type"
+                    | None -> Error "[Ag] could not get attribute"
 
 
     let mutable private initialized = 0
