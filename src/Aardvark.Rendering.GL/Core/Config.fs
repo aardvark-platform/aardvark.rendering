@@ -43,7 +43,7 @@ module Config =
     /// defines whether the GL context should log errors
     /// </summary>
     [<Literal>]
-    let CheckErrors = false
+    let CheckErrors = true
 
     /// ResourceSet.Update and Program.Run use a GL fence sync if true.
     /// This flag improves timings for gpu uploads but also incurs a (possible) performance
@@ -103,11 +103,11 @@ module Error =
     // with this inline function leads to a complete elimination of
     // the enire call including the allocation of its arguments
     type GL with
-        static member inline Check str =
+        static member Check str =
             if Config.CheckErrors then
                 let err = GL.GetError()
                 if err <> ErrorCode.NoError then
-                    Aardvark.Base.Report.Warn("{0}:{1}",err,str)
+                    Aardvark.Base.Report.Warn("{0}: {1}",err,str)
                     //raise <| OpenGLException(err, str)
 
         static member SetupDebugOutput() =

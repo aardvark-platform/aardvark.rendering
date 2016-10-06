@@ -64,7 +64,6 @@ module ``Reflection Extensions`` =
 
 
     open Yaaf.FSharp.Scripting
-    open Microsoft.FSharp.Compiler.SourceCodeServices
 
     let rec private getPrettyNameInternal (t : Type) =
         let res = 
@@ -1092,7 +1091,6 @@ type Dispatcher<'b, 'r> (tryGet : obj -> Type -> Option<obj * MethodInfo>) =
                                         IL.Call(mi.DeclaringType.GetMethod("TryInvoke"))
                                         IL.ConditionalJump(IL.True, doneLabel)
                                         
-                                        IL.Leave noRes
 
                                         IL.Mark(doneLabel)
                                         IL.Ldarg 4
@@ -1122,15 +1120,8 @@ type Dispatcher<'b, 'r> (tryGet : obj -> Type -> Option<obj * MethodInfo>) =
 
                     // inline the callee's code
 
-                    let state =
-                        { 
-                            IL.Assembler.generator = il
-                            IL.Assembler.locals = Map.empty
-                            IL.Assembler.labels = Map.ofList [noRes, noResLabel]
-                            IL.Assembler.stack = []
-                        }
 
-                    Aardvark.Base.IL.Assembler.assembleTo' state code
+                    failwith ""
 
                 else
                     // load the target (if not static)
