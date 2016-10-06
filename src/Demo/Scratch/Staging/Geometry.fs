@@ -568,31 +568,32 @@ module GeometryTest =
     [<Demo("Geometry Serialization")>]
     let run() =
         
-        let t = FileTexture(@"C:\Aardwork\ps_texture_1k.png", false) :> ITexture |> Mod.constant :> IMod
 
-        let geometry =
-            {
-                mode             = IndexedGeometryMode.TriangleList
-                faceVertexCount  = 6
-                vertexCount      = 4
-                indices          = Some (BufferView.ofArray [| 0;1;2; 0;2;3 |])
-                uniforms =
-                    Map.ofList [ 
-                        Symbol.Create "ModelTrafo", Mod.constant (Trafo3d.Scale(10.0)) :> IMod 
-                        DefaultSemantic.DiffuseColorTexture, t
-                    ]
-                vertexAttributes = 
-                    Map.ofList [ 
-                        DefaultSemantic.Positions, BufferView.ofArray [| V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO |] 
-                        DefaultSemantic.DiffuseColorCoordinates, BufferView.ofArray [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] 
-                    ]
-            }
 
-        use mem = new IO.MemoryStream()
-        geometry.Save(mem)
+        let file = Path.combine [Environment.GetFolderPath(Environment.SpecialFolder.Desktop); "bla.aard"]
+        if not (IO.File.Exists file) then
+            let t = FileTexture(@"C:\Aardwork\ps_texture_1k.png", false) :> ITexture |> Mod.constant :> IMod
+            let geometry =
+                {
+                    mode             = IndexedGeometryMode.TriangleList
+                    faceVertexCount  = 6
+                    vertexCount      = 4
+                    indices          = Some (BufferView.ofArray [| 0;1;2; 0;2;3 |])
+                    uniforms =
+                        Map.ofList [ 
+                            Symbol.Create "ModelTrafo", Mod.constant (Trafo3d.Scale(10.0)) :> IMod 
+                            DefaultSemantic.DiffuseColorTexture, t
+                        ]
+                    vertexAttributes = 
+                        Map.ofList [ 
+                            DefaultSemantic.Positions, BufferView.ofArray [| V3f.OOO; V3f.IOO; V3f.IIO; V3f.OIO |] 
+                            DefaultSemantic.DiffuseColorCoordinates, BufferView.ofArray [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] 
+                        ]
+                }
 
-        use mem = new IO.MemoryStream(mem.ToArray())
-        let test = Geometry.Load(mem)
+            geometry.Save(file)
+
+        let test = Geometry.Load(file)
         
 
         test
