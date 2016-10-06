@@ -15,8 +15,18 @@ open QuotationCompiler.Simple
 open Aardvark.Base.Incremental
 
 module Ag =
+
+    type internal IAg =
+        abstract member GetSynFunction<'r> : string -> (obj -> 'r)
+        abstract member GetInhFunction<'r> : string -> (obj -> 'r)
+        abstract member GetUntypedSynFunction : string -> (obj -> obj)
+        abstract member AttachValue : obj * string * obj -> unit
+
+
     [<AutoOpen>]
     module Frontend =
+        let mutable internal instance = Unchecked.defaultof<IAg>
+
         type AttributeKind =
             | None          = 0x00
             | Inherited     = 0x01
@@ -59,9 +69,15 @@ module Ag =
         [<MethodImpl(MethodImplOptions.NoInlining)>]
         let (?) (o : 'a) (name : string) : 'b =
             if IsFunction<'b>.Value then
-                raise <| SemanticException(AttributeKind.Synthesized, name)
+                let v = instance.GetUntypedSynFunction name (o :> obj)
+                Aardvark.Base.NewAg.Delay.delay v
             else
-                raise <| SemanticException(AttributeKind.Inherited, name)
+                instance.GetInhFunction<'b> name (o :> obj)
+ 
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let (?<-) (o : 'a) (name : string) (value : 'b) : unit =
+            instance.AttachValue(o, name, value)
+            
             
         [<MethodImpl(MethodImplOptions.NoInlining)>]
         let (<<=) (m : Inh) (value : 'a) = ()
@@ -134,7 +150,10 @@ module Ag =
         module Globals = 
             open System.Threading
             open System.Collections.Concurrent
+            open System.Runtime.CompilerServices
+
             type Marker = Marker
+
 
             let mutable rootDispatchers : IObjectDispatcher[] = null
             let mutable synDispatchers : IObjectDispatcher2[] = null
@@ -143,6 +162,69 @@ module Ag =
             let private semInstances = ConcurrentDictionary<Type, obj>()
             let mutable private currentIndex = -1
 
+
+            type NopDispatcher<'b, 'r> private() =
+                static let instance = NopDispatcher<'b, 'r>() :> IDispatcher<'b, 'r>
+                static let objInstance = NopDispatcher<'b, 'r>() :> IObjectDispatcher<'b>
+
+                static member Instance = instance 
+                static member ObjInstance = objInstance 
+
+                interface IDispatcher<'b, 'r> with
+                    member x.TryInvoke(_,_,_) = false
+                    
+                interface IObjectDispatcher2 with
+                    member x.TryInvoke(_,_,_) = false 
+
+                interface IObjectDispatcher<'b> with
+                    member x.TryInvoke(_,_,_) = false 
+
+            type NopDispatcher<'r> private() =
+                static let instance = NopDispatcher<'r>() :> IDispatcher<'r>
+                static let objInstance = NopDispatcher<'r>() :> IObjectDispatcher
+
+                static member Instance = instance 
+                static member ObjInstance = objInstance 
+
+                interface IDispatcher<'r> with
+                    member x.TryInvoke(_,_) = false
+
+                interface IObjectDispatcher with
+                    member x.TryInvoke(_,_) = false
+
+            let getInhDispatcher<'b, 'r> (i : int) =
+                if i >= 0 && i < inhDispatchers.Length then
+                    match inhDispatchers.[i] with
+                        | null -> NopDispatcher<'b, 'r>.Instance
+                        | :? IDispatcher<'b, 'r> as d -> d
+                        | _ -> NopDispatcher<'b, 'r>.Instance
+                else
+                    NopDispatcher<'b, 'r>.Instance
+
+            let getRootDispatcher<'r> (i : int) =
+                if i >= 0 && i < rootDispatchers.Length then
+                    match rootDispatchers.[i] with
+                        | null -> NopDispatcher<'r>.Instance
+                        | :? IDispatcher<'r> as d -> d
+                        | _ -> NopDispatcher<'r>.Instance
+                else
+                    NopDispatcher<'r>.Instance
+
+
+
+            let attachedValues = ConditionalWeakTable<obj, ref<Map<int, Option<obj>>>>()
+            let inline getAttachedValues (o : obj) = 
+                match attachedValues.TryGetValue o with
+                    | (true, v) -> !v
+                    | _ -> Map.empty
+
+            let inline attachValue (node : obj) (id : int) (value : obj) =
+                match attachedValues.TryGetValue(node) with
+                    | (true, r) ->
+                        r := Map.add id (Some value) !r
+                    | _->
+                        let r = ref (Map.ofList [id, Some value])
+                        attachedValues.Add(node, r)
 
             let getInstance (t : Type) =
                 semInstances.GetOrAdd(t, fun t -> Activator.CreateInstance t)
@@ -233,6 +315,25 @@ module Ag =
                         x.Cache <- Map.add i (res |> Option.map (fun v -> v :> obj)) x.Cache
                         res
 
+            member x.TryInheritUntypedInternal(i : int, disp : IObjectDispatcher<Scope>, root : IObjectDispatcher) : Option<obj> =
+                match x.TryGet i with
+                    | Some r -> Some r
+                    | None ->
+                        let res = 
+                            match x.Parent with
+                                | null -> 
+                                    match root.TryInvoke(x.Node) with
+                                        | (true, v) -> Some v
+                                        | _ -> None
+
+                                | p -> 
+                                    match disp.TryInvoke(p.Node, p) with
+                                        | (true, res) -> Some res
+                                        | _ -> p.TryInheritUntypedInternal(i, disp, root)
+                        x.Cache <- Map.add i res x.Cache
+                        res
+
+
             member x.Get(i : int) =
                 match x.TryGet i with
                     | Some v -> v
@@ -244,14 +345,40 @@ module Ag =
                     | None -> failwithf "[Ag] could not inherit attribute %A" i
 
             member x.Inherit<'r>(i : int) : 'r =
-                let disp = Globals.inhDispatchers.[i] |> unbox<IDispatcher<Scope, 'r>>
-                let root = Globals.rootDispatchers.[i] |> unbox<IDispatcher<'r>>
+                let disp = Globals.getInhDispatcher<Scope,'r> i
+                let root = Globals.getRootDispatcher<'r> i
                 x.InheritInternal(i, disp, root)
 
             member x.TryInherit<'r>(i : int) : Option<'r> =
-                let disp = Globals.inhDispatchers.[i] |> unbox<IDispatcher<Scope, 'r>>
-                let root = Globals.rootDispatchers.[i] |> unbox<IDispatcher<'r>>
+                let disp = Globals.getInhDispatcher<Scope,'r> i
+                let root = Globals.getRootDispatcher<'r> i
                 x.TryInheritInternal(i, disp, root)
+
+
+            member x.TryAutoInherit(i : int) =
+                match x.TryGet i with
+                    | Some v -> Some v
+                    | None ->
+                        match x.Parent with
+                            | null -> None
+                            | p -> p.TryAutoInherit i
+
+            member x.TryInheritUntyped (i : int) =
+                if i >= 0 && i < Globals.inhDispatchers.Length then
+                    let disp = 
+                        match Globals.inhDispatchers.[i] with
+                            | null -> Globals.NopDispatcher<Scope, obj>.ObjInstance
+                            | :? IObjectDispatcher<Scope> as d -> d
+                            | _ -> Globals.NopDispatcher<Scope, obj>.ObjInstance
+
+                    let root =
+                        match Globals.rootDispatchers.[i] with
+                            | null -> Globals.NopDispatcher<obj>.ObjInstance
+                            | d -> d
+
+                    x.TryInheritUntypedInternal(i, disp, root)
+                else
+                    x.TryAutoInherit i
 
             override x.ToString() =
                 match x.Parent with
@@ -259,8 +386,8 @@ module Ag =
                     | p -> sprintf "%s/%s" (p.ToString()) (x.Node.GetType().PrettyName)
 
 
-            new(p : Scope, n : obj) = { Parent = p; Node = n; Cache = Map.empty }
-            new(n : obj) = { Parent = null; Node = n; Cache = Map.empty }
+            new(p : Scope, n : obj) = { Parent = p; Node = n; Cache = Globals.getAttachedValues n }
+            new(n : obj) = { Parent = null; Node = n; Cache = Globals.getAttachedValues n }
 
 
         end
@@ -3762,6 +3889,98 @@ module Ag =
 
             ()
 
+    [<AutoOpen>]
+    module private Functions =
+        let tryGetSynFunction<'a> (name : string) : Option<obj -> 'a> =
+            match Globals.tryGetAttributeIndex name with
+                | Some i ->
+                    match Globals.synDispatchers.[i] with
+                        | null -> None
+                        | :? IDispatcher<Scope, 'a> as d ->
+                            let current = CurrentScope.Instance
+                            let f = fun (n : obj) -> 
+                                match d with
+                                    | :? Scope as s -> d.Invoke(s.Node, s)
+                                    | _ -> d.Invoke(n, Scope(current, n))
+                            Some f
+                        | _ -> None
+                | None ->
+                    None
+    
+        let getSynFunction<'a> (name : string) : obj -> 'a =
+            match tryGetSynFunction<'a> name with
+                | Some f -> f 
+                | _ -> failwithf "[Ag] could not get syn rule for '%s'" name
+
+        let tryGetInhFunction<'a> (name : string) : Option<obj -> 'a> =
+            match Globals.tryGetAttributeIndex name with
+                | Some i ->
+                    let current = CurrentScope.Instance
+                    let f = fun (n : obj) -> 
+                        match n with
+                            | :? Scope as s -> s.Inherit(i)
+                            | _ -> current.Inherit(i)
+                    Some f
+                | None ->
+                    None
+
+        let getInhFunction<'a> (name : string) : obj -> 'a =
+            match tryGetSynFunction<'a> name with
+                | Some f -> f 
+                | _ -> failwithf "[Ag] could not get inh rule for '%s'" name
+        
+        let tryGetUntypedSynFunction (name : string) : Option<obj -> obj> =
+            match Globals.tryGetAttributeIndex name with
+                | Some i ->
+                    match Globals.synDispatchers.[i] with
+                        | null -> None
+                        | d ->
+                            let current = CurrentScope.Instance
+                            let f = fun (n : obj) ->
+                                match n with
+                                    | :? Scope as s -> 
+                                        match d.TryInvoke(s.Node, s) with
+                                            | (true, v) -> v
+                                            | _ -> failwithf "[Ag] could not get syn attribute '%s' for %A" name n
+                                    | _ ->
+                                        match d.TryInvoke(n, Scope(current, n)) with
+                                            | (true, v) -> v
+                                            | _ -> failwithf "[Ag] could not get syn attribute '%s' for %A" name n
+                            Some f
+                | None ->
+                    None
+                
+        let getUntypedSynFunction (name : string) =
+            match tryGetUntypedSynFunction name with
+                | Some f -> f 
+                | _ -> failwithf "[Ag] could not get syn rule for '%s'" name
+
+
+    let tryGetAttributeValue (n : obj) (name : string) =
+        let scope = 
+            match n with
+                | :? Scope as s -> s
+                | _ -> Scope(CurrentScope.Instance, n)
+
+        match Globals.tryGetAttributeIndex name with
+            | Some i when i >= 0 && i < Globals.synDispatchers.Length ->
+                match Globals.synDispatchers.[i] with
+                    | null ->
+                        scope.TryInheritUntyped i
+                    | d ->
+                        match d.TryInvoke(n, scope) with
+                            | (true, res) -> Some res
+                            | _ -> None
+
+            | Some i ->
+                scope.TryInheritUntyped i
+
+            | None ->
+                None
+
+
+
+
     let mutable private initialized = 0
     let init() =
         if System.Threading.Interlocked.Exchange(&initialized, 1) = 0 then
@@ -3785,27 +4004,17 @@ module Ag =
             Globals.rootDispatchers <- Array.zeroCreate cnt
 
             SemanticFunctions.compileAll functions
-//            for sf in functions do
-//                SemanticFunctions.compile sf
-            
-            Log.stop()
 
-    let tryGetSynFunction<'a> (name : string) : Option<obj -> 'a> =
-        match Globals.tryGetAttributeIndex name with
-            | Some i ->
-                match Globals.synDispatchers.[i] with
-                    | null -> None
-                    | :? IDispatcher<Scope, 'a> as d ->
-                        let f = fun (n : obj) -> d.Invoke(n, Scope(null, n))
-                        Some f
-                    | _ -> None
-            | None ->
-                None
-    
-    let getSynFunction<'a> (name : string) : obj -> 'a =
-        match tryGetSynFunction<'a> name with
-            | Some f -> f 
-            | _ -> failwithf "[Ag] could not get syn rule for '%s'" name
+
+            Frontend.instance <-
+                { new IAg with
+                    member x.GetSynFunction<'r>(name : string) = getSynFunction<'r> name
+                    member x.GetInhFunction<'r>(name : string) = getInhFunction<'r> name
+                    member x.GetUntypedSynFunction (name : string) = getUntypedSynFunction name
+                    member x.AttachValue(target, name, obj) = Globals.attachValue target (Globals.getAttributeIndex name) obj
+                }
+
+            Log.stop()
 
 
 module NewestAgDemo =
