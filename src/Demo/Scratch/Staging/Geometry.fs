@@ -6,6 +6,8 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Native
 
+#nowarn "9"
+
 type ComponentType =
     | Int8 = 0
     | Int16 = 1
@@ -22,6 +24,11 @@ type ComponentType =
 type UniformKind =
     | Texture = 0
     | Value = 1
+
+
+type private IRefCounted =
+    abstract member AddRef : unit -> unit
+    abstract member RemoveRef : unit -> unit
 
 [<AutoOpen>]
 module private Operators =
@@ -40,6 +47,8 @@ module private Operators =
 module private Utils =
     open System.Reflection
     open DevILSharp
+    open Aardvark.Base.NativeTensors
+    open Microsoft.FSharp.NativeInterop
 
     let devilLock =
         let fi = typeof<PixImage>.GetField("s_devilLock", BindingFlags.NonPublic ||| BindingFlags.Static)
@@ -202,6 +211,14 @@ module private Utils =
             (ChannelFormat.BGR, ChannelType.UnsignedByte), (CompressedDataFormat.Dxt1, TextureFormat.CompressedRgbS3tcDxt1Ext)
             (ChannelFormat.BGRA, ChannelType.UnsignedByte), (CompressedDataFormat.Dxt5, TextureFormat.CompressedRgbaS3tcDxt5Ext)
          
+            (ChannelFormat.Luminance, ChannelType.UnsignedShort), (CompressedDataFormat.DxtNoCompression, TextureFormat.R16ui)
+            (ChannelFormat.LuminanceAlpha, ChannelType.UnsignedShort), (CompressedDataFormat.DxtNoCompression, TextureFormat.Rg16ui)
+            (ChannelFormat.RGB, ChannelType.UnsignedShort), (CompressedDataFormat.DxtNoCompression, TextureFormat.Rgb16ui)
+            (ChannelFormat.RGBA, ChannelType.UnsignedShort), (CompressedDataFormat.DxtNoCompression, TextureFormat.Rgba16ui)
+            (ChannelFormat.BGR, ChannelType.UnsignedShort), (CompressedDataFormat.DxtNoCompression, TextureFormat.Rgb16ui)
+            (ChannelFormat.BGRA, ChannelType.UnsignedShort), (CompressedDataFormat.DxtNoCompression, TextureFormat.Rgba16ui)
+         
+
         ]
 
     let toTextureData (size : V2i) (sizeInBytes : int64) (ptr : ptr) =
@@ -233,18 +250,64 @@ module private Utils =
             for i in 0 .. levels - 1 do
                 if i <> 0 then IL.ActiveMipmap 1 |> ignore
 
-                let size = IL.GetDXTCData(0n, 0, compression)
-                let data : byte[] = Array.zeroCreate size
-                let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                try IL.GetDXTCData(gc.AddrOfPinnedObject(), size, compression) |> ignore
-                finally gc.Free()
+                let size = 
+                    if compression = CompressedDataFormat.DxtNoCompression then IL.GetInteger(IntName.ImageSizeOfData)
+                    else IL.GetDXTCData(0n, 0, compression)
+
                 let w = IL.GetInteger(IntName.ImageWidth)
                 let h = IL.GetInteger(IntName.ImageHeight)
 
-                writer.Write(size)
+
+                let lineSize = size / h
+                let alignedLineSize =
+                    if lineSize % 4 = 0 then lineSize
+                    else (lineSize + 3) &&& ~~~3
+
+                let dataSize = alignedLineSize * h
+
+                let data : byte[] = Array.zeroCreate dataSize
+                let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                try 
+                    if compression = CompressedDataFormat.DxtNoCompression then
+                        if alignedLineSize = lineSize then
+                            Marshal.Copy(IL.GetData(), gc.AddrOfPinnedObject(), dataSize)
+                        else
+                            let d = lineSize / w
+                            let srcInfo =
+                                VolumeInfo(
+                                    0L, 
+                                    V3l(int64 w, int64 h, int64 d),
+                                    V3l(int64 d, int64 lineSize, 1L)
+                                )
+
+                            let dstInfo = 
+                                VolumeInfo(
+                                    0L, 
+                                    srcInfo.Size, 
+                                    V3l(srcInfo.DX, int64 alignedLineSize, srcInfo.DZ)
+                                )
+
+                            let vSrc = 
+                                Aardvark.Base.NativeTensors.NativeVolume<byte>(
+                                    NativePtr.ofNativeInt (IL.GetData()), 
+                                    srcInfo
+                                )
+
+                            let vDst = 
+                                Aardvark.Base.NativeTensors.NativeVolume<byte>(
+                                    NativePtr.ofNativeInt (gc.AddrOfPinnedObject()), 
+                                    dstInfo
+                                )
+
+                            NativeVolume.iter2 vSrc vDst (fun s d -> NativePtr.write d (NativePtr.read s))
+
+                    else 
+                        IL.GetDXTCData(gc.AddrOfPinnedObject(), dataSize, compression) |> ignore
+                finally gc.Free()
+                writer.Write(dataSize)
                 writer.Write(w)
                 writer.Write(h)
-                writer.Write(data, 0, size)
+                writer.Write(data, 0, dataSize)
 
             IL.BindImage 0
             IL.DeleteImage img
@@ -502,6 +565,7 @@ type Geometry =
         x.Save(s)
 
 
+
 module GeometryTest =
     open Aardvark.SceneGraph
 
@@ -571,8 +635,10 @@ module GeometryTest =
 
 
         let file = Path.combine [Environment.GetFolderPath(Environment.SpecialFolder.Desktop); "bla.aard"]
-        if not (IO.File.Exists file) then
-            let t = FileTexture(@"C:\Aardwork\ps_texture_1k.png", false) :> ITexture |> Mod.constant :> IMod
+        
+        let mutable test = Unchecked.defaultof<_>
+        if true ||  not (IO.File.Exists file) then
+            let t = FileTexture(@"C:\Aardwork\ps_height_1k.png", true) :> ITexture |> Mod.constant :> IMod
             let geometry =
                 {
                     mode             = IndexedGeometryMode.TriangleList
@@ -592,8 +658,9 @@ module GeometryTest =
                 }
 
             geometry.Save(file)
+            test <- geometry
 
-        let test = Geometry.Load(file)
+        //let test = Geometry.Load(file)
         
 
         test

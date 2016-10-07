@@ -99,6 +99,38 @@ module TextureExtensions =
 
     [<AutoOpen>]
     module private Patterns =
+
+        let compressedFormats =
+            HashSet.ofList [
+                TextureFormat.CompressedRed
+                TextureFormat.CompressedRg
+                TextureFormat.CompressedRgbS3tcDxt1Ext
+                TextureFormat.CompressedRgbaS3tcDxt1Ext
+                TextureFormat.CompressedRgbaS3tcDxt3Ext
+                TextureFormat.CompressedRgbaS3tcDxt5Ext
+                TextureFormat.CompressedAlpha
+                TextureFormat.CompressedLuminance
+                TextureFormat.CompressedLuminanceAlpha
+                TextureFormat.CompressedIntensity
+                TextureFormat.CompressedRgb
+                TextureFormat.CompressedRgba
+                TextureFormat.CompressedSrgb
+                TextureFormat.CompressedSrgbAlpha
+                TextureFormat.CompressedSluminance
+                TextureFormat.CompressedSluminanceAlpha
+                TextureFormat.CompressedSrgbS3tcDxt1Ext
+                TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext
+                TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext
+                TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
+                TextureFormat.CompressedRedRgtc1
+                TextureFormat.CompressedSignedRedRgtc1
+                TextureFormat.CompressedRgRgtc2
+                TextureFormat.CompressedSignedRgRgtc2
+                TextureFormat.CompressedRgbaBptcUnorm
+                TextureFormat.CompressedRgbBptcSignedFloat
+                TextureFormat.CompressedRgbBptcUnsignedFloat
+            ]
+
         let (|FileTexture|_|) (t : ITexture) =
             match t with
                 | :? FileTexture as t -> Some(FileTexture(t.TextureParams, t.FileName))
@@ -218,6 +250,101 @@ module TextureExtensions =
             Col.Format.Depth, 1
         ]
 
+
+    let internal toFormatAndType =
+        LookupTable.lookupTable [
+            TextureFormat.Bgr8 , (PixelFormat.Bgr, PixelType.UnsignedByte)
+            TextureFormat.Bgra8 , (PixelFormat.Bgra, PixelType.UnsignedByte)
+            TextureFormat.Rgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
+            TextureFormat.Rgb16 , (PixelFormat.Rgb, PixelType.UnsignedShort)
+            TextureFormat.Rgba8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.Rgb10A2 , (PixelFormat.Rgba, PixelType.UnsignedInt1010102)
+            TextureFormat.Rgba16 , (PixelFormat.Rgba, PixelType.UnsignedShort)
+
+            TextureFormat.DepthComponent16 , (PixelFormat.DepthComponent, PixelType.HalfFloat)
+            TextureFormat.DepthComponent24 , (PixelFormat.DepthComponent, PixelType.Float)
+            TextureFormat.DepthComponent32 , (PixelFormat.DepthComponent, PixelType.Float)
+            TextureFormat.CompressedRed , (PixelFormat.Red, PixelType.UnsignedByte)
+            TextureFormat.CompressedRg , (PixelFormat.Rg, PixelType.UnsignedByte)
+            TextureFormat.R8 , (PixelFormat.Red, PixelType.UnsignedByte)
+            TextureFormat.R16 , (PixelFormat.Red, PixelType.UnsignedShort)
+            TextureFormat.Rg8 , (PixelFormat.Rg, PixelType.UnsignedByte)
+            TextureFormat.Rg16 , (PixelFormat.Rg, PixelType.UnsignedShort)
+            TextureFormat.R16f , (PixelFormat.Red, PixelType.HalfFloat)
+            TextureFormat.R32f , (PixelFormat.Red, PixelType.Float)
+            TextureFormat.Rg16f , (PixelFormat.Rg, PixelType.HalfFloat)
+            TextureFormat.Rg32f , (PixelFormat.Rg, PixelType.Float)
+            TextureFormat.R8i , (PixelFormat.Red, PixelType.Byte)
+            TextureFormat.R8ui , (PixelFormat.Red, PixelType.UnsignedByte)
+            TextureFormat.R16i , (PixelFormat.Red, PixelType.Short)
+            TextureFormat.R16ui , (PixelFormat.Red, PixelType.UnsignedShort)
+            TextureFormat.R32i , (PixelFormat.Red, PixelType.Int)
+            TextureFormat.R32ui , (PixelFormat.Red, PixelType.UnsignedInt)
+            TextureFormat.Rg8i , (PixelFormat.Rg, PixelType.Byte)
+            TextureFormat.Rg8ui , (PixelFormat.Rg, PixelType.UnsignedByte)
+            TextureFormat.Rg16i , (PixelFormat.Rg, PixelType.Short)
+            TextureFormat.Rg16ui , (PixelFormat.Rg, PixelType.UnsignedShort)
+            TextureFormat.Rg32i , (PixelFormat.Rg, PixelType.Int)
+            TextureFormat.Rg32ui , (PixelFormat.Rg, PixelType.UnsignedInt)
+            TextureFormat.CompressedRgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
+            TextureFormat.CompressedRgbaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.CompressedRgbaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.CompressedRgbaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.CompressedAlpha , (PixelFormat.Alpha, PixelType.UnsignedByte)
+            TextureFormat.CompressedLuminance , (PixelFormat.Luminance, PixelType.UnsignedByte)
+            TextureFormat.CompressedLuminanceAlpha , (PixelFormat.LuminanceAlpha, PixelType.UnsignedByte)
+            TextureFormat.CompressedRgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+            TextureFormat.CompressedRgba , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.DepthStencil , (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev)
+
+            TextureFormat.Rgba32f , (PixelFormat.Rgba, PixelType.Float)
+            TextureFormat.Rgb32f , (PixelFormat.Rgb, PixelType.Float)
+            TextureFormat.Rgba16f , (PixelFormat.Rgba, PixelType.HalfFloat)
+            TextureFormat.Rgb16f , (PixelFormat.Rgb, PixelType.HalfFloat)
+            TextureFormat.Depth24Stencil8 , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
+            TextureFormat.Srgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+            TextureFormat.Srgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
+            TextureFormat.SrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.Srgb8Alpha8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
+
+            TextureFormat.CompressedSrgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+            TextureFormat.CompressedSrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.CompressedSrgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.DepthComponent32f , (PixelFormat.DepthComponent, PixelType.Float)
+            TextureFormat.Depth32fStencil8 , (PixelFormat.DepthComponent, PixelType.Float)
+            TextureFormat.Rgba32ui , (PixelFormat.Rgba, PixelType.UnsignedInt)
+            TextureFormat.Rgb32ui , (PixelFormat.Rgb, PixelType.UnsignedInt)
+            TextureFormat.Rgba16ui , (PixelFormat.Rgba, PixelType.UnsignedShort)
+            TextureFormat.Rgb16ui , (PixelFormat.Rgb, PixelType.UnsignedShort)
+            TextureFormat.Rgba8ui , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.Rgb8ui , (PixelFormat.Rgb, PixelType.UnsignedByte)
+            TextureFormat.Rgba32i , (PixelFormat.Rgba, PixelType.Int)
+            TextureFormat.Rgb32i , (PixelFormat.Rgb, PixelType.Int)
+            TextureFormat.Rgba16i , (PixelFormat.Rgba, PixelType.Short)
+            TextureFormat.Rgb16i , (PixelFormat.Rgb, PixelType.Short)
+            TextureFormat.Rgba8i , (PixelFormat.Rgba, PixelType.Byte)
+            TextureFormat.Rgb8i , (PixelFormat.Rgb, PixelType.Byte)
+            TextureFormat.Float32UnsignedInt248Rev , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
+            TextureFormat.CompressedRedRgtc1 , (PixelFormat.Red, PixelType.UnsignedByte)
+            TextureFormat.CompressedSignedRedRgtc1 , (PixelFormat.Red, PixelType.Byte)
+            TextureFormat.CompressedRgRgtc2 , (PixelFormat.Rg, PixelType.UnsignedByte)
+            TextureFormat.CompressedSignedRgRgtc2 , (PixelFormat.Rg, PixelType.Byte)
+            TextureFormat.CompressedRgbaBptcUnorm , (PixelFormat.Rgba, PixelType.UnsignedByte)
+            TextureFormat.CompressedRgbBptcSignedFloat , (PixelFormat.Rgb, PixelType.Float)
+            TextureFormat.CompressedRgbBptcUnsignedFloat , (PixelFormat.Rgb, PixelType.Float)
+            TextureFormat.R8Snorm , (PixelFormat.Red, PixelType.Byte)
+            TextureFormat.Rg8Snorm , (PixelFormat.Rg, PixelType.Byte)
+            TextureFormat.Rgb8Snorm , (PixelFormat.Rgb, PixelType.Byte)
+            TextureFormat.Rgba8Snorm , (PixelFormat.Rgba, PixelType.Byte)
+            TextureFormat.R16Snorm , (PixelFormat.Red, PixelType.Short)
+            TextureFormat.Rg16Snorm , (PixelFormat.Rg, PixelType.Short)
+            TextureFormat.Rgb16Snorm , (PixelFormat.Rgb, PixelType.Short)
+            TextureFormat.Rgba16Snorm , (PixelFormat.Rgba, PixelType.Short)
+
+        ]
 
     module private Devil =
         open DevILSharp
@@ -367,8 +494,17 @@ module TextureExtensions =
                                             | Some c -> c
                                             | _ -> pixFormat.ChannelCount
                                 
+                                    let align = t.Context.PackAlignment
+                                    let lineSize = w * elementSize * channelCount
+                                    let alignedLineSize =
+                                        if lineSize % align = 0 then lineSize
+                                        else (lineSize + (align - 1)) &&& ~~~(align - 1)
+
+
                                     let pbo = GL.GenBuffer()
-                                    let size = int64 (elementSize * channelCount * w * h)
+
+
+                                    let size = int64 (alignedLineSize * h)
                                     GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
                                     GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
                                     GL.Check "[uploadTexture2DLevelFile] BufferStorage"
@@ -382,14 +518,14 @@ module TextureExtensions =
                                         VolumeInfo(
                                             0L, 
                                             V3l(int64 w, int64 h, int64 d),
-                                            V3l(int64 d, int64 (w * d), 1L)
+                                            V3l(int64 d, int64 lineSize, 1L)
                                         )
 
                                     let dstInfo = 
                                         VolumeInfo(
-                                            srcInfo.DY * (srcInfo.SY-1L), 
+                                            int64 alignedLineSize * (srcInfo.SY-1L), 
                                             srcInfo.Size, 
-                                            V3l(srcInfo.DX, -srcInfo.DY, srcInfo.DZ)
+                                            V3l(srcInfo.DX, int64 -alignedLineSize, srcInfo.DZ)
                                         )
 
                                     let vSrc = 
@@ -409,7 +545,7 @@ module TextureExtensions =
 
 
                                     GL.BindTexture(TextureTarget.Texture2D, t.Handle)
-                                    GL.TexImage2D(TextureTarget.Texture2D, 0, unbox (int ifmt), w, h, 0, pixelFormat, pixelType, 0n)
+                                    GL.TexImage2D(TextureTarget.Texture2D, level, unbox (int ifmt), w, h, 0, pixelFormat, pixelType, 0n)
                                     GL.Check "[uploadTexture2DLevelFile] TexImage2D"
                                     GL.BindTexture(TextureTarget.Texture2D, 0)
 
@@ -841,12 +977,19 @@ module TextureExtensions =
                     let target = TextureTarget.Texture2D
                     GL.BindTexture(target, t.Handle)
 
+                    let isCompressed = compressedFormats.Contains data.Format
+
                     let mutable totalSize = 0L
                     for l in 0 .. data.MipMapLevels - 1 do
                         let levelData = data.[0,l]
+                        
                         totalSize <- totalSize + levelData.SizeInBytes
                         levelData.Use(fun ptr ->
-                            GL.CompressedTexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, int levelData.SizeInBytes, ptr)
+                            if isCompressed then
+                                GL.CompressedTexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, int levelData.SizeInBytes, ptr)
+                            else
+                                let pf, pt = toFormatAndType data.Format
+                                GL.TexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, pf, pt, ptr)
                         )
 
                     GL.TexParameterI(target, TextureParameterName.TextureMaxLevel, [|data.MipMapLevels - 1|])
