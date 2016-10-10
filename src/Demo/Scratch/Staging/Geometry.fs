@@ -263,7 +263,9 @@ module private Utils =
                     if lineSize % 4 = 0 then lineSize
                     else (lineSize + 3) &&& ~~~3
 
-                let dataSize = alignedLineSize * h
+                let dataSize = 
+                    if compression = CompressedDataFormat.DxtNoCompression then alignedLineSize * h
+                    else size
 
                 let data : byte[] = Array.zeroCreate dataSize
                 let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
@@ -660,7 +662,7 @@ module GeometryTest =
             geometry.Save(file)
             test <- geometry
 
-        //let test = Geometry.Load(file)
+        let test = Geometry.Load(file)
         
 
         test

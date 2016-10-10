@@ -984,12 +984,23 @@ module TextureExtensions =
                         let levelData = data.[0,l]
                         
                         totalSize <- totalSize + levelData.SizeInBytes
-                        levelData.Use(fun ptr ->
+                        levelData.Use(fun src ->
+                            let pbo = GL.GenBuffer()
+                            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+
+                            GL.BufferData(BufferTarget.PixelUnpackBuffer, nativeint levelData.SizeInBytes, 0n, BufferUsageHint.StaticDraw)
+                            let dst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint levelData.SizeInBytes, BufferAccessMask.MapWriteBit)
+                            Marshal.Copy(src, dst, levelData.SizeInBytes)
+                            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+
                             if isCompressed then
-                                GL.CompressedTexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, int levelData.SizeInBytes, ptr)
+                                GL.CompressedTexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, int levelData.SizeInBytes, 0n)
                             else
                                 let pf, pt = toFormatAndType data.Format
-                                GL.TexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, pf, pt, ptr)
+                                GL.TexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, pf, pt, 0n)
+                        
+                            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+                            GL.DeleteBuffer(pbo)
                         )
 
                     GL.TexParameterI(target, TextureParameterName.TextureMaxLevel, [|data.MipMapLevels - 1|])
