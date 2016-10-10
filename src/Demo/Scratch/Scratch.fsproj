@@ -68,6 +68,7 @@
     <Compile Include="Staging\Time.fs" />
     <Compile Include="Staging\Proc.fs" />
     <Compile Include="Staging\GeometryPool.fs" />
+    <Compile Include="Staging\Optimizer.fs" />
     <Compile Include="Staging\Dispatcher.fs" />
     <Compile Include="Staging\QuotationCompiler.fs" />
     <Compile Include="Staging\Ag.fs" />
@@ -92,6 +93,8 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
       <Name>Aardvark.Base.Rendering</Name>
       <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>

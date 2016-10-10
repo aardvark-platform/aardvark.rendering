@@ -12,6 +12,7 @@ let main args =
 
     //Playground.run() |> ignore // former hacked helloWorld example
     //HelloWorld.run() |> ignore
+    NullBufferTest.run() |> ignore
 
     //Examples.Tutorial.run()
     //Examples.Render2TexturePrimitive.run()
@@ -20,7 +21,7 @@ let main args =
     //Examples.Render2TexturePrimitiveFloat.run()
     //Examples.PostProcessing.run()
     //Examples.Shadows.run()
-    Examples.Maya.run()
+    //Examples.Maya.run()
     //Examples.GeometrySet.run()
     //Examples.LoD.run()
     //Examples.Polygons.run()           attention: this one is currently broken due to package refactoring

@@ -166,6 +166,8 @@ module BufferExtensions =
                     removeBuffer x (int64 buffer.SizeInBytes)
                     GL.DeleteBuffer handle
                     GL.Check "failed to delete buffer"
+                    let isBuffer = GL.IsBuffer handle
+                    if isBuffer then Log.warn "deleted buffer which is still a buffer"
             )
 
         member x.CreateBuffer(data : IBuffer) =
