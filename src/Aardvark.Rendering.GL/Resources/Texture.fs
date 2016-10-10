@@ -66,15 +66,15 @@ type Texture =
 [<AutoOpen>]
 module TextureExtensions =
 
-    let private addTexture (ctx:Context) size =
+    let addTexture (ctx:Context) size =
         Interlocked.Increment(&ctx.MemoryUsage.TextureCount) |> ignore
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,size) |> ignore
 
-    let private removeTexture (ctx:Context) size =
+    let removeTexture (ctx:Context) size =
         Interlocked.Decrement(&ctx.MemoryUsage.TextureCount)  |> ignore
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,-size) |> ignore
 
-    let private updateTexture (ctx:Context) oldSize newSize =
+    let updateTexture (ctx:Context) oldSize newSize =
         Interlocked.Add(&ctx.MemoryUsage.TextureMemory,newSize-oldSize) |> ignore
 
 
