@@ -62,9 +62,492 @@ type Texture =
 
     end
 
+[<AutoOpen>]
+module private ResourceCounts =
 
-module TextureExtensionsNew =
-    
+    // PositiveX = 0,
+    // NegativeX = 1,
+    // PositiveY = 2,
+    // NegativeY = 3,
+    // PositiveZ = 4,
+    // NegativeZ = 5,
+    // cubeSides are sorted like in their implementation (making some things easier)
+    let cubeSides =
+        [|
+            CubeSide.PositiveX, TextureTarget.TextureCubeMapPositiveX
+            CubeSide.NegativeX, TextureTarget.TextureCubeMapNegativeX
+
+            CubeSide.PositiveY, TextureTarget.TextureCubeMapNegativeY
+            CubeSide.NegativeY, TextureTarget.TextureCubeMapPositiveY
+                
+            CubeSide.PositiveZ, TextureTarget.TextureCubeMapPositiveZ
+            CubeSide.NegativeZ, TextureTarget.TextureCubeMapNegativeZ
+        |]
+
+
+    let addTexture (ctx:Context) size =
+        Interlocked.Increment(&ctx.MemoryUsage.TextureCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.TextureMemory,size) |> ignore
+
+    let removeTexture (ctx:Context) size =
+        Interlocked.Decrement(&ctx.MemoryUsage.TextureCount)  |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.TextureMemory,-size) |> ignore
+
+    let updateTexture (ctx:Context) oldSize newSize =
+        Interlocked.Add(&ctx.MemoryUsage.TextureMemory,newSize-oldSize) |> ignore
+
+    let texSizeInBytes (size : V3i, t : TextureFormat, samples : int) =
+        let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
+        pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
+
+module TextureTarget =
+    let ofParameters (dim : TextureDimension) (isArray : bool) (isMS : bool) =
+        match dim, isArray, isMS with
+
+            | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"
+            | TextureDimension.Texture1D,      true,    _        -> TextureTarget.Texture1DArray
+            | TextureDimension.Texture1D,      false,   _        -> TextureTarget.Texture1D
+                                                   
+            | TextureDimension.Texture2D,      false,   false    -> TextureTarget.Texture2D
+            | TextureDimension.Texture2D,      true,    false    -> TextureTarget.Texture2DArray
+            | TextureDimension.Texture2D,      false,   true     -> TextureTarget.Texture2DMultisample
+            | TextureDimension.Texture2D,      true,    true     -> TextureTarget.Texture2DMultisampleArray
+                                                   
+            | TextureDimension.Texture3D,      false,   false    -> TextureTarget.Texture3D
+            | TextureDimension.Texture3D,      _,       _        -> failwith "Texture3D cannot be multisampled or an array"
+                                                  
+            | TextureDimension.TextureCube,   false,    false    -> TextureTarget.TextureCubeMap
+            | TextureDimension.TextureCube,   true,     false    -> TextureTarget.TextureCubeMapArray
+            | TextureDimension.TextureCube,   _,        true     -> failwith "TextureCube cannot be multisampled"
+
+            | _ -> failwithf "unknown texture dimension: %A" dim
+
+    let ofTexture (texture : Texture) =
+        ofParameters texture.Dimension texture.IsArray texture.IsMultisampled
+
+
+[<AutoOpen>]
+module TextureCreationExtensions =
+    type Context with 
+        member x.CreateTexture1D(size : int, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, 1, t, 0L, false)
+                x.UpdateTexture1D(tex, size, mipMapLevels, t)
+
+                tex
+            )
+
+        member x.CreateTexture2D(size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+                
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, 1, t, 0L, false)
+
+                x.UpdateTexture2D(tex, size, mipMapLevels, t, samples)
+
+                tex
+            )
+
+        member x.CreateTexture3D(size : V3i, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, V3i.Zero, 1, t, 0L, false)
+                x.UpdateTexture3D(tex, size, mipMapLevels, t)
+
+                tex
+            )
+
+        member x.CreateTextureCube(size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size.X, size.Y, 0), 1, t, 0L, false)
+                x.UpdateTextureCube(tex, size, mipMapLevels, t, samples)
+
+                tex
+            )
+
+        member x.CreateTexture1DArray(size : int, count : int, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, 1, t, 0L, false)
+                x.UpdateTexture1DArray(tex, size, count, mipMapLevels, t)
+
+                tex
+            ) 
+
+        member x.CreateTexture2DArray(size : V2i, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+            using x.ResourceLock (fun _ ->
+                let h = GL.GenTexture()
+                GL.Check "could not create texture"
+                
+                addTexture x 0L
+                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, 1, t, 0L, false)
+
+                x.UpdateTexture2DArray(tex, size, count, mipMapLevels, t, samples)
+
+                tex
+            )
+            
+        member x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                if tex.ImmutableFormat then
+                    failwith "cannot update format/size for immutable texture"
+
+                GL.BindTexture(TextureTarget.Texture1D, tex.Handle)
+                GL.Check "could not bind texture"
+
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1)
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
+  
+                GL.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, unbox (int t), size)
+                GL.Check "could not allocate texture"
+
+                GL.BindTexture(TextureTarget.Texture1D, 0)
+                GL.Check "could not unbind texture"
+
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.Texture1D
+                tex.Size <- V3i(size, 0, 0)
+                tex.Format <- t
+                tex.ImmutableFormat <- true
+            )
+
+        member x.UpdateTexture2D(tex : Texture, size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
+            using x.ResourceLock (fun _ ->
+                if tex.ImmutableFormat then
+                    failwith "cannot update format/size for immutable texture"
+
+                let target =
+                    if samples = 1 then TextureTarget.Texture2D
+                    else TextureTarget.Texture2DMultisample
+
+                GL.BindTexture(target, tex.Handle)
+                GL.Check "could not bind texture"
+
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples)
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
+
+                if samples = 1 then
+                    GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int t), size.X, size.Y)
+                else
+                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                    GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
+
+                GL.Check "could not allocate texture"
+
+                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels)
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+
+
+                GL.BindTexture(target, 0)
+                GL.Check "could not unbind texture"
+
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.Texture2D
+                tex.Multisamples <- samples
+                tex.Count <- 1
+                tex.Size <- V3i(size.X, size.Y, 0)
+                tex.Format <- t
+                tex.ImmutableFormat <- true
+            )
+
+        member x.UpdateTexture3D(tex : Texture, size : V3i, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                if tex.ImmutableFormat then
+                    failwith "cannot update format/size for immutable texture"
+
+                GL.BindTexture(TextureTarget.Texture3D, tex.Handle)
+                GL.Check "could not bind texture"
+
+                let ifmt = unbox (int t) 
+
+                let sizeInBytes = texSizeInBytes(size, t, 1)
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
+
+                GL.TexStorage3D(TextureTarget3d.Texture3D, mipMapLevels, ifmt, size.X, size.Y, size.Z)
+                GL.Check "could not allocate texture"
+
+                GL.BindTexture(TextureTarget.Texture3D, 0)
+                GL.Check "could not unbind texture"
+
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.Texture3D
+                tex.Count <- 1
+                tex.Multisamples <- 1
+                tex.Size <- size
+                tex.Format <- t
+                tex.ImmutableFormat <- true
+            )
+
+        member x.UpdateTextureCube(tex : Texture, size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
+            using x.ResourceLock (fun _ ->
+                if tex.ImmutableFormat then
+                    failwith "cannot update format/size for immutable texture"
+
+                GL.BindTexture(TextureTarget.TextureCubeMap, tex.Handle)
+                GL.Check "could not bind texture"
+
+                if samples = 1 then
+                    GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int t), size.X, size.Y)
+                else
+                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                    // TODO: verify that this works!!
+                    for f in 0..5 do
+                        let target = int TextureTarget.TextureCubeMapPositiveX + f
+                        GL.TexImage2DMultisample(unbox target, samples, unbox (int t), size.X, size.Y, true)
+
+                GL.BindTexture(TextureTarget.TextureCubeMap, 0)
+                GL.Check "could not unbind texture"
+
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples)
+                let sizeInBytes = sizeInBytes * 6L
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
+
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.TextureCube
+                tex.Size <- V3i(size.X, size.Y, 0)
+                tex.Count <- 1
+                tex.Multisamples <- samples
+                tex.Format <- t
+                tex.ImmutableFormat <- true
+            )
+
+        member x.UpdateTexture2DArray(tex : Texture, size : V2i, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+            using x.ResourceLock (fun _ ->
+                if tex.ImmutableFormat then
+                    failwith "cannot update format/size for immutable texture"
+
+                let target =
+                    if samples = 1 then TextureTarget.Texture2DArray
+                    else TextureTarget.Texture2DMultisampleArray
+
+                GL.BindTexture(target, tex.Handle)
+                GL.Check "could not bind texture"
+
+
+                let sizeInBytes = texSizeInBytes(size.XYI, t, samples) * (int64 count)
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes // TODO check multisampling
+
+                if samples = 1 then
+                    GL.TexStorage3D(TextureTarget3d.Texture2DArray, mipMapLevels, unbox (int t), size.X, size.Y, count)
+                else
+                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                    GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, unbox (int t), size.X, size.Y, count, true)
+  
+                GL.Check "could not allocate texture"
+
+                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels)
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+
+
+                GL.BindTexture(target, 0)
+                GL.Check "could not unbind texture"
+
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.Texture2D
+                tex.Count <- count
+                tex.Multisamples <- samples
+                tex.Size <- V3i(size.X, size.Y, 0)
+                tex.Format <- t
+                tex.ImmutableFormat <- true
+            )
+
+        member x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, t : TextureFormat) =
+            using x.ResourceLock (fun _ ->
+                if tex.ImmutableFormat then
+                    failwith "cannot update format/size for immutable texture"
+
+                GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
+                GL.Check "could not bind texture"
+
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1) * (int64 count)
+                updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
+  
+                GL.TexStorage2D(TextureTarget2d.Texture1DArray, mipMapLevels, unbox (int t), size, count)
+                GL.Check "could not allocate texture"
+
+                GL.BindTexture(TextureTarget.Texture1DArray, 0)
+                GL.Check "could not unbind texture"
+
+                tex.MipMapLevels <- mipMapLevels
+                tex.Dimension <- TextureDimension.Texture1D
+                tex.Count <- count
+                tex.Multisamples <- 1
+                tex.Size <- V3i(size, 0, 0)
+                tex.Format <- t
+                tex.ImmutableFormat <- true
+            )
+
+        member x.CreateTextureView(orig : Texture, levels : Range1i, slices : Range1i) =
+            using x.ResourceLock (fun _ ->
+                if not orig.ImmutableFormat then
+                    failwithf "cannot create texture-views for mutable textures"
+
+                let handle = GL.GenTexture()
+                GL.Check "could not create texture"
+
+                let dim =
+                    match orig.Dimension, orig.Count with
+                        | TextureDimension.TextureCube, 1 -> 
+                            if slices.Min <> slices.Max then failwithf "cannot take multiple slices from CubeMap"
+                            TextureDimension.Texture2D
+                        | d,_ -> d
+
+                let tex = Texture(x, handle, dim, 1 + levels.Max - levels.Min, orig.Multisamples, orig.Size, 1 + slices.Max - slices.Min, orig.Format, 0L, true)
+                let target = TextureTarget.ofTexture tex
+                  
+                GL.TextureView(
+                    handle,
+                    target,
+                    orig.Handle,
+                    unbox (int orig.Format),
+                    levels.Min, 1 + levels.Max - levels.Min,
+                    slices.Min, 1
+                )
+                GL.Check "could not create texture view"
+
+                tex
+            )
+
+        member x.Delete(t : Texture) =
+            using x.ResourceLock (fun _ ->
+                removeTexture x t.SizeInBytes
+                GL.DeleteTexture(t.Handle)
+                GL.Check "could not delete texture"
+            )
+            
+        member x.Blit(src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
+            using x.ResourceLock (fun _ ->
+                let fSrc = GL.GenFramebuffer()
+                GL.Check "could not create framebuffer"
+                let fDst = GL.GenFramebuffer()
+                GL.Check "could not create framebuffer"
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
+                GL.Check "could not bind framebuffer"
+                if src.Count > 1 then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
+                else GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel)
+                GL.Check "could not attach texture to framebuffer"
+
+                let srcCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
+                if srcCheck <> FramebufferErrorCode.FramebufferComplete then
+                    failwithf "could not create input framebuffer: %A" srcCheck
+
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
+                GL.Check "could not bind framebuffer"
+
+                if src.Count > 1 then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel, dstSlice)
+                else GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel)
+                GL.Check "could not attach texture to framebuffer"
+
+                let dstCheck = GL.CheckFramebufferStatus(FramebufferTarget.DrawFramebuffer)
+                if dstCheck <> FramebufferErrorCode.FramebufferComplete then
+                    failwithf "could not create output framebuffer: %A" dstCheck
+
+                GL.BlitFramebuffer(
+                    srcRegion.Min.X, srcRegion.Min.Y,
+                    srcRegion.Max.X, srcRegion.Max.Y,
+
+                    dstRegion.Min.X, dstRegion.Min.Y,
+                    dstRegion.Max.X, dstRegion.Max.Y,
+
+                    ClearBufferMask.ColorBufferBit,
+                    (if linear then BlitFramebufferFilter.Linear else BlitFramebufferFilter.Nearest)
+                )
+                GL.Check "could blit framebuffer"
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                GL.Check "could unbind framebuffer"
+
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+                GL.Check "could unbind framebuffer"
+
+                GL.DeleteFramebuffer(fSrc)
+                GL.Check "could delete framebuffer"
+
+                GL.DeleteFramebuffer(fDst)
+                GL.Check "could delete framebuffer"
+
+            )
+
+        member x.Copy(src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
+            using x.ResourceLock (fun _ ->
+                let fSrc = GL.GenFramebuffer()
+                GL.Check "could not create framebuffer"
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
+                GL.Check "could not bind framebuffer"
+
+                if src.Count > 1 then
+                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
+                else
+                    GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel)
+                GL.Check "could not attach texture to framebuffer"
+
+                let srcCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
+                if srcCheck <> FramebufferErrorCode.FramebufferComplete then
+                    failwithf "could not create input framebuffer: %A" srcCheck
+
+                GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
+                GL.Check "could not set readbuffer"
+
+
+                let bindTarget = TextureTarget.ofTexture dst
+                GL.BindTexture(bindTarget, dst.Handle)
+                GL.Check "could not bind texture"
+
+                let copyTarget =
+                    match dst.Dimension with
+                        | TextureDimension.TextureCube -> snd cubeSides.[dstSlice]
+                        | _ -> bindTarget
+
+                GL.CopyTexSubImage2D(
+                    copyTarget,
+                    dstLevel,
+                    dstOffset.X, dstOffset.Y,
+                    srcOffset.X, srcOffset.Y,
+                    size.X, size.Y
+                )
+                GL.Check "could not copy texture"
+
+                GL.ReadBuffer(ReadBufferMode.None)
+                GL.Check "could not unset readbuffer"
+
+                GL.BindTexture(bindTarget, 0)
+                GL.Check "could not unbind texture"
+
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                GL.Check "could not unbind framebuffer"
+
+                GL.DeleteFramebuffer(fSrc)
+                GL.Check "could not delete framebuffer"
+
+            )
+
+
+[<AutoOpen>]
+module TextureUploadExtensions =
     open Microsoft.FSharp.NativeInterop
 
     module private StructTypes = 
@@ -117,29 +600,27 @@ module TextureExtensionsNew =
             let mi = meth.MakeGenericMethod [|t|]
             mi.Invoke(e, [| null |]) |> ignore
 
-    type Col.Format with
-        static member Stencil = unbox<Col.Format> (Int32.MaxValue)
-        static member Depth = unbox<Col.Format> (Int32.MaxValue - 1)
+        type Col.Format with
+            static member Stencil = unbox<Col.Format> (Int32.MaxValue)
+            static member Depth = unbox<Col.Format> (Int32.MaxValue - 1)
 
-    let internal toChannelCount =
-        LookupTable.lookupTable [
-            Col.Format.Alpha, 1
-            Col.Format.BW, 1
-            Col.Format.Gray, 1
-            Col.Format.GrayAlpha, 2
-            Col.Format.RGB, 3
-            Col.Format.BGR, 3
-            Col.Format.RGBA, 4
-            Col.Format.BGRA, 4
-            Col.Format.RGBP, 4
-            Col.Format.NormalUV, 2
-            Col.Format.Stencil, 1
-            Col.Format.Depth, 1
-        ]
+        let toChannelCount =
+            LookupTable.lookupTable [
+                Col.Format.Alpha, 1
+                Col.Format.BW, 1
+                Col.Format.Gray, 1
+                Col.Format.GrayAlpha, 2
+                Col.Format.RGB, 3
+                Col.Format.BGR, 3
+                Col.Format.RGBA, 4
+                Col.Format.BGRA, 4
+                Col.Format.RGBP, 4
+                Col.Format.NormalUV, 2
+                Col.Format.Stencil, 1
+                Col.Format.Depth, 1
+            ]
 
-
-
-    type Utils =
+    type TextureCopyUtils =
 
         static member Copy(elementType : Type, src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
             elementType |> run { 
@@ -157,7 +638,7 @@ module TextureExtensionsNew =
             }
 
         static member Copy(elementSize : int, src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
-            Utils.Copy(StructTypes.types.[elementSize], src, srcInfo, dst, dstInfo)
+            TextureCopyUtils.Copy(StructTypes.types.[elementSize], src, srcInfo, dst, dstInfo)
 
         static member Copy(src : PixImage, dst : nativeint, dstInfo : VolumeInfo) =
             let gc = GCHandle.Alloc(src.Array, GCHandleType.Pinned)
@@ -172,7 +653,7 @@ module TextureExtensionsNew =
                         imgInfo.Size,
                         imgInfo.Delta * elementSize
                     )
-                Utils.Copy(elementType, pSrc, srcInfo, dst, dstInfo)
+                TextureCopyUtils.Copy(elementType, pSrc, srcInfo, dst, dstInfo)
             finally
                 gc.Free()   
 
@@ -189,12 +670,439 @@ module TextureExtensionsNew =
                         imgInfo.Size,
                         imgInfo.Delta * elementSize
                     )
-                Utils.Copy(elementType, src, srcInfo, pDst, dstInfo)
+                TextureCopyUtils.Copy(elementType, src, srcInfo, pDst, dstInfo)
             finally
                 gc.Free()     
 
-    type Uploads =
-        static member PinPBO(image : PixImage, trafo : ImageTrafo, f : V2i -> nativeint -> unit) =
+    [<AutoOpen>]
+    module FormatConversions = 
+        type Col.Format with
+            member x.ChannelCount = toChannelCount x
+
+        module PixelFormat =
+        
+            let channels =
+                LookupTable.lookupTable [
+                    PixelFormat.Alpha, 1
+                    PixelFormat.Bgr, 3
+                    PixelFormat.Bgra, 4
+                    PixelFormat.Luminance, 1
+                    PixelFormat.LuminanceAlpha, 2
+                    PixelFormat.Rg, 2
+                    PixelFormat.Rgb, 3
+                    PixelFormat.Rgba, 4
+                ]
+
+            let ofColFormat =
+                LookupTable.lookupTable [
+                    Col.Format.Alpha, PixelFormat.Alpha
+                    Col.Format.BGR, PixelFormat.Bgr
+                    Col.Format.BGRA, PixelFormat.Bgra
+                    Col.Format.BGRP, PixelFormat.Bgra
+                    Col.Format.BW, PixelFormat.Luminance
+                    Col.Format.Gray, PixelFormat.Luminance
+                    Col.Format.GrayAlpha, PixelFormat.LuminanceAlpha
+                    Col.Format.NormalUV, PixelFormat.Rg
+                    Col.Format.RGB, PixelFormat.Rgb
+                    Col.Format.RGBA, PixelFormat.Rgba
+                    Col.Format.RGBP, PixelFormat.Rgba
+                ]
+
+        module PixelType =
+
+            let size =
+                LookupTable.lookupTable [
+                    PixelType.UnsignedByte, 1
+                    PixelType.Byte, 1
+                    PixelType.UnsignedShort, 2
+                    PixelType.Short, 2
+                    PixelType.UnsignedInt, 4
+                    PixelType.Int, 4
+                    PixelType.HalfFloat, 2
+                    PixelType.Float, 4
+                ]
+
+            let ofType =
+                LookupTable.lookupTable [
+                    typeof<uint8>, PixelType.UnsignedByte
+                    typeof<int8>, PixelType.Byte
+                    typeof<uint16>, PixelType.UnsignedShort
+                    typeof<int16>, PixelType.Short
+                    typeof<uint32>, PixelType.UnsignedInt
+                    typeof<int32>, PixelType.Int
+                    typeof<float16>, PixelType.HalfFloat
+                    typeof<float32>, PixelType.Float
+                ]
+
+        module TextureFormat =
+            let ofFormatAndType =
+                LookupTable.lookupTable [
+                     (PixelFormat.Bgr, PixelType.UnsignedByte), TextureFormat.Bgr8 
+                     (PixelFormat.Bgra, PixelType.UnsignedByte), TextureFormat.Bgra8 
+                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Rgb8 
+                     (PixelFormat.Rgb, PixelType.UnsignedShort), TextureFormat.Rgb16 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Rgba8 
+                     (PixelFormat.Rgba, PixelType.UnsignedInt1010102), TextureFormat.Rgb10A2 
+                     (PixelFormat.Rgba, PixelType.UnsignedShort), TextureFormat.Rgba16 
+                     (PixelFormat.DepthComponent, PixelType.HalfFloat), TextureFormat.DepthComponent16 
+                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent24 
+                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent32 
+                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.CompressedRed 
+                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.CompressedRg 
+                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.R8 
+                     (PixelFormat.Red, PixelType.UnsignedShort), TextureFormat.R16 
+                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.Rg8 
+                     (PixelFormat.Rg, PixelType.UnsignedShort), TextureFormat.Rg16 
+                     (PixelFormat.Red, PixelType.HalfFloat), TextureFormat.R16f 
+                     (PixelFormat.Red, PixelType.Float), TextureFormat.R32f 
+                     (PixelFormat.Rg, PixelType.HalfFloat), TextureFormat.Rg16f 
+                     (PixelFormat.Rg, PixelType.Float), TextureFormat.Rg32f 
+                     (PixelFormat.Red, PixelType.Byte), TextureFormat.R8i 
+                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.R8ui 
+                     (PixelFormat.Red, PixelType.Short), TextureFormat.R16i 
+                     (PixelFormat.Red, PixelType.UnsignedShort), TextureFormat.R16ui 
+                     (PixelFormat.Red, PixelType.Int), TextureFormat.R32i 
+                     (PixelFormat.Red, PixelType.UnsignedInt), TextureFormat.R32ui 
+                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.Rg8i 
+                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.Rg8ui 
+                     (PixelFormat.Rg, PixelType.Short), TextureFormat.Rg16i 
+                     (PixelFormat.Rg, PixelType.UnsignedShort), TextureFormat.Rg16ui 
+                     (PixelFormat.Rg, PixelType.Int), TextureFormat.Rg32i 
+                     (PixelFormat.Rg, PixelType.UnsignedInt), TextureFormat.Rg32ui 
+                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedRgbS3tcDxt1Ext 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt1Ext 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt3Ext 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt5Ext 
+                     (PixelFormat.Alpha, PixelType.UnsignedByte), TextureFormat.CompressedAlpha 
+                     (PixelFormat.Luminance, PixelType.UnsignedByte), TextureFormat.CompressedLuminance 
+                     (PixelFormat.LuminanceAlpha, PixelType.UnsignedByte), TextureFormat.CompressedLuminanceAlpha 
+                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedRgb 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgba 
+                     (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev), TextureFormat.DepthStencil 
+
+                     (PixelFormat.Rgba, PixelType.Float), TextureFormat.Rgba32f 
+                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.Rgb32f 
+                     (PixelFormat.Rgba, PixelType.HalfFloat), TextureFormat.Rgba16f 
+                     (PixelFormat.Rgb, PixelType.HalfFloat), TextureFormat.Rgb16f 
+                     (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev), TextureFormat.Depth24Stencil8 
+                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Srgb 
+                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Srgb8 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.SrgbAlpha 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Srgb8Alpha8 
+
+                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedSrgb 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlpha 
+                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedSrgbS3tcDxt1Ext 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext 
+                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent32f 
+                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.Depth32fStencil8 
+                     (PixelFormat.Rgba, PixelType.UnsignedInt), TextureFormat.Rgba32ui 
+                     (PixelFormat.Rgb, PixelType.UnsignedInt), TextureFormat.Rgb32ui 
+                     (PixelFormat.Rgba, PixelType.UnsignedShort), TextureFormat.Rgba16ui 
+                     (PixelFormat.Rgb, PixelType.UnsignedShort), TextureFormat.Rgb16ui 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Rgba8ui 
+                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Rgb8ui 
+                     (PixelFormat.Rgba, PixelType.Int), TextureFormat.Rgba32i 
+                     (PixelFormat.Rgb, PixelType.Int), TextureFormat.Rgb32i 
+                     (PixelFormat.Rgba, PixelType.Short), TextureFormat.Rgba16i 
+                     (PixelFormat.Rgb, PixelType.Short), TextureFormat.Rgb16i 
+                     (PixelFormat.Rgba, PixelType.Byte), TextureFormat.Rgba8i 
+                     (PixelFormat.Rgb, PixelType.Byte), TextureFormat.Rgb8i 
+                     (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev), TextureFormat.Float32UnsignedInt248Rev 
+                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.CompressedRedRgtc1 
+                     (PixelFormat.Red, PixelType.Byte), TextureFormat.CompressedSignedRedRgtc1 
+                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.CompressedRgRgtc2 
+                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.CompressedSignedRgRgtc2 
+                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaBptcUnorm 
+                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.CompressedRgbBptcSignedFloat 
+                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.CompressedRgbBptcUnsignedFloat 
+                     (PixelFormat.Red, PixelType.Byte), TextureFormat.R8Snorm 
+                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.Rg8Snorm 
+                     (PixelFormat.Rgb, PixelType.Byte), TextureFormat.Rgb8Snorm 
+                     (PixelFormat.Rgba, PixelType.Byte), TextureFormat.Rgba8Snorm 
+                     (PixelFormat.Red, PixelType.Short), TextureFormat.R16Snorm 
+                     (PixelFormat.Rg, PixelType.Short), TextureFormat.Rg16Snorm 
+                     (PixelFormat.Rgb, PixelType.Short), TextureFormat.Rgb16Snorm 
+                     (PixelFormat.Rgba, PixelType.Short), TextureFormat.Rgba16Snorm 
+                ]
+
+            let toFormatAndType =
+                LookupTable.lookupTable [
+                    TextureFormat.Bgr8 , (PixelFormat.Bgr, PixelType.UnsignedByte)
+                    TextureFormat.Bgra8 , (PixelFormat.Bgra, PixelType.UnsignedByte)
+                    TextureFormat.Rgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                    TextureFormat.Rgb16 , (PixelFormat.Rgb, PixelType.UnsignedShort)
+                    TextureFormat.Rgba8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.Rgb10A2 , (PixelFormat.Rgba, PixelType.UnsignedInt1010102)
+                    TextureFormat.Rgba16 , (PixelFormat.Rgba, PixelType.UnsignedShort)
+
+                    TextureFormat.DepthComponent16 , (PixelFormat.DepthComponent, PixelType.HalfFloat)
+                    TextureFormat.DepthComponent24 , (PixelFormat.DepthComponent, PixelType.Float)
+                    TextureFormat.DepthComponent32 , (PixelFormat.DepthComponent, PixelType.Float)
+                    TextureFormat.CompressedRed , (PixelFormat.Red, PixelType.UnsignedByte)
+                    TextureFormat.CompressedRg , (PixelFormat.Rg, PixelType.UnsignedByte)
+                    TextureFormat.R8 , (PixelFormat.Red, PixelType.UnsignedByte)
+                    TextureFormat.R16 , (PixelFormat.Red, PixelType.UnsignedShort)
+                    TextureFormat.Rg8 , (PixelFormat.Rg, PixelType.UnsignedByte)
+                    TextureFormat.Rg16 , (PixelFormat.Rg, PixelType.UnsignedShort)
+                    TextureFormat.R16f , (PixelFormat.Red, PixelType.HalfFloat)
+                    TextureFormat.R32f , (PixelFormat.Red, PixelType.Float)
+                    TextureFormat.Rg16f , (PixelFormat.Rg, PixelType.HalfFloat)
+                    TextureFormat.Rg32f , (PixelFormat.Rg, PixelType.Float)
+                    TextureFormat.R8i , (PixelFormat.Red, PixelType.Byte)
+                    TextureFormat.R8ui , (PixelFormat.Red, PixelType.UnsignedByte)
+                    TextureFormat.R16i , (PixelFormat.Red, PixelType.Short)
+                    TextureFormat.R16ui , (PixelFormat.Red, PixelType.UnsignedShort)
+                    TextureFormat.R32i , (PixelFormat.Red, PixelType.Int)
+                    TextureFormat.R32ui , (PixelFormat.Red, PixelType.UnsignedInt)
+                    TextureFormat.Rg8i , (PixelFormat.Rg, PixelType.Byte)
+                    TextureFormat.Rg8ui , (PixelFormat.Rg, PixelType.UnsignedByte)
+                    TextureFormat.Rg16i , (PixelFormat.Rg, PixelType.Short)
+                    TextureFormat.Rg16ui , (PixelFormat.Rg, PixelType.UnsignedShort)
+                    TextureFormat.Rg32i , (PixelFormat.Rg, PixelType.Int)
+                    TextureFormat.Rg32ui , (PixelFormat.Rg, PixelType.UnsignedInt)
+                    TextureFormat.CompressedRgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                    TextureFormat.CompressedRgbaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.CompressedRgbaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.CompressedRgbaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.CompressedAlpha , (PixelFormat.Alpha, PixelType.UnsignedByte)
+                    TextureFormat.CompressedLuminance , (PixelFormat.Luminance, PixelType.UnsignedByte)
+                    TextureFormat.CompressedLuminanceAlpha , (PixelFormat.LuminanceAlpha, PixelType.UnsignedByte)
+                    TextureFormat.CompressedRgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                    TextureFormat.CompressedRgba , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.DepthStencil , (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev)
+
+                    TextureFormat.Rgba32f , (PixelFormat.Rgba, PixelType.Float)
+                    TextureFormat.Rgb32f , (PixelFormat.Rgb, PixelType.Float)
+                    TextureFormat.Rgba16f , (PixelFormat.Rgba, PixelType.HalfFloat)
+                    TextureFormat.Rgb16f , (PixelFormat.Rgb, PixelType.HalfFloat)
+                    TextureFormat.Depth24Stencil8 , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
+                    TextureFormat.Srgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                    TextureFormat.Srgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                    TextureFormat.SrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.Srgb8Alpha8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
+
+                    TextureFormat.CompressedSrgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                    TextureFormat.CompressedSrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.CompressedSrgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                    TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.DepthComponent32f , (PixelFormat.DepthComponent, PixelType.Float)
+                    TextureFormat.Depth32fStencil8 , (PixelFormat.DepthComponent, PixelType.Float)
+                    TextureFormat.Rgba32ui , (PixelFormat.Rgba, PixelType.UnsignedInt)
+                    TextureFormat.Rgb32ui , (PixelFormat.Rgb, PixelType.UnsignedInt)
+                    TextureFormat.Rgba16ui , (PixelFormat.Rgba, PixelType.UnsignedShort)
+                    TextureFormat.Rgb16ui , (PixelFormat.Rgb, PixelType.UnsignedShort)
+                    TextureFormat.Rgba8ui , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.Rgb8ui , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                    TextureFormat.Rgba32i , (PixelFormat.Rgba, PixelType.Int)
+                    TextureFormat.Rgb32i , (PixelFormat.Rgb, PixelType.Int)
+                    TextureFormat.Rgba16i , (PixelFormat.Rgba, PixelType.Short)
+                    TextureFormat.Rgb16i , (PixelFormat.Rgb, PixelType.Short)
+                    TextureFormat.Rgba8i , (PixelFormat.Rgba, PixelType.Byte)
+                    TextureFormat.Rgb8i , (PixelFormat.Rgb, PixelType.Byte)
+                    TextureFormat.Float32UnsignedInt248Rev , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
+                    TextureFormat.CompressedRedRgtc1 , (PixelFormat.Red, PixelType.UnsignedByte)
+                    TextureFormat.CompressedSignedRedRgtc1 , (PixelFormat.Red, PixelType.Byte)
+                    TextureFormat.CompressedRgRgtc2 , (PixelFormat.Rg, PixelType.UnsignedByte)
+                    TextureFormat.CompressedSignedRgRgtc2 , (PixelFormat.Rg, PixelType.Byte)
+                    TextureFormat.CompressedRgbaBptcUnorm , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                    TextureFormat.CompressedRgbBptcSignedFloat , (PixelFormat.Rgb, PixelType.Float)
+                    TextureFormat.CompressedRgbBptcUnsignedFloat , (PixelFormat.Rgb, PixelType.Float)
+                    TextureFormat.R8Snorm , (PixelFormat.Red, PixelType.Byte)
+                    TextureFormat.Rg8Snorm , (PixelFormat.Rg, PixelType.Byte)
+                    TextureFormat.Rgb8Snorm , (PixelFormat.Rgb, PixelType.Byte)
+                    TextureFormat.Rgba8Snorm , (PixelFormat.Rgba, PixelType.Byte)
+                    TextureFormat.R16Snorm , (PixelFormat.Red, PixelType.Short)
+                    TextureFormat.Rg16Snorm , (PixelFormat.Rg, PixelType.Short)
+                    TextureFormat.Rgb16Snorm , (PixelFormat.Rgb, PixelType.Short)
+                    TextureFormat.Rgba16Snorm , (PixelFormat.Rgba, PixelType.Short)
+
+                ]
+
+    [<AutoOpen>]
+    module DevilExtensions =
+        open DevILSharp
+
+        module PixelFormat =
+        
+            let channels =
+                LookupTable.lookupTable [
+                    PixelFormat.Alpha, 1
+                    PixelFormat.Bgr, 3
+                    PixelFormat.Bgra, 4
+                    PixelFormat.Luminance, 1
+                    PixelFormat.LuminanceAlpha, 2
+                    PixelFormat.Rg, 2
+                    PixelFormat.Rgb, 3
+                    PixelFormat.Rgba, 4
+                ]
+
+            let ofColFormat =
+                LookupTable.lookupTable [
+                    Col.Format.Alpha, PixelFormat.Alpha
+                    Col.Format.BGR, PixelFormat.Bgr
+                    Col.Format.BGRA, PixelFormat.Bgra
+                    Col.Format.BGRP, PixelFormat.Bgra
+                    Col.Format.BW, PixelFormat.Luminance
+                    Col.Format.Gray, PixelFormat.Luminance
+                    Col.Format.GrayAlpha, PixelFormat.LuminanceAlpha
+                    Col.Format.NormalUV, PixelFormat.Rg
+                    Col.Format.RGB, PixelFormat.Rgb
+                    Col.Format.RGBA, PixelFormat.Rgba
+                    Col.Format.RGBP, PixelFormat.Rgba
+                ]
+
+            let ofDevil =
+                LookupTable.lookupTable [
+                    ChannelFormat.RGB, PixelFormat.Rgb
+                    ChannelFormat.BGR, PixelFormat.Bgr
+                    ChannelFormat.RGBA, PixelFormat.Rgba
+                    ChannelFormat.BGRA, PixelFormat.Bgra
+                    ChannelFormat.Luminance, PixelFormat.Luminance
+                    ChannelFormat.Alpha, PixelFormat.Alpha
+                    ChannelFormat.LuminanceAlpha, PixelFormat.LuminanceAlpha
+
+                ]
+
+        module PixelType =
+
+            let size =
+                LookupTable.lookupTable [
+                    PixelType.UnsignedByte, 1
+                    PixelType.Byte, 1
+                    PixelType.UnsignedShort, 2
+                    PixelType.Short, 2
+                    PixelType.UnsignedInt, 4
+                    PixelType.Int, 4
+                    PixelType.HalfFloat, 2
+                    PixelType.Float, 4
+                ]
+
+            let ofType =
+                LookupTable.lookupTable [
+                    typeof<uint8>, PixelType.UnsignedByte
+                    typeof<int8>, PixelType.Byte
+                    typeof<uint16>, PixelType.UnsignedShort
+                    typeof<int16>, PixelType.Short
+                    typeof<uint32>, PixelType.UnsignedInt
+                    typeof<int32>, PixelType.Int
+                    typeof<float16>, PixelType.HalfFloat
+                    typeof<float32>, PixelType.Float
+                ]
+
+            let ofDevil =
+                LookupTable.lookupTable [
+                    ChannelType.Byte, PixelType.Byte
+                    //ChannelType.Double, PixelType.Double
+                    ChannelType.Float, PixelType.Float
+                    ChannelType.Half, PixelType.HalfFloat
+                    ChannelType.Int, PixelType.Int
+                    ChannelType.Short, PixelType.Short
+                    ChannelType.UnsignedByte, PixelType.UnsignedByte
+                    ChannelType.UnsignedInt, PixelType.UnsignedInt
+                    ChannelType.UnsignedShort, PixelType.UnsignedShort
+                ]
+
+        module IL =
+            let lockObj = 
+                let fi = typeof<PixImage>.GetField("s_devilLock", Reflection.BindingFlags.Static ||| Reflection.BindingFlags.NonPublic)
+                fi.GetValue(null)
+
+            let GetPixelType() = IL.GetDataType() |> PixelType.ofDevil
+
+            let GetPixelFormat() = IL.GetInteger(IntName.ImageFormat) |> unbox |> PixelFormat.ofDevil
+
+            let PinBPO(align : int, trafo : ImageTrafo, f : V2i -> PixelType -> PixelFormat-> nativeint -> unit) =
+                let align = nativeint align
+                let mask = align - 1n
+
+                let data = IL.GetData()
+                let w = IL.GetInteger(IntName.ImageWidth)
+                let h = IL.GetInteger(IntName.ImageHeight)
+                let pt = GetPixelType()
+                let pf = GetPixelFormat()
+
+                let elementSize = PixelType.size pt
+                let channels = PixelFormat.channels pf
+
+                let lineSize = nativeint w * nativeint elementSize * nativeint channels
+
+                let alignedLineSize =
+                    if lineSize % align = 0n then lineSize
+                    else (lineSize + mask) &&& ~~~mask
+
+                let sizeInBytes = alignedLineSize * nativeint h
+
+                let pbo = GL.GenBuffer()
+                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+                GL.BufferData(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferUsageHint.DynamicDraw)
+
+                let dst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
+                
+                let viSize = V3l(int64 w, int64 h, int64 channels)
+                let dstInfo =
+                    match trafo with
+                        | ImageTrafo.Rot0 -> 
+                            VolumeInfo(
+                                0L,
+                                viSize,
+                                V3l(int64 channels * int64 elementSize, int64 alignedLineSize, int64 elementSize)
+                            )
+
+                        | ImageTrafo.MirrorY -> 
+                            VolumeInfo(
+                                int64 alignedLineSize * (int64 h - 1L),
+                                viSize,
+                                V3l(int64 channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
+                            )
+
+                        | ImageTrafo.MirrorX ->
+                            VolumeInfo(
+                                int64 w - 1L,
+                                viSize,
+                                V3l(int64 -channels * int64 elementSize, int64 alignedLineSize, int64 elementSize)
+                            )
+
+                        | ImageTrafo.Rot180 ->
+                            VolumeInfo(
+                                int64 alignedLineSize * (int64 h - 1L) + int64 w - 1L,
+                                viSize,
+                                V3l(int64 -channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
+                            )
+
+                        | _ -> 
+                            failwithf "[GL] only supports ImageTrafo.[Rot0|MirrorY|MirrorX|Rot180] atm. but got %A" trafo
+
+                let srcInfo =
+                    VolumeInfo(
+                        0L,
+                        viSize,
+                        V3l(int64 channels * int64 elementSize, int64 alignedLineSize, int64 elementSize)
+                    )
+
+                TextureCopyUtils.Copy(elementSize, data, srcInfo, dst, dstInfo)
+
+                GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+                f (V2i(w,h)) pt pf sizeInBytes
+
+                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+                GL.DeleteBuffer(pbo)
+
+
+                
+                ()
+  
+    type PixImage with
+        member image.PinPBO(align : int, trafo : ImageTrafo, f : V2i -> PixelType -> PixelFormat -> nativeint -> unit) =
+            let pt = PixelType.ofType image.PixFormat.Type
+            let pf = PixelFormat.ofColFormat image.Format
+            
+            let align = align |> nativeint
+            let mask = align - 1n |> nativeint
             let size = image.Size
             let elementSize = image.PixFormat.Type.GLSize
             let channels = toChannelCount image.Format
@@ -202,8 +1110,8 @@ module TextureExtensionsNew =
             let lineSize = nativeint size.X * nativeint elementSize * nativeint channels
 
             let alignedLineSize =
-                if lineSize % 4n = 0n then lineSize
-                else (lineSize + 3n) &&& ~~~3n
+                if lineSize % align = 0n then lineSize
+                else (lineSize + mask) &&& ~~~mask
 
             let sizeInBytes = alignedLineSize * nativeint size.Y
 
@@ -247,10 +1155,10 @@ module TextureExtensionsNew =
                     | _ -> 
                         failwithf "[GL] only supports ImageTrafo.[Rot0|MirrorY|MirrorX|Rot180] atm. but got %A" trafo
 
-            Utils.Copy(image, dst, dstInfo)
+            TextureCopyUtils.Copy(image, dst, dstInfo)
 
             GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
-            f size sizeInBytes
+            f size pt pf sizeInBytes
 
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
             GL.DeleteBuffer(pbo)
@@ -259,6 +1167,30 @@ module TextureExtensionsNew =
 
 
             ()
+
+    type Context with
+        
+        member x.Upload(texture : Texture, data : PixImageMipMap, config : TextureParams) =
+            using x.ResourceLock (fun _ ->
+                if data.LevelCount < 1 then
+                    failwith "[GL] cannot upload empty PixImageMipMap"
+
+                let levels = data.LevelCount
+                let level0 = data.[0]
+                let size = level0.Size
+                let expectedLevels = min size.X size.Y |> Fun.Log2 |> ceil |> int 
+                let generateMipMaps = data.LevelCount = 1 && config.wantMipMaps
+
+                for level in 0 .. levels - 1 do
+                    let image = data.[level]
+                    ()
+
+
+                ()
+            )
+
+
+
 
 
 [<AutoOpen>]
@@ -795,7 +1727,6 @@ module TextureExtensions =
 
     [<AutoOpen>]
     module private Uploads =
-
         let getTextureTarget' (dim : TextureDimension, isArray : bool, isMS : bool) =
             match dim, isArray, isMS with
 
@@ -819,58 +1750,6 @@ module TextureExtensions =
 
         let getTextureTarget (texture : Texture) =
             getTextureTarget' ( texture.Dimension, texture.IsArray, texture.IsMultisampled)
-
-        let uploadTexture2DLevelInternal (target : TextureTarget) (t : Texture) (level : int) (image : PixImage) =
-            // determine the input format and covert the image
-            // to a supported format if necessary.
-            let pixelType, pixelFormat =
-                match toPixelType image.PixFormat.Type, toPixelFormat image.Format with
-                    | Some t, Some f -> (t,f)
-                    | _ -> failwith "[GL] conversion not implemented"
-
-
-            TextureExtensionsNew.Uploads.PinPBO(image, ImageTrafo.MirrorY, fun dim size ->
-                GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
-                GL.Check (sprintf "could not upload texture data for level %d" level)
-            )
-//
-//            let elementSize = image.PixFormat.Type.GLSize
-//            let channelCount =
-//                match toChannelCount image.Format with
-//                    | Some c -> c
-//                    | _ -> image.PixFormat.ChannelCount
-//
-//            let lineSize = image.Size.X * channelCount * elementSize
-//            let packAlign = t.Context.PackAlignment
-//
-//            let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
-//            let targetSize = alignedLineSize * image.Size.Y
-//            //let data = Marshal.AllocHGlobal(alignedLineSize * image.Size.Y)
-//
-//            let b = GL.GenBuffer()
-//            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
-//            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
-//
-//            let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
-//            try
-//                let srcInfo = image.VolumeInfo
-//                let dy = int64 (alignedLineSize / elementSize)
-//
-//                let dstInfo = 
-//                    VolumeInfo(
-//                        dy * (srcInfo.Size.Y-1L), 
-//                        srcInfo.Size, 
-//                        V3l(srcInfo.SZ, -dy, 1L)
-//                    )
-//                NativeVolume.copyImageToNative image ptr dstInfo
-//            finally
-//                GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
-//
-//            GL.TexSubImage2D(target, level, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, 0n)
-//            GL.Check (sprintf "could not upload texture data for level %d" level)
-//
-//            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
-//            GL.DeleteBuffer(b)
 
         let private uploadTexture2DInternal (bindTarget : TextureTarget) (target : TextureTarget) (isTopLevel : bool) (t : Texture) (startLevel : int) (textureParams : TextureParams) (data : PixImageMipMap) =
             if data.LevelCount <= 0 then
@@ -902,73 +1781,14 @@ module TextureExtensions =
 
             for l in 0..uploadLevels-1 do
                 let image = data.[l]
-                //let level = level.ToPixImage(Col.Format.RGBA)
 
-                // determine the input format and covert the image
-                // to a supported format if necessary.
-                let pixelType, pixelFormat =
-                    match toPixelType image.PixFormat.Type, toPixelFormat image.Format with
-                        | Some t, Some f -> (t,f)
-                        | _ ->
-                            failwith "conversion not implemented"
-
-                TextureExtensionsNew.Uploads.PinPBO(image, ImageTrafo.MirrorY, fun dim size ->
+                image.PinPBO(t.Context.PackAlignment,ImageTrafo.MirrorY, fun dim pixelType pixelFormat size ->
                     if sizeChanged || formatChanged then
                         GL.TexImage2D(target, startLevel + l, internalFormat, dim.X, dim.Y, 0, pixelFormat, pixelType, 0n)
                     else
                         GL.TexSubImage2D(target, startLevel + l, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
                     GL.Check (sprintf "could not upload texture data for level %d" l)
                 )
-//
-//                let elementSize = image.PixFormat.Type.GLSize
-//                let channelCount =
-//                    match toChannelCount image.Format with
-//                        | Some c -> c
-//                        | _ -> image.PixFormat.ChannelCount
-//                let lineSize = image.Size.X * channelCount * elementSize
-//                let packAlign = t.Context.PackAlignment
-//
-//                let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
-//                let targetSize = alignedLineSize * image.Size.Y
-//                //let data = Marshal.AllocHGlobal(alignedLineSize * image.Size.Y)
-//
-//                let b = GL.GenBuffer()
-//                GL.Check "could not create pixel buffer"
-//                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
-//                GL.Check "could not bind pixel buffer"
-//                GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
-//                GL.Check "could not allocate pixel buffer"
-//            
-//                let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
-//                GL.Check "could not map pixel buffer"
-//                try
-//                    let srcInfo = image.VolumeInfo
-//
-//                    let dy = int64 (alignedLineSize / elementSize)
-//                    let dstInfo = 
-//                        VolumeInfo(
-//                            dy * (srcInfo.Size.Y-1L),
-//                            srcInfo.Size, 
-//                            V3l(srcInfo.SZ,-dy, 1L)
-//                        )
-//
-//
-//                    NativeVolume.copyImageToNative image ptr dstInfo
-//                finally
-//                    GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
-//                    GL.Check "could not unmap pixel buffer"
-//                if sizeChanged || formatChanged then
-//                    GL.TexImage2D(target, startLevel + l, internalFormat, image.Size.X, image.Size.Y, 0, pixelFormat, pixelType, 0n)
-//                else
-//                    GL.TexSubImage2D(target, startLevel + l, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, 0n)
-//                GL.Check (sprintf "could not upload texture data for level %d" l)
-//
-//                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
-//                GL.Check "could not unbind pixel buffer"
-//
-//                GL.DeleteBuffer(b)
-//                GL.Check "could not delete pixel buffer"
-
 
 
             // if the image did not contain a sufficient
@@ -1038,8 +1858,6 @@ module TextureExtensions =
             t.Multisamples <- 1
             t.Count <- 1
             t.Dimension <- TextureDimension.TextureCube
-
-
 
         let uploadTexture2DBitmap (t : Texture) (mipMaps : bool) (bmp : BitmapTexture) =
             let size = V2i(bmp.Bitmap.Width, bmp.Bitmap.Height)
@@ -1181,7 +1999,6 @@ module TextureExtensions =
             t.Dimension <- TextureDimension.Texture3D
             t.Format <- newFormat
 
-
         let uploadNativeTexture (t : Texture) (data : INativeTexture) =
             match data.Dimension, data.Count with
                 | TextureDimension.Texture2D, 1 ->
@@ -1288,7 +2105,6 @@ module TextureExtensions =
             GL.BindTexture(target, 0)
             GL.Check "could not unbind texture"
 
-          
         let downloadTexture2D (t : Texture) (level : int) (image : PixImage) =
             downloadTexture2DInternal TextureTarget.Texture2D true t level image
 
@@ -1831,7 +2647,10 @@ module TextureExtensions =
                         GL.BindTexture(target, t.Handle)
                         GL.Check "could not bind texture"
 
-                        uploadTexture2DLevelInternal target t level source
+                        source.PinPBO(t.Context.PackAlignment, ImageTrafo.MirrorY, fun dim pixelType pixelFormat size ->
+                            GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
+                            GL.Check (sprintf "could not upload texture data for level %d" level)
+                        )
 
                         GL.BindTexture(target, 0)
                         GL.Check "could not unbind texture"
@@ -1842,7 +2661,10 @@ module TextureExtensions =
                         GL.Check "could not bind texture"
 
                         let target = snd cubeSides.[slice]
-                        uploadTexture2DLevelInternal target t level source
+                        source.PinPBO(t.Context.PackAlignment, ImageTrafo.MirrorY, fun dim pixelType pixelFormat size ->
+                            GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
+                            GL.Check (sprintf "could not upload texture data for level %d" level)
+                        )
 
                         GL.BindTexture(target, 0)
                         GL.Check "could not unbind texture"
