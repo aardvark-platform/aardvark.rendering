@@ -63,6 +63,204 @@ type Texture =
     end
 
 
+module TextureExtensionsNew =
+    
+    open Microsoft.FSharp.NativeInterop
+
+    module private StructTypes = 
+        [<StructLayout(LayoutKind.Explicit, Size = 1)>] type byte1 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 2)>] type byte2 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 3)>] type byte3 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 4)>] type byte4 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 5)>] type byte5 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 6)>] type byte6 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 7)>] type byte7 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 8)>] type byte8 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 9)>] type byte9 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 10)>] type byte10 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 11)>] type byte11 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 12)>] type byte12 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 13)>] type byte13 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 14)>] type byte14 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 15)>] type byte15 = struct end
+        [<StructLayout(LayoutKind.Explicit, Size = 16)>] type byte16 = struct end
+
+
+        let types = 
+            Dictionary.ofList [
+                1, typeof<byte1>
+                2, typeof<byte2>
+                3, typeof<byte3>
+                4, typeof<byte4>
+                5, typeof<byte5>
+                6, typeof<byte6>
+                7, typeof<byte7>
+                8, typeof<byte8>
+                9, typeof<byte9>
+                10, typeof<byte10>
+                11, typeof<byte11>
+                12, typeof<byte12>
+                13, typeof<byte13>
+                14, typeof<byte14>
+                15, typeof<byte15>
+                16, typeof<byte16>
+            ]
+
+    [<AutoOpen>]
+    module private ExistentialHack = 
+        type IUnmanagedAction =
+            abstract member Run<'a when 'a : unmanaged> : Option<'a> -> unit
+
+        let private meth = typeof<IUnmanagedAction>.GetMethod "Run"
+
+        let run (e : IUnmanagedAction) (t : Type) =
+            let mi = meth.MakeGenericMethod [|t|]
+            mi.Invoke(e, [| null |]) |> ignore
+
+    type Col.Format with
+        static member Stencil = unbox<Col.Format> (Int32.MaxValue)
+        static member Depth = unbox<Col.Format> (Int32.MaxValue - 1)
+
+    let internal toChannelCount =
+        LookupTable.lookupTable [
+            Col.Format.Alpha, 1
+            Col.Format.BW, 1
+            Col.Format.Gray, 1
+            Col.Format.GrayAlpha, 2
+            Col.Format.RGB, 3
+            Col.Format.BGR, 3
+            Col.Format.RGBA, 4
+            Col.Format.BGRA, 4
+            Col.Format.RGBP, 4
+            Col.Format.NormalUV, 2
+            Col.Format.Stencil, 1
+            Col.Format.Depth, 1
+        ]
+
+
+
+    type Utils =
+
+        static member Copy(elementType : Type, src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
+            elementType |> run { 
+                new IUnmanagedAction with
+                    member x.Run(a : Option<'a>) =
+                        let vSrc = NativeVolume<byte>(NativePtr.ofNativeInt src, srcInfo)
+                        let vDst = NativeVolume<byte>(NativePtr.ofNativeInt dst, dstInfo)
+
+                        let copy (s : nativeptr<byte>) (d : nativeptr<byte>) =
+                            let s : nativeptr<'a> = NativePtr.cast s
+                            let d : nativeptr<'a> = NativePtr.cast d
+                            NativePtr.write d (NativePtr.read s)
+
+                        NativeVolume.iter2 vSrc vDst copy
+            }
+
+        static member Copy(elementSize : int, src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
+            Utils.Copy(StructTypes.types.[elementSize], src, srcInfo, dst, dstInfo)
+
+        static member Copy(src : PixImage, dst : nativeint, dstInfo : VolumeInfo) =
+            let gc = GCHandle.Alloc(src.Array, GCHandleType.Pinned)
+            try
+                let pSrc = gc.AddrOfPinnedObject()
+                let imgInfo = src.VolumeInfo
+                let elementType = src.PixFormat.Type
+                let elementSize = elementType.GLSize |> int64
+                let srcInfo =
+                    VolumeInfo(
+                        imgInfo.Origin * elementSize,
+                        imgInfo.Size,
+                        imgInfo.Delta * elementSize
+                    )
+                Utils.Copy(elementType, pSrc, srcInfo, dst, dstInfo)
+            finally
+                gc.Free()   
+
+        static member Copy(src : nativeint, srcInfo : VolumeInfo, dst : PixImage) =
+            let gc = GCHandle.Alloc(dst.Array, GCHandleType.Pinned)
+            try
+                let pDst = gc.AddrOfPinnedObject()
+                let imgInfo = dst.VolumeInfo
+                let elementType = dst.PixFormat.Type
+                let elementSize = elementType.GLSize |> int64
+                let dstInfo =
+                    VolumeInfo(
+                        imgInfo.Origin * elementSize,
+                        imgInfo.Size,
+                        imgInfo.Delta * elementSize
+                    )
+                Utils.Copy(elementType, src, srcInfo, pDst, dstInfo)
+            finally
+                gc.Free()     
+
+    type Uploads =
+        static member PinPBO(image : PixImage, trafo : ImageTrafo, f : V2i -> nativeint -> unit) =
+            let size = image.Size
+            let elementSize = image.PixFormat.Type.GLSize
+            let channels = toChannelCount image.Format
+
+            let lineSize = nativeint size.X * nativeint elementSize * nativeint channels
+
+            let alignedLineSize =
+                if lineSize % 4n = 0n then lineSize
+                else (lineSize + 3n) &&& ~~~3n
+
+            let sizeInBytes = alignedLineSize * nativeint size.Y
+
+            let pbo = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+            GL.BufferData(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferUsageHint.DynamicDraw)
+
+            let dst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
+
+            let dstInfo =
+                let viSize = V3l(int64 size.X, int64 size.Y, int64 channels)
+                match trafo with
+                    | ImageTrafo.Rot0 -> 
+                        VolumeInfo(
+                            0L,
+                            viSize,
+                            V3l(int64 channels * int64 elementSize, int64 alignedLineSize, int64 elementSize)
+                        )
+
+                    | ImageTrafo.MirrorY -> 
+                        VolumeInfo(
+                            int64 alignedLineSize * (int64 size.Y - 1L),
+                            viSize,
+                            V3l(int64 channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
+                        )
+
+                    | ImageTrafo.MirrorX ->
+                        VolumeInfo(
+                            int64 size.X - 1L,
+                            viSize,
+                            V3l(int64 -channels * int64 elementSize, int64 alignedLineSize, int64 elementSize)
+                        )
+
+                    | ImageTrafo.Rot180 ->
+                        VolumeInfo(
+                            int64 alignedLineSize * (int64 size.Y - 1L) + int64 size.X - 1L,
+                            viSize,
+                            V3l(int64 -channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
+                        )
+
+                    | _ -> 
+                        failwithf "[GL] only supports ImageTrafo.[Rot0|MirrorY|MirrorX|Rot180] atm. but got %A" trafo
+
+            Utils.Copy(image, dst, dstInfo)
+
+            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+            f size sizeInBytes
+
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.DeleteBuffer(pbo)
+
+
+
+
+            ()
+
+
 [<AutoOpen>]
 module TextureExtensions =
 
@@ -625,49 +823,54 @@ module TextureExtensions =
         let uploadTexture2DLevelInternal (target : TextureTarget) (t : Texture) (level : int) (image : PixImage) =
             // determine the input format and covert the image
             // to a supported format if necessary.
-            let pixelType, pixelFormat, image =
+            let pixelType, pixelFormat =
                 match toPixelType image.PixFormat.Type, toPixelFormat image.Format with
-                    | Some t, Some f -> (t,f, image)
-                    | _ ->
-                        failwith "conversion not implemented"
+                    | Some t, Some f -> (t,f)
+                    | _ -> failwith "[GL] conversion not implemented"
 
-            let elementSize = image.PixFormat.Type.GLSize
-            let channelCount =
-                match toChannelCount image.Format with
-                    | Some c -> c
-                    | _ -> image.PixFormat.ChannelCount
 
-            let lineSize = image.Size.X * channelCount * elementSize
-            let packAlign = t.Context.PackAlignment
-
-            let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
-            let targetSize = alignedLineSize * image.Size.Y
-            //let data = Marshal.AllocHGlobal(alignedLineSize * image.Size.Y)
-
-            let b = GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
-            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
-
-            let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
-            try
-                let srcInfo = image.VolumeInfo
-                let dy = int64 (alignedLineSize / elementSize)
-
-                let dstInfo = 
-                    VolumeInfo(
-                        dy * (srcInfo.Size.Y-1L), 
-                        srcInfo.Size, 
-                        V3l(srcInfo.SZ, -dy, 1L)
-                    )
-                NativeVolume.copyImageToNative image ptr dstInfo
-            finally
-                GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
-
-            GL.TexSubImage2D(target, level, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, 0n)
-            GL.Check (sprintf "could not upload texture data for level %d" level)
-
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
-            GL.DeleteBuffer(b)
+            TextureExtensionsNew.Uploads.PinPBO(image, ImageTrafo.MirrorY, fun dim size ->
+                GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
+                GL.Check (sprintf "could not upload texture data for level %d" level)
+            )
+//
+//            let elementSize = image.PixFormat.Type.GLSize
+//            let channelCount =
+//                match toChannelCount image.Format with
+//                    | Some c -> c
+//                    | _ -> image.PixFormat.ChannelCount
+//
+//            let lineSize = image.Size.X * channelCount * elementSize
+//            let packAlign = t.Context.PackAlignment
+//
+//            let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
+//            let targetSize = alignedLineSize * image.Size.Y
+//            //let data = Marshal.AllocHGlobal(alignedLineSize * image.Size.Y)
+//
+//            let b = GL.GenBuffer()
+//            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
+//            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
+//
+//            let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
+//            try
+//                let srcInfo = image.VolumeInfo
+//                let dy = int64 (alignedLineSize / elementSize)
+//
+//                let dstInfo = 
+//                    VolumeInfo(
+//                        dy * (srcInfo.Size.Y-1L), 
+//                        srcInfo.Size, 
+//                        V3l(srcInfo.SZ, -dy, 1L)
+//                    )
+//                NativeVolume.copyImageToNative image ptr dstInfo
+//            finally
+//                GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+//
+//            GL.TexSubImage2D(target, level, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, 0n)
+//            GL.Check (sprintf "could not upload texture data for level %d" level)
+//
+//            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+//            GL.DeleteBuffer(b)
 
         let private uploadTexture2DInternal (bindTarget : TextureTarget) (target : TextureTarget) (isTopLevel : bool) (t : Texture) (startLevel : int) (textureParams : TextureParams) (data : PixImageMipMap) =
             if data.LevelCount <= 0 then
@@ -698,65 +901,73 @@ module TextureExtensions =
                 GL.TexParameterI(bindTarget, TextureParameterName.TextureMaxLevel, [|uploadLevels|])
 
             for l in 0..uploadLevels-1 do
-                let level = data.[l]
+                let image = data.[l]
                 //let level = level.ToPixImage(Col.Format.RGBA)
 
                 // determine the input format and covert the image
                 // to a supported format if necessary.
-                let pixelType, pixelFormat, image =
-                    match toPixelType level.PixFormat.Type, toPixelFormat level.Format with
-                        | Some t, Some f -> (t,f, level)
+                let pixelType, pixelFormat =
+                    match toPixelType image.PixFormat.Type, toPixelFormat image.Format with
+                        | Some t, Some f -> (t,f)
                         | _ ->
                             failwith "conversion not implemented"
 
-                let elementSize = image.PixFormat.Type.GLSize
-                let channelCount =
-                    match toChannelCount image.Format with
-                        | Some c -> c
-                        | _ -> image.PixFormat.ChannelCount
-                let lineSize = image.Size.X * channelCount * elementSize
-                let packAlign = t.Context.PackAlignment
-
-                let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
-                let targetSize = alignedLineSize * image.Size.Y
-                //let data = Marshal.AllocHGlobal(alignedLineSize * image.Size.Y)
-
-                let b = GL.GenBuffer()
-                GL.Check "could not create pixel buffer"
-                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
-                GL.Check "could not bind pixel buffer"
-                GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
-                GL.Check "could not allocate pixel buffer"
-            
-                let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
-                GL.Check "could not map pixel buffer"
-                try
-                    let srcInfo = image.VolumeInfo
-
-                    let dy = int64 (alignedLineSize / elementSize)
-                    let dstInfo = 
-                        VolumeInfo(
-                            dy * (srcInfo.Size.Y-1L),
-                            srcInfo.Size, 
-                            V3l(srcInfo.SZ,-dy, 1L)
-                        )
-
-
-                    NativeVolume.copyImageToNative image ptr dstInfo
-                finally
-                    GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
-                    GL.Check "could not unmap pixel buffer"
-                if sizeChanged || formatChanged then
-                    GL.TexImage2D(target, startLevel + l, internalFormat, image.Size.X, image.Size.Y, 0, pixelFormat, pixelType, 0n)
-                else
-                    GL.TexSubImage2D(target, startLevel + l, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, 0n)
-                GL.Check (sprintf "could not upload texture data for level %d" l)
-
-                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
-                GL.Check "could not unbind pixel buffer"
-
-                GL.DeleteBuffer(b)
-                GL.Check "could not delete pixel buffer"
+                TextureExtensionsNew.Uploads.PinPBO(image, ImageTrafo.MirrorY, fun dim size ->
+                    if sizeChanged || formatChanged then
+                        GL.TexImage2D(target, startLevel + l, internalFormat, dim.X, dim.Y, 0, pixelFormat, pixelType, 0n)
+                    else
+                        GL.TexSubImage2D(target, startLevel + l, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
+                    GL.Check (sprintf "could not upload texture data for level %d" l)
+                )
+//
+//                let elementSize = image.PixFormat.Type.GLSize
+//                let channelCount =
+//                    match toChannelCount image.Format with
+//                        | Some c -> c
+//                        | _ -> image.PixFormat.ChannelCount
+//                let lineSize = image.Size.X * channelCount * elementSize
+//                let packAlign = t.Context.PackAlignment
+//
+//                let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
+//                let targetSize = alignedLineSize * image.Size.Y
+//                //let data = Marshal.AllocHGlobal(alignedLineSize * image.Size.Y)
+//
+//                let b = GL.GenBuffer()
+//                GL.Check "could not create pixel buffer"
+//                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, b)
+//                GL.Check "could not bind pixel buffer"
+//                GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapWriteBit)
+//                GL.Check "could not allocate pixel buffer"
+//            
+//                let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapWriteBit)
+//                GL.Check "could not map pixel buffer"
+//                try
+//                    let srcInfo = image.VolumeInfo
+//
+//                    let dy = int64 (alignedLineSize / elementSize)
+//                    let dstInfo = 
+//                        VolumeInfo(
+//                            dy * (srcInfo.Size.Y-1L),
+//                            srcInfo.Size, 
+//                            V3l(srcInfo.SZ,-dy, 1L)
+//                        )
+//
+//
+//                    NativeVolume.copyImageToNative image ptr dstInfo
+//                finally
+//                    GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+//                    GL.Check "could not unmap pixel buffer"
+//                if sizeChanged || formatChanged then
+//                    GL.TexImage2D(target, startLevel + l, internalFormat, image.Size.X, image.Size.Y, 0, pixelFormat, pixelType, 0n)
+//                else
+//                    GL.TexSubImage2D(target, startLevel + l, 0, 0, image.Size.X, image.Size.Y, pixelFormat, pixelType, 0n)
+//                GL.Check (sprintf "could not upload texture data for level %d" l)
+//
+//                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+//                GL.Check "could not unbind pixel buffer"
+//
+//                GL.DeleteBuffer(b)
+//                GL.Check "could not delete pixel buffer"
 
 
 
