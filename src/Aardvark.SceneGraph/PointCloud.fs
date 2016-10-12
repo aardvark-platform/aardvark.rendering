@@ -572,6 +572,7 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
+                        printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
                         //printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
                         ()
                 }
@@ -648,7 +649,7 @@ module PointCloudRenderObjectSemantics =
 
             let calls = h.DrawCallInfos
 
-            obj.IndirectBuffer <- calls |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
+            obj.IndirectBuffer <- calls |> Mod.map IndirectBuffer.ofArray
             obj.Activate <- h.Activate
             obj.VertexAttributes <- h.Attributes
             obj.Mode <- Mod.constant IndexedGeometryMode.PointList

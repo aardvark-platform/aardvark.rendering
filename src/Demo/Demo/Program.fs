@@ -648,7 +648,7 @@ let testGpuThroughput () =
                 |> Sg.cullMode ~~CullMode.Clockwise
                 |> Sg.blendMode ~~BlendMode.None
                     
-    let task = runtime.CompileRender(signature, sg)
+    let task = runtime.CompileRender(signature, { BackendConfiguration.Default with useDebugOutput = true }, sg)
     let clear = runtime.CompileClear(signature, ~~C4f.Black,~~1.0)
     
     use token = runtime.Context.ResourceLock
@@ -1771,7 +1771,7 @@ module Outline =
         let task = 
             RenderTask.ofList [
                 runtime.CompileClear(signature, Mod.constant Map.empty, Mod.constant(Some 1.0))
-                runtime.CompileRender(signature, objects)
+                runtime.CompileRender(signature, { BackendConfiguration.Default with useDebugOutput = true }, objects)
             ]
 
         let fbo = runtime.CreateFramebuffer(signature, Mod.constant size)
@@ -2843,7 +2843,7 @@ let main args =
     use task = 
         RenderTask.ofList [
             //app.Runtime.CompileClear(ctrl.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
-            app.Runtime.CompileRender(ctrl.FramebufferSignature, sg)
+            app.Runtime.CompileRender(ctrl.FramebufferSignature, { BackendConfiguration.Default with useDebugOutput = false }, sg)
         ]
 
     ctrl.RenderTask <- task |> DefaultOverlays.withStatistics

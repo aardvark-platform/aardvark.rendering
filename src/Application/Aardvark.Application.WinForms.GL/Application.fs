@@ -9,8 +9,9 @@ open Aardvark.Rendering.GL
 open Aardvark.Application
 
 
-type OpenGlApplication() =
-    do OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
+type OpenGlApplication(forceNvidia : bool) =
+    do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
+       OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
        try 
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException)
        with e -> Report.Warn("Could not set SetUnhandledExceptionMode.")
@@ -58,6 +59,8 @@ type OpenGlApplication() =
 //                glctx.MakeCurrent(null)
 //                ctx.CurrentContextHandle <- None
 //                ContextHandle.Current <- None
+
+    new() = new OpenGlApplication(true)
 
     member x.Context = ctx
     member x.Runtime = runtime

@@ -28,7 +28,7 @@ module RenderTasks =
         let manager = ResourceManager(manager.Context, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
         let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
         let structureChanged = Mod.custom ignore
-
+        let runtimeStats = NativePtr.alloc 1
 
         let mutable isDisposed = false
         let currentContext = Mod.init Unchecked.defaultof<ContextHandle>
@@ -36,8 +36,8 @@ module RenderTasks =
 
         let scope =
             { 
+                runtimeStats = runtimeStats
                 currentContext = currentContext
-                stats = ref FrameStatistics.Zero
                 drawBuffers = NativePtr.toNativeInt allBuffers.Buffers
                 drawBufferCount = allBuffers.Count 
                 usedTextureSlots = ref RefSet.empty
@@ -180,9 +180,12 @@ module RenderTasks =
             let innerStats = 
                 renderTaskLock.Run (fun () -> 
                     beforeRender.OnNext()
+                    NativePtr.write runtimeStats V2i.Zero
                     let r = x.Perform fbo
+
                     afterRender.OnNext()
-                    r
+                    let rt = NativePtr.read runtimeStats
+                    { r with DrawCallCount = float rt.X; EffectiveDrawCallCount = float rt.Y }
                 )
 
             x.popFbo (desc, fboState)
@@ -194,7 +197,7 @@ module RenderTasks =
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
             
 
-            innerStats + !scope.stats
+            innerStats
 
             
 
@@ -225,6 +228,7 @@ module RenderTasks =
 
         member x.Parent = parent
 
+        abstract member Update : unit -> FrameStatistics
         abstract member Perform : unit -> FrameStatistics
         abstract member Dispose : unit -> unit
         abstract member Add : PreparedMultiRenderObject -> unit
@@ -392,12 +396,16 @@ module RenderTasks =
                 hasProgram <- true
                 currentConfig <- config
 
-        override x.Perform() =
+        override x.Update() =
             let config = parent.Config.GetValue parent
             reinit x config
 
-            let updateStats = 
-                x.ProgramUpdate (fun () -> program.Update parent)
+            //TODO
+            let programStats = x.ProgramUpdate (fun () -> program.Update parent)
+            FrameStatistics.Zero
+
+        override x.Perform() =
+            x.Update() |> ignore
 
             let stats = 
                 x.Execution (fun () -> program.Run())
@@ -480,6 +488,7 @@ module RenderTasks =
                     | [| a; b; c |] -> GLVM.vmAppend3(frag, id, i.Operation, a, b, c)
                     | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, i.Operation, a, b, c, d)
                     | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
+                    | [| a; b; c; d; e; f |] -> GLVM.vmAppend6(frag, id, i.Operation, a, b, c, d, e, f)
                     | _ -> failwithf "invalid instruction: %A" i
 
         let dirtyBlocks = HashSet blocksWithContent
@@ -541,7 +550,7 @@ module RenderTasks =
             initialized <- true
             GLVM.vmInit()
         
-        let fragments = objects |> ASet.mapUse (fun o -> new AdaptiveGLVMFragment(o, RenderProgram.Compiler.compileFull { parent.Scope with stats = ref FrameStatistics.Zero } o))
+        let fragments = objects |> ASet.mapUse (fun o -> new AdaptiveGLVMFragment(o, RenderProgram.Compiler.compileFull parent.Scope o))
         let fragmentReader = fragments.GetReader()
         let mutable vmStats = VMStats()
         let last = new AdaptiveGLVMFragment(empty, RenderProgram.Compiler.compileFull parent.Scope empty)
@@ -713,12 +722,17 @@ module RenderTasks =
 
         member x.Scope = scope
 
-        override x.Perform() =
+        override x.Update() = 
             let cfg = parent.Config.GetValue parent
             reinit x cfg
 
             let updateStats = 
                 x.ProgramUpdate (fun () -> program.Update parent)
+            FrameStatistics.Zero
+
+
+        override x.Perform() =
+            x.Update() |> ignore
 
             let stats = 
                 x.Execution (fun () -> program.Run())
@@ -765,88 +779,6 @@ module RenderTasks =
                 objects.Remove o |> ignore
             )
                 
-
-    type RenderObjectStats() =
-        inherit DirtyTrackingAdaptiveObject<IMod<DrawCallStats>>()
-
-        let oldValues = Dict<IMod<DrawCallStats>, DrawCallStats>()
-        let mutable drawCalls = 0
-        let mutable effectiveCalls = 0
-        let mutable resourceCount = 0
-
-        let mutable added = 0
-        let mutable removed = 0
-
-        let add (stats : DrawCallStats) =
-            match stats with
-                | NoDraw -> ()
-                | DirectDraw(c, i) ->
-                    // TODO: assuming that DrawIndirects have only 1 instance
-                    Interlocked.Add(&drawCalls, c) |> ignore
-                    Interlocked.Add(&effectiveCalls, i) |> ignore
-                | IndirectDraw c ->
-                    Interlocked.Add(&drawCalls, 1) |> ignore
-                    Interlocked.Add(&effectiveCalls, c) |> ignore
-                    
-        let remove (stats : DrawCallStats) =
-            match stats with
-                | NoDraw -> ()
-                | DirectDraw(c, i) ->
-                    // TODO: assuming that DrawIndirects have only 1 instance
-                    Interlocked.Add(&drawCalls, -c) |> ignore
-                    Interlocked.Add(&effectiveCalls, -i) |> ignore
-                | IndirectDraw c ->
-                    Interlocked.Add(&drawCalls, -1) |> ignore
-                    Interlocked.Add(&effectiveCalls, -c) |> ignore
-
-        member x.Add(o : PreparedRenderObject) =
-            added <- added + 1
-            resourceCount <- resourceCount + o.ResourceCount
-            let value = o.DrawCallStats.GetValue x
-            oldValues.[o.DrawCallStats] <- value
-            add value
-
-        member x.Remove(o : PreparedRenderObject) =
-            removed <- removed + 1
-            resourceCount <- resourceCount - o.ResourceCount
-            match oldValues.TryRemove o.DrawCallStats with
-                | (true, old) -> 
-                    lock o.DrawCallStats (fun () -> o.DrawCallStats.Outputs.Remove x |> ignore)
-                    remove old
-                | _ -> ()
-
-        member x.GetValue(caller : IAdaptiveObject) =
-            x.EvaluateAlways' caller (fun dirty ->
-                if x.OutOfDate then
-                    for d in dirty do
-                        let value = d.GetValue x
-                        match oldValues.TryGetValue d with
-                            | (true, old) -> 
-                                remove old
-                                add value
-                            | _ ->
-                                () // removed
-
-                        oldValues.[d] <- value
-                                
-                let add = Interlocked.Exchange(&added, 0) 
-                let rem = Interlocked.Exchange(&removed, 0)
-                { FrameStatistics.Zero with 
-                    DrawCallCount = float drawCalls
-                    EffectiveDrawCallCount = float effectiveCalls 
-                    VirtualResourceCount = float resourceCount
-                    AddedRenderObjects = float add
-                    RemovedRenderObjects = float rem
-                }
-            )
-
-        interface IMod with
-            member x.IsConstant = false
-            member x.GetValue caller = x.GetValue caller :> obj
-
-        interface IMod<FrameStatistics> with
-            member x.GetValue caller = x.GetValue caller
-
     type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
         
@@ -854,26 +786,55 @@ module RenderTasks =
         let resources = new Aardvark.Base.Rendering.ResourceInputSet()
         let inputSet = InputSet(this) 
         let resourceUpdateWatch = OpenGlStopwatch()
-        let callStats = RenderObjectStats()
         let structuralChange = Mod.init ()
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
 
+        let vaoCache = ResourceCache(None, Some this.RenderTaskLock)
 
         let add (ro : PreparedRenderObject) = 
+            let res = 
+                vaoCache.GetOrCreate(
+                    [this.Scope.currentContext :> obj; ro.VertexArray.Handle :> obj],
+                    (fun () ->
+                        { new Resource<nativeint>(ResourceKind.Unknown) with
+                            override x.Create (old) = 
+                                let ctx = this.Scope.currentContext.GetValue x
+                                let handle = ro.VertexArray.Handle.GetValue x
+                                match old with
+                                    | Some old ->
+                                        NativeInt.write old handle.Handle
+                                        old, FrameStatistics.Zero
+
+                                    | None -> 
+                                        let ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal sizeof<int>
+                                        NativeInt.write ptr handle.Handle
+                                        ptr, FrameStatistics.Zero
+
+                            override x.Destroy handle = System.Runtime.InteropServices.Marshal.FreeHGlobal handle
+                            override x.GetInfo handle = ResourceInfo.Zero
+                        }
+                    )
+                )
+
+            let ro = { ro with VertexArrayHandle = res }
+
+
             let all = ro.Resources |> Seq.toList
             for r in all do resources.Add r
 
-            callStats.Add ro
-
+            
             let old = ro.Activation
             ro.Activation <- 
                 { new IDisposable with
                     member x.Dispose() =
+                        res.Dispose()
                         old.Dispose()
                         for r in all do resources.Remove r
-                        callStats.Remove ro
+                        //callStats.Remove ro
+                        ro.Activation <- old
                 }
+
             ro
 
         let rec prepareRenderObject (ro : IRenderObject) =
@@ -914,13 +875,9 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-
-
-        override x.Perform(fbo : Framebuffer) =
+        let update ( x : AbstractOpenGlRenderTask ) =
             let mutable stats = FrameStatistics.Zero
             let deltas = preparedObjectReader.GetDelta x
-
-            x.ResourceManager.DrawBufferManager.Write(fbo)
 
             resourceUpdateWatch.Restart()
             stats <- stats + resources.Update(x)
@@ -939,6 +896,25 @@ module RenderTasks =
                         let task = getSubTask v.RenderPass
                         task.Remove v
 
+            { stats with
+                ResourceUpdateSubmissionTime = resourceUpdateWatch.ElapsedCPU
+                ResourceUpdateTime = resourceUpdateWatch.ElapsedGPU
+            } 
+
+
+        override x.Update() =
+            let mutable stats = update x
+
+            let mutable runStats = []
+            for (_,t) in Map.toSeq subtasks do
+                stats <- stats + t.Update()
+
+            stats
+
+        override x.Perform(fbo : Framebuffer) =
+            let updateStats = update x
+
+            x.ResourceManager.DrawBufferManager.Write(fbo)
 
             let mutable current = 0
             let mutable query =  0 //GL.GenQuery()
@@ -957,13 +933,9 @@ module RenderTasks =
             let mutable primitives = primitivesGenerated.Value
 
 
-            stats + 
-            !this.Scope.stats + 
+            updateStats + 
             (runStats |> List.sumBy (fun l -> l.Value)) +
-            callStats.GetValue() +
             { FrameStatistics.Zero with
-                ResourceUpdateSubmissionTime = resourceUpdateWatch.ElapsedCPU
-                ResourceUpdateTime = resourceUpdateWatch.ElapsedGPU
                 PrimitiveCount = float primitives
             }
 
@@ -976,10 +948,20 @@ module RenderTasks =
 
             subtasks <- Map.empty
 
+        override x.Use (f : unit -> 'a) =
+            lock x (fun () ->
+                x.RenderTaskLock.Run (fun () ->
+                    lock resources (fun () ->
+                        f()
+                    )
+                )
+            )
+
 
     type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
         inherit AbstractRenderTask()
 
+        override x.Update() = FrameStatistics.Zero
         override x.Run(desc : OutputDescription) =
             let fbo = desc.framebuffer
             using ctx.ResourceLock (fun _ ->
@@ -1056,4 +1038,6 @@ module RenderTasks =
             depth.RemoveOutput x
         override x.FramebufferSignature = fboSignature |> Some
         override x.Runtime = runtime |> Some
+
+        override x.Use f = lock x f
 

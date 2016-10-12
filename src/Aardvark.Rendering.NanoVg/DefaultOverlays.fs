@@ -343,6 +343,11 @@ module DefaultOverlays =
 
             member x.Runtime = inner.Runtime
 
+            member x.Update(caller) =
+                x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () -> 
+                    inner.Update x
+                )
+
             member x.Run(caller, f) =
                 notRendering.Reset()
                 installTick x
@@ -368,6 +373,7 @@ module DefaultOverlays =
 
             member x.FrameId = frameId
 
+            member x.Use f = lock x (fun () -> inner.Use f)
 
     let withStatistics (t : IRenderTask) =
         match t.Runtime with

@@ -1,4 +1,4 @@
-﻿namespace Aardvark.SceneGraph.Semantics
+﻿namespace Aardvark.SceneGraph
 
 open Aardvark.Base
 open Aardvark.Base.Incremental
@@ -9,60 +9,61 @@ open Aardvark.SceneGraph.Internal
 open System.Collections.Generic
 
 
-[<AutoOpen>]
-module Ext =
+module NaiveLod =
 
-    type LodScope = { trafo : Trafo3d; cameraPosition : V3d; scope : Scope}
-
-    type ViewFrustumCullNode(sg : IMod<ISg>) =
-        interface IApplicator with
-            member x.Child = sg
-        member x.Child = sg
-
-        new(s : ISg) = ViewFrustumCullNode(Mod.constant s)
-        new(s : IEvent<ISg>) = ViewFrustumCullNode(Mod.fromEvent  s)
-
-    type LodNode(viewDecider : (LodScope -> bool), 
-                 low : IMod<ISg>, high : IMod<ISg>) =
-        interface ISg
+    type LodScope = { trafo : Trafo3d; cameraPosition : V3d; scope : Scope; bb : IMod<Box3d> }
+    type LodNode(viewDecider : (LodScope -> bool), low : IMod<ISg>, high : IMod<ISg>) =
+        inherit Sg.AbstractApplicator(low)
 
         member x.Low = low
         member x.High = high
         member x.ViewDecider = viewDecider
-        member val Name = "" with get, set
 
         new(viewDecider : System.Func<LodScope, bool>, low : ISg, high : ISg) = 
             LodNode((fun t -> viewDecider.Invoke t), Mod.constant low, Mod.constant high)
 
-    module LodSemantics =
 
-        [<Semantic>]
-        type LodSem() =
-            member x.RenderObjects(node : LodNode) : aset<IRenderObject> =
+//    type ViewFrustumCullNode(sg : IMod<ISg>) =
+//        interface IApplicator with
+//            member x.Child = sg
+//        member x.Child = sg
+//
+//        new(s : ISg) = ViewFrustumCullNode(Mod.constant s)
+//        new(s : IEvent<ISg>) = ViewFrustumCullNode(Mod.fromEvent  s)
 
-                let mvTrafo = node?ModelViewTrafo()
+    module Sg =
 
-                aset {
-                    let scope = Ag.getContext()
+        let loD (low : ISg) (high : ISg) (decider : LodScope -> bool) = 
+            LodNode(decider,low,high) :> ISg
 
-                    let! highSg,lowSg = node.High,node.Low
+module NaiveLoDSemantics =
 
-                    let lowJobs = lowSg?RenderObjects() : aset<IRenderObject> 
-                    let highJobs = highSg?RenderObjects() : aset<IRenderObject>
+    open NaiveLod
+    open Aardvark.SceneGraph.Semantics
 
-                    //this parallel read is absolutely crucial for performance, since otherwise the 
-                    //resulting set will no longer be referentially equal (cannot really be solved any other way)
-                    //once more we see that adaptive code is extremely sensible.
-                    let! camLocation,trafo = node?CameraLocation,mvTrafo
+    [<Semantic>]
+    type LodSem() =
 
-                    if node.ViewDecider { trafo = trafo; cameraPosition = camLocation; scope = scope } then 
-                        yield! highJobs
-                    else    
-                        yield! lowJobs
-                }
+        member x.RenderObjects(node : LodNode) : aset<IRenderObject> =
 
-                            //            member x.GlobalBoundingBox(n : LodNode) : IMod<Box3d> = 
-                //                adaptive {
-                //                    let! low = n.Low
-                //                    return! low?GlobalBoundingBox()
-                //                }
+            let scope                      = Ag.getContext()
+            let mvTrafo                    = node.ModelTrafo
+            let cameraLocation : IMod<V3d> = node?CameraLocation
+
+            aset {
+                let! highSg, lowSg = node.High, node.Low
+
+                let bb = lowSg.GlobalBoundingBox()
+                let lowJobs  = lowSg .RenderObjects()
+                let highJobs = highSg.RenderObjects()
+
+                //this parallel read is absolutely crucial for performance, since otherwise the 
+                //resulting set will no longer be referentially equal (cannot really be solved any other way)
+                //once more we see that adaptive code is extremely sensible.
+                let! camLocation,trafo = node?CameraLocation,mvTrafo
+
+                if node.ViewDecider { trafo = trafo; cameraPosition = camLocation; scope = scope; bb = bb } then 
+                    yield! highJobs
+                else    
+                    yield! lowJobs
+            }

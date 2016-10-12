@@ -120,6 +120,25 @@ type SceneGraphExtensions =
     [<Extension>]
     static member VertexAttributes(sg : ISg, attributes : SymbolDict<BufferView>) : ISg = Sg.VertexAttributeApplicator(attributes, sg) :> ISg
 
+    [<Extension>]
+    static member VertexAttribute(sg : ISg, attribute : Symbol, data : Array) : ISg = Sg.VertexAttributeApplicator(attribute, BufferView(Mod.constant (ArrayBuffer(data) :> IBuffer), data.GetType().GetElementType()), sg) :> ISg
+
+    [<Extension>]
+    static member VertexAttribute(sg : ISg, attribute : Symbol, data : IMod<Array>) : ISg = Sg.VertexAttributeApplicator(attribute, BufferView(Mod.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data, data.GetValue().GetType().GetElementType()), sg) :> ISg
+
+    [<Extension>]
+    static member Pass(sg : ISg, renderPass : RenderPass) : ISg = Sg.PassApplicator(renderPass, sg) :> ISg
+
+    [<Extension>]
+    static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<Symbol>) : ISg = Sg.WriteBuffersApplicator(Some (Set.ofSeq bufferIdentifiers), sg) :> ISg
+
+    [<Extension>]
+    static member WriteBuffers(sg : ISg, [<ParamArray>] bufferIdentifiers: Symbol[]) : ISg = Sg.WriteBuffersApplicator(Some (Set.ofArray bufferIdentifiers), sg) :> ISg
+    
+    [<Extension>]
+    static member OnOff(sg : ISg, on : IMod<bool>) : ISg = Sg.OnOffNode(on, sg) :> ISg
+
+
 [<Extension>]
 [<AbstractClass>]
 [<Sealed>]

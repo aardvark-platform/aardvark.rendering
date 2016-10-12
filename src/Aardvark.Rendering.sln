@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
+VisualStudioVersion = 14.0.25123.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
 EndProject
@@ -57,6 +57,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.SceneGraph.IO", "Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj", "{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Scratch", "Demo\Scratch\Scratch.fsproj", "{346185F9-AB7F-4973-8B80-24CEB113E4B5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -152,6 +154,10 @@ Global
 		{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{346185F9-AB7F-4973-8B80-24CEB113E4B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{346185F9-AB7F-4973-8B80-24CEB113E4B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{346185F9-AB7F-4973-8B80-24CEB113E4B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{346185F9-AB7F-4973-8B80-24CEB113E4B5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -172,5 +178,6 @@ Global
 		{79D48400-F885-461A-B747-E3675A7EF2EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{CBE9D375-2495-4496-834D-6253C557F414} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
 		{BE9C26C3-B846-4356-923D-12E7D88AB309} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}
+		{346185F9-AB7F-4973-8B80-24CEB113E4B5} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 	EndGlobalSection
 EndGlobal

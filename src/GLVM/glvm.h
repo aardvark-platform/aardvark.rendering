@@ -16,44 +16,50 @@
 #include <vector>
 
 #ifndef __GNUC__
-static PFNGLACTIVETEXTUREPROC			glActiveTexture;
-static PFNGLBLENDCOLORPROC				glBlendColor;
+static PFNGLACTIVETEXTUREPROC							glActiveTexture;
+static PFNGLBLENDCOLORPROC								glBlendColor;
 #endif
+static PFNGLBINDVERTEXARRAYPROC							glBindVertexArray;
+static PFNGLUSEPROGRAMPROC								glUseProgram;
+static PFNGLBINDSAMPLERPROC								glBindSampler;
+static PFNGLBINDBUFFERPROC								glBindBuffer;
+static PFNGLBINDBUFFERBASEPROC							glBindBufferBase;
+static PFNGLBINDBUFFERRANGEPROC							glBindBufferRange;
+static PFNGLBINDFRAMEBUFFERPROC							glBindFramebuffer;
+static PFNGLBLENDFUNCSEPARATEPROC						glBlendFuncSeparate;
+static PFNGLBLENDEQUATIONSEPARATEPROC					glBlendEquationSeparate;
+static PFNGLSTENCILFUNCSEPARATEPROC						glStencilFuncSeparate;
+static PFNGLSTENCILOPSEPARATEPROC						glStencilOpSeparate;
+static PFNGLPATCHPARAMETERIPROC							glPatchParameteri;
+static PFNGLDRAWARRAYSINSTANCEDPROC						glDrawArraysInstanced;
+static PFNGLDRAWELEMENTSBASEVERTEXPROC					glDrawElementsBaseVertex;
+static PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC			glDrawArraysInstancedBaseInstance;
+static PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC		glDrawElementsInstancedBaseVertexBaseInstance;
+static PFNGLVERTEXATTRIBPOINTERPROC						glVertexAttribPointer;
+static PFNGLUNIFORM1FVPROC								glUniform1fv;
+static PFNGLUNIFORM1IVPROC								glUniform1iv;
+static PFNGLUNIFORM2FVPROC								glUniform2fv;
+static PFNGLUNIFORM2IVPROC								glUniform2iv;
+static PFNGLUNIFORM3FVPROC								glUniform3fv;
+static PFNGLUNIFORM3IVPROC								glUniform3iv;
+static PFNGLUNIFORM4FVPROC								glUniform4fv;
+static PFNGLUNIFORM4IVPROC								glUniform4iv;
+static PFNGLUNIFORMMATRIX2FVPROC						glUniformMatrix2fv;
+static PFNGLUNIFORMMATRIX3FVPROC						glUniformMatrix3fv;
+static PFNGLUNIFORMMATRIX4FVPROC						glUniformMatrix4fv;
+static PFNGLVERTEXATTRIB1FPROC							glVertexAttrib1f;
+static PFNGLVERTEXATTRIB2FPROC							glVertexAttrib2f;
+static PFNGLVERTEXATTRIB3FPROC							glVertexAttrib3f;
+static PFNGLVERTEXATTRIB4FPROC							glVertexAttrib4f;
+static PFNGLMULTIDRAWARRAYSINDIRECTPROC					glMultiDrawArraysIndirect;
+static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
+static PFNGLCOLORMASKIPROC								glColorMaski;
+static PFNGLDRAWBUFFERSPROC								glDrawBuffers;
+static PFNGLMAPBUFFERRANGEPROC							glMapBufferRange;
+static PFNGLUNMAPBUFFERPROC								glUnmapBuffer;
+static PFNGLGETBUFFERPARAMETERIVPROC					glGetBufferParameteriv;
 
-static PFNGLBINDVERTEXARRAYPROC				glBindVertexArray;
-static PFNGLUSEPROGRAMPROC					glUseProgram;
-static PFNGLBINDSAMPLERPROC					glBindSampler;
-static PFNGLBINDBUFFERPROC					glBindBuffer;
-static PFNGLBINDBUFFERBASEPROC				glBindBufferBase;
-static PFNGLBINDBUFFERRANGEPROC				glBindBufferRange;
-static PFNGLBINDFRAMEBUFFERPROC				glBindFramebuffer;
-static PFNGLBLENDFUNCSEPARATEPROC			glBlendFuncSeparate;
-static PFNGLBLENDEQUATIONSEPARATEPROC		glBlendEquationSeparate;
-static PFNGLSTENCILFUNCSEPARATEPROC			glStencilFuncSeparate;
-static PFNGLSTENCILOPSEPARATEPROC			glStencilOpSeparate;
-static PFNGLPATCHPARAMETERIPROC				glPatchParameteri;
-static PFNGLDRAWARRAYSINSTANCEDPROC			glDrawArraysInstanced;
-static PFNGLDRAWELEMENTSINSTANCEDPROC		glDrawElementsInstanced;
-static PFNGLVERTEXATTRIBPOINTERPROC			glVertexAttribPointer;
-static PFNGLUNIFORM1FVPROC					glUniform1fv;
-static PFNGLUNIFORM1IVPROC					glUniform1iv;
-static PFNGLUNIFORM2FVPROC					glUniform2fv;
-static PFNGLUNIFORM2IVPROC					glUniform2iv;
-static PFNGLUNIFORM3FVPROC					glUniform3fv;
-static PFNGLUNIFORM3IVPROC					glUniform3iv;
-static PFNGLUNIFORM4FVPROC					glUniform4fv;
-static PFNGLUNIFORM4IVPROC					glUniform4iv;
-static PFNGLUNIFORMMATRIX2FVPROC			glUniformMatrix2fv;
-static PFNGLUNIFORMMATRIX3FVPROC			glUniformMatrix3fv;
-static PFNGLUNIFORMMATRIX4FVPROC			glUniformMatrix4fv;
-static PFNGLVERTEXATTRIB1FPROC				glVertexAttrib1f;
-static PFNGLVERTEXATTRIB2FPROC				glVertexAttrib2f;
-static PFNGLVERTEXATTRIB3FPROC				glVertexAttrib3f;
-static PFNGLVERTEXATTRIB4FPROC				glVertexAttrib4f;
-static PFNGLMULTIDRAWARRAYSINDIRECTPROC		glMultiDrawArraysIndirect;
-static PFNGLMULTIDRAWELEMENTSINDIRECTPROC	glMultiDrawElementsIndirect;
-static PFNGLCOLORMASKIPROC					glColorMaski;
-static PFNGLDRAWBUFFERSPROC					glDrawBuffers;
+static PFNGLDRAWELEMENTSINSTANCEDPROC					glDrawElementsInstanced;
 
 // enum holding the available instruction codes
 typedef enum {
@@ -113,7 +119,18 @@ typedef enum {
 	DepthMask = 54,
 	ColorMask = 55,
 	StencilMask = 56,
-	DrawBuffers = 57
+	DrawBuffers = 57,
+
+	HDrawArrays = 100,
+	HDrawElements = 101,
+	HDrawArraysIndirect = 102,
+	HDrawElementsIndirect = 103,
+	HSetDepthTest = 104,
+	HSetCullFace = 105,
+	HSetPolygonMode = 106,
+	HSetBlendMode = 107,
+	HSetStencilMode = 108
+
 
 } InstructionCode;
 
@@ -132,6 +149,7 @@ typedef struct {
 	intptr_t Arg2;
 	intptr_t Arg3;
 	intptr_t Arg4;
+	intptr_t Arg5;
 } Instruction;
 
 // a fragment consists of a substructured vector of instructions
@@ -160,6 +178,18 @@ DllExport(void) vmAppend2(Fragment* frag, int block, InstructionCode code, intpt
 DllExport(void) vmAppend3(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2);
 DllExport(void) vmAppend4(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3);
 DllExport(void) vmAppend5(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3, intptr_t arg4);
+DllExport(void) vmAppend6(Fragment* frag, int block, InstructionCode code, intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3, intptr_t arg4, intptr_t arg5);
 DllExport(void) vmClear(Fragment* frag);
 DllExport(void) vmRunSingle(Fragment* frag);
 DllExport(void) vmRun(Fragment* frag, VMMode mode, Statistics& stats);
+
+DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos);
+DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos);
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLint* count, GLuint buffer);
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLuint buffer);
+DllExport(void) hglSetDepthTest(GLenum* mode);
+DllExport(void) hglSetCullFace(GLenum* face);
+DllExport(void) hglSetPolygonMode(GLenum* mode);
+DllExport(void) hglSetBlendMode(BlendMode* mode);
+DllExport(void) hglSetStencilMode(StencilMode* mode);
+DllExport(void) hglBindVertexArray(int* vao);

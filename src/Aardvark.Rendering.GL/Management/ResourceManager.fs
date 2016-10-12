@@ -220,7 +220,7 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
 
     let alignedSize = (size + 255) &&& ~~~255
 
-    let buffer = new MappedBuffer(ctx)
+    let buffer = ctx.CreateMappedBuffer()
     do renderTaskInfo |> Option.iter buffer.AddLock
     let manager = MemoryManager.createNop()
 
@@ -260,12 +260,13 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
                                 | None ->
                                     block <- manager.Alloc alignedSize
                                     ReaderWriterLock.write rw (fun () ->
-                                        if buffer.Capacity <> manager.Capacity then buffer.Resize(manager.Capacity)
+                                        let mcap = nativeint manager.Capacity
+                                        if buffer.Capacity <> mcap then buffer.Resize(mcap)
                                     )
                                     UniformBufferView(buffer, block.Offset, nativeint block.Size)
 
                         ReaderWriterLock.read rw (fun () ->
-                            buffer.Use(handle.Offset, handle.Size, fun ptr ->
+                            buffer.UseWrite(handle.Offset, handle.Size, fun ptr ->
                                 for (_,w) in writers do w.Write(x, ptr)
                             )
                         )
@@ -274,7 +275,7 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
                     member x.Destroy h =
                         manager.Free block
                         if manager.AllocatedBytes = 0 then
-                            buffer.Resize 0
+                            buffer.Resize 0n
 
                 }
         )
@@ -344,6 +345,30 @@ and DrawBufferManager (signature : IFramebufferSignature) =
 
 
 
+type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource<'a>) =
+    inherit AdaptiveDecorator(inner)
+    let handle = inner.Handle |> Mod.cast
+
+    member x.Inner = inner
+
+    override x.GetHashCode() = inner.GetHashCode()
+    override x.Equals o = 
+        match o with
+            | :? CastResource<'a,'b> as o -> inner.Equals o.Inner
+            | _ -> false
+
+    interface IResource with
+        member x.Dispose() = inner.Dispose()
+        member x.AddRef() = inner.AddRef()
+        member x.RemoveRef() = inner.RemoveRef()
+        member x.Update(caller) = inner.Update(caller)
+        member x.Info = inner.Info
+        member x.IsDisposed = inner.IsDisposed
+        member x.Kind = inner.Kind
+
+    interface IResource<'b> with
+        member x.Handle = handle
+
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     
@@ -369,25 +394,58 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let vaoCache                = derivedCache (fun m -> m.VAOCache)
     let uniformLocationCache    = derivedCache (fun m -> m.UniformLocationCache)
 
+    let isActiveCache           = derivedCache (fun m -> m.IsActiveCache)
+    let beginModeCache          = derivedCache (fun m -> m.BeginModeCache)
+    let drawCallInfoCache       = derivedCache (fun m -> m.DrawCallInfoCache)
+    let depthTestCache          = derivedCache (fun m -> m.DepthTestCache)
+    let cullModeCache           = derivedCache (fun m -> m.CullModeCache)
+    let polygonModeCache        = derivedCache (fun m -> m.PolygonModeCache)
+    let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
+    let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
+
     let uniformBufferManagers = 
         match parent with
             | Some p -> p.UniformBufferManagers
             | _ -> ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
 
-    member private x.ArrayBufferCache       : ResourceCache<Buffer>             = arrayBufferCache
-    member private x.BufferCache            : ResourceCache<Buffer>             = bufferCache
-    member private x.TextureCache           : ResourceCache<Texture>            = textureCache
-    member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer>     = indirectBufferCache
-    member private x.ProgramCache           : ResourceCache<Program>            = programCache
-    member private x.SamplerCache           : ResourceCache<Sampler>            = samplerCache
-    member private x.VAOCache               : ResourceCache<VertexArrayObject>  = vaoCache
-    member private x.UniformLocationCache   : ResourceCache<UniformLocation>    = uniformLocationCache
-    member private x.UniformBufferManagers                                      = uniformBufferManagers
+    member private x.ArrayBufferCache       : ResourceCache<Buffer>                 = arrayBufferCache
+    member private x.BufferCache            : ResourceCache<Buffer>                 = bufferCache
+    member private x.TextureCache           : ResourceCache<Texture>                = textureCache
+    member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer>         = indirectBufferCache
+    member private x.ProgramCache           : ResourceCache<Program>                = programCache
+    member private x.SamplerCache           : ResourceCache<Sampler>                = samplerCache
+    member private x.VAOCache               : ResourceCache<VertexArrayObject>      = vaoCache
+    member private x.UniformLocationCache   : ResourceCache<UniformLocation>        = uniformLocationCache
+    member private x.UniformBufferManagers                                          = uniformBufferManagers
+                                                                                    
+    member private x.IsActiveCache          : ResourceCache<IsActiveHandle>         = isActiveCache
+    member private x.BeginModeCache         : ResourceCache<BeginModeHandle>        = beginModeCache
+    member private x.DrawCallInfoCache      : ResourceCache<DrawCallInfoListHandle> = drawCallInfoCache
+    member private x.DepthTestCache         : ResourceCache<DepthTestModeHandle>    = depthTestCache
+    member private x.CullModeCache          : ResourceCache<CullModeHandle>         = cullModeCache
+    member private x.PolygonModeCache       : ResourceCache<PolygonModeHandle>      = polygonModeCache
+    member private x.BlendModeCache         : ResourceCache<BlendModeHandle>        = blendModeCache
+    member private x.StencilModeCache       : ResourceCache<StencilModeHandle>      = stencilModeCache
 
     member x.RenderTaskLock = renderTaskInfo
 
     new(parent, ctx, lock, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, lock, shareTextures, shareBuffers)
     new(ctx, lock, shareTextures, shareBuffers) = ResourceManager(None, ctx, lock, shareTextures, shareBuffers)
+
+    interface IResourceManager with
+        member x.CreateSurface(signature, surf) =
+            let res = x.CreateSurface(signature, surf)
+            new CastResource<_, _>(res) :> IResource<_>
+
+        member x.CreateBuffer (data : IMod<IBuffer>) =
+            let res = x.CreateBuffer(data)
+            new CastResource<_, _>(res) :> IResource<_>
+
+        member x.CreateTexture (data : IMod<ITexture>) =
+            let res = x.CreateTexture(data)
+            new CastResource<_, _>(res) :> IResource<_>
+
+
 
     member x.DrawBufferManager = drawBufferManager.Value
     member x.Context = ctx
@@ -450,12 +508,12 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IBuffer>) =
-        indirectBufferCache.GetOrCreate<IBuffer>(data, [indexed :> obj], {
-            create = fun b      -> ctx.CreateIndirect(indexed, b)
-            update = fun h b    -> ctx.UploadIndirect(h, indexed, b); h
-            delete = fun h      -> ctx.Delete h
-            info =   fun h      -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
+    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IIndirectBuffer>) =
+        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed], {
+            create = fun b   -> ctx.CreateIndirect(indexed, b)
+            update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
+            delete = fun h   -> ctx.Delete h
+            info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
             kind = ResourceKind.IndirectBuffer
         })
 
@@ -484,7 +542,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.SamplerState
         })
 
-    member x.CreateVertexArrayObject( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer>>, index : Option<IResource<Buffer>>) =
+    member x.CreateVertexArrayObject( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer>>) =
         let createView (self : IAdaptiveObject) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =
             index, { 
                 Type = view.ElementType
@@ -504,7 +562,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
                     member x.Create (old : Option<VertexArrayObject>) =
                         let attributes = bindings |> List.map (createView x)
-                        let index = match index with | Some i -> i.Handle.GetValue x |> Some | _ -> None
+                        let index = match index with | Some (_,i) -> i.Handle.GetValue x |> Some | _ -> None
                         
                         match old with
                             | Some old -> ctx.Delete old
@@ -564,4 +622,78 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             )
 
         manager.CreateUniformBuffer(scope, u, program.UniformGetters)
+ 
+
+ 
       
+    member x.CreateIsActive(value : IMod<bool>) =
+        isActiveCache.GetOrCreate(value, {
+            create = fun b      -> ctx.CreateIsActive b
+            update = fun h b    -> ctx.Update(h,b); h
+            delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+      
+    member x.CreateBeginMode(hasTess : bool, value : IMod<IndexedGeometryMode>) =
+        beginModeCache.GetOrCreate(value, {
+            create = fun b      -> ctx.CreateBeginMode(b, hasTess)
+            update = fun h b    -> ctx.Update(h, b, hasTess); h
+            delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateDrawCallInfoList(value : IMod<list<DrawCallInfo>>) =
+        drawCallInfoCache.GetOrCreate(value, {
+            create = fun b      -> ctx.CreateDrawCallInfoList(List.toArray b)
+            update = fun h b    -> ctx.Update(h,List.toArray b); h
+            delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateDepthTest(value : IMod<DepthTestMode>) =
+        depthTestCache.GetOrCreate(value, {
+            create = fun b      -> ctx.CreateDepthTest b
+            update = fun h b    -> ctx.Update(h,b); h
+            delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateCullMode(value : IMod<CullMode>) =
+        cullModeCache.GetOrCreate(value, {
+            create = fun b      -> ctx.CreateCullMode b
+            update = fun h b    -> ctx.Update(h,b); h
+            delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreatePolygonMode(value : IMod<FillMode>) =
+        polygonModeCache.GetOrCreate(value, {
+            create = fun b      -> ctx.CreatePolygonMode b
+            update = fun h b    -> ctx.Update(h,b); h
+            delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateBlendMode(value : IMod<BlendMode>) =
+        blendModeCache.GetOrCreate(value, {
+            create = fun b      -> ctx.CreateBlendMode b
+            update = fun h b    -> ctx.Update(h,b); h
+            delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateStencilMode(value : IMod<StencilMode>) =
+        stencilModeCache.GetOrCreate(value, {
+            create = fun b      -> ctx.CreateStencilMode b
+            update = fun h b    -> ctx.Update(h,b); h
+            delete = fun h      -> ctx.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })

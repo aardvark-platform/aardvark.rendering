@@ -1,4 +1,4 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/oqg1tw2ax1jl8qjx?svg=true)](https://ci.appveyor.com/project/haraldsteinlechner/aardvark-rendering)
+[![Build status](https://ci.appveyor.com/api/projects/status/oqg1tw2ax1jl8qjx/branch/master?svg=true)](https://ci.appveyor.com/project/haraldsteinlechner/aardvark-rendering/branch/master)
 [![Build Status](https://travis-ci.org/vrvis/aardvark.rendering.svg?branch=master)](https://travis-ci.org/vrvis/aardvark.rendering)
 
 # Aardvark.Rendering
@@ -20,6 +20,8 @@ Linux:
 
 Tutorials can be found here:
 https://github.com/vrvis/aardvark.rendering/tree/master/src/Demo/Examples
+- [Getting Started, Aardvark.Base libraries](https://github.com/vrvis/aardvark/wiki)
+- [Tutorial: Terrain Generator](https://aszabo314.github.io/stuff/terraingenerator.html)
 - "Hello World": https://github.com/vrvis/aardvark.rendering/blob/master/src/Demo/Examples/HelloWorld.fs
 - a version of Hello World based on Aardvark.Rendering.Interactive (lightweight abstraction for application setup in examples): https://github.com/vrvis/aardvark.rendering/blob/master/src/Demo/Examples/Tutorial.fs ... Note that this file can be executed in the F# interactive shell
 

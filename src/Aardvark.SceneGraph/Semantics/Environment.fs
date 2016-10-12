@@ -22,8 +22,4 @@ module EnvironmentSemantics =
             e?CameraLocation
 
 
-        member x.NormalMatrix(s : obj) : IMod<M33d> = 
-            Mod.map (fun (t : Trafo3d) -> t.Backward.Transposed.UpperLeftM33()) (s?ModelTrafo())
-
-
         member x.RcpViewportSize(e : ISg) = e?ViewportSize |> Mod.map (fun (s : V2i) -> 1.0 / (V2d s))

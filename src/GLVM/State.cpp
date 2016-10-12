@@ -13,7 +13,7 @@ State::State()
 	currentDepthFunc = -1;
 	currentCullFace = -1;
 	currentDepthMask = 1;
-	currentStencilMask = 0xFFFFFFFF;
+	currentStencilMask = -1;
 	currentColorMask = std::unordered_map<intptr_t, int>();
 	currentDrawBuffers = std::vector<GLenum>();
 
@@ -61,7 +61,85 @@ void State::Reset()
 	blendColor = std::tuple<intptr_t, intptr_t, intptr_t, intptr_t>(-1, -1, -1, -1);
 	stencilFunc = std::tuple<intptr_t, intptr_t, intptr_t, intptr_t>(-1, -1, -1, -1);
 	stencilOp = std::tuple<intptr_t, intptr_t, intptr_t, intptr_t>(-1, -1, -1, -1);
+
+	hDepthTest = nullptr;
+	hCullFace = nullptr;
+	hPolygonMode = nullptr;
+	hBlendMode = nullptr;
+	hStencilMode = nullptr;
 }
+
+
+bool State::HShouldSetDepthTest(GLenum* test)
+{
+	if (hDepthTest == nullptr || *hDepthTest != *test)
+	{
+		hDepthTest = test;
+		return true;
+	}
+	else
+	{
+		removedInstructions++;
+		return false;
+	}
+}
+
+bool State::HShouldSetCullFace(GLenum* test)
+{
+	if (hCullFace == nullptr || *hCullFace != *test)
+	{
+		hCullFace = test;
+		return true;
+	}
+	else
+	{
+		removedInstructions++;
+		return false;
+	}
+}
+
+bool State::HShouldSetPolygonMode(GLenum* test)
+{
+	if (hPolygonMode == nullptr || *hPolygonMode != *test)
+	{
+		hPolygonMode = test;
+		return true;
+	}
+	else
+	{
+		removedInstructions++;
+		return false;
+	}
+}
+
+bool State::HShouldSetBlendMode(BlendMode* test)
+{
+	if (hBlendMode == nullptr || memcmp(hBlendMode, test, sizeof(BlendMode)) != 0)
+	{
+		hBlendMode = test;
+		return true;
+	}
+	else
+	{
+		removedInstructions++;
+		return false;
+	}
+}
+
+bool State::HShouldSetStencilMode(StencilMode* test)
+{
+	if (hStencilMode == nullptr || memcmp(hStencilMode, test, sizeof(StencilMode)) != 0)
+	{
+		hStencilMode = test;
+		return true;
+	}
+	else
+	{
+		removedInstructions++;
+		return false;
+	}
+}
+
 
 
 bool State::ShouldSetProgram(intptr_t program)

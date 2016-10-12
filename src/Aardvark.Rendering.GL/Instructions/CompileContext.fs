@@ -52,7 +52,13 @@ module ExecutionContext =
     /// <summary>
     /// determines whether the current OpenGL implementation supports synchronization via glFence
     /// </summary>
-    let syncSupported = OpenGl.getProcAddress "glFenceSync" <> 0n
+    let syncSupported = 
+        let s = OpenGl.getProcAddress "glFenceSync" <> 0n
+        s
+    /// <summary>
+    /// determines whether the current OpenGL implementation supports buffer storage (persistently mappable)
+    /// </summary>
+    let bufferStorageSupported = OpenGl.getProcAddress "glBufferStorage" <> 0n
 
 
     /// <summary>
@@ -135,6 +141,17 @@ module ExecutionContext =
             | InstructionCode.ColorMask                     -> OpenGl.Pointers.ColorMask
             | InstructionCode.DrawBuffers                   -> OpenGl.Pointers.DrawBuffers
 
+            | InstructionCode.HDrawArrays                   -> OpenGl.Pointers.HDrawArrays
+            | InstructionCode.HDrawElements                 -> OpenGl.Pointers.HDrawElements
+            | InstructionCode.HDrawArraysIndirect           -> OpenGl.Pointers.HDrawArraysIndirect
+            | InstructionCode.HDrawElementsIndirect         -> OpenGl.Pointers.HDrawElementsIndirect
+            | InstructionCode.HSetDepthTest                 -> OpenGl.Pointers.HSetDepthTest
+            | InstructionCode.HSetCullFace                  -> OpenGl.Pointers.HSetCullFace
+            | InstructionCode.HSetPolygonMode               -> OpenGl.Pointers.HSetPolygonMode
+            | InstructionCode.HSetBlendMode                 -> OpenGl.Pointers.HSetBlendMode
+            | InstructionCode.HSetStencilMode               -> OpenGl.Pointers.HSetStencilMode
+
+
             | _ -> raise <| OpenGLException (OpenTK.Graphics.OpenGL4.ErrorCode.InvalidEnum, sprintf "cannot get function pointer for: %A" i)
 
 
@@ -198,6 +215,17 @@ module ExecutionContext =
             OpenGl.Pointers.StencilMask, fun args -> Instruction(InstructionCode.StencilMask, args)
             OpenGl.Pointers.ColorMask, fun args -> Instruction(InstructionCode.ColorMask, args)
             OpenGl.Pointers.DrawBuffers, fun args -> Instruction(InstructionCode.DrawBuffers, args)
+
+
+            OpenGl.Pointers.HDrawArrays, fun args -> Instruction(InstructionCode.HDrawArrays, args)
+            OpenGl.Pointers.HDrawElements, fun args -> Instruction(InstructionCode.HDrawElements, args)
+            OpenGl.Pointers.HDrawArraysIndirect, fun args -> Instruction(InstructionCode.HDrawArraysIndirect, args)
+            OpenGl.Pointers.HDrawElementsIndirect, fun args -> Instruction(InstructionCode.HDrawElementsIndirect, args)
+            OpenGl.Pointers.HSetDepthTest, fun args -> Instruction(InstructionCode.HSetDepthTest, args)
+            OpenGl.Pointers.HSetCullFace, fun args -> Instruction(InstructionCode.HSetCullFace, args)
+            OpenGl.Pointers.HSetPolygonMode, fun args -> Instruction(InstructionCode.HSetPolygonMode, args)
+            OpenGl.Pointers.HSetBlendMode, fun args -> Instruction(InstructionCode.HSetBlendMode, args)
+            OpenGl.Pointers.HSetStencilMode, fun args -> Instruction(InstructionCode.HSetStencilMode, args)
         ]
 
     let callToInstruction (ptr : nativeint, args : obj[]) =
@@ -228,7 +256,7 @@ module ExecutionContext =
         let inline int64 id = i.Arguments.[id] |> unbox<int64>
         let inline ptr id = i.Arguments.[id] |> unbox<nativeint>
 
-        let drawCount (id : int) =
+        let readInt (id : int) =
             match i.Arguments.[id] with
                 | :? Aardvark.Base.PtrArgument as p -> 
                     match p with
@@ -238,7 +266,7 @@ module ExecutionContext =
                 | _ -> failwith "bad draw call count"
 
         match i.Operation with
-            | InstructionCode.BindVertexArray          -> OpenGl.Unsafe.BindVertexArray(int 0)
+            | InstructionCode.BindVertexArray          -> OpenGl.Unsafe.BindVertexArray(readInt 0)
             | InstructionCode.BindProgram              -> OpenGl.Unsafe.BindProgram(int 0)
             | InstructionCode.ActiveTexture            -> OpenGl.Unsafe.ActiveTexture(int 0)
             | InstructionCode.BindSampler              -> OpenGl.Unsafe.BindSampler (int 0) (int 1)
@@ -292,9 +320,19 @@ module ExecutionContext =
             | InstructionCode.DrawBuffers              -> OpenGl.Unsafe.DrawBuffers (int 0) (ptr 1) 
 
             | InstructionCode.MultiDrawArraysIndirect  -> 
-                OpenGl.Unsafe.MultiDrawArraysIndirect (int 0) (ptr 1) (drawCount 2) (int 3)
+                OpenGl.Unsafe.MultiDrawArraysIndirect (int 0) (ptr 1) (readInt 2) (int 3)
             | InstructionCode.MultiDrawElementsIndirect  -> 
-                OpenGl.Unsafe.MultiDrawElementsIndirect (int 0) (int 1) (ptr 2) (drawCount 3) (int 4)
+                OpenGl.Unsafe.MultiDrawElementsIndirect (int 0) (int 1) (ptr 2) (readInt 3) (int 4)
+
+            | InstructionCode.HDrawArrays -> OpenGl.Unsafe.HDrawArrays (ptr 0) (ptr 1) (ptr 2) (ptr 3)
+            | InstructionCode.HDrawElements -> OpenGl.Unsafe.HDrawElements (ptr 0) (ptr 1) (ptr 2) (int 3) (ptr 4)
+            | InstructionCode.HDrawArraysIndirect -> OpenGl.Unsafe.HDrawArraysIndirect (ptr 0) (ptr 1) (ptr 2) (ptr 3) (int 4)
+            | InstructionCode.HDrawElementsIndirect -> OpenGl.Unsafe.HDrawElementsIndirect (ptr 0) (ptr 1) (ptr 2) (int 3) (ptr 4) (int 5)
+            | InstructionCode.HSetDepthTest -> OpenGl.Unsafe.HSetDepthTest (ptr 0) 
+            | InstructionCode.HSetCullFace -> OpenGl.Unsafe.HSetCullFace (ptr 0) 
+            | InstructionCode.HSetPolygonMode -> OpenGl.Unsafe.HSetPolygonMode (ptr 0) 
+            | InstructionCode.HSetBlendMode -> OpenGl.Unsafe.HSetBlendMode (ptr 0) 
+            | InstructionCode.HSetStencilMode -> OpenGl.Unsafe.HSetStencilMode (ptr 0) 
 
             | InstructionCode.GetError                 -> ()
             | _ -> failwithf "unknown instruction: %A" i

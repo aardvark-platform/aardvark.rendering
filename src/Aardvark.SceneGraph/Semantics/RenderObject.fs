@@ -181,7 +181,7 @@ module RenderObjectSemantics =
                 }
 
             rj.VertexAttributes <- vertexAttributes
-            rj.IndirectBuffer <- indirect |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer)
+            rj.IndirectBuffer <- indirect |> Mod.map IndirectBuffer.ofArray
             //rj.IndirectCount <- indirect |> Mod.map Array.length
             rj.Mode <- Mod.constant r.Mode
             rj.Activate <- activate

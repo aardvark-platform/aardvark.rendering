@@ -162,16 +162,6 @@ module ChangeableResources =
         createFramebuffer  runtime signature  ( color |> Mod.map (fun s -> { texture = s; slice = 0; level = 0 } :> IFramebufferOutput) |> Some ) ( Mod.cast depth |> Some )
 
 
-type IOutputMod<'a> =
-    inherit IMod<'a>
-    abstract member LastStatistics : FrameStatistics
-    abstract member Acquire : unit -> unit
-    abstract member Release : unit -> unit
-
-type ILockedResource =
-    abstract member AddLock     : RenderTaskLock -> unit
-    abstract member RemoveLock  : RenderTaskLock -> unit
-
 [<AutoOpen>]
 module private RefCountedResources = 
     type ChangeableFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =
@@ -506,9 +496,10 @@ type AbstractRenderTask() =
 
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
+    abstract member Update : unit -> FrameStatistics
     abstract member Run : OutputDescription -> FrameStatistics
     abstract member Dispose : unit -> unit
-
+    abstract member Use : (unit -> 'a) -> 'a
     
 
     member x.FrameId = frameId
@@ -518,6 +509,10 @@ type AbstractRenderTask() =
             frameId <- frameId + 1UL
             stats
         )
+    member x.Update(caller : IAdaptiveObject) =
+        x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () -> 
+            x.Update()
+        )
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -526,8 +521,9 @@ type AbstractRenderTask() =
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Runtime = x.Runtime
         member x.FrameId = frameId
+        member x.Update(caller) = x.Update(caller)
         member x.Run(caller, out) = x.Run(caller, out)
-
+        member x.Use f = x.Use f
 
 
 module RenderTask =
@@ -543,9 +539,11 @@ module RenderTask =
         interface IRenderTask with
             member x.FramebufferSignature = None
             member x.Dispose() = ()
+            member x.Update(caller) = FrameStatistics.Zero
             member x.Run(caller, fbo) = FrameStatistics.Zero
             member x.Runtime = None
             member x.FrameId = 0UL
+            member x.Use f = f()
 
     type SequentialRenderTask(f : FrameStatistics -> FrameStatistics, tasks : IRenderTask[]) as this =
         inherit AbstractRenderTask()
@@ -568,8 +566,25 @@ module RenderTask =
         let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)
         member x.Tasks = tasks
 
+        override x.Use(f : unit -> 'a) =
+            lock x (fun () ->
+                let rec run (i : int) =
+                    if i >= tasks.Length then f()
+                    else tasks.[i].Use (fun () -> run (i + 1))
+
+                run 0
+            )
+
         override x.Dispose() =
-            for t in tasks do t.RemoveOutput x
+            for t in tasks do t.Dispose()
+
+        override x.Update() =
+            let mutable stats = FrameStatistics.Zero
+            for t in tasks do
+                let res = t.Update(x)
+                stats <- stats + res
+
+            stats |> f
 
         override x.Run(output) =
             let mutable stats = FrameStatistics.Zero
@@ -589,30 +604,45 @@ module RenderTask =
         inherit AbstractRenderTask()
         let mutable inner : Option<IRenderTask> = None
 
-        override x.FramebufferSignature = 
-            let v = input.GetValue x
-            v.FramebufferSignature
-
-        override x.Run(fbo) =
+        let updateInner x =
             let ni = input.GetValue x
 
             match inner with
                 | Some oi when oi = ni -> ()
                 | _ ->
                     match inner with
-                        | Some oi -> oi.RemoveOutput x
+                        | Some oi -> oi.Dispose()
                         | _ -> ()
 
                     ni.AddOutput x
 
             inner <- Some ni
+            ni
+
+        override x.Use(f : unit -> 'a) =
+            lock x (fun () ->
+                lock input (fun () ->
+                    input.GetValue().Use f
+                )
+            )
+
+        override x.FramebufferSignature = 
+            let v = input.GetValue x
+            v.FramebufferSignature
+
+        override x.Update() =
+            let ni = updateInner x
+            ni.Update(x)
+
+        override x.Run(fbo) =
+            let ni = updateInner x
             ni.Run(x, fbo)
 
         override x.Dispose() =
             input.RemoveOutput x
             match inner with
                 | Some i -> 
-                    i.RemoveOutput x
+                    i.Dispose()
                     inner <- None
                 | _ -> ()
 
@@ -644,7 +674,7 @@ module RenderTask =
 
         let remove (t : IRenderTask) =
             if tasks.Remove t then
-                t.RemoveOutput this
+                t.Dispose()
 
         let processDeltas() =
             // TODO: EvaluateAlways should ensure that self is OutOfDate since
@@ -660,9 +690,32 @@ module RenderTask =
 
             this.OutOfDate <- wasOutOfDate
 
+        override x.Use (f : unit -> 'a) =
+            lock x (fun () ->
+                processDeltas()
+                let l = reader.Content.All |> Seq.toList
+                
+                let rec run (l : list<ISortKey * IRenderTask>) =
+                    match l with
+                        | [] -> f()
+                        | (_,h) :: rest -> h.Use (fun () -> run rest)
+
+                run l
+            )
         override x.FramebufferSignature =
             lock this (fun () -> processDeltas())
             signature
+
+        override x.Update() =
+            processDeltas ()
+
+            let mutable stats = FrameStatistics.Zero
+
+            for (_,t) in reader.Content.All do
+                let res = t.Update(x)
+                stats <- stats + res
+
+            stats
 
         override x.Run(fbo) =
             processDeltas()
@@ -683,7 +736,7 @@ module RenderTask =
             reader.Dispose()
 
             for i in tasks do
-                i.RemoveOutput x
+                i.Dispose()
             tasks.Clear()
                 
         override x.Runtime =
@@ -697,8 +750,9 @@ module RenderTask =
         override x.FramebufferSignature = None
         override x.Run(fbo) = f.Evaluate (x,(x :> IRenderTask,fbo))
         override x.Dispose() = f.RemoveOutput this 
+        override x.Update() = FrameStatistics.Zero
         override x.Runtime = None
-            
+        override x.Use f = lock x f
 
     type private FinalizerRenderTask(inner : IRenderTask) =
         inherit AbstractRenderTask()
@@ -713,8 +767,15 @@ module RenderTask =
             try x.Dispose false
             with _ -> ()
 
+        
+        override x.Use f = 
+            lock x (fun () ->
+                inner.Use f
+            )
+
         override x.Dispose() = x.Dispose true
         override x.Run(fbo) = inner.Run(x, fbo)
+        override x.Update() = inner.Update x
         override x.FramebufferSignature = inner.FramebufferSignature
         override x.Runtime = inner.Runtime
 
@@ -725,7 +786,13 @@ module RenderTask =
         member x.After = after
         member x.Inner = inner
 
+        override x.Use f =
+            lock x (fun () ->
+                inner.Use f
+            )
+
         override x.FramebufferSignature = inner.FramebufferSignature
+        override x.Update() = inner.Update x
         override x.Run(fbo) =
             match before with
                 | Some before -> before()
@@ -739,7 +806,7 @@ module RenderTask =
 
             res
 
-        override x.Dispose() = inner.RemoveOutput x
+        override x.Dispose() = inner.Dispose()
         override x.Runtime = inner.Runtime
 
 

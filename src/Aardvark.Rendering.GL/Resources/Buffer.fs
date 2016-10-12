@@ -166,6 +166,8 @@ module BufferExtensions =
                     removeBuffer x (int64 buffer.SizeInBytes)
                     GL.DeleteBuffer handle
                     GL.Check "failed to delete buffer"
+                    let isBuffer = GL.IsBuffer handle
+                    if isBuffer then Log.warn "deleted buffer which is still a buffer"
             )
 
         member x.CreateBuffer(data : IBuffer) =
@@ -189,8 +191,10 @@ module BufferExtensions =
             if b.Handle = 0 then failwith "cannot update null buffer"
             match data with
                 | :? ArrayBuffer as ab -> x.Upload(b, ab.Data)
+
                 | :? Buffer as bb ->
                     if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
+
                 | :? NullBuffer ->
                     failwith "cannot create null buffer out of non-null buffer"
 
@@ -385,9 +389,10 @@ module BufferExtensions =
                     removeBuffer x (int64 buffer.SizeInBytes)
                     addBuffer x (int64 nativeSize)
                     buffer.SizeInBytes <- nativeSize
-                    GL.BufferData(BufferTarget.ArrayBuffer, nativeSize, src, BufferUsageHint.DynamicDraw)
+                    let source = if nativeSize = 0n then 0n else src
+                    GL.BufferData(BufferTarget.ArrayBuffer, nativeSize, source, BufferUsageHint.DynamicDraw)
                     GL.Check "failed to set buffer data"
-                else
+                elif nativeSize <> 0n then
                     let target = GL.MapBufferRange(BufferTarget.ArrayBuffer, 0n, nativeSize, BufferAccessMask.MapWriteBit)
                     GL.Check "failed to map buffer for writing"
 
@@ -548,7 +553,7 @@ module IndirectBufferExtensions =
     let private postProcessDrawCallBuffer (indexed : bool) (b : Buffer) =
         let callCount = int b.SizeInBytes / sizeof<DrawCallInfo>
 
-        if indexed then
+        if indexed && callCount > 0 then
             using b.Context.ResourceLock (fun _ ->
                 GL.BindBuffer(BufferTarget.ArrayBuffer, b.Handle)
                 GL.Check "could not bind buffer"
@@ -590,30 +595,77 @@ module IndirectBufferExtensions =
             val mutable public Buffer : Buffer
             val mutable public Count : nativeptr<int>
             val mutable public Stride : int
+            val mutable public Indexed : bool
 
-            new(b, ptr, stride) = { Buffer = b; Count = ptr; Stride = stride }
+            interface IIndirectBuffer with
+                member x.Buffer = x.Buffer :> IBuffer
+                member x.Count = NativePtr.read x.Count
+
+            new(b, ptr, stride, indexed) = { Buffer = b; Count = ptr; Stride = stride; Indexed = indexed }
         end 
 
     type Context with
+
+        member x.Clear(b : Buffer, size : nativeint) =
+            using x.ResourceLock (fun _ ->
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
+                GL.BufferData(BufferTarget.CopyWriteBuffer, size, 0n, BufferUsageHint.DynamicDraw)
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+            )
+
+        member x.Copy(source : Buffer, sourceOffset : nativeint, target : Buffer, targetOffset : nativeint, size : nativeint) =
+            using x.ResourceLock (fun _ ->
+                GL.BindBuffer(BufferTarget.CopyReadBuffer, source.Handle)
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, target.Handle)
+
+                if targetOffset + size > target.SizeInBytes then
+                    failwith "[Gl] insufficient buffer size"
+
+                GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, sourceOffset, targetOffset, size)
+                
+                GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+            )
+
+        member x.Clone(b : Buffer, offset : nativeint, size : nativeint) =
+            let mine = x.CreateBuffer(0n, int size, BufferUsage.Dynamic)
+            x.Copy(b, offset, mine, 0n, size)
+            mine
+
+        member x.Clone(b : Buffer) = x.Clone(b, 0n, b.SizeInBytes)
+
 
         member x.Delete(buffer : IndirectBuffer) =
             x.Delete(buffer.Buffer)
             NativePtr.free buffer.Count
 
-        member x.UploadIndirect(buffer : IndirectBuffer, indexed : bool, data : IBuffer) =
+        member x.UploadIndirect(indirect : IndirectBuffer, indexed : bool, data : IIndirectBuffer) =
             using x.ResourceLock (fun _ ->
-                x.Upload(buffer.Buffer, data)
-                let callCount = postProcessDrawCallBuffer indexed buffer.Buffer
-                NativePtr.write buffer.Count callCount
+                match data.Buffer with
+                    | :? Buffer as b ->
+                        if indirect.Buffer.SizeInBytes <> b.SizeInBytes then
+                            x.Clear(indirect.Buffer, b.SizeInBytes)
+                        x.Copy(b, 0n, indirect.Buffer, 0n, b.SizeInBytes)
+
+                    | b ->
+                        x.Upload(indirect.Buffer, b)
+
+                let callCount = postProcessDrawCallBuffer indexed indirect.Buffer
+                indirect.Indexed <- indexed
+                NativePtr.write indirect.Count callCount
             )
 
-        member x.CreateIndirect(indexed : bool, data : IBuffer) =
+        member x.CreateIndirect(indexed : bool, data : IIndirectBuffer) =
             using x.ResourceLock (fun _ ->
-                let buffer = x.CreateBuffer(data)
-                let callCount = postProcessDrawCallBuffer indexed buffer
+                let buffer = 
+                    match data.Buffer with
+                        | :? Buffer as b -> x.Clone(b)
+                        | _ -> x.CreateBuffer(data.Buffer)
+
                 let cnt = NativePtr.alloc 1
+                let callCount = postProcessDrawCallBuffer indexed buffer
                 NativePtr.write cnt callCount
-                IndirectBuffer(buffer, cnt, sizeof<DrawCallInfo>)
+                IndirectBuffer(buffer, cnt, sizeof<DrawCallInfo>, indexed)
             )
 
 

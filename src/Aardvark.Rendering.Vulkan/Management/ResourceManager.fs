@@ -286,14 +286,14 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
         x.CreateBuffer(data, VkBufferUsageFlags.IndexBufferBit)
 
 
-    member x.CreateIndirectBuffer(data : IMod<IBuffer>, indexed : bool) =
+    member x.CreateIndirectBuffer(data : IMod<IIndirectBuffer>, indexed : bool) =
         indirectBufferCache.GetOrCreate(
             [data; indexed],
             fun () ->
                 let mutable created = false
                 { new Resource<IndirectBuffer>(indirectBufferCache) with
                     member x.Create(old) =
-                        let input = data.GetValue(x)
+                        let input = data.GetValue(x).Buffer
 
                         match input with
                             | :? IndirectBuffer as b ->

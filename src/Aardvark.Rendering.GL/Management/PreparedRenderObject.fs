@@ -10,10 +10,6 @@ open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 
-type DrawCallStats =
-    | NoDraw
-    | DirectDraw of count : int * instances : int
-    | IndirectDraw of count : int
 
 [<CustomEquality;CustomComparison>]
 type PreparedRenderObject =
@@ -29,12 +25,20 @@ type PreparedRenderObject =
         Uniforms : Map<int, IResource<UniformLocation>>
         Textures : Map<int, IResource<Texture> * IResource<Sampler>>
         Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer>>
-        IndexBuffer : Option<IResource<Buffer>>
-
+        IndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer>>
+        
+        IsActive : IResource<IsActiveHandle>
+        BeginMode : IResource<BeginModeHandle>
+        DrawCallInfos : IResource<DrawCallInfoListHandle>
         IndirectBuffer : Option<IResource<IndirectBuffer>>
-        DrawCallInfos : IResource<list<DrawCallInfo>>
+        DepthTestMode : IResource<DepthTestModeHandle>
+        CullMode : IResource<CullModeHandle>
+        PolygonMode : IResource<PolygonModeHandle>
+        BlendMode : IResource<BlendModeHandle>
+        StencilMode : IResource<StencilModeHandle>
 
         mutable VertexArray : IResource<VertexArrayObject>
+        VertexArrayHandle : IResource<nativeint>
         VertexAttributeValues : Map<int, IMod<Option<V4f>>>
         
         ColorAttachmentCount : int
@@ -43,9 +47,7 @@ type PreparedRenderObject =
         DepthBufferMask : bool
         StencilBufferMask : bool
 
-        //ClipDistanceBitmask : array<bool>
 
-        DrawCallStats : IMod<DrawCallStats>
         mutable ResourceCount : int
         mutable ResourceCounts : Map<ResourceKind, int>
 
@@ -64,17 +66,7 @@ type PreparedRenderObject =
     member x.Id = x.Original.Id
     member x.CreationPath = x.Original.Path
     member x.AttributeScope = x.Original.AttributeScope
-
-    member x.IsActive = x.Original.IsActive
     member x.RenderPass = x.Original.RenderPass
-
-    member x.Mode = x.Original.Mode
-
-    member x.DepthTest = x.Original.DepthTest
-    member x.CullMode = x.Original.CullMode
-    member x.BlendMode = x.Original.BlendMode
-    member x.FillMode = x.Original.FillMode
-    member x.StencilMode = x.Original.StencilMode
 
     member x.Resources =
         seq {
@@ -93,15 +85,25 @@ type PreparedRenderObject =
                 yield b :> _
 
             match x.IndexBuffer with
-                | Some ib -> yield ib :> _
+                | Some (_,ib) -> yield ib :> _
                 | _ -> ()
 
             match x.IndirectBuffer with
                 | Some ib -> yield ib :> _
-                | _ -> ()
+                | _ -> yield x.DrawCallInfos :> _
+
 
             yield x.VertexArray :> _ 
-            yield x.DrawCallInfos :> _
+            if not (isNull (x.VertexArrayHandle :> obj)) then
+                yield x.VertexArrayHandle :> _
+            yield x.IsActive :> _
+            yield x.BeginMode :> _
+            
+            yield x.DepthTestMode :> _
+            yield x.CullMode :> _
+            yield x.PolygonMode :> _
+            yield x.BlendMode :> _
+            yield x.StencilMode :> _
         }
 
     member x.Update(caller : IAdaptiveObject) =
@@ -126,35 +128,65 @@ type PreparedRenderObject =
             b.Update(caller) |> add
 
         match x.IndexBuffer with
-            | Some ib -> ib.Update(caller) |> add
+            | Some (_,ib) -> ib.Update(caller) |> add
             | _ -> ()
 
         match x.IndirectBuffer with
             | Some ib -> ib.Update(caller) |> add
-            | _ -> ()
+            | _ -> x.DrawCallInfos.Update(caller) |> add
 
         x.VertexArray.Update(caller) |> add
+        if not (isNull (x.VertexArrayHandle :> obj)) then
+            x.VertexArrayHandle.Update(caller) |> add
+
+
+        x.IsActive.Update(caller) |> add
+        x.BeginMode.Update(caller) |> add
+        x.DepthTestMode.Update(caller) |> add
+        x.CullMode.Update(caller) |> add
+        x.PolygonMode.Update(caller) |> add
+        x.BlendMode.Update(caller) |> add
+        x.StencilMode.Update(caller) |> add
 
         stats
 
     member x.Dispose() =
-        if not x.IsDisposed then
+        lock x (fun () -> 
+            try
+                if not x.IsDisposed then
+                    x.IsDisposed <- true
 
-            x.Activation.Dispose()
-            x.IsDisposed <- true
-            match x.DrawBuffers with
-                | Some b -> b.RemoveRef()
-                | _ -> ()
-            x.VertexArray.Dispose() 
-            x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
-            x.IndexBuffer |> Option.iter (fun b -> b.Dispose())
-            x.IndirectBuffer |> Option.iter (fun b -> b.Dispose())
-            x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
-            x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
-            x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-            x.Program.Dispose() 
-            x.VertexArray <- Unchecked.defaultof<_>
-         
+                    use resourceLock = x.Context.ResourceLock
+
+                    OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
+
+                    x.Activation.Dispose()
+                    match x.DrawBuffers with
+                        | Some b -> b.RemoveRef()
+                        | _ -> ()
+                    x.VertexArray.Dispose() 
+                    x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
+                    x.IndexBuffer |> Option.iter (fun (_,b) -> b.Dispose())
+                    match x.IndirectBuffer with
+                        | Some b -> b.Dispose()
+                        | None -> x.DrawCallInfos.Dispose()
+
+                    x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
+                    x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
+                    x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
+                    x.Program.Dispose() 
+                    x.VertexArray <- Unchecked.defaultof<_>
+
+                    x.IsActive.Dispose()
+                    x.BeginMode.Dispose()
+                    x.DepthTestMode.Dispose()
+                    x.CullMode.Dispose()
+                    x.PolygonMode.Dispose()
+                    x.BlendMode.Dispose()
+                    x.StencilMode.Dispose()
+            with e -> Log.warn "Prepare killed!!"
+        )
+        
              
 
     interface IDisposable with
@@ -193,7 +225,6 @@ module PreparedRenderObject =
             Buffers = []
             IndexBuffer = None
             IndirectBuffer = None
-            DrawCallInfos = Unchecked.defaultof<_>
             VertexArray = Unchecked.defaultof<_>
             VertexAttributeValues = Map.empty
             ColorAttachmentCount = 0
@@ -202,9 +233,17 @@ module PreparedRenderObject =
             DepthBufferMask = true
             StencilBufferMask = true
             IsDisposed = false
-            DrawCallStats = Mod.constant NoDraw
             ResourceCount = 0
             ResourceCounts = Map.empty
+            IsActive = Unchecked.defaultof<_>
+            BeginMode = Unchecked.defaultof<_>
+            DrawCallInfos = Unchecked.defaultof<_>
+            DepthTestMode = Unchecked.defaultof<_>
+            CullMode = Unchecked.defaultof<_>
+            PolygonMode = Unchecked.defaultof<_>
+            BlendMode = Unchecked.defaultof<_>
+            StencilMode = Unchecked.defaultof<_>
+            VertexArrayHandle = Unchecked.defaultof<_>
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -215,6 +254,7 @@ module PreparedRenderObject =
                     Some b
                 | _ ->
                     None
+
         let res = 
             {
                 Activation = { new IDisposable with member x.Dispose() = () }
@@ -230,7 +270,6 @@ module PreparedRenderObject =
                 Buffers = o.Buffers
                 IndexBuffer = o.IndexBuffer
                 IndirectBuffer = o.IndirectBuffer
-                DrawCallInfos = o.DrawCallInfos
                 VertexArray = o.VertexArray
                 VertexAttributeValues = o.VertexAttributeValues
                 ColorAttachmentCount = o.ColorAttachmentCount
@@ -239,9 +278,18 @@ module PreparedRenderObject =
                 DepthBufferMask = o.DepthBufferMask
                 StencilBufferMask = o.StencilBufferMask
                 IsDisposed = o.IsDisposed
-                DrawCallStats = o.DrawCallStats
                 ResourceCount = o.ResourceCount
                 ResourceCounts = o.ResourceCounts
+
+                IsActive  = o.IsActive 
+                BeginMode  = o.BeginMode 
+                DrawCallInfos  = o.DrawCallInfos 
+                DepthTestMode  = o.DepthTestMode 
+                CullMode  = o.CullMode 
+                PolygonMode  = o.PolygonMode 
+                BlendMode  = o.BlendMode 
+                StencilMode  = o.StencilMode 
+                VertexArrayHandle = o.VertexArrayHandle
             }  
 
         for r in res.Resources do
@@ -257,11 +305,6 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
             | h::_ -> h
 
     let last = children |> List.last
-
-    let drawCallStats =
-        children |> List.map (fun c -> c.DrawCallStats) |> Mod.mapN Seq.toList
-
-    member x.DrawCallStats = drawCallStats
 
     member x.Children = children
 
@@ -298,6 +341,9 @@ type ResourceManagerExtensions private() =
     static member Prepare (x : ResourceManager, fboSignature : IFramebufferSignature, rj : RenderObject) : PreparedRenderObject =
         // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
+
+//        ContextHandle.Current.Value.AttachDebugOutputIfNeeded()
+//        OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.DebugOutput)
 
         let activation = rj.Activate()
 
@@ -397,6 +443,8 @@ type ResourceManagerExtensions private() =
         let buffers =
             prog.Inputs 
                 |> List.map (fun v ->
+                    let expected = AttributeType.getExpectedType v.attributeType
+
                     match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                         | Some value ->
                             let dep = x.CreateBuffer(value.Buffer)
@@ -414,10 +462,23 @@ type ResourceManagerExtensions private() =
                                             failwithf "could not get attribute %A" v.semantic
                    )
 
+
         // create the index buffer (if present)
         let index =
             match rj.Indices with
-                | Some i -> x.CreateBuffer i.Buffer |> Some
+                | Some i -> 
+                    let buffer = x.CreateBuffer i.Buffer
+                    let indexType =
+                        let indexType = i.ElementType
+                        if indexType = typeof<byte> then OpenGl.Enums.IndexType.UnsignedByte
+                        elif indexType = typeof<uint16> then OpenGl.Enums.IndexType.UnsignedShort
+                        elif indexType = typeof<uint32> then OpenGl.Enums.IndexType.UnsignedInt
+                        elif indexType = typeof<sbyte> then OpenGl.Enums.IndexType.UnsignedByte
+                        elif indexType = typeof<int16> then OpenGl.Enums.IndexType.UnsignedShort
+                        elif indexType = typeof<int32> then OpenGl.Enums.IndexType.UnsignedInt
+                        else failwithf "unsupported index type: %A"  indexType
+                    Some(indexType, buffer)
+
                 | None -> None
 
 
@@ -432,6 +493,7 @@ type ResourceManagerExtensions private() =
         let attributeValues =
             buffers 
                 |> List.map (fun (i,v,_,_) ->
+
                     i, v.Buffer |> Mod.map (fun v ->
                         match v with
                             | :? NullBuffer as nb -> 
@@ -479,45 +541,17 @@ type ResourceManagerExtensions private() =
                 | Some b -> Set.contains DefaultSemantic.Stencil b
                 | None -> true
 
-        let drawCalls =
-            if isNull rj.DrawCallInfos then
-                { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
-                    member x.Create(_) = [], FrameStatistics.Zero
-                    member x.Destroy(_) = ()
-                    member x.GetInfo _ = ResourceInfo.Zero
-                }
-            else
-                { new Resource<list<DrawCallInfo>>(ResourceKind.DrawCall) with
-                    member x.Create(_) = rj.DrawCallInfos.GetValue x, FrameStatistics.Zero
-                    member x.Destroy(_) = ()
-                    member x.GetInfo _ = ResourceInfo.Zero
-                }
 
-        drawCalls.AddRef()
-
-        let drawCallStats =
-            Mod.custom (fun self ->
-                match indirect with
-                    | Some ib ->
-                        // we don't want to update the indirect-buffer but we need to depend on it
-                        lock ib (fun () -> ib.Outputs.Add self |> ignore)
-                        match isNull ib.Handle with
-                        | false ->
-                            let ib = ib.Handle.GetValue(self)
-                            match Unchecked.equals (ib :> obj) null with
-                            | false ->
-                                let calls = ib.Count |> NativePtr.read
-                                IndirectDraw calls
-                            | true -> DrawCallStats.NoDraw //where is the value
-                        | true -> DrawCallStats.NoDraw //wtf is going on
-
-                    | None ->
-                        let calls = drawCalls.Handle.GetValue(self)
-
-                        let instances = calls |> List.sumBy (fun c -> c.InstanceCount)
-                        let calls = calls |> List.length
-                        DirectDraw (calls, instances)
-            )
+        let isActive = x.CreateIsActive rj.IsActive
+        let beginMode = 
+            let hasTess = program.Handle.GetValue().Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl || s.Stage = ShaderStage.TessEval)
+            x.CreateBeginMode(hasTess, rj.Mode)
+        let drawCalls = if isNull rj.DrawCallInfos then Unchecked.defaultof<_> else x.CreateDrawCallInfoList rj.DrawCallInfos
+        let depthTest = x.CreateDepthTest rj.DepthTest
+        let cullMode = x.CreateCullMode rj.CullMode
+        let polygonMode = x.CreatePolygonMode rj.FillMode
+        let blendMode = x.CreateBlendMode rj.BlendMode
+        let stencilMode = x.CreateStencilMode rj.StencilMode
 
 
 
@@ -537,7 +571,6 @@ type ResourceManagerExtensions private() =
                 Buffers = buffers
                 IndexBuffer = index
                 IndirectBuffer = indirect
-                DrawCallInfos = drawCalls
                 VertexArray = vao
                 VertexAttributeValues = attributeValues
                 ColorAttachmentCount = attachmentCount
@@ -546,11 +579,24 @@ type ResourceManagerExtensions private() =
                 DepthBufferMask = depthMask
                 StencilBufferMask = stencilMask
                 IsDisposed = false
-                DrawCallStats = drawCallStats
                 ResourceCount = -1
                 ResourceCounts = Map.empty
+
+                IsActive = isActive
+                BeginMode = beginMode
+                DrawCallInfos = drawCalls
+                DepthTestMode = depthTest
+                CullMode = cullMode
+                PolygonMode = polygonMode
+                BlendMode = blendMode
+                StencilMode = stencilMode
+                VertexArrayHandle = Unchecked.defaultof<_>
+
             }
 
         res.ResourceCount <- res.Resources |> Seq.length
         res.ResourceCounts <- res.Resources |> Seq.countBy (fun r -> r.Kind) |> Map.ofSeq
+
+        OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
+
         res

@@ -34,8 +34,14 @@ type IPreparedRenderObject =
     abstract member Update : IAdaptiveObject -> unit
     abstract member Original : Option<RenderObject>
 
+[<AllowNullLiteral>]
+type IResourceManager =
+    abstract member CreateSurface : signature : IFramebufferSignature * surface : IMod<ISurface> -> IResource<IBackendSurface>
+    abstract member CreateBuffer : buffer : IMod<IBuffer> -> IResource<IBackendBuffer>
+    abstract member CreateTexture : texture : IMod<ITexture> -> IResource<IBackendTexture>
 
-type IRuntime =
+and IRuntime =
+    abstract member ResourceManager : IResourceManager
     abstract member ContextLock : IDisposable
 
     abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * Set<Symbol> -> IFramebufferSignature
@@ -60,6 +66,7 @@ type IRuntime =
     abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
     abstract member CreateMappedBuffer : unit -> IMappedBuffer
+    abstract member CreateMappedIndirectBuffer : indexed : bool -> IMappedIndirectBuffer
 
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit
@@ -80,8 +87,10 @@ and IRenderTask =
     inherit IAdaptiveObject
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
+    abstract member Update : IAdaptiveObject -> FrameStatistics
     abstract member Run : IAdaptiveObject * OutputDescription -> FrameStatistics
     abstract member FrameId : uint64
+    abstract member Use : (unit -> 'a) -> 'a
 
 and [<AllowNullLiteral>] IFramebufferSignature =
     abstract member Runtime : IRuntime
@@ -119,12 +128,7 @@ and OutputDescription =
         stencilMaskBack : uint32
     }
 
-open System.Threading
-type RenderTaskLock() =
-    let rw = new ReaderWriterLockSlim()
-    member x.Run f = ReaderWriterLock.write rw f
-    member x.Update f = 
-        ReaderWriterLock.read rw f
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module OutputDescription =
@@ -160,17 +164,17 @@ type ShaderStage =
 
 
 
-type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, uniforms : SymbolDict<IMod>, samplerStates : SymbolDict<SamplerStateDescription>, semanticMap : SymbolDict<Symbol>) =
+type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, uniforms : SymbolDict<IMod>, samplerStates : SymbolDict<SamplerStateDescription>, semanticMap : SymbolDict<Symbol>, expectsRowMajorMatrices : bool) =
     interface ISurface
     member x.Code = code
     member x.EntryPoints = entryPoints
     member x.Uniforms = uniforms
     member x.SamplerStates = samplerStates
     member x.SemanticMap = semanticMap
-
-    new(code, entryPoints) = BackendSurface(code, entryPoints, SymDict.empty, SymDict.empty, SymDict.empty)
-    new(code, entryPoints, uniforms) = BackendSurface(code, entryPoints, uniforms, SymDict.empty, SymDict.empty)
-    new(code, entryPoints, uniforms, samplerStates) = BackendSurface(code, entryPoints, uniforms, samplerStates, SymDict.empty)
+    member x.ExpectsRowMajorMatrices = expectsRowMajorMatrices
+    new(code, entryPoints) = BackendSurface(code, entryPoints, SymDict.empty, SymDict.empty, SymDict.empty, false)
+    new(code, entryPoints, uniforms) = BackendSurface(code, entryPoints, uniforms, SymDict.empty, SymDict.empty, false)
+    new(code, entryPoints, uniforms, samplerStates) = BackendSurface(code, entryPoints, uniforms, samplerStates, SymDict.empty, false)
 
 type IGeneratedSurface =
     inherit ISurface

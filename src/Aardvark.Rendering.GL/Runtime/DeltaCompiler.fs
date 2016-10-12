@@ -47,19 +47,19 @@ module DeltaCompiler =
                         yield Instruction.DrawBuffers b.Count (NativePtr.toNativeInt b.Buffers)
 
             //set all modes if needed
-            if prev.DepthTest <> me.DepthTest && me.DepthTest <> null then
-                yield Instructions.setDepthTest me.DepthTest
+            if prev.DepthTestMode <> me.DepthTestMode then
+                yield Instructions.setDepthTest me.DepthTestMode
 
-            if prev.FillMode <> me.FillMode && me.FillMode <> null then
-                yield Instructions.setFillMode me.FillMode
+            if prev.PolygonMode <> me.PolygonMode then
+                yield Instructions.setPolygonMode me.PolygonMode
 
-            if prev.CullMode <> me.CullMode && me.CullMode <> null then
+            if prev.CullMode <> me.CullMode then
                 yield Instructions.setCullMode me.CullMode
 
-            if prev.BlendMode <> me.BlendMode && me.BlendMode <> null then
+            if prev.BlendMode <> me.BlendMode then
                 yield Instructions.setBlendMode me.BlendMode
 
-            if prev.StencilMode <> me.StencilMode && me.StencilMode <> null then
+            if prev.StencilMode <> me.StencilMode then
                 yield Instructions.setStencilMode me.StencilMode
 
             // bind the program (if needed)
@@ -109,7 +109,8 @@ module DeltaCompiler =
 
             // bind the VAO (if needed)
             if prev.VertexArray <> me.VertexArray then
-                yield Instructions.bindVertexArray me.VertexArray
+                let ptr = me.VertexArrayHandle.Handle |> Mod.force 
+                yield Instruction.HBindVertexArray ptr
 
             // bind vertex attribute default values
             for (id,v) in Map.toSeq me.VertexAttributeValues do
@@ -122,12 +123,32 @@ module DeltaCompiler =
             // TODO: surface assumed to be constant here
             let prog = me.Program.Handle.GetValue()
 
+            let isActive = me.IsActive.Handle |> Mod.force
+            let beginMode = me.BeginMode.Handle |> Mod.force
+            let! s = compilerState
+            let stats = NativePtr.toNativeInt s.runtimeStats
+
             match me.IndirectBuffer with
-                | Some ib ->
-                    yield Instructions.bindIndirectBuffer ib
-                    yield Instructions.drawIndirect prog me.Original.Indices ib me.Mode me.IsActive
-                | _ ->
-                    yield Instructions.draw prog me.Original.Indices me.DrawCallInfos.Handle me.Mode me.IsActive
+                | Some indirect ->
+                    match me.IndexBuffer with
+                        | Some (it,_) ->
+                            yield
+                                indirect.Handle |> Mod.map (fun i -> 
+                                    [ Instruction.HDrawElementsIndirect stats isActive beginMode (int it) i.Count i.Buffer.Handle]
+                                )
+                        | None ->
+                            yield
+                                indirect.Handle |> Mod.map (fun i -> 
+                                    [ Instruction.HDrawArraysIndirect stats isActive beginMode i.Count i.Buffer.Handle]
+                                )
+
+                | None ->
+                    let calls = me.DrawCallInfos.Handle |> Mod.force
+                    match me.IndexBuffer with
+                        | Some (it,_) ->
+                            yield Instruction.HDrawElements stats isActive beginMode (int it) calls
+                        | None ->
+                            yield Instruction.HDrawArrays stats isActive beginMode calls
 
         }   
 
@@ -175,7 +196,7 @@ module DeltaCompiler =
                     )
                 )
 
-            yield Instruction.BindVertexArray 0
+            //yield Instruction.BindVertexArray 0
             yield Instruction.BindProgram 0
             yield Instruction.BindBuffer (int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer) 0
 
@@ -183,34 +204,7 @@ module DeltaCompiler =
         }    
 
     let private toCode (s : CompilerState) =
-        let myStats = ref FrameStatistics.Zero
-        let stats = s.info.stats
-        let calls =
-            s.instructions |> List.map (fun i ->
-                match i.IsConstant with
-                    | true -> 
-                        let i = i.GetValue()
-                        let cnt = List.length i
-                        let dStats = { FrameStatistics.Zero with InstructionCount = float cnt; ActiveInstructionCount = float cnt }
-                        stats := !stats + dStats
-                        myStats := !myStats + dStats
-
-                        Mod.constant i
-
-                    | false -> 
-                        let mutable oldCount = 0
-                        i |> Mod.map (fun i -> 
-                            let newCount = List.length i
-                            let dCount = newCount - oldCount
-                            oldCount <- newCount
-                            let dStats = { FrameStatistics.Zero with InstructionCount = float dCount; ActiveInstructionCount = float dCount }
-
-                            stats := !stats + dStats
-                            myStats := !myStats + dStats
-                            i
-                        )
-            )
-
+        let calls = s.instructions
 
         { new IAdaptiveCode<Instruction> with
             member x.Content = calls
@@ -218,14 +212,6 @@ module DeltaCompiler =
                 transact (fun () ->
                     for d in s.disposeActions do d()
                 )
-
-                for o in s.instructions do
-                    for i in o.Inputs do
-                        i.RemoveOutput o
-
-                stats := !stats - !myStats
-                myStats := FrameStatistics.Zero
-
         }
 
 
@@ -247,6 +233,7 @@ module DeltaCompiler =
     let run (info : CompilerInfo) (c : Compiled<unit>) =
         let (s,()) =
             c.runCompile {
+                runtimeStats = info.runtimeStats
                 info = info
                 instructions = []
                 disposeActions = []

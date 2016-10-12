@@ -139,7 +139,8 @@
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y</Command>
+      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y
+xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release" /y</Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Message>copying binaries to bin\Debug</Message>
@@ -201,7 +202,8 @@
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y</Command>
+      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y
+xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release" /y</Command>
       <Message>copying binaries to bin\Debug</Message>
       <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;%(Outputs)</Outputs>
     </CustomBuildStep>

@@ -64,6 +64,7 @@ module Translations =
 
     let toGLComparison (f : DepthTestMode) =
         match f with
+            | DepthTestMode.None -> 0
             | DepthTestMode.Greater -> CompareFunction.Greater |> int
             | DepthTestMode.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
             | DepthTestMode.Less -> CompareFunction.Less |> int

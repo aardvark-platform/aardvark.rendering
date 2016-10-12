@@ -149,6 +149,7 @@ type Runtime(device : Device) as this =
 
 
     interface IRuntime with
+        member x.ResourceManager = failwith ""
         member x.ContextLock = { new IDisposable with member x.Dispose() = () }
 
         // compilation
@@ -215,6 +216,9 @@ type Runtime(device : Device) as this =
 
         member x.CreateMappedBuffer() =
             new MappedBuffer(context) :> IMappedBuffer
+
+        member x.CreateMappedIndirectBuffer(indexed) =
+            failwith "not implemented"
 
         member x.PrepareBuffer (b) =
             context.CreateBuffer(None, b, VkBufferUsageFlags.VertexBufferBit) :> IBackendBuffer

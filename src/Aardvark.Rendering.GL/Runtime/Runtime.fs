@@ -65,6 +65,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     let mutable ctx = ctx
     let mutable manager = if ctx <> null then ResourceManager(ctx, None, shareTextures, shareBuffers) else null
 
+    do if not (isNull ctx) then using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+
     new(ctx) = new Runtime(ctx, false, false)
 
     member x.SupportsUniformBuffers =
@@ -75,6 +77,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         and set c = 
             ctx <- c
             manager <- ResourceManager(ctx, None, shareTextures, shareBuffers)
+            using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+
             //compiler <- Compiler.Compiler(x, c)
             //currentRuntime <- Some (x :> IRuntime)
 
@@ -89,6 +93,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        
+        member x.ResourceManager = manager :> IResourceManager
 
         member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
             x.CreateFramebufferSignature(attachments, images) :> IFramebufferSignature
@@ -156,6 +162,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateMappedBuffer()  =
             x.CreateMappedBuffer ()
 
+        member x.CreateMappedIndirectBuffer(indexed)  =
+            x.CreateMappedIndirectBuffer (indexed)
+
 
     member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
         let attachments = Map.ofSeq (SymDict.toSeq attachments)
@@ -187,9 +196,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
     member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) = 
-        match SurfaceCompilers.compile ctx signature s with
-            | Success prog -> prog
-            | Error e -> failwith e
+        using ctx.ResourceLock (fun d -> 
+            match SurfaceCompilers.compile ctx signature s with
+                | Success prog -> prog  
+                | Error e -> failwith e
+        )
+
+
 
     member x.DeleteTexture (t : Texture) = 
         ctx.Delete t
@@ -400,6 +413,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         ctx.CreateRenderbuffer(size, format, samples)
 
     member x.CreateMappedBuffer() : IMappedBuffer =
-        new MappedBuffer(ctx) :> _
+        ctx.CreateMappedBuffer()
+
+
+    member x.CreateMappedIndirectBuffer(indexed : bool) : IMappedIndirectBuffer =
+        ctx.CreateMappedIndirectBuffer(indexed)
 
     new() = new Runtime(null)

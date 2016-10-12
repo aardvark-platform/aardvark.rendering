@@ -8,6 +8,15 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 
 
+
+type IOutputMod<'a> =
+    inherit IMod<'a>
+    abstract member LastStatistics : FrameStatistics
+    abstract member Acquire : unit -> unit
+    abstract member Release : unit -> unit
+
+
+
 type ResourceInfo = 
     struct
         val mutable public AllocatedSize : Mem
@@ -139,19 +148,23 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
                 updateStats + stats
 
     member x.AddRef() =
-        if Interlocked.Increment(&refCount) = 1 then
-            x.ForceUpdate null |> ignore
+        lock x (fun () -> 
+            if Interlocked.Increment(&refCount) = 1 then
+                x.ForceUpdate null |> ignore
+        )
 
     member x.RemoveRef() =
-        if Interlocked.Decrement(&refCount) = 0 then
-            onDispose.OnNext()
-            x.Destroy handle.Value
-            current <- None
-            info <- ResourceInfo.Zero
-            transact (fun () -> 
-                x.MarkOutdated()
-                handle.Value <- Unchecked.defaultof<_>
-            )
+        lock x (fun () -> 
+            if Interlocked.Decrement(&refCount) = 0 then
+                onDispose.OnNext()
+                x.Destroy handle.Value
+                current <- None
+                info <- ResourceInfo.Zero
+                transact (fun () -> 
+                    x.MarkOutdated()
+                    handle.Value <- Unchecked.defaultof<_>
+                )
+        )
 
     member x.Update(caller : IAdaptiveObject) =
         x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () ->

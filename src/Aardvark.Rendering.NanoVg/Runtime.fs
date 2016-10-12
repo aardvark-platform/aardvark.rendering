@@ -7,7 +7,7 @@ open NanoVgSharp
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.Operators
-open Aardvark.Base.Monads.State
+open Aardvark.Base.Monads.StateOld
 open Aardvark.Rendering.GL
 
 module internal Interpreter =
@@ -444,6 +444,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     interface IRenderTask with
         member x.FramebufferSignature = None
         member x.Runtime = runtime :> IRuntime |> Some
+        member x.Update(caller) = FrameStatistics.Zero
         member x.Run(caller, fbo) = 
             x.Run(caller, fbo)
             FrameStatistics.Zero
@@ -452,6 +453,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
             x.Dispose()
 
         member x.FrameId = frameId
+        member x.Use f = lock x f
 
 [<Extension; AbstractClass; Sealed>]
 type LowLevelRuntimeExtensions private() =

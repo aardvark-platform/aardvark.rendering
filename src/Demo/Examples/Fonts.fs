@@ -1712,8 +1712,7 @@ module Rewrite =
                                         BaseVertex = 0
                                     )
                                    )
-                                |> ArrayBuffer
-                                :> IBuffer
+                                |> IndirectBuffer.ofArray
 
                         let offsets = 
                             arr |> Array.map (fst >> V2f.op_Explicit)

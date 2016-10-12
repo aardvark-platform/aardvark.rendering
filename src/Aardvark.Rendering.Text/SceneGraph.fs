@@ -78,8 +78,7 @@ module Sg =
                                     BaseVertex = 0
                                 )
                                 )
-                            |> ArrayBuffer
-                            :> IBuffer
+                            |> IndirectBuffer.ofArray
 
                     let offsets = 
                         List.zip renderText.offsets renderText.scales
