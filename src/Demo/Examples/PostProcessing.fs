@@ -22,6 +22,7 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering.Interactive
 
+open RenderingSetup
 open Default // makes viewTrafo and other tutorial specicific default creators visible
 
 open Aardvark.Base.Incremental

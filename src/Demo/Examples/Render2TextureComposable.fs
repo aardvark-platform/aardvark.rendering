@@ -23,6 +23,7 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
 
+open RenderingSetup
 open Default // makes viewTrafo and other tutorial specicific default creators visible
 
 module Render2TextureComposable = 

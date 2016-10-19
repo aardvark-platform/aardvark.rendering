@@ -24,7 +24,8 @@ open Aardvark.Base.Monads.State
 
 module ASP =
     open System.Collections.Generic
-
+    let a = Aardvark.SceneGraph.IO.Loader.Empty
+    
     
     type IntersectByReader<'a, 'b, 'c, 'r when 'c : equality>(l : IReader<'a>, r : IReader<'b>, pa : 'a -> 'c, pb : 'b -> 'c, f : 'a -> 'b -> Option<'r>) =
         inherit ASetReaders.AbstractReader<'r>()

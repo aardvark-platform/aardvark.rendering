@@ -73,7 +73,7 @@ module FsiSetup =
         let win = app.CreateSimpleRenderWindow(1)
         let task = app.Runtime.CompileRender(win.FramebufferSignature, Sg.group [])
 
-        win.Text <- @"Aardvark rocks \o/"
+        win.Text <- @"Aaasdfasdfrdvark rocks adfasdf \o/"
         win.Visible <- true 
         win.RenderTask <- task
 
@@ -160,6 +160,6 @@ module FsiSetup =
             if win.RenderTask = Unchecked.defaultof<_> then win.RenderTask <- task
 
 
-        (fun (s:ISg) -> fixupRenderTask () ; transact (fun () -> Mod.change root  s)), win, task
+        (fun (s:ISg) -> fixupRenderTask () ; transact (fun () -> Mod.change root  s); win.Show()), win, task
       
     

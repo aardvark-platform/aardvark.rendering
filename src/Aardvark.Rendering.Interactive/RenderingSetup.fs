@@ -1,18 +1,18 @@
 ﻿namespace Aardvark.Rendering.Interactive
 
+open System
+open Aardvark.Base
+open Aardvark.Base.Incremental
+open Aardvark.Base.Rendering
+open Aardvark.SceneGraph
+open Aardvark.SceneGraph.Semantics
+open Aardvark.Application
+open Aardvark.Application.WinForms
+open Aardvark.Rendering.NanoVg
 
-[<AutoOpen>]
+
 module RenderingSetup =
 
-    open System
-    open Aardvark.Base
-    open Aardvark.Base.Incremental
-    open Aardvark.Base.Rendering
-    open Aardvark.SceneGraph
-    open Aardvark.SceneGraph.Semantics
-
-    open Aardvark.Application
-    open Aardvark.Application.WinForms
 
 
     let setSg, win, mainTask = runInteractive ()
@@ -43,4 +43,8 @@ module RenderingSetup =
             let p = perspective ()
             let cam = Mod.map2 Camera.create vt p
             cam
+
+
+                
+
 
