@@ -13,6 +13,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
+open RenderingSetup
 open Default 
 
 open Aardvark.Base.Incremental

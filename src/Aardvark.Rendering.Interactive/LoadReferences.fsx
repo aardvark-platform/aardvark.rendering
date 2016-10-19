@@ -14,5 +14,11 @@
 #r "Aardvark.Application.WinForms.dll"
 #r "Aardvark.Application.WinForms.GL.dll"
 #r "System.Reactive.Core.dll"
+#r "Aardvark.Rendering.Interactive.dll"
+#r "Aardvark.SceneGraph.IO.dll"
 
-#r @"Aardvark.Rendering.Interactive.dll"
+namespace Aardvark.Rendering.Interactive
+
+[<AutoOpen>]
+module Dirs = 
+    let BinDirectory =  __SOURCE_DIRECTORY__

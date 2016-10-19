@@ -11,6 +11,7 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering.Interactive
 
+open RenderingSetup
 open Default // makes viewTrafo and other tutorial specicific default creators visible
 
 open System.Collections.Generic
@@ -18,7 +19,6 @@ open Aardvark.Base.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Default 
 
 module GeometrySet = 
 

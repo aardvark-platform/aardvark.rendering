@@ -93,6 +93,9 @@ module SgFSharp =
         let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) = 
             texture DefaultSemantic.DiffuseColorTexture (Mod.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
+        let fileTexture (sym : Symbol) (path : string) (wantMipMaps : bool) (sg : ISg) = 
+            texture sym (Mod.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
+
         let scopeDependentTexture (sem : Symbol) (tex : Scope -> IMod<ITexture>) (sg : ISg) =
             Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sem, fun s -> tex s :> IMod]), sg) :> ISg
 
@@ -458,6 +461,8 @@ module SgFSharp =
         let normalize sg = sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
 
         let loadAsync (fboSignature : IFramebufferSignature) (sg : ISg) = Sg.AsyncLoadApplicator(fboSignature, Mod.constant sg) :> ISg
+
+        let adapter (o : obj) = Sg.AdapterNode(o) :> ISg
 
         let overlay (task : IRenderTask) =
             Sg.OverlayNode(task) :> ISg

@@ -22,15 +22,6 @@ module NaiveLod =
         new(viewDecider : System.Func<LodScope, bool>, low : ISg, high : ISg) = 
             LodNode((fun t -> viewDecider.Invoke t), Mod.constant low, Mod.constant high)
 
-
-//    type ViewFrustumCullNode(sg : IMod<ISg>) =
-//        interface IApplicator with
-//            member x.Child = sg
-//        member x.Child = sg
-//
-//        new(s : ISg) = ViewFrustumCullNode(Mod.constant s)
-//        new(s : IEvent<ISg>) = ViewFrustumCullNode(Mod.fromEvent  s)
-
     module Sg =
 
         let loD (low : ISg) (high : ISg) (decider : LodScope -> bool) = 

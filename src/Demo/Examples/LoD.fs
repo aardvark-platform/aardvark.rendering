@@ -10,6 +10,7 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering.Interactive
 
+open RenderingSetup
 
 open System.Collections.Generic
 open Aardvark.Base.Rendering

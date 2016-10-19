@@ -735,98 +735,98 @@ module TextureUploadExtensions =
                 ]
 
         module TextureFormat =
-            let ofFormatAndType =
-                LookupTable.lookupTable [
-                     (PixelFormat.Bgr, PixelType.UnsignedByte), TextureFormat.Bgr8 
-                     (PixelFormat.Bgra, PixelType.UnsignedByte), TextureFormat.Bgra8 
-                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Rgb8 
-                     (PixelFormat.Rgb, PixelType.UnsignedShort), TextureFormat.Rgb16 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Rgba8 
-                     (PixelFormat.Rgba, PixelType.UnsignedInt1010102), TextureFormat.Rgb10A2 
-                     (PixelFormat.Rgba, PixelType.UnsignedShort), TextureFormat.Rgba16 
-                     (PixelFormat.DepthComponent, PixelType.HalfFloat), TextureFormat.DepthComponent16 
-                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent24 
-                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent32 
-                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.CompressedRed 
-                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.CompressedRg 
-                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.R8 
-                     (PixelFormat.Red, PixelType.UnsignedShort), TextureFormat.R16 
-                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.Rg8 
-                     (PixelFormat.Rg, PixelType.UnsignedShort), TextureFormat.Rg16 
-                     (PixelFormat.Red, PixelType.HalfFloat), TextureFormat.R16f 
-                     (PixelFormat.Red, PixelType.Float), TextureFormat.R32f 
-                     (PixelFormat.Rg, PixelType.HalfFloat), TextureFormat.Rg16f 
-                     (PixelFormat.Rg, PixelType.Float), TextureFormat.Rg32f 
-                     (PixelFormat.Red, PixelType.Byte), TextureFormat.R8i 
-                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.R8ui 
-                     (PixelFormat.Red, PixelType.Short), TextureFormat.R16i 
-                     (PixelFormat.Red, PixelType.UnsignedShort), TextureFormat.R16ui 
-                     (PixelFormat.Red, PixelType.Int), TextureFormat.R32i 
-                     (PixelFormat.Red, PixelType.UnsignedInt), TextureFormat.R32ui 
-                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.Rg8i 
-                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.Rg8ui 
-                     (PixelFormat.Rg, PixelType.Short), TextureFormat.Rg16i 
-                     (PixelFormat.Rg, PixelType.UnsignedShort), TextureFormat.Rg16ui 
-                     (PixelFormat.Rg, PixelType.Int), TextureFormat.Rg32i 
-                     (PixelFormat.Rg, PixelType.UnsignedInt), TextureFormat.Rg32ui 
-                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedRgbS3tcDxt1Ext 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt1Ext 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt3Ext 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt5Ext 
-                     (PixelFormat.Alpha, PixelType.UnsignedByte), TextureFormat.CompressedAlpha 
-                     (PixelFormat.Luminance, PixelType.UnsignedByte), TextureFormat.CompressedLuminance 
-                     (PixelFormat.LuminanceAlpha, PixelType.UnsignedByte), TextureFormat.CompressedLuminanceAlpha 
-                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedRgb 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgba 
-                     (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev), TextureFormat.DepthStencil 
-
-                     (PixelFormat.Rgba, PixelType.Float), TextureFormat.Rgba32f 
-                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.Rgb32f 
-                     (PixelFormat.Rgba, PixelType.HalfFloat), TextureFormat.Rgba16f 
-                     (PixelFormat.Rgb, PixelType.HalfFloat), TextureFormat.Rgb16f 
-                     (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev), TextureFormat.Depth24Stencil8 
-                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Srgb 
-                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Srgb8 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.SrgbAlpha 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Srgb8Alpha8 
-
-                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedSrgb 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlpha 
-                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedSrgbS3tcDxt1Ext 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext 
-                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent32f 
-                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.Depth32fStencil8 
-                     (PixelFormat.Rgba, PixelType.UnsignedInt), TextureFormat.Rgba32ui 
-                     (PixelFormat.Rgb, PixelType.UnsignedInt), TextureFormat.Rgb32ui 
-                     (PixelFormat.Rgba, PixelType.UnsignedShort), TextureFormat.Rgba16ui 
-                     (PixelFormat.Rgb, PixelType.UnsignedShort), TextureFormat.Rgb16ui 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Rgba8ui 
-                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Rgb8ui 
-                     (PixelFormat.Rgba, PixelType.Int), TextureFormat.Rgba32i 
-                     (PixelFormat.Rgb, PixelType.Int), TextureFormat.Rgb32i 
-                     (PixelFormat.Rgba, PixelType.Short), TextureFormat.Rgba16i 
-                     (PixelFormat.Rgb, PixelType.Short), TextureFormat.Rgb16i 
-                     (PixelFormat.Rgba, PixelType.Byte), TextureFormat.Rgba8i 
-                     (PixelFormat.Rgb, PixelType.Byte), TextureFormat.Rgb8i 
-                     (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev), TextureFormat.Float32UnsignedInt248Rev 
-                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.CompressedRedRgtc1 
-                     (PixelFormat.Red, PixelType.Byte), TextureFormat.CompressedSignedRedRgtc1 
-                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.CompressedRgRgtc2 
-                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.CompressedSignedRgRgtc2 
-                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaBptcUnorm 
-                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.CompressedRgbBptcSignedFloat 
-                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.CompressedRgbBptcUnsignedFloat 
-                     (PixelFormat.Red, PixelType.Byte), TextureFormat.R8Snorm 
-                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.Rg8Snorm 
-                     (PixelFormat.Rgb, PixelType.Byte), TextureFormat.Rgb8Snorm 
-                     (PixelFormat.Rgba, PixelType.Byte), TextureFormat.Rgba8Snorm 
-                     (PixelFormat.Red, PixelType.Short), TextureFormat.R16Snorm 
-                     (PixelFormat.Rg, PixelType.Short), TextureFormat.Rg16Snorm 
-                     (PixelFormat.Rgb, PixelType.Short), TextureFormat.Rgb16Snorm 
-                     (PixelFormat.Rgba, PixelType.Short), TextureFormat.Rgba16Snorm 
-                ]
+//            let ofFormatAndType =
+//                LookupTable.lookupTable [
+//                     (PixelFormat.Bgr, PixelType.UnsignedByte), TextureFormat.Bgr8 
+//                     (PixelFormat.Bgra, PixelType.UnsignedByte), TextureFormat.Bgra8 
+//                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Rgb8 
+//                     (PixelFormat.Rgb, PixelType.UnsignedShort), TextureFormat.Rgb16 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Rgba8 
+//                     (PixelFormat.Rgba, PixelType.UnsignedInt1010102), TextureFormat.Rgb10A2 
+//                     (PixelFormat.Rgba, PixelType.UnsignedShort), TextureFormat.Rgba16 
+//                     (PixelFormat.DepthComponent, PixelType.HalfFloat), TextureFormat.DepthComponent16 
+//                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent24 
+//                     //(PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent32 
+//                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.CompressedRed 
+//                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.CompressedRg 
+//                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.R8 
+//                     (PixelFormat.Red, PixelType.UnsignedShort), TextureFormat.R16 
+//                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.Rg8 
+//                     (PixelFormat.Rg, PixelType.UnsignedShort), TextureFormat.Rg16 
+//                     (PixelFormat.Red, PixelType.HalfFloat), TextureFormat.R16f 
+//                     (PixelFormat.Red, PixelType.Float), TextureFormat.R32f 
+//                     (PixelFormat.Rg, PixelType.HalfFloat), TextureFormat.Rg16f 
+//                     (PixelFormat.Rg, PixelType.Float), TextureFormat.Rg32f 
+//                     (PixelFormat.Red, PixelType.Byte), TextureFormat.R8i 
+//                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.R8ui 
+//                     (PixelFormat.Red, PixelType.Short), TextureFormat.R16i 
+//                     (PixelFormat.Red, PixelType.UnsignedShort), TextureFormat.R16ui 
+//                     (PixelFormat.Red, PixelType.Int), TextureFormat.R32i 
+//                     (PixelFormat.Red, PixelType.UnsignedInt), TextureFormat.R32ui 
+//                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.Rg8i 
+//                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.Rg8ui 
+//                     (PixelFormat.Rg, PixelType.Short), TextureFormat.Rg16i 
+//                     (PixelFormat.Rg, PixelType.UnsignedShort), TextureFormat.Rg16ui 
+//                     (PixelFormat.Rg, PixelType.Int), TextureFormat.Rg32i 
+//                     (PixelFormat.Rg, PixelType.UnsignedInt), TextureFormat.Rg32ui 
+//                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedRgbS3tcDxt1Ext 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt1Ext 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt3Ext 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaS3tcDxt5Ext 
+//                     (PixelFormat.Alpha, PixelType.UnsignedByte), TextureFormat.CompressedAlpha 
+//                     (PixelFormat.Luminance, PixelType.UnsignedByte), TextureFormat.CompressedLuminance 
+//                     (PixelFormat.LuminanceAlpha, PixelType.UnsignedByte), TextureFormat.CompressedLuminanceAlpha 
+//                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedRgb 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgba 
+//                     (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev), TextureFormat.DepthStencil 
+//
+//                     (PixelFormat.Rgba, PixelType.Float), TextureFormat.Rgba32f 
+//                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.Rgb32f 
+//                     (PixelFormat.Rgba, PixelType.HalfFloat), TextureFormat.Rgba16f 
+//                     (PixelFormat.Rgb, PixelType.HalfFloat), TextureFormat.Rgb16f 
+//                     (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev), TextureFormat.Depth24Stencil8 
+//                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Srgb 
+//                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Srgb8 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.SrgbAlpha 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Srgb8Alpha8 
+//
+//                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedSrgb 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlpha 
+//                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.CompressedSrgbS3tcDxt1Ext 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext 
+//                     //(PixelFormat.DepthComponent, PixelType.Float), TextureFormat.DepthComponent32f 
+//                     (PixelFormat.DepthComponent, PixelType.Float), TextureFormat.Depth32fStencil8 
+//                     (PixelFormat.Rgba, PixelType.UnsignedInt), TextureFormat.Rgba32ui 
+//                     (PixelFormat.Rgb, PixelType.UnsignedInt), TextureFormat.Rgb32ui 
+//                     (PixelFormat.Rgba, PixelType.UnsignedShort), TextureFormat.Rgba16ui 
+//                     (PixelFormat.Rgb, PixelType.UnsignedShort), TextureFormat.Rgb16ui 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.Rgba8ui 
+//                     (PixelFormat.Rgb, PixelType.UnsignedByte), TextureFormat.Rgb8ui 
+//                     (PixelFormat.Rgba, PixelType.Int), TextureFormat.Rgba32i 
+//                     (PixelFormat.Rgb, PixelType.Int), TextureFormat.Rgb32i 
+//                     (PixelFormat.Rgba, PixelType.Short), TextureFormat.Rgba16i 
+//                     (PixelFormat.Rgb, PixelType.Short), TextureFormat.Rgb16i 
+//                     (PixelFormat.Rgba, PixelType.Byte), TextureFormat.Rgba8i 
+//                     (PixelFormat.Rgb, PixelType.Byte), TextureFormat.Rgb8i 
+//                     (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev), TextureFormat.Float32UnsignedInt248Rev 
+//                     (PixelFormat.Red, PixelType.UnsignedByte), TextureFormat.CompressedRedRgtc1 
+//                     (PixelFormat.Red, PixelType.Byte), TextureFormat.CompressedSignedRedRgtc1 
+//                     (PixelFormat.Rg, PixelType.UnsignedByte), TextureFormat.CompressedRgRgtc2 
+//                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.CompressedSignedRgRgtc2 
+//                     (PixelFormat.Rgba, PixelType.UnsignedByte), TextureFormat.CompressedRgbaBptcUnorm 
+//                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.CompressedRgbBptcSignedFloat 
+//                     (PixelFormat.Rgb, PixelType.Float), TextureFormat.CompressedRgbBptcUnsignedFloat 
+//                     (PixelFormat.Red, PixelType.Byte), TextureFormat.R8Snorm 
+//                     (PixelFormat.Rg, PixelType.Byte), TextureFormat.Rg8Snorm 
+//                     (PixelFormat.Rgb, PixelType.Byte), TextureFormat.Rgb8Snorm 
+//                     (PixelFormat.Rgba, PixelType.Byte), TextureFormat.Rgba8Snorm 
+//                     (PixelFormat.Red, PixelType.Short), TextureFormat.R16Snorm 
+//                     (PixelFormat.Rg, PixelType.Short), TextureFormat.Rg16Snorm 
+//                     (PixelFormat.Rgb, PixelType.Short), TextureFormat.Rgb16Snorm 
+//                     (PixelFormat.Rgba, PixelType.Short), TextureFormat.Rgba16Snorm 
+//                ]
 
             let toFormatAndType =
                 LookupTable.lookupTable [
@@ -1547,7 +1547,7 @@ module TextureExtensions =
                     | Some t, Some fmt -> PixFormat(t, fmt) |> Some
                     | _ -> None
 
-        let devilLock = 
+        let devilLock =
             let fi = typeof<PixImage>.GetField("s_devilLock", Reflection.BindingFlags.Static ||| Reflection.BindingFlags.NonPublic)
             fi.GetValue(null)
 
