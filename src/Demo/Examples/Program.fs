@@ -12,9 +12,9 @@ let main args =
 
     //Playground.run() |> ignore // former hacked helloWorld example
     //HelloWorld.run() |> ignore
-    NullBufferTest.run() |> ignore
+    //NullBufferTest.run() |> ignore
 
-    //Examples.Tutorial.run()
+    Examples.Tutorial.run()
     //Examples.Render2TexturePrimitive.run()
     //Examples.Render2TextureComposable.run()
     //Examples.Render2TexturePrimiviteChangeableSize.run()

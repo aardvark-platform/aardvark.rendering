@@ -39,9 +39,6 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open RenderingSetup
-open Default // makes viewTrafo and other tutorial specicific default creators visible
-
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -49,6 +46,8 @@ open Aardvark.Application
 module Tutorial = 
 
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+
+    let win = Interactive.Window
 
     let quadSg =
         let quad =
@@ -60,26 +59,42 @@ module Tutorial =
         // create a scenegraph given the indexedGeometry containing a quad
         quad |> Sg.ofIndexedGeometry
 
+
+    let cameraView = 
+        CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
+            |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+            |> Mod.map CameraView.viewTrafo
+
+    let projection = 
+        win.Sizes 
+            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+            |> Mod.map Frustum.projTrafo
+
+    // for construction view and projection matrices there are convinience functions in the Interactive class, e.g.
+    let cameraView_ = Interactive.ControlledViewTrafo (V3d.III * 3.0) V3d.Zero
+    // or
+    let projection_ = Interactive.DefaultProjTrafo
+
     let sg =
         quadSg |> Sg.effect [
                 DefaultSurfaces.trafo |> toEffect                   // compose shaders by using FShade composition.
                 DefaultSurfaces.constantColor C4f.Red |> toEffect   // use standard trafo + map a constant color to each fragment
                 ]
             // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
-            |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo ) 
+            |> Sg.viewTrafo cameraView
             // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
             // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
-            |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
+            |> Sg.projTrafo projection
 
     let run () =
         FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
-        setSg sg
-        win.Run()
+        Interactive.SceneGraph <- sg
+        Interactive.RunMainLoop()
 
 open Tutorial
 
 #if INTERACTIVE
-setSg sg
-printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
+Interactive.SceneGraph <- sg
+printfn "Done. Modify sg and set Interactive.SceneGraph again in order to see the modified rendering results."
 #else
 #endif

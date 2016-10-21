@@ -55,3 +55,24 @@ module NewShit =
                 let win, ref = getWindowAndSg()
                 transact (fun () -> ref.Value <- sg)
                 if not win.Visible then win.Show()
+
+        static member ControlledCameraView (eye : V3d) (lookAt : V3d) =
+            let win, _ = getWindowAndSg()
+            let view =  CameraView.LookAt(eye,lookAt, V3d.OOI)
+            DefaultCameraController.control win.Mouse win.Keyboard win.Time view
+
+        static member DefaultCameraView () = Interactive.ControlledViewTrafo (V3d.III * 3.0) V3d.Zero
+
+        static member ControlledViewTrafo  (eye : V3d) (lookAt : V3d) =
+            Interactive.ControlledCameraView eye lookAt |> Mod.map CameraView.viewTrafo
+
+        static member DefaultFrustum =
+            let win, _ = getWindowAndSg()
+            win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 100.0 (float s.X / float s.Y))
+
+        static member DefaultProjTrafo =
+            let win, _ = getWindowAndSg()
+            win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 100.0 (float s.X / float s.Y) |> Frustum.projTrafo)
+
+        static member RunMainLoop() =
+            System.Windows.Forms.Application.Run()
