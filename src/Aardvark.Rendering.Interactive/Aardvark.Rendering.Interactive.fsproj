@@ -63,12 +63,10 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="FsiSetup.fs" />
     <Compile Include="Utilities.fs" />
-    <Compile Include="NewSetup.fs" />
-    <Compile Include="RenderingSetup.fs" />
+    <Compile Include="Interactive.fs" />
     <None Include="LoadReferences.fsx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="DemoSetup.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

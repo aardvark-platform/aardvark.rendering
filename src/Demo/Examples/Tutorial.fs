@@ -80,10 +80,7 @@ module Tutorial =
                 DefaultSurfaces.trafo |> toEffect                   // compose shaders by using FShade composition.
                 DefaultSurfaces.constantColor C4f.Red |> toEffect   // use standard trafo + map a constant color to each fragment
                 ]
-            // viewTrafo () creates camera controls and returns IMod<ICameraView> which we project to its view trafo component by using CameraView.viewTrafo
             |> Sg.viewTrafo cameraView
-            // perspective () connects a proj trafo to the current main window (in order to take account for aspect ratio when creating the matrices.
-            // Again, perspective() returns IMod<Frustum> which we project to its matrix by mapping ofer Frustum.projTrafo.
             |> Sg.projTrafo projection
 
     let run () =

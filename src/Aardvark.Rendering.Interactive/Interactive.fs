@@ -16,9 +16,10 @@ module NewShit =
         static let app = new OpenGlApplication()
         static let mutable window = None
         static let emptySg = Sg.ofList []
+        static let mutable samples = 8
 
-        static let createWindow() =
-            let win = app.CreateSimpleRenderWindow(8)
+        static let createWindow () =
+            let win = app.CreateSimpleRenderWindow(samples)
             win.Text <- "Aardvark Interactive Session Setup"
             let sg = Mod.init emptySg
             let task = 
@@ -33,16 +34,21 @@ module NewShit =
             )
             win, sg
 
-        static let getWindowAndSg() =
+        static let getWindowAndSg () =
             match window with
                 | None ->
-                    let t = createWindow()
+                    let t = createWindow ()
                     window <- Some t
                     t
                 | Some t ->
                     t
 
-        static member Window = getWindowAndSg() |> fst :> IRenderWindow
+        static member Window = getWindowAndSg ()  |> fst :> IRenderWindow
+
+        static member Samples 
+            with get () = samples
+            and set v = samples <- v
+
         static member Runtime = app.Runtime :> IRuntime
         static member Keyboard = Interactive.Window.Keyboard
         static member Mouse = Interactive.Window.Mouse
@@ -61,7 +67,11 @@ module NewShit =
             let view =  CameraView.LookAt(eye,lookAt, V3d.OOI)
             DefaultCameraController.control win.Mouse win.Keyboard win.Time view
 
-        static member DefaultCameraView () = Interactive.ControlledViewTrafo (V3d.III * 3.0) V3d.Zero
+        static member DefaultCameraView = 
+            Interactive.ControlledCameraView (V3d.III * 3.0) V3d.Zero
+
+        static member DefaultViewTrafo =
+            Interactive.ControlledViewTrafo (V3d.III * 3.0) V3d.Zero
 
         static member ControlledViewTrafo  (eye : V3d) (lookAt : V3d) =
             Interactive.ControlledCameraView eye lookAt |> Mod.map CameraView.viewTrafo
@@ -73,6 +83,10 @@ module NewShit =
         static member DefaultProjTrafo =
             let win, _ = getWindowAndSg()
             win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.01 100.0 (float s.X / float s.Y) |> Frustum.projTrafo)
+
+        static member DefaultCamera =
+            Mod.map2 (fun c f -> { cameraView = c; frustum = f }) Interactive.DefaultCameraView Interactive.DefaultFrustum
+
 
         static member RunMainLoop() =
             System.Windows.Forms.Application.Run()

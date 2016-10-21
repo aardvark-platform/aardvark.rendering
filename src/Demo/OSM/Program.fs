@@ -326,7 +326,7 @@ let main argv =
     ) |> ignore
 
     let sg = sg |> Sg.fillMode mode
-                |> Sg.vertexBufferValue (Symbol.Create "Hugo") (Mod.constant V4f.IOOI)
+                |> Sg.vertexBufferValue (Symbol.Create "Hugo") (Mod.constant V4f.IIII)
     //let sg = Sg.VertexAttributeApplicator(Symbol.Create "Hugo", BufferView(Mod.constant (NullBuffer(V4f.IOII) :> IBuffer), typeof<V4f>), sg) :> ISg
     // compile the rendertask and pass it to the window
 

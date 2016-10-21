@@ -74,6 +74,11 @@
     <Compile Include="Staging\Ag.fs" />
     <Compile Include="Staging\Heap.fs" />
     <Compile Include="Staging\Geometry.fs" />
+    <Compile Include="Experiments\ASP.fs" />
+    <Compile Include="Experiments\Fonts.fs" />
+    <Compile Include="Experiments\NullBufferTest.fs" />
+    <Compile Include="Experiments\Playground.fs" />
+    <Compile Include="Experiments\Vulkan.fs" />
     <Compile Include="PGM.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
@@ -85,6 +90,12 @@
     <Reference Include="mscorlib" />
     <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
       <Private>True</Private>
+    </Reference>
+    <Reference Include="OpenTK">
+      <HintPath>..\..\..\lib\Release\OpenTK.dll</HintPath>
+    </Reference>
+    <Reference Include="OpenTK.Compatibility">
+      <HintPath>..\..\..\lib\Release\OpenTK.Compatibility.dll</HintPath>
     </Reference>
     <Reference Include="QuotationCompiler">
       <HintPath>..\..\..\lib\Release\QuotationCompiler.dll</HintPath>
@@ -115,6 +126,11 @@
       <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
+      <Name>Aardvark.Rendering.Vulkan</Name>
+      <Project>{67c2dd0d-8892-4953-b916-ced3aed034b1}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj">
       <Name>Aardvark.SceneGraph.IO</Name>
       <Project>{d7b02e89-dc77-462d-a3d4-a28daa403aaf}</Project>
@@ -128,6 +144,11 @@
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
       <Name>Aardvark.Application.WinForms.GL</Name>
       <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj">
+      <Name>Aardvark.Application.WinForms.Vulkan</Name>
+      <Project>{be9c26c3-b846-4356-923d-12e7d88ab309}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">

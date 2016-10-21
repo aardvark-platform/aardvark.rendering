@@ -1,3 +1,8 @@
+namespace ASP
+
+open Aardvark.Base
+open Aardvark.Base.Incremental
+
 
 module ASP =
     open System.Collections.Generic
