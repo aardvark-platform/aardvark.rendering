@@ -9,6 +9,7 @@ open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Application
 open Aardvark.Application.WinForms
+open Aardvark.Rendering.NanoVg
 
 type private ChangeableRenderTask() =
     inherit AbstractRenderTask()
@@ -42,12 +43,17 @@ type DemoAttribute(name : Option<string>) =
     new() = DemoAttribute(None)    
 
 [<AllowNullLiteral; AttributeUsage(AttributeTargets.Method)>]
+type CategoryAttribute(name : string) = 
+    inherit System.Attribute()   
+    member x.Name = name
+     
+
+
+[<AllowNullLiteral; AttributeUsage(AttributeTargets.Method)>]
 type DescriptionAttribute(desc : string) = 
     inherit System.Attribute()   
     member x.Description = desc
     
-
-
 
 type App private () =
     
@@ -79,6 +85,7 @@ type App private () =
     static member Keyboard = getWin().Keyboard
     static member Mouse = getWin().Mouse
     static member Time = getWin().Time
+    static member Size = getWin().Sizes
     static member WithCam sg = withCam sg
 
     static member run (task : IRenderTask) =
@@ -102,15 +109,19 @@ type App private () =
                 |> Seq.filter (fun (mi,_) -> mi.IsStatic)
                 |> Seq.map (fun (mi, n) ->
                     let att = mi.GetCustomAttribute<DescriptionAttribute>()
-
                     let desc = if isNull att then None else Some att.Description
-
+                    
+                    let cat = mi.GetCustomAttribute<CategoryAttribute>()
+                    let cat = if isNull cat then "Global" else cat.Name
+                    
                     match n.Name with
-                        | Some n -> n, desc, mi
-                        | None -> mi.Name, desc, mi
+                        | Some n -> cat, n, desc, mi
+                        | None -> cat, mi.Name, desc, mi
                    )
                 |> HashSet.ofSeq
-                |> Seq.sortBy (fun (a,_,_) -> a)
+                |> Seq.groupBy (fun (c,_,_,_) -> c)
+                |> Seq.sortBy (fun (c,_) -> c)
+                |> Seq.map (fun (c,demos) -> c, demos |> Seq.map (fun (_,a,b,c) -> (a,b,c)) |> Seq.sortBy (fun (a,_,_) -> a) |> Seq.toList )
                 |> Seq.toList
 
         let runDemo(mi : MethodInfo) =
@@ -119,7 +130,7 @@ type App private () =
                 | :? ISg as s ->
                     let w = getWin()
                     let task = app.Value.Runtime.CompileRender(w.FramebufferSignature, BackendConfiguration.NativeOptimized, withCam s)
-                    realTask.Inner <- task
+                    realTask.Inner <- task |> DefaultOverlays.withStatistics
                     w.Show()
 
                 | :? IRenderTask as r -> 
@@ -184,43 +195,52 @@ type App private () =
                 
         )
 
-        let mutable i = 0
-        for (name, desc, mi) in demos do
+        let newRow() =
             let row = new DataGridViewRow()
-            
             let c0 = new DataGridViewImageCell(true)
             c0.ImageLayout <- DataGridViewImageCellLayout.Normal
-            
             c0.Value <- form.Icon
             row.Cells.Add(c0) |> ignore
             row.Height <- form.Icon.Height
-
-            let cell = new DataGridViewTextBoxCell()
-            
-            cell.Tag <- mi
-            cell.Value <- name
-            let name = mi.DeclaringType.FullName + "." + mi.Name
-            
-            cell.ToolTipText <-
-                match desc with 
-                    | Some desc ->  name + "\r\n\r\n" + desc
-                    | _ -> name
-
-            
-
-            row.Cells.Add(cell) |> ignore
-
-            
-            
-
-            list.Rows.Add(row) |> ignore
-            cell.ReadOnly <- true
             c0.ReadOnly <- true
-            //let item = new ListViewItem(name, Tag = mi)
-            //item.Bounds <- System.Drawing.Rectangle(item.Bounds.X, item.Bounds.Y, 3000, item.Bounds.Height)
-//            let item = list.Items.Add(name)
-//            item.Tag <- mi
-//            i <- i + 1
+            row
+
+        let mutable i = 0
+        for cat, demos in demos do
+//            let row = newRow()
+//
+////            let cell = new DataGridViewTextBoxCell()
+////            cell.Value <- cat
+////            
+//            
+//            row.Cells.Add(cell) |> ignore
+//            cell.ReadOnly <- true
+
+
+            for (name, desc, mi) in demos do
+                let row = newRow()
+
+                let cell = new DataGridViewTextBoxCell()
+            
+                cell.Tag <- mi
+                cell.Value <- name
+                let name = mi.DeclaringType.FullName + "." + mi.Name
+            
+                cell.ToolTipText <-
+                    match desc with 
+                        | Some desc ->  name + "\r\n\r\n" + desc
+                        | _ -> name
+
+            
+
+                row.Cells.Add(cell) |> ignore
+
+            
+            
+
+                list.Rows.Add(row) |> ignore
+                cell.ReadOnly <- true
+
 
 
         list.CellMouseDoubleClick.Add (fun c ->

@@ -19,6 +19,7 @@ type TextureParams =
 module TextureParams =
     
     let empty = { wantMipMaps = false; wantSrgb = false; wantCompressed = false}
+    let compressed = { wantMipMaps = false; wantSrgb = false; wantCompressed = true }
 
 type BitmapTexture(bmp : System.Drawing.Bitmap, textureParams : TextureParams) =
     [<Obsolete("use texture params instead")>]
@@ -62,7 +63,7 @@ type FileTexture(fileName : string, textureParams : TextureParams) =
                 false
 
     new(fileName : string, wantMipMaps : bool) = 
-        FileTexture(fileName, { TextureParams.empty with wantMipMaps = wantMipMaps}  )
+        FileTexture(fileName, { TextureParams.compressed with wantMipMaps = wantMipMaps}  )
 
 type NullTexture() =
     interface ITexture with 

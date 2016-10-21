@@ -115,6 +115,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
     let updateStats = { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
 
     let mutable info = ResourceInfo.Zero
+    let lockObj = obj()
 
     abstract member Create : Option<'h> -> 'h * FrameStatistics
     abstract member Destroy : 'h -> unit
@@ -148,13 +149,13 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
                 updateStats + stats
 
     member x.AddRef() =
-        lock x (fun () -> 
+        lock lockObj (fun () -> 
             if Interlocked.Increment(&refCount) = 1 then
                 x.ForceUpdate null |> ignore
         )
 
     member x.RemoveRef() =
-        lock x (fun () -> 
+        lock lockObj (fun () -> 
             if Interlocked.Decrement(&refCount) = 0 then
                 onDispose.OnNext()
                 x.Destroy handle.Value

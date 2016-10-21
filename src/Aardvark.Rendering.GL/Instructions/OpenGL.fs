@@ -170,6 +170,7 @@ module OpenGl =
                       | TriangleStripAdjacency = 0x000D
                       | TrianglesAdjacency = 0x000C
                       | Patches = 0x000E
+                      | QuadList = 0x0007
 
         type IndexType = UnsignedByte = 0x1401
                        | UnsignedShort = 0x1403

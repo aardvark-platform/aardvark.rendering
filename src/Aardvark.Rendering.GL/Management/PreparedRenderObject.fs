@@ -9,6 +9,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
+open OpenTK.Graphics.OpenGL4
 
 
 [<CustomEquality;CustomComparison>]
@@ -351,6 +352,7 @@ type ResourceManagerExtensions private() =
         let program = x.CreateSurface(fboSignature, rj.Surface)
         let prog = program.Handle.GetValue()
 
+        GL.Check "[Prepare] Create Surface"
 
         let createdViews = System.Collections.Generic.List()
 
@@ -362,6 +364,7 @@ type ResourceManagerExtensions private() =
                    )
                 |> Map.ofList
 
+        GL.Check "[Prepare] Uniform Buffers"
 
         // partition all requested (top-level) uniforms into Textures and other
         let textureUniforms, otherUniforms = 
@@ -427,6 +430,8 @@ type ResourceManagerExtensions private() =
                     )
                 |> Map.ofList
 
+        GL.Check "[Prepare] Textures"
+
         // create all requested UniformLocations
         let uniforms =
             otherUniforms
@@ -438,6 +443,8 @@ type ResourceManagerExtensions private() =
                         None
                    )
                 |> Map.ofList
+
+        GL.Check "[Prepare] Create Uniform Location"
 
         // create all requested vertex-/instance-inputs
         let buffers =
@@ -462,6 +469,7 @@ type ResourceManagerExtensions private() =
                                             failwithf "could not get attribute %A" v.semantic
                    )
 
+        GL.Check "[Prepare] Buffers"
 
         // create the index buffer (if present)
         let index =
@@ -482,13 +490,19 @@ type ResourceManagerExtensions private() =
                 | None -> None
 
 
+        GL.Check "[Prepare] Indices"
+
         let indirect =
             if isNull rj.IndirectBuffer then None
             else x.CreateIndirectBuffer(Option.isSome rj.Indices, rj.IndirectBuffer) |> Some
 
+        GL.Check "[Prepare] Indirect Buffer"
+
         // create the VertexArrayObject
         let vao =
             x.CreateVertexArrayObject(buffers, index)
+
+        GL.Check "[Prepare] VAO"
 
         let attributeValues =
             buffers 

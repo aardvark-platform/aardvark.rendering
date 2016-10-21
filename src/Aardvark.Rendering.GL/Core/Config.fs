@@ -37,7 +37,7 @@ module Config =
     /// The number of resource context to be created for a default
     /// rendering context instance.
     /// </summary>
-    let NumberOfResourceContexts = 2
+    let NumberOfResourceContexts = 4
 
     /// <summary>
     /// defines whether the GL context should log errors
@@ -103,11 +103,11 @@ module Error =
     // with this inline function leads to a complete elimination of
     // the enire call including the allocation of its arguments
     type GL with
-        static member inline Check str =
+        static member Check str =
             if Config.CheckErrors then
                 let err = GL.GetError()
                 if err <> ErrorCode.NoError then
-                    Aardvark.Base.Report.Warn("{0}:{1}",err,str)
+                    Aardvark.Base.Report.Warn("{0}: {1}",err,str)
                     //raise <| OpenGLException(err, str)
 
         static member SetupDebugOutput() =

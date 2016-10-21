@@ -94,7 +94,7 @@ module RenderTasks =
 
                 GL.DepthMask(true)
                 GL.StencilMask(0xFFFFFFFFu)
-                GL.Enable(EnableCap.DepthClamp)
+                //GL.Enable(EnableCap.DepthClamp)
                 
                 for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
                     match Map.tryFind sem desc.colorWrite with
@@ -928,7 +928,7 @@ module RenderTasks =
                 runStats <- s::runStats
 
             primitivesGenerated.Stop()
-            GL.Sync()
+            //GL.Sync()
             
             let mutable primitives = primitivesGenerated.Value
 
