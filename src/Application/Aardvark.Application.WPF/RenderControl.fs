@@ -12,7 +12,7 @@ open Aardvark.Application
 open System.Windows.Forms.Integration
 
 type RenderControl() =
-    inherit ContentControl()
+    inherit Border()
 
     let mutable runtime : IRuntime = Unchecked.defaultof<IRuntime>
     let mutable renderTask : Option<IRenderTask> = None
@@ -45,7 +45,7 @@ type RenderControl() =
             | Some i -> failwith "implementation can only be set once per control"
             | None -> ()
 
-        self.Content <- c
+        self.Child <- c
         runtime <- cr.Runtime
 
         match c with
@@ -73,6 +73,9 @@ type RenderControl() =
     override x.OnRenderSizeChanged(e) =
         base.OnRenderSizeChanged(e)
         transact (fun () -> Mod.change sizes (V2i(x.ActualWidth, x.ActualHeight)))
+
+    override x.HitTestCore (hitTestParameters : PointHitTestParameters) =
+        PointHitTestResult(x, hitTestParameters.HitPoint) :> HitTestResult
 
     member x.Implementation
         with get() = match ctrl with | Some c -> c | _ -> null
