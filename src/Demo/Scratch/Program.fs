@@ -105,6 +105,7 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
     App.run()
 
     0 // return an integer exit code
