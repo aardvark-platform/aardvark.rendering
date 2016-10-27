@@ -116,7 +116,7 @@ module private ManagedBufferImplementation =
                         store.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
 
                     lock writer (fun () -> 
-                        if not writer.OutOfDate then
+                        if writer.OutOfDate then
                             writer.Write(range)
                     )
 
@@ -149,7 +149,7 @@ module private ManagedBufferImplementation =
                         store.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
                             
                     lock writer (fun () -> 
-                        if not writer.OutOfDate then
+                        if writer.OutOfDate then
                             writer.Write(range)
                     )
 
