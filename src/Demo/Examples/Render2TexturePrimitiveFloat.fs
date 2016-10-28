@@ -132,7 +132,7 @@ module Render2TexturePrimitiveFloat =
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         Interactive.SceneGraph <- sg
-        win.Run()
+        Interactive.RunMainLoop()
 
 open Render2TexturePrimitiveFloat
 

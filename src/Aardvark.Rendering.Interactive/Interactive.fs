@@ -94,4 +94,5 @@ module NewShit =
 
 
         static member RunMainLoop() =
-            System.Windows.Forms.Application.Run()
+            let w, _ = getWindowAndSg ()
+            System.Windows.Forms.Application.Run w

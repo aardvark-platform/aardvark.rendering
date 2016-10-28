@@ -64,13 +64,13 @@
   <ItemGroup>
     <Compile Include="HelloWorld.fs" />
     <Compile Include="Tutorial.fs" />
+    <Compile Include="PostProcessing.fs" />
+    <Compile Include="Shadows.fs" />
+    <Compile Include="LoD.fs" />
     <Compile Include="Render2TexturePrimitive.fs" />
     <Compile Include="Render2TextureComposable.fs" />
     <Compile Include="Render2TexturePrimitiveChangeableSizes.fs" />
     <Compile Include="Render2TexturePrimitiveFloat.fs" />
-    <Compile Include="PostProcessing.fs" />
-    <Compile Include="Shadows.fs" />
-    <Compile Include="LoD.fs" />
     <Compile Include="AssimpInterop.fs" />
     <Compile Include="LiveDemo.fs" />
     <None Include="LiveDemo.fsx" />

@@ -102,7 +102,7 @@ module Render2TexturePrimiviteChangeableSize =
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         Interactive.SceneGraph <- sg
-        win.Run()
+        Interactive.RunMainLoop()
 
     
 open Render2TexturePrimiviteChangeableSize

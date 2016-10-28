@@ -383,7 +383,7 @@ module AssimpInterop =
     let run () =
         FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
         Interactive.SceneGraph <- sg
-        win.Run()
+        Interactive.RunMainLoop()
 
 open AssimpInterop
 

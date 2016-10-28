@@ -1,4 +1,10 @@
-﻿#I @"../../../bin/Debug"
+﻿
+(* SEE THIS DEMO IN ACTION https://www.youtube.com/watch?v=QjVRJworUOw
+
+
+*)
+
+#I @"../../../bin/Debug"
 #load "LoadReferences.fsx"
 #r "Examples.exe"
 
