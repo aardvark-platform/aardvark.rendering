@@ -200,15 +200,23 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
     let mutable pboSize = 0n
    
 
-    let mutable ping = 
+    let mutable texA = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
         Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, 1, TextureFormat.Rgba8, 0L, false)
 
-    let mutable pong = 
+    let mutable texB = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
         Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, 1, TextureFormat.Rgba8, 0L, false)
+
+    let mutable texC = 
+        use t = ctx.ResourceLock
+        let handle = GL.GenTexture()
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, 1, TextureFormat.Rgba8, 0L, false)
+
+    let mutable fenceAB = 0n
+    let mutable fenceC = 0n
 
     let mutable currentFormat = PixFormat(typeof<obj>, Col.Format.RGBA)
     let mutable currentSize = -V2i.II
@@ -222,7 +230,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
     let mutable mipMapLevels = 0
     let mutable bufferSize = 0n
 
-    let pboLock = obj()
+    let swapLock = obj()
 
     let upload (f : PixFormat) (size : V2i) (data : nativeint) =
         use token = ctx.ResourceLock
@@ -243,48 +251,52 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
             mipMapLevels <- expectedLevels size
             bufferSize <- size.X * size.Y * channels * channelSize |> nativeint
 
-        lock pboLock (fun () ->
-            // create the pbo if necessary
-            if pbo = 0 then pbo <- GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
-            GL.Check "could not bind PBO"
+        // create the pbo if necessary
+        if pbo = 0 then pbo <- GL.GenBuffer()
+        GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+        GL.Check "could not bind PBO"
 
-            // update its size if necessary
-            if pboSize <> bufferSize then
-                pboSize <- bufferSize
-                GL.BufferData(BufferTarget.PixelUnpackBuffer, bufferSize, 0n, BufferUsageHint.DynamicDraw)
-                GL.Check "could not resize PBO"
+        if fenceAB <> 0n then
+            GL.ClientWaitSync(fenceAB, ClientWaitSyncFlags.SyncFlushCommandsBit, ~~~0L) |> ignore
+            GL.DeleteSync(fenceAB)
+            fenceAB <- 0n
 
-            // upload the data to the pbo
-            let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n , bufferSize, BufferAccessMask.MapWriteBit)
-            if ptr = 0n then failwithf "[GL] could not map PBO"
-            Marshal.Copy(data, ptr, bufferSize)
-            if not (GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer)) then
-                failwithf "[GL] could not unmap PBO"
-        )
+        // update its size if necessary
+        if pboSize <> bufferSize then
+            pboSize <- bufferSize
+            GL.BufferData(BufferTarget.PixelUnpackBuffer, bufferSize, 0n, BufferUsageHint.DynamicDraw)
+            GL.Check "could not resize PBO"
+
+        // upload the data to the pbo
+        let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n , bufferSize, BufferAccessMask.MapWriteBit)
+        if ptr = 0n then failwithf "[GL] could not map PBO"
+        Marshal.Copy(data, ptr, bufferSize)
+        if not (GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer)) then
+            failwithf "[GL] could not unmap PBO"
+
 
         // copy pbo to texture
-        GL.BindTexture(TextureTarget.Texture2D, ping.Handle)
+        GL.BindTexture(TextureTarget.Texture2D, texA.Handle)
         GL.Check "could not bind texture"
 
 
-        if ping.Size2D = size && ping.Format = textureFormat && ping.MipMapLevels = mipMapLevels then
+        if texA.Size2D = size && texA.Format = textureFormat && texA.MipMapLevels = mipMapLevels then
             GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, size.X, size.Y, pixelFormat, pixelType, 0n)
             GL.Check "could not update texture"
         else
             GL.TexImage2D(TextureTarget.Texture2D, 0, unbox (int textureFormat), size.X, size.Y, 0, pixelFormat, pixelType, 0n)
             GL.Check "could not update texture"
-            ping.Size <- V3i(size.X, size.Y, 1)
-            ping.Format <- textureFormat
-            ping.MipMapLevels <- mipMapLevels
-            ping.ImmutableFormat <- false
-            ping.Count <- 1
-            ping.Dimension <- TextureDimension.Texture2D
-            ping.Multisamples <- 1
+            texA.Size <- V3i(size.X, size.Y, 1)
+            texA.Format <- textureFormat
+            texA.MipMapLevels <- mipMapLevels
+            texA.ImmutableFormat <- false
+            texA.Count <- 1
+            texA.Dimension <- TextureDimension.Texture2D
+            texA.Multisamples <- 1
 
             let newSize = if mipMap then (int64 bufferSize * 4L) / 3L else int64 bufferSize
-            updateTexture ctx ping.SizeInBytes newSize
-            ping.SizeInBytes <- newSize
+            updateTexture ctx texA.SizeInBytes newSize
+            texA.SizeInBytes <- newSize
 
 
         if mipMapLevels > 1 then 
@@ -296,24 +308,28 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         // unbind the pbo
         GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
         GL.Check "could not unbind PBO"
+        let fence = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
+        fenceAB <- fence
 
-        Fun.Swap(&ping, &pong)
+        lock swapLock (fun () -> 
+            Fun.Swap(&texA, &texB)
+        )
 
     member x.Context = ctx
 
     member x.UpdateAsync(f : PixFormat, size : V2i, data : nativeint) =
-        upload f size data
+        lock x (fun () -> upload f size data)
         let t = new Transaction()
         t.Enqueue x
         t
 
     member x.Update(f : PixFormat, size : V2i, data : nativeint) =
-        upload f size data
+        lock x (fun () -> upload f size data)
         
         transact (fun () -> x.MarkOutdated())
 
     member x.ReadPixel(pos : V2i) =
-        lock pboLock (fun () ->
+        lock x (fun () ->
             if pbo = 0 || pos.X < 0 || pos.Y < 0 || pos.X >= currentSize.X || pos.Y >= currentSize.Y then
                 C4f(0.0f, 0.0f, 0.0f, 0.0f)
             else
@@ -375,8 +391,9 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
 
     member x.Dispose() =
         use token = ctx.ResourceLock
-        ctx.Delete(ping)
-        ctx.Delete(pong)
+        ctx.Delete(texA)
+        ctx.Delete(texB)
+        ctx.Delete(texC)
         if pbo <> 0 then
             pbo <- 0
             GL.DeleteBuffer(pbo)
@@ -395,7 +412,16 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
 
 
     override x.Compute() =
-        pong :> ITexture
+        lock swapLock (fun () -> 
+            Fun.Swap(&texB, &texC)
+            Fun.Swap(&fenceAB, &fenceC)
+        )
+        use t = ctx.ResourceLock
+        GL.ClientWaitSync(fenceC, ClientWaitSyncFlags.SyncFlushCommandsBit, ~~~0L) |> ignore
+        GL.DeleteSync(fenceC)
+        fenceC <- 0n
+
+        texC :> ITexture
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

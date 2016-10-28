@@ -90,41 +90,74 @@ type EventMouse(autoGenerateClickEvents : bool) =
                 ()
         upEvent.Emit(b)
 
-    member x.Down(pos : PixelPosition, b : MouseButtons) =
+    
+    abstract member Down : PixelPosition * MouseButtons -> unit
+    abstract member Up : PixelPosition * MouseButtons -> unit
+    abstract member Click : PixelPosition * MouseButtons -> unit
+    abstract member DoubleClick : PixelPosition * MouseButtons -> unit
+    abstract member Scroll : PixelPosition * float -> unit
+    abstract member Enter : PixelPosition -> unit
+    abstract member Leave : PixelPosition -> unit
+    abstract member Move : PixelPosition -> unit
+
+
+
+    default x.Down(pos : PixelPosition, b : MouseButtons) =
         let m = getDown b
         transact (fun () -> Mod.change m true; setPos pos)
         handleDown pos b
 
-    member x.Up(pos : PixelPosition, b : MouseButtons) =
+    default x.Up(pos : PixelPosition, b : MouseButtons) =
         let m = getDown b
         transact (fun () -> Mod.change m false; setPos pos)
         handleUp pos b
 
 
-    member x.Click(pos : PixelPosition, b : MouseButtons) =
+    default x.Click(pos : PixelPosition, b : MouseButtons) =
         transact (fun () -> setPos pos)
         clickEvent.Emit b
 
-    member x.DoubleClick(pos : PixelPosition, b : MouseButtons) =
+    default x.DoubleClick(pos : PixelPosition, b : MouseButtons) =
         transact (fun () -> setPos pos)
         doubleClickEvent.Emit b
 
-    member x.Scroll(pos : PixelPosition, b : float) =
+    default x.Scroll(pos : PixelPosition, b : float) =
         transact (fun () -> Mod.change scroll (scroll.GetValue() + b); setPos pos)
         scrollEvent.Emit b
 
-    member x.Enter(p : PixelPosition) =
+    default x.Enter(p : PixelPosition) =
         transact (fun () -> Mod.change inside true; setPos p)
         enterEvent.Emit p
 
-    member x.Leave(p : PixelPosition) =
+    default x.Leave(p : PixelPosition) =
         transact (fun () -> Mod.change inside false; setPos p)
         leaveEvent.Emit p
 
-    member x.Move(p : PixelPosition) =
+    default x.Move(p : PixelPosition) =
         let last = position.GetValue()
         transact (fun () -> setPos p)
         moveEvent.Emit ((last, p))
+
+    
+    member x.Use(o : IMouse) =
+        let pos = o.Position
+        let loc() = Mod.force pos
+        let subscriptions =
+            [
+                o.Down.Values.Subscribe(fun v -> x.Down(loc(), v))
+                o.Up.Values.Subscribe(fun v -> x.Up(loc(), v))
+                o.Click.Values.Subscribe(fun v -> x.Click(loc(), v))
+                o.DoubleClick.Values.Subscribe(fun v -> x.DoubleClick(loc(), v))
+                o.Scroll.Values.Subscribe(fun v -> x.Scroll(loc(), v))
+                o.Enter.Values.Subscribe(x.Enter)
+                o.Leave.Values.Subscribe(x.Leave)
+                o.Move.Values.Subscribe(fun (_,n) -> x.Move(n))
+            ]
+
+        { new IDisposable with
+            member x.Dispose() = subscriptions |> List.iter (fun i -> i.Dispose()) 
+        }
+
 
     interface IMouse with
         member x.Position = position :> IMod<_>
@@ -140,6 +173,10 @@ type EventMouse(autoGenerateClickEvents : bool) =
         member x.Scroll = scrollEvent :> IEvent<_>
         member x.Enter = enterEvent :> IEvent<_>
         member x.Leave = leaveEvent :> IEvent<_>
+
+
+
+
 
 
 //
