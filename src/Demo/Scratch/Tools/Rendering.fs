@@ -60,6 +60,8 @@ type App private () =
     static let app = lazy ( new OpenGlApplication() )
     static let mutable win : Option<SimpleRenderWindow> = None
     static let realTask = new ChangeableRenderTask()
+    static let mutable config = BackendConfiguration.Default 
+
 
     static let getWin() =
         match win with
@@ -80,6 +82,10 @@ type App private () =
         sg |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
            |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
 
+    static member Config 
+        with get () = config
+        and set v = config <- v
+
     static member Runtime = app.Value.Runtime :> IRuntime
     static member FramebufferSignature = getWin().FramebufferSignature
     static member Keyboard = getWin().Keyboard
@@ -95,7 +101,7 @@ type App private () =
         win <- None
 
     static member run (sg : ISg) =
-        use task = App.Runtime.CompileRender(App.FramebufferSignature, withCam sg)
+        use task = App.Runtime.CompileRender(App.FramebufferSignature, config, withCam sg)
         App.run task
 
 
@@ -129,7 +135,7 @@ type App private () =
             match res with
                 | :? ISg as s ->
                     let w = getWin()
-                    let task = app.Value.Runtime.CompileRender(w.FramebufferSignature, BackendConfiguration.NativeOptimized, withCam s)
+                    let task = app.Value.Runtime.CompileRender(w.FramebufferSignature, config, withCam s)
                     realTask.Inner <- task |> DefaultOverlays.withStatistics
                     w.Show()
 

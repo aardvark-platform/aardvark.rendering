@@ -153,39 +153,44 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         lock x (fun () -> 
-            try
-                if not x.IsDisposed then
-                    x.IsDisposed <- true
+            if not x.IsDisposed then
+                x.IsDisposed <- true
 
-                    use resourceLock = x.Context.ResourceLock
+                // ObjDisposed might occur here if GL is dead already and render objects get disposed nondeterministically by finalizer thread.
+                let resourceLock = try Some x.Context.ResourceLock with :? ObjectDisposedException as o -> None
 
-                    OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
+                match resourceLock with
+                    | None ->
+                        // OpenGL already dead
+                        ()
+                    | Some l -> 
+                        use resourceLock = l
 
-                    x.Activation.Dispose()
-                    match x.DrawBuffers with
-                        | Some b -> b.RemoveRef()
-                        | _ -> ()
-                    x.VertexArray.Dispose() 
-                    x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
-                    x.IndexBuffer |> Option.iter (fun (_,b) -> b.Dispose())
-                    match x.IndirectBuffer with
-                        | Some b -> b.Dispose()
-                        | None -> x.DrawCallInfos.Dispose()
+                        OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
+                        x.Activation.Dispose()
+                        match x.DrawBuffers with
+                            | Some b -> b.RemoveRef()
+                            | _ -> ()
+                        x.VertexArray.Dispose() 
+                        x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
+                        x.IndexBuffer |> Option.iter (fun (_,b) -> b.Dispose())
+                        match x.IndirectBuffer with
+                            | Some b -> b.Dispose()
+                            | None -> x.DrawCallInfos.Dispose()
 
-                    x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
-                    x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
-                    x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-                    x.Program.Dispose() 
-                    x.VertexArray <- Unchecked.defaultof<_>
+                        x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
+                        x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
+                        x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
+                        x.Program.Dispose() 
+                        x.VertexArray <- Unchecked.defaultof<_>
 
-                    x.IsActive.Dispose()
-                    x.BeginMode.Dispose()
-                    x.DepthTestMode.Dispose()
-                    x.CullMode.Dispose()
-                    x.PolygonMode.Dispose()
-                    x.BlendMode.Dispose()
-                    x.StencilMode.Dispose()
-            with e -> Log.warn "Prepare killed!!"
+                        x.IsActive.Dispose()
+                        x.BeginMode.Dispose()
+                        x.DepthTestMode.Dispose()
+                        x.CullMode.Dispose()
+                        x.PolygonMode.Dispose()
+                        x.BlendMode.Dispose()
+                        x.StencilMode.Dispose()
         )
         
              

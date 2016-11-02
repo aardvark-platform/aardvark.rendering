@@ -291,7 +291,7 @@ module Shadows =
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         Interactive.SceneGraph <- sg
-        System.Windows.Forms.Application.Run ()
+        Interactive.RunMainLoop()
 
 
     let setShadowSize (w : int) (h : int) =

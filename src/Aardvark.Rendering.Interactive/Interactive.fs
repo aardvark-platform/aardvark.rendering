@@ -17,13 +17,14 @@ module NewShit =
         static let mutable window = None
         static let emptySg = Sg.ofList []
         static let mutable samples = 8
+        static let mutable config = BackendConfiguration.Default
 
         static let createWindow () =
             let win = app.CreateSimpleRenderWindow(samples)
             win.Text <- "Aardvark Interactive Session Setup"
             let sg = Mod.init emptySg
             let task = 
-                app.Runtime.CompileRender(win.FramebufferSignature, Sg.dynamic sg)
+                app.Runtime.CompileRender(win.FramebufferSignature, config, Sg.dynamic sg)
                     |> DefaultOverlays.withStatistics
             win.RenderTask <- task
             win.Show()
@@ -48,6 +49,10 @@ module NewShit =
         static member Samples 
             with get () = samples
             and set v = samples <- v
+
+        static member BackendConfiguration 
+            with get () = config
+            and set v = config <- v
 
         static member Runtime = app.Runtime :> IRuntime
         static member Keyboard = Interactive.Window.Keyboard
@@ -89,4 +94,5 @@ module NewShit =
 
 
         static member RunMainLoop() =
-            System.Windows.Forms.Application.Run()
+            let w, _ = getWindowAndSg ()
+            System.Windows.Forms.Application.Run w

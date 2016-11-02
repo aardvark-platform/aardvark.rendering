@@ -45,12 +45,6 @@ module Config =
     [<Literal>]
     let CheckErrors = false
 
-    /// ResourceSet.Update and Program.Run use a GL fence sync if true.
-    /// This flag improves timings for gpu uploads but also incurs a (possible) performance
-    /// penality as well as incompatibiliy on some drivers.
-    [<Literal>]
-    let SyncUploadsAndFrames = false
-
     /// <summary>
     /// The number of bits used for color values in default contexts
     /// </summary>
@@ -76,7 +70,18 @@ module Config =
     let enableSamplersIfPossible = true
     let enableUniformBuffersIfPossible = true
 
+module RuntimeConfig =
 
+    /// ResourceSet.Update and Program.Run use a GL fence sync if true.
+    /// This flag improves timings for gpu uploads but also incurs a (possible) performance
+    /// penality as well as incompatibiliy on some drivers.
+    let mutable SyncUploadsAndFrames = false
+  
+    /// If true, no OpenGL queries take place, i.e. no primitive counting etc.
+    let mutable SupressGLTimers = false
+
+    /// If true, no frame statistics is accumulated for render tasks 
+    let mutable SupressRuntimeStats = false
 
 [<AutoOpen>]
 module Error =

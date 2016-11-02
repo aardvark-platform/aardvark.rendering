@@ -10,7 +10,8 @@ open System.Runtime.CompilerServices
 type IStreamingTexture =
     inherit IMod<ITexture>
     abstract member Update : format : PixFormat * size : V2i * data : nativeint -> unit
-    abstract member ReadPixel : pos : V2i -> C4b
+    abstract member UpdateAsync : format : PixFormat * size : V2i * data : nativeint -> Transaction
+    abstract member ReadPixel : pos : V2i -> C4f
 
 
 

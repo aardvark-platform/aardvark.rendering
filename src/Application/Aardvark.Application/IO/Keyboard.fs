@@ -29,8 +29,12 @@ type EventKeyboard() =
     let downWithRepeats = EventSource<Keys>()
     let input = EventSource<char>()
 
+    abstract member KeyDown : Keys -> unit
+    abstract member KeyUp : Keys -> unit
+    abstract member KeyPress : char -> unit
 
-    member x.KeyDown(k : Keys) =
+
+    default x.KeyDown(k : Keys) =
         downWithRepeats.Emit k
         if CSet.add k downKeys then
             downEvent.Emit k
@@ -43,7 +47,7 @@ type EventKeyboard() =
                 | (true, e) -> transact (fun () -> Mod.change e true)
                 | _ -> ()      
 
-    member x.KeyUp(k : Keys) =
+    default x.KeyUp(k : Keys) =
         if CSet.remove k downKeys then
             upEvent.Emit k
 
@@ -55,8 +59,23 @@ type EventKeyboard() =
                 | (true, e) -> transact (fun () -> Mod.change e false)
                 | _ -> ()   
 
-    member x.KeyPress(c : char) =
+    default x.KeyPress(c : char) =
         input.Emit c
+
+
+    
+    member x.Use(o : IKeyboard) =
+        let subscriptions =
+            [
+                o.Down.Values.Subscribe(x.KeyDown)
+                o.Up.Values.Subscribe(x.KeyUp)
+                o.Press.Values.Subscribe(x.KeyPress)
+            ]
+
+        { new System.IDisposable with
+            member x.Dispose() = subscriptions |> List.iter (fun i -> i.Dispose()) 
+        }
+
 
 
     interface IKeyboard with

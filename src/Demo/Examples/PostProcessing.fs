@@ -193,7 +193,7 @@ module PostProcessing =
         Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         Interactive.SceneGraph <- final
-        win.Run()
+        Interactive.RunMainLoop()
 
     // finally we create a simple utility for changing the pointSize
     // you can play with it and see the render-result adjust to the given point-size.
