@@ -11,7 +11,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Application
 open System.Windows.Forms.Integration
 
-type RenderControl() =
+type RenderControl() as self =
     inherit Border()
 
     let mutable runtime : IRuntime = Unchecked.defaultof<IRuntime>
@@ -40,6 +40,19 @@ type RenderControl() =
                 | None -> DateTime.Now
            )
 
+    let dragHandler = DragEventHandler(fun o a -> 
+                            let pos = a.GetPosition(self)
+                            mouse.DragMouse (int pos.X) (int pos.Y)
+                        )
+                                   
+    let setupDragAndDrop() =
+        self.DragOver.AddHandler dragHandler
+        self.Drop.AddHandler dragHandler
+                                   
+    let disposeDragAndDrop() =
+        self.DragOver.RemoveHandler dragHandler
+        self.Drop.RemoveHandler dragHandler
+
     member x.SetControl (self : RenderControl) (c : FrameworkElement) (cr : IRenderTarget) =
         match impl with
             | Some i -> failwith "implementation can only be set once per control"
@@ -52,7 +65,7 @@ type RenderControl() =
             | :? WindowsFormsHost as host ->
                 keyboard.SetControl(host.Child)
                 mouse.SetControl(host.Child)
-                
+                setupDragAndDrop()
             | _ ->
                 failwith "impossible to create WPF mouse"
 
