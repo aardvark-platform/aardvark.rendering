@@ -93,11 +93,13 @@ module private ManagedBufferImplementation =
             store.Resize 0n
 
         member x.Add(range : Range1l, view : BufferView) =
-            lock x (fun () ->
+            let mutable isNew = false
+            let res = lock x (fun () ->
                 let count = range.Size + 1L
 
                 let writer = 
                     bufferWriters.GetOrCreate(view, fun view ->
+                        isNew <- true
                         let remove w =
                             x.Dirty.Remove w |> ignore
                             bufferWriters.Remove view |> ignore
@@ -114,9 +116,9 @@ module private ManagedBufferImplementation =
                     let min = nativeint(range.Min + count) * asize
                     if store.Capacity < min then
                         store.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
-
+       
                     lock writer (fun () -> 
-                        if writer.OutOfDate then
+                        if not writer.OutOfDate then
                             writer.Write(range)
                     )
 
@@ -125,10 +127,12 @@ module private ManagedBufferImplementation =
                         writer.RemoveRef range |> ignore
                 }
             )
+            if isNew then transact (fun () -> x.MarkOutdated ())
+            res
 
         member x.Add(index : int, data : IMod) =
-            lock x (fun () ->
-                let mutable isNew = false
+            let mutable isNew = false
+            let res = lock x (fun () ->
                 let writer =
                     uniformWriters.GetOrCreate(data, fun data ->
                         isNew <- true
@@ -149,9 +153,10 @@ module private ManagedBufferImplementation =
                         store.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
                             
                     lock writer (fun () -> 
-                        if writer.OutOfDate then
+                        if not writer.OutOfDate then
                             writer.Write(range)
                     )
+
 
 
                         
@@ -160,6 +165,9 @@ module private ManagedBufferImplementation =
                         writer.RemoveRef range |> ignore
                 }
             )
+            if isNew then
+                transact (fun () -> x.MarkOutdated ())
+            res
 
         member x.Set(range : Range1l, value : byte[]) =
             let count = range.Size + 1L
