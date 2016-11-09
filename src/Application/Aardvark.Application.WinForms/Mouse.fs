@@ -178,6 +178,11 @@ type Mouse() as this =
         removeHandlers()
         ctrl <- Some c
         addHandlers()
+        
+    member x.DragMouse pX pY =
+        let s = size()
+        let pp = PixelPosition(pX, pY, s.X, s.Y)
+        this.Move pp
 
     member x.Dispose() = removeHandlers()
 

@@ -505,8 +505,10 @@ module ProgramExtensions =
                     if fs then yield "Pixel", "PS", ShaderStage.Pixel
                 ]
 
+#if DEBUG
             let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-            printfn "CODE: %s" codeWithDefine
+            Report.Line("CODE: {0}", codeWithDefine)
+#endif
 
             using x.ResourceLock (fun _ ->
                 let results =

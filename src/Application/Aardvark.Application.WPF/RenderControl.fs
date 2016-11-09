@@ -11,8 +11,8 @@ open Aardvark.Base.Incremental
 open Aardvark.Application
 open System.Windows.Forms.Integration
 
-type RenderControl() =
-    inherit ContentControl()
+type RenderControl() as self =
+    inherit Border()
 
     let mutable runtime : IRuntime = Unchecked.defaultof<IRuntime>
     let mutable renderTask : Option<IRenderTask> = None
@@ -40,19 +40,32 @@ type RenderControl() =
                 | None -> DateTime.Now
            )
 
+    let dragHandler = DragEventHandler(fun o a -> 
+                            let pos = a.GetPosition(self)
+                            mouse.DragMouse (int pos.X) (int pos.Y)
+                        )
+                                   
+    let setupDragAndDrop() =
+        self.DragOver.AddHandler dragHandler
+        self.Drop.AddHandler dragHandler
+                                   
+    let disposeDragAndDrop() =
+        self.DragOver.RemoveHandler dragHandler
+        self.Drop.RemoveHandler dragHandler
+
     member x.SetControl (self : RenderControl) (c : FrameworkElement) (cr : IRenderTarget) =
         match impl with
             | Some i -> failwith "implementation can only be set once per control"
             | None -> ()
 
-        self.Content <- c
+        self.Child <- c
         runtime <- cr.Runtime
 
         match c with
             | :? WindowsFormsHost as host ->
                 keyboard.SetControl(host.Child)
                 mouse.SetControl(host.Child)
-                
+                setupDragAndDrop()
             | _ ->
                 failwith "impossible to create WPF mouse"
 
@@ -73,6 +86,9 @@ type RenderControl() =
     override x.OnRenderSizeChanged(e) =
         base.OnRenderSizeChanged(e)
         transact (fun () -> Mod.change sizes (V2i(x.ActualWidth, x.ActualHeight)))
+
+    override x.HitTestCore (hitTestParameters : PointHitTestParameters) =
+        PointHitTestResult(x, hitTestParameters.HitPoint) :> HitTestResult
 
     member x.Implementation
         with get() = match ctrl with | Some c -> c | _ -> null

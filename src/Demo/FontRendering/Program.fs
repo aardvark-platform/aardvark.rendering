@@ -22,7 +22,7 @@ module Shader =
         [<Position>] pos : V4d 
         [<TexCoord>] tc : V2d
         [<Color>] color : V4d
-        [<Semantic("ZZZInstanceTrafo")>] trafo : M44d
+        [<Semantic("InstanceTrafo")>] trafo : M44d
     }
 
     let trafo (v : Vertex) =

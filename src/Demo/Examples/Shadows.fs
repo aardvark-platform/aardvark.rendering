@@ -1,5 +1,5 @@
 ﻿(*
-PostProcessing.fsx
+Shadows.fsx
 
 This example illustrates how to do a very simple PostProcessing on a scene.
 For simplicity the scene is just a random set of points but the example easily 
@@ -14,6 +14,8 @@ similar way. (e.g. fluid-rendering things, etc.)
 #I @"../../../bin/Debug"
 #I @"../../../bin/Release"
 #load "LoadReferences.fsx"
+#r "OpenTK.dll"
+#r "OpenTK.Compatibility.dll"
 #else
 namespace Examples
 #endif
@@ -146,21 +148,20 @@ module Shader =
         }
            
     type InstanceVertex = { 
-        [<Position>] pos : V4d 
-        [<Semantic("ZZZInstanceTrafo")>] trafo : M44d
+        [<Position>]      pos   : V4d 
+        [<InstanceTrafo>] trafo : M44d
     }
 
     let instanceTrafo (v : InstanceVertex) =
         vertex {
             return { v with pos = v.trafo * v.pos }
         }
-             
+            
 module Shadows = 
 
-    Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
-    let win = openWindow()
+    let win = Interactive.Window
 
     let shadowMapSize = Mod.init (V2i(4096, 4096))
 
@@ -248,16 +249,8 @@ module Shadows =
     let pointSg = 
         let rand = Random()
         let randomV3f() = V3f(rand.NextDouble(), rand.NextDouble(), rand.NextDouble())
-
         Sg.instancedGeometry (Mod.constant <| Array.init pointCount (fun _ -> randomV3f() |> V3d.op_Explicit |> Trafo3d.Translation)) (box C4b.Red (Box3d.FromCenterAndSize(V3d.OOO, 0.04 * V3d.III)))
 
-//        let randomColor() = C4b(rand.NextDouble(), rand.NextDouble(), rand.NextDouble(), 1.0)
-//
-//        Sg.draw IndexedGeometryMode.PointList
-//            |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
-//            |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
-//            |> Sg.vertexAttribute DefaultSemantic.Normals (Array.init pointCount (fun _ -> V3f.OOI) |> Mod.constant)
-//            |> Sg.uniform "PointSize" pointSize
 
     let sceneSg (fragmentShader : list<FShadeEffect>) =
         quadSg C4b.Green 
@@ -292,38 +285,13 @@ module Shadows =
                  |> Sg.effect [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.Red |> toEffect; DefaultSurfaces.simpleLighting |> toEffect ]
              )
 
-            |> Sg.viewTrafo (viewTrafo win   |> Mod.map CameraView.viewTrafo )
-            |> Sg.projTrafo (perspective win |> Mod.map Frustum.projTrafo)
+            |> Sg.camera Interactive.DefaultCamera
 
 
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-        let renderTask =  Sg.compile win.Runtime win.FramebufferSignature sg
-        let composedTask = 
-            
-            match renderTask with
-                | :? Aardvark.Rendering.GL.RenderTasks.AbstractOpenGlRenderTask as a -> 
-//                     a.BeforeRender.Add (fun _ -> 
-//                                OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
-//                            )
-//                     a.AfterRender.Add( fun _ -> 
-//                         OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
-//                     )
-                       ()
-                | :? Aardvark.Base.RenderTask.SequentialRenderTask as s -> 
-                    match s.Tasks.[0] with
-                        | :? Aardvark.Rendering.GL.RenderTasks.AbstractOpenGlRenderTask as a -> 
-                            a.BeforeRender.Add (fun _ -> 
-                                OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
-                            )
-                            a.AfterRender.Add( fun _ -> 
-                                OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.All.ClipDistance0 |> unbox)
-                            )
-                        | _ -> failwith "unexpected task"
-                | _ -> failwith "unexpected task"
-        win.RenderTask <- renderTask
-        //showSg win sg
-        System.Windows.Forms.Application.Run ()
+        Interactive.SceneGraph <- sg
+        Interactive.RunMainLoop()
 
 
     let setShadowSize (w : int) (h : int) =
@@ -334,5 +302,5 @@ module Shadows =
 open Shadows
 
 #if INTERACTIVE
-showSg win g
+Interactive.SceneGraph <- sg
 #endif

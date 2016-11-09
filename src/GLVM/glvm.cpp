@@ -840,8 +840,15 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 	}
 	else
 	{
-		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-		glMultiDrawArraysIndirect(m, nullptr, drawcount, 20);
+		if (buffer != 0)
+		{
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
+			glMultiDrawArraysIndirect(m, nullptr, drawcount, 20);
+		}
+		else
+		{
+			// skipping draw (crash on nv hardware)
+		}
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 	}
 	endtrace("a")
@@ -889,8 +896,15 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 	}
 	else
 	{
-		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
-		glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, 0);
+		if (buffer != 0)
+		{
+			glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer);
+			glMultiDrawElementsIndirect(m, indexType, nullptr, drawcount, 0);
+		}
+		else
+		{
+			// skipping draw (crash on nv hardware)
+		}
 		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 	}
 	endtrace("a")

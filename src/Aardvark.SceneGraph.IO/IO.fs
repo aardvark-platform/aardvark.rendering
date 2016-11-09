@@ -333,7 +333,7 @@ module Loader =
                                             | Some file -> file
                                             | None -> map.[Symbol.Empty]
 
-                                    sem, { texture = FileTexture(file, true) :> ITexture; coordIndex = slot.UVIndex }
+                                    sem, { texture = FileTexture(file, { wantCompressed = false; wantMipMaps = true; wantSrgb = false }) :> ITexture; coordIndex = slot.UVIndex }
 
                                 | None ->
                                     sem, { texture = NullTexture() :> ITexture; coordIndex = slot.UVIndex }
@@ -533,11 +533,13 @@ module Loader =
                 //Assimp.PostProcessSteps.FlipUVs |||
                 //Assimp.PostProcessSteps.FlipWindingOrder |||
                 Assimp.PostProcessSteps.MakeLeftHanded ||| 
-                Assimp.PostProcessSteps.Triangulate
+                Assimp.PostProcessSteps.Triangulate |||
+                Assimp.PostProcessSteps.CalculateTangentSpace
 
             let scene = ctx.ImportFile(file, flags)
 
             let textureTable = getTextureTable dir
+            printfn "%A" textureTable
             let materials = scene.Materials.MapToArray(fun m -> toMaterial textureTable m)
             let state =
                 {

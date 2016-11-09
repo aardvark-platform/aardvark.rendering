@@ -24,15 +24,14 @@ open Aardvark.Rendering.Interactive
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
-open Default // makes viewTrafo and other tutorial specicific default creators visible
+open Aardvark.Base.Incremental.Operators 
 open Aardvark.Base.Rendering
 
 module Render2TexturePrimitiveFloat = 
 
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
-
+    let win = Interactive.Window
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
     let size = V2i(256,256)
@@ -75,7 +74,9 @@ module Render2TexturePrimitiveFloat =
     let render2TextureSg =
         aset {
             let! cnt = cnt
-            for i in 0 .. cnt - 1 do yield quadSg |> Sg.trafo (Mod.constant Trafo3d.Identity)
+            for i in 0 .. cnt - 1 do 
+                yield Sg.fullScreenQuad 
+                    |> Sg.trafo (Mod.constant Trafo3d.Identity)
         } |> Sg.set
             |> Sg.viewTrafo ~~(CameraView.lookAt (V3d(3,3,3)) V3d.OOO V3d.OOI                   |> CameraView.viewTrafo )
             |> Sg.projTrafo ~~(Frustum.perspective 60.0 0.01 10.0 (float size.X / float size.Y) |> Frustum.projTrafo    )
@@ -112,11 +113,11 @@ module Render2TexturePrimitiveFloat =
    
 
     let sg = 
-        quadSg
+        Sg.fullScreenQuad
             |> Sg.texture DefaultSemantic.DiffuseColorTexture ~~(color :> ITexture)
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
-            |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
-            |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
+            |> Sg.viewTrafo Interactive.DefaultViewTrafo
+            |> Sg.projTrafo Interactive.DefaultProjTrafo
 
     win.Keyboard.KeyDown(Keys.Add).Values.Subscribe(fun _ ->
         transact (fun _ -> Mod.change cnt (cnt.Value + 1))
@@ -130,13 +131,13 @@ module Render2TexturePrimitiveFloat =
 
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-        setSg sg
-        win.Run()
+        Interactive.SceneGraph <- sg
+        Interactive.RunMainLoop()
 
 open Render2TexturePrimitiveFloat
 
 
 #if INTERACTIVE
-setSg sg
+Interactive.SceneGraph <- sg
 printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
 #endif

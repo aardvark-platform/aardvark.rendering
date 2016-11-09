@@ -13,8 +13,6 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open Default 
-
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -364,6 +362,8 @@ module AssimpInterop =
     System.Environment.CurrentDirectory <- Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"]
     DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
 
+
+    let win = Interactive.Window
     let model = Assimp.load (Path.combine [__SOURCE_DIRECTORY__;"..";"Demo";"eigi";"eigi.dae" ])
 
 
@@ -378,17 +378,17 @@ module AssimpInterop =
                     DefaultSurfaces.simpleLighting |> toEffect
                     DefaultSurfaces.diffuseTexture |> toEffect
                 ]
-            |> Sg.camera ( defaultCamera  () ) 
+            |> Sg.camera Interactive.DefaultCamera 
 
     let run () =
         FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
-        setSg sg
-        win.Run()
+        Interactive.SceneGraph <- sg
+        Interactive.RunMainLoop()
 
 open AssimpInterop
 
 #if INTERACTIVE
-setSg sg
+Interactive.SceneGraph <- sg
 printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
 #else
 #endif

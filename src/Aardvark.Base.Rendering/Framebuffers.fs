@@ -446,3 +446,17 @@ type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice 
 type AttachmentSignature = { format : RenderbufferFormat; samples : int }
 
 
+type INativeTextureData = 
+    abstract member Size : V3i
+    abstract member SizeInBytes : int64
+    abstract member Use : (nativeint -> 'a) -> 'a
+
+[<AllowNullLiteral>]
+type INativeTexture =
+    inherit ITexture
+    abstract member Dimension : TextureDimension
+    abstract member Format : TextureFormat
+    abstract member MipMapLevels : int
+    abstract member Count : int
+    abstract member Item : slice : int * level : int -> INativeTextureData with get
+

@@ -10,6 +10,9 @@ open Aardvark.Base.Rendering
 [<AutoOpen>]
 module EnvironmentSemantics =
 
+    type ISg with
+        member x.CameraLocation : IMod<V3d> = x?CameraLocation
+
     [<Semantic>]
     type DefaultValues() =
 

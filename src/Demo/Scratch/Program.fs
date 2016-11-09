@@ -104,15 +104,8 @@ let naiveLoD() =
 let main argv = 
     Ag.initialize()
     Aardvark.Init()
-//
-//    let sg =
-//        Sg.sphere' 5 C4b.Red 1.0
-//            |> Sg.effect [
-//                DefaultSurfaces.trafo |> toEffect
-//                DefaultSurfaces.constantColor C4f.Red |> toEffect
-//            ]
 
-
+    App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
     App.run()
 
     0 // return an integer exit code

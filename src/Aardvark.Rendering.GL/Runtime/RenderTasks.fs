@@ -94,7 +94,7 @@ module RenderTasks =
 
                 GL.DepthMask(true)
                 GL.StencilMask(0xFFFFFFFFu)
-                GL.Enable(EnableCap.DepthClamp)
+                //GL.Enable(EnableCap.DepthClamp)
                 
                 for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
                     match Map.tryFind sem desc.colorWrite with
@@ -916,28 +916,29 @@ module RenderTasks =
 
             x.ResourceManager.DrawBufferManager.Write(fbo)
 
-            let mutable current = 0
-            let mutable query =  0 //GL.GenQuery()
-
-            
-            primitivesGenerated.Restart()
+            if not RuntimeConfig.SupressGLTimers then
+                primitivesGenerated.Restart()
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
                 let s = t.Run()
                 runStats <- s::runStats
 
-            primitivesGenerated.Stop()
-            GL.Sync()
+            if not RuntimeConfig.SupressGLTimers then
+                primitivesGenerated.Stop()
+
+            if RuntimeConfig.SyncUploadsAndFrames then
+                GL.Sync()
             
-            let mutable primitives = primitivesGenerated.Value
+            let primitiveCnt = 
+                if RuntimeConfig.SupressGLTimers then { FrameStatistics.Zero with PrimitiveCount = 0.0 }
+                else { FrameStatistics.Zero with PrimitiveCount = float primitivesGenerated.Value }
 
+            let runStats =
+                if RuntimeConfig.SupressRuntimeStats then FrameStatistics.Zero
+                else runStats |> List.sumBy (fun l -> l.Value)
 
-            updateStats + 
-            (runStats |> List.sumBy (fun l -> l.Value)) +
-            { FrameStatistics.Zero with
-                PrimitiveCount = float primitives
-            }
+            updateStats + runStats + primitiveCnt
 
 
         override x.Release() =

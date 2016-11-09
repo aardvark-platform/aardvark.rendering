@@ -62,30 +62,25 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="GeometrySetSketch.fs" />
+    <Compile Include="HelloWorld.fs" />
     <Compile Include="Tutorial.fs" />
+    <Compile Include="PostProcessing.fs" />
+    <Compile Include="Shadows.fs" />
+    <Compile Include="LoD.fs" />
     <Compile Include="Render2TexturePrimitive.fs" />
     <Compile Include="Render2TextureComposable.fs" />
     <Compile Include="Render2TexturePrimitiveChangeableSizes.fs" />
     <Compile Include="Render2TexturePrimitiveFloat.fs" />
-    <Compile Include="PostProcessing.fs" />
-    <Compile Include="Shadows.fs" />
-    <Compile Include="GeometrySet.fs" />
-    <Compile Include="LoD.fs" />
-    <Compile Include="Tic-Tac-Toe.fs" />
-    <Compile Include="Polygons.fs" />
     <Compile Include="AssimpInterop.fs" />
-    <Compile Include="HelloWorld.fs" />
-    <Compile Include="NullBufferTest.fs" />
-    <Compile Include="Vulkan.fs" />
-    <Compile Include="Fonts.fs" />
-    <Compile Include="Playground.fs" />
-    <Compile Include="Proc.fs" />
-    <Compile Include="Maya.fs" />
+    <Compile Include="LiveDemo.fs" />
+    <None Include="LiveDemo.fsx" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
     <EmbeddedResource Include="Assimp.zip" />
+    <None Include="Inactive\Tic-Tac-Toe.fs" />
+    <None Include="Inactive\Polygons.fs" />
+    <None Include="Inactive\Maya.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
@@ -111,6 +106,11 @@
     <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
       <Name>Aardvark.Rendering.Vulkan</Name>
       <Project>{67c2dd0d-8892-4953-b916-ced3aed034b1}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj">
+      <Name>Aardvark.SceneGraph.IO</Name>
+      <Project>{d7b02e89-dc77-462d-a3d4-a28daa403aaf}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">

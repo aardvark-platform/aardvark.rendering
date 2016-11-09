@@ -10,6 +10,7 @@ type IndexedGeometryMode =
     | TriangleList = 4
     | TriangleAdjacencyList = 5
     | LineAdjacencyList = 6
+    | QuadList = 7
 
 type IndexedGeometry =
     class

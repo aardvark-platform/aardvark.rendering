@@ -86,11 +86,12 @@ module FramebufferExtensions =
         ]
 
     let private init (bindings : list<int * Symbol * IFramebufferOutput>) (depth : Option<IFramebufferOutput>) (stencil : Option<IFramebufferOutput>) (c : Aardvark.Rendering.GL.ContextHandle) : int =
-        let handle = GL.GenFramebuffer()
-        GL.Check "could not create framebuffer"
 
         let mutable oldFbo = 0
         GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
+
+        let handle = GL.GenFramebuffer()
+        GL.Check "could not create framebuffer"
 
         GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
         GL.Check "could not bind framebuffer"

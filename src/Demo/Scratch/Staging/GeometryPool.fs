@@ -1,4 +1,4 @@
-﻿namespace Aardvark.SceneGraph
+﻿namespace Aardvark.SceneGraph.Pool
 
 open System
 open System.Threading
@@ -662,15 +662,19 @@ module ``Pool Tests`` =
                     ]
             }
 
+        let rnd = Random()
+
         let geometry (pos : V3d) =  
             let trafo = Trafo3d.Scale 0.1 * Trafo3d.Translation pos
 
-            Primitives.unitSphere 0
+            Primitives.unitSphere 3
+            //Primitives.unitSphere (rnd.Next(1, 7))
+            //Primitives.unitCone (rnd.Next(10, 2000))
                 |> AdaptiveGeometry.ofIndexedGeometry [Sem.Hugo, Mod.constant trafo :> IMod ]
                 |> pool.Add
 
 
-        let s = 20.0
+        let s = 5.0 
 
         let all =
             [    
@@ -705,6 +709,22 @@ module ``Pool Tests`` =
                     geometries.Clear()
                     geometries.UnionWith all
                 )
+
+            if k = Keys.Z then
+                transact (fun () ->
+                    
+                    let rnd = Random()
+                    Report.Line("adding new random stuff: Seed={0}", rnd.Next())
+             
+                    for i in 0 .. 100 do
+                        let rx = rnd.NextDouble() * 10.0 - 5.0
+                        let ry = rnd.NextDouble() * 10.0 - 5.0
+                        let rz = rnd.NextDouble() * 10.0 - 5.0
+                        let newStuff = geometry(V3d(rx, ry, rz))
+                        geometries.Add newStuff |> ignore    
+                )
+
+                Report.Line("new geometry count: {0}", geometries.Count)
                 
         )
 

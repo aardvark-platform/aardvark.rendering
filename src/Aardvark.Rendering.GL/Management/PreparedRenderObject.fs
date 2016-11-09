@@ -9,6 +9,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
+open OpenTK.Graphics.OpenGL4
 
 
 [<CustomEquality;CustomComparison>]
@@ -152,39 +153,44 @@ type PreparedRenderObject =
 
     member x.Dispose() =
         lock x (fun () -> 
-            try
-                if not x.IsDisposed then
-                    x.IsDisposed <- true
+            if not x.IsDisposed then
+                x.IsDisposed <- true
 
-                    use resourceLock = x.Context.ResourceLock
+                // ObjDisposed might occur here if GL is dead already and render objects get disposed nondeterministically by finalizer thread.
+                let resourceLock = try Some x.Context.ResourceLock with :? ObjectDisposedException as o -> None
 
-                    OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
+                match resourceLock with
+                    | None ->
+                        // OpenGL already dead
+                        ()
+                    | Some l -> 
+                        use resourceLock = l
 
-                    x.Activation.Dispose()
-                    match x.DrawBuffers with
-                        | Some b -> b.RemoveRef()
-                        | _ -> ()
-                    x.VertexArray.Dispose() 
-                    x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
-                    x.IndexBuffer |> Option.iter (fun (_,b) -> b.Dispose())
-                    match x.IndirectBuffer with
-                        | Some b -> b.Dispose()
-                        | None -> x.DrawCallInfos.Dispose()
+                        OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
+                        x.Activation.Dispose()
+                        match x.DrawBuffers with
+                            | Some b -> b.RemoveRef()
+                            | _ -> ()
+                        x.VertexArray.Dispose() 
+                        x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
+                        x.IndexBuffer |> Option.iter (fun (_,b) -> b.Dispose())
+                        match x.IndirectBuffer with
+                            | Some b -> b.Dispose()
+                            | None -> x.DrawCallInfos.Dispose()
 
-                    x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
-                    x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
-                    x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-                    x.Program.Dispose() 
-                    x.VertexArray <- Unchecked.defaultof<_>
+                        x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
+                        x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
+                        x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
+                        x.Program.Dispose() 
+                        x.VertexArray <- Unchecked.defaultof<_>
 
-                    x.IsActive.Dispose()
-                    x.BeginMode.Dispose()
-                    x.DepthTestMode.Dispose()
-                    x.CullMode.Dispose()
-                    x.PolygonMode.Dispose()
-                    x.BlendMode.Dispose()
-                    x.StencilMode.Dispose()
-            with e -> Log.warn "Prepare killed!!"
+                        x.IsActive.Dispose()
+                        x.BeginMode.Dispose()
+                        x.DepthTestMode.Dispose()
+                        x.CullMode.Dispose()
+                        x.PolygonMode.Dispose()
+                        x.BlendMode.Dispose()
+                        x.StencilMode.Dispose()
         )
         
              
@@ -351,6 +357,7 @@ type ResourceManagerExtensions private() =
         let program = x.CreateSurface(fboSignature, rj.Surface)
         let prog = program.Handle.GetValue()
 
+        GL.Check "[Prepare] Create Surface"
 
         let createdViews = System.Collections.Generic.List()
 
@@ -362,6 +369,7 @@ type ResourceManagerExtensions private() =
                    )
                 |> Map.ofList
 
+        GL.Check "[Prepare] Uniform Buffers"
 
         // partition all requested (top-level) uniforms into Textures and other
         let textureUniforms, otherUniforms = 
@@ -427,6 +435,8 @@ type ResourceManagerExtensions private() =
                     )
                 |> Map.ofList
 
+        GL.Check "[Prepare] Textures"
+
         // create all requested UniformLocations
         let uniforms =
             otherUniforms
@@ -438,6 +448,8 @@ type ResourceManagerExtensions private() =
                         None
                    )
                 |> Map.ofList
+
+        GL.Check "[Prepare] Create Uniform Location"
 
         // create all requested vertex-/instance-inputs
         let buffers =
@@ -462,6 +474,7 @@ type ResourceManagerExtensions private() =
                                             failwithf "could not get attribute %A" v.semantic
                    )
 
+        GL.Check "[Prepare] Buffers"
 
         // create the index buffer (if present)
         let index =
@@ -482,13 +495,19 @@ type ResourceManagerExtensions private() =
                 | None -> None
 
 
+        GL.Check "[Prepare] Indices"
+
         let indirect =
             if isNull rj.IndirectBuffer then None
             else x.CreateIndirectBuffer(Option.isSome rj.Indices, rj.IndirectBuffer) |> Some
 
+        GL.Check "[Prepare] Indirect Buffer"
+
         // create the VertexArrayObject
         let vao =
             x.CreateVertexArrayObject(buffers, index)
+
+        GL.Check "[Prepare] VAO"
 
         let attributeValues =
             buffers 

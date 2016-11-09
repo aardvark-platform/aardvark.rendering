@@ -24,13 +24,14 @@ open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
-open Default // makes viewTrafo and other tutorial specicific default creators visible
+
 
 module Render2TexturePrimitive = 
 
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
 
+    let win = Interactive.Window
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
     let size = V2i(1024,768)
@@ -58,7 +59,7 @@ module Render2TexturePrimitive =
   
     // Default scene graph setup with static camera
     let render2TextureSg =
-        quadSg
+        Sg.fullScreenQuad
             |> Sg.viewTrafo ~~(CameraView.lookAt (V3d(3,3,3)) V3d.OOO V3d.OOI                   |> CameraView.viewTrafo )
             |> Sg.projTrafo ~~(Frustum.perspective 60.0 0.01 10.0 (float size.X / float size.Y) |> Frustum.projTrafo    )
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
@@ -94,20 +95,20 @@ module Render2TexturePrimitive =
 
     // The render to texture texture can also be used in another render pass (here we again render to our main window)
     let sg = 
-        quadSg 
+        Sg.fullScreenQuad 
             |> Sg.texture DefaultSemantic.DiffuseColorTexture ~~(color :> ITexture)
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
-            |> Sg.viewTrafo (viewTrafo   () |> Mod.map CameraView.viewTrafo )
-            |> Sg.projTrafo (perspective () |> Mod.map Frustum.projTrafo    )
+            |> Sg.viewTrafo Interactive.DefaultViewTrafo
+            |> Sg.projTrafo Interactive.DefaultProjTrafo
 
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-        setSg sg
-        win.Run()
+        Interactive.SceneGraph <- sg
+        Interactive.RunMainLoop()
 
 open Render2TexturePrimitive
 
 #if INTERACTIVE
-setSg sg
+Interactive.SceneGraph <- sg
 printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
 #endif

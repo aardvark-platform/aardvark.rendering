@@ -37,19 +37,13 @@ module Config =
     /// The number of resource context to be created for a default
     /// rendering context instance.
     /// </summary>
-    let NumberOfResourceContexts = 2
+    let NumberOfResourceContexts = 4
 
     /// <summary>
     /// defines whether the GL context should log errors
     /// </summary>
     [<Literal>]
     let CheckErrors = false
-
-    /// ResourceSet.Update and Program.Run use a GL fence sync if true.
-    /// This flag improves timings for gpu uploads but also incurs a (possible) performance
-    /// penality as well as incompatibiliy on some drivers.
-    [<Literal>]
-    let SyncUploadsAndFrames = false
 
     /// <summary>
     /// The number of bits used for color values in default contexts
@@ -76,7 +70,18 @@ module Config =
     let enableSamplersIfPossible = true
     let enableUniformBuffersIfPossible = true
 
+module RuntimeConfig =
 
+    /// ResourceSet.Update and Program.Run use a GL fence sync if true.
+    /// This flag improves timings for gpu uploads but also incurs a (possible) performance
+    /// penality as well as incompatibiliy on some drivers.
+    let mutable SyncUploadsAndFrames = false
+  
+    /// If true, no OpenGL queries take place, i.e. no primitive counting etc.
+    let mutable SupressGLTimers = false
+
+    /// If true, no frame statistics is accumulated for render tasks 
+    let mutable SupressRuntimeStats = false
 
 [<AutoOpen>]
 module Error =
@@ -103,11 +108,11 @@ module Error =
     // with this inline function leads to a complete elimination of
     // the enire call including the allocation of its arguments
     type GL with
-        static member inline Check str =
+        static member Check str =
             if Config.CheckErrors then
                 let err = GL.GetError()
                 if err <> ErrorCode.NoError then
-                    Aardvark.Base.Report.Warn("{0}:{1}",err,str)
+                    Aardvark.Base.Report.Warn("{0}: {1}",err,str)
                     //raise <| OpenGLException(err, str)
 
         static member SetupDebugOutput() =

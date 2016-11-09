@@ -20,11 +20,9 @@ namespace Examples
 
 open System
 open Aardvark.Base
-open Aardvark.Rendering.Interactive
-
-open Default // makes viewTrafo and other tutorial specicific default creators visible
-
 open Aardvark.Base.Incremental
+
+open Aardvark.Rendering.Interactive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Base.Incremental.Operators
@@ -33,10 +31,10 @@ open Aardvark.Rendering.NanoVg
 
 module PostProcessing = 
 
-    Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
-
+    Interactive.Samples <- 1
+    let win = Interactive.Window
     // let's start by creating our example-scene containing random points.
     let pointSize = Mod.init 50.0
     let pointCount = 2048
@@ -49,8 +47,8 @@ module PostProcessing =
         Sg.draw IndexedGeometryMode.PointList
             |> Sg.vertexAttribute DefaultSemantic.Positions (Array.init pointCount (fun _ -> randomV3f()) |> Mod.constant)
             |> Sg.vertexAttribute DefaultSemantic.Colors (Array.init pointCount (fun _ -> randomColor()) |> Mod.constant)
-            |> Sg.viewTrafo (viewTrafo() |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo (perspective() |> Mod.map Frustum.projTrafo)
+            |> Sg.viewTrafo Interactive.DefaultViewTrafo
+            |> Sg.projTrafo Interactive.DefaultProjTrafo
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.pointSprite |> toEffect; DefaultSurfaces.pointSpriteFragment |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
             |> Sg.uniform "PointSize" pointSize
             |> Sg.uniform "ViewportSize" win.Sizes
@@ -68,9 +66,6 @@ module PostProcessing =
                 texture uniform?DiffuseColorTexture
                 filter Filter.MinMagMipPoint
             }
-
-    //    let cube =
-    //        SamplerCube(uniform?CubeMap, { SamplerState.Empty with Filter = Some Filter.MinMagLinear })
 
         // for a given filterSize and sigma calculate the weights CPU-side
         let filterSize = 15
@@ -111,11 +106,6 @@ module PostProcessing =
                 return V4d(color.XYZ, 1.0)
             }
 
-    //    let bla (v : Vertex) =
-    //        fragment {
-    //            return cube.Sample(v.p.XYZ.Normalized)
-    //        }
-
 
     // for rendering the filtered image we need a fullscreen quad
     let fullscreenQuad =
@@ -134,26 +124,6 @@ module PostProcessing =
             |> Sg.compile win.Runtime win.FramebufferSignature 
             |> RenderTask.renderToColor win.Sizes
  
-    //let runtime = win.Runtime  
-    //let signature =
-    //    runtime.CreateFramebufferSignature [
-    //        DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-    //        DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
-    //    ]
-    //let cube = win.Runtime.CreateTextureCube(V2i(1024,1024), TextureFormat.Rgba8, 1, 1)
-    //let depth = win.Runtime.CreateRenderbuffer(V2i(1024,1024),RenderbufferFormat.Depth24Stencil8, 1)
-    //
-    //let fbo = 
-    //    runtime.CreateFramebuffer(signature, 
-    //        Map.ofList [
-    //             DefaultSemantic.Colors, { texture = cube; slice = int CubeSide.PositiveX; level = 0 } :> IFramebufferOutput 
-    //             DefaultSemantic.Depth, depth :> IFramebufferOutput
-    //        ])
-    //
-    //let cubeResult = 
-    //    RenderTask.renderTo (Mod.constant <| OutputDescription.ofFramebuffer fbo) (pointSg |> Sg.compile win.Runtime win.FramebufferSignature)
-    //
-    //let a = RenderTask.getResult DefaultSemantic.Colors cubeResult
 
     // by taking the texture created above and the fullscreen quad we can now apply
     // the first gaussian filter to it and in turn get a new IMod<ITexture>     
@@ -213,17 +183,17 @@ module PostProcessing =
         Sg.group' [mainResult; overlayOriginal; overlayText]
 
     let showTexture t =
-        setSg (
+        Interactive.SceneGraph <- 
             fullscreenQuad 
                 |> Sg.texture DefaultSemantic.DiffuseColorTexture t
                 |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
-        )
+
 
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
-        setSg final
-        win.Run()
+        Interactive.SceneGraph <- final
+        Interactive.RunMainLoop()
 
     // finally we create a simple utility for changing the pointSize
     // you can play with it and see the render-result adjust to the given point-size.
@@ -235,13 +205,13 @@ module PostProcessing =
     let showMain() = showTexture mainResult
     let showOnlyX() = showTexture blurredOnlyX
     let showOnlyY() = showTexture blurredOnlyY
-    let showFinal() = setSg final      
+    let showFinal() = Interactive.SceneGraph <- final      
 
 
 open PostProcessing
 
 #if INTERACTIVE
-setSg final
-printfn "Done. Modify sg and call setSg again in order to see the modified rendering result."
+Interactive.SceneGraph <- final
+printfn "Done. Modify sg and call set the scene graph again in order to see the modified rendering result."
 #endif
 
