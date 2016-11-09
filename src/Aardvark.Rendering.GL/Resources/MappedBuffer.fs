@@ -17,7 +17,94 @@ open Aardvark.Rendering.GL
 #nowarn "51"
 
 
+module ResizeBuffers =
+
+    type ResizeBuffer(ctx : Context, handle : int) =
+        inherit Buffer(ctx, 0n, handle)
+
+        member x.Resize(newCapacity : nativeint) =
+            let newCapactiy = Fun.NextPowerOfTwo(int64 newCapacity) |> nativeint
+            if newCapacity <> x.SizeInBytes then
+                using ctx.ResourceLock (fun _ -> 
+                    let copyBytes = min newCapacity x.SizeInBytes
+
+                    GL.BindBuffer(BufferTarget.CopyReadBuffer, x.Handle)
+                    if copyBytes <> 0n then
+                        let tmpBuffer = GL.GenBuffer()
+                        GL.BindBuffer(BufferTarget.CopyWriteBuffer, tmpBuffer)
+
+                        GL.BufferData(BufferTarget.CopyWriteBuffer, copyBytes, 0n, BufferUsageHint.StaticCopy)
+                        GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copyBytes)
+
+                        GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StreamDraw)
+                        GL.CopyBufferSubData(BufferTarget.CopyWriteBuffer, BufferTarget.CopyReadBuffer, 0n, 0n, copyBytes)
+
+                        GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                        GL.DeleteBuffer(tmpBuffer)
+                    else
+                        GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StreamDraw)
+
+                    GL.BindBuffer(BufferTarget.CopyReadBuffer,  0)
+
+                    x.SizeInBytes <- newCapacity
+
+                )
+
+        member x.UseWrite(offset : nativeint, size : nativeint, f : nativeint -> 'a) =
+            if offset < 0n then failwith "offset < 0n"
+            if size < 0n then failwith "negative size"
+            if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
+
+            if size = 0n then
+                f 0n
+            else
+                let data = Marshal.AllocHGlobal size
+
+                using ctx.ResourceLock (fun _ ->
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
+                    GL.Check "[ResizeableBuffer] could not bind buffer"
+
+                    let res = f data
+
+                    GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
+                    GL.Check "[ResizeableBuffer] could not upload buffer"
+
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                    GL.Check "[ResizeableBuffer] could not unbind buffer"
+                    
+                    Marshal.FreeHGlobal data
+                    res
+                )
+
+        member x.UseRead(offset : nativeint, size : nativeint, f : nativeint -> 'a) =
+            if offset < 0n then failwith "offset < 0n"
+            if size < 0n then failwith "negative size"
+            if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
+
+            if size = 0n then
+                f 0n
+            else
+                let data = Marshal.AllocHGlobal size
+
+                using ctx.ResourceLock (fun _ ->
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
+                    GL.Check "[ResizeableBuffer] could not bind buffer"
+
+                    GL.GetBufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
+                    GL.Check "[ResizeableBuffer] could not download buffer"
+
+                    let res = f data
+
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                    GL.Check "[ResizeableBuffer] could not unbind buffer"
+
+                    Marshal.FreeHGlobal data
+                    res
+                )
+
+
 module MappedBufferImplementations = 
+
     type MappedBuffer(ctx : Context) =
         inherit Mod.AbstractMod<IBuffer>()
 
@@ -213,7 +300,7 @@ module MappedBufferImplementations =
         let locks = ReferenceCountingSet<RenderTaskLock>()
 
         let mutable oldBuffers : list<int> = []
-        let mutable buffer = Buffer(ctx, 0n, 0)
+        let mutable buffer = ResizeBuffers.ResizeBuffer(ctx, using ctx.ResourceLock (fun _ -> GL.GenBuffer()))
         let onDispose = new System.Reactive.Subjects.Subject<unit>()
 
         let resourceLocked f =
@@ -225,57 +312,10 @@ module MappedBufferImplementations =
             run locks ()
 
         let resize (newCapacity : nativeint) =
-            if nativeint newCapacity <> buffer.SizeInBytes then
-                let copySize = min buffer.SizeInBytes newCapacity
+            buffer.Resize(newCapacity)
+            false
 
-                let oldBuffer = buffer.Handle
-                let newBuffer = GL.GenBuffer()
-                GL.Check "[MappedBuffer] could not create buffer"
-            
-                if buffer.Handle <> 0 then
-                    GL.BindBuffer(BufferTarget.CopyReadBuffer, buffer.Handle)
-                    GL.Check "[MappedBuffer] could not bind old buffer"
-
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, newBuffer)
-                GL.Check "[MappedBuffer] could not bind new buffer"
-
-
-                if newCapacity > 0n then
-                    GL.BufferData(BufferTarget.CopyWriteBuffer, newCapacity, 0n, BufferUsageHint.DynamicDraw)
-                    GL.Check "[MappedBuffer] could not set buffer storage"
-
-                    if oldBuffer <> 0 then
-                        if copySize > 0n then
-                            GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copySize)
-                            GL.Check "[MappedBuffer] could not copy buffer"
-
-                        GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
-                        GL.Check "[MappedBuffer] could unbind old buffer"
-
-                    buffer <- Buffer(ctx, nativeint newCapacity, newBuffer)
-                else
-                    buffer <- Buffer(ctx, 0n, 0)
-
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                GL.Check "[MappedBuffer] could unbind buffer"
-
-
-                if oldBuffer <> 0 then
-                    Interlocked.Change(&oldBuffers, fun o -> oldBuffer::o) |> ignore
-
-                true
-            else false
-
-        let deleteOldBuffers () =
-            let delete = Interlocked.Exchange(&oldBuffers, [])
-            if not (List.isEmpty delete) then
-                using ctx.ResourceLock (fun _ ->
-                    for d in delete do 
-                        GL.DeleteBuffer(d) 
-                        GL.Check "[MappedBuffer] could delete old buffer"
-                )
-
-        member x.Write(sourcePtr : IntPtr, offset : nativeint, size : nativeint) =   
+        member x.Write(sourcePtr : IntPtr, offset : nativeint, size : nativeint) = 
             resourceLocked (fun () -> 
                 if size + offset > buffer.SizeInBytes then failwith "insufficient buffer size"
 
@@ -291,7 +331,7 @@ module MappedBufferImplementations =
                 )
             )
 
-        member x.Read(targetPtr : IntPtr, offset : nativeint, size : nativeint) =   
+        member x.Read(targetPtr : IntPtr, offset : nativeint, size : nativeint) =
             resourceLocked (fun () -> 
                 if size + offset > buffer.SizeInBytes then failwith "insufficient buffer size"
                 using ctx.ResourceLock (fun _ ->
@@ -365,8 +405,6 @@ module MappedBufferImplementations =
 
 
         override x.Compute() =
-            deleteOldBuffers()
-
             buffer :> IBuffer
 
         member x.Dispose() =
@@ -404,7 +442,6 @@ module MappedBufferImplementations =
             member x.Use (f : unit -> 'a) = x.Use f
             member x.AddLock (r : RenderTaskLock) = x.AddLock r
             member x.RemoveLock (r : RenderTaskLock) = x.RemoveLock r
-
 
 
 [<AutoOpen>]
