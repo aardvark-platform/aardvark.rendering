@@ -401,7 +401,7 @@ module RenderTasks =
             reinit x config
 
             //TODO
-            let programStats = x.ProgramUpdate (fun () -> program.Update parent)
+            let programStats = x.ProgramUpdate (fun () -> program.Update null)
             FrameStatistics.Zero
 
         override x.Perform() =
@@ -727,7 +727,7 @@ module RenderTasks =
             reinit x cfg
 
             let updateStats = 
-                x.ProgramUpdate (fun () -> program.Update parent)
+                x.ProgramUpdate (fun () -> program.Update null)
             FrameStatistics.Zero
 
 
