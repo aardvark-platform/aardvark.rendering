@@ -635,12 +635,12 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, family : Queu
     member x.Handle = handle
 
 and internal DeviceHeap(heap : MemoryHeapInfo) =
-    let size = heap.size.Bytes
+    let totalSize = heap.size.Bytes
     let mutable allocated = 0L
 
     member x.TryAdd(size : int64) =
         Interlocked.Change(&allocated, fun v ->
-            if v + size > size then (v, false)
+            if v + size > totalSize then (v, false)
             else (v + size, true)
         )
 
@@ -654,8 +654,8 @@ and internal DeviceHeap(heap : MemoryHeapInfo) =
     member x.Info = heap
     member x.Index = heap.index
     member x.Allocated = Mem allocated
-    member x.Available = Mem (size - allocated)
-    member x.Size = size
+    member x.Available = Mem (totalSize - allocated)
+    member x.Size = totalSize
 
 and DeviceMemory internal(device : Device, memory : MemoryInfo, heap : DeviceHeap) =
     member x.Device = device
@@ -690,6 +690,11 @@ and DeviceMemory internal(device : Device, memory : MemoryInfo, heap : DeviceHea
         match x.TryAlloc size with
             | (true, ptr) -> ptr
             | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
+            
+    member x.TryAlloc(mem : Mem, [<Out>] ptr : byref<DevicePtr>) = x.TryAlloc(mem.Bytes, &ptr)
+    member x.TryAlloc(mem : VkDeviceSize, [<Out>] ptr : byref<DevicePtr>) = x.TryAlloc(int64 mem, &ptr)
+    member x.Alloc(mem : Mem) = x.Alloc(mem.Bytes)
+    member x.Alloc(mem : VkDeviceSize) = x.Alloc(int64 mem)
 
     member x.Free(ptr : DevicePtr) =
         lock ptr (fun () ->
