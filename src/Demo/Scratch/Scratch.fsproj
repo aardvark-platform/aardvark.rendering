@@ -79,6 +79,7 @@
     <Compile Include="Experiments\NullBufferTest.fs" />
     <Compile Include="Experiments\Playground.fs" />
     <Compile Include="Experiments\Vulkan.fs" />
+    <Compile Include="Experiments\ChangeBufferHandle.fs" />
     <Compile Include="PGM.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
