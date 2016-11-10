@@ -78,7 +78,39 @@ let main args =
             Log.stop()
         Log.stop()
  
+        Log.start "memories"
+        let t = d.DeviceMemory
+        Log.start "device memory"
+        Log.line "index:          %d" t.index
+        Log.line "heap size:      %A" t.heap.size
+        Log.line "flags:          %A" t.flags
+        Log.stop()
+
+        let t = d.HostMemory
+        Log.start "host memory"
+        Log.line "index:          %d" t.index
+        Log.line "heap size:      %A" t.heap.size
+        Log.line "flags:          %A" t.flags
+        Log.stop()
+
+        Log.stop()
+  
+
+    
+
         
         Log.stop()
+
+
+    let main = instance.Devices.[0]
+    use dev = main.CreateDevice(Set.empty, Set.ofList ["VK_KHR_swapchain"; "VK_NV_glsl_shader"], [main.MainQueue, 4])
+
+    Log.start "allocate 1GB"
+    Log.line "before:          %A" dev.DeviceMemory.Available
+    let ptr = dev.DeviceMemory.Alloc(1L <<< 30)
+    Log.line "after alloc:     %A" dev.DeviceMemory.Available
+    dev.DeviceMemory.Free(ptr)
+    Log.line "after free:      %A" dev.DeviceMemory.Available
+    Log.stop()
 
     0

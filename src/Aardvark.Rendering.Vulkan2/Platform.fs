@@ -15,6 +15,8 @@ module private Utilities =
     let check (str : string) (err : VkResult) =
         if err <> VkResult.VkSuccess then failwithf "[Vulkan] %s" str
 
+    let inline failf fmt = Printf.kprintf (fun str -> failwith ("[Vulkan] " + str)) fmt
+
     module NativePtr =
         let withA (f : nativeptr<'a> -> 'b) (a : 'a[]) =
             let gc = GCHandle.Alloc(a, GCHandleType.Pinned)
@@ -77,6 +79,34 @@ type QueueFamilyInfo =
         flags                       : QueueFlags
         minImgTransferGranularity   : V3i
         timestampBits               : int
+    }
+
+[<Flags>]
+type MemoryHeapFlags =
+    | None = 0
+    | DeviceLocalBit = 0x00000001
+
+type MemoryHeapInfo =
+    {
+        index           : int
+        size            : Mem
+        flags           : MemoryHeapFlags
+    }
+
+[<Flags>]
+type MemoryFlags =
+    | None              = 0x00000000
+    | DeviceLocal       = 0x00000001
+    | HostVisible       = 0x00000002
+    | HostCoherent      = 0x00000004
+    | HostCached        = 0x00000008
+    | LazilyAllocated   = 0x00000010
+
+type MemoryInfo =
+    {
+        index           : int
+        heap            : MemoryHeapInfo
+        flags           : MemoryFlags
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -175,6 +205,50 @@ module QueueFamilyInfo =
     let inline flags (qf : QueueFamilyInfo) = qf.flags
     let inline minImgTransferGranularity (qf : QueueFamilyInfo) = qf.minImgTransferGranularity
     let inline timestampBits (qf : QueueFamilyInfo) = qf.timestampBits
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module MemoryFlags =
+    let inline deviceLocal (f : MemoryFlags) = (f &&& MemoryFlags.DeviceLocal) <> MemoryFlags.None
+    let inline hostVisible (f : MemoryFlags) = (f &&& MemoryFlags.HostVisible) <> MemoryFlags.None
+    let inline hostCoherent (f : MemoryFlags) = (f &&& MemoryFlags.HostCoherent) <> MemoryFlags.None
+    let inline hostCached (f : MemoryFlags) = (f &&& MemoryFlags.HostCached) <> MemoryFlags.None
+    let inline lazilyAllocated (f : MemoryFlags) = (f &&& MemoryFlags.LazilyAllocated) <> MemoryFlags.None
+
+
+    let internal deviceScore (f : MemoryFlags) =
+        if deviceLocal f then
+            let mutable res = 16
+
+            if hostVisible f then res <- res + 8
+            if hostCoherent f then res <- res + 4
+            if hostCached f then res <- res + 2
+            if lazilyAllocated f then res <- res + 2
+            res
+        else
+            0
+
+    let internal hostScore (f : MemoryFlags) =
+        if hostVisible f then
+            let mutable res = 8
+            if hostCoherent f then res <- res + 4
+            if hostCached f then res <- res + 2
+            if lazilyAllocated f then res <- res + 1
+            res
+        else
+            0
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module MemoryInfo =
+    let inline index (info : MemoryInfo) = info.index
+    let inline heap (info : MemoryInfo) = info.heap
+    let inline flags (info : MemoryInfo) = info.flags
+
+    let internal deviceScore (info : MemoryInfo) =
+        (MemoryFlags.deviceScore info.flags, info.heap.size.Bytes)
+
+    let internal hostScore (info : MemoryInfo) =
+        (MemoryFlags.hostScore info.flags, info.heap.size.Bytes)
 
 
 type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<string>) as this =   
@@ -296,7 +370,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
         devices |> Array.mapi (fun i d -> PhysicalDevice(this, d, i))
 
 
-
+    
 
     member x.Dispose() =
         let o = Interlocked.Exchange(&isDisposed, 1)
@@ -308,13 +382,15 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
     member x.Devices = devices
 
+    member x.IsDisposed = isDisposed <> 0
+
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
     static member AvailableLayers = availableLayers
     static member GlobalExtensions = globalExtensions
 
-and PhysicalDevice(instance : Instance, handle : VkPhysicalDevice, index : int) =
+and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, index : int) =
 
     let availableLayers = 
         let mutable count = 0u
@@ -367,7 +443,25 @@ and PhysicalDevice(instance : Instance, handle : VkPhysicalDevice, index : int) 
             }
         )
 
-    
+    let mutable memoryProperties = VkPhysicalDeviceMemoryProperties()
+    do VkRaw.vkGetPhysicalDeviceMemoryProperties(handle, &&memoryProperties)
+        
+    let heaps =
+        Array.init (int memoryProperties.memoryHeapCount) (fun i ->
+            let info = memoryProperties.memoryHeaps.[i]
+            { MemoryHeapInfo.index = i; MemoryHeapInfo.size = Mem info.size; MemoryHeapInfo.flags = unbox (int info.flags) }
+        )
+
+    let memoryTypes =
+        Array.init (int memoryProperties.memoryTypeCount) (fun i ->
+            let info = memoryProperties.memoryTypes.[i]
+            { MemoryInfo.index = i; MemoryInfo.heap = heaps.[int info.heapIndex]; MemoryInfo.flags = unbox (int info.propertyFlags) }
+        )
+        
+
+    let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
+    let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
+
     let mainQueue = queueFamilyInfos |> Array.maxBy (QueueFamilyInfo.flags >> QueueFlags.score)
     let pureTransferQueue = queueFamilyInfos |> Array.tryFind (QueueFamilyInfo.flags >> QueueFlags.transferOnly)
 
@@ -376,7 +470,8 @@ and PhysicalDevice(instance : Instance, handle : VkPhysicalDevice, index : int) 
     member x.QueueFamilies = queueFamilyInfos
     member x.MainQueue = mainQueue
     member x.TransferQueue = pureTransferQueue
-
+    member x.MemoryTypes = memoryTypes
+    member x.Heaps = heaps
 
     member x.Handle = handle
     member x.Index = index
@@ -385,13 +480,20 @@ and PhysicalDevice(instance : Instance, handle : VkPhysicalDevice, index : int) 
     member x.APIVersion = apiVersion
     member x.DriverVersion = driverVersion
 
+    member x.DeviceMemory = deviceMemory
+    member x.HostMemory = hostMemory
 
     member x.Instance = instance
+
+
+    member x.CreateDevice(layers : Set<string>, extensions : Set<string>, queues : list<QueueFamilyInfo * int>) =
+        new Device(x, layers, extensions, queues)
+
 
     override x.ToString() =
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
 
-and Device(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>, queues : list<QueueFamilyInfo * int>) =
+and Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>, queues : list<QueueFamilyInfo * int>) as this =
 
     let layers, extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
@@ -423,10 +525,10 @@ and Device(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensio
             ) |> Set.ofSeq
 
         enabledLayers, enabledExtensions
+    let mutable isDisposed = 0
 
-
-    let queues = 
-        queues |> List.choose (fun (q,c) ->
+    let queueInfos = 
+        queues |> List.toArray |> Array.choose (fun (q,c) ->
             if c < 0 then 
                 None
             else
@@ -436,37 +538,183 @@ and Device(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensio
                         q.count
                     else
                         c 
-                Some (q.index, count)
+
+                let result =
+                    VkDeviceQueueCreateInfo(
+                        VkStructureType.DeviceQueueCreateInfo, 0n,
+                        0u,
+                        uint32 q.index,
+                        uint32 count,
+                        NativePtr.zero
+                    )
+
+                Some result
         )
 
-    let device =
-        let layers = Set.toArray layers
-        let extensions = Set.toArray extensions
-        let pLayers = CStr.sallocMany layers
-        let pExtensions = CStr.sallocMany extensions
-
-        let queueInfos =
-            queues |> List.toArray |> Array.map (fun (index,count) -> 
-                VkDeviceQueueCreateInfo(
-                    VkStructureType.DeviceQueueCreateInfo, 0n,
-                    0u,
-                    uint32 index,
-                    uint32 count,
-                    NativePtr.zero
-                )
-            )
+    let instance = physical.Instance
+    let mutable device =
         queueInfos |> NativePtr.withA (fun ptr ->
-            let info =
+            let layers = Set.toArray layers
+            let extensions = Set.toArray extensions
+            let pLayers = CStr.sallocMany layers
+            let pExtensions = CStr.sallocMany extensions
+
+            let mutable features = VkPhysicalDeviceFeatures()
+            VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, &&features)
+
+            let mutable info =
                 VkDeviceCreateInfo(
                     VkStructureType.DeviceCreateInfo, 0n,
                     0u,
                     uint32 queueInfos.Length, ptr,
                     uint32 layers.Length, pLayers,
                     uint32 extensions.Length, pExtensions,
-                    NativePtr.zero
-
+                    &&features
                 )
-            ()
+
+            let mutable device = VkDevice.Zero
+            VkRaw.vkCreateDevice(physical.Handle, &&info, NativePtr.zero, &&device)
+                |> check "could not create device"
+
+            device
         )
 
+
+    let queues = 
+        [
+            for info in queueInfos do
+                let family = physical.QueueFamilies.[int info.queueFamilyIndex]
+                for i in 0 .. int info.queueCount - 1 do
+                    yield family, DeviceQueue(this, device, family, i)
+        ]
+        |> Seq.groupBy fst 
+        |> Seq.map (fun (k, vs) -> k, Seq.toArray (Seq.map snd vs))
+        |> HashMap.ofSeq
+
+    let heaps = physical.Heaps |> Array.map DeviceHeap
+    
+    let memories = 
+        physical.MemoryTypes |> Array.map (fun t ->
+            DeviceMemory(this, t, heaps.[t.heap.index])
+        )
+
+    let deviceMemory = memories.[physical.DeviceMemory.index]
+    let hostMemory = memories.[physical.HostMemory.index]
+
+    member x.Instance = instance
+
+    member x.Queues = queues
+
+    member x.IsDisposed = instance.IsDisposed || isDisposed <> 0
+
+    member x.Memories = memories
+    member x.DeviceMemory = deviceMemory
+    member x.HostMemory = hostMemory
+
+    member x.Dispose() =
+        if not instance.IsDisposed then
+            let o = Interlocked.Exchange(&isDisposed, 1)
+            if o = 0 then
+                VkRaw.vkDestroyDevice(device, NativePtr.zero)
+                device <- VkDevice.Zero
+
+    member x.Handle = device
+
     member x.PhysicalDevice = physical
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+and DeviceQueue internal(device : Device, deviceHandle : VkDevice, family : QueueFamilyInfo, index : int) =
+    let mutable handle = VkQueue.Zero
+    do VkRaw.vkGetDeviceQueue(deviceHandle, uint32 family.index, uint32 index, &&handle)
+
+    member x.Device = device
+    member x.Family = family
+    member x.Index = index
+    member x.Handle = handle
+
+and internal DeviceHeap(heap : MemoryHeapInfo) =
+    let size = heap.size.Bytes
+    let mutable allocated = 0L
+
+    member x.TryAdd(size : int64) =
+        Interlocked.Change(&allocated, fun v ->
+            if v + size > size then (v, false)
+            else (v + size, true)
+        )
+
+    member inline x.TryAdd(size : VkDeviceSize) = x.TryAdd (int64 size)
+    member inline x.TryAdd(size : Mem) = x.TryAdd size.Bytes
+
+    member x.Remove(size : int64) = Interlocked.Add(&allocated, -size) |> ignore
+    member inline x.Remove(size : VkDeviceSize) = x.Remove (int64 size)
+    member inline x.Remove(size : Mem) = x.Remove size.Bytes
+
+    member x.Info = heap
+    member x.Index = heap.index
+    member x.Allocated = Mem allocated
+    member x.Available = Mem (size - allocated)
+    member x.Size = size
+
+and DeviceMemory internal(device : Device, memory : MemoryInfo, heap : DeviceHeap) =
+    member x.Device = device
+    member x.Info = memory
+
+    member x.HeapFlags = heap.Info.flags
+    member x.Flags = memory.flags
+    member x.Available = heap.Available
+    member x.Allocated = heap.Allocated
+    member x.Size = heap.Size
+
+    member x.TryAlloc(size : int64, [<Out>] ptr : byref<DevicePtr>) =
+        if heap.TryAdd size then
+            let mutable info =
+                VkMemoryAllocateInfo(
+                    VkStructureType.MemoryAllocateInfo, 0n,
+                    uint64 size,
+                    uint32 memory.index
+                )
+
+            let mutable mem = VkDeviceMemory.Null
+
+            VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
+                |> check "could not allocate memory"
+
+            ptr <- DevicePtr(x, heap, mem, size)
+            true
+        else
+            false
+
+    member x.Alloc(size : int64) =
+        match x.TryAlloc size with
+            | (true, ptr) -> ptr
+            | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
+
+    member x.Free(ptr : DevicePtr) =
+        lock ptr (fun () ->
+            if ptr.Handle.IsValid then
+                heap.Remove ptr.Size
+                VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
+                ptr.Handle <- VkDeviceMemory.Null
+                ptr.Size <- 0L
+        )
+
+and DevicePtr internal(memory : DeviceMemory, heap : DeviceHeap, handle : VkDeviceMemory, size : int64) =
+    let mutable handle = handle
+    let mutable size = size
+
+    member x.Memory = memory
+
+    member x.Handle
+        with get() : VkDeviceMemory = handle
+        and internal set h = handle <- h
+
+    member x.Size
+        with get() : int64 = size
+        and internal set s = size <- s
+
+    member x.IsNull = handle.IsNull
+    member x.IsValid = handle.IsValid
+
+    member x.Dispose() = memory.Free(x)
