@@ -354,7 +354,7 @@ type private LayoutManager<'a>() =
                 Interlocked.Increment &r.contents |> ignore
                 v
             | _ ->
-                let v = manager.Alloc size
+                let v = manager.Alloc (nativeint size)
                 let r = ref 1
                 cnts.[v] <- (key,r)
                 store.[key] <- (v)
@@ -368,7 +368,7 @@ type private LayoutManager<'a>() =
                 Interlocked.Increment &r.contents |> ignore
                 false, v
             | _ ->
-                let v = manager.Alloc size
+                let v = manager.Alloc (nativeint size)
                 let r = ref 1
                 cnts.[v] <- (key,r)
                 store.[key] <- (v)

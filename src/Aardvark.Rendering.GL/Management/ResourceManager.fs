@@ -258,7 +258,7 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
                             match old with
                                 | Some old -> old
                                 | None ->
-                                    block <- manager.Alloc alignedSize
+                                    block <- manager.Alloc (nativeint alignedSize)
                                     ReaderWriterLock.write rw (fun () ->
                                         let mcap = nativeint manager.Capacity
                                         if buffer.Capacity <> mcap then buffer.Resize(mcap)
@@ -274,7 +274,7 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
 
                     member x.Destroy h =
                         manager.Free block
-                        if manager.AllocatedBytes = 0 then
+                        if manager.AllocatedBytes = 0n then
                             buffer.Resize 0n
 
                 }

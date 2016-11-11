@@ -63,6 +63,8 @@ type VkMirSurfaceCreateFlagsKHR = uint32
 type VkDebugReportFlagsEXT = uint32
 type PFN_vkDebugReportCallbackEXT = nativeint
 
+type VkExternalMemoryHandleTypeFlagsNV = uint32
+type VkExternalMemoryFeatureFlagsNV = uint32
 type VkInstance = nativeint
 type VkPhysicalDevice = nativeint
 type VkDevice = nativeint
@@ -805,6 +807,7 @@ type VkResult =
     | VkErrorIncompatibleDriver = -9
     | VkErrorTooManyObjects = -10
     | VkErrorFormatNotSupported = -11
+    | VkErrorFragmentedPool = -12
 
 type VkDynamicState = 
     | Viewport = 0
@@ -1082,7 +1085,7 @@ type VkPresentModeKHR =
     | VkPresentModeFifoRelaxedKhr = 3
 
 type VkColorSpaceKHR = 
-    | VkColorspaceSrgbNonlinearKhr = 0
+    | VkColorSpaceSrgbNonlinearKhr = 0
 
 [<Flags>]
 type VkDisplayPlaneAlphaFlagBitsKHR = 
@@ -1156,6 +1159,28 @@ type VkDebugReportObjectTypeEXT =
 type VkDebugReportErrorEXT = 
     | VkDebugReportErrorNoneExt = 0
     | VkDebugReportErrorCallbackRefExt = 1
+
+type VkRasterizationOrderAMD = 
+    | VkRasterizationOrderStrictAmd = 0
+    | VkRasterizationOrderRelaxedAmd = 1
+
+[<Flags>]
+type VkExternalMemoryHandleTypeFlagBitsNV = 
+    | None = 0
+    | VkExternalMemoryHandleTypeOpaqueWin32BitNv = 0x00000001
+    | VkExternalMemoryHandleTypeOpaqueWin32KmtBitNv = 0x00000002
+    | VkExternalMemoryHandleTypeD3d11ImageBitNv = 0x00000004
+    | VkExternalMemoryHandleTypeD3d11ImageKmtBitNv = 0x00000008
+
+[<Flags>]
+type VkExternalMemoryFeatureFlagBitsNV = 
+    | None = 0
+    | VkExternalMemoryFeatureDedicatedOnlyBitNv = 0x00000001
+    | VkExternalMemoryFeatureExportableBitNv = 0x00000002
+    | VkExternalMemoryFeatureImportableBitNv = 0x00000004
+
+type VkValidationCheckEXT = 
+    | VkValidationCheckAllExt = 0
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkAllocationCallbacks = 
@@ -1704,6 +1729,49 @@ type VkCopyDescriptorSet =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkDebugMarkerMarkerInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public pMarkerName : cstr
+        val mutable public color : V4f
+
+        new(sType : VkStructureType, pNext : nativeint, pMarkerName : cstr, color : V4f) = { sType = sType; pNext = pNext; pMarkerName = pMarkerName; color = color }
+        override x.ToString() =
+            sprintf "VkDebugMarkerMarkerInfoEXT { sType = %A; pNext = %A; pMarkerName = %A; color = %A }" x.sType x.pNext x.pMarkerName x.color
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDebugMarkerObjectNameInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public objectType : VkDebugReportObjectTypeEXT
+        val mutable public _object : uint64
+        val mutable public pObjectName : cstr
+
+        new(sType : VkStructureType, pNext : nativeint, objectType : VkDebugReportObjectTypeEXT, _object : uint64, pObjectName : cstr) = { sType = sType; pNext = pNext; objectType = objectType; _object = _object; pObjectName = pObjectName }
+        override x.ToString() =
+            sprintf "VkDebugMarkerObjectNameInfoEXT { sType = %A; pNext = %A; objectType = %A; _object = %A; pObjectName = %A }" x.sType x.pNext x.objectType x._object x.pObjectName
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDebugMarkerObjectTagInfoEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public objectType : VkDebugReportObjectTypeEXT
+        val mutable public _object : uint64
+        val mutable public tagName : uint64
+        val mutable public tagSize : uint64
+        val mutable public pTag : nativeint
+
+        new(sType : VkStructureType, pNext : nativeint, objectType : VkDebugReportObjectTypeEXT, _object : uint64, tagName : uint64, tagSize : uint64, pTag : nativeint) = { sType = sType; pNext = pNext; objectType = objectType; _object = _object; tagName = tagName; tagSize = tagSize; pTag = pTag }
+        override x.ToString() =
+            sprintf "VkDebugMarkerObjectTagInfoEXT { sType = %A; pNext = %A; objectType = %A; _object = %A; tagName = %A; tagSize = %A; pTag = %A }" x.sType x.pNext x.objectType x._object x.tagName x.tagSize x.pTag
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkDebugReportCallbackCreateInfoEXT = 
     struct
         val mutable public sType : VkStructureType
@@ -1715,6 +1783,43 @@ type VkDebugReportCallbackCreateInfoEXT =
         new(sType : VkStructureType, pNext : nativeint, flags : VkDebugReportFlagsEXT, pfnCallback : PFN_vkDebugReportCallbackEXT, pUserData : nativeint) = { sType = sType; pNext = pNext; flags = flags; pfnCallback = pfnCallback; pUserData = pUserData }
         override x.ToString() =
             sprintf "VkDebugReportCallbackCreateInfoEXT { sType = %A; pNext = %A; flags = %A; pfnCallback = %A; pUserData = %A }" x.sType x.pNext x.flags x.pfnCallback x.pUserData
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDedicatedAllocationBufferCreateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public dedicatedAllocation : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, dedicatedAllocation : VkBool32) = { sType = sType; pNext = pNext; dedicatedAllocation = dedicatedAllocation }
+        override x.ToString() =
+            sprintf "VkDedicatedAllocationBufferCreateInfoNV { sType = %A; pNext = %A; dedicatedAllocation = %A }" x.sType x.pNext x.dedicatedAllocation
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDedicatedAllocationImageCreateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public dedicatedAllocation : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, dedicatedAllocation : VkBool32) = { sType = sType; pNext = pNext; dedicatedAllocation = dedicatedAllocation }
+        override x.ToString() =
+            sprintf "VkDedicatedAllocationImageCreateInfoNV { sType = %A; pNext = %A; dedicatedAllocation = %A }" x.sType x.pNext x.dedicatedAllocation
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDedicatedAllocationMemoryAllocateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public image : VkImage
+        val mutable public buffer : VkBuffer
+
+        new(sType : VkStructureType, pNext : nativeint, image : VkImage, buffer : VkBuffer) = { sType = sType; pNext = pNext; image = image; buffer = buffer }
+        override x.ToString() =
+            sprintf "VkDedicatedAllocationMemoryAllocateInfoNV { sType = %A; pNext = %A; image = %A; buffer = %A }" x.sType x.pNext x.image x.buffer
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2072,6 +2177,31 @@ type VkEventCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkExportMemoryAllocateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsNV
+
+        new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsNV) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+        override x.ToString() =
+            sprintf "VkExportMemoryAllocateInfoNV { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExportMemoryWin32HandleInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public pAttributes : nativeptr<nativeint>
+        val mutable public dwAccess : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, pAttributes : nativeptr<nativeint>, dwAccess : uint32) = { sType = sType; pNext = pNext; pAttributes = pAttributes; dwAccess = dwAccess }
+        override x.ToString() =
+            sprintf "VkExportMemoryWin32HandleInfoNV { sType = %A; pNext = %A; pAttributes = %A; dwAccess = %A }" x.sType x.pNext x.pAttributes x.dwAccess
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkExtensionProperties = 
     struct
         val mutable public extensionName : String256
@@ -2080,6 +2210,45 @@ type VkExtensionProperties =
         new(extensionName : String256, specVersion : uint32) = { extensionName = extensionName; specVersion = specVersion }
         override x.ToString() =
             sprintf "VkExtensionProperties { extensionName = %A; specVersion = %A }" x.extensionName x.specVersion
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImageFormatProperties = 
+    struct
+        val mutable public maxExtent : VkExtent3D
+        val mutable public maxMipLevels : uint32
+        val mutable public maxArrayLayers : uint32
+        val mutable public sampleCounts : VkSampleCountFlags
+        val mutable public maxResourceSize : VkDeviceSize
+
+        new(maxExtent : VkExtent3D, maxMipLevels : uint32, maxArrayLayers : uint32, sampleCounts : VkSampleCountFlags, maxResourceSize : VkDeviceSize) = { maxExtent = maxExtent; maxMipLevels = maxMipLevels; maxArrayLayers = maxArrayLayers; sampleCounts = sampleCounts; maxResourceSize = maxResourceSize }
+        override x.ToString() =
+            sprintf "VkImageFormatProperties { maxExtent = %A; maxMipLevels = %A; maxArrayLayers = %A; sampleCounts = %A; maxResourceSize = %A }" x.maxExtent x.maxMipLevels x.maxArrayLayers x.sampleCounts x.maxResourceSize
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExternalImageFormatPropertiesNV = 
+    struct
+        val mutable public imageFormatProperties : VkImageFormatProperties
+        val mutable public externalMemoryFeatures : VkExternalMemoryFeatureFlagsNV
+        val mutable public exportFromImportedHandleTypes : VkExternalMemoryHandleTypeFlagsNV
+        val mutable public compatibleHandleTypes : VkExternalMemoryHandleTypeFlagsNV
+
+        new(imageFormatProperties : VkImageFormatProperties, externalMemoryFeatures : VkExternalMemoryFeatureFlagsNV, exportFromImportedHandleTypes : VkExternalMemoryHandleTypeFlagsNV, compatibleHandleTypes : VkExternalMemoryHandleTypeFlagsNV) = { imageFormatProperties = imageFormatProperties; externalMemoryFeatures = externalMemoryFeatures; exportFromImportedHandleTypes = exportFromImportedHandleTypes; compatibleHandleTypes = compatibleHandleTypes }
+        override x.ToString() =
+            sprintf "VkExternalImageFormatPropertiesNV { imageFormatProperties = %A; externalMemoryFeatures = %A; exportFromImportedHandleTypes = %A; compatibleHandleTypes = %A }" x.imageFormatProperties x.externalMemoryFeatures x.exportFromImportedHandleTypes x.compatibleHandleTypes
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkExternalMemoryImageCreateInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleTypes : VkExternalMemoryHandleTypeFlagsNV
+
+        new(sType : VkStructureType, pNext : nativeint, handleTypes : VkExternalMemoryHandleTypeFlagsNV) = { sType = sType; pNext = pNext; handleTypes = handleTypes }
+        override x.ToString() =
+            sprintf "VkExternalMemoryImageCreateInfoNV { sType = %A; pNext = %A; handleTypes = %A }" x.sType x.pNext x.handleTypes
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2428,20 +2597,6 @@ type VkImageCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkImageFormatProperties = 
-    struct
-        val mutable public maxExtent : VkExtent3D
-        val mutable public maxMipLevels : uint32
-        val mutable public maxArrayLayers : uint32
-        val mutable public sampleCounts : VkSampleCountFlags
-        val mutable public maxResourceSize : VkDeviceSize
-
-        new(maxExtent : VkExtent3D, maxMipLevels : uint32, maxArrayLayers : uint32, sampleCounts : VkSampleCountFlags, maxResourceSize : VkDeviceSize) = { maxExtent = maxExtent; maxMipLevels = maxMipLevels; maxArrayLayers = maxArrayLayers; sampleCounts = sampleCounts; maxResourceSize = maxResourceSize }
-        override x.ToString() =
-            sprintf "VkImageFormatProperties { maxExtent = %A; maxMipLevels = %A; maxArrayLayers = %A; sampleCounts = %A; maxResourceSize = %A }" x.maxExtent x.maxMipLevels x.maxArrayLayers x.sampleCounts x.maxResourceSize
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
 type VkImageSubresourceRange = 
     struct
         val mutable public aspectMask : VkImageAspectFlags
@@ -2503,6 +2658,19 @@ type VkImageViewCreateInfo =
         new(sType : VkStructureType, pNext : nativeint, flags : VkImageViewCreateFlags, image : VkImage, viewType : VkImageViewType, format : VkFormat, components : VkComponentMapping, subresourceRange : VkImageSubresourceRange) = { sType = sType; pNext = pNext; flags = flags; image = image; viewType = viewType; format = format; components = components; subresourceRange = subresourceRange }
         override x.ToString() =
             sprintf "VkImageViewCreateInfo { sType = %A; pNext = %A; flags = %A; image = %A; viewType = %A; format = %A; components = %A; subresourceRange = %A }" x.sType x.pNext x.flags x.image x.viewType x.format x.components x.subresourceRange
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImportMemoryWin32HandleInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public handleType : VkExternalMemoryHandleTypeFlagsNV
+        val mutable public handle : nativeint
+
+        new(sType : VkStructureType, pNext : nativeint, handleType : VkExternalMemoryHandleTypeFlagsNV, handle : nativeint) = { sType = sType; pNext = pNext; handleType = handleType; handle = handle }
+        override x.ToString() =
+            sprintf "VkImportMemoryWin32HandleInfoNV { sType = %A; pNext = %A; handleType = %A; handle = %A }" x.sType x.pNext x.handleType x.handle
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2868,6 +3036,18 @@ type VkPipelineLayoutCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkPipelineRasterizationStateRasterizationOrderAMD = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public rasterizationOrder : VkRasterizationOrderAMD
+
+        new(sType : VkStructureType, pNext : nativeint, rasterizationOrder : VkRasterizationOrderAMD) = { sType = sType; pNext = pNext; rasterizationOrder = rasterizationOrder }
+        override x.ToString() =
+            sprintf "VkPipelineRasterizationStateRasterizationOrderAMD { sType = %A; pNext = %A; rasterizationOrder = %A }" x.sType x.pNext x.rasterizationOrder
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkPresentInfoKHR = 
     struct
         val mutable public sType : VkStructureType
@@ -3161,6 +3341,19 @@ type VkSwapchainCreateInfoKHR =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkValidationFlagsEXT = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public disabledValidationCheckCount : uint32
+        val mutable public pDisabledValidationChecks : nativeptr<VkValidationCheckEXT>
+
+        new(sType : VkStructureType, pNext : nativeint, disabledValidationCheckCount : uint32, pDisabledValidationChecks : nativeptr<VkValidationCheckEXT>) = { sType = sType; pNext = pNext; disabledValidationCheckCount = disabledValidationCheckCount; pDisabledValidationChecks = pDisabledValidationChecks }
+        override x.ToString() =
+            sprintf "VkValidationFlagsEXT { sType = %A; pNext = %A; disabledValidationCheckCount = %A; pDisabledValidationChecks = %A }" x.sType x.pNext x.disabledValidationCheckCount x.pDisabledValidationChecks
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkWaylandSurfaceCreateInfoKHR = 
     struct
         val mutable public sType : VkStructureType
@@ -3172,6 +3365,24 @@ type VkWaylandSurfaceCreateInfoKHR =
         new(sType : VkStructureType, pNext : nativeint, flags : VkWaylandSurfaceCreateFlagsKHR, display : nativeptr<nativeint>, surface : nativeptr<nativeint>) = { sType = sType; pNext = pNext; flags = flags; display = display; surface = surface }
         override x.ToString() =
             sprintf "VkWaylandSurfaceCreateInfoKHR { sType = %A; pNext = %A; flags = %A; display = %A; surface = %A }" x.sType x.pNext x.flags x.display x.surface
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkWin32KeyedMutexAcquireReleaseInfoNV = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public acquireCount : uint32
+        val mutable public pAcquireSyncs : nativeptr<VkDeviceMemory>
+        val mutable public pAcquireKeys : nativeptr<uint64>
+        val mutable public pAcquireTimeoutMilliseconds : nativeptr<uint32>
+        val mutable public releaseCount : uint32
+        val mutable public pReleaseSyncs : nativeptr<VkDeviceMemory>
+        val mutable public pReleaseKeys : nativeptr<uint64>
+
+        new(sType : VkStructureType, pNext : nativeint, acquireCount : uint32, pAcquireSyncs : nativeptr<VkDeviceMemory>, pAcquireKeys : nativeptr<uint64>, pAcquireTimeoutMilliseconds : nativeptr<uint32>, releaseCount : uint32, pReleaseSyncs : nativeptr<VkDeviceMemory>, pReleaseKeys : nativeptr<uint64>) = { sType = sType; pNext = pNext; acquireCount = acquireCount; pAcquireSyncs = pAcquireSyncs; pAcquireKeys = pAcquireKeys; pAcquireTimeoutMilliseconds = pAcquireTimeoutMilliseconds; releaseCount = releaseCount; pReleaseSyncs = pReleaseSyncs; pReleaseKeys = pReleaseKeys }
+        override x.ToString() =
+            sprintf "VkWin32KeyedMutexAcquireReleaseInfoNV { sType = %A; pNext = %A; acquireCount = %A; pAcquireSyncs = %A; pAcquireKeys = %A; pAcquireTimeoutMilliseconds = %A; releaseCount = %A; pReleaseSyncs = %A; pReleaseKeys = %A }" x.sType x.pNext x.acquireCount x.pAcquireSyncs x.pAcquireKeys x.pAcquireTimeoutMilliseconds x.releaseCount x.pReleaseSyncs x.pReleaseKeys
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3483,7 +3694,7 @@ module VkRaw =
     [<DllImport(lib)>]
     extern void vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32 regionCount, VkBufferImageCopy* pRegions)
     [<DllImport(lib)>]
-    extern void vkCmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, uint32* pData)
+    extern void vkCmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, nativeint pData)
     [<DllImport(lib)>]
     extern void vkCmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32 data)
     [<DllImport(lib)>]
@@ -3586,3 +3797,21 @@ module VkRaw =
     extern void vkDestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, VkAllocationCallbacks* pAllocator)
     [<DllImport(lib)>]
     extern void vkDebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64 _object, uint64 location, int messageCode, string pLayerPrefix, string pMessage)
+    [<DllImport(lib)>]
+    extern VkResult vkDebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo)
+    [<DllImport(lib)>]
+    extern VkResult vkDebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo)
+    [<DllImport(lib)>]
+    extern void vkCmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo)
+    [<DllImport(lib)>]
+    extern void vkCmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer)
+    [<DllImport(lib)>]
+    extern void vkCmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo)
+    [<DllImport(lib)>]
+    extern VkResult vkGetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType _type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties)
+    [<DllImport(lib)>]
+    extern VkResult vkGetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, nativeint* pHandle)
+    [<DllImport(lib)>]
+    extern void vkCmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32 maxDrawCount, uint32 stride)
+    [<DllImport(lib)>]
+    extern void vkCmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32 maxDrawCount, uint32 stride)
