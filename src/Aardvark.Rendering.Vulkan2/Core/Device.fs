@@ -297,7 +297,7 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
             fence.Wait()
         )
 
-    member x.UsingQueue (f : DeviceQueue -> 'a) =
+    member x.UsingQueue<'a> (f : DeviceQueue -> 'a) : 'a =
         let queue = store.Take()
         try f queue
         finally store.Add queue

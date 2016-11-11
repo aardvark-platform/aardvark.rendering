@@ -53,15 +53,15 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Types.fs" />
-    <Compile Include="Vulkan.fs" />
-    <Compile Include="PCI.fs" />
-    <Compile Include="Utilities.fs" />
-    <Compile Include="Info.fs" />
-    <Compile Include="Platform.fs" />
-    <Compile Include="Device.fs" />
-    <Compile Include="Commands.fs" />
-    <Compile Include="Buffer.fs" />
+    <Compile Include="Wrapper\Types.fs" />
+    <Compile Include="Wrapper\Vulkan.fs" />
+    <Compile Include="Wrapper\PCI.fs" />
+    <Compile Include="Core\Utilities.fs" />
+    <Compile Include="Core\Info.fs" />
+    <Compile Include="Core\Platform.fs" />
+    <Compile Include="Core\Device.fs" />
+    <Compile Include="Core\Commands.fs" />
+    <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <PropertyGroup>
