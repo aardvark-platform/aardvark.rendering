@@ -11,6 +11,9 @@ open Aardvark.Base
 #nowarn "9"
 #nowarn "51"
 
+// =======================================================================
+// Resource Definition
+// =======================================================================
 type Buffer =
     class
         val mutable public Device : Device
@@ -26,9 +29,12 @@ type Buffer =
         new(device, handle, memory) = { Device = device; Handle = handle; Memory = memory }
     end
 
+
+// =======================================================================
+// Command Extensions
+// =======================================================================
 [<AutoOpen>]
 module BufferCommands =
-
     type Command with
         
         // ptr to buffer
@@ -139,19 +145,24 @@ module BufferCommands =
         static member inline Copy(src : Buffer, dst : Buffer) = 
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
 
-[<AutoOpen>]
-module private BufferCreationUtilities =
 
-    let memoryTypes (d : Device) (bits : uint32) =
-        let mutable mask = 1u
-        d.Memories 
-        |> Seq.filter (fun m ->
-            let mask = 1u <<< m.Info.index
-            bits &&& mask <> 0u
-           )
-        |> Seq.toList
+// =======================================================================
+// Resource functions for Device
+// =======================================================================
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Buffer =
+    [<AutoOpen>]
+    module private Helpers = 
+        let memoryTypes (d : Device) (bits : uint32) =
+            let mutable mask = 1u
+            d.Memories 
+            |> Seq.filter (fun m ->
+                let mask = 1u <<< m.Info.index
+                bits &&& mask <> 0u
+               )
+            |> Seq.toList
 
-    let createBuffer (device : Device, flags : VkBufferUsageFlags, ptr : DevicePtr) =    
+    let ofDevicePtr (flags : VkBufferUsageFlags) (ptr : DevicePtr) (device : Device) =    
         let mutable info =
             VkBufferCreateInfo(
                 VkStructureType.BufferCreateInfo, 0n,
@@ -186,14 +197,16 @@ module private BufferCreationUtilities =
 
         Buffer(device, handle, ptr)
     
-    let inline createBufferInternal (ctx : Device, flags : VkBufferUsageFlags, size : nativeint, writer : nativeint -> unit) =
-        use token = ctx.ResourceToken
+    let inline private ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
+        use token = device.ResourceToken
 
-        let deviceAlignedSize = Alignment.next ctx.MinUniformBufferOffsetAlignment (int64 size)
-        let deviceMem = ctx.DeviceMemory.Alloc(int64 ctx.MinUniformBufferOffsetAlignment, deviceAlignedSize)
-        let buffer = createBuffer(ctx, flags, deviceMem)
+        let align = int64 device.MinUniformBufferOffsetAlignment
+
+        let deviceAlignedSize = Alignment.next align (int64 size)
+        let deviceMem = device.DeviceMemory.Alloc(align, deviceAlignedSize)
+        let buffer = device |> ofDevicePtr flags deviceMem
         
-        let hostPtr = ctx.HostMemory.Alloc(int64 ctx.MinMemoryMapAlignment, deviceAlignedSize)
+        let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
         hostPtr.Mapped (fun dst -> writer dst)
 
         token.enqueue {
@@ -203,46 +216,49 @@ module private BufferCreationUtilities =
 
         buffer
 
-
-[<AbstractClass; Sealed; Extension>]
-type ContextBufferExtensions private() =
-
-    [<Extension>]
-    static member CreateBuffer(device : Device, flags : VkBufferUsageFlags, ptr : DevicePtr) =
-        createBuffer(device, flags, ptr)
-
-    [<Extension>]
-    static member Delete(device : Device, buffer : Buffer) =
+    let delete (buffer : Buffer) (device : Device) =
         if buffer.Handle.IsValid then
             VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
             buffer.Handle <- VkBuffer.Null
             buffer.Memory.Dispose()
 
-    [<Extension>]
-    static member CreateBuffer(device : Device, flags : VkBufferUsageFlags, b : IBuffer) =
-        match b with
+    let ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
+        match buffer with
             | :? ArrayBuffer as ab ->
                 let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
                 let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                try createBufferInternal(device, flags, size, fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
+                try device |> ofWriter flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
                 finally gc.Free()
 
             | :? INativeBuffer as nb ->
                 let size = nb.SizeInBytes |> nativeint
                 nb.Use(fun src ->
-                    createBufferInternal(device, flags, size, fun dst -> Marshal.Copy(src, dst, size))
+                    device |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
                 )
 
             | :? Buffer as b ->
                 b
 
             | _ ->
-                failf "unsupported buffer type %A" b
+                failf "unsupported buffer type %A" buffer
+
+
+// =======================================================================
+// Device Extensions
+// =======================================================================
+[<AbstractClass; Sealed; Extension>]
+type ContextBufferExtensions private() =
 
     [<Extension>]
-    static member CreateBuffer(ctx : Device, flags : VkBufferUsageFlags, data : 'a[]) =
-        let size = nativeint sizeof<'a> * nativeint data.Length
-        let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-        try createBufferInternal(ctx, flags, size, fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
-        finally gc.Free()
+    static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, ptr : DevicePtr) =
+        device |> Buffer.ofDevicePtr flags ptr
+
+    [<Extension>]
+    static member inline Delete(device : Device, buffer : Buffer) =
+        device |> Buffer.delete buffer
+
+    [<Extension>]
+    static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, b : IBuffer) =
+        device |> Buffer.ofBuffer flags b
+
 

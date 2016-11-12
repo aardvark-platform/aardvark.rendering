@@ -114,7 +114,7 @@ module CommandAPI =
                     comp()
             }
 
-        member x.Zero = x.Return(())
+        member x.Zero() = x.Return(())
 
         member x.For(elements : seq<'a>, f : 'a -> Command<unit>) : Command<unit> =
             let seen = List<IDisposable>()

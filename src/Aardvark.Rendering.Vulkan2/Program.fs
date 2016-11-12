@@ -4,6 +4,8 @@ open Aardvark.Rendering.Vulkan
 
 [<EntryPoint>]
 let main args =
+    Aardvark.Init()
+
     Log.start "layers"
     for l in Instance.AvailableLayers do
         Log.start "%s" l.name
@@ -108,17 +110,20 @@ let main args =
 
 
 
-    let b = dev.CreateBuffer(VkBufferUsageFlags.StorageBufferBit, [|1uy; 2uy;|])
+    let b = dev.CreateBuffer(VkBufferUsageFlags.StorageBufferBit, ArrayBuffer [|1uy; 2uy;|])
 
 
-    let buffer = dev.CreateBuffer(VkBufferUsageFlags.VertexBufferBit, [|1;2;3;4;5|])
-    let buffer2 = dev.CreateBuffer(VkBufferUsageFlags.VertexBufferBit, [|1;2;3;4;5|])
+    let buffer = dev.CreateBuffer(VkBufferUsageFlags.VertexBufferBit, ArrayBuffer [|1;2;3;4;5|])
+    let buffer2 = dev.CreateBuffer(VkBufferUsageFlags.VertexBufferBit, ArrayBuffer [|1;2;3;4;5|])
+
+    let image = dev.CreateImage(@"E:\Development\WorkDirectory\DataSVN\pattern.jpg", { wantCompressed = false; wantSrgb = false; wantMipMaps = true })
 
     
     Log.warn "allocated: %A" dev.DeviceMemory.Allocated
     dev.Delete b
     dev.Delete buffer
     dev.Delete buffer2
+    dev.Delete image
 
     Log.warn "allocated: %A" dev.DeviceMemory.Allocated
 

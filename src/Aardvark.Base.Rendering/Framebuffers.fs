@@ -329,6 +329,201 @@ module TextureFormat =
             TextureFormat.DepthComponent32f, PixFormat.FloatGray
         ]
 
+    let pixelSizeInBits =
+        lookupTable [
+            TextureFormat.Bgr8, 24
+            TextureFormat.Bgra8, 32
+            TextureFormat.DepthComponent, 24
+            TextureFormat.Alpha, 8
+            TextureFormat.Rgb, 24
+            TextureFormat.Rgba,32
+            TextureFormat.Luminance, 8
+            TextureFormat.LuminanceAlpha, 16
+            TextureFormat.R3G3B2, 6
+            TextureFormat.Rgb2Ext, 6
+            TextureFormat.Rgb4, 12
+            TextureFormat.Rgb5, 15
+            TextureFormat.Rgb8, 24
+            TextureFormat.Rgb10, 30
+            TextureFormat.Rgb12, 36
+            TextureFormat.Rgb16, 48
+            TextureFormat.Rgba2, 8
+            TextureFormat.Rgba4, 16
+            TextureFormat.Rgb5A1, 16
+            TextureFormat.Rgba8, 32
+            TextureFormat.Rgb10A2, 32
+            TextureFormat.Rgba12, 48
+            TextureFormat.Rgba16, 64
+            TextureFormat.DualAlpha4Sgis, 8
+            TextureFormat.DualAlpha8Sgis, 16
+            TextureFormat.DualAlpha12Sgis, 24
+            TextureFormat.DualAlpha16Sgis,32
+            TextureFormat.DualLuminance4Sgis, 8
+            TextureFormat.DualLuminance8Sgis, 16
+            TextureFormat.DualLuminance12Sgis, 24
+            TextureFormat.DualLuminance16Sgis, 32
+            TextureFormat.DualIntensity4Sgis, 8
+            TextureFormat.DualIntensity8Sgis, 16
+            TextureFormat.DualIntensity12Sgis, 24
+            TextureFormat.DualIntensity16Sgis, 32
+            TextureFormat.DualLuminanceAlpha4Sgis, -1
+            TextureFormat.DualLuminanceAlpha8Sgis, -1
+            TextureFormat.QuadAlpha4Sgis, 16
+            TextureFormat.QuadAlpha8Sgis,32
+            TextureFormat.QuadLuminance4Sgis, 16
+            TextureFormat.QuadLuminance8Sgis, 32
+            TextureFormat.QuadIntensity4Sgis, 16
+            TextureFormat.QuadIntensity8Sgis, 32
+            TextureFormat.DepthComponent16, 16
+            TextureFormat.DepthComponent24, 24
+            TextureFormat.DepthComponent32, 32
+            TextureFormat.CompressedRed, -1
+            TextureFormat.CompressedRg, -1
+            TextureFormat.R8, 8
+            TextureFormat.R16, 16
+            TextureFormat.Rg8, 16
+            TextureFormat.Rg16, 32
+            TextureFormat.R16f, 32
+            TextureFormat.R32f, 32
+            TextureFormat.Rg16f, 32
+            TextureFormat.Rg32f, 64
+            TextureFormat.R8i, 8
+            TextureFormat.R8ui, 8
+            TextureFormat.R16i, 16
+            TextureFormat.R16ui, 16
+            TextureFormat.R32i, 32
+            TextureFormat.R32ui, 32
+            TextureFormat.Rg8i, 16
+            TextureFormat.Rg8ui, 16
+            TextureFormat.Rg16i, 32
+            TextureFormat.Rg16ui, 32
+            TextureFormat.Rg32i, 64
+            TextureFormat.Rg32ui, 64
+            TextureFormat.CompressedRgbS3tcDxt1Ext, -1
+            TextureFormat.CompressedRgbaS3tcDxt1Ext, -1
+            TextureFormat.CompressedRgbaS3tcDxt3Ext, -1
+            TextureFormat.CompressedRgbaS3tcDxt5Ext, -1
+            TextureFormat.RgbIccSgix, 24
+            TextureFormat.RgbaIccSgix, 32
+            TextureFormat.AlphaIccSgix, 8
+            TextureFormat.LuminanceIccSgix, 8
+            TextureFormat.IntensityIccSgix, 8
+            TextureFormat.LuminanceAlphaIccSgix, 16
+            TextureFormat.R5G6B5IccSgix, 16
+            TextureFormat.R5G6B5A8IccSgix, 24
+            TextureFormat.Alpha16IccSgix, 16
+            TextureFormat.Luminance16IccSgix, 16
+            TextureFormat.Intensity16IccSgix, 16
+            TextureFormat.Luminance16Alpha8IccSgix, 24
+            TextureFormat.CompressedAlpha, -1
+            TextureFormat.CompressedLuminance, -1
+            TextureFormat.CompressedLuminanceAlpha, -1
+            TextureFormat.CompressedIntensity, -1
+            TextureFormat.CompressedRgb, -1
+            TextureFormat.CompressedRgba, -1
+            TextureFormat.DepthStencil, 32
+            TextureFormat.Rgba32f, 128
+            TextureFormat.Rgb32f, 96
+            TextureFormat.Rgba16f, 64
+            TextureFormat.Rgb16f, 48
+            TextureFormat.Depth24Stencil8, 32
+            TextureFormat.R11fG11fB10f, 32
+            TextureFormat.Rgb9E5, 032
+            TextureFormat.Srgb, 24
+            TextureFormat.Srgb8, 24
+            TextureFormat.SrgbAlpha, 32
+            TextureFormat.Srgb8Alpha8, 32
+            TextureFormat.SluminanceAlpha, 16
+            TextureFormat.Sluminance8Alpha8, 16
+            TextureFormat.Sluminance, 8
+            TextureFormat.Sluminance8, 8
+            TextureFormat.CompressedSrgb, -1
+            TextureFormat.CompressedSrgbAlpha, -1
+            TextureFormat.CompressedSluminance, -1
+            TextureFormat.CompressedSluminanceAlpha, -1
+            TextureFormat.CompressedSrgbS3tcDxt1Ext, -1
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext, -1
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext, -1
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, -1
+            TextureFormat.DepthComponent32f, 32
+            TextureFormat.Depth32fStencil8, 40
+            TextureFormat.Rgba32ui, 128
+            TextureFormat.Rgb32ui, 96
+            TextureFormat.Rgba16ui, 64
+            TextureFormat.Rgb16ui, 48
+            TextureFormat.Rgba8ui, 32
+            TextureFormat.Rgb8ui, 24
+            TextureFormat.Rgba32i, 128
+            TextureFormat.Rgb32i, 96
+            TextureFormat.Rgba16i, 64
+            TextureFormat.Rgb16i, 48
+            TextureFormat.Rgba8i, 32
+            TextureFormat.Rgb8i, 24
+            TextureFormat.Float32UnsignedInt248Rev, 32
+            TextureFormat.CompressedRedRgtc1, -1
+            TextureFormat.CompressedSignedRedRgtc1, -1
+            TextureFormat.CompressedRgRgtc2, -1
+            TextureFormat.CompressedSignedRgRgtc2, -1
+            TextureFormat.CompressedRgbaBptcUnorm, -1
+            TextureFormat.CompressedRgbBptcSignedFloat, -1
+            TextureFormat.CompressedRgbBptcUnsignedFloat, -1
+            TextureFormat.R8Snorm, 8
+            TextureFormat.Rg8Snorm, 16
+            TextureFormat.Rgb8Snorm, 24
+            TextureFormat.Rgba8Snorm, 32
+            TextureFormat.R16Snorm, 16
+            TextureFormat.Rg16Snorm, 32
+            TextureFormat.Rgb16Snorm, 48
+            TextureFormat.Rgba16Snorm, 64
+            TextureFormat.Rgb10A2ui, 32
+            TextureFormat.One, -1
+            TextureFormat.Two, -1
+            TextureFormat.Three, -1
+            TextureFormat.Four, -1
+        ]
+
+    let pixelSizeInBytes (fmt : TextureFormat) =
+        let s = pixelSizeInBits fmt
+        if s < 0 then -1
+        elif s % 8 = 0 then s / 8
+        else failwithf "[TextureFormat] ill-aligned size %A" s
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module PixFormat =
+    let channels =
+        LookupTable.lookupTable [
+            Col.Format.Alpha, 1
+            Col.Format.BGR, 3
+            Col.Format.BGRA, 4
+            Col.Format.BGRP, 4
+            Col.Format.BW, 1
+            Col.Format.Gray, 1
+            Col.Format.GrayAlpha, 2
+            Col.Format.NormalUV, 2
+            Col.Format.RGB, 3
+            Col.Format.RGBA, 4
+            Col.Format.RGBP, 4
+        ]
+
+    let typeSize =
+        LookupTable.lookupTable [
+            typeof<int8>, 1
+            typeof<uint8>, 1
+            typeof<int16>, 2
+            typeof<uint16>, 2
+            typeof<int32>, 4
+            typeof<uint32>, 4
+            typeof<int64>, 8
+            typeof<uint64>, 8
+            typeof<float16>, 2
+            typeof<float32>, 4
+            typeof<float>, 8
+
+        ]
+
+    let pixelSizeInBytes (fmt : PixFormat) =
+        typeSize fmt.Type * channels fmt.Format
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderbufferFormat =
     

@@ -62,6 +62,7 @@
     <Compile Include="Core\Device.fs" />
     <Compile Include="Core\Commands.fs" />
     <Compile Include="Resources\Buffer.fs" />
+    <Compile Include="Resources\Image.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <PropertyGroup>

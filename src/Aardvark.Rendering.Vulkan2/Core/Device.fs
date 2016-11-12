@@ -566,9 +566,12 @@ and Event internal(device : Device) =
 and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapInfo) as this =
     let hostVisible = memory.flags |> MemoryFlags.hostVisible
     let manager = DeviceMemoryManager(this, heap.Capacity.Bytes, 128L <<< 20)
+    let mask = 1u <<< memory.index
+
     member x.Device = device
     member x.Info = memory
-
+    member x.Index = memory.index
+    member internal x.Mask = mask
     member x.IsHostVisible = hostVisible
     member x.HeapFlags = heap.Flags
     member x.Flags = memory.flags
@@ -704,6 +707,7 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
 
     override x.Dispose() = heap.Free(x)
     override x.Memory = x
+    override x.Device = heap.Device
 
 and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
     
@@ -713,6 +717,8 @@ and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
     abstract member Dispose : unit -> unit
     default x.Dispose() = ()
 
+    abstract member Device : Device
+    default x.Device : Device = memory.Device
     member x.Offset = offset
     member x.Size = size
 
@@ -753,7 +759,36 @@ and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
 [<AbstractClass; Sealed; Extension>]
 type DeviceExtensions private() =
 
+    static let rec tryAlloc (reqs : VkMemoryRequirements) (i : int) (memories : DeviceHeap[]) =
+        if i >= memories.Length then
+            None
+        else
+            let mem = memories.[i]
+            if mem.Mask &&& reqs.memoryTypeBits <> 0u then
+                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size)
+                Some ptr
+            else
+                tryAlloc reqs (i + 1) memories
+
     [<Extension>]
     static member CreateDevice(this : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>, queues : list<QueueFamilyInfo * int>) =
         new Device(this, wantedLayers, wantedExtensions, queues)
 
+    [<Extension>]
+    static member Alloc(this : Device, reqs : VkMemoryRequirements, preferDevice : bool) =
+        if preferDevice then
+            let mem = this.DeviceMemory
+            if reqs.memoryTypeBits &&& mem.Mask <> 0u then
+                mem.Alloc(int64 reqs.alignment, int64 reqs.size)
+            else
+                match tryAlloc reqs 0 this.Memories with
+                    | Some mem -> mem
+                    | None -> failf "could not find compatible memory for %A" reqs
+        else
+            match tryAlloc reqs 0 this.Memories with
+                | Some mem -> mem
+                | None -> failf "could not find compatible memory for %A" reqs
+
+    [<Extension>]
+    static member Alloc(this : Device, reqs : VkMemoryRequirements) =
+        DeviceExtensions.Alloc(this, reqs, false)

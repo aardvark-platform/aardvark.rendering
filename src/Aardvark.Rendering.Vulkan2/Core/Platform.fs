@@ -143,6 +143,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
     member x.Devices = devices
 
 and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, index : int) =
+    static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
 
     let availableLayers = 
         let mutable count = 0u
@@ -213,12 +214,27 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
             { MemoryInfo.index = i; MemoryInfo.heap = heaps.[int info.heapIndex]; MemoryInfo.flags = unbox (int info.propertyFlags) }
         )
         
+    let formatProperties =
+        Dictionary.ofList [
+            for fmt in allFormats do
+                let mutable props = VkFormatProperties()
+                VkRaw.vkGetPhysicalDeviceFormatProperties(handle, fmt, &&props)
+                yield fmt, props
+        ]
 
     let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
     let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
 
     let mainQueue = queueFamilyInfos |> Array.maxBy (QueueFamilyInfo.flags >> QueueFlags.score)
     let pureTransferQueue = queueFamilyInfos |> Array.tryFind (QueueFamilyInfo.flags >> QueueFlags.transferOnly)
+
+    member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
+        match tiling with
+            | VkImageTiling.Linear -> formatProperties.[fmt].linearTilingFeatures
+            | _ -> formatProperties.[fmt].optimalTilingFeatures
+
+    member x.GetBufferFormatFeatures(fmt : VkFormat) =
+        formatProperties.[fmt].bufferFeatures
 
     member x.AvailableLayers = availableLayers
     member x.GlobalExtensions = globalExtensions
