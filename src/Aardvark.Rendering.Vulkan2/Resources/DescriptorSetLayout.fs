@@ -16,7 +16,6 @@ type DescriptorSetLayoutBinding =
     class
         inherit Resource<VkDescriptorSetLayoutBinding>
         val mutable public Parameter : ShaderParameter
-
         member x.StageFlags = x.Handle.stageFlags
         member x.DescriptorCount = int x.Handle.descriptorCount
         member x.Name = x.Parameter.paramName

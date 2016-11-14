@@ -330,6 +330,64 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                     }
                 )
 
+    member x.GetOrCreateDependent<'a when 'a : equality>(res : IResource<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+        let key = (res :> obj)::additionalKeys
+        match tryGetParent key with
+            | Some v -> 
+                v.AddRef()
+                v :> IResource<_>
+            | None ->
+                x.GetOrCreateLocal(key, fun _ -> 
+                    let mutable ownsHandle = false
+                
+                    { new Resource<'h>(desc.kind) with
+                        member x.GetInfo (h : 'h) =
+                            desc.info h
+
+                        member x.Create(old : Option<'h>) =
+                            
+                            let stats = res.Update(x)
+                            let data = res.Handle.GetValue()
+
+                            match old with
+                                | Some old ->
+                                    match data :> obj with
+                                        | :? 'h as handle ->
+                                            if ownsHandle then desc.delete old
+                                            ownsHandle <- false
+                                            handle, stats
+
+                                        | _ ->
+                                            if ownsHandle then
+                                                let newHandle = desc.update old data
+                                                newHandle, stats
+                                            else
+                                                let newHandle = desc.create data
+                                                ownsHandle <- true
+                                                newHandle, stats
+
+                                | None -> 
+                                    res.AddRef()
+
+                                    match data :> obj with
+                                        | :? 'h as handle -> 
+                                            ownsHandle <- false
+                                            handle, stats
+                                        | _ ->
+                                            let handle = desc.create data
+                                            ownsHandle <- true
+                                            handle, stats
+
+                        member x.Destroy(h : 'h) =
+                            res.RemoveRef()
+                            res.RemoveOutput x
+                            if ownsHandle then
+                                ownsHandle <- false
+                                desc.delete h
+                    }
+                )
+
+
     member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
         x.GetOrCreate(dataMod, [], desc)
 

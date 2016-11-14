@@ -42,6 +42,8 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
     member private x.PipelineCache : ResourceCache<Pipeline> = pipelineCache
     member private x.DescriptorSetCache : ResourceCache<DescriptorSet> = descriptorSetCache
 
+    member x.Device = device
+
     member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
         device.CreateRenderPass(signature)
 
@@ -57,15 +59,14 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
     member x.CreateBufferView(view : Aardvark.Base.BufferView, data : IResource<Buffer>) =
         let fmt = VkFormat.ofType view.ElementType
         let offset = view.Offset |> int64
-        
-        bufferViewCache.GetOrCreate<Buffer>(data.Handle, [fmt :> obj; offset :> obj], {
+
+        bufferViewCache.GetOrCreateDependent<Buffer>(data, [fmt :> obj; offset :> obj], {
             create = fun b      -> device.CreateBufferView(b, fmt, offset, b.Size - offset)
             update = fun h b    -> device.Delete(h); device.CreateBufferView(b, fmt, offset, b.Size - offset)
             delete = fun h      -> device.Delete(h)
             info =   fun h      -> ResourceInfo.Zero
             kind = ResourceKind.UniformLocation
         })
-
 
     member x.CreateIndexBuffer(data : IMod<IBuffer>) =
         indexBufferCache.GetOrCreate<IBuffer>(data, {
@@ -86,7 +87,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
         })
 
     member x.CreateImageView(data : IResource<Image>) =
-        imageViewCache.GetOrCreate<Image>(data.Handle, {
+        imageViewCache.GetOrCreateDependent<Image>(data, [], {
             create = fun b      -> device.CreateImageView(b)
             update = fun h b    -> device.Delete(h); device.CreateImageView(b)
             delete = fun h      -> device.Delete(h)
@@ -103,7 +104,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             kind = ResourceKind.SamplerState
         })
 
-    member x.CreatShaderProgram(signature : IFramebufferSignature, surface : IMod<ISurface>) =
+    member x.CreateShaderProgram(signature : IFramebufferSignature, surface : IMod<ISurface>) =
         let renderPass =
             match signature with
                 | :? RenderPass as p -> p
@@ -182,15 +183,18 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
         let anyAttachment = pass.ColorAttachments |> Map.toSeq |> Seq.head |> snd |> snd
         pipelineCache.GetOrCreate(
             key, fun () ->
+                program.AddRef()
                 { new Aardvark.Base.Rendering.Resource<Pipeline>(ResourceKind.ShaderProgram) with
                     member x.GetInfo b = 
                         ResourceInfo.Zero
 
                     member x.Create old =
+                        let stats = program.Update(x)
+                        
                         let desc =
                             {
                                 renderPass              = pass
-                                shaderProgram           = program.Handle.GetValue x
+                                shaderProgram           = program.Handle.GetValue()
                                 vertexInputState        = VertexInputState.create inputs
                                 inputAssembly           = InputAssemblyState.ofIndexedGeometryMode (geometryMode.GetValue x)
                                 rasterizerState         = RasterizerState.create (cullMode.GetValue x) (fillMode.GetValue x)
@@ -214,6 +218,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
 
                     member x.Destroy h =
+                        program.RemoveRef()
                         device.Delete h
                 }
         )
@@ -232,18 +237,24 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                                 | None -> descriptorPool.Alloc(layout)
                         
 
+                        let mutable stats = FrameStatistics.Zero
+                        
+
                         let buffers = 
                             buffers |> Map.map (fun _ r -> 
-                                Descriptor.UniformBuffer(r.Handle.GetValue(x))
+                                stats <- stats + r.Update(x)
+                                Descriptor.UniformBuffer(r.Handle.GetValue())
                             )
 
                         let images = 
                             images |> Map.map (fun _ (v,s) ->
-                                Descriptor.SampledImage(v.Handle.GetValue(x), s.Handle.GetValue(x))
+                                stats <- stats + v.Update(x)
+                                stats <- stats + s.Update(x)
+                                Descriptor.SampledImage(v.Handle.GetValue(), s.Handle.GetValue())
                             )
                         
                         descriptorPool.Update(desc, Map.union buffers images)
-                        desc, FrameStatistics.Zero
+                        desc, stats
 
 
                     member x.Destroy h =
