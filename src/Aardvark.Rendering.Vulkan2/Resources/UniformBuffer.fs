@@ -248,5 +248,9 @@ type ContextUniformBufferExtensions private() =
         this |> UniformBuffer.create parameter
 
     [<Extension>]
+    static member inline Upload(this : Device, b : UniformBuffer) =
+        this |> UniformBuffer.upload b
+
+    [<Extension>]
     static member inline Delete(this : Device, b : UniformBuffer) =
         this |> UniformBuffer.delete b       

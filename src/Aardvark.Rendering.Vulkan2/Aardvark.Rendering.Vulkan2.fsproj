@@ -74,6 +74,8 @@
     <Compile Include="Resources\PipelineLayout.fs" />
     <Compile Include="Resources\ShaderProgram.fs" />
     <Compile Include="Resources\UniformBuffer.fs" />
+    <Compile Include="Resources\DescriptorPool.fs" />
+    <Compile Include="Resources\DescriptorSet.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <PropertyGroup>
