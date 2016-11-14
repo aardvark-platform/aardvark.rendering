@@ -27,6 +27,17 @@ type Buffer =
         new(device, handle, memory) = { inherit Resource<_>(device, handle); Memory = memory }
     end
 
+type BufferView =
+    class
+        inherit Resource<VkBufferView>
+        val mutable public Buffer : Buffer
+        val mutable public Format : VkFormat
+        val mutable public Offset : uint64
+        val mutable public Size : uint64
+
+        new(device, handle, buffer, fmt, offset, size) = { inherit Resource<_>(device, handle); Buffer = buffer; Format = fmt; Offset = offset; Size = size }
+    end
+
 
 // =======================================================================
 // Command Extensions
@@ -241,6 +252,31 @@ module Buffer =
                 failf "unsupported buffer type %A" buffer
 
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module BufferView =
+    let create (fmt : VkFormat) (b : Buffer) (offset : uint64) (size : uint64) (device : Device) =
+        let mutable info = 
+            VkBufferViewCreateInfo(
+                VkStructureType.BufferViewCreateInfo, 0n,
+                VkBufferViewCreateFlags.MinValue,
+                b.Handle, 
+                fmt,
+                offset,
+                size
+            )
+
+        let mutable handle = VkBufferView.Null
+        VkRaw.vkCreateBufferView(device.Handle, &&info, NativePtr.zero, &&handle)
+            |> check "could not create BufferView"
+
+        BufferView(device, handle, b, fmt, offset, size)
+
+    let delete (view : BufferView) (device : Device) =
+        if view.Handle.IsValid then
+            VkRaw.vkDestroyBufferView(device.Handle, view.Handle, NativePtr.zero)
+            view.Handle <- VkBufferView.Null
+
+
 // =======================================================================
 // Device Extensions
 // =======================================================================
@@ -260,3 +296,34 @@ type ContextBufferExtensions private() =
         device |> Buffer.ofBuffer flags b
 
 
+    [<Extension>]
+    static member inline CreateBufferView(device : Device, buffer : Buffer, format : VkFormat, offset : int64, size : int64) =
+        device |> BufferView.create format buffer (uint64 offset) (uint64 size)
+
+    [<Extension>]
+    static member inline Delete(device : Device, view : BufferView) =
+        device |> BufferView.delete view
+
+[<AutoOpen>]
+module ``Buffer Format Extensions`` = 
+    module VkFormat =
+        let ofType =
+            LookupTable.lookupTable [
+                typeof<float32>, VkFormat.R32Sfloat
+                typeof<V2f>, VkFormat.R32g32Sfloat
+                typeof<V3f>, VkFormat.R32g32b32Sfloat
+                typeof<V4f>, VkFormat.R32g32b32a32Sfloat
+
+                typeof<int>, VkFormat.R32Sint
+                typeof<V2i>, VkFormat.R32g32Sint
+                typeof<V3i>, VkFormat.R32g32b32Sint
+                typeof<V4i>, VkFormat.R32g32b32a32Sint
+
+                typeof<uint32>, VkFormat.R32Uint
+                typeof<uint16>, VkFormat.R16Uint
+                typeof<uint8>, VkFormat.R8Uint
+                typeof<C4b>, VkFormat.B8g8r8a8Unorm
+                typeof<C4us>, VkFormat.R16g16b16a16Unorm
+                typeof<C4ui>, VkFormat.R32g32b32a32Uint
+                typeof<C4f>, VkFormat.R32g32b32a32Sfloat
+            ]

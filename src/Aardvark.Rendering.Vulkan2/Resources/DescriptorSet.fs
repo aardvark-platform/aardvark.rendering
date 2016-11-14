@@ -13,6 +13,11 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "51"
 
 
+type Descriptor =
+    | UniformBuffer of UniformBuffer
+    | SampledImage of ImageView * Sampler
+
+
 type DescriptorSet =
     class
         inherit Resource<VkDescriptorSet>
@@ -51,11 +56,76 @@ module DescriptorSet =
 
             desc.Handle <- VkDescriptorSet.Null
 
+    let update (descriptors : Map<int, Descriptor>) (set : DescriptorSet) (pool : DescriptorPool) =
+        let device = pool.Device
+        let layout = set.Layout
+        let cnt = descriptors.Count
+        let mutable bufferInfos = NativePtr.stackalloc cnt
+        let mutable imageInfos = NativePtr.stackalloc cnt
+
+        let writes =
+            descriptors
+                |> Map.toSeq
+                |> Seq.map (fun (binding, desc) ->
+                    match desc with
+                        | UniformBuffer ub ->
+                            let info = 
+                                VkDescriptorBufferInfo(
+                                    ub.Handle, 
+                                    0UL, 
+                                    uint64 ub.Storage.Size
+                                )
+
+                            NativePtr.write bufferInfos info
+                            let ptr = bufferInfos
+                            bufferInfos <- NativePtr.step 1 bufferInfos
+
+                            VkWriteDescriptorSet(
+                                VkStructureType.WriteDescriptorSet, 0n,
+                                set.Handle,
+                                uint32 binding,
+                                0u, 1u, VkDescriptorType.UniformBuffer,
+                                NativePtr.zero,
+                                ptr,
+                                NativePtr.zero
+                            )
+                        | SampledImage(view, sam) ->
+                            let info =
+                                VkDescriptorImageInfo(
+                                    sam.Handle,
+                                    view.Handle,
+                                    view.Image.Layout
+                                )
+
+                            NativePtr.write imageInfos info
+                            let ptr = imageInfos
+                            imageInfos <- NativePtr.step 1 imageInfos
+
+                            VkWriteDescriptorSet(
+                                VkStructureType.WriteDescriptorSet, 0n,
+                                set.Handle,
+                                uint32 binding,
+                                0u, 1u, VkDescriptorType.SampledImage,
+                                ptr,
+                                NativePtr.zero,
+                                NativePtr.zero
+                            )
+
+                   )
+                |> Seq.toArray
+
+        let pWrites = NativePtr.pushStackArray writes
+        VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero) 
+            
 [<AbstractClass; Sealed; Extension>]
 type ContextDescriptorSetExtensions private() =
     [<Extension>]
     static member inline Alloc(this : DescriptorPool, layout : DescriptorSetLayout) =
         this |> DescriptorSet.alloc layout
+
+    [<Extension>]
+    static member inline Update(this : DescriptorPool, set : DescriptorSet, values : Map<int, Descriptor>) =
+        this |> DescriptorSet.update values set
 
     [<Extension>]
     static member inline Free(this : DescriptorPool, set : DescriptorSet) =

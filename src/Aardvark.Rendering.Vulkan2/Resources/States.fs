@@ -86,6 +86,22 @@ type StencilState =
         back                    : VkStencilOpState
     }
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module InputAssemblyState =
+    let ofIndexedGeometryMode =
+        LookupTable.lookupTable [
+            IndexedGeometryMode.LineAdjacencyList,      { topology = VkPrimitiveTopology.LineListWithAdjacency; restartEnable = true }
+            IndexedGeometryMode.LineList,               { topology = VkPrimitiveTopology.LineList; restartEnable = true }
+            IndexedGeometryMode.LineStrip,              { topology = VkPrimitiveTopology.LineStrip; restartEnable = true }
+            IndexedGeometryMode.PointList,              { topology = VkPrimitiveTopology.PointList; restartEnable = false }
+            IndexedGeometryMode.QuadList,               { topology = VkPrimitiveTopology.PatchList; restartEnable = true }
+            IndexedGeometryMode.TriangleAdjacencyList,  { topology = VkPrimitiveTopology.TriangleListWithAdjacency; restartEnable = true }
+            IndexedGeometryMode.TriangleList,           { topology = VkPrimitiveTopology.TriangleList; restartEnable = true }
+            IndexedGeometryMode.TriangleStrip,          { topology = VkPrimitiveTopology.TriangleStrip; restartEnable = true }
+        ]
+        
+    
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VertexInputState =

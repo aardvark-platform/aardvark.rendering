@@ -143,5 +143,5 @@ type ContextShaderProgramExtensions private() =
                 failf "bad surface type: %A" surface
 
     [<Extension>]
-    static member inline Delete(this : Device, layout : PipelineLayout) =
-        this |> PipelineLayout.delete layout       
+    static member inline Delete(this : Device, program : ShaderProgram) =
+        this |> ShaderProgram.delete program       
