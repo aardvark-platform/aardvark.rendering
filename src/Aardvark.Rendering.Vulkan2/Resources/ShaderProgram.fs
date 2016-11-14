@@ -12,7 +12,6 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 #nowarn "51"
 
-
 type ShaderProgram =
     class
         val mutable public Device : Device
@@ -65,7 +64,7 @@ module ShaderProgram =
 
         let mutable index = 0
         for (stage, code) in codes do
-            match GLSLang.GLSLang.tryCreateShader (GLSLang.stage stage) code with
+            match GLSLang.GLSLang.tryCreateShader (SpirVReflector.glslangStage stage) code with
                 | Success shader ->
                     shaders.[index] <- shader
                 | Error err ->
@@ -77,7 +76,7 @@ module ShaderProgram =
                 try
                     let shaders = 
                         codes |> Array.map (fun (stage,_) ->
-                            match prog.TryGetSpirVForStage (GLSLang.stage stage) with
+                            match prog.TryGetSpirVForStage (SpirVReflector.glslangStage stage) with
                                 | Some spirv ->
                                     device.CreateShaderModule(stage, spirv)
                                 | _ ->

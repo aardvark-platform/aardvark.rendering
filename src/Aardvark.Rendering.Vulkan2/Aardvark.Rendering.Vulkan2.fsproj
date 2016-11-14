@@ -61,6 +61,7 @@
     <Compile Include="Core\Platform.fs" />
     <Compile Include="Core\Device.fs" />
     <Compile Include="Core\Commands.fs" />
+    <Compile Include="Core\ShaderInterface.fs" />
     <Compile Include="Resources\Resources.fs" />
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\Image.fs" />
@@ -69,6 +70,7 @@
     <Compile Include="Resources\RenderPass.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\ShaderModule.fs" />
+    <Compile Include="Resources\DescriptorSetLayout.fs" />
     <Compile Include="Resources\PipelineLayout.fs" />
     <Compile Include="Resources\ShaderProgram.fs" />
     <Compile Include="Resources\UniformBuffer.fs" />
