@@ -155,6 +155,8 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     let currentResourceToken = new ThreadLocal<ref<Option<DeviceToken>>>(fun _ -> ref None)
 
+    let mutable runtime = Unchecked.defaultof<IRuntime>
+
     member x.ResourceToken =
         let ref = currentResourceToken.Value
         match !ref with
@@ -165,6 +167,10 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
                 let t = new DeviceToken(ref, transferFamily.Value.DefaultCommandPool)
                 ref := Some t
                 t
+
+    member x.Runtime
+        with get() = runtime
+        and internal set r = runtime <- r
 
     member x.MinMemoryMapAlignment = minMemoryMapAlignment
     member x.MinTexelBufferOffsetAlignment = minTexelBufferOffsetAlignment

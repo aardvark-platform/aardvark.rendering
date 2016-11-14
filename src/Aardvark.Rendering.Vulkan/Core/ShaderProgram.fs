@@ -163,8 +163,10 @@ type ShaderProgramExtensions private() =
 //                let fileName = sprintf @"C:\Users\Schorsch\Desktop\%A.spv" shaderStage
 //                File.writeAllBytes fileName spirvBinary
 
+                let spirvBinary = spirvBinary.UnsafeCoerce<byte>()
+
                 let vkStage = toVkStage shaderStage
-                let m =
+                let m = 
                     use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(spirvBinary))
                     reader |> SpirV.Serializer.read
 

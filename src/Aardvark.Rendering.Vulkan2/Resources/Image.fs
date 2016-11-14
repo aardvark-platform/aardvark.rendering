@@ -808,27 +808,28 @@ module ``Image Format Extensions`` =
     type Device with
         
         member x.GetSupportedFormat(tiling : VkImageTiling, fmt : PixFormat) =
-            let test = VkFormat.ofPixFormat fmt
-            let features = x.PhysicalDevice.GetFormatFeatures(tiling, test)
+            let retry f = x.GetSupportedFormat(tiling, PixFormat(fmt.Type, f))
 
-            if features <> VkFormatFeatureFlags.None then
-                test
-            else
-                match fmt.Format with
-                    | Col.Format.Gray ->
-                        x.GetSupportedFormat(tiling, PixFormat(fmt.Type, Col.Format.NormalUV))
+            match fmt.Format with
+                | Col.Format.BGR    -> retry Col.Format.RGB
+                | Col.Format.BGRA   -> retry Col.Format.RGBA
+                | Col.Format.BGRP   -> retry Col.Format.RGBP
+                | _ -> 
+                    let test = VkFormat.ofPixFormat fmt
+                    let features = x.PhysicalDevice.GetFormatFeatures(tiling, test)
 
-                    | Col.Format.NormalUV ->
-                        x.GetSupportedFormat(tiling, PixFormat(fmt.Type, Col.Format.RGB))
-
-                    | Col.Format.RGB -> 
-                        x.GetSupportedFormat(tiling, PixFormat(fmt.Type, Col.Format.RGBA))
-
-                    | Col.Format.BGR -> 
-                        x.GetSupportedFormat(tiling, PixFormat(fmt.Type, Col.Format.BGRA))
-
-                    | _ ->
-                        failf "bad format"
+                    if features <> VkFormatFeatureFlags.None then
+                        test
+                    else
+                        match fmt.Format with
+                            | Col.Format.BW         -> retry Col.Format.Gray
+                            | Col.Format.Alpha      -> retry Col.Format.Gray
+                            | Col.Format.Gray       -> retry Col.Format.NormalUV
+                            | Col.Format.NormalUV   -> retry Col.Format.RGB
+                            | Col.Format.GrayAlpha  -> retry Col.Format.RGB
+                            | Col.Format.RGB        -> retry Col.Format.RGBA
+                            | _ ->
+                                failf "bad format"
 
         member x.CreateVolume(def : 'a, src : NativeVolume<'a>, srcFormat : VkFormat, trafo : ImageTrafo, dstFormat : VkFormat) =
             let rowAlign = 4L
@@ -882,18 +883,165 @@ module ``Image Format Extensions`` =
                 rowSize = int64 alignedRowSize
             }
 
+    module VkComponentMapping =
+        let ofColFormat =
+            let c0 = VkComponentSwizzle.R
+            let c1 = VkComponentSwizzle.G
+            let c2 = VkComponentSwizzle.B
+            let c3 = VkComponentSwizzle.A
+            let zero = VkComponentSwizzle.Zero
+            let one = VkComponentSwizzle.One
+            LookupTable.lookupTable [
+                Col.Format.Alpha, VkComponentMapping(zero, zero, zero, c0)
+                Col.Format.BGR, VkComponentMapping(c2, c1, c0, one)
+                Col.Format.BGRA, VkComponentMapping(c2, c1, c0, c3)
+                Col.Format.BGRP, VkComponentMapping(c2, c1, c0, c3)
+                Col.Format.BW, VkComponentMapping(c0, c0, c0, one)
+                Col.Format.Gray, VkComponentMapping(c0, c0, c0, one)
+                Col.Format.GrayAlpha, VkComponentMapping(c0, c0, c0, c1) 
+                Col.Format.NormalUV, VkComponentMapping(c0, c1, zero, one) 
+                Col.Format.RGB, VkComponentMapping(c0, c1, c2, one)
+                Col.Format.RGBA, VkComponentMapping(c0, c1, c2, c3)
+                Col.Format.RGBP, VkComponentMapping(c0, c1, c2, c3)
+            ]
+
+        let ofTextureFormat =
+       
+            let r = VkComponentSwizzle.R
+            let g = VkComponentSwizzle.G
+            let b = VkComponentSwizzle.B
+            let a = VkComponentSwizzle.A
+            let z = VkComponentSwizzle.Zero
+            let i = VkComponentSwizzle.One
+
+            let create a b c d = VkComponentMapping(a,b,c,d)
+
+            LookupTable.lookupTable [
+                TextureFormat.DualAlpha4Sgis, create r g z i
+                TextureFormat.DualAlpha8Sgis, create r g z i
+                TextureFormat.DualAlpha16Sgis, create r g z i
+                TextureFormat.DualLuminance4Sgis, create r g z i
+                TextureFormat.DualLuminance8Sgis, create r g z i
+                TextureFormat.DualLuminance16Sgis, create r g z i
+                TextureFormat.DualIntensity4Sgis, create r g z i
+                TextureFormat.DualIntensity8Sgis, create r g z i
+                TextureFormat.DualIntensity16Sgis, create r g z i
+                TextureFormat.QuadAlpha4Sgis, create r g b a
+                TextureFormat.QuadAlpha8Sgis, create r g b a
+                TextureFormat.QuadLuminance4Sgis, create r g b a
+                TextureFormat.QuadLuminance8Sgis, create r g b a
+                TextureFormat.QuadIntensity4Sgis, create r g b a
+                TextureFormat.QuadIntensity8Sgis, create r g b a
+                TextureFormat.DepthComponent, create r r r i
+                TextureFormat.Rgb, create r g b i
+                TextureFormat.Rgba, create r g b a
+                TextureFormat.Luminance, create r r r i
+                TextureFormat.LuminanceAlpha, create r r r g
+                TextureFormat.Rgb5, create r g b i
+                TextureFormat.Rgb8, create r g b i
+                TextureFormat.Rgb10, create r g b i
+                TextureFormat.Rgb16, create r g b i
+                TextureFormat.Rgba4, create r g b a
+                TextureFormat.Rgb5A1, create r g b a
+                TextureFormat.Rgba8, create r g b a
+                TextureFormat.Rgb10A2, create r g b a
+                TextureFormat.Rgba16, create r g b a
+                TextureFormat.DepthComponent16, create r r r i
+                TextureFormat.DepthComponent24, create r r r i
+                TextureFormat.DepthComponent32, create r r r i
+                TextureFormat.CompressedRg, create r g z i
+                TextureFormat.R8, create r z z i
+                TextureFormat.R16, create r z z i
+                TextureFormat.Rg8, create r g z i
+                TextureFormat.Rg16, create r g z i
+                TextureFormat.R16f, create r z z i
+                TextureFormat.R32f, create r z z i
+                TextureFormat.Rg16f, create r g z i
+                TextureFormat.Rg32f, create r g z i
+                TextureFormat.R8i, create r z z i
+                TextureFormat.R8ui, create r z z i
+                TextureFormat.R16i, create r z z i
+                TextureFormat.R16ui, create r z z i
+                TextureFormat.R32i, create r z z i
+                TextureFormat.R32ui, create r z z i
+                TextureFormat.Rg8i, create r g z i
+                TextureFormat.Rg8ui, create r g z i
+                TextureFormat.Rg16i, create r g z i
+                TextureFormat.Rg16ui, create r g z i
+                TextureFormat.Rg32i, create r g z i
+                TextureFormat.Rg32ui, create r g z i
+                TextureFormat.RgbIccSgix, create r g b i
+                TextureFormat.RgbaIccSgix, create r g b a
+                TextureFormat.AlphaIccSgix, create z z z r
+                TextureFormat.LuminanceIccSgix, create r r r i
+                TextureFormat.IntensityIccSgix, create r r r i
+                TextureFormat.LuminanceAlphaIccSgix, create r r r g
+                TextureFormat.R5G6B5IccSgix, create r g b i
+                TextureFormat.Alpha16IccSgix, create z z z r
+                TextureFormat.Luminance16IccSgix, create r r r i
+                TextureFormat.Intensity16IccSgix, create r r r i
+                TextureFormat.CompressedRgb, create r g b i
+                TextureFormat.CompressedRgba, create r g b a
+                TextureFormat.DepthStencil, create r r r i
+                TextureFormat.Rgba32f, create r g b a
+                TextureFormat.Rgb32f, create r g b i
+                TextureFormat.Rgba16f, create r g b a
+                TextureFormat.Rgb16f, create r g b i
+                TextureFormat.Depth24Stencil8, create r r r i
+                TextureFormat.R11fG11fB10f, create b g r i
+                TextureFormat.Rgb9E5, create b g r i
+                TextureFormat.Srgb, create r g b i
+                TextureFormat.Srgb8, create r g b i
+                TextureFormat.SrgbAlpha, create r g b a
+                TextureFormat.Srgb8Alpha8, create r g b a
+                TextureFormat.SluminanceAlpha, create r r r g
+                TextureFormat.Sluminance8Alpha8, create r r r g
+                TextureFormat.Sluminance, create r r r i
+                TextureFormat.Sluminance8, create r r r i
+                TextureFormat.CompressedSrgb, create r g b i
+                TextureFormat.CompressedSrgbAlpha, create r g b a
+                TextureFormat.DepthComponent32f, create r r r i
+                TextureFormat.Depth32fStencil8, create r r r i
+                TextureFormat.Rgba32ui, create r g b a
+                TextureFormat.Rgb32ui, create r g b i
+                TextureFormat.Rgba16ui, create r g b a
+                TextureFormat.Rgb16ui, create r g b i
+                TextureFormat.Rgba8ui, create r g b a
+                TextureFormat.Rgb8ui, create r g b i
+                TextureFormat.Rgba32i, create r g b a
+                TextureFormat.Rgb32i, create r g b i
+                TextureFormat.Rgba16i, create r g b a
+                TextureFormat.Rgb16i, create r g b i
+                TextureFormat.Rgba8i, create r g b a
+                TextureFormat.Rgb8i, create r g b i
+                TextureFormat.Float32UnsignedInt248Rev, create r r r i
+                TextureFormat.CompressedRgbaBptcUnorm, create r g b a
+                TextureFormat.CompressedRgbBptcSignedFloat, create r g b a
+                TextureFormat.CompressedRgbBptcUnsignedFloat, create r g b a
+                TextureFormat.R8Snorm, create r z z i
+                TextureFormat.Rg8Snorm, create r g z i
+                TextureFormat.Rgb8Snorm, create r g b i
+                TextureFormat.Rgba8Snorm, create r g b a
+                TextureFormat.R16Snorm, create r z z i
+                TextureFormat.Rg16Snorm, create r g z i
+                TextureFormat.Rgb16Snorm, create r g b i
+                TextureFormat.Rgba16Snorm, create r g b a
+                TextureFormat.Rgb10A2ui, create r g b a
+            ]
+
 
 
 type Image =
     class 
-        val mutable public Device : Device
-        val mutable public Handle : VkImage
+        inherit Resource<VkImage>
+
         val mutable public Size : V3i
         val mutable public MipMapLevels : int
         val mutable public Count : int
         val mutable public Samples : int
         val mutable public Dimension : TextureDimension
         val mutable public Format : VkFormat
+        val mutable public ComponentMapping : VkComponentMapping
         val mutable public Memory : DevicePtr
         val mutable public Layout : VkImageLayout
 
@@ -909,15 +1057,15 @@ type Image =
             member x.Samples = x.Samples
             member x.Size = x.Size
 
-        new(dev, handle, s, levels, count, samples, dim, fmt, mem, layout) = 
+        new(dev, handle, s, levels, count, samples, dim, fmt, mapping, mem, layout) = 
             {
-                Device = dev
-                Handle = handle
+                inherit Resource<_>(dev, handle);
                 Size = s
                 MipMapLevels = levels
                 Count = count
                 Samples = samples
                 Dimension = dim
+                ComponentMapping = mapping
                 Format = fmt
                 Memory = mem
                 Layout = layout
@@ -1136,7 +1284,7 @@ module Image =
                 table (typeof<'a>) (x, img)
 
 
-    let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (layout : VkImageLayout) (device : Device) =
+    let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (compMapping : VkComponentMapping) (usage : VkImageUsageFlags) (layout : VkImageLayout) (device : Device) =
         use token = device.ResourceToken
 
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
@@ -1170,7 +1318,7 @@ module Image =
         VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind image memory"
 
-        let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+        let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, compMapping, ptr, VkImageLayout.Undefined)
 
         token.enqueue {
             do! Command.TransformLayout(result, layout)
@@ -1183,6 +1331,13 @@ module Image =
             VkRaw.vkDestroyImage(img.Device.Handle, img.Handle, NativePtr.zero)
             img.Memory.Dispose()
             img.Handle <- VkImage.Null
+
+    let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (layout : VkImageLayout) (device : Device) =
+        let vkfmt = VkFormat.ofTextureFormat fmt
+        let swizzle = VkComponentMapping.ofTextureFormat fmt
+        alloc size mipMapLevels count samples dim vkfmt swizzle usage layout device
+
+
 
     let ofPixImageMipMap (pi : PixImageMipMap) (info : TextureParams) (device : Device) =
         use token = device.ResourceToken
@@ -1217,7 +1372,8 @@ module Image =
 
         let usage = VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
 
-        let img = device |> alloc size mipMapLevels 1 1 TextureDimension.Texture2D textureFormat usage VkImageLayout.TransferDstOptimal
+        let compMapping = VkComponentMapping.ofColFormat level0.Format
+        let img = device |> alloc size mipMapLevels 1 1 TextureDimension.Texture2D textureFormat compMapping usage VkImageLayout.TransferDstOptimal
 
         let align = device.MinUniformBufferOffsetAlignment
 
@@ -1309,3 +1465,7 @@ type ContextImageExtensions private() =
     [<Extension>]
     static member inline Delete(this : Device, img : Image) =
         this |> Image.delete img
+
+    [<Extension>]
+    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags, layout : VkImageLayout) =
+        this |> Image.create size mipMapLevels count samples dim fmt usage layout

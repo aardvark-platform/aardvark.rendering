@@ -16,8 +16,7 @@ open Aardvark.Base
 // =======================================================================
 type Buffer =
     class
-        val mutable public Device : Device
-        val mutable public Handle : VkBuffer
+        inherit Resource<VkBuffer>
         val mutable public Memory : DevicePtr
 
         member x.Size = x.Memory.Size
@@ -25,8 +24,7 @@ type Buffer =
         interface IBackendBuffer with
             member x.Handle = x.Handle :> obj
 
-
-        new(device, handle, memory) = { Device = device; Handle = handle; Memory = memory }
+        new(device, handle, memory) = { inherit Resource<_>(device, handle); Memory = memory }
     end
 
 
