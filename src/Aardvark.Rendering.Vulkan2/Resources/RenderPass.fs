@@ -21,6 +21,11 @@ type RenderPass =
         val mutable public ColorAttachments : Map<int, Symbol * AttachmentSignature>
         val mutable public DepthStencilAttachment : Option<AttachmentSignature>
 
+        member x.AttachmentCount =
+            match x.DepthStencilAttachment with
+                | Some _ -> x.ColorAttachmentCount + 1
+                | _ -> 0
+
         interface IFramebufferSignature with
             member x.Runtime = x.Device.Runtime
             member x.ColorAttachments = x.ColorAttachments

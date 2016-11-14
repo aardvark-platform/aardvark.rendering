@@ -50,3 +50,13 @@ module DescriptorSet =
                 |> check "could not free DescriptorSet"
 
             desc.Handle <- VkDescriptorSet.Null
+
+[<AbstractClass; Sealed; Extension>]
+type ContextDescriptorSetExtensions private() =
+    [<Extension>]
+    static member inline Alloc(this : DescriptorPool, layout : DescriptorSetLayout) =
+        this |> DescriptorSet.alloc layout
+
+    [<Extension>]
+    static member inline Free(this : DescriptorPool, set : DescriptorSet) =
+        this |> DescriptorSet.free set

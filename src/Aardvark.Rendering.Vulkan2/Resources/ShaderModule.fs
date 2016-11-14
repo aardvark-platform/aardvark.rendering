@@ -276,7 +276,7 @@ module ShaderModule =
     
 
 [<AbstractClass; Sealed; Extension>]
-type ContextFramebufferExtensions private() =
+type ContextShaderModuleExtensions private() =
     [<Extension>]
     static member inline CreateShaderModule(this : Device, stage : ShaderStage, glsl : string) =
         this |> ShaderModule.ofGLSL stage glsl

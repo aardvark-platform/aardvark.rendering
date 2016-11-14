@@ -76,6 +76,8 @@
     <Compile Include="Resources\UniformBuffer.fs" />
     <Compile Include="Resources\DescriptorPool.fs" />
     <Compile Include="Resources\DescriptorSet.fs" />
+    <Compile Include="Resources\States.fs" />
+    <Compile Include="Resources\Pipeline.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <PropertyGroup>
