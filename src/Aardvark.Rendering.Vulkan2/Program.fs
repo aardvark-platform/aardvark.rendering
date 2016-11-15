@@ -127,4 +127,43 @@ let main args =
 
     Log.warn "allocated: %A" dev.DeviceMemory.Allocated
 
+
+    let mb = dev |> MappedBuffer.create (VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit)
+
+    let s = 1L <<< 16
+
+    mb.Resize(s)
+    mb.Resize(128L * s)
+
+
+    let offset = 10L * s - 4L
+    let data = Array.init 20 (fun i -> 1 + i)
+    mb.Write(offset, data)
+    Log.line "size: %A" mb.Size
+    
+    mb.Resize(256L * s)
+    Log.line "size: %A" mb.Size
+
+
+    let test = mb.Read<int>(offset, data.Length)
+
+    if test <> data then
+        Log.warn "input:  %A" data
+        Log.warn "output: %A" test
+    else
+        Log.warn "success"
+
+    mb.Resize(10L * s)
+
+    let test2 = mb.Read<int>(offset, 1)
+    if test2.[0] <> data.[0] then
+        Log.warn "input:  %A" data.[0]
+        Log.warn "output: %A" test2.[0]
+    else
+        Log.warn "success"
+
+    mb.Resize(s)
+
+    mb.Resize(0L)
+
     0

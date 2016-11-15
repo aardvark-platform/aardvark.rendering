@@ -633,24 +633,38 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
 
     let memories = List<DeviceMemory>()
 
+    let tryCollapse() =
+        if manager.AllocatedBytes = 0n then
+            for mem in memories do
+                mem.Dispose()
+            memories.Clear()
+
+        else
+            let e = manager.LastUsedByte |> int64
+            let memid = e / blockSize |> int
+            let mutable last = memories.Count - 1
+            while memid < last do
+                memories.[last].Dispose()
+                memories.RemoveAt last
+                last <- last - 1
+
     member internal x.Release (ptr : managedptr) =
         if not ptr.Free then
             lock manager (fun () ->
                 manager.Free ptr
-                if manager.AllocatedBytes = 0n then
-                    for mem in memories do
-                        mem.Dispose()
-                    memories.Clear()
-
-                else
-                    let e = manager.LastUsedByte |> int64
-                    let memid = e / blockSize |> int
-                    let mutable last = memories.Count - 1
-                    while memid < last do
-                        memories.[last].Dispose()
-                        memories.RemoveAt last
-                        last <- last - 1
+                tryCollapse()
             )
+
+    member internal x.TryResize (ptr : managedptr, newSize : int64) =
+        let newSize = nativeint newSize
+        if newSize = ptr.Size then 
+            true
+        elif newSize < ptr.Size then
+            manager.Realloc(ptr, nativeint newSize) |> ignore
+            tryCollapse()
+            true
+        else
+            false
 
     member x.Alloc(align : int64, size : int64) =
         if size > blockSize then
@@ -693,6 +707,13 @@ and ManagedDevicePtr internal(memory : DeviceMemory, offset : int64, size : int6
     inherit DevicePtr(memory, offset, size)
     override x.Dispose() = parent.Release ptr
 
+    override x.TryResize(s : int64) =
+        if parent.TryResize(ptr, s) then
+            x.Size <- s
+            true
+        else
+            false
+
 and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)
     let mutable handle = handle
@@ -716,7 +737,8 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
     override x.Device = heap.Device
 
 and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
-    
+    let mutable size = size
+
     abstract member Memory : DeviceMemory
     default x.Memory = memory
 
@@ -725,8 +747,14 @@ and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
 
     abstract member Device : Device
     default x.Device : Device = memory.Device
+
+    abstract member TryResize : int64 -> bool
+    default x.TryResize (s : int64) = s = size
+
     member x.Offset = offset
-    member x.Size = size
+    member x.Size
+        with get() = size
+        and internal set s = size <- s
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

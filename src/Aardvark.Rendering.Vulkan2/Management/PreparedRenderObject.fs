@@ -13,16 +13,19 @@ open Aardvark.Base.Incremental
 #nowarn "9"
 #nowarn "51"
 
+
+
 type PreparedRenderObject =
     {
         device                  : Device
         original                : RenderObject
-        program                 : IResource<ShaderProgram>
-        descriptorResources     : list<IResource>
-        descriptorSets          : list<IResource<DescriptorSet>>
-        pipeline                : IResource<Pipeline>
-        vertexBuffers           : array<IResource<Buffer> * int>
-        indexBuffer             : Option<IResource<Buffer>>
+        
+        pipeline                : VulkanResource<Pipeline, VkPipeline>
+        indexBuffer             : Option<VulkanResource<Buffer, VkBuffer>>
+        descriptorSets          : IResource<nativeptr<DescriptorSetBinding>>
+        vertexBuffers           : IResource<nativeptr<VertexBufferBinding>>
+        drawCalls               : IResource<nativeptr<DrawCall>>
+        
         activation              : IDisposable
     }
     member x.DrawCallInfos = x.original.DrawCallInfos
@@ -32,13 +35,11 @@ type PreparedRenderObject =
     member x.Dispose() =
         //x.geometryMode.Dispose()
         x.activation.Dispose()
-        x.program.Dispose()
         x.pipeline.Dispose()
-        for r in x.descriptorResources do r.Dispose()
-        for r in x.descriptorSets do r.Dispose()
+        x.descriptorSets.Dispose()
 
-        for (b,_) in x.vertexBuffers do b.Dispose()
-
+        x.vertexBuffers.Dispose()
+        x.drawCalls.Dispose()
 
         match x.indexBuffer with
             | Some ib -> ib.Dispose()
@@ -49,8 +50,10 @@ type PreparedRenderObject =
         let mutable stats = FrameStatistics.Zero
         stats <- stats + x.pipeline.Update(caller)
 
-        for r in x.descriptorSets do stats <- stats + r.Update(caller)
-        for (b,_) in x.vertexBuffers do stats <- stats + b.Update(caller)
+        stats <- stats + x.descriptorSets.Update(caller)
+        stats <- stats + x.vertexBuffers.Update(caller)
+
+        stats <- stats + x.drawCalls.Update(caller)
 
 //        match x.indirect with
 //            | Some b -> do! b.Update(caller)
@@ -64,13 +67,11 @@ type PreparedRenderObject =
 
     member x.IncrementReferenceCount() =
         //x.geometryMode.IncrementReferenceCount()
-        x.program.AddRef()
         x.pipeline.AddRef()
 
-        for r in x.descriptorResources do r.AddRef()
-        for r in x.descriptorSets do r.AddRef()
-        for (b,_) in x.vertexBuffers do b.AddRef()
-
+        x.descriptorSets.AddRef()
+        x.vertexBuffers.AddRef()
+        x.drawCalls.AddRef()
 //        match x.indirect with
 //            | Some ib -> ib.AddRef()
 //            | None -> ()
@@ -97,8 +98,6 @@ type DevicePreparedRenderObjectExtensions private() =
                 let program = this.CreateShaderProgram(renderPass, ro.Surface)
                 let prog = program.Handle.GetValue()
 
-                let mutable descriptorResources : list<IResource> = []
-
                 let descriptorSets = 
                     prog.PipelineLayout.DescriptorSetLayouts |> List.map (fun ds ->
                         let bufferBindings, imageBindings = 
@@ -114,7 +113,6 @@ type DevicePreparedRenderObjectExtensions private() =
                                     | ShaderType.Ptr(_, ShaderType.Struct(_,fields)) ->
                                         let layout = UniformBufferLayoutStd140.structLayout fields
                                         let buffer = this.CreateUniformBuffer(ro.AttributeScope, layout, ro.Uniforms, prog.UniformGetters)
-                                        descriptorResources <- (buffer :> _) :: descriptorResources
                                         b.Binding, buffer
                                     | _ ->
                                         failf "impossible"
@@ -150,7 +148,6 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let view = this.CreateImageView(tex)
                                                 let sam = this.CreateSampler(Mod.constant samplerState)
                                                 
-                                                descriptorResources <- (tex :> _) :: (sam :> _) :: (view :> _) :: descriptorResources
                                                 binding, (view, sam)
                                             | _ -> 
                                                 failwithf "could not find texture: %A" desc.Parameter
@@ -199,9 +196,9 @@ type DevicePreparedRenderObjectExtensions private() =
                         |> Seq.sortBy (fun (_,l,_,_) -> l)
                         |> Seq.map (fun (name,loc, _, view) ->
                             let buffer = this.CreateBuffer(view.Buffer)
-                            buffer, view.Offset
+                            buffer, int64 view.Offset
                             )
-                        |> Seq.toArray
+                        |> Seq.toList
 
 
                 let bufferFormats = 
@@ -220,21 +217,34 @@ type DevicePreparedRenderObjectExtensions private() =
                         ro.StencilMode
                     )
 
+                let indexed = Option.isSome ro.Indices
                 let indexBuffer =
                     match ro.Indices with
                         | Some view -> this.CreateIndexBuffer(view.Buffer) |> Some
                         | None -> None
 
+                let calls =
+                    match ro.IndirectBuffer with
+                        | null -> this.CreateDrawCall(indexed, ro.DrawCallInfos)
+                        | b -> 
+                            let indirect = this.CreateIndirectBuffer(b)
+                            this.CreateDrawCall(indexed, indirect)
+
+                let bindings =
+                    this.CreateVertexBufferBinding(buffers)
+
+                let descriptorBindings =
+                    this.CreateDescriptorSetBinding(prog.PipelineLayout, descriptorSets)
+
                 let res = 
                     {
                         device                      = this.Device
                         original                    = ro
-                        program                     = this.CreateShaderProgram(renderPass, ro.Surface)
-                        descriptorResources         = descriptorResources
-                        descriptorSets              = descriptorSets
+                        descriptorSets              = descriptorBindings
                         pipeline                    = pipeline
-                        vertexBuffers               = buffers
+                        vertexBuffers               = bindings
                         indexBuffer                 = indexBuffer
+                        drawCalls                   = calls
                         activation                  = ro.Activate()
                     }
 

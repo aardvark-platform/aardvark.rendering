@@ -509,7 +509,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateIndirectBuffer(indexed : bool, data : IMod<IIndirectBuffer>) =
-        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed], {
+        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed :> obj], {
             create = fun b   -> ctx.CreateIndirect(indexed, b)
             update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h   -> ctx.Delete h

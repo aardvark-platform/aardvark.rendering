@@ -196,7 +196,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, renderTaskLock : Option<RenderTaskLock>) =
     let store = ConcurrentDictionary<list<obj>, Resource<'h>>()
 
-    let acquire (old : Option<'h>) (m : IMod<'a>) =
+    let acquire (old : Option<'x>) (m : IMod<'a>) =
         match old with
             | None ->
                 match m with
@@ -234,15 +234,18 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | (true,v) -> Some v
             | _ -> None
      
-    member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'h>) =
+    member x.GetOrCreateLocalWrapped<'x when 'x : equality>(key : list<obj>, create : unit -> Resource<'x>, wrap : Resource<'x> -> Resource<'h>) =
         let resource = 
             store.GetOrAdd(key, fun _ -> 
                 let res = create()
                 res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
-                res
+                wrap res
             )
         resource.AddRef()
         resource :> IResource<_>
+
+    member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'h>) =
+        x.GetOrCreateLocalWrapped<'h>(key, create, id)
 
     member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h>) =
         match tryGetParent key with
@@ -251,7 +254,15 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                 r :> IResource<_>
             | None -> x.GetOrCreateLocal(key, create)
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+    member x.GetOrCreateWrapped<'x when 'x : equality>(key : list<obj>, create : unit -> Resource<'x>, wrap : Resource<'x> -> Resource<'h>) =
+        match tryGetParent key with
+            | Some r -> 
+                r.AddRef()
+                r :> IResource<_>
+            | None -> 
+                x.GetOrCreateLocalWrapped(key, create, wrap)
+
+    member x.GetOrCreateWrapped<'a, 'x when 'x : equality>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x>, wrap : Resource<'x> -> Resource<'h>) =
         let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
@@ -284,51 +295,57 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                 x.GetOrCreateLocal(key, fun _ -> 
                     let mutable ownsHandle = false
                 
-                    { new Resource<'h>(desc.kind) with
-                        member x.GetInfo (h : 'h) =
-                            desc.info h
+                    let resource = 
+                        { new Resource<'x>(desc.kind) with
+                            member x.GetInfo (h : 'x) =
+                                desc.info h
 
-                        member x.Create(old : Option<'h>) =
-                            acquire old dataMod
-                            let data = dataMod.GetValue x
-                            let stats = stats dataMod
+                            member x.Create(old : Option<'x>) =
+                                acquire old dataMod
+                                let data = dataMod.GetValue x
+                                let stats = stats dataMod
 
-                            match old with
-                                | Some old ->
-                                    match data :> obj with
-                                        | :? 'h as handle ->
-                                            if ownsHandle then desc.delete old
-                                            ownsHandle <- false
-                                            handle, stats
+                                match old with
+                                    | Some old ->
+                                        match data :> obj with
+                                            | :? 'x as handle ->
+                                                if ownsHandle then desc.delete old
+                                                ownsHandle <- false
+                                                handle, stats
 
-                                        | _ ->
-                                            if ownsHandle then
-                                                let newHandle = desc.update old data
-                                                newHandle, stats
-                                            else
-                                                let newHandle = desc.create data
+                                            | _ ->
+                                                if ownsHandle then
+                                                    let newHandle = desc.update old data
+                                                    newHandle, stats
+                                                else
+                                                    let newHandle = desc.create data
+                                                    ownsHandle <- true
+                                                    newHandle, stats
+
+                                    | None -> 
+
+
+                                        match data :> obj with
+                                            | :? 'x as handle -> 
+                                                ownsHandle <- false
+                                                handle, stats
+                                            | _ ->
+                                                let handle = desc.create data
                                                 ownsHandle <- true
-                                                newHandle, stats
+                                                handle, stats
 
-                                | None -> 
+                            member x.Destroy(h : 'x) =
+                                release dataMod
+                                if ownsHandle then
+                                    ownsHandle <- false
+                                    desc.delete h
+                        }
 
-
-                                    match data :> obj with
-                                        | :? 'h as handle -> 
-                                            ownsHandle <- false
-                                            handle, stats
-                                        | _ ->
-                                            let handle = desc.create data
-                                            ownsHandle <- true
-                                            handle, stats
-
-                        member x.Destroy(h : 'h) =
-                            release dataMod
-                            if ownsHandle then
-                                ownsHandle <- false
-                                desc.delete h
-                    }
+                    wrap resource
                 )
+
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+        x.GetOrCreateWrapped<'a, 'h>(dataMod, additionalKeys, desc, id)
 
     member x.GetOrCreateDependent<'a when 'a : equality>(res : IResource<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
         let key = (res :> obj)::additionalKeys
@@ -367,8 +384,6 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                                                 newHandle, stats
 
                                 | None -> 
-                                    res.AddRef()
-
                                     match data :> obj with
                                         | :? 'h as handle -> 
                                             ownsHandle <- false

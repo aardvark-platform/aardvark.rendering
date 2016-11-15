@@ -20,27 +20,38 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
         
     let descriptorPool     = device.CreateDescriptorPool(1 <<< 20, 1 <<< 22)
 
-    let bufferCache        = derivedCache (fun m -> m.BufferCache)
-    let bufferViewCache    = derivedCache (fun m -> m.BufferViewCache)
-    let indexBufferCache   = derivedCache (fun m -> m.IndexBufferCache)
-    let imageCache         = derivedCache (fun m -> m.ImageCache)
-    let imageViewCache     = derivedCache (fun m -> m.ImageViewCache)
-    let surfaceCache       = derivedCache (fun m -> m.SurfaceCache)
-    let samplerCache       = derivedCache (fun m -> m.SamplerCache)
-    let uniformBufferCache = derivedCache (fun m -> m.UniformBufferCache)
-    let pipelineCache      = derivedCache (fun m -> m.PipelineCache)
-    let descriptorSetCache = derivedCache (fun m -> m.DescriptorSetCache)
+    let bufferCache             = derivedCache (fun m -> m.BufferCache)
+    let bufferViewCache         = derivedCache (fun m -> m.BufferViewCache)
+    let indexBufferCache        = derivedCache (fun m -> m.IndexBufferCache)
+    let indirectBufferCache     = derivedCache (fun m -> m.IndirectBufferCache)
+    let imageCache              = derivedCache (fun m -> m.ImageCache)
+    let imageViewCache          = derivedCache (fun m -> m.ImageViewCache)
+    let surfaceCache            = derivedCache (fun m -> m.SurfaceCache)
+    let samplerCache            = derivedCache (fun m -> m.SamplerCache)
+    let uniformBufferCache      = derivedCache (fun m -> m.UniformBufferCache)
+    let pipelineCache           = derivedCache (fun m -> m.PipelineCache)
+    let descriptorSetCache      = derivedCache (fun m -> m.DescriptorSetCache)
+
+    let directCallCache = derivedCache (fun m -> m.DirectCallCache)
+    let indirectCallCache = derivedCache (fun m -> m.IndirectCallCache)
+    let vertexBindingCache = derivedCache (fun m -> m.VertexBindingCache)
+    let descriptorSetBindingCache = derivedCache (fun m -> m.DescriptorSetBindingCache)
 
     member private x.BufferCache : ResourceCache<Buffer> = bufferCache
     member private x.BufferViewCache : ResourceCache<BufferView> = bufferViewCache
-    member private x.IndexBufferCache : ResourceCache<Buffer> = indexBufferCache
+    member private x.IndexBufferCache : ResourceCache<nativeptr<VkBuffer>> = indexBufferCache
+    member private x.IndirectBufferCache : ResourceCache<IndirectBuffer> = indirectBufferCache
     member private x.ImageCache : ResourceCache<Image> = imageCache
     member private x.ImageViewCache : ResourceCache<ImageView> = imageViewCache
     member private x.SurfaceCache : ResourceCache<ShaderProgram> = surfaceCache
     member private x.SamplerCache : ResourceCache<Sampler> = samplerCache
     member private x.UniformBufferCache : ResourceCache<UniformBuffer> = uniformBufferCache
-    member private x.PipelineCache : ResourceCache<Pipeline> = pipelineCache
+    member private x.PipelineCache : ResourceCache<nativeptr<VkPipeline>> = pipelineCache
     member private x.DescriptorSetCache : ResourceCache<DescriptorSet> = descriptorSetCache
+    member private x.DirectCallCache : ResourceCache<nativeptr<DrawCall>> = directCallCache
+    member private x.IndirectCallCache : ResourceCache<nativeptr<DrawCall>> = indirectCallCache
+    member private x.VertexBindingCache : ResourceCache<nativeptr<VertexBufferBinding>> = vertexBindingCache
+    member private x.DescriptorSetBindingCache : ResourceCache<nativeptr<DescriptorSetBinding>> = descriptorSetBindingCache
 
     member x.Device = device
 
@@ -69,13 +80,23 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
         })
 
     member x.CreateIndexBuffer(data : IMod<IBuffer>) =
-        indexBufferCache.GetOrCreate<IBuffer>(data, {
+        indexBufferCache.GetOrCreateVulkan(data, [], {
             create = fun b      -> device.CreateBuffer(VkBufferUsageFlags.IndexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
             update = fun h b    -> device.Delete(h); device.CreateBuffer(VkBufferUsageFlags.IndexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
             delete = fun h      -> device.Delete(h)
             info =   fun h      -> h.Size |> Mem |> ResourceInfo
             kind = ResourceKind.Buffer
         })
+
+    member x.CreateIndirectBuffer(data : IMod<IIndirectBuffer>) =
+        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, {
+            create = fun b      -> device.CreateIndirectBuffer(b)
+            update = fun h b    -> device.Delete(h); device.CreateIndirectBuffer(b)
+            delete = fun h      -> device.Delete(h)
+            info =   fun h      -> h.Size |> Mem |> ResourceInfo
+            kind = ResourceKind.Buffer
+        })
+
 
     member x.CreateImage(data : IMod<ITexture>) =
         imageCache.GetOrCreate<ITexture>(data, {
@@ -181,9 +202,8 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             ]
 
         let anyAttachment = pass.ColorAttachments |> Map.toSeq |> Seq.head |> snd |> snd
-        pipelineCache.GetOrCreate(
+        pipelineCache.GetOrCreateVulkan(
             key, fun () ->
-                program.AddRef()
                 { new Aardvark.Base.Rendering.Resource<Pipeline>(ResourceKind.ShaderProgram) with
                     member x.GetInfo b = 
                         ResourceInfo.Zero
@@ -219,6 +239,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
                     member x.Destroy h =
                         program.RemoveRef()
+                        program.RemoveOutput x
                         device.Delete h
                 }
         )
@@ -259,12 +280,84 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
                     member x.Destroy h =
                         descriptorPool.Free h
+                        for (_,b) in Map.toSeq buffers do
+                            b.RemoveRef()
+                            b.RemoveOutput x
+
+                        for (_,(i,s)) in Map.toSeq images do
+                            i.RemoveRef()
+                            i.RemoveOutput x
+                            s.RemoveRef()
+                            s.RemoveOutput x
 
                     member x.GetInfo h =
                         ResourceInfo.Zero
+
                 }
         )
 
+
+    member x.CreateDrawCall(indexed : bool, calls : IMod<list<DrawCallInfo>>) =
+        directCallCache.GetOrCreate(calls, [indexed :> obj], {
+            create = fun b      -> device.CreateDrawCall(indexed, b)
+            update = fun h b    -> device.UpdateDrawCall(h, indexed, b); h
+            delete = fun h      -> device.Delete(h)
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateDrawCall(indexed : bool, calls : IResource<IndirectBuffer>) =
+        directCallCache.GetOrCreateDependent(calls, [indexed :> obj], {
+            create = fun b      -> device.CreateDrawCall(indexed, b)
+            update = fun h b    -> device.UpdateDrawCall(h, indexed, b); h
+            delete = fun h      -> device.Delete(h)
+            info =   fun h      -> ResourceInfo.Zero
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateVertexBufferBinding(buffers : list<IResource<Buffer> * int64>) =
+        vertexBindingCache.GetOrCreate(
+            [buffers :> obj],
+            (fun () ->
+                let inputs = buffers |> List.map (fun (r,_) -> r :> IResource)
+
+                let create (old : Option<nativeptr<VertexBufferBinding>>) =
+                    let buffersAndOffsets = buffers |> List.map (fun (b,o) -> (Mod.force b.Handle, o)) |> List.toArray
+                    match old with
+                        | None ->
+                            device.CreateVertexBufferBinding(0, buffersAndOffsets)
+                        | Some old ->
+                            device.UpdateVertexBufferBinding(old, 0, buffersAndOffsets)
+                            old
+
+                let destroy (ptr : nativeptr<VertexBufferBinding>) =
+                    device.Delete(ptr)
+
+                inputs |> Resource.custom create destroy |> unbox<Aardvark.Base.Rendering.Resource<nativeptr<VertexBufferBinding>>>
+            )
+        )
+
+    member x.CreateDescriptorSetBinding(layout : PipelineLayout, bindings : list<IResource<DescriptorSet>>) =
+        descriptorSetBindingCache.GetOrCreate(
+            [bindings :> obj; layout :> obj],
+            (fun () ->
+                let inputs = bindings |> List.map (fun r -> r :> IResource)
+
+                let create (old : Option<nativeptr<DescriptorSetBinding>>) =
+                    let handles = bindings |> List.map (fun b -> Mod.force b.Handle) |> List.toArray
+                    match old with
+                        | None ->
+                            device.CreateDescriptorSetBinding(layout, 0, handles)
+                        | Some old ->
+                            device.UpdateDescriptorSetBinding(old, layout, 0, handles)
+                            old
+
+                let destroy (ptr : nativeptr<DescriptorSetBinding>) =
+                    device.Delete(ptr)
+
+                inputs |> Resource.custom create destroy |> unbox<Aardvark.Base.Rendering.Resource<nativeptr<DescriptorSetBinding>>>
+            )
+        )
 
     member x.RenderTaskLock = renderTaskInfo
 
