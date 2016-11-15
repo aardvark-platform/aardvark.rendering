@@ -1057,6 +1057,12 @@ type Image =
             member x.Samples = x.Samples
             member x.Size = x.Size
 
+        interface IRenderbuffer with
+            member x.Size = x.Size.XY
+            member x.Samples = x.Samples
+            member x.Format = VkFormat.toTextureFormat x.Format |> TextureFormat.toRenderbufferFormat
+            member x.Handle = x.Handle :> obj
+
         new(dev, handle, s, levels, count, samples, dim, fmt, mapping, mem, layout) = 
             {
                 inherit Resource<_>(dev, handle);

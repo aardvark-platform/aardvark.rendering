@@ -272,6 +272,43 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, family : Queu
     member x.Index = index
     member x.Handle = handle
 
+    member x.RunSynchronously(cmd : CommandBuffer) =
+        let mutable handle = cmd.Handle
+        let mutable submitInfo =
+            VkSubmitInfo(
+                VkStructureType.SubmitInfo, 0n,
+                0u, NativePtr.zero, NativePtr.zero,
+                1u, &&handle,
+                0u, NativePtr.zero
+            )
+
+        let fence = device.CreateFence()
+
+        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
+            |> check "could not submit command buffer"
+
+        fence.Wait()
+
+    member x.Wait(sem : Semaphore) =
+        let mutable semHandle = sem.Handle
+        let mutable submitInfo =
+            let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
+            VkSubmitInfo(
+                VkStructureType.SubmitInfo,
+                0n, 
+                1u, &&semHandle,
+                &&dstStage,
+                0u, NativePtr.zero,
+                0u, NativePtr.zero
+            )
+
+        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
+            |> check "vkQueueWaitSemaphore"
+
+    member x.WaitIdle() =
+        VkRaw.vkQueueWaitIdle(x.Handle)
+            |> check "could not wait for queue"
+
 and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues : list<DeviceQueue>) as this =
     let store = new BlockingCollection<DeviceQueue>()
     do for q in queues do store.Add q
@@ -286,21 +323,7 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
 
     member x.RunSynchronously(cmd : CommandBuffer) =
         x.UsingQueue(fun queue ->
-            let mutable handle = cmd.Handle
-            let mutable submitInfo =
-                VkSubmitInfo(
-                    VkStructureType.SubmitInfo, 0n,
-                    0u, NativePtr.zero, NativePtr.zero,
-                    1u, &&handle,
-                    0u, NativePtr.zero
-                )
-
-            let fence = device.CreateFence()
-
-            VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submitInfo, fence.Handle)
-                |> check "could not submit command buffer"
-
-            fence.Wait()
+            queue.RunSynchronously(cmd)
         )
 
     member x.UsingQueue<'a> (f : DeviceQueue -> 'a) : 'a =

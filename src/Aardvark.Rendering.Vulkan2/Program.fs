@@ -107,6 +107,26 @@ let main args =
 
     let main = instance.Devices.[0]
     use dev = main.CreateDevice(Set.empty, Set.ofList ["VK_KHR_swapchain"; "VK_NV_glsl_shader"], [main.MainQueue, 4])
+    let runtime = new Runtime(dev, false, false)
+
+    let size = V2i(1024, 768)
+    let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
+    let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+
+    let signature =
+        runtime.CreateFramebufferSignature [
+            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+        ]
+
+    let framebuffer =
+        runtime.CreateFramebuffer(
+            signature, [
+                DefaultSemantic.Colors, { texture = color; level = 0; slice = 0 } :> IFramebufferOutput
+                DefaultSemantic.Depth, depth :> IFramebufferOutput
+            ]
+        )
+
 
 
 

@@ -260,3 +260,41 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
 
     override x.ToString() =
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
+        
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Instance =
+    module Extensions =
+        let DebugReport         = "VK_EXT_debug_report"
+        let Surface             = "VK_KHR_surface"
+        let SwapChain           = "VK_KHR_swapchain"
+        let Display             = "VK_KHR_display"
+        let DisplaySwapChain    = "VK_KHR_display_swapchain"
+
+        let AndroidSurface      = "VK_KHR_android_surface"
+        let MirSurface          = "VK_KHR_mir_surface"
+        let WaylandSurface      = "VK_KHR_wayland_surface"
+        let Win32Surface        = "VK_KHR_win32_surface"
+        let XcbSurface          = "VK_KHR_xcb_surface"
+        let XlibSurface         = "VK_KHR_xlib_surface"
+
+    module Layers =
+        let ApiDump             = "VK_LAYER_LUNARG_api_dump"
+        let DeviceLimits        = "VK_LAYER_LUNARG_device_limits"
+        let DrawState           = "VK_LAYER_LUNARG_draw_state"
+        let Image               = "VK_LAYER_LUNARG_image"
+        let MemTracker          = "VK_LAYER_LUNARG_mem_tracker"
+        let ObjectTracker       = "VK_LAYER_LUNARG_object_tracker"
+        let ParamChecker        = "VK_LAYER_LUNARG_param_checker"
+        let Screenshot          = "VK_LAYER_LUNARG_screenshot"
+        let SwapChain           = "VK_LAYER_LUNARG_swapchain"
+        let StandardValidation  = "VK_LAYER_LUNARG_standard_validation"
+        let Threading           = "VK_LAYER_GOOGLE_threading"
+        let UniqueObjects       = "VK_LAYER_GOOGLE_unique_objects"
+        let Trace               = "VK_LAYER_LUNARG_vktrace"
+        let ParameterValidation = "VK_LAYER_LUNARG_parameter_validation"
+        let CoreValidation      = "VK_LAYER_LUNARG_core_validation"
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module PhysicalDevice =
+    module Extensions =
+        let SwapChain = "VK_KHR_swapchain"
