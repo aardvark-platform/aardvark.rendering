@@ -32,6 +32,15 @@ let blubber() =
             DefaultSurfaces.simpleLighting |> toEffect
         ]
 
+[<Demo("Quad Demo")>]
+let quad() =
+    Sg.fullScreenQuad
+        |> Sg.effect [
+            DefaultSurfaces.trafo |> toEffect
+            DefaultSurfaces.constantColor C4f.Red |> toEffect
+        ]
+
+
 module Shader =
     open FShade
 
@@ -100,8 +109,11 @@ let naiveLoD() =
     App.Runtime.CompileRender(App.FramebufferSignature, objs) |> DefaultOverlays.withStatistics
 
 
+
+
 [<EntryPoint>]
 let main argv = 
+
     Ag.initialize()
     Aardvark.Init()
 

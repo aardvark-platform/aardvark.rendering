@@ -25,7 +25,7 @@ type PreparedRenderObject =
         descriptorSets          : IResource<nativeptr<DescriptorSetBinding>>
         vertexBuffers           : IResource<nativeptr<VertexBufferBinding>>
         drawCalls               : IResource<nativeptr<DrawCall>>
-        isActive                : IResource<nativeptr<int>>
+        isActive                : IResource<nativeint>
         activation              : IDisposable
     }
     member x.DrawCallInfos = x.original.DrawCallInfos
@@ -257,24 +257,25 @@ type DevicePreparedRenderObjectExtensions private() =
             this.CreateDescriptorSetBinding(prog.PipelineLayout, descriptorSets)
 
         let isActive =
-            { new Rendering.Resource<nativeptr<int>>(ResourceKind.Unknown) with
-                member x.Create (old : Option<nativeptr<int>>) =
+            { new Rendering.Resource<nativeint>(ResourceKind.Unknown) with
+                member x.Create (old : Option<nativeint>) =
                     let ptr =
                         match old with
                             | Some ptr -> ptr
-                            | None -> NativePtr.alloc 1
+                            | None -> Marshal.AllocHGlobal 4
 
                     let v = ro.IsActive.GetValue(x)
-                    NativePtr.write ptr (if v then 1 else 0)
+                    NativeInt.write ptr (if v then 1 else 0)
                     
                     ptr, FrameStatistics.Zero
 
-                member x.Destroy (h : nativeptr<int>) =
-                    NativePtr.free h
+                member x.Destroy (h : nativeint) =
+                    Marshal.FreeHGlobal h
 
                 member x.GetInfo h =
                     ResourceInfo.Zero
             }
+        isActive.AddRef()
 
         let res = 
             {

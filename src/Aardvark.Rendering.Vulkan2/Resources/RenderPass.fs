@@ -76,7 +76,7 @@ module RenderPass =
 
                 VkAttachmentDescription(
                     VkAttachmentDescriptionFlags.None,
-                    VkFormat.ofTextureFormat (TextureFormat.ofRenderbufferFormat a.format),
+                    VkFormat.ofTextureFormat (unbox (int a.format)),
                     unbox<VkSampleCountFlags> a.samples,
 
                     loadOp,
@@ -92,7 +92,7 @@ module RenderPass =
         let depthAttachmentDescription =
             match depthAtt with
                 | Some a ->
-                    let format = VkFormat.ofTextureFormat (TextureFormat.ofRenderbufferFormat a.format)
+                    let format = VkFormat.ofTextureFormat (unbox (int a.format))
                     let hasStencil =
                         match format with
                             | VkFormat.D16UnormS8Uint -> true

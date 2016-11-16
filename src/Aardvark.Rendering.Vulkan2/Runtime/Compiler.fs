@@ -60,12 +60,12 @@ module Compiler =
             VKVM.Pointers.vmBindPipeline, [| r.Pointer :> obj |]
 
         let bindDescriptorSets (r : IResource<nativeptr<DescriptorSetBinding>>) : Instruction =
-            VKVM.Pointers.vmBindPipeline, [| r.Handle.GetValue() :> obj |]
+            VKVM.Pointers.vmBindDescriptorSets, [| r.Handle.GetValue() :> obj |]
 
         let bindVertexBuffers (r : IResource<nativeptr<VertexBufferBinding>>) : Instruction =
             VKVM.Pointers.vmBindVertexBuffers, [| r.Handle.GetValue() :> obj |]
 
-        let draw (stats : nativeptr<V2i>) (isActive : IResource<nativeptr<int>>) (r : IResource<nativeptr<DrawCall>>) : Instruction =
+        let draw (stats : nativeptr<V2i>) (isActive : IResource<nativeint>) (r : IResource<nativeptr<DrawCall>>) : Instruction =
             VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Handle.GetValue() :> obj; r.Handle.GetValue() :> obj |]
 
     let compileSingle (scope : CompilerScope) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =

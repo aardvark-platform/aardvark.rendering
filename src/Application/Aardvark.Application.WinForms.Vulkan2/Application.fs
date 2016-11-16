@@ -124,25 +124,30 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
     
         new Instance(Version(1,0,0), enabledLayers, enabledExtensions)
 
+    let mutable debugAdapter = None
+
     // install debug output to file (and errors/warnings to console)
-//    do if debug then
-//        instance.OnDebugMessage.Add (fun msg ->
-//            
-//            let str = sprintf "[%s] %s" msg.layerPrefix msg.message
-//
-//            match msg.messageFlags with
-//                | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
-//                    Log.error "%s" str
-//
-//                | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt | VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt ->
-//                    Log.warn "%s" str
-//
-//                | VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt ->
-//                    Report.Line(4, "{0}", str)
-//
-//                | _ -> ()
-//
-//        )
+    do if debug then
+        let adapter = new DebugReport.Adapter(instance.Handle, VkDebugReportFlagBitsEXT.All)
+        adapter.Start()
+        debugAdapter <- Some adapter
+        adapter.OnMessage.Add (fun msg ->
+            
+            let str = sprintf "[%s] %s" msg.layerPrefix msg.message
+
+            match msg.messageFlags with
+                | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
+                    Log.error "%s" str
+
+                | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt | VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt ->
+                    Log.warn "%s" str
+
+                | VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt ->
+                    Report.Line(4, "{0}", str)
+
+                | _ -> ()
+
+        )
 
 
     // choose a physical device
@@ -175,7 +180,8 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
     member x.Initialize(ctrl : IRenderControl, samples : int) =
         match ctrl with
             | :? Aardvark.Application.WinForms.RenderControl as ctrl ->
-                let impl = new VulkanRenderControl(runtime, samples)
+                let mode = Aardvark.Application.WinForms.Vulkan.GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, 1)
+                let impl = new VulkanRenderControl(runtime, mode)
                 ctrl.Implementation <- impl
 
             | _ ->
@@ -191,15 +197,19 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
             | _ ->
                 failwith "unsupported RenderControl"
 
+    member x.Dispose() =
+        match debugAdapter with
+            | Some a -> a.Dispose()
+            | _ -> ()
+        device.Dispose()
+        instance.Dispose()
 
     interface IApplication with
         member x.Runtime = runtime :> _ 
         member x.Initialize(ctrl : IRenderControl, samples : int) =
             x.Initialize(ctrl, samples)
 
-        member x.Dispose() =
-            device.Dispose()
-            instance.Dispose()
+        member x.Dispose() = x.Dispose()
 
 
     new(appName, debug) = new VulkanApplication(appName, debug, VisualDeviceChooser.run)

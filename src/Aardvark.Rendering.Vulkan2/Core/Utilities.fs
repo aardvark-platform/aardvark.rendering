@@ -23,6 +23,8 @@ module private Utilities =
 
     let inline failf fmt = Printf.kprintf (fun str -> failwith ("[Vulkan] " + str)) fmt
 
+[<AutoOpen>]
+module BaseLibExtensions = 
     module NativePtr =
         let withA (f : nativeptr<'a> -> 'b) (a : 'a[]) =
             let gc = GCHandle.Alloc(a, GCHandleType.Pinned)

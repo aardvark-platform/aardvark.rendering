@@ -66,6 +66,11 @@ module ``Image Format Extensions`` =
                 TextureDimension.TextureCube, VkImageType.D2d
             ]
 
+    type ImageKind =
+        | Color = 1
+        | Depth = 2
+        | DepthStencil = 3
+
     module VkFormat =
         let ofTextureFormat =
             LookupTable.lookupTable [
@@ -214,7 +219,10 @@ module ``Image Format Extensions`` =
 //                TextureFormat.Four, VkFormat.
 
             ]
-        
+
+        let ofRenderbufferFormat (fmt : RenderbufferFormat) =
+            fmt |> int |> unbox<TextureFormat> |> ofTextureFormat
+
         let toTextureFormat =
             let unknown = unbox<TextureFormat> 0
             LookupTable.lookupTable [
@@ -403,6 +411,226 @@ module ``Image Format Extensions`` =
                 VkFormat.Astc1210SrgbBlock, unknown
                 VkFormat.Astc1212UnormBlock, unknown
                 VkFormat.Astc1212SrgbBlock, unknown       
+            ]
+
+        let toRenderbufferFormat (fmt : VkFormat) =
+            fmt |> toTextureFormat |> int |> unbox<RenderbufferFormat>
+
+
+        let private depthFormats = HashSet.ofList [ VkFormat.D16Unorm; VkFormat.D32Sfloat; VkFormat.X8D24UnormPack32 ]
+        let private depthStencilFormats = HashSet.ofList [VkFormat.D16UnormS8Uint; VkFormat.D24UnormS8Uint; VkFormat.D32SfloatS8Uint ]
+
+        let toAspect (fmt : VkFormat) =
+            if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit
+            elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
+            else VkImageAspectFlags.ColorBit
+
+        let toImageKind (fmt : VkFormat) =
+            if depthStencilFormats.Contains fmt then ImageKind.DepthStencil
+            elif depthFormats.Contains fmt then ImageKind.Depth
+            else ImageKind.Color
+
+
+        let toColFormat =
+            let r = Col.Format.Gray
+            let rg = Col.Format.NormalUV
+            let rgb = Col.Format.RGB
+            let rgba = Col.Format.RGBA
+            let bgr = Col.Format.BGR
+            let bgra = Col.Format.BGRA
+            let argb = Col.Format.None
+            let abgr = Col.Format.None
+            let none = Col.Format.None
+            let d = Col.Format.Gray
+            let ds = Col.Format.GrayAlpha
+            let s = Col.Format.Alpha
+            let unknown = Col.Format.None
+            LookupTable.lookupTable [
+                VkFormat.Undefined, none
+                VkFormat.R4g4UnormPack8, rg
+                VkFormat.R4g4b4a4UnormPack16, rgba
+                VkFormat.B4g4r4a4UnormPack16, bgra
+                VkFormat.R5g6b5UnormPack16, rgb
+                VkFormat.B5g6r5UnormPack16, bgr
+                VkFormat.R5g5b5a1UnormPack16, rgba
+                VkFormat.B5g5r5a1UnormPack16, bgra
+                VkFormat.A1r5g5b5UnormPack16, argb
+                VkFormat.R8Unorm, r
+                VkFormat.R8Snorm, r
+                VkFormat.R8Uscaled, r
+                VkFormat.R8Sscaled, r
+                VkFormat.R8Uint, r
+                VkFormat.R8Sint, r
+                VkFormat.R8Srgb, r
+                VkFormat.R8g8Unorm, rg
+                VkFormat.R8g8Snorm, rg
+                VkFormat.R8g8Uscaled, rg
+                VkFormat.R8g8Sscaled, rg
+                VkFormat.R8g8Uint, rg
+                VkFormat.R8g8Sint, rg
+                VkFormat.R8g8Srgb, rg
+                VkFormat.R8g8b8Unorm, rgb
+                VkFormat.R8g8b8Snorm, rgb
+                VkFormat.R8g8b8Uscaled, rgb
+                VkFormat.R8g8b8Sscaled, rgb
+                VkFormat.R8g8b8Uint, rgb
+                VkFormat.R8g8b8Sint, rgb
+                VkFormat.R8g8b8Srgb, rgb
+                VkFormat.B8g8r8Unorm, bgr
+                VkFormat.B8g8r8Snorm, bgr
+                VkFormat.B8g8r8Uscaled, bgr
+                VkFormat.B8g8r8Sscaled, bgr
+                VkFormat.B8g8r8Uint, bgr
+                VkFormat.B8g8r8Sint, bgr
+                VkFormat.B8g8r8Srgb, bgr
+                VkFormat.R8g8b8a8Unorm, rgba
+                VkFormat.R8g8b8a8Snorm, rgba
+                VkFormat.R8g8b8a8Uscaled, rgba
+                VkFormat.R8g8b8a8Sscaled, rgba
+                VkFormat.R8g8b8a8Uint, rgba
+                VkFormat.R8g8b8a8Sint, rgba
+                VkFormat.R8g8b8a8Srgb, rgba
+                VkFormat.B8g8r8a8Unorm, bgra
+                VkFormat.B8g8r8a8Snorm, bgra
+                VkFormat.B8g8r8a8Uscaled, bgra
+                VkFormat.B8g8r8a8Sscaled, bgra
+                VkFormat.B8g8r8a8Uint, bgra
+                VkFormat.B8g8r8a8Sint, bgra
+                VkFormat.B8g8r8a8Srgb, bgra
+                VkFormat.A8b8g8r8UnormPack32, abgr
+                VkFormat.A8b8g8r8SnormPack32, abgr
+                VkFormat.A8b8g8r8UscaledPack32, abgr
+                VkFormat.A8b8g8r8SscaledPack32, abgr
+                VkFormat.A8b8g8r8UintPack32, abgr
+                VkFormat.A8b8g8r8SintPack32, abgr
+                VkFormat.A8b8g8r8SrgbPack32, abgr
+                VkFormat.A2r10g10b10UnormPack32, argb
+                VkFormat.A2r10g10b10SnormPack32, argb
+                VkFormat.A2r10g10b10UscaledPack32, argb
+                VkFormat.A2r10g10b10SscaledPack32, argb
+                VkFormat.A2r10g10b10UintPack32, argb
+                VkFormat.A2r10g10b10SintPack32, argb
+                VkFormat.A2b10g10r10UnormPack32, abgr
+                VkFormat.A2b10g10r10SnormPack32, abgr
+                VkFormat.A2b10g10r10UscaledPack32, abgr
+                VkFormat.A2b10g10r10SscaledPack32, abgr
+                VkFormat.A2b10g10r10UintPack32, abgr
+                VkFormat.A2b10g10r10SintPack32, abgr
+                VkFormat.R16Unorm, r
+                VkFormat.R16Snorm, r
+                VkFormat.R16Uscaled, r
+                VkFormat.R16Sscaled, r
+                VkFormat.R16Uint, r
+                VkFormat.R16Sint, r
+                VkFormat.R16Sfloat, r
+                VkFormat.R16g16Unorm, rg
+                VkFormat.R16g16Snorm, rg
+                VkFormat.R16g16Uscaled, rg
+                VkFormat.R16g16Sscaled, rg
+                VkFormat.R16g16Uint, rg
+                VkFormat.R16g16Sint, rg
+                VkFormat.R16g16Sfloat, rg
+                VkFormat.R16g16b16Unorm, rgb
+                VkFormat.R16g16b16Snorm, rgb
+                VkFormat.R16g16b16Uscaled, rgb
+                VkFormat.R16g16b16Sscaled, rgb
+                VkFormat.R16g16b16Uint, rgb
+                VkFormat.R16g16b16Sint, rgb
+                VkFormat.R16g16b16Sfloat, rgb
+                VkFormat.R16g16b16a16Unorm, rgba
+                VkFormat.R16g16b16a16Snorm, rgba
+                VkFormat.R16g16b16a16Uscaled, rgba
+                VkFormat.R16g16b16a16Sscaled, rgba
+                VkFormat.R16g16b16a16Uint, rgba
+                VkFormat.R16g16b16a16Sint, rgba
+                VkFormat.R16g16b16a16Sfloat, rgba
+                VkFormat.R32Uint, r
+                VkFormat.R32Sint, r
+                VkFormat.R32Sfloat, r
+                VkFormat.R32g32Uint, rg
+                VkFormat.R32g32Sint, rg
+                VkFormat.R32g32Sfloat, rg
+                VkFormat.R32g32b32Uint, rgb
+                VkFormat.R32g32b32Sint, rgb
+                VkFormat.R32g32b32Sfloat, rgb
+                VkFormat.R32g32b32a32Uint, rgba
+                VkFormat.R32g32b32a32Sint, rgba
+                VkFormat.R32g32b32a32Sfloat, rgba
+                VkFormat.R64Uint, r
+                VkFormat.R64Sint, r
+                VkFormat.R64Sfloat, r
+                VkFormat.R64g64Uint, rg
+                VkFormat.R64g64Sint, rg
+                VkFormat.R64g64Sfloat, rg
+                VkFormat.R64g64b64Uint, rgb
+                VkFormat.R64g64b64Sint, rgb
+                VkFormat.R64g64b64Sfloat, rgb
+                VkFormat.R64g64b64a64Uint, rgba
+                VkFormat.R64g64b64a64Sint, rgba
+                VkFormat.R64g64b64a64Sfloat, rgba
+                VkFormat.B10g11r11UfloatPack32, bgr
+                VkFormat.E5b9g9r9UfloatPack32, bgr
+                VkFormat.D16Unorm, d
+                VkFormat.X8D24UnormPack32, d
+                VkFormat.D32Sfloat, ds
+                VkFormat.S8Uint, s
+                VkFormat.D16UnormS8Uint, ds
+                VkFormat.D24UnormS8Uint, ds
+                VkFormat.D32SfloatS8Uint, ds
+                VkFormat.Bc1RgbUnormBlock, rgb
+                VkFormat.Bc1RgbSrgbBlock, rgb
+                VkFormat.Bc1RgbaUnormBlock, rgba
+                VkFormat.Bc1RgbaSrgbBlock, rgba
+                VkFormat.Bc2UnormBlock, unknown
+                VkFormat.Bc2SrgbBlock, rgb
+                VkFormat.Bc3UnormBlock, unknown
+                VkFormat.Bc3SrgbBlock, rgb
+                VkFormat.Bc4UnormBlock, unknown
+                VkFormat.Bc4SnormBlock, unknown
+                VkFormat.Bc5UnormBlock, unknown
+                VkFormat.Bc5SnormBlock, unknown
+                VkFormat.Bc6hUfloatBlock, unknown
+                VkFormat.Bc6hSfloatBlock, unknown
+                VkFormat.Bc7UnormBlock, unknown
+                VkFormat.Bc7SrgbBlock, rgb
+                VkFormat.Etc2R8g8b8UnormBlock, rgb
+                VkFormat.Etc2R8g8b8SrgbBlock, rgb
+                VkFormat.Etc2R8g8b8a1UnormBlock, rgba
+                VkFormat.Etc2R8g8b8a1SrgbBlock, rgba
+                VkFormat.Etc2R8g8b8a8UnormBlock, rgba
+                VkFormat.Etc2R8g8b8a8SrgbBlock, rgba
+                VkFormat.EacR11UnormBlock, r
+                VkFormat.EacR11SnormBlock, r
+                VkFormat.EacR11g11UnormBlock, rg
+                VkFormat.EacR11g11SnormBlock, rg
+                VkFormat.Astc44UnormBlock, unknown
+                VkFormat.Astc44SrgbBlock, rgb
+                VkFormat.Astc54UnormBlock, unknown
+                VkFormat.Astc54SrgbBlock, rgb
+                VkFormat.Astc55UnormBlock, unknown
+                VkFormat.Astc55SrgbBlock, rgb
+                VkFormat.Astc65UnormBlock, unknown
+                VkFormat.Astc65SrgbBlock, rgb
+                VkFormat.Astc66UnormBlock, unknown
+                VkFormat.Astc66SrgbBlock, rgb
+                VkFormat.Astc85UnormBlock, unknown
+                VkFormat.Astc85SrgbBlock, rgb
+                VkFormat.Astc86UnormBlock, unknown
+                VkFormat.Astc86SrgbBlock, rgb
+                VkFormat.Astc88UnormBlock, unknown
+                VkFormat.Astc88SrgbBlock, rgb
+                VkFormat.Astc105UnormBlock, unknown
+                VkFormat.Astc105SrgbBlock, rgb
+                VkFormat.Astc106UnormBlock, unknown
+                VkFormat.Astc106SrgbBlock, rgb
+                VkFormat.Astc108UnormBlock, unknown
+                VkFormat.Astc108SrgbBlock, rgb
+                VkFormat.Astc1010UnormBlock, unknown
+                VkFormat.Astc1010SrgbBlock, rgb
+                VkFormat.Astc1210UnormBlock, unknown
+                VkFormat.Astc1210SrgbBlock, rgb
+                VkFormat.Astc1212UnormBlock, unknown
+                VkFormat.Astc1212SrgbBlock, rgb   
             ]
 
         let channels =
@@ -595,6 +823,7 @@ module ``Image Format Extensions`` =
             ]
 
         let sizeInBytes =
+
             LookupTable.lookupTable [
                 VkFormat.Undefined, -1
                 VkFormat.R4g4UnormPack8, 1
@@ -883,7 +1112,17 @@ module ``Image Format Extensions`` =
                 rowSize = int64 alignedRowSize
             }
 
+    type VkStructureType with
+        static member SwapChainCreateInfoKHR = 1000001000 |> unbox<VkStructureType>
+        static member PresentInfoKHR = 1000001001 |> unbox<VkStructureType>
+
+    type VkImageLayout with
+        static member PresentSrcKhr = unbox<VkImageLayout> 1000001002
+
+
     module VkComponentMapping =
+        let Identity = VkComponentMapping(VkComponentSwizzle.R, VkComponentSwizzle.G, VkComponentSwizzle.B, VkComponentSwizzle.A)
+
         let ofColFormat =
             let c0 = VkComponentSwizzle.R
             let c1 = VkComponentSwizzle.G
@@ -1141,7 +1380,7 @@ module ``Image Command Extensions`` =
             }
 
         static member TransformLayout(img : Image, target : VkImageLayout) =
-            if img.Layout = target then
+            if img.Layout = target || target = VkImageLayout.Undefined || target = VkImageLayout.Preinitialized then
                 { new Command<unit>() with
                     member x.Enqueue _ = ()
                     member x.Dispose() = ()
@@ -1151,12 +1390,27 @@ module ``Image Command Extensions`` =
                 img.Layout <- target
                 { new Command<unit>() with
                     member x.Enqueue (buffer : CommandBuffer) =
+                        let src =
+                            if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                            elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                            elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                            elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                            else VkAccessFlags.None
+
+                        let dst =
+                            if target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                            elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                            elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                            elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit ||| VkAccessFlags.InputAttachmentReadBit
+                            elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                            else VkAccessFlags.None
+
                         let queueIndex = uint32 buffer.QueueFamily.Info.index
                         let mutable barrier =
                             VkImageMemoryBarrier(
                                 VkStructureType.ImageMemoryBarrier, 0n, 
-                                VkAccessFlags.Write,
-                                VkAccessFlags.Read,
+                                src,
+                                dst,
                                 source,
                                 target,
                                 queueIndex,
@@ -1171,8 +1425,8 @@ module ``Image Command Extensions`` =
 
                         VkRaw.vkCmdPipelineBarrier(
                             buffer.Handle,
-                            VkPipelineStageFlags.None,
-                            VkPipelineStageFlags.None,
+                            VkPipelineStageFlags.BottomOfPipeBit,
+                            VkPipelineStageFlags.BottomOfPipeBit,
                             VkDependencyFlags.None,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero,
@@ -1228,11 +1482,14 @@ module ``Image Command Extensions`` =
                     dstOffsets.[0] <- VkOffset3D(dstRange.Min.X, dstRange.Min.Y, dstRange.Min.Z)
                     dstOffsets.[1] <- VkOffset3D(dstRange.SizeX, dstRange.SizeY, dstRange.SizeZ)
 
+                    let srcAspect = VkFormat.toAspect src.Format
+                    let dstAspect = VkFormat.toAspect dst.Format
+
                     let mutable blit =
                         VkImageBlit(
-                            VkImageSubresourceLayers(VkImageAspectFlags.All, uint32 srcLevel, uint32 srcSlice, 1u),
+                            VkImageSubresourceLayers(srcAspect, uint32 srcLevel, uint32 srcSlice, 1u),
                             srcOffsets,
-                            VkImageSubresourceLayers(VkImageAspectFlags.All, uint32 dstLevel, uint32 dstSlice, 1u),
+                            VkImageSubresourceLayers(dstAspect, uint32 dstLevel, uint32 dstSlice, 1u),
                             dstOffsets
                         )
                     
@@ -1258,7 +1515,70 @@ module ``Image Command Extensions`` =
 
             }
 
+        static member ClearColor(img : Image, color : C4f, levelRange : Range1i, sliceRange : Range1i) =
+            let originalLayout = img.Layout
+            let kind = VkFormat.toImageKind img.Format
 
+            { new Command<unit>() with
+                member x.Enqueue buffer =
+                    buffer.Enqueue (Command.TransformLayout(img, VkImageLayout.TransferDstOptimal))
+                    
+                    match kind with
+                        | ImageKind.Color -> 
+                            let mutable clearValue = VkClearColorValue(float32 = color.ToV4f())
+                            let mutable range =
+                                VkImageSubresourceRange(
+                                    VkImageAspectFlags.ColorBit,
+                                    uint32 levelRange.Min,
+                                    uint32 (1 + levelRange.Max - levelRange.Min),
+                                    uint32 sliceRange.Min,
+                                    uint32 (1 + sliceRange.Max - sliceRange.Min)
+                                )
+                            VkRaw.vkCmdClearColorImage(buffer.Handle, img.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range)
+                        | _ ->
+                            failf "unsupported ImageKind: %A" kind
+
+                    buffer.Enqueue (Command.TransformLayout(img, originalLayout))
+
+                member x.Dispose() =
+                    ()
+            }
+
+        static member ClearDepthStencil(img : Image, depth : float, stencil : uint32, levelRange : Range1i, sliceRange : Range1i) =
+            let originalLayout = img.Layout
+            let kind = VkFormat.toImageKind img.Format
+            let aspectFlags = VkFormat.toAspect img.Format
+
+            { new Command<unit>() with
+                member x.Enqueue buffer =
+                    buffer.Enqueue (Command.TransformLayout(img, VkImageLayout.TransferDstOptimal))
+                    
+                    match kind with
+                        | ImageKind.DepthStencil -> 
+                            let mutable clearValue = VkClearDepthStencilValue(float32 depth, stencil)
+                            let mutable range =
+                                VkImageSubresourceRange(
+                                    aspectFlags,
+                                    uint32 levelRange.Min,
+                                    uint32 (1 + levelRange.Max - levelRange.Min),
+                                    uint32 sliceRange.Min,
+                                    uint32 (1 + sliceRange.Max - sliceRange.Min)
+                                )
+                            VkRaw.vkCmdClearDepthStencilImage(buffer.Handle, img.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range)
+                        | _ ->
+                            failf "unsupported ImageKind: %A" kind
+
+                    buffer.Enqueue (Command.TransformLayout(img, originalLayout))
+
+                member x.Dispose() =
+                    ()
+            }
+
+        static member ClearColor(img : Image, color : C4f) =
+            Command.ClearColor(img, color, Range1i(0,0), Range1i(0,0))
+
+        static member ClearDepthStencil(img : Image, depth : float, stencil : uint32) =
+            Command.ClearDepthStencil(img, depth, stencil, Range1i(0,0), Range1i(0,0))
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

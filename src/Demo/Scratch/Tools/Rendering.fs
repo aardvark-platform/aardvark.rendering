@@ -18,11 +18,12 @@ type private ChangeableRenderTask() =
 
     member x.Inner
         with get() = current
-        and set v =
+        and set (v : IRenderTask) =
             current <- v
             transact (fun () -> x.MarkOutdated())
 
-    override x.Run o = current.Run(x, o)
+    override x.Run (o : OutputDescription) = 
+        current.Run(x, o)
 
     override x.Dispose() = current <- RenderTask.empty
 
@@ -57,7 +58,7 @@ type DescriptionAttribute(desc : string) =
 
 type App private () =
     
-    static let app = lazy ( new OpenGlApplication() )
+    static let app = lazy ( new VulkanApplication(true) )
     static let mutable win : Option<SimpleRenderWindow> = None
     static let realTask = new ChangeableRenderTask()
     static let mutable config = BackendConfiguration.Default 
@@ -136,7 +137,7 @@ type App private () =
                 | :? ISg as s ->
                     let w = getWin()
                     let task = app.Value.Runtime.CompileRender(w.FramebufferSignature, config, withCam s)
-                    realTask.Inner <- task |> DefaultOverlays.withStatistics
+                    realTask.Inner <- task 
                     w.Show()
 
                 | :? IRenderTask as r -> 
@@ -259,6 +260,13 @@ type App private () =
 
         form.ResumeLayout()
         Application.Run(form)
+        realTask.Inner.Dispose()
+        realTask.Inner <- RenderTask.empty
+
+        match win with
+            | Some w -> w.Dispose()
+            | _ -> ()
+        if app.IsValueCreated then app.Value.Dispose()
 
         ()
  

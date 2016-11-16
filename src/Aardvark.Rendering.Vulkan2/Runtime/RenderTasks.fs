@@ -432,8 +432,6 @@ module RenderTasks =
                 let fbo = unbox<Framebuffer> outputs.framebuffer
 
                 cmd.Begin(CommandBufferUsage.OneTimeSubmit)
-    //            cmd.BeginPass(renderPass, fbo)
-
                 let mutable rect = VkRect3D(VkOffset3D(0,0,0), VkExtent3D(fbo.Size.X, fbo.Size.Y,1))
                 for (sem, view) in Map.toSeq fbo.Attachments do
                     let image = view.Image
@@ -474,8 +472,6 @@ module RenderTasks =
                 cmd.End()
 
                 device.GraphicsFamily.RunSynchronously cmd
-
-
                 FrameStatistics.Zero
             )
 

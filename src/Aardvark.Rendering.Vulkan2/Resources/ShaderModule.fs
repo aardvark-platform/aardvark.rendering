@@ -191,8 +191,8 @@ module private SpirVReflector =
             (set, binding, p.paramName)
         
         let (execModel, entryPoint) = instructions |> List.pick (function OpEntryPoint(m,_,name,_) -> Some (m,name) | _ -> None)
-        let inputs = extractParamteters StorageClass.Input |> List.sortBy ioSort
-        let outputs = extractParamteters StorageClass.Output |> List.sortBy ioSort
+        let inputs = extractParamteters StorageClass.Input |> List.sortBy ioSort |> List.filter (fun p -> Option.isNone (ShaderParameter.tryGetBuiltInSemantic p))
+        let outputs = extractParamteters StorageClass.Output |> List.sortBy ioSort |> List.filter (fun p -> Option.isNone (ShaderParameter.tryGetBuiltInSemantic p))
         let uniforms = extractParamteters StorageClass.Uniform |> List.sortBy uniformSort
         
         { executionModel = execModel; entryPoint = entryPoint ;inputs = inputs; outputs = outputs; uniforms = uniforms; images = images }
@@ -241,7 +241,7 @@ module ShaderModule =
                 VkShaderModuleCreateInfo(
                     VkStructureType.ShaderModuleCreateInfo, 0n, 
                     VkShaderModuleCreateFlags.MinValue,
-                    uint64 binary.LongLength,
+                    uint64 (4L * binary.LongLength),
                     pBinary
                 )
 
@@ -253,8 +253,8 @@ module ShaderModule =
         )
 
     let ofBinary (stage : ShaderStage) (binary : uint32[]) (device : Device) =
-        let handle = device |> createRaw binary
         let iface = SpirVReflector.ofBinary binary
+        let handle = device |> createRaw binary
         let result = ShaderModule(device, handle, stage, iface)
         result
 

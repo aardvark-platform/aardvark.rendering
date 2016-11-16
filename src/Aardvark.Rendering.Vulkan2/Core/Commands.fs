@@ -49,14 +49,43 @@ type Command() =
 type CommandBufferExtensions private() =
     [<Extension>]
     static member Enqueue(this : CommandBuffer, cmd : AbstractCommand) =
+        if not this.IsRecording then
+            failf "cannot enqueue commands to non-recording CommandBuffer"
+
         if cmd.TryEnqueue this then
             this.AddCompensation cmd
         else
             failf "could not enqueue command"
 
     [<Extension>]
+    static member RunSynchronously(this : DeviceQueue, cmd : AbstractCommand) =
+        use buffer = this.Family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        buffer.Begin(CommandBufferUsage.OneTimeSubmit)
+        CommandBufferExtensions.Enqueue(buffer, cmd)
+        buffer.End()
+        this.RunSynchronously(buffer)
+
+    [<Extension>]
+    static member Start(this : DeviceQueue, cmd : AbstractCommand) =
+        use buffer = this.Family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        buffer.Begin(CommandBufferUsage.OneTimeSubmit)
+        CommandBufferExtensions.Enqueue(buffer, cmd)
+        buffer.End()
+        this.Start(buffer)
+
+    [<Extension>]
     static member Enqueue(this : DeviceToken, cmd : AbstractCommand) =
         CommandBufferExtensions.Enqueue(this.CommandBuffer, cmd)
+
+
+    [<Extension>]
+    static member RunSynchronously(this : DeviceQueueFamily, cmd : AbstractCommand) =
+        use buffer = this.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        buffer.Begin(CommandBufferUsage.OneTimeSubmit)
+        CommandBufferExtensions.Enqueue(buffer, cmd)
+        buffer.End()
+        this.RunSynchronously(buffer)
+
 
 [<AutoOpen>]
 module CommandAPI = 

@@ -14,11 +14,13 @@ DllExport(void) vmBindPipeline(VkCommandBuffer commandBuffer, VkPipeline* pipeli
 
 DllExport(void) vmBindDescriptorSets(VkCommandBuffer commandBuffer, DescriptorSetBinding* binding)
 {
+	if (binding->Count == 0)return;
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, binding->Layout, binding->FirstIndex, binding->Count, binding->Sets, 0, nullptr);
 }
 
 DllExport(void) vmBindVertexBuffers(VkCommandBuffer commandBuffer, VertexBufferBinding* binding)
 {
+	if (binding->BindingCount == 0)return;
 	vkCmdBindVertexBuffers(commandBuffer, binding->FirstBinding, binding->BindingCount, binding->Buffers, binding->Offsets);
 }
 
@@ -28,6 +30,7 @@ DllExport(void) vmDraw(VkCommandBuffer commandBuffer, RuntimeStats* stats, int* 
 
 	if (call->IsIndirect)
 	{
+		if (call->IndirectCount == 0)return;
 		stats->DrawCalls++;
 		stats->EffectiveDrawCalls += call->IndirectCount;
 

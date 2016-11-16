@@ -60,6 +60,8 @@ module ShaderProgram =
                     stage, versionRx.Replace(code, "#version 140\r\n" + (sprintf "#define %s\r\n" define))
                 )
 
+        printfn "%s" surface.Code
+
         let shaders = Array.zeroCreate codes.Length
         let mutable program = Unchecked.defaultof<_>
 
@@ -71,7 +73,8 @@ module ShaderProgram =
                 | Error err ->
                     Log.error "[Vulkan] %A shader compilation failed: %A" stage err
                     failf "%A shader compilation failed: %A" stage err
-            
+            index <- index + 1
+
         match GLSLang.GLSLang.tryCreateProgram shaders with
             | Success prog ->
                 try
@@ -86,8 +89,6 @@ module ShaderProgram =
 
 
                     let map = shaders |> Array.map (fun s -> s.Stage, s) |> Map.ofArray
-
-                    let bs : IBackendSurface = failwith ""
 
                     let first   = shaders.[0]
                     let last    = shaders.[shaders.Length - 1]

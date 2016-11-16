@@ -94,10 +94,10 @@ module PrimitiveType =
             v4d,        typeof<V4d>
 
             m22f,       typeof<M22f>
-            m33f,       typeof<M33f>
+            m33f,       typeof<M34f>
             m44f,       typeof<M44f>
             m22d,       typeof<M22d>
-            m33d,       typeof<M33d>
+            m33d,       typeof<M34d>
             m44d,       typeof<M44d>
         ]
     
@@ -198,8 +198,12 @@ module UniformBufferLayoutStd140 =
                 // R components, where N is the total number of columns
                 // present.
                 match toUniformType colType with
-                    | Primitive(t,s,a) -> 
-                        UniformType.Primitive(PrimitiveType.Matrix(t, cols), s * cols, s * cols)
+                    | Primitive(t,physicalSize,a)  -> 
+                        let size =
+                            if physicalSize % 16 = 0 then physicalSize
+                            else physicalSize + 16 - (physicalSize % 16)
+
+                        UniformType.Primitive(PrimitiveType.Matrix(t, cols), size * cols, size)
                     | o ->
                         let fields = [colType, "C0", []; colType, "C1", []; colType, "C2", []; colType, "C3", []] |> List.take cols
                         UniformType.Struct(structLayout fields)

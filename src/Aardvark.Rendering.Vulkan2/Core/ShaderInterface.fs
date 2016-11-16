@@ -156,7 +156,7 @@ module ShaderType =
     let DoubleMat4x4 = ShaderType.Matrix(DoubleVec4, 4)
 
 
-    let toType =
+    let toPrimtiveType =
         LookupTable.lookupTable [
             Bool,               typeof<bool>
             
@@ -186,6 +186,11 @@ module ShaderType =
 
 
         ]
+
+    let rec toType (t : ShaderType) =
+        match t with
+            | ShaderType.Ptr(_,t) -> toType t
+            | _ -> toPrimtiveType t
 
 type ShaderParameter = 
     { 

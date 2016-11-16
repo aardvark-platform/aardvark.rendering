@@ -58,6 +58,8 @@ module ImageView =
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
+        let aspect = VkFormat.toAspect img.Format
+
         let viewType = viewType img.Dimension slices
         let mutable info = 
             VkImageViewCreateInfo(
@@ -68,7 +70,7 @@ module ImageView =
                 img.Format,
                 img.ComponentMapping,
                 VkImageSubresourceRange(
-                    VkImageAspectFlags.All, 
+                    aspect, 
                     uint32 levelRange.Min,
                     uint32 levels,
                     uint32 arrayRange.Min,

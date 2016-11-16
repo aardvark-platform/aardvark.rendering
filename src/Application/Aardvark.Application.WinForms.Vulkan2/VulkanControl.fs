@@ -8,12 +8,10 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
+open Aardvark.Application.WinForms.Vulkan
 
-type VulkanControl(context : Device, depthFormat : VkFormat, samples : int) as this =
+type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     inherit UserControl()
-
-    let queuePool = context.GraphicsFamily
-
 
     do base.SetStyle(ControlStyles.UserPaint, true)
        base.SetStyle(ControlStyles.DoubleBuffer, false)
@@ -21,83 +19,55 @@ type VulkanControl(context : Device, depthFormat : VkFormat, samples : int) as t
        base.SetStyle(ControlStyles.Opaque, true)
        base.SetStyle(ControlStyles.ResizeRedraw, true)
 
-    let mutable samples = samples
-    let mutable swapChainDescription : VulkanSwapChainDescription = Unchecked.defaultof<_>
-    let mutable swapChain : IVulkanSwapChain = Unchecked.defaultof<_>
-    let mutable renderPass : RenderPass = Unchecked.defaultof<_>
+    let mutable surface : Surface = Unchecked.defaultof<_>
+    let mutable swapchainDescription : SwapchainDescription = Unchecked.defaultof<_>
+    let mutable swapchain : Swapchain = Unchecked.defaultof<_>
     let mutable loaded = false
-    let mutable recreateSwapChain = true
-
-    member x.UpdateSamples(newSamples : int) =
-
-        if loaded && samples <> newSamples then
-            swapChainDescription.Dispose()
-            swapChain.Dispose()
-            swapChainDescription <- this.CreateVulkanSwapChainDescription(context, depthFormat, newSamples)
-            renderPass <- swapChainDescription.RenderPass
-            recreateSwapChain <- true
-
-        samples <- newSamples
 
 
     member x.SwapChainDescription = 
         if not x.IsHandleCreated then x.CreateHandle()
-        swapChainDescription
+        swapchainDescription
 
     member x.RenderPass = 
         if not x.IsHandleCreated then x.CreateHandle()
-        swapChainDescription.RenderPass
+        swapchainDescription.renderPass
 
 
-    abstract member OnRenderFrame : RenderPass * Framebuffer -> unit
-    default x.OnRenderFrame(_,_) = ()
+    abstract member OnRenderFrame : RenderPass * DeviceQueue * Framebuffer -> unit
+    default x.OnRenderFrame(_,_,_) = ()
 
-
-    override x.OnResize(e) =
-        base.OnResize e
-        if loaded then
-//            if not recreateSwapChain then
-//                swapChain.Dispose()
-            recreateSwapChain <- true
-        
     override x.OnHandleCreated(e) =
         base.OnHandleCreated e
-        swapChainDescription <- this.CreateVulkanSwapChainDescription(context, depthFormat, samples)
-        renderPass <- swapChainDescription.RenderPass
-        
-        recreateSwapChain <- true
+        surface <- device.CreateSurface(x)
+        swapchainDescription <- device.CreateSwapchainDescription(surface, graphicsMode)
+        swapchain <- device.CreateSwapchain(swapchainDescription)
+
         loaded <- true
 
     override x.OnPaint(e) =
         base.OnPaint(e)
 
         if loaded then
-            if recreateSwapChain then
-                recreateSwapChain <- false
-                if not (isNull swapChain) then swapChain.Dispose()
-                swapChain <- x.CreateVulkanSwapChain(swapChainDescription)
 
-            queuePool.UsingQueue (fun queue ->
-                swapChain.BeginFrame queue
-
-                let fbo = swapChain.Framebuffer
+            swapchain.RenderFrame(fun queue framebuffer ->
                 Aardvark.Base.Incremental.EvaluationUtilities.evaluateTopLevel (fun () ->
-                    x.OnRenderFrame(renderPass, fbo)
+                    x.OnRenderFrame(swapchainDescription.renderPass, queue, framebuffer)
                 )
-
-                swapChain.EndFrame queue
             )
+
 
     override x.Dispose(d) =
         base.Dispose(d)
 
         if loaded then
             loaded <- false
-            swapChain.Dispose()
-            swapChainDescription.Dispose()
+            device.Delete swapchain
+            device.Delete swapchainDescription
+            device.Delete surface
 
-type VulkanRenderControl(runtime : Runtime, samples : int) as this =
-    inherit VulkanControl(runtime.Device, VkFormat.D16Unorm, samples)
+type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode) as this =
+    inherit VulkanControl(runtime.Device, graphicsMode)
     
     static let messageLoop = MessageLoop()
     static do messageLoop.Start()
@@ -109,11 +79,15 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
 
     let time = Mod.custom(fun _ -> DateTime.Now)
 
-    override x.OnRenderFrame(pass, fbo) =
+    override x.OnRenderFrame(pass, queue, fbo) =
         needsRedraw <- false
         let s = V2i(x.ClientSize.Width, x.ClientSize.Height)
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
+
+        queue.WaitIdle()
+
+
 
         renderTask.Run(fbo) |> ignore
 

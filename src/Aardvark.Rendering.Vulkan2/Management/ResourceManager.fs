@@ -172,6 +172,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                                 | None -> device.CreateUniformBuffer(layout)
                                 | Some o -> o
                         for (m,w) in writers do w.Write(x, m, buffer.Storage.Pointer)
+                        device.Upload(buffer)
                         buffer, FrameStatistics.Zero
 
                     member x.Destroy h =
@@ -222,7 +223,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                                 multisampleState        = MultisampleState.create anyAttachment.samples
                                 depthState              = DepthState.create (depthTest.GetValue x)
                                 stencilState            = StencilState.create (stencilMode.GetValue x)
-                                dynamicStates           = [||]
+                                dynamicStates           = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
                             }
 
                         match old with

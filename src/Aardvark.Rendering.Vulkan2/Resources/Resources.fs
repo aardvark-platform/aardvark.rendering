@@ -94,6 +94,7 @@ module Resource =
 
 type VulkanResource<'a, 'b when 'a : equality and 'b : unmanaged>(input : IResource<'a>, f : 'a -> 'b) =
     inherit Aardvark.Base.Rendering.Resource<nativeptr<'b>>(ResourceKind.Unknown)
+    do input.AddRef()
 
     member x.ManagedHandle = input.Handle
     member x.Pointer = x.Handle.GetValue()

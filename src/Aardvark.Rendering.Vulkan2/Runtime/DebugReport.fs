@@ -65,9 +65,6 @@ module DebugReport =
 
         let onMessage = Event<_>()
 
-        let vkCreateDebugReportCallbackEXT : VkCreateDebugReportCallbackEXTDelegate = load "vkCreateDebugReportCallbackEXT"
-        let vkDestroyDebugReportCallbackEXT : VkDestroyDebugReportCallbackEXTDelegate = load "vkDestroyDebugReportCallbackEXT"
-        
         let callback (flags : VkDebugReportFlagBitsEXT) (objType : VkDebugReportObjectTypeEXT) (srcObject : uint64) (location : uint64) (msgCode : int) (layerPrefix : cstr) (msg : cstr) (userData : nativeint) =
             let layerPrefix = layerPrefix |> CStr.toString
             let msg = msg |> CStr.toString
@@ -94,11 +91,14 @@ module DebugReport =
         let ptr = Marshal.GetFunctionPointerForDelegate(cbd)
         let mutable callback = VkDebugReportCallbackEXT.Null
 
+        let vkCreateDebugReportCallbackEXT : VkCreateDebugReportCallbackEXTDelegate = load "vkCreateDebugReportCallbackEXT"
+        let vkDestroyDebugReportCallbackEXT : VkDestroyDebugReportCallbackEXTDelegate = load "vkDestroyDebugReportCallbackEXT"
 
         [<CLIEvent>]
         member x.OnMessage = onMessage.Publish
 
-        member x.OnMessageEvent = onMessage
+        member x.RaiseMessage (message : Message) = 
+            onMessage.Trigger(message)
 
 
         member x.Start() =
@@ -110,13 +110,20 @@ module DebugReport =
                         ptr,
                         0n
                     )
-                vkCreateDebugReportCallbackEXT.Invoke(instance, &&info, NativePtr.zero, &&callback) 
+                vkCreateDebugReportCallbackEXT.Invoke(instance, &&info, NativePtr.zero, &&callback)
                     |> check "vkDbgCreateMsgCallback"
 
         member x.Stop() =
             if callback.IsValid then
                 vkDestroyDebugReportCallbackEXT.Invoke(instance, callback, NativePtr.zero)
                 callback <- VkDebugReportCallbackEXT.Null
+
+        member x.Dispose() =
+            x.Stop()
+            gc.Free()
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
 
 [<AutoOpen>]
 module Exts =

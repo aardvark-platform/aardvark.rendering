@@ -452,15 +452,6 @@ module Playground =
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.ManagedOptimized, sg.RenderObjects())
 
-        win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
-            let ctrl = win.Control.Implementation |> unbox<Aardvark.Application.WinForms.VulkanRenderControl>
-
-            let pi = ctrl.Screenshot (ctrl.Sizes.GetValue())
-
-            pi.SaveAsImage @"C:\Users\schorsch\Desktop\test.jpg"
-
-        )
-
         win.RenderTask <- task //|> DefaultOverlays.withStatistics
         win.Run()
         0

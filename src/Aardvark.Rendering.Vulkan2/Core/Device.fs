@@ -46,6 +46,12 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
         enabledLayers, enabledExtensions
     let mutable isDisposed = 0
 
+    let maxQueueCount = queues |> Seq.map snd |> Seq.max
+    let queuePriorities =
+        let ptr = NativePtr.alloc maxQueueCount
+        for i in 0 .. maxQueueCount - 1 do NativePtr.set ptr i 1.0f
+        ptr
+
     let queueInfos = 
         queues |> List.toArray |> Array.choose (fun (q,c) ->
             if c < 0 then 
@@ -64,11 +70,12 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
                         0u,
                         uint32 q.index,
                         uint32 count,
-                        NativePtr.zero
+                        queuePriorities
                     )
 
                 Some result
         )
+
 
     let instance = physical.Instance
     let mutable device =
@@ -78,6 +85,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
             let pLayers = CStr.sallocMany layers
             let pExtensions = CStr.sallocMany extensions
 
+            
             let mutable features = VkPhysicalDeviceFeatures()
             VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, &&features)
 
@@ -255,24 +263,33 @@ and DeviceToken internal(cell : ref<Option<DeviceToken>>, commandPool : DeviceCo
 
                 cell := None
 
-and DeviceQueue internal(device : Device, deviceHandle : VkDevice, family : QueueFamilyInfo, index : int) =
+and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : QueueFamilyInfo, index : int) =
     let mutable handle = VkQueue.Zero
-    do VkRaw.vkGetDeviceQueue(deviceHandle, uint32 family.index, uint32 index, &&handle)
+    do VkRaw.vkGetDeviceQueue(deviceHandle, uint32 familyInfo.index, uint32 index, &&handle)
 
-    let transfer = QueueFlags.transfer family.flags
-    let compute = QueueFlags.compute family.flags
-    let graphics = QueueFlags.graphics family.flags
+
+    let transfer = QueueFlags.transfer familyInfo.flags
+    let compute = QueueFlags.compute familyInfo.flags
+    let graphics = QueueFlags.graphics familyInfo.flags
+    let mutable family : DeviceQueueFamily = Unchecked.defaultof<_>
+
 
     member x.HasTransfer = transfer
     member x.HasCompute = compute
     member x.HasGraphics= graphics
 
     member x.Device = device
-    member x.Family = family
+    member x.Family
+        with get() : DeviceQueueFamily = family
+        and internal set (f : DeviceQueueFamily) = family <- f
+
     member x.Index = index
     member x.Handle = handle
 
     member x.RunSynchronously(cmd : CommandBuffer) =
+        if cmd.IsRecording then
+            failf "cannot submit recording CommandBuffer"
+
         let mutable handle = cmd.Handle
         let mutable submitInfo =
             VkSubmitInfo(
@@ -289,15 +306,31 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, family : Queu
 
         fence.Wait()
 
+    member x.Start(cmd : CommandBuffer) =
+        if cmd.IsRecording then
+            failf "cannot submit recording CommandBuffer"
+
+        let mutable handle = cmd.Handle
+        let mutable submitInfo =
+            VkSubmitInfo(
+                VkStructureType.SubmitInfo, 0n,
+                0u, NativePtr.zero, NativePtr.zero,
+                1u, &&handle,
+                0u, NativePtr.zero
+            )
+
+
+        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
+            |> check "could not submit command buffer"
+
+
     member x.Wait(sem : Semaphore) =
         let mutable semHandle = sem.Handle
         let mutable submitInfo =
             let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
             VkSubmitInfo(
-                VkStructureType.SubmitInfo,
-                0n, 
-                1u, &&semHandle,
-                &&dstStage,
+                VkStructureType.SubmitInfo, 0n, 
+                1u, &&semHandle, &&dstStage,
                 0u, NativePtr.zero,
                 0u, NativePtr.zero
             )
@@ -311,12 +344,15 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, family : Queu
 
 and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues : list<DeviceQueue>) as this =
     let store = new BlockingCollection<DeviceQueue>()
-    do for q in queues do store.Add q
+    do for q in queues do 
+        q.Family <- this
+        store.Add q
 
     let defaultPool = new DeviceCommandPool(device, info.index, this)
 
     member x.Device = device
     member x.Info = info
+    member x.Index = info.index
     member x.Queues = queues
     member x.DefaultCommandPool = defaultPool
     member x.CreateCommandPool() = new CommandPool(device, info.index, x)
@@ -325,6 +361,7 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
         x.UsingQueue(fun queue ->
             queue.RunSynchronously(cmd)
         )
+
 
     member x.UsingQueue<'a> (f : DeviceQueue -> 'a) : 'a =
         let queue = store.Take()
