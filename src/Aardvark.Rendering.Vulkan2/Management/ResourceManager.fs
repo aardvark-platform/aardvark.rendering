@@ -17,8 +17,12 @@ open Aardvark.Base.Incremental
 type ResourceManager private (parent : Option<ResourceManager>, device : Device, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     let derivedCache (f : ResourceManager -> ResourceCache<'a>) =
         ResourceCache<'a>(Option.map f parent, Option.map snd renderTaskInfo)
+ 
         
-    let descriptorPool     = device.CreateDescriptorPool(1 <<< 20, 1 <<< 22)
+    let descriptorPool = 
+        match parent with
+            | Some p -> p.DescriptorPool
+            | _ -> device.CreateDescriptorPool(1 <<< 20, 1 <<< 22)
 
     let bufferCache             = derivedCache (fun m -> m.BufferCache)
     let bufferViewCache         = derivedCache (fun m -> m.BufferViewCache)
@@ -52,6 +56,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
     member private x.IndirectCallCache : ResourceCache<nativeptr<DrawCall>> = indirectCallCache
     member private x.VertexBindingCache : ResourceCache<nativeptr<VertexBufferBinding>> = vertexBindingCache
     member private x.DescriptorSetBindingCache : ResourceCache<nativeptr<DescriptorSetBinding>> = descriptorSetBindingCache
+    member private x.DescriptorPool : DescriptorPool = descriptorPool
 
     member x.Device = device
 
@@ -362,5 +367,30 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
     member x.RenderTaskLock = renderTaskInfo
 
-    new(parent, ctx, lock, shareTextures, shareBuffers) = ResourceManager(Some parent, ctx, lock, shareTextures, shareBuffers)
-    new(ctx, lock, shareTextures, shareBuffers) = ResourceManager(None, ctx, lock, shareTextures, shareBuffers)
+    member x.Dispose() =
+        match parent with
+            | None -> 
+                device.Delete descriptorPool
+                bufferCache.Clear()             
+                bufferViewCache.Clear() 
+                indexBufferCache.Clear() 
+                indirectBufferCache.Clear() 
+                imageCache.Clear()     
+                imageViewCache.Clear()    
+                surfaceCache.Clear()           
+                samplerCache.Clear() 
+                uniformBufferCache.Clear() 
+                pipelineCache.Clear()       
+                descriptorSetCache.Clear() 
+                directCallCache.Clear()
+                indirectCallCache.Clear()
+                vertexBindingCache.Clear()
+                descriptorSetBindingCache.Clear()   
+            | Some p ->
+                ()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+    new(parent, ctx, lock, shareTextures, shareBuffers) = new ResourceManager(Some parent, ctx, lock, shareTextures, shareBuffers)
+    new(ctx, lock, shareTextures, shareBuffers) = new ResourceManager(None, ctx, lock, shareTextures, shareBuffers)

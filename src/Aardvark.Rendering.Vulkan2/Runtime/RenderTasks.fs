@@ -25,7 +25,7 @@ module RenderTasks =
         let fboSignature = renderPass :> IFramebufferSignature
         let device = manager.Device
         let renderTaskLock = RenderTaskLock()
-        let manager = ResourceManager(manager, manager.Device, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
+        let manager = new ResourceManager(manager, manager.Device, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
         let runtimeStats = NativePtr.alloc 1
         let mutable isDisposed = false
 
@@ -48,7 +48,9 @@ module RenderTasks =
         override x.Dispose() =
             if not isDisposed then
                 isDisposed <- true
+                manager.Dispose()
                 x.Release()
+                NativePtr.free runtimeStats
 
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some device.Runtime

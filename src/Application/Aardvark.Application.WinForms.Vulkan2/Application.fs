@@ -201,6 +201,7 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
         match debugAdapter with
             | Some a -> a.Dispose()
             | _ -> ()
+        runtime.Dispose()
         device.Dispose()
         instance.Dispose()
 

@@ -211,11 +211,11 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member x.DeviceMemory = deviceMemory
     member x.HostMemory = hostMemory
 
-    abstract member Dispose : unit -> unit
-    default x.Dispose() =
+    member x.Dispose() =
         if not instance.IsDisposed then
             let o = Interlocked.Exchange(&isDisposed, 1)
-            if o = 0 then
+            if o = 0 then 
+                for (_,f) in HashMap.toSeq queueFamilies do f.Dispose()
                 VkRaw.vkDestroyDevice(device, NativePtr.zero)
                 device <- VkDevice.Zero
 
@@ -368,6 +368,11 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
         try f queue
         finally store.Add queue
 
+    member x.Dispose() =
+        defaultPool.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 and DeviceCommandPool internal(device : Device, index : int, queueFamily : DeviceQueueFamily) =
     let createCommandPoolHandle _ =
@@ -408,6 +413,19 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
                         x.Reset()
                         bag.Add x
                 }
+
+
+    member x.Dispose() =
+        if device.Handle <> 0n then
+            let all = handles |> Seq.map (fun (KeyValue(_,(p,_,_))) -> p) |> Seq.toArray
+            handles.Clear()
+            all |> Seq.iter (fun h -> 
+                if h.IsValid then
+                    VkRaw.vkDestroyCommandPool(device.Handle, h, NativePtr.zero)
+            )
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 and CommandPool internal(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily) =
     let mutable handle = VkCommandPool.Null

@@ -18,11 +18,10 @@ open Aardvark.Base.Runtime
 
 type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this =
     do device.Runtime <- this
-    let manager = ResourceManager(device, None, shareTextures, shareBuffers)
+    let manager = new ResourceManager(device, None, shareTextures, shareBuffers)
 
     member x.Device = device
     member x.ResourceManager = manager
-
     member x.ContextLock = device.ResourceToken :> IDisposable
 
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = failf "not implemented"
@@ -199,6 +198,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this
         }
 
     member x.Dispose() = 
+        manager.Dispose()
         device.Dispose()
         
     interface IDisposable with

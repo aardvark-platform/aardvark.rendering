@@ -181,6 +181,19 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
     member x.Dispose() = x.RemoveRef()
 
+    member x.ForceDispose() =
+        lock lockObj (fun () -> 
+            if Interlocked.Exchange(&refCount, 0) <> 0 then
+                onDispose.OnNext()
+                x.Destroy handle.Value
+                current <- None
+                info <- ResourceInfo.Zero
+                transact (fun () -> 
+                    x.MarkOutdated()
+                    handle.Value <- Unchecked.defaultof<_>
+                )
+        )
+
     interface IDisposable with
         member x.Dispose() = x.RemoveRef()
 
@@ -407,7 +420,12 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
         x.GetOrCreate(dataMod, [], desc)
 
     member x.Count = store.Count
-    member x.Clear() = store.Clear()
+    member x.Clear() = 
+        let remaining = store |> Seq.map (fun (KeyValue(_,r)) -> r) |> Seq.toArray
+        for r in remaining do
+            Log.warn "leaking resource: %A" r
+            r.ForceDispose()
+        store.Clear()
 
 type ConstantResource<'h when 'h : equality>(kind : ResourceKind, handle : 'h) =
     inherit ConstantObject()

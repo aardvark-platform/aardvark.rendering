@@ -116,17 +116,19 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     interface IControl with
         member x.IsInvalid = needsRedraw
         member x.Invalidate() =
-            if not needsRedraw then
+            if not x.IsDisposed && not needsRedraw then
                 needsRedraw <- true
                 x.Invalidate()
 
         member x.Paint() =
-            use g = x.CreateGraphics()
-            use e = new System.Windows.Forms.PaintEventArgs(g, x.ClientRectangle)
-            x.InvokePaint(x, e)
+            if not x.IsDisposed then
+                use g = x.CreateGraphics()
+                use e = new System.Windows.Forms.PaintEventArgs(g, x.ClientRectangle)
+                x.InvokePaint(x, e)
 
         member x.Invoke f =
-            base.Invoke (new System.Action(f)) |> ignore
+            if not x.IsDisposed then
+                base.Invoke (new System.Action(f)) |> ignore
 
     interface IRenderTarget with
         member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
