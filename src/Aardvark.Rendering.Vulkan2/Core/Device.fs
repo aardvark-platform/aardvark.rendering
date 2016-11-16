@@ -115,7 +115,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
                     yield family, DeviceQueue(this, device, family, i)
         ]
         |> Seq.groupBy fst 
-        |> Seq.map (fun (k, vs) -> k, DeviceQueueFamily(this, k, Seq.toList (Seq.map snd vs)))
+        |> Seq.map (fun (k, vs) -> k, new DeviceQueueFamily(this, k, Seq.toList (Seq.map snd vs)))
         |> HashMap.ofSeq
 
     let memories = 
