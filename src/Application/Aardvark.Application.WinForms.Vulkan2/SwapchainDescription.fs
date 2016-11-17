@@ -174,20 +174,21 @@ module SwapchainDescription =
         let presentMode         = mode.ChoosePresentMode surface.PresentModes
         let buffers             = mode.ChooseBufferCount(surface.MinImageCount, surface.MaxImageCount)
         let transform           = Chooser.chooseTransform surface.Transforms
+        let samples             = mode.Samples
 
         let renderPass = 
             match depthFormat with
                 | Some depthFormat ->
                     device.CreateRenderPass(
                         Map.ofList [
-                            DefaultSemantic.Colors, { format = VkFormat.toRenderbufferFormat colorFormat; samples = 1 }
-                            DefaultSemantic.Depth, { format = VkFormat.toRenderbufferFormat depthFormat; samples = 1 }
+                            DefaultSemantic.Colors, { format = VkFormat.toRenderbufferFormat colorFormat; samples = samples }
+                            DefaultSemantic.Depth, { format = VkFormat.toRenderbufferFormat depthFormat; samples = samples }
                         ]
                     )
                 | None ->
                     device.CreateRenderPass(
                         Map.ofList [
-                            DefaultSemantic.Colors, { format = VkFormat.toRenderbufferFormat colorFormat; samples = 1 }
+                            DefaultSemantic.Colors, { format = VkFormat.toRenderbufferFormat colorFormat; samples = samples }
                         ]
                     )
 
@@ -200,7 +201,7 @@ module SwapchainDescription =
             presentMode = presentMode
             transform = transform
             buffers = buffers
-            samples = mode.Samples
+            samples = samples
         }
 
     let delete (desc : SwapchainDescription) (device : Device) =

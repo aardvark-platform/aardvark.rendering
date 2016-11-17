@@ -24,8 +24,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this
     member x.ResourceManager = manager
     member x.ContextLock = device.ResourceToken :> IDisposable
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = failf "not implemented"
-    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = failf "not implemented"
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
 
@@ -34,6 +32,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
     member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
 
+
+    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
+        device.DownloadLevel(unbox t, level, slice, target)
+
+    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
+        device.UploadLevel(unbox t, level, slice, source)
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         manager.PrepareRenderObject(unbox fboSignature, rj) :> IPreparedRenderObject

@@ -138,10 +138,9 @@ type Swapchain(device : Device, description : SwapchainDescription) =
         let surface = description.surface
         let renderPass = description.renderPass
 
-        let colorUsage, colorLayout =
-            if description.samples = 1 then VkImageUsageFlags.ColorAttachmentBit, VkImageLayout.ColorAttachmentOptimal
-            else VkImageUsageFlags.TransferDstBit, VkImageLayout.TransferDstOptimal
-
+        let colorUsage =
+            if description.samples = 1 then VkImageUsageFlags.ColorAttachmentBit
+            else VkImageUsageFlags.ColorAttachmentBit
 
         let mutable info =
             VkSwapchainCreateInfoKHR(
@@ -171,7 +170,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
         VkRaw.vkCreateSwapchainKHR(device.Handle, &&info, NativePtr.zero, &&handle)
             |> check "could not create Swapchain"
         
-        let colorViews = 
+        let renderViews = 
             let mutable count = 0u
             VkRaw.vkGetSwapchainImagesKHR(device.Handle, handle, &&count, NativePtr.zero)
                 |> check "could not get Swapchain Images"
@@ -199,15 +198,34 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
             )
 
+        let colorView =
+            if description.samples = 1 then
+                None
+            else
+                let image = 
+                        device.CreateImage(
+                            V3i(size.X, size.Y, 1), 1, 1, description.samples, 
+                            TextureDimension.Texture2D, 
+                            VkFormat.toTextureFormat description.colorFormat, 
+                            VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit, 
+                            VkImageLayout.ColorAttachmentOptimal
+                        )
+                // hacky-hack
+                image.Format <- description.colorFormat
+                image.ComponentMapping <- VkComponentMapping.Identity
+                
+                let view = device.CreateImageView(image, 0, 1, 0, 1)
+                Some view
+
         let depthView =
             match description.depthFormat with
                 | Some depthFormat ->
                     let image = 
                         device.CreateImage(
-                            V3i(size.X, size.Y, 1), 1, 1, 1, 
+                            V3i(size.X, size.Y, 1), 1, 1, description.samples, 
                             TextureDimension.Texture2D, 
                             VkFormat.toTextureFormat depthFormat, 
-                            VkImageUsageFlags.DepthStencilAttachmentBit, 
+                            VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit, 
                             VkImageLayout.DepthStencilAttachmentOptimal
                         )
                     // hacky-hack
@@ -221,25 +239,34 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     None
 
         let framebuffers =
-            colorViews |> Array.map (fun colorView ->
+            match colorView with
+                | Some colorView ->
+                    let attachments =
+                        match depthView with
+                            | Some depthView -> Map.ofList [ DefaultSemantic.Colors, colorView; DefaultSemantic.Depth, depthView]
+                            | None -> Map.ofList [ DefaultSemantic.Colors, colorView ]
 
-                let attachments =
-                    match depthView with
-                        | Some depthView -> Map.ofList [ DefaultSemantic.Colors, colorView; DefaultSemantic.Depth, depthView]
-                        | None -> Map.ofList [ DefaultSemantic.Colors, colorView ]
+                    [| device.CreateFramebuffer(renderPass, attachments) |]
+                | None ->
+                    renderViews |> Array.map (fun colorView ->
 
-                device.CreateFramebuffer(renderPass, attachments)
-            )
+                        let attachments =
+                            match depthView with
+                                | Some depthView -> Map.ofList [ DefaultSemantic.Colors, colorView; DefaultSemantic.Depth, depthView]
+                                | None -> Map.ofList [ DefaultSemantic.Colors, colorView ]
 
-        handle, depthView, colorViews, framebuffers
+                        device.CreateFramebuffer(renderPass, attachments)
+                    )
+
+        handle, depthView, renderViews, colorView, framebuffers
 
     let mutable disposed = 0
 
-    let mutable colorLayout = VkImageLayout.ColorAttachmentOptimal
     let mutable handle = VkSwapchainKHR.Null
     let mutable size = V2i.Zero
     let mutable depthView : Option<ImageView> = None
-    let mutable colorViews : ImageView[] = Array.zeroCreate 0
+    let mutable renderViews : ImageView[] = Array.zeroCreate 0
+    let mutable colorView : Option<ImageView> = None
     let mutable framebuffers : Framebuffer[] = Array.zeroCreate 0
     let mutable currentBuffer = 0u
 
@@ -250,19 +277,23 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 // delete old things
                 framebuffers |> Array.iter device.Delete
                 depthView |> Option.iter (fun view -> device.Delete view; device.Delete view.Image)
-                colorViews |> Array.iter device.Delete
+                renderViews |> Array.iter device.Delete
+                colorView |> Option.iter (fun view -> device.Delete view; device.Delete view.Image)
 
-                let (newHandle, newDepthView, newColorViews, newFramebuffers) = recreate handle newSize
+                let (newHandle, newDepthView, newRenderViews, newColorView, newFramebuffers) = recreate handle newSize
                 if handle.IsValid then VkRaw.vkDestroySwapchainKHR(device.Handle, handle, NativePtr.zero)
 
                 handle <- newHandle
                 size <- newSize
                 depthView <- newDepthView
-                colorViews <- newColorViews
+                renderViews <- newRenderViews
+                colorView <- newColorView
                 framebuffers <- newFramebuffers
                 currentBuffer <- 0u
+
     member x.Size = update(); size
     member x.Description = description
+    member x.Samples = description.samples
 
     member x.RenderFrame (render : DeviceQueue -> Framebuffer -> 'a) =
         if disposed <> 0 then failf "cannot use disposed Swapchain"
@@ -275,28 +306,45 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
             queue.Wait(sem)
 
-            let view = colorViews.[int currentBuffer]
-            let image = view.Image
-            
-            let cmd0 = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
-            cmd0.Begin(CommandBufferUsage.OneTimeSubmit)
-            cmd0.enqueue {
-                do! Command.ClearColor(image, C4f.Black)
-                match depthView with
-                    | Some v -> do! Command.ClearDepthStencil(v.Image, 1.0, 0u)
-                    | _ -> ()
-                do! Command.TransformLayout(image, colorLayout)
-            }
-            cmd0.End()
-            queue.Start cmd0
+            let targetView = renderViews.[int currentBuffer]
+            let targetImage = targetView.Image
 
-            let res = render queue framebuffers.[int currentBuffer]
+            let index = int currentBuffer % framebuffers.Length
+
+            let preRender  = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
+            let postRender = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
+            // clear the currently attached color/depth - views
+            do  preRender.Begin(CommandBufferUsage.OneTimeSubmit)
+                let currentColorAttachmentView = 
+                    match colorView with
+                        | Some view -> view
+                        | None -> renderViews.[index]
+
+                preRender.enqueue {
+                    do! Command.ClearColor(currentColorAttachmentView.Image, C4f.Black)
+                    match depthView with
+                        | Some v -> do! Command.ClearDepthStencil(v.Image, 1.0, 0u)
+                        | _ -> ()
+                    do! Command.TransformLayout(currentColorAttachmentView.Image, VkImageLayout.ColorAttachmentOptimal)
+                }
+                preRender.End()
+                queue.Start preRender
+
+            let res = render queue framebuffers.[index]
             
-            let cmd1 = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
-            cmd1.Begin CommandBufferUsage.OneTimeSubmit
-            cmd1.Enqueue(Command.TransformLayout(image, VkImageLayout.PresentSrcKhr))
-            cmd1.End()
-            queue.Start cmd1
+            do  postRender.Begin CommandBufferUsage.OneTimeSubmit
+                match colorView with
+                    | Some colorView ->
+                        postRender.enqueue {
+                            do! Command.TransformLayout(colorView.Image, VkImageLayout.TransferSrcOptimal)
+                            do! Command.TransformLayout(targetImage, VkImageLayout.TransferDstOptimal)
+                            do! Command.ResolveMultisamples(colorView.Image, 0, 0, V3i.Zero, targetImage, 0, 0, V3i.Zero, colorView.Image.Size)
+                        }
+                    | None -> 
+                        ()
+                postRender.Enqueue(Command.TransformLayout(targetImage, VkImageLayout.PresentSrcKhr))
+                postRender.End()
+                queue.Start postRender
 
             let mutable result = VkResult.VkSuccess
             let mutable info =
@@ -313,8 +361,8 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 |> check "could not swap buffers"
 
             queue.WaitIdle()
-            cmd0.Dispose()
-            cmd1.Dispose()
+            preRender.Dispose()
+            postRender.Dispose()
 
             result 
                 |> check "something went wrong with swap"
@@ -328,13 +376,15 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             // delete old things
             framebuffers |> Array.iter device.Delete
             depthView |> Option.iter (fun view -> device.Delete view; device.Delete view.Image)
-            colorViews |> Array.iter device.Delete
+            renderViews |> Array.iter device.Delete
+            colorView |> Option.iter (fun view -> device.Delete view; device.Delete view.Image)
             VkRaw.vkDestroySwapchainKHR(device.Handle, handle, NativePtr.zero)
 
             handle <- VkSwapchainKHR.Null
             size <- V2i.Zero
             depthView <- None
-            colorViews <- Array.zeroCreate 0
+            renderViews <- Array.zeroCreate 0
+            colorView <- None
             framebuffers <- Array.zeroCreate 0
             currentBuffer <- 0u
 
@@ -345,116 +395,9 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 module Swapchain =
     let create (desc : SwapchainDescription) (device : Device) =
         new Swapchain(device, desc)
-//        let size = desc.surface.Size
-//        let extent = VkExtent2D(size.X, size.Y)
-//        let surface = desc.surface
-//        let renderPass = desc.renderPass
-//
-//        let colorUsage, colorLayout =
-//            if desc.samples = 1 then VkImageUsageFlags.ColorAttachmentBit, VkImageLayout.ColorAttachmentOptimal
-//            else VkImageUsageFlags.TransferDstBit, VkImageLayout.TransferDstOptimal
-//
-//
-//        let mutable info =
-//            VkSwapchainCreateInfoKHR(
-//                VkStructureType.SwapChainCreateInfoKHR, 0n, 
-//                VkSwapchainCreateFlagsKHR.MinValue,
-//
-//                surface.Handle,
-//                uint32 desc.buffers,
-//                desc.colorFormat,
-//
-//                desc.colorSpace,
-//                extent,
-//
-//                1u,
-//                colorUsage,
-//                VkSharingMode.Exclusive,
-//                0u, NativePtr.zero,
-//
-//                desc.transform,
-//                VkCompositeAlphaFlagBitsKHR.VkCompositeAlphaOpaqueBitKhr,
-//                desc.presentMode,
-//                1u, VkSwapchainKHR.Null
-//            )
-//
-//        let mutable handle = VkSwapchainKHR.Null
-//        VkRaw.vkCreateSwapchainKHR(device.Handle, &&info, NativePtr.zero, &&handle)
-//            |> check "could not create Swapchain"
-//        
-//        let colorViews = 
-//            let mutable count = 0u
-//            VkRaw.vkGetSwapchainImagesKHR(device.Handle, handle, &&count, NativePtr.zero)
-//                |> check "could not get Swapchain Images"
-//
-//            let imageHandles = Array.zeroCreate (int count)
-//            imageHandles |> NativePtr.withA (fun pImages ->
-//                VkRaw.vkGetSwapchainImagesKHR(device.Handle, handle, &&count, pImages)
-//                    |> check "could not get Swapchain Images"
-//            )
-//
-//            imageHandles |> Array.map (fun handle ->
-//                let image = 
-//                    Image(
-//                        device,
-//                        handle,
-//                        V3i(size.X, size.Y, 1),
-//                        1, 1, 1,
-//                        TextureDimension.Texture2D,
-//                        desc.colorFormat,
-//                        VkComponentMapping.Identity,
-//                        Unchecked.defaultof<_>,
-//                        VkImageLayout.Undefined
-//                    )
-//                device.CreateImageView(image, 0, 1, 0, 1)
-//
-//            )
-//
-//        let depthView =
-//            match desc.depthFormat with
-//                | Some depthFormat ->
-//                    let image = 
-//                        device.CreateImage(
-//                            V3i(size.X, size.Y, 1), 1, 1, 1, 
-//                            TextureDimension.Texture2D, 
-//                            VkFormat.toTextureFormat depthFormat, 
-//                            VkImageUsageFlags.DepthStencilAttachmentBit, 
-//                            VkImageLayout.DepthStencilAttachmentOptimal
-//                        )
-//                    // hacky-hack
-//                    image.Format <- depthFormat
-//                    image.ComponentMapping <- VkComponentMapping.Identity
-//
-//                    let view = device.CreateImageView(image, 0, 1, 0, 1)
-//
-//                    Some view
-//                | _ -> 
-//                    None
-//
-//        let framebuffers =
-//            colorViews |> Array.map (fun colorView ->
-//
-//                let attachments =
-//                    match depthView with
-//                        | Some depthView -> Map.ofList [ DefaultSemantic.Colors, colorView; DefaultSemantic.Depth, depthView]
-//                        | None -> Map.ofList [ DefaultSemantic.Colors, colorView ]
-//
-//                device.CreateFramebuffer(renderPass, attachments)
-//            )
-//
-//        Swapchain(device, handle, desc, size, colorLayout, depthView, colorViews, framebuffers)
 
     let delete (chain : Swapchain) (device : Device) =
         chain.Dispose()
-//        if chain.Handle.IsValid then
-//            chain.DepthView |> Option.iter (fun view ->
-//                device.Delete view.Image
-//                device.Delete view
-//            )
-//            chain.ColorViews |> Array.iter device.Delete
-//            chain.Framebuffers |> Array.iter device.Delete
-//            VkRaw.vkDestroySwapchainKHR(device.Handle, chain.Handle, NativePtr.zero)
-//            chain.Handle <- VkSwapchainKHR.Null
 
 
 [<AbstractClass; Sealed; Extension>]

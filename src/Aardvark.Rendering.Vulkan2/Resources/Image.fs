@@ -1102,6 +1102,8 @@ module ``Image Format Extensions`` =
             let create a b c d = VkComponentMapping(a,b,c,d)
 
             LookupTable.lookupTable [
+                TextureFormat.Bgr8, create r g b i
+                TextureFormat.Bgra8, create r g b a
                 TextureFormat.DualAlpha4Sgis, create r g z i
                 TextureFormat.DualAlpha8Sgis, create r g z i
                 TextureFormat.DualAlpha16Sgis, create r g z i
@@ -1751,6 +1753,7 @@ module ``Image Command Extensions`` =
                             elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
                             elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
                             elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
+                            elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
                             else VkAccessFlags.None
 
                         let dst =
@@ -1827,10 +1830,27 @@ module ``Image Command Extensions`` =
                     ()
             }
 
+        static member ResolveMultisamples(src : Image, srcLevel : int, srcSlice : int, srcOffset : V3i, dst : Image, dstLevel : int, dstSlice : int, dstOffset : V3i, size : V3i) =
+            { new Command<unit>() with
+                member x.Enqueue (buffer : CommandBuffer) =
+                    let mutable resolve =
+                        VkImageResolve(
+                            VkImageSubresourceLayers(VkFormat.toAspect src.Format, uint32 srcLevel, uint32 srcSlice, 1u),
+                            VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
+                            VkImageSubresourceLayers(VkFormat.toAspect dst.Format, uint32 dstLevel, uint32 dstSlice, 1u),
+                            VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
+                            VkExtent3D(size.X, size.Y, size.Z)
+                        )
+
+                    VkRaw.vkCmdResolveImage(buffer.Handle, src.Handle, src.Layout, dst.Handle, dst.Layout, 1u, &&resolve)
+                member x.Dispose() =
+                    ()
+            }
+
         static member Blit(src : Image, srcLevel : int, srcSlice : int, srcRange : Box3i, dst : Image, dstLevel : int, dstSlice : int, dstRange : Box3i, filter : VkFilter) =
             { new Command<unit>() with
                 member x.Enqueue (buffer : CommandBuffer) =
-                    
+
                     let mutable srcOffsets = VkOffset3D_2()
                     srcOffsets.[0] <- VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z)
                     srcOffsets.[1] <- VkOffset3D(srcRange.Max.X + 1, srcRange.Max.Y + 1, srcRange.Max.Z + 1)
@@ -1850,7 +1870,6 @@ module ``Image Command Extensions`` =
                             dstOffsets
                         )
                     
-
                     VkRaw.vkCmdBlitImage(buffer.Handle, src.Handle, src.Layout, dst.Handle, dst.Layout, 1u, &&blit, filter)
 
                 member x.Dispose() =

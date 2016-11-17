@@ -1,6 +1,8 @@
 ﻿namespace Aardvark.Application.WinForms
 
 open System
+open System.Diagnostics
+open System.Collections.Concurrent
 open Aardvark.Application
 open Aardvark.Rendering.Vulkan
 open Aardvark.Base
@@ -126,28 +128,43 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
 
     let mutable debugAdapter = None
 
+    let seen = ConcurrentHashSet()
+
+    #if DEBUG 
+    let debugBreak (str : string) =
+        let stack = StackTrace().GetFrames() |> Array.toList |> List.map (fun f -> f.GetMethod())
+        if seen.Add ((stack, str)) then
+            if Debugger.IsAttached then
+                Debugger.Break()
+            else
+                if Debugger.Launch() then
+                    Debugger.Break()
+    #else
+    let debugBreak (str : string) = ()
+
+    #endif
+
+    let debugMessage (msg : DebugReport.Message) =
+        let str = msg.layerPrefix + ": " + msg.message
+
+        match msg.messageFlags with
+            | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
+                debugBreak str
+                Report.Error("[Vulkan] {0}", str)
+
+            | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt | VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt ->
+                debugBreak str
+                Report.Warn("[Vulkan] {0}", str)
+
+            | _ ->
+                Report.Line(4, "[Vulkan] {0}", str)
+
     // install debug output to file (and errors/warnings to console)
     do if debug then
         let adapter = new DebugReport.Adapter(instance.Handle, VkDebugReportFlagBitsEXT.All)
         adapter.Start()
         debugAdapter <- Some adapter
-        adapter.OnMessage.Add (fun msg ->
-            
-            let str = sprintf "[%s] %s" msg.layerPrefix msg.message
-
-            match msg.messageFlags with
-                | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
-                    Log.error "%s" str
-
-                | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt | VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt ->
-                    Log.warn "%s" str
-
-                | VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt ->
-                    Report.Line(4, "{0}", str)
-
-                | _ -> ()
-
-        )
+        adapter.OnMessage.Add debugMessage
 
 
     // choose a physical device
@@ -180,7 +197,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     member x.Initialize(ctrl : IRenderControl, samples : int) =
         match ctrl with
             | :? Aardvark.Application.WinForms.RenderControl as ctrl ->
-                let mode = Aardvark.Application.WinForms.Vulkan.GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, 1)
+                let mode = Aardvark.Application.WinForms.Vulkan.GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples)
                 let impl = new VulkanRenderControl(runtime, mode)
                 ctrl.Implementation <- impl
 

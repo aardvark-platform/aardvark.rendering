@@ -69,7 +69,7 @@ type App private () =
             | Some w when not w.IsDisposed -> 
                 w 
             | _ -> 
-                let w = app.Value.CreateSimpleRenderWindow()
+                let w = app.Value.CreateSimpleRenderWindow(8)
                 w.RenderTask <- realTask
                 win <- Some w
                 w 
