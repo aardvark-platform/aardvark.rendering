@@ -8,15 +8,19 @@ How to build:
 
 Windows:
 - Visual Studio 2015,
-- Visual FSharp Tools installed (we use 4.0 now) 
+- Visual FSharp Tools 4.0 installed: visit http://fsharp.org/use/windows/ or download directly [1]
 - run build.cmd which will install all dependencies
-- msbuild src\Aardvark.sln or use VisualStudio to build the solution
+- msbuild src\Aardvark.Rendering.sln or use VisualStudio to build the solution
 
 Linux:
 - install mono >= 4.2.3.0 (might work in older versions as well)
 - install fsharp 4.0 (http://fsharp.org/use/linux/)
 - run build.sh which will install all dependencies
 - run xbuild src/Aardvark.Rendering.sln
+
+In order to use F# interactive with Aardvark.Rendering make sure you are using the 64bit version of fsi.exe (fsharpi.exe on linux). 
+For windows, in order to use the visual studio integrated interactive shell, go to Tools/Options/F#  and 64bit interactive to true.
+On Linux, make sure to use a 64bit mono and all is fine.
 
 Tutorials can be found here:
 https://github.com/vrvis/aardvark.rendering/tree/master/src/Demo/Examples
@@ -27,6 +31,6 @@ https://github.com/vrvis/aardvark.rendering/tree/master/src/Demo/Examples
 
 
 
-[1] https://visualfsharp.codeplex.com/releases/view/161288
+[1] https://www.microsoft.com/en-us/download/details.aspx?id=48179
 
 
