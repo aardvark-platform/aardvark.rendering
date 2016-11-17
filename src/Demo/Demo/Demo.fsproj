@@ -47,13 +47,9 @@
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <Import Project="$(FSharpTargetsPath)" Condition="exists('$(FSharpTargetsPath)')" />
   <ItemGroup>
-    <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="IO.fs" />
-    <Compile Include="AssimpExporter.fs" />
     <Compile Include="Program.fs">
     </Compile>
     <Content Include="app.config" />
-    <EmbeddedResource Include="Assimp.zip" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
@@ -75,6 +71,11 @@
     <ProjectReference Include="..\..\Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj">
       <Name>Aardvark.Rendering.NanoVg</Name>
       <Project>{054df582-d549-4da0-b74b-762ab2585d3f}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj">
+      <Name>Aardvark.SceneGraph.IO</Name>
+      <Project>{d7b02e89-dc77-462d-a3d4-a28daa403aaf}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">

@@ -20,6 +20,7 @@ open Aardvark.SceneGraph.IO
 
 
 FsiSetup.initFsi (Path.combine [BinDirectory; "Examples.exe"])
+Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
 
 let fillMode = Mod.init FillMode.Fill
 
@@ -40,8 +41,10 @@ let demoScene =
     let lodDecider (threshhold : float) (scope : LodScope) =
         (scope.bb.Center - scope.cameraPosition).Length < threshhold
 
+    let modelPath = Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "data"; "aardvark"; "aardvark.obj" ]
+
     let aardvark = 
-        Loader.Assimp.load @"C:\Aardwork\aardvark\Aardvark.obj" 
+        Loader.Assimp.load modelPath
          |> Sg.adapter
          |> Sg.normalizeTo (Box3d(-V3d.III, V3d.III))
          |> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO,V3d.OIO,-V3d.OOI))
@@ -64,12 +67,12 @@ let demoScene =
                         let highDetail = Sg.lod (lodDecider 2.0) (Sg.unitSphere 3 ~~C4b.Red) aardvark
                         yield 
                             Sg.lod (lodDecider 5.0) (Sg.box ~~C4b.Red ~~(Box3d.FromCenterAndSize(V3d.OOO,V3d.III*2.0))) highDetail
-                            |> Sg.diffuseFileTexture' @"C:\Aardwork\pattern.jpg" true
+                            //|> Sg.diffuseFileTexture' @"C:\Aardwork\pattern.jpg" true // use this line to load texture from file
+                            |> Sg.diffuseTexture DefaultTextures.checkerboard
                             |> Sg.scale 0.4
                             |> Sg.translate x y 0.0
         ] |> Sg.ofSeq
 
-    //Sg.unitSphere 4 ~~C4b.Red
     spheres 
         |> Sg.andAlso (Sg.onOff ~~false aardvark)
         |> Sg.shader {

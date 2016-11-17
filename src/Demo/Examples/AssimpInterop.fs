@@ -360,16 +360,16 @@ module AssimpInterop =
 
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
     System.Environment.CurrentDirectory <- Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"]
-    DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
+    Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
 
 
     let win = Interactive.Window
-    let model = Assimp.load (Path.combine [__SOURCE_DIRECTORY__;"..";"Demo";"eigi";"eigi.dae" ])
+    let model = Assimp.load (Path.combine [__SOURCE_DIRECTORY__;"..";"..";"..";"data";"eigi";"eigi.dae" ])
 
 
     let sg =
         model 
-            |> Helpers.normalizeTo ( Box3d(-V3d.III, V3d.III) )
+            |> Sg.normalizeTo ( Box3d(-V3d.III, V3d.III) )
             |> Sg.trafo (Mod.constant Trafo3d.ChangeYZ)
             |> Sg.blendMode (Mod.constant Rendering.BlendMode.Blend)
             |> Sg.effect [

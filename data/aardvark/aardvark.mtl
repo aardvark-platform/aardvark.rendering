@@ -1,0 +1,15 @@
+# 
+# Wavefront material file
+# Converted by the DEEP Exploration  Deep Exploration 4.0.10.871 Release
+# Right Hemisphere, LTD
+# http://www.righthemisphere.com/
+# 
+
+newmtl Material__1
+Ka 0.2 0.2 0.2
+Kd 0.5 0.5 0.5
+Ks 0.002964 0.002964 0.002964
+illum 2
+Ns 2
+map_Kd aardva-c.tif
+map_Kn aardva-n.tif

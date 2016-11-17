@@ -62,7 +62,6 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="FsiSetup.fs" />
-    <Compile Include="Utilities.fs" />
     <Compile Include="Interactive.fs" />
     <None Include="LoadReferences.fsx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

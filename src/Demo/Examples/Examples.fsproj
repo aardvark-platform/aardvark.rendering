@@ -77,7 +77,6 @@
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
-    <EmbeddedResource Include="Assimp.zip" />
     <None Include="Inactive\Tic-Tac-Toe.fs" />
     <None Include="Inactive\Polygons.fs" />
     <None Include="Inactive\Maya.fs" />

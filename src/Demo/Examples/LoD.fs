@@ -280,8 +280,8 @@ module LoD =
             Helpers.frustum gridCam gridProj
 
             data.BoundingBox.EnlargedByRelativeEps(0.005)
-                |> Helpers.wireBox C4b.VRVisGreen
-                |> Sg.ofIndexedGeometry
+                |> Sg.wireBox' C4b.VRVisGreen 
+
         ]
 
     let final =
