@@ -15,7 +15,7 @@ open Microsoft.FSharp.NativeInterop
 
 type Descriptor =
     | UniformBuffer of UniformBuffer
-    | SampledImage of ImageView * Sampler
+    | CombinedImageSampler of ImageView * Sampler
 
 
 type DescriptorSet =
@@ -89,7 +89,7 @@ module DescriptorSet =
                                 ptr,
                                 NativePtr.zero
                             )
-                        | SampledImage(view, sam) ->
+                        | CombinedImageSampler(view, sam) ->
                             let info =
                                 VkDescriptorImageInfo(
                                     sam.Handle,
@@ -105,7 +105,7 @@ module DescriptorSet =
                                 VkStructureType.WriteDescriptorSet, 0n,
                                 set.Handle,
                                 uint32 binding,
-                                0u, 1u, VkDescriptorType.SampledImage,
+                                0u, 1u, VkDescriptorType.CombinedImageSampler,
                                 ptr,
                                 NativePtr.zero,
                                 NativePtr.zero

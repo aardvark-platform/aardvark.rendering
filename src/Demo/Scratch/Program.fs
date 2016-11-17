@@ -11,6 +11,32 @@ open Aardvark.Application.WinForms
 open Aardvark.Rendering.NanoVg
 open FShade
 
+module Shader =
+    open FShade
+
+    type Vertex = {
+        [<Position>]        pos     : V4d
+        [<Semantic("Urdar")>] m : M44d
+        [<WorldPosition>]   wp      : V4d
+        [<Normal>]          n       : V3d
+        [<BiNormal>]        b       : V3d
+        [<Tangent>]         t       : V3d
+        [<Color>]           c       : V4d
+        [<TexCoord>]        tc      : V2d
+    }
+
+    let trafo (v : Vertex) =
+        vertex {
+            let wp = v.m * v.pos
+            return { v with
+                        pos = uniform.ViewProjTrafo * wp
+                        wp = wp 
+                   }
+        }
+    let tcColor (v : Vertex) =
+        fragment {
+            return V4d(v.tc.X, v.tc.Y, 1.0, 1.0)
+        }
 
 [<Demo("Simple Sphere Demo")>]
 [<Description("simply renders a red sphere with very simple lighting")>]
@@ -40,29 +66,17 @@ let quad() =
             DefaultSurfaces.constantColor C4f.Red |> toEffect
         ]
 
+[<Demo("Textured Quad Demo")>]
+let quadTexture() =
+    Sg.fullScreenQuad
+        |> Sg.effect [
+            DefaultSurfaces.trafo |> toEffect
+            DefaultSurfaces.constantColor C4f.Red |> toEffect
+            DefaultSurfaces.diffuseTexture |> toEffect
+           ]
+        |> Sg.diffuseFileTexture' @"E:\Development\WorkDirectory\DataSVN\pattern.jpg" true
 
-module Shader =
-    open FShade
 
-    type Vertex = {
-        [<Position>]        pos     : V4d
-        [<Semantic("Urdar")>] m : M44d
-        [<WorldPosition>]   wp      : V4d
-        [<Normal>]          n       : V3d
-        [<BiNormal>]        b       : V3d
-        [<Tangent>]         t       : V3d
-        [<Color>]           c       : V4d
-        [<TexCoord>]        tc      : V2d
-    }
-
-    let trafo (v : Vertex) =
-        vertex {
-            let wp = v.m * v.pos
-            return { v with
-                        pos = uniform.ViewProjTrafo * wp
-                        wp = wp 
-                   }
-        }
 
 [<Demo("Super naive LoD")>]
 let naiveLoD() =

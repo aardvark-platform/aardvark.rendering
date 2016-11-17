@@ -6,7 +6,7 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>8bbc1ef6-9c85-4baf-a732-fc46dca64ec3</ProjectGuid>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
     <RootNamespace>Aardvark.Rendering.Vulkan2</RootNamespace>
     <AssemblyName>Aardvark.Rendering.Vulkan2</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
@@ -88,7 +88,6 @@
     <Compile Include="Runtime\Compiler.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Runtime.fs" />
-    <Compile Include="Program.fs" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>

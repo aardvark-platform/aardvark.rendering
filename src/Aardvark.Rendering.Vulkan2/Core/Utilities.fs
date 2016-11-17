@@ -463,9 +463,9 @@ module NativeUtilities =
                 dp <- dp + dzj
 
         let copy (src : NativeVolume<'a>) (dst : NativeVolume<'a>) =
-            let cxy = compare src.Info.DX src.Info.DY
-            let cyz = compare src.Info.DY src.Info.DZ
-            let cxz = compare src.Info.DX src.Info.DZ
+            let cxy = compare (abs src.Info.DX) (abs src.Info.DY)
+            let cyz = compare (abs src.Info.DY) (abs src.Info.DZ)
+            let cxz = compare (abs src.Info.DX) (abs src.Info.DZ)
 
             if cxz > 0 && cyz > 0 then
                 // z < x && z < y
@@ -496,7 +496,7 @@ module NativeUtilities =
         
 
 
-        let inline private setXYZ (src : 'a) (dst : NativeVolume<'a>)  =
+        let private setXYZ (src : 'a) (dst : NativeVolume<'a>)  =
             let dstInfo = dst.Info
             let sa = sizeof<'a> |> nativeint
 
@@ -522,7 +522,7 @@ module NativeUtilities =
                     ptr <- ptr + yj
                 ptr <- ptr + xj
 
-        let inline private setYXZ (src : 'a) (dst : NativeVolume<'a>)  =
+        let private setYXZ (src : 'a) (dst : NativeVolume<'a>)  =
             let dstInfo = dst.Info
             let sa = sizeof<'a> |> nativeint
 
@@ -548,7 +548,7 @@ module NativeUtilities =
                     ptr <- ptr + xj
                 ptr <- ptr + yj
 
-        let inline private setXZY (src : 'a) (dst : NativeVolume<'a>)  =
+        let private setXZY (src : 'a) (dst : NativeVolume<'a>)  =
             let dstInfo = dst.Info
             let sa = sizeof<'a> |> nativeint
 
@@ -574,7 +574,7 @@ module NativeUtilities =
                     ptr <- ptr + zj
                 ptr <- ptr + xj
 
-        let inline private setYZX (src : 'a) (dst : NativeVolume<'a>)  =
+        let private setYZX (src : 'a) (dst : NativeVolume<'a>)  =
             let dstInfo = dst.Info
             let sa = sizeof<'a> |> nativeint
 
@@ -600,7 +600,7 @@ module NativeUtilities =
                     ptr <- ptr + zj
                 ptr <- ptr + yj
 
-        let inline private setZXY (src : 'a) (dst : NativeVolume<'a>)  =
+        let private setZXY (src : 'a) (dst : NativeVolume<'a>)  =
             let dstInfo = dst.Info
             let sa = sizeof<'a> |> nativeint
 
@@ -626,7 +626,7 @@ module NativeUtilities =
                     ptr <- ptr + xj
                 ptr <- ptr + zj
 
-        let inline private setZYX (src : 'a) (dst : NativeVolume<'a>)  =
+        let private setZYX (src : 'a) (dst : NativeVolume<'a>)  =
             let dstInfo = dst.Info
             let sa = sizeof<'a> |> nativeint
 
@@ -653,9 +653,9 @@ module NativeUtilities =
                 ptr <- ptr + zj
 
         let set (src : 'a) (dst : NativeVolume<'a>) =
-            let cxy = compare dst.Info.DX dst.Info.DY
-            let cyz = compare dst.Info.DY dst.Info.DZ
-            let cxz = compare dst.Info.DX dst.Info.DZ
+            let cxy = compare (abs dst.Info.DX) (abs dst.Info.DY)
+            let cyz = compare (abs dst.Info.DY) (abs dst.Info.DZ)
+            let cxz = compare (abs dst.Info.DX) (abs dst.Info.DZ)
 
             if cxz > 0 && cyz > 0 then
                 // z < x && z < y

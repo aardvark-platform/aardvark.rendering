@@ -82,7 +82,7 @@ module VisualDeviceChooser =
 
 
 
-type VulkanApplication(appName : string, debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
     let requestedExtensions =
         [
             yield Instance.Extensions.Surface
@@ -213,7 +213,6 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
         member x.Dispose() = x.Dispose()
 
 
-    new(appName, debug) = new VulkanApplication(appName, debug, VisualDeviceChooser.run)
-    new(appName) = new VulkanApplication(appName, false)
-    new(debug) = new VulkanApplication("Aardvark", debug)
-    new() = new VulkanApplication("Aardvark", false)
+    new(debug)      = new VulkanApplication(debug, VisualDeviceChooser.run)
+    new(chooser)    = new VulkanApplication(false, chooser)
+    new()           = new VulkanApplication(false, VisualDeviceChooser.run)

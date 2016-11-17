@@ -277,7 +277,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                             images |> Map.map (fun _ (v,s) ->
                                 stats <- stats + v.Update(x)
                                 stats <- stats + s.Update(x)
-                                Descriptor.SampledImage(v.Handle.GetValue(), s.Handle.GetValue())
+                                Descriptor.CombinedImageSampler(v.Handle.GetValue(), s.Handle.GetValue())
                             )
                         
                         descriptorPool.Update(desc, Map.union buffers images)
