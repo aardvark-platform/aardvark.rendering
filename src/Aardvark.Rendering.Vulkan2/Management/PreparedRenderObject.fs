@@ -22,6 +22,7 @@ type PreparedRenderObject =
         
         pipeline                : VulkanResource<Pipeline, VkPipeline>
         indexBuffer             : Option<IResource<nativeptr<IndexBufferBinding>>>
+        uniformBuffers          : list<IResource<UniformBuffer>>
         descriptorSets          : IResource<nativeptr<DescriptorSetBinding>>
         vertexBuffers           : IResource<nativeptr<VertexBufferBinding>>
         drawCalls               : IResource<nativeptr<DrawCall>>
@@ -36,6 +37,8 @@ type PreparedRenderObject =
         x.activation.Dispose()
 
         x.pipeline.Dispose()
+        for b in x.uniformBuffers do
+            b.Dispose()
         x.descriptorSets.Dispose()
         x.vertexBuffers.Dispose()
         x.drawCalls.Dispose()
@@ -47,6 +50,9 @@ type PreparedRenderObject =
     member x.Update(caller : IAdaptiveObject) =
         use token = x.device.ResourceToken
         let mutable stats = FrameStatistics.Zero
+        
+        for b in x.uniformBuffers do
+            stats <- stats + b.Update(caller)
         stats <- stats + x.pipeline.Update(caller)
         stats <- stats + x.descriptorSets.Update(caller)
         stats <- stats + x.vertexBuffers.Update(caller)
@@ -63,6 +69,9 @@ type PreparedRenderObject =
         x.descriptorSets.AddRef()
         x.vertexBuffers.AddRef()
         x.drawCalls.AddRef()
+        
+        for b in x.uniformBuffers do
+            b.AddRef()
 
         match x.indexBuffer with
             | Some ib -> ib.AddRef()
@@ -118,6 +127,7 @@ type DevicePreparedRenderObjectExtensions private() =
         let program = this.CreateShaderProgram(renderPass, ro.Surface)
         let prog = program.Handle.GetValue()
 
+        let mutable uniformBuffers = []
         let descriptorSets = 
             prog.PipelineLayout.DescriptorSetLayouts |> List.map (fun ds ->
                 let bufferBindings, imageBindings = 
@@ -133,7 +143,8 @@ type DevicePreparedRenderObjectExtensions private() =
                             | ShaderType.Ptr(_, ShaderType.Struct(_,fields)) ->
                                 let layout = UniformBufferLayoutStd140.structLayout fields
                                 let buffer = this.CreateUniformBuffer(ro.AttributeScope, layout, ro.Uniforms, prog.UniformGetters)
-                                b.Binding, buffer
+                                uniformBuffers <- buffer :: uniformBuffers
+                                b.Binding, buffer.Handle.GetValue()
                             | _ ->
                                 failf "impossible"
                     )
@@ -290,6 +301,7 @@ type DevicePreparedRenderObjectExtensions private() =
             {
                 device                      = this.Device
                 original                    = ro
+                uniformBuffers              = uniformBuffers
                 descriptorSets              = descriptorBindings
                 pipeline                    = pipeline
                 vertexBuffers               = bindings

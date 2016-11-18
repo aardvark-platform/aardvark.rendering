@@ -272,7 +272,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
         )
 
     member x.CreateDescriptorSet(layout : DescriptorSetLayout,
-                                 buffers : Map<int, IResource<UniformBuffer>>, 
+                                 buffers : Map<int, UniformBuffer>, 
                                  images : Map<int, IResource<ImageView> * IResource<Sampler>>) =
         descriptorSetCache.GetOrCreate(
             [layout :> obj; buffers :> obj; images :> obj],
@@ -290,8 +290,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
                         let buffers = 
                             buffers |> Map.map (fun _ r -> 
-                                stats <- stats + r.Update(x)
-                                Descriptor.UniformBuffer(r.Handle.GetValue())
+                                Descriptor.UniformBuffer(r)
                             )
 
                         let images = 
@@ -311,9 +310,6 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
                     member x.Destroy h =
                         descriptorPool.Free h
-                        for (_,b) in Map.toSeq buffers do
-                            b.RemoveRef()
-                            b.RemoveOutput x
 
                         for (_,(i,s)) in Map.toSeq images do
                             i.RemoveRef()
