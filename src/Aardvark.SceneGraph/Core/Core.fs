@@ -117,14 +117,15 @@ module private Providers =
         member x.TryGetUniform(dynamicScope, s : Symbol) =
             
             let contains (s : Symbol) =
-                let nullResource = attributeProviders |> List.tryPick (fun p ->
-                    match p.TryGetAttribute s with
-                     | Some v -> v.Buffer |> Mod.map (not << NullResources.isNullResource) |> Some
-                     | None -> None
-                )
+                let nullResource = 
+                    attributeProviders |> List.tryPick (fun p ->
+                        match p.TryGetAttribute s with
+                         | Some v -> Some (not v.IsSingleValue) //v.Buffer |> Mod.map (not << NullResources.isNullResource) |> Some
+                         | None -> None
+                    )
                 match nullResource with
                     | Some v -> v
-                    | None -> Mod.constant false
+                    | None -> false
 
             let str = s.ToString()
             match cache.TryGetValue s with
@@ -151,7 +152,7 @@ module private Providers =
                                             | Some v -> 
                                                 NullResources.isValidResourceAdaptive v :> IMod |> Some 
                                             | None -> 
-                                                baseName |> contains :> IMod |> Some
+                                                baseName |> contains |> Mod.constant :> IMod |> Some
                                     else None
 
         interface IUniformProvider with

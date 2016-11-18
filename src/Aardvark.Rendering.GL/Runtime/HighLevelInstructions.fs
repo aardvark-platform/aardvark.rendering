@@ -92,11 +92,9 @@ module Instructions =
             [ Instruction.BindTexture target r.Handle ]
         )
 
-    let bindVertexAttribValue (index : int) (value : IMod<Option<V4f>>) =
+    let bindVertexAttribValue (index : int) (value : IMod<V4f>) =
         value |> Mod.map (fun v ->
-            match v with
-                | Some v -> [Instruction.VertexAttrib4f index v.X v.Y v.Z v.W]
-                | _ -> []
+            [Instruction.VertexAttrib4f index v.X v.Y v.Z v.W]
         )
 
     let drawIndirect (program : Program) (indexBuffer : Option<BufferView>) (buffer : IResource<IndirectBuffer>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =

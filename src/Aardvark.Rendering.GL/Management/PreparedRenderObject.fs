@@ -40,7 +40,7 @@ type PreparedRenderObject =
 
         mutable VertexArray : IResource<VertexArrayObject>
         VertexArrayHandle : IResource<nativeint>
-        VertexAttributeValues : Map<int, IMod<Option<V4f>>>
+        VertexAttributeValues : Map<int, IMod<V4f>>
         
         ColorAttachmentCount : int
         DrawBuffers : Option<DrawBufferConfig>
@@ -511,15 +511,10 @@ type ResourceManagerExtensions private() =
 
         let attributeValues =
             buffers 
-                |> List.map (fun (i,v,_,_) ->
-
-                    i, v.Buffer |> Mod.map (fun v ->
-                        match v with
-                            | :? NullBuffer as nb -> 
-                                Some nb.Value
-                            | _ -> 
-                                None
-                    )
+                |> List.choose (fun (i,v,_,_) ->
+                    match v.SingleValue with
+                        | Some v -> Some (i,v)
+                        | _ -> None
                 ) |> Map.ofList
 
         let attachments = fboSignature.ColorAttachments |> Map.toList

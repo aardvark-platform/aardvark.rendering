@@ -52,7 +52,7 @@ module NullBufferTest =
         // USing NullBuffer for Normals (ShaderI nput slot 1) -> works
         // https://community.amd.com/thread/160069
 
-        let nullBufferColors = BufferView(Mod.constant (NullBuffer(V4f.IOII) :> IBuffer), typeof<V4f>)
+        let nullBufferColors = BufferView(SingleValueBuffer(Mod.constant V4f.IOII), typeof<V4f>)
         let quadSg = Sg.VertexAttributeApplicator(DefaultSemantic.Colors, nullBufferColors, quadSg)
 
 //        let nullBufferNormals = BufferView(Mod.constant (NullBuffer(V4f.OIOO) :> IBuffer), typeof<V3f>)

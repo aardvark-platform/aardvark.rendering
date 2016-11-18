@@ -147,7 +147,7 @@ module Assimp =
                                     if m.Normals.Count = m.Vertices.Count then
                                         yield DefaultSemantic.Normals, m.Normals |> mapAttribute (fun v -> V3f(v.X, v.Y, v.Z))
                                     else
-                                        yield DefaultSemantic.Normals, BufferView(Mod.constant (NullBuffer(V4f.OOOO) :> IBuffer), typeof<V4f>)
+                                        yield DefaultSemantic.Normals, BufferView(SingleValueBuffer(Mod.constant V4f.OOOO), typeof<V4f>)
                                 
                                 if m.TextureCoordinateChannelCount > 0 then
                                     let tc = m.TextureCoordinateChannels.[0]

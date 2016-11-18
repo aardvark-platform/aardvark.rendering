@@ -71,11 +71,8 @@ module Sharing =
                 )
             )
 
-        let nullBuffer = Buffer(ctx, 0n, 0)
-
         member x.Create(data : IBuffer) =
             match data with
-                | :? NullBuffer as nb ->nullBuffer
                 | _ ->
                     if active then
                         let shared = get data
@@ -489,6 +486,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                 r.Dispose()
                         }
                 )
+
+            | :? SingleValueBuffer as v ->
+                bufferCache.GetOrCreate(Mod.constant 0, {
+                    create = fun b      -> Buffer(ctx, 0n, 0)
+                    update = fun h b    -> h
+                    delete = fun h      -> ()
+                    info =   fun h      -> ResourceInfo.Zero
+                    kind = ResourceKind.Buffer
+                })
 
             | _ ->
                 bufferCache.GetOrCreate<IBuffer>(data, {

@@ -14,11 +14,36 @@ type IIndirectBuffer =
     abstract member Count : int
 
 
+type SingleValueBuffer(value : IMod<V4f>) =
+    inherit Mod.AbstractMod<IBuffer>()
+
+    member x.Value = value
+
+    override x.Compute() = 
+        let v = value.GetValue x
+        failwithf "NullBuffer cannot be evaluated"
+
+    override x.GetHashCode() = value.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? SingleValueBuffer as o -> value = o.Value
+            | _ -> false
+
+    new() = SingleValueBuffer(Mod.constant V4f.Zero)
+
+
 type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
+    let singleValue =
+        match b with
+            | :? SingleValueBuffer as nb -> Some nb.Value
+            | _ -> None
+
     member x.Buffer = b
     member x.ElementType = elementType
     member x.Stride = stride
     member x.Offset = offset
+    member x.SingleValue = singleValue
+    member x.IsSingleValue = Option.isSome singleValue
 
     new(b : IMod<IBuffer>, elementType : Type, offset : int) =
         BufferView(b, elementType, offset, 0)
@@ -34,19 +59,6 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
             | :? BufferView as o ->
                 o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
             | _ -> false
-
-type NullBuffer(value : V4f) =
-    interface IBuffer
-
-    member x.Value = value
-
-    override x.GetHashCode() = value.GetHashCode()
-    override x.Equals o =
-        match o with
-            | :? NullBuffer as o -> value = o.Value
-            | _ -> false
-
-    new() = NullBuffer(V4f.Zero)
 
 
 type INativeBuffer =
@@ -217,26 +229,27 @@ module BufferView =
             if view.Stride = 0 then elementSize
             else view.Stride
 
-        view.Buffer |> Mod.map (fun b -> 
-            match b with
-                | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
-                    if count = a.Data.Length then 
-                        a.Data
-                    else
-                        let res = Array.CreateInstance(elementType, count)
-                        Array.Copy(a.Data, res, count)
-                        res
+        match view.SingleValue with
+            | Some value ->
+                value |> Mod.map (fun v -> reader.Initialize(v, count))
+            | _ -> 
+                view.Buffer |> Mod.map (fun b -> 
+                    match b with
+                        | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
+                            if count = a.Data.Length then 
+                                a.Data
+                            else
+                                let res = Array.CreateInstance(elementType, count)
+                                Array.Copy(a.Data, res, count)
+                                res
 
-                | :? INativeBuffer as b ->
-                    let available = (b.SizeInBytes - view.Offset) / elementSize
-                    if count > available then
-                        raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements")
+                        | :? INativeBuffer as b ->
+                            let available = (b.SizeInBytes - view.Offset) / elementSize
+                            if count > available then
+                                raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements")
 
-                    b.Use (fun ptr -> reader.Read(ptr + nativeint offset, count, stride))
+                            b.Use (fun ptr -> reader.Read(ptr + nativeint offset, count, stride))
 
-                | :? NullBuffer as nb ->
-                    reader.Initialize(nb.Value, count)
-
-                | _ ->
-                    failwith "[BufferView] unknown buffer-type"
-        )
+                        | _ ->
+                            failwith "[BufferView] unknown buffer-type"
+                )

@@ -31,13 +31,15 @@ module AttributeSemantics =
         let (~%) (m : Map<Symbol, BufferView>) = m
 
         static let bufferViewCount (view : BufferView) =
-            let elementSize = System.Runtime.InteropServices.Marshal.SizeOf view.ElementType
-            view.Buffer |> Mod.map (fun b ->
-                match b with
-                    | :? INativeBuffer as b -> (b.SizeInBytes - view.Offset) / elementSize
-                    | :? NullBuffer as b -> 0
-                    | _ -> failwithf "[Sg] could not determine buffer-size: %A" b
-            )
+            if view.IsSingleValue then
+                Mod.constant 0
+            else
+                let elementSize = System.Runtime.InteropServices.Marshal.SizeOf view.ElementType
+                view.Buffer |> Mod.map (fun b ->
+                    match b with
+                        | :? INativeBuffer as b -> (b.SizeInBytes - view.Offset) / elementSize
+                        | _ -> failwithf "[Sg] could not determine buffer-size: %A" b
+                )
 
 
         member x.FaceVertexCount (root : Root<ISg>) =

@@ -257,11 +257,13 @@ module NullResources =
 
     let isNullResource (obj : obj) =
         match obj with 
-         | :? NullBuffer -> true
          | :? NullTexture -> true
          | _ -> false
          
     let isValidResourceAdaptive (m : IMod) =
-      [m :> IAdaptiveObject] |> Mod.mapCustom (fun s ->
-            not <| isNullResource (m.GetValue s)
-      ) 
+        match m with
+            | :? SingleValueBuffer -> Mod.constant false
+            | _ -> 
+              [m :> IAdaptiveObject] |> Mod.mapCustom (fun s ->
+                    not <| isNullResource (m.GetValue s)
+              ) 

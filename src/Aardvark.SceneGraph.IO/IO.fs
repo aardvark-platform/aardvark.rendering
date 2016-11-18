@@ -62,8 +62,7 @@ module Loader =
                         let b = arr |> ArrayBuffer :> IBuffer |> Mod.constant
                         Some (BufferView(b, arr.GetType().GetElementType()))
                     | _ ->
-                        let nb = NullBuffer(V4f.Zero) :> IBuffer |> Mod.constant
-                        Some (BufferView(nb, typeof<V4f>))
+                        Some (BufferView(SingleValueBuffer(Mod.constant V4f.Zero), typeof<V4f>))
 
             member x.All = Seq.empty
             member x.Dispose() = ()

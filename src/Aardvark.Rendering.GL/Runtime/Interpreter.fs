@@ -643,9 +643,7 @@ module OpenGLObjectInterpreter =
                 gl.bindVertexArray vao
 
                 for (id,v) in Map.toSeq o.VertexAttributeValues do
-                    match v.GetValue() with
-                        | Some v -> gl.vertexAttrib4f id v
-                        | None -> ()
+                    gl.vertexAttrib4f id (Mod.force v)
 
                 if hasTess then
                     gl.patchVertices patchSize

@@ -170,10 +170,10 @@ let naiveLoD() =
     let objs = 
         sg 
         |> Aardvark.SceneGraph.Semantics.RenderObjectSemantics.Semantic.renderObjects 
-        |> Aardvark.Rendering.Optimizer.optimize App.Runtime App.FramebufferSignature
+        //|> Aardvark.Rendering.Optimizer.optimize App.Runtime App.FramebufferSignature
        
 
-    App.Runtime.CompileRender(App.FramebufferSignature, objs) |> DefaultOverlays.withStatistics
+    App.Runtime.CompileRender(App.FramebufferSignature, objs)
 
 
 
