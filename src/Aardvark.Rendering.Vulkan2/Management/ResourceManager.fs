@@ -67,13 +67,31 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
         device.CreateRenderPass(signature)
 
     member x.CreateBuffer(data : IMod<IBuffer>) =
-        bufferCache.GetOrCreate<IBuffer>(data, {
-            create = fun b      -> device.CreateBuffer(VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
-            update = fun h b    -> device.Delete(h); device.CreateBuffer(VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
-            delete = fun h      -> device.Delete(h)
-            info =   fun h      -> h.Size |> Mem |> ResourceInfo
-            kind = ResourceKind.Buffer
-        })
+        match data with
+            | :? SingleValueBuffer as data ->
+                let update (h : Buffer) (v : V4f) =
+                    device.eventually {
+                        let temp = device.HostMemory.Alloc(device.MinUniformBufferOffsetAlignment, 16L)
+                        temp.Mapped(fun ptr -> NativeInt.write ptr v)
+                        try do! Command.Copy(temp, h)
+                        finally temp.Dispose()
+                    }
+                    h
+                bufferCache.GetOrCreate(data.Value, {
+                    create = fun v      -> device.CreateBuffer(VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit, ArrayBuffer [|v|])
+                    update = fun h v    -> update h v
+                    delete = fun h      -> device.Delete(h)
+                    info =   fun h      -> h.Size |> Mem |> ResourceInfo
+                    kind = ResourceKind.Buffer
+                })
+            | _ -> 
+                bufferCache.GetOrCreate<IBuffer>(data, {
+                    create = fun b      -> device.CreateBuffer(VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
+                    update = fun h b    -> device.Delete(h); device.CreateBuffer(VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
+                    delete = fun h      -> device.Delete(h)
+                    info =   fun h      -> h.Size |> Mem |> ResourceInfo
+                    kind = ResourceKind.Buffer
+                })
 
     member x.CreateBufferView(view : Aardvark.Base.BufferView, data : IResource<Buffer>) =
         let fmt = VkFormat.ofType view.ElementType
@@ -190,7 +208,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
     member x.CreatePipeline(pass            : RenderPass,
                             program         : IResource<ShaderProgram>,
-                            inputs          : Map<string, bool * Type>,
+                            inputs          : Map<string, bool * Aardvark.Base.BufferView>,
                             geometryMode    : IMod<IndexedGeometryMode>,
                             fillMode        : IMod<FillMode>,
                             cullMode        : IMod<CullMode>,

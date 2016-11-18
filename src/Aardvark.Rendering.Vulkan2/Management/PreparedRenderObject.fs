@@ -222,7 +222,9 @@ type DevicePreparedRenderObjectExtensions private() =
 
 
         let bufferFormats = 
-            bufferViews |> Seq.map (fun (name,location, perInstance, view) -> name, (perInstance, view.ElementType)) |> Map.ofSeq
+            bufferViews |> Seq.map (fun (name,location, perInstance, view) ->
+                name, (perInstance, view)
+            ) |> Map.ofSeq
 
 
         let pipeline =

@@ -101,11 +101,9 @@ module InputAssemblyState =
         ]
         
     
-
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VertexInputState =
-    
+
     let private toVkFormat =
         LookupTable.lookupTable [
             typeof<int8>, VkFormat.R8Sint
@@ -328,14 +326,14 @@ module VertexInputState =
 
         ]
 
-    let create (o : Map<string, bool * Type>) =
-        o |> Map.map (fun k (perInstance, attType) ->
-            let fmt = toVkFormat attType
+    let create (o : Map<string, bool * Aardvark.Base.BufferView>) =
+        o |> Map.map (fun k (perInstance, view) ->
+            let fmt = toVkFormat view.ElementType
             { 
                 inputFormat = fmt
-                stride = getFormatSize fmt
-                stepRate = (if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex)
-                offset = 0
+                stride = if view.IsSingleValue then 0 else getFormatSize fmt
+                stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                offset = view.Offset
             }
         )
  

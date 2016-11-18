@@ -95,18 +95,18 @@ module RenderTasks =
 
         member x.Add (o : PreparedMultiRenderObject) =
             x.init()
+            version <- version + 1
             transact (fun () ->
                 o.Update(x) |> ignore
                 objects.Add o |> ignore
             )
-            version <- version + 1
 
         member x.Remove(o : PreparedMultiRenderObject) =
             x.init()
+            version <- version + 1
             transact (fun () ->
                 objects.Remove o |> ignore
             )
-            version <- version + 1
 
         abstract member Init : aset<PreparedMultiRenderObject> -> unit
         abstract member UpdateProgram : unit -> FrameStatistics
@@ -125,7 +125,8 @@ module RenderTasks =
             x.EvaluateIfNeeded' caller FrameStatistics.Zero (fun dirty ->
                 let mutable stats = FrameStatistics.Zero
                 for d in dirty do
-                    stats <- stats + d.Update x
+                    if not d.IsDisposed then
+                        stats <- stats + d.Update x
 
                 let s = x.UpdateProgram()
                 stats + s
