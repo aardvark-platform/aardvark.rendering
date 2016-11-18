@@ -221,3 +221,32 @@ type DeviceDescriptorSetBindingExtensions private() =
         let old = NativePtr.read ptr
         old.Dispose()
         NativePtr.free ptr
+
+
+[<StructLayout(LayoutKind.Sequential)>]
+type IndexBufferBinding =
+    struct
+        val mutable public Buffer : VkBuffer
+        val mutable public Offset : VkDeviceSize
+        val mutable public Type : VkIndexType
+
+        new(b : VkBuffer, t : VkIndexType) = { Buffer = b; Offset = 0UL; Type = t }
+    end
+    
+[<AbstractClass; Sealed; Extension>]
+type DeviceIndexBufferBindingExtensions private() =
+    [<Extension>]
+    static member CreateIndexBufferBinding(device : Device, buffer : Buffer, t : VkIndexType) =
+        let value = new IndexBufferBinding(buffer.Handle, t)
+        let ptr = NativePtr.alloc 1
+        NativePtr.write ptr value
+        ptr
+
+    [<Extension>]
+    static member UpdateIndexBufferBinding(device : Device, ptr : nativeptr<IndexBufferBinding>, buffer : Buffer, t : VkIndexType) =
+        let value = new IndexBufferBinding(buffer.Handle, t)
+        NativePtr.write ptr value
+
+    [<Extension>]
+    static member Delete(this : Device, ptr : nativeptr<IndexBufferBinding>) =
+        NativePtr.free ptr

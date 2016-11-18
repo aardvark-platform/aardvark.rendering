@@ -47,8 +47,15 @@ typedef struct {
 	VkDescriptorSet* Sets;
 } DescriptorSetBinding;
 
+typedef struct {
+	VkBuffer Buffer;
+	uint64_t Offset;
+	VkIndexType Type;
+} IndexBufferBinding;
+
 DllExport(void) vmBindPipeline(VkCommandBuffer commandBuffer, VkPipeline* pipeline);
 DllExport(void) vmBindDescriptorSets(VkCommandBuffer commandBuffer, DescriptorSetBinding* binding);
+DllExport(void) vmBindIndexBuffer(VkCommandBuffer commandBuffer, IndexBufferBinding* indexBuffer);
 DllExport(void) vmBindVertexBuffers(VkCommandBuffer commandBuffer, VertexBufferBinding* binding);
 DllExport(void) vmDraw(VkCommandBuffer commandBuffer, RuntimeStats* stats, int* isActive, DrawCall* call);
 

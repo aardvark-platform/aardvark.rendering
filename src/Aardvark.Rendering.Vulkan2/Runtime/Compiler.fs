@@ -34,6 +34,9 @@ module Compiler =
 
         [<DllImport(lib)>]
         extern void vmBindVertexBuffers(VkCommandBuffer buffer, VertexBufferBinding* binding)
+        
+        [<DllImport(lib)>]
+        extern void vmBindIndexBuffer(VkCommandBuffer buffer, IndexBufferBinding* binding)
 
         [<DllImport(lib)>]
         extern void vmDraw(VkCommandBuffer buffer, V2i* runtimeStats, int* isActive, DrawCall* call)
@@ -50,6 +53,7 @@ module Compiler =
             let vmBindPipeline          = getProcAddress "vmBindPipeline"
             let vmBindDescriptorSets    = getProcAddress "vmBindDescriptorSets"
             let vmBindVertexBuffers     = getProcAddress "vmBindVertexBuffers"
+            let vmBindIndexBuffer       = getProcAddress "vmBindIndexBuffer"
             let vmDraw                  = getProcAddress "vmDraw"
 
     type Instruction = nativeint * obj[]
@@ -64,6 +68,9 @@ module Compiler =
 
         let bindVertexBuffers (r : IResource<nativeptr<VertexBufferBinding>>) : Instruction =
             VKVM.Pointers.vmBindVertexBuffers, [| r.Handle.GetValue() :> obj |]
+            
+        let bindIndexBuffer (r : IResource<nativeptr<IndexBufferBinding>>) : Instruction =
+            VKVM.Pointers.vmBindIndexBuffer, [| r.Handle.GetValue() :> obj |]
 
         let draw (stats : nativeptr<V2i>) (isActive : IResource<nativeint>) (r : IResource<nativeptr<DrawCall>>) : Instruction =
             VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Handle.GetValue() :> obj; r.Handle.GetValue() :> obj |]
@@ -72,10 +79,15 @@ module Compiler =
         match prev with
             | None ->
                 [
-                    Instruction.bindPipeline self.pipeline
-                    Instruction.bindVertexBuffers self.vertexBuffers
-                    Instruction.bindDescriptorSets self.descriptorSets
-                    Instruction.draw scope.runtimeStats self.isActive self.drawCalls
+                    yield Instruction.bindPipeline self.pipeline
+                    yield Instruction.bindVertexBuffers self.vertexBuffers
+                    yield Instruction.bindDescriptorSets self.descriptorSets
+
+                    match self.indexBuffer with
+                        | Some ib -> yield Instruction.bindIndexBuffer ib
+                        | _ -> ()
+
+                    yield Instruction.draw scope.runtimeStats self.isActive self.drawCalls
                 ]
 
             | Some prev ->
@@ -88,6 +100,11 @@ module Compiler =
 
                     if prev.descriptorSets <> self.descriptorSets || prev.pipeline <> self.pipeline then
                         yield Instruction.bindDescriptorSets self.descriptorSets
+
+                    if prev.indexBuffer <> self.indexBuffer then
+                        match self.indexBuffer with
+                            | Some ib -> yield Instruction.bindIndexBuffer ib
+                            | _ -> ()
 
                     yield Instruction.draw scope.runtimeStats self.isActive self.drawCalls
                 ]

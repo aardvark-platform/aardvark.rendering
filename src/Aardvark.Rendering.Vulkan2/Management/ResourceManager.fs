@@ -40,10 +40,11 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
     let indirectCallCache = derivedCache (fun m -> m.IndirectCallCache)
     let vertexBindingCache = derivedCache (fun m -> m.VertexBindingCache)
     let descriptorSetBindingCache = derivedCache (fun m -> m.DescriptorSetBindingCache)
+    let indexBufferBindingCache = derivedCache (fun m -> m.IndexBufferBindingCache)
 
     member private x.BufferCache : ResourceCache<Buffer> = bufferCache
     member private x.BufferViewCache : ResourceCache<BufferView> = bufferViewCache
-    member private x.IndexBufferCache : ResourceCache<nativeptr<VkBuffer>> = indexBufferCache
+    member private x.IndexBufferCache : ResourceCache<Buffer> = indexBufferCache
     member private x.IndirectBufferCache : ResourceCache<IndirectBuffer> = indirectBufferCache
     member private x.ImageCache : ResourceCache<Image> = imageCache
     member private x.ImageViewCache : ResourceCache<ImageView> = imageViewCache
@@ -56,6 +57,8 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
     member private x.IndirectCallCache : ResourceCache<nativeptr<DrawCall>> = indirectCallCache
     member private x.VertexBindingCache : ResourceCache<nativeptr<VertexBufferBinding>> = vertexBindingCache
     member private x.DescriptorSetBindingCache : ResourceCache<nativeptr<DescriptorSetBinding>> = descriptorSetBindingCache
+    member private x.IndexBufferBindingCache : ResourceCache<nativeptr<IndexBufferBinding>> = indexBufferBindingCache
+
     member private x.DescriptorPool : DescriptorPool = descriptorPool
 
     member x.Device = device
@@ -85,7 +88,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
         })
 
     member x.CreateIndexBuffer(data : IMod<IBuffer>) =
-        indexBufferCache.GetOrCreateVulkan(data, [], {
+        indexBufferCache.GetOrCreate(data, [], {
             create = fun b      -> device.CreateBuffer(VkBufferUsageFlags.IndexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
             update = fun h b    -> device.Delete(h); device.CreateBuffer(VkBufferUsageFlags.IndexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
             delete = fun h      -> device.Delete(h)
@@ -366,6 +369,25 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                     device.Delete(ptr)
 
                 inputs |> Resource.custom create destroy |> unbox<Aardvark.Base.Rendering.Resource<nativeptr<DescriptorSetBinding>>>
+            )
+        )
+        
+    member x.CreateIndexBufferBinding(binding : IResource<Buffer>, t : VkIndexType) =
+        indexBufferBindingCache.GetOrCreate(
+            [binding :> obj; t :> obj],
+            (fun () ->
+                let create (old : Option<nativeptr<IndexBufferBinding>>) =
+                    match old with
+                        | None ->
+                            device.CreateIndexBufferBinding(binding.Handle.GetValue(), t)
+                        | Some old ->
+                            device.UpdateIndexBufferBinding(old, binding.Handle.GetValue(), t)
+                            old
+
+                let destroy (ptr : nativeptr<IndexBufferBinding>) =
+                    device.Delete(ptr)
+
+                [binding :> IResource] |> Resource.custom create destroy |> unbox<Aardvark.Base.Rendering.Resource<nativeptr<IndexBufferBinding>>>
             )
         )
 

@@ -68,6 +68,15 @@ module ``Image Format Extensions`` =
         | Depth = 2
         | DepthStencil = 3
 
+    module VkIndexType =
+        let ofType =
+            LookupTable.lookupTable [
+                typeof<int16>, VkIndexType.Uint16
+                typeof<uint16>, VkIndexType.Uint16
+                typeof<int32>, VkIndexType.Uint32
+                typeof<uint32>, VkIndexType.Uint32
+            ]
+
     module VkFormat =
         let ofTextureFormat =
             LookupTable.lookupTable [
@@ -1571,7 +1580,10 @@ module DeviceMemoryImage =
             VkRaw.vkDestroyImage(device.Handle, handle, NativePtr.zero)
             failf "could not allocate DeviceVolume since HostMemory is incompatible"
 
-        let memory = device.HostMemory.Alloc(int64 requirements.alignment, int64 requirements.size)
+        let memalign = int64 requirements.alignment |> Alignment.next device.BufferImageGranularity
+        let memsize = int64 requirements.size |> Alignment.next device.BufferImageGranularity
+
+        let memory = device.HostMemory.Alloc(memalign, memsize)
         VkRaw.vkBindImageMemory(device.Handle, handle, memory.Memory.Handle, uint64 memory.Offset)
             |> check "could not bind image memory for DeviceVolume"
 
@@ -2085,7 +2097,9 @@ module Image =
 
         let mutable reqs = VkMemoryRequirements()
         VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
-        let ptr = device.Alloc(reqs, true)
+        let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
+        let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
+        let ptr = device.DeviceMemory.Alloc(memalign, memsize)
 
         VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind image memory"

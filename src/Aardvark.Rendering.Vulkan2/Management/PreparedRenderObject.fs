@@ -21,7 +21,7 @@ type PreparedRenderObject =
         original                : RenderObject
         
         pipeline                : VulkanResource<Pipeline, VkPipeline>
-        indexBuffer             : Option<VulkanResource<Buffer, VkBuffer>>
+        indexBuffer             : Option<IResource<nativeptr<IndexBufferBinding>>>
         descriptorSets          : IResource<nativeptr<DescriptorSetBinding>>
         vertexBuffers           : IResource<nativeptr<VertexBufferBinding>>
         drawCalls               : IResource<nativeptr<DrawCall>>
@@ -238,10 +238,17 @@ type DevicePreparedRenderObjectExtensions private() =
             )
 
         let indexed = Option.isSome ro.Indices
-        let indexBuffer =
+        let indexBufferBinding =
             match ro.Indices with
-                | Some view -> this.CreateIndexBuffer(view.Buffer) |> Some
-                | None -> None
+                | Some view -> 
+                    let buffer = this.CreateIndexBuffer(view.Buffer)
+                    let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
+
+                    Some res
+                | None -> 
+                    None
+
+            
 
         let calls =
             match ro.IndirectBuffer with
@@ -284,7 +291,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 descriptorSets              = descriptorBindings
                 pipeline                    = pipeline
                 vertexBuffers               = bindings
-                indexBuffer                 = indexBuffer
+                indexBuffer                 = indexBufferBinding
                 drawCalls                   = calls
                 isActive                    = isActive
                 activation                  = ro.Activate()
