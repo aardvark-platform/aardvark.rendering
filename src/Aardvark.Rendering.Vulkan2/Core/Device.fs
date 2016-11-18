@@ -12,6 +12,7 @@ open Aardvark.Base
 #nowarn "9"
 #nowarn "51"
 
+
 type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>, queues : list<QueueFamilyInfo * int>) as this =
 
     let layers, extensions =
@@ -172,13 +173,22 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
                 t.AddRefCount()
                 t
             | None ->
-                let t = new DeviceToken(ref, transferFamily.Value.DefaultCommandPool)
+                let t = new DeviceToken(1, ref, transferFamily.Value.DefaultCommandPool)
                 ref := Some t
-                t
+                t 
+
+    member x.Sync() =
+        let ref = currentResourceToken.Value
+        match !ref with
+            | Some t -> t.Sync()
+            | _ -> ()
 
     member x.Runtime
         with get() = runtime
         and internal set r = runtime <- r
+
+    member x.EnabledLayers = layers
+    member x.EnabledExtensions = extensions
 
     member x.MinMemoryMapAlignment = minMemoryMapAlignment
     member x.MinTexelBufferOffsetAlignment = minTexelBufferOffsetAlignment
@@ -232,36 +242,72 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
         member x.Dispose() = x.Dispose()
 
 
-and DeviceToken internal(cell : ref<Option<DeviceToken>>, commandPool : DeviceCommandPool) =
-    let mutable cnt = 1
+and [<AbstractClass>] Resource =
+    class
+        val mutable public Device : Device
+
+        abstract member IsValid : bool
+        default x.IsValid = x.Device.Handle <> 0n
+
+        new(device : Device) = { Device = device }
+    end
+
+and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
+    class
+        inherit Resource
+        val mutable public Handle : 'a
+
+        override x.IsValid =
+            not x.Device.IsDisposed && x.Handle <> Unchecked.defaultof<_>
+
+        new(device : Device, handle : 'a) = 
+            { inherit Resource(device); Handle = handle }
+    end
+
+
+and DeviceToken internal(cnt : int, cell : ref<Option<DeviceToken>>, commandPool : DeviceCommandPool) =
+    let mutable cnt = cnt
 
     let queueFamily : DeviceQueueFamily = commandPool.QueueFamily
 
-    let cmd = 
-        lazy (
-            let res : CommandBuffer = commandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-            res.Begin(CommandBufferUsage.OneTimeSubmit)
-            res
-        )
+    let mutable current = None
+    
+    let getCmd() =
+        match current with
+            | Some cmd -> cmd 
+            | None ->
+                let res : CommandBuffer = commandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+                res.Begin(CommandBufferUsage.OneTimeSubmit)
+                current <- Some res
+                res
+
+    let run() =
+        match current with
+            | Some cmd ->
+                cmd.End()
+                queueFamily.RunSynchronously(cmd)
+                cmd.Dispose()
+                current <- None
+            | None ->
+                ()
 
     member x.Device = commandPool.Device
     member x.QueueFamily = commandPool.QueueFamily
-    member x.CommandBuffer = cmd.Value
+    member x.CommandBuffer = getCmd()
 
     member internal x.AddRefCount() =
         cnt <- cnt + 1
 
-    interface IDisposable with
-        member x.Dispose() =
-            cnt <- cnt - 1
-            if cnt = 0 then
-                if cmd.IsValueCreated then
-                    let cmd = cmd.Value
-                    cmd.End()
-                    queueFamily.RunSynchronously(cmd)
-                    cmd.Dispose()
+    member x.Sync() = run()
 
-                cell := None
+    member x.Dispose() =
+        cnt <- cnt - 1
+        if cnt = 0 then
+            run()
+            cell := None
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : QueueFamilyInfo, index : int) =
     let mutable handle = VkQueue.Zero
@@ -290,38 +336,40 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         if cmd.IsRecording then
             failf "cannot submit recording CommandBuffer"
 
-        let mutable handle = cmd.Handle
-        let mutable submitInfo =
-            VkSubmitInfo(
-                VkStructureType.SubmitInfo, 0n,
-                0u, NativePtr.zero, NativePtr.zero,
-                1u, &&handle,
-                0u, NativePtr.zero
-            )
+        if not cmd.IsEmpty then
+            let mutable handle = cmd.Handle
+            let mutable submitInfo =
+                VkSubmitInfo(
+                    VkStructureType.SubmitInfo, 0n,
+                    0u, NativePtr.zero, NativePtr.zero,
+                    1u, &&handle,
+                    0u, NativePtr.zero
+                )
 
-        let fence = device.CreateFence()
+            let fence = device.CreateFence()
 
-        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
-            |> check "could not submit command buffer"
+            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
+                |> check "could not submit command buffer"
 
-        fence.Wait()
+            fence.Wait()
 
     member x.Start(cmd : CommandBuffer) =
         if cmd.IsRecording then
             failf "cannot submit recording CommandBuffer"
 
-        let mutable handle = cmd.Handle
-        let mutable submitInfo =
-            VkSubmitInfo(
-                VkStructureType.SubmitInfo, 0n,
-                0u, NativePtr.zero, NativePtr.zero,
-                1u, &&handle,
-                0u, NativePtr.zero
-            )
+        if not cmd.IsEmpty then
+            let mutable handle = cmd.Handle
+            let mutable submitInfo =
+                VkSubmitInfo(
+                    VkStructureType.SubmitInfo, 0n,
+                    0u, NativePtr.zero, NativePtr.zero,
+                    1u, &&handle,
+                    0u, NativePtr.zero
+                )
 
 
-        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
-            |> check "could not submit command buffer"
+            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
+                |> check "could not submit command buffer"
 
 
     member x.Wait(sem : Semaphore) =
@@ -466,6 +514,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     do VkRaw.vkAllocateCommandBuffers(device.Handle, &&info, &&handle)
         |> check "could not allocated command buffer"
     
+    let mutable commands = 0
     let mutable recording = false
     let cleanupTasks = List<IDisposable>()
 
@@ -478,21 +527,58 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
 
         VkRaw.vkResetCommandBuffer(handle, VkCommandBufferResetFlags.None)
             |> check "could not reset command buffer"
-
+        commands <- 0
         recording <- false
 
     member x.Begin(usage : CommandBufferUsage) =
         cleanup()
+        let mutable inh =
+            VkCommandBufferInheritanceInfo(
+                VkStructureType.CommandBufferInheritanceInfo, 0n,
+                VkRenderPass.Null, 0u,
+                VkFramebuffer.Null, 
+                0u,
+                VkQueryControlFlags.None,
+                VkQueryPipelineStatisticFlags.None
+            )
+
         let mutable info =
             VkCommandBufferBeginInfo(
                 VkStructureType.CommandBufferBeginInfo, 0n,
                 unbox (int usage),
-                NativePtr.zero
+                &&inh
             )
 
         VkRaw.vkBeginCommandBuffer(handle, &&info)
             |> check "could not begin command buffer"
 
+        commands <- 0
+        recording <- true
+
+    member x.Begin(pass : Resource<VkRenderPass>, usage : CommandBufferUsage) =
+        cleanup()
+        let mutable inh =
+            VkCommandBufferInheritanceInfo(
+                VkStructureType.CommandBufferInheritanceInfo, 0n,
+                pass.Handle, 0u,
+                VkFramebuffer.Null, 
+                0u,
+                VkQueryControlFlags.None,
+                VkQueryPipelineStatisticFlags.None
+            )
+
+        let mutable info =
+            VkCommandBufferBeginInfo(
+                VkStructureType.CommandBufferBeginInfo, 0n,
+                unbox (int usage),
+                &&inh
+            )
+
+        VkRaw.vkBeginCommandBuffer(handle, &&info)
+            |> check "could not begin command buffer"
+
+
+        commands <- 0
         recording <- true
 
     member x.End() =
@@ -500,15 +586,21 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
             |> check "could not end command buffer"
         recording <- false
 
+    member x.AppendCommand() =
+        if not recording then failf "cannot enqueue commands to non-recording CommandBuffer"
+        commands <- commands + 1
+
     member x.Set(e : Event, flags : VkPipelineStageFlags) =
+        x.AppendCommand()
         VkRaw.vkCmdSetEvent(handle, e.Handle, flags)
 
     member x.Reset(e : Event, flags : VkPipelineStageFlags) =
+        x.AppendCommand()
         VkRaw.vkCmdResetEvent(handle, e.Handle, flags)
  
     member x.WaitAll(e : Event[]) =
+        x.AppendCommand()
         let handles = e |> Array.map (fun e -> e.Handle)
-
         handles |> NativePtr.withA (fun ptr ->
             VkRaw.vkCmdWaitEvents(
                 handle, uint32 handles.Length, ptr,
@@ -519,6 +611,8 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
             )
         )
 
+    member x.IsEmpty = commands = 0
+    member x.CommandCount = commands
     member x.IsRecording = recording
     member x.Level = level
     member x.Handle = handle
@@ -538,7 +632,6 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
-
 
 and Fence internal(device : Device, signaled : bool) =
     let mutable info =
@@ -794,8 +887,12 @@ and ManagedDevicePtr internal(memory : DeviceMemory, offset : int64, size : int6
 
 and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)
+    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L)
+
     let mutable handle = handle
     let mutable size = size
+
+    static member Null = nullptr
 
     member x.Heap = heap
 
@@ -816,6 +913,8 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
 
 and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
     let mutable size = size
+    static let nullptr = lazy (new DevicePtr(DeviceMemory.Null, 0L, 0L))
+    static member Null = nullptr.Value
 
     abstract member Memory : DeviceMemory
     default x.Memory = memory

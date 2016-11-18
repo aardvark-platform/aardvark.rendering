@@ -280,7 +280,11 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                                 Descriptor.CombinedImageSampler(v.Handle.GetValue(), s.Handle.GetValue())
                             )
                         
-                        descriptorPool.Update(desc, Map.union buffers images)
+                        let changes = stats.ResourceDeltas.Total
+                        // update if any of the handles changed or there was no old
+                        if Option.isNone old || changes.Replaced <> 0.0 then
+                            descriptorPool.Update(desc, Map.union buffers images)
+
                         desc, stats
 
 

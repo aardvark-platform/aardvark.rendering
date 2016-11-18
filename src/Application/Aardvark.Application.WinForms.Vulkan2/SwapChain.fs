@@ -22,12 +22,9 @@ module private EnumExtensions =
     type Command with
         static member PresentBarrier(img : Image) =
             if img.Layout = VkImageLayout.PresentSrcKhr then
-                { new Command<unit>() with
-                    member x.Enqueue _ = ()
-                    member x.Dispose() = ()
-                }
+                Command.Nop
             else
-                { new Command<unit>() with
+                { new Command() with
                     member x.Enqueue cmd =
                         let familyIndex = cmd.QueueFamily.Index
                         let mutable prePresentBarrier =
@@ -43,6 +40,7 @@ module private EnumExtensions =
                                 VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
                             )
 
+                        cmd.AppendCommand()
                         VkRaw.vkCmdPipelineBarrier(
                             cmd.Handle,
                             VkPipelineStageFlags.AllCommandsBit, 
@@ -54,8 +52,7 @@ module private EnumExtensions =
                         )
 
                         img.Layout <- VkImageLayout.PresentSrcKhr
-
-                    member x.Dispose() = ()
+                        Disposable.Empty
                 }
 
 
@@ -88,9 +85,9 @@ type OldSwapchain(device : Device, handle : VkSwapchainKHR, description : Swapch
             let cmd0 = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
             cmd0.Begin(CommandBufferUsage.OneTimeSubmit)
             cmd0.enqueue {
-                do! Command.ClearColor(image, C4f.Black)
+                do! Command.ClearColor(image.[ImageAspect.Color, * , *], C4f.Black)
                 match depthView with
-                    | Some v -> do! Command.ClearDepthStencil(v.Image, 1.0, 0u)
+                    | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil, *, *], 1.0, 0u)
                     | _ -> ()
                 do! Command.TransformLayout(image, colorLayout)
             }
@@ -198,22 +195,25 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
             )
 
+        use cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmd.Begin CommandBufferUsage.OneTimeSubmit
+
         let colorView =
             if description.samples = 1 then
                 None
             else
                 let image = 
-                        device.CreateImage(
-                            V3i(size.X, size.Y, 1), 1, 1, description.samples, 
-                            TextureDimension.Texture2D, 
-                            VkFormat.toTextureFormat description.colorFormat, 
-                            VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit, 
-                            VkImageLayout.ColorAttachmentOptimal
-                        )
+                    device.CreateImage(
+                        V3i(size.X, size.Y, 1), 1, 1, description.samples, 
+                        TextureDimension.Texture2D, 
+                        VkFormat.toTextureFormat description.colorFormat, 
+                        VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
+                    )
                 // hacky-hack
                 image.Format <- description.colorFormat
                 image.ComponentMapping <- VkComponentMapping.Identity
-                
+                cmd.Enqueue (Command.TransformLayout(image, VkImageLayout.ColorAttachmentOptimal))
+
                 let view = device.CreateImageView(image, 0, 1, 0, 1)
                 Some view
 
@@ -225,12 +225,12 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                             V3i(size.X, size.Y, 1), 1, 1, description.samples, 
                             TextureDimension.Texture2D, 
                             VkFormat.toTextureFormat depthFormat, 
-                            VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit, 
-                            VkImageLayout.DepthStencilAttachmentOptimal
+                            VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                         )
                     // hacky-hack
                     image.Format <- depthFormat
                     image.ComponentMapping <- VkComponentMapping.Identity
+                    cmd.Enqueue (Command.TransformLayout(image, VkImageLayout.DepthStencilAttachmentOptimal))
 
                     let view = device.CreateImageView(image, 0, 1, 0, 1)
 
@@ -257,6 +257,8 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
                         device.CreateFramebuffer(renderPass, attachments)
                     )
+        cmd.End()
+        device.GraphicsFamily.RunSynchronously(cmd)
 
         handle, depthView, renderViews, colorView, framebuffers
 
@@ -321,9 +323,10 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         | None -> renderViews.[index]
 
                 preRender.enqueue {
-                    do! Command.ClearColor(currentColorAttachmentView.Image, C4f.Black)
+                    let color = currentColorAttachmentView.Image.[ImageAspect.Color]
+                    do! Command.ClearColor(color, C4f.Black)
                     match depthView with
-                        | Some v -> do! Command.ClearDepthStencil(v.Image, 1.0, 0u)
+                        | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil], 1.0, 0u)
                         | _ -> ()
                     do! Command.TransformLayout(currentColorAttachmentView.Image, VkImageLayout.ColorAttachmentOptimal)
                 }
@@ -338,7 +341,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         postRender.enqueue {
                             do! Command.TransformLayout(colorView.Image, VkImageLayout.TransferSrcOptimal)
                             do! Command.TransformLayout(targetImage, VkImageLayout.TransferDstOptimal)
-                            do! Command.ResolveMultisamples(colorView.Image, 0, 0, V3i.Zero, targetImage, 0, 0, V3i.Zero, colorView.Image.Size)
+                            do! Command.ResolveMultisamples(colorView.Image.[ImageAspect.Color, 0, *], targetImage.[ImageAspect.Color, 0, *])
                         }
                     | None -> 
                         ()

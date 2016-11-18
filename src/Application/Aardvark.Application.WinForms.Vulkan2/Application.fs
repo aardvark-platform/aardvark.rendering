@@ -126,46 +126,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     
         new Instance(Version(1,0,0), enabledLayers, enabledExtensions)
 
-    let mutable debugAdapter = None
-
-    let seen = ConcurrentHashSet()
-
-    #if DEBUG 
-    let debugBreak (str : string) =
-        let stack = StackTrace().GetFrames() |> Array.toList |> List.map (fun f -> f.GetMethod())
-        if seen.Add ((stack, str)) then
-            if Debugger.IsAttached then
-                Debugger.Break()
-            else
-                if Debugger.Launch() then
-                    Debugger.Break()
-    #else
-    let debugBreak (str : string) = ()
-
-    #endif
-
-    let debugMessage (msg : DebugReport.Message) =
-        let str = msg.layerPrefix + ": " + msg.message
-
-        match msg.messageFlags with
-            | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
-                debugBreak str
-                Report.Error("[Vulkan] {0}", str)
-
-            | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt | VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt ->
-                debugBreak str
-                Report.Warn("[Vulkan] {0}", str)
-
-            | _ ->
-                Report.Line(4, "[Vulkan] {0}", str)
-
-    // install debug output to file (and errors/warnings to console)
-    do if debug then
-        let adapter = new DebugReport.Adapter(instance.Handle, VkDebugReportFlagBitsEXT.All)
-        adapter.Start()
-        debugAdapter <- Some adapter
-        adapter.OnMessage.Add debugMessage
-
+    do instance.PrintInfo(2)
 
     // choose a physical device
     let physicalDevice = 
@@ -187,22 +148,26 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         
         physicalDevice.CreateDevice(enabledLayers, enabledExtensions, [physicalDevice.QueueFamilies.[0], 4])
 
-
     // create a runtime
-    let runtime = new Runtime(device, false, false)
+    let runtime = new Runtime(device, false, false, debug)
 
+    let canCreateRenderControl =
+        Set.contains Instance.Extensions.SwapChain device.EnabledExtensions
 
     member x.Runtime = runtime
 
     member x.Initialize(ctrl : IRenderControl, samples : int) =
         match ctrl with
             | :? Aardvark.Application.WinForms.RenderControl as ctrl ->
-                let mode = Aardvark.Application.WinForms.Vulkan.GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples)
-                let impl = new VulkanRenderControl(runtime, mode)
-                ctrl.Implementation <- impl
+                if canCreateRenderControl then
+                    let mode = Aardvark.Application.WinForms.Vulkan.GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples)
+                    let impl = new VulkanRenderControl(runtime, mode)
+                    ctrl.Implementation <- impl
+                else
+                    failwithf "[Vulkan] cannot initialize RenderControl since device-extension (%s) is missing" Instance.Extensions.SwapChain
 
             | _ ->
-                failwith "unsupported RenderControl"
+                failwithf "[Vulkan] unsupported RenderControl-Type %A" ctrl
 
     member x.GetRenderPass(ctrl : IRenderControl) =
         match ctrl with
@@ -215,9 +180,6 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
                 failwith "unsupported RenderControl"
 
     member x.Dispose() =
-        match debugAdapter with
-            | Some a -> a.Dispose()
-            | _ -> ()
         runtime.Dispose()
         device.Dispose()
         instance.Dispose()

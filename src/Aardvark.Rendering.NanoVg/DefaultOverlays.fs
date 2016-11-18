@@ -241,7 +241,8 @@ module DefaultOverlays =
     let statisticsTable (s : FrameStatistics) =
         let sortTime = s.SortingTime
         let updateTime = s.ProgramUpdateTime - sortTime
-
+        let resourceDeltas = s.ResourceDeltas.Map |> Map.map (fun _ v -> v.InPlace + v.Replaced)
+        let resourceCounts = s.ResourceCounts.Map |> Map.map (fun _ v -> v.Count)
 
         [
             "draw calls", (if s.DrawCallCount = s.EffectiveDrawCallCount then sprintf "%.0f" s.DrawCallCount else sprintf "%.0f (%.0f)" s.DrawCallCount s.EffectiveDrawCallCount)
@@ -249,12 +250,12 @@ module DefaultOverlays =
             "primitives", sprintf "%.0f" s.PrimitiveCount
             "execute", splittime s.SubmissionTime s.ExecutionTime
             "resource update", splittime s.ResourceUpdateSubmissionTime s.ResourceUpdateTime
-            "resource updates", printResourceUpdateCounts 3 s.ResourceUpdateCounts
+            "resource updates", printResourceUpdateCounts 3 resourceDeltas
             "program update", sprintf "%A" updateTime
             "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
-            "resources", printResourceUpdateCounts 3 s.ResourceCounts
+            "resources", printResourceUpdateCounts 3 resourceCounts
             //"resources", sprintf "%.0f" s.PhysicalResourceCount
-            "memory", string s.ResourceSize
+            "memory", string s.ResourceCounts.Total.Memory
         ]
 
     let tableString (t : list<string * string>) =

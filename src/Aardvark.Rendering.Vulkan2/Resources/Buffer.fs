@@ -51,10 +51,10 @@ module BufferCommands =
             if size < 0L || srcOffset < 0L || srcOffset + size > src.Size || dstOffset < 0L || dstOffset + size > dst.Size then
                 failf "bad copy range"
 
-            let mutable srcBuffer = VkBuffer.Null
-            let device = src.Memory.Heap.Device
-            { new Command<unit>() with
+            { new Command() with
                 member x.Enqueue cmd =
+                    let mutable srcBuffer = VkBuffer.Null
+                    let device = src.Memory.Heap.Device
                     let align = device.MinUniformBufferOffsetAlignment
 
                     let srcOffset = src.Offset + srcOffset
@@ -77,10 +77,13 @@ module BufferCommands =
                         |> check "could not bind temporary buffer memory"
 
                     let mutable copyInfo = VkBufferCopy(uint64 srcCopyOffset, uint64 dstOffset, uint64 size)
+                    cmd.AppendCommand()
                     VkRaw.vkCmdCopyBuffer(cmd.Handle, srcBuffer, dst.Handle, 1u, &&copyInfo)
 
-                member x.Dispose() =
-                    if srcBuffer.IsValid then VkRaw.vkDestroyBuffer(device.Handle, srcBuffer, NativePtr.zero)
+                    { new Disposable() with
+                        member x.Dispose() =
+                            if srcBuffer.IsValid then VkRaw.vkDestroyBuffer(device.Handle, srcBuffer, NativePtr.zero)
+                    }
             }
 
         // buffer to ptr
@@ -88,10 +91,10 @@ module BufferCommands =
             if size < 0L || srcOffset < 0L || srcOffset + size > src.Size || dstOffset < 0L || dstOffset + size > dst.Size then
                 failf "bad copy range"
 
-            let mutable dstBuffer = VkBuffer.Null
-            let device = src.Device
-            { new Command<unit>() with
+            { new Command() with
                 member x.Enqueue cmd =
+                    let mutable dstBuffer = VkBuffer.Null
+                    let device = src.Device
                     let align = device.MinUniformBufferOffsetAlignment
 
                     let dstOffset = dst.Offset + dstOffset
@@ -116,10 +119,13 @@ module BufferCommands =
 
 
                     let mutable copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstCopyOffset, uint64 size)
+                    cmd.AppendCommand()
                     VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dstBuffer, 1u, &&copyInfo)
 
-                member x.Dispose() =
-                    if dstBuffer.IsValid then VkRaw.vkDestroyBuffer(device.Handle, dstBuffer, NativePtr.zero)
+                    { new Disposable() with
+                        member x.Dispose() = 
+                            if dstBuffer.IsValid then VkRaw.vkDestroyBuffer(device.Handle, dstBuffer, NativePtr.zero)
+                    }
             }
 
         // buffer to buffer
@@ -127,12 +133,12 @@ module BufferCommands =
             if size < 0L || srcOffset < 0L || srcOffset + size > src.Size || dstOffset < 0L || dstOffset + size > dst.Size then
                 failf "bad copy range"
 
-            { new Command<unit>() with
+            { new Command() with
                 member x.Enqueue cmd =
                     let mutable copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
+                    cmd.AppendCommand()
                     VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, &&copyInfo)
-                member x.Dispose() =
-                    ()
+                    Disposable.Empty
             }
 
 
@@ -207,8 +213,6 @@ module Buffer =
         Buffer(device, handle, ptr)
     
     let inline private ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
-        use token = device.ResourceToken
-
         let align = int64 device.MinUniformBufferOffsetAlignment
 
         let deviceAlignedSize = Alignment.next align (int64 size)
@@ -218,7 +222,7 @@ module Buffer =
         let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
         hostPtr.Mapped (fun dst -> writer dst)
 
-        token.enqueue {
+        device.eventually {
             try do! Command.Copy(hostPtr, 0L, buffer, 0L, int64 size)
             finally hostPtr.Dispose()
         }

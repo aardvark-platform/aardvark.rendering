@@ -112,7 +112,22 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
     let mutable refCount = 0
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
-    let updateStats = { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
+    //let updateStats = ResourceDeltas(kind, ResourceDelta(1, 0, 0, 0,  { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
+
+    let inPlaceStats (oldInfo : ResourceInfo) (newInfo : ResourceInfo) =
+        { FrameStatistics.Zero with
+            ResourceDeltas = ResourceDeltas(kind, ResourceDelta(0.0, 0.0, 1.0, 0.0, newInfo.AllocatedSize - oldInfo.AllocatedSize))
+        }
+
+    let replaceStats (oldInfo : ResourceInfo) (newInfo : ResourceInfo) =
+        { FrameStatistics.Zero with
+            ResourceDeltas = ResourceDeltas(kind, ResourceDelta(0.0, 0.0, 0.0, 1.0, newInfo.AllocatedSize - oldInfo.AllocatedSize))
+        }
+
+    let createStats (newInfo : ResourceInfo) =
+        { FrameStatistics.Zero with
+            ResourceDeltas = ResourceDeltas(kind, ResourceDelta(1.0, 0.0, 0.0, 0.0, newInfo.AllocatedSize))
+        }
 
     let mutable info = ResourceInfo.Zero
     let lockObj = obj()
@@ -133,20 +148,24 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
         if refCount <= 0 then
             failwithf "[Resource] cannot update unreferenced resource"
 
+        let oldInfo = info
         let (h, stats) = x.Create current
         info <- x.GetInfo h
+        let memDelta = info.AllocatedSize - oldInfo.AllocatedSize
 
         match current with
             | Some old when old = h -> 
-                updateStats + stats
+                stats + inPlaceStats oldInfo info
 
-            | _ -> 
+            | Some old ->  
                 current <- Some h
-                    
-                if h <> handle.Value then
-                    transact (fun () -> handle.Value <- h)
+                if h <> handle.Value then transact (fun () -> handle.Value <- h)
+                stats + replaceStats oldInfo info
 
-                updateStats + stats
+            | None -> 
+                current <- Some h
+                if h <> handle.Value then transact (fun () -> handle.Value <- h)
+                stats + createStats info
 
     member x.AddRef() =
         lock lockObj (fun () -> 
@@ -473,24 +492,16 @@ type ResourceInputSet() =
     inherit DirtyTrackingAdaptiveObject<IResource>()
 
     let all = ReferenceCountingSet<IResource>()
-    let resourceInfos = Dictionary<ResourceKind, ResourceInfo>()
-    let mutable resourceInfo = ResourceInfo.Zero
+    let mutable resourceCounts = ResourceCounts.Zero
 
-    let applyResourceInfo (kind : ResourceKind) (oldInfo : ResourceInfo) (newInfo : ResourceInfo) =
-        let dInfo = newInfo - oldInfo
-        resourceInfo <- resourceInfo + dInfo
-
-        match resourceInfos.TryGetValue kind with
-            | (true, total) ->
-                resourceInfos.[kind] <- total + dInfo
-            | _ ->
-                resourceInfos.[kind] <- dInfo
+    let applyResourceDeltas (deltas : ResourceDeltas) =
+        resourceCounts <- resourceCounts + deltas
 
     let updateOne (x : ResourceInputSet) (r : IResource)  =
         let oldInfo = r.Info
         let ret = r.Update x
         let newInfo = r.Info
-        applyResourceInfo r.Kind oldInfo newInfo
+        applyResourceDeltas ret.ResourceDeltas
         ret
 
     let updateDirty(x : ResourceInputSet) =
@@ -518,10 +529,7 @@ type ResourceInputSet() =
 
         run 0 FrameStatistics.Zero
 
-    let mutable resourceCounts = Map.empty
-
-    member x.ResourceInfo = resourceInfo
-    member x.ResourceInfos = resourceInfos :> IDictionary<_,_>
+    member x.ResourceCounts = resourceCounts
 
     member x.Count = all.Count
 
@@ -530,11 +538,6 @@ type ResourceInputSet() =
             lock all (fun () ->
                 if all.Add r then
                     lock r (fun () ->
-                        match Map.tryFind r.Kind resourceCounts with
-                            | Some old -> resourceCounts <- Map.add r.Kind (old + 1.0) resourceCounts
-                            | None -> resourceCounts <- Map.add r.Kind 1.0 resourceCounts
-
-                        applyResourceInfo r.Kind ResourceInfo.Zero r.Info
                         if r.OutOfDate then 
                             x.Dirty.Add r |> ignore
                             true
@@ -557,13 +560,11 @@ type ResourceInputSet() =
         lock all (fun () ->
 
             if all.Remove r then
-                match Map.tryFind r.Kind resourceCounts with
-                    | Some old when old > 1.0 -> resourceCounts <- Map.add r.Kind (old - 1.0) resourceCounts
-                    | _ -> resourceCounts <- Map.remove r.Kind resourceCounts
+                let deltas = ResourceDeltas(r.Kind, ResourceDelta(0.0, 1.0, 0.0, 0.0, -r.Info.AllocatedSize))
 
                 x.Dirty.Remove r |> ignore
                 lock r (fun () -> r.Outputs.Remove x |> ignore)
-                applyResourceInfo r.Kind r.Info ResourceInfo.Zero
+                applyResourceDeltas deltas
         )
 
     member x.Update (caller : IAdaptiveObject) =
@@ -571,7 +572,6 @@ type ResourceInputSet() =
             x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () -> updateDirty x)
 
         { updateStats with
-            ResourceSize = resourceInfo.AllocatedSize
             PhysicalResourceCount = float all.Count 
             ResourceCounts = resourceCounts
         }
@@ -583,8 +583,6 @@ type ResourceInputSet() =
 
             all.Clear()
             x.Dirty.Clear()
-            resourceInfos.Clear()
-            resourceInfo <- ResourceInfo.Zero
         )
 
     interface IDisposable with

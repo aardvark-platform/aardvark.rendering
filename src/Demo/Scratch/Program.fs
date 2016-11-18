@@ -38,6 +38,36 @@ module Shader =
             return V4d(v.tc.X, v.tc.Y, 1.0, 1.0)
         }
 
+    let environmentMap =
+        samplerCube {
+            texture uniform?EnvironmentMap
+            filter Filter.MinMagMipLinear
+            addressU WrapMode.Clamp
+            addressV WrapMode.Clamp
+            addressW WrapMode.Clamp
+        }
+
+    type Fragment =
+        {
+            [<Color>]
+            color : V4d
+
+            [<Depth>]
+            depth : float
+        }
+
+    let environment (v : Vertex) =
+        fragment {
+            let pixel = v.pos //V4d(v.pos.X * 2.0, v.pos.Y * 2.0, v.pos.Z, v.pos.W)
+            let world = uniform.ViewProjTrafoInv * pixel
+            let world = world.XYZ / world.W
+            let dir = world - uniform.CameraLocation |> Vec.normalize
+            return {
+                color = environmentMap.Sample(dir)
+                depth = 1.0
+            }
+        }
+
 [<Demo("Simple Sphere Demo")>]
 [<Description("simply renders a red sphere with very simple lighting")>]
 let bla() =
@@ -68,13 +98,36 @@ let quad() =
 
 [<Demo("Textured Quad Demo")>]
 let quadTexture() =
+    let environment =
+        PixImageCube.load [
+            CubeSide.NegativeX, @"E:\Development\WorkDirectory\DataSVN\lazarus_negative_x.jpg"
+            CubeSide.PositiveX, @"E:\Development\WorkDirectory\DataSVN\lazarus_positive_x.jpg"
+            CubeSide.NegativeY, @"E:\Development\WorkDirectory\DataSVN\lazarus_negative_y.jpg"
+            CubeSide.PositiveY, @"E:\Development\WorkDirectory\DataSVN\lazarus_positive_y.jpg"
+            CubeSide.NegativeZ, @"E:\Development\WorkDirectory\DataSVN\lazarus_negative_z.jpg"
+            CubeSide.PositiveZ, @"E:\Development\WorkDirectory\DataSVN\lazarus_positive_z.jpg"
+        ]
+
+    let environment =
+        environment 
+            |> PixImageCube.ofOpenGlConvention
+            |> PixImageCube.toTexture true
+
+    let env =
+        Sg.farPlaneQuad
+            |> Sg.shader {
+                do! Shader.environment
+               }
+            |> Sg.texture (Symbol.Create "EnvironmentMap") (Mod.constant environment)
+
     Sg.fullScreenQuad
         |> Sg.effect [
             DefaultSurfaces.trafo |> toEffect
             DefaultSurfaces.constantColor C4f.Red |> toEffect
             DefaultSurfaces.diffuseTexture |> toEffect
            ]
-        |> Sg.diffuseFileTexture' @"E:\Development\WorkDirectory\DataSVN\pattern.jpg" true
+        |> Sg.diffuseFileTexture' @"E:\Development\WorkDirectory\DataSVN\pattern.jpg" false
+        |> Sg.andAlso env
 
 
 

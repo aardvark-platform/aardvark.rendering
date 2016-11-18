@@ -1221,6 +1221,15 @@ module ``Image Format Extensions`` =
 // Image Resource Type
 // ===========================================================================================
 
+[<Flags>]
+type ImageAspect =
+    | None = 0x00000000
+    | Color = 0x00000001
+    | Depth = 0x00000002
+    | Stencil = 0x00000004
+    | Metadata = 0x00000008
+    | DepthStencil = 0x00000006
+
 type Image =
     class 
         inherit Resource<VkImage>
@@ -1253,6 +1262,26 @@ type Image =
             member x.Format = VkFormat.toTextureFormat x.Format |> TextureFormat.toRenderbufferFormat
             member x.Handle = x.Handle :> obj
 
+        member x.IsNull = x.Handle.IsNull
+
+        member x.Item with get(aspect : ImageAspect) = ImageSubresourceRange(x, aspect, 0, x.MipMapLevels, 0, x.Count)
+        member x.Item with get(aspect : ImageAspect, level : int) = ImageSubresourceLevels(x, aspect, level, 0, x.Count)
+        member x.Item with get(aspect : ImageAspect, level : int, slice : int) = ImageSubresource(x, aspect, level, slice)
+              
+                
+        member x.GetSlice(aspect : ImageAspect, minLevel : Option<int>, maxLevel : Option<int>, minSlice : Option<int>, maxSlice : Option<int>) =
+            x.[aspect].GetSlice(minLevel, maxLevel, minSlice, maxSlice)
+
+        member x.GetSlice(aspect : ImageAspect, minLevel : Option<int>, maxLevel : Option<int>, slice : int) =
+            x.[aspect].GetSlice(minLevel, maxLevel, slice)
+      
+        member x.GetSlice(aspect : ImageAspect, level : int, minSlice : Option<int>, maxSlice : Option<int>) =
+            x.[aspect].GetSlice(level, minSlice, maxSlice)
+
+            
+        override x.ToString() =
+            sprintf "0x%08X" x.Handle.Handle
+
         new(dev, handle, s, levels, count, samples, dim, fmt, mapping, mem, layout) = 
             {
                 inherit Resource<_>(dev, handle);
@@ -1268,21 +1297,99 @@ type Image =
             }
     end
 
+and ImageSubresourceRange(image : Image, aspect : ImageAspect, baseLevel : int, levelCount : int, baseSlice : int, sliceCount : int) =
+    let maxSize = 
+        if baseLevel = 0 then
+            image.Size
+        else
+            let imageSize = image.Size
+            let divisor = 1 <<< baseLevel
+            V3i(
+                max 1 (imageSize.X / divisor),
+                max 1 (imageSize.Y / divisor),
+                max 1 (imageSize.Z / divisor)
+            )
+  
+    member internal x.Flags = unbox<VkImageAspectFlags> aspect
+    member x.Aspect = aspect
+    member x.Image = image
+    member x.VkImageSubresourceRange = VkImageSubresourceRange(x.Flags, uint32 baseLevel, uint32 levelCount, uint32 baseSlice, uint32 sliceCount)
+
+    member x.BaseLevel = baseLevel
+    member x.LevelCount = levelCount
+    member x.BaseSlice = baseSlice
+    member x.SliceCount = sliceCount
+
+    member x.MaxSize = maxSize
+
+    member x.GetSlice(minLevel : Option<int>, maxLevel : Option<int>, minSlice : Option<int>, maxSlice : Option<int>) =
+        let levelTop = levelCount - 1
+        let sliceTop = sliceCount - 1
+        let minLevel = defaultArg minLevel 0            |> clamp 0 levelTop
+        let maxLevel = defaultArg maxLevel levelTop     |> clamp minLevel levelTop
+        let minSlice = defaultArg minSlice 0            |> clamp 0 sliceTop
+        let maxSlice = defaultArg maxSlice sliceTop     |> clamp minSlice sliceTop
+        ImageSubresourceRange(image, aspect, baseLevel + minLevel, 1 + maxLevel - minLevel, baseSlice + minSlice, 1 + maxSlice - minSlice)
+
+    member x.GetSlice(level : int, minSlice : Option<int>, maxSlice : Option<int>) =
+        let sliceTop = sliceCount - 1
+        let minSlice = defaultArg minSlice 0            |> clamp 0 sliceTop
+        let maxSlice = defaultArg maxSlice sliceTop     |> clamp minSlice sliceTop
+        ImageSubresourceLayers(image, aspect, baseLevel + level, baseSlice + minSlice, 1 + maxSlice - minSlice)
+
+    member x.GetSlice(minLevel : Option<int>, maxLevel : Option<int>, slice : int) =
+        let levelTop = levelCount - 1
+        let minLevel = defaultArg minLevel 0            |> clamp 0 levelTop
+        let maxLevel = defaultArg maxLevel levelTop     |> clamp minLevel levelTop
+        ImageSubresourceLevels(image, aspect, baseLevel + minLevel, 1 + maxLevel - minLevel, baseSlice + slice)
+
+    member x.Item with get(level : int, slice : int) = ImageSubresource(image, aspect, baseLevel + level, baseSlice + slice)
+
+    override x.ToString() =
+        let minLevel = baseLevel
+        let maxLevel = minLevel + levelCount - 1
+        let minSlice = baseSlice
+        let maxSlice = minSlice + sliceCount - 1
+        match (minLevel = maxLevel), (minSlice = maxSlice) with
+            | true,     true    -> sprintf "%A[%A, %d, %d]" image aspect minLevel minSlice
+            | true,     false   -> sprintf "%A[%A, %d, %d..%d]" image aspect minLevel minSlice maxSlice
+            | false,    true    -> sprintf "%A[%A, %d..%d, %d]" image aspect minLevel maxLevel minSlice
+            | false,    false   -> sprintf "%A[%A, %d..%d, %d..%d]" image aspect minLevel maxLevel minSlice maxSlice
+
+
+and ImageSubresourceLayers(image : Image, aspect : ImageAspect, level : int, baseSlice : int, sliceCount : int) =
+    inherit ImageSubresourceRange(image, aspect, level, 1, baseSlice, sliceCount)
+    member x.Level = level
+    member x.Size = x.MaxSize
+    member x.Item with get (slice : int) = x.[0, slice]
+    member x.GetSlice (minSlice : Option<int>, maxSlice : Option<int>) = x.GetSlice(0, minSlice, maxSlice)
+    member x.VkImageSubresourceLayers = VkImageSubresourceLayers(x.Flags, uint32 level, uint32 baseSlice, uint32 sliceCount)
+
+and ImageSubresourceLevels(image : Image, aspect : ImageAspect, baseLevel : int, levelCount : int, slice : int) =
+    inherit ImageSubresourceRange(image, aspect, baseLevel, levelCount, slice, 1)
+    member x.Slice = slice
+    member x.Item with get (i : int) = x.[i, 0]
+    member x.GetSlice (minLevel : Option<int>, maxLevel : Option<int>) = x.GetSlice(minLevel, maxLevel, 0)
+
+and ImageSubresource(image : Image, aspect : ImageAspect, level : int, slice : int) =
+    inherit ImageSubresourceLayers(image, aspect, level, slice, 1)
+    member x.Slice = slice
+    member x.VkImageSubresource = VkImageSubresource(x.Flags, uint32 level, uint32 slice)
 
 // ===========================================================================================
 // DevicePixImageMipMap
 // ===========================================================================================
 
 [<AbstractClass>]
-type DevicePixImageMipMap(device : Device, image : Image) =
+type DeviceMemoryImage(device : Device, image : Image, aspect : ImageAspect) =
+    inherit ImageSubresourceLevels(image, aspect, 0, image.MipMapLevels, 0)
     member x.Device = device
     member x.Image = image
 
     member x.LevelCount = image.MipMapLevels
     member x.Size = image.Size.XY
 
-    abstract member GetLevelSize : int -> V2i
-
+    abstract member GetLevelSize : int -> V3i
     abstract member PixFormat : PixFormat
 
     abstract member Upload : level : int * src : PixImage -> unit
@@ -1291,8 +1398,8 @@ type DevicePixImageMipMap(device : Device, image : Image) =
     abstract member Upload : level : int * format : PixFormat * srcTrafo : ImageTrafo * src : nativeint * srcRowSize : int64 -> unit
     abstract member Download : level : int * format : PixFormat * dstTrafo : ImageTrafo * dst : nativeint * dstRowSize : int64 -> unit
 
-type DevicePixImageMipMap<'a when 'a : unmanaged> internal(device : Device, image : Image) =
-    inherit DevicePixImageMipMap(device, image)
+type DeviceMemoryImage<'a when 'a : unmanaged> internal(device : Device, image : Image, aspect : ImageAspect) =
+    inherit DeviceMemoryImage(device, image, aspect)
 
     static let defaultValue =
         match typeof<'a> with
@@ -1308,37 +1415,34 @@ type DevicePixImageMipMap<'a when 'a : unmanaged> internal(device : Device, imag
             | TypeInfo.Patterns.Float64 -> 1.0 |> unbox<'a>
             | _ -> failf "unsupported channel-type: %A" typeof<'a>
 
-    
     let aspect = VkFormat.toAspect image.Format
     let channels = VkFormat.channels image.Format
     let channelSize = int64 sizeof<'a>
-    let volumeInfos = 
+
+    let tensor4Infos = 
         Array.init image.MipMapLevels (fun level ->
             let mutable subresource = VkImageSubresource(aspect, uint32 level, 0u)
             let mutable layout = VkSubresourceLayout()
             VkRaw.vkGetImageSubresourceLayout(device.Handle, image.Handle, &&subresource, &&layout)
 
-            let height = int64 layout.size / int64 layout.rowPitch
-            let width = int64 layout.size / (height * int64 channels * channelSize)
+            let divisor = 1 <<< level
+            let size = V3i(image.Size.X / divisor |> max 1, image.Size.Y / divisor |> max 1, image.Size.Z / divisor |> max 1)
 
-            VolumeInfo(
+            Tensor4Info(
                 int64 layout.offset / channelSize,
-                V3l(
-                    width, 
-                    height, 
-                    int64 channels
-                ),
-                V3l(
+                V4l(int64 size.X, int64 size.Y, int64 channels, int64 size.Z),
+                V4l(
                     int64 channels,
                     int64 layout.rowPitch / channelSize,
-                    1L
+                    1L,
+                    int64 layout.depthPitch / channelSize
                 )
             )
         )
 
     let pixFormat = PixFormat(typeof<'a>, VkFormat.toColFormat image.Format)
 
-    let copy (fill : bool) (src : NativeVolume<'a>) (dst : NativeVolume<'a>) =
+    let copyVolume (fill : bool) (src : NativeVolume<'a>) (dst : NativeVolume<'a>) =
         if src.SZ = dst.SZ then
             NativeVolume.copy src dst
         elif src.SZ < dst.SZ then
@@ -1347,21 +1451,30 @@ type DevicePixImageMipMap<'a when 'a : unmanaged> internal(device : Device, imag
         else
             NativeVolume.copy src.[*, *, 0L .. dst.SZ - 1L] dst
 
+    let copyTensor (fill : bool) (src : NativeTensor4<'a>) (dst : NativeTensor4<'a>) =
+        if src.SZ = dst.SZ then
+            NativeTensor4.copy src dst
+        elif src.SZ < dst.SZ then
+            NativeTensor4.copy src dst.[*, *, 0L .. src.SZ - 1L, *]
+            if fill then NativeTensor4.set defaultValue dst.[*, *, src.SZ .. dst.SZ - 1L, *]
+        else
+            NativeTensor4.copy src.[*, *, 0L .. dst.SZ - 1L, *] dst
+
     override x.PixFormat = pixFormat
 
     override x.Upload(level : int, src : PixImage) =
         let src = unbox<PixImage<'a>>(src).Volume.Transformed(ImageTrafo.MirrorY)
         NativeVolume.using src (fun src ->
-            x.Mapped(level, fun dst -> 
-                copy true src dst
+            x.MapVolume(level, fun dst -> 
+                copyVolume true src dst
             )
         )
 
     override x.Download(level : int, dst : PixImage) =
         let dst = unbox<PixImage<'a>>(dst).Volume.Transformed(ImageTrafo.MirrorY)
         NativeVolume.using dst (fun dst ->
-            x.Mapped(level, fun src ->
-                copy false src dst
+            x.MapVolume(level, fun src ->
+                copyVolume false src dst
             )
         )
 
@@ -1369,7 +1482,7 @@ type DevicePixImageMipMap<'a when 'a : unmanaged> internal(device : Device, imag
         if format.Type <> typeof<'a> then
             failf "cannot upload input-data of type: %A" format.Type
 
-        let dstInfo = volumeInfos.[level]
+        let dstInfo = tensor4Infos.[level].SubXYZVolume(0L)
         let srcSize = srcTrafo |> ImageTrafo.inverseTransformSize image.Size.XY
         let srcChannels = format.ChannelCount
         
@@ -1383,13 +1496,13 @@ type DevicePixImageMipMap<'a when 'a : unmanaged> internal(device : Device, imag
         let srcInfo = untransformedSrcInfo.Transformed(srcTrafo)
         let src = NativeVolume<'a>(NativePtr.ofNativeInt src, srcInfo)
 
-        x.Mapped(level, fun dst -> copy true src dst)
+        x.MapVolume(level, fun dst -> copyVolume true src dst)
 
     override x.Download(level : int, format : PixFormat, dstTrafo : ImageTrafo, dst : nativeint, dstRowSize : int64) =
         if format.Type <> typeof<'a> then
             failf "cannot upload input-data of type: %A" format.Type
-
-        let srcInfo = volumeInfos.[level]
+            
+        let dstInfo = tensor4Infos.[level].SubXYZVolume(0L)
         let dstSize = dstTrafo |> ImageTrafo.transformSize image.Size.XY
         let dstChannels = format.ChannelCount
 
@@ -1402,18 +1515,23 @@ type DevicePixImageMipMap<'a when 'a : unmanaged> internal(device : Device, imag
 
         let dstInfo = untransformedDstInfo.Transformed(ImageTrafo.inverse dstTrafo)
         let dst = NativeVolume<'a>(NativePtr.ofNativeInt dst, dstInfo)
-        x.Mapped(level, fun src -> copy true src dst)
+        x.MapVolume(level, fun src -> copyVolume true src dst)
 
     override x.GetLevelSize (level : int) =
-        volumeInfos.[level].Size.XY |> V2i
+        tensor4Infos.[level].Size.XYW |> V3i
 
-    member x.Mapped<'x>(level : int, f : NativeVolume<'a> -> 'x) : 'x =
-        let info = volumeInfos.[level]
+    member x.MapVolume<'x>(level : int, f : NativeVolume<'a> -> 'x) : 'x =
+        let info = tensor4Infos.[level].SubXYZVolume(0L)
         image.Memory.Mapped(fun ptr ->
-            let volume = NativeVolume<'a>(NativePtr.ofNativeInt ptr, volumeInfos.[level])
+            let volume = NativeVolume<'a>(NativePtr.ofNativeInt ptr, info)
             f volume
         )
-
+    member x.MapTensor<'x>(level : int, f : NativeTensor4<'a> -> 'x) : 'x =
+        let info = tensor4Infos.[level]
+        image.Memory.Mapped(fun ptr ->
+            let volume = NativeTensor4<'a>(NativePtr.ofNativeInt ptr, info)
+            f volume
+        )
 
     member x.Image = image
     member x.Channels = channels
@@ -1421,7 +1539,7 @@ type DevicePixImageMipMap<'a when 'a : unmanaged> internal(device : Device, imag
     member x.Aspect = aspect
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module DevicePixImageMipMap =
+module DeviceMemoryImage =
 
     let create<'a when 'a : unmanaged> (size : V2i) (levels : int) (fmt : Col.Format) (device : Device) =
         let pixFormat = PixFormat(typeof<'a>, fmt)
@@ -1458,9 +1576,9 @@ module DevicePixImageMipMap =
             |> check "could not bind image memory for DeviceVolume"
 
         let image = Image(device, handle, V3i(size.X, size.Y, 1), levels, 1, 1, TextureDimension.Texture2D, format, VkComponentMapping.Identity, memory, VkImageLayout.Preinitialized)
-        DevicePixImageMipMap<'a>(device, image)
+        DeviceMemoryImage<'a>(device, image, ImageAspect.Color)
 
-    let delete (mipMap : DevicePixImageMipMap) (device : Device) =
+    let delete (mipMap : DeviceMemoryImage) (device : Device) =
         let image = mipMap.Image
         if image.Handle.IsValid then
             image.Memory.Dispose()
@@ -1468,7 +1586,7 @@ module DevicePixImageMipMap =
             image.Handle <- VkImage.Null
 
     let inline private createUpcast<'a when 'a : unmanaged> (size : V2i) (levels : int) (fmt : Col.Format) (device : Device) =
-        create<'a> size levels fmt device :> DevicePixImageMipMap
+        create<'a> size levels fmt device :> DeviceMemoryImage
 
     let private ctors =
         LookupTable.lookupTable [
@@ -1494,9 +1612,10 @@ module DevicePixImageMipMap =
         let res = device |> createUntyped size levels pixFormat
 
         for l in 0 .. levels - 1 do
-            res.Upload(l, data.[l])
+            res.Upload(l, data.[l].Transformed(ImageTrafo.MirrorY))
 
         res
+
 
 [<AutoOpen>]
 module ``Devil Loader`` =
@@ -1539,7 +1658,7 @@ module ``Devil Loader`` =
             PixFormat(types t, colFormat fmt)
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module DevicePixImageMipMap =   
+    module DeviceMemoryImage =   
         let ofFile (file : string) (device : Device) =
             lock devilLock (fun () ->
                 PixImage.InitDevil()
@@ -1560,7 +1679,7 @@ module ``Devil Loader`` =
                     let bytesPerPixel = IL.GetInteger(IntName.ImageBytesPerPixel)
                     let rowSize = int64 bytesPerPixel * int64 width
 
-                    let target = device |> DevicePixImageMipMap.createUntyped (V2i(width, height)) 1 pixFormat
+                    let target = device |> DeviceMemoryImage.createUntyped (V2i(width, height)) 1 pixFormat
                     target.Upload(0, pixFormat, ImageTrafo.Rot0, data, rowSize)
                     
                     target
@@ -1571,31 +1690,31 @@ module ``Devil Loader`` =
             )
 
 [<AbstractClass; Sealed; Extension>]
-type DevicePixImageMipMapExtensions private() =
+type DeviceMemoryImageExtensions private() =
 
     [<Extension>]
-    static member inline CreatePixImageMipMap(this : Device, data : PixImageMipMap, levels : int) =
-        this |> DevicePixImageMipMap.ofPixImageMipMap data levels
+    static member inline CreateDeviceMemoryImage(this : Device, data : PixImageMipMap, levels : int) =
+        this |> DeviceMemoryImage.ofPixImageMipMap data levels
 
     [<Extension>]
-    static member inline CreatePixImageMipMap(this : Device, data : PixImageMipMap) =
-        this |> DevicePixImageMipMap.ofPixImageMipMap data data.LevelCount
+    static member inline CreateDeviceMemoryImage(this : Device, data : PixImageMipMap) =
+        this |> DeviceMemoryImage.ofPixImageMipMap data data.LevelCount
 
     [<Extension>]
-    static member inline CreatePixImageMipMap(this : Device, file : string) =
-        this |> DevicePixImageMipMap.ofFile file
+    static member inline CreateDeviceMemoryImage(this : Device, file : string) =
+        this |> DeviceMemoryImage.ofFile file
 
     [<Extension>]
-    static member inline CreatePixImageMipMap(this : Device, size : V2i, levels : int, fmt : PixFormat) =
-        this |> DevicePixImageMipMap.createUntyped size levels fmt
+    static member inline CreateDeviceMemoryImage(this : Device, size : V2i, levels : int, fmt : PixFormat) =
+        this |> DeviceMemoryImage.createUntyped size levels fmt
 
     [<Extension>]
-    static member inline CreatePixImageMipMap<'a when 'a : unmanaged>(this : Device, size : V2i, levels : int, fmt : Col.Format) =
-        this |> DevicePixImageMipMap.create<'a> size levels fmt
+    static member inline CreateDeviceMemoryImage<'a when 'a : unmanaged>(this : Device, size : V2i, levels : int, fmt : Col.Format) =
+        this |> DeviceMemoryImage.create<'a> size levels fmt
 
     [<Extension>]
-    static member inline Delete(this : Device, mipMap : DevicePixImageMipMap) =
-        this |> DevicePixImageMipMap.delete mipMap
+    static member inline Delete(this : Device, mipMap : DeviceMemoryImage) =
+        this |> DeviceMemoryImage.delete mipMap
 
 
 
@@ -1604,360 +1723,303 @@ type DevicePixImageMipMapExtensions private() =
 // ===========================================================================================
 [<AutoOpen>]
 module ``Image Command Extensions`` =
+
+
+    let private srcMasks =
+        LookupTable.lookupTable [
+            VkImageLayout.Undefined,                        VkAccessFlags.None
+            VkImageLayout.General,                          VkAccessFlags.Write ||| VkAccessFlags.Read
+            VkImageLayout.ColorAttachmentOptimal,           VkAccessFlags.ColorAttachmentWriteBit
+            VkImageLayout.DepthStencilAttachmentOptimal,    VkAccessFlags.DepthStencilAttachmentWriteBit
+            VkImageLayout.DepthStencilReadOnlyOptimal,      VkAccessFlags.DepthStencilAttachmentReadBit
+            VkImageLayout.ShaderReadOnlyOptimal,            VkAccessFlags.ShaderReadBit
+            VkImageLayout.TransferSrcOptimal,               VkAccessFlags.TransferReadBit
+            VkImageLayout.TransferDstOptimal,               VkAccessFlags.TransferWriteBit
+            VkImageLayout.Preinitialized,                   VkAccessFlags.HostWriteBit ||| VkAccessFlags.TransferWriteBit
+        ]
+
+
+    let private dstMasks =
+        LookupTable.lookupTable [
+            VkImageLayout.Undefined,                        VkAccessFlags.None
+            VkImageLayout.General,                          VkAccessFlags.Write ||| VkAccessFlags.Read
+            VkImageLayout.ColorAttachmentOptimal,           VkAccessFlags.ColorAttachmentWriteBit
+            VkImageLayout.DepthStencilAttachmentOptimal,    VkAccessFlags.DepthStencilAttachmentWriteBit
+            VkImageLayout.DepthStencilReadOnlyOptimal,      VkAccessFlags.DepthStencilAttachmentReadBit
+            VkImageLayout.ShaderReadOnlyOptimal,            VkAccessFlags.ShaderReadBit
+            VkImageLayout.TransferSrcOptimal,               VkAccessFlags.TransferReadBit
+            VkImageLayout.TransferDstOptimal,               VkAccessFlags.TransferWriteBit
+            VkImageLayout.Preinitialized,                   VkAccessFlags.HostWriteBit ||| VkAccessFlags.TransferWriteBit
+        ]
+
+
     type Command with
 
-        static member Copy(src : Image, srcAspect : VkImageAspectFlags, srcLevel : int, srcSlice : int, srcOffset : V3i, dst : Image, dstAspect : VkImageAspectFlags, dstLevel : int, dstSlice : int, dstOffset : V3i, size : V3i) =
-            let srcLayout = src.Layout
-            let dstLayout = dst.Layout
+        static member Copy(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
+            if src.SliceCount <> dst.SliceCount then
+                failf "cannot copy image: { srcSlices = %A, dstSlices = %A }" src.SliceCount dst.SliceCount
 
-            { new Command<unit>() with
-                member x.Enqueue buffer =
-                    buffer.Enqueue (Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal))
-                    buffer.Enqueue (Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal))
-
+            command {
+                let srcLayout = src.Image.Layout
+                let dstLayout = dst.Image.Layout
+                do! Command.Custom (fun cmd ->
                     let mutable copy =
                         VkImageCopy(
-                            VkImageSubresourceLayers(srcAspect, uint32 srcLevel, uint32 srcSlice, 1u),
+                            src.VkImageSubresourceLayers,
                             VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
-                            VkImageSubresourceLayers(dstAspect, uint32 dstLevel, uint32 dstSlice, 1u),
+                            dst.VkImageSubresourceLayers,
                             VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
                             VkExtent3D(size.X, size.Y, size.Z)
                         )
 
-                    VkRaw.vkCmdCopyImage(buffer.Handle, src.Handle, VkImageLayout.TransferSrcOptimal, dst.Handle, VkImageLayout.TransferDstOptimal, 1u, &&copy)
-                    
-                    buffer.Enqueue (Command.TransformLayout(src, srcLayout))
-                    buffer.Enqueue (Command.TransformLayout(dst, dstLayout))
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdCopyImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&copy)
+                )
 
-                    ()
-                member x.Dispose() =
-                    ()
             }
 
-        static member Copy(src : Image, srcAspect : VkImageAspectFlags, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Image, dstAspect : VkImageAspectFlags, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
-            Command.Copy(src, srcAspect, srcLevel, srcSlice, V3i(srcOffset, 0), dst, dstAspect, dstLevel, dstSlice, V3i(dstOffset, 0), V3i(size, 1))
+        static member Copy(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
+            let srcSize = src.Size
+            let dstSize = dst.Size
 
-        static member Copy(src : Image, srcLevel : int, srcSlice : int, srcOffset : V3i, dst : Image, dstLevel : int, dstSlice : int, dstOffset : V3i, size : V3i) =
-            let srcAspect = VkFormat.toAspect src.Format
-            let dstAspect = VkFormat.toAspect dst.Format
-            Command.Copy(src, srcAspect, srcLevel, srcSlice, srcOffset, dst, dstAspect, dstLevel, dstSlice, dstOffset, size)
+            if srcSize <> dstSize then
+                failf "cannot copy image: { srcSize = %A; dstSize = %A }" srcSize dstSize
 
-        static member Copy(src : Image, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Image, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
-            let srcAspect = VkFormat.toAspect src.Format
-            let dstAspect = VkFormat.toAspect dst.Format
-            Command.Copy(src, srcAspect, srcLevel, srcSlice, V3i(srcOffset, 0), dst, dstAspect, dstLevel, dstSlice, V3i(dstOffset, 0), V3i(size, 1))
+            Command.Copy(src, V3i.Zero, dst, V3i.Zero, srcSize)
 
-        static member Copy(src : Image, srcLevel : int, srcOffset : V3i, dst : Image, dstLevel : int, dstOffset : V3i, size : V3i) =
-            let srcAspect = VkFormat.toAspect src.Format
-            let dstAspect = VkFormat.toAspect dst.Format
-            Command.Copy(src, srcAspect, srcLevel, 0, srcOffset, dst, dstAspect, dstLevel, 0, dstOffset, size)
+        static member Copy(src : ImageSubresourceRange, dst : ImageSubresourceRange) =
+            if src.LevelCount <> dst.LevelCount then
+                failf "cannot copy image: { srcLevels = %A; dstLevels = %A }" src.LevelCount dst.LevelCount
 
-        static member Copy(src : Image, srcLevel : int, srcOffset : V2i, dst : Image, dstLevel : int, dstOffset : V2i, size : V2i) =
-            let srcAspect = VkFormat.toAspect src.Format
-            let dstAspect = VkFormat.toAspect dst.Format
-            Command.Copy(src, srcAspect, srcLevel, 0, V3i(srcOffset, 0), dst, dstAspect, dstLevel, 0, V3i(dstOffset, 0), V3i(size, 1))
+            if src.SliceCount <> dst.SliceCount then
+                failf "cannot copy image: { srcSlices = %A; dstSlices = %A }" src.SliceCount dst.SliceCount
 
-        static member Copy(src : Image, srcAspect : VkImageAspectFlags, srcLevel : int, dst : Image, dstAspect : VkImageAspectFlags, dstLevel : int) =
-            Command.Copy(src, srcAspect, srcLevel, 0, V3i.Zero, dst, dstAspect, dstLevel, 0, V3i.Zero, dst.Size)
+            if src.MaxSize <> dst.MaxSize then
+                failf "cannot copy image: { srcSize = %A; dstSize = %A }" src.LevelCount dst.LevelCount
 
-        static member Copy(src : Image, srcLevel : int, dst : Image, dstLevel : int) =
-            let srcAspect = VkFormat.toAspect src.Format
-            let dstAspect = VkFormat.toAspect dst.Format
-            Command.Copy(src, srcAspect, srcLevel, 0, V3i.Zero, dst, dstAspect, dstLevel, 0, V3i.Zero, dst.Size)
-
-
-
-        static member Copy(src : DevicePixImageMipMap, srcBaseLevel : int, dst : Image, dstBaseLevel : int, dstSlice : int, levels : int) =
             command {
-                for i in 0 .. levels - 1 do
-                    let srcLevel = srcBaseLevel + i
-                    let dstLevel = dstBaseLevel + i
-                    let size = src.GetLevelSize srcLevel
-                    do! Command.Copy(src.Image, srcLevel, 0, V2i.Zero, dst, dstLevel, dstSlice, V2i.Zero, size)
+                for i in 0 .. src.LevelCount-1 do
+                    do! Command.Copy(src.[i, *], dst.[i, *])
             }
 
-        static member inline Copy(src : DevicePixImageMipMap, srcBaseLevel : int, dst : Image, dstBaseLevel : int, levels : int) =
-            Command.Copy(src, srcBaseLevel, dst, dstBaseLevel, 0, levels)
 
-        static member inline Copy(src : DevicePixImageMipMap, dst : Image, dstSlice : int, levels : int) =
-            Command.Copy(src, 0, dst, 0, dstSlice, levels)
-
-        static member inline Copy(src : DevicePixImageMipMap, dst : Image, levels : int) =
-            Command.Copy(src, 0, dst, 0, 0, levels)
-
-        static member inline Copy(src : DevicePixImageMipMap, dst : Image) =
-            Command.Copy(src, 0, dst, 0, 0, src.LevelCount)
-
-
-        static member Copy(src : Image, srcBaseLevel : int, srcSlice : int, dst : DevicePixImageMipMap, dstBaseLevel : int, levels : int) =
-            command {
-                for i in 0 .. levels - 1 do
-                    let srcLevel = srcBaseLevel + i
-                    let dstLevel = dstBaseLevel + i
-                    let size = dst.GetLevelSize srcLevel
-                    do! Command.Copy(src, srcLevel, srcSlice, V2i.Zero, dst.Image, dstLevel, 0, V2i.Zero, size)
-            }
-
-        static member inline Copy(src : Image, srcBaseLevel : int, dst : DevicePixImageMipMap, dstBaseLevel : int, levels : int) =
-            Command.Copy(src, srcBaseLevel, 0, dst, dstBaseLevel, levels)
-
-        static member inline Copy(src : Image, srcSlice : int, dst : DevicePixImageMipMap, levels : int) =
-            Command.Copy(src, 0, srcSlice, dst, 0, levels)
-
-        static member inline Copy(src : Image, dst : DevicePixImageMipMap, levels : int) =
-            Command.Copy(src, 0, 0, dst, 0, levels)
-
-        static member inline Copy(src : Image, dst : DevicePixImageMipMap) =
-            Command.Copy(src, 0, 0, dst, 0, dst.LevelCount)
-
-
-
-
-        static member Copy(src : Buffer, srcOffset : int64, srcRowLength : int64, dst : Image, dstSlice : int, dstLevel : int, dstOffset : V3i, size : V3i) =
-            if dst.Samples <> 1 then
-                failf "cannot copy buffer to multisampled image"
-
-            if dst.Layout <> VkImageLayout.General && dst.Layout <> VkImageLayout.TransferDstOptimal then
-                failf "cannot copy buffer to image with layout: %A" dst.Layout
-
-            { new Command<unit>() with
+        static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
+            if src.SliceCount <> dst.SliceCount then
+                failf "cannot resolve image: { srcSlices = %A; dstSlices = %A }" src.SliceCount dst.SliceCount
+                
+            { new Command() with
                 member x.Enqueue (cmd : CommandBuffer) =
-                    let mutable region =
-                        VkBufferImageCopy(
-                            uint64 srcOffset,
-                            uint32 srcRowLength,
-                            uint32 size.Y,
-                            VkImageSubresourceLayers(VkImageAspectFlags.ColorBit, uint32 dstLevel, uint32 dstSlice, 1u),
+                    let mutable resolve =
+                        VkImageResolve(
+                            src.VkImageSubresourceLayers,
+                            VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
+                            dst.VkImageSubresourceLayers,
                             VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
                             VkExtent3D(size.X, size.Y, size.Z)
                         )
-                    VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Handle, dst.Layout, 1u, &&region)
-                member x.Dispose() =
-                    ()
+
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&resolve)
+                    Disposable.Empty
             }
+
+        static member ResolveMultisamples(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
+            if src.Size <> dst.Size then
+                failf "cannot copy image: { srcSize = %A; dstSize = %A }" src.LevelCount dst.LevelCount
+
+            Command.ResolveMultisamples(src, V3i.Zero, dst, V3i.Zero, src.Size)
+
+
+        static member Blit(src : ImageSubresourceLayers, srcRange : Box3i, dst : ImageSubresourceLayers, dstRange : Box3i, filter : VkFilter) =
+            command {
+                let srcLayout = src.Image.Layout
+                let dstLayout = dst.Image.Layout
+
+                do! Command.Custom (fun cmd ->
+                    let mutable srcOffsets = VkOffset3D_2()
+                    srcOffsets.[0] <- VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z)
+                    srcOffsets.[1] <- VkOffset3D(1 + srcRange.Max.X, 1 + srcRange.Max.Y, 1 + srcRange.Max.Z)
+
+                    let mutable dstOffsets = VkOffset3D_2()
+                    dstOffsets.[0] <- VkOffset3D(dstRange.Min.X, dstRange.Min.Y, dstRange.Min.Z)
+                    dstOffsets.[1] <- VkOffset3D(1 + dstRange.Max.X, 1 + dstRange.Max.Y, 1 + dstRange.Max.Z)
+
+                    let mutable blit =
+                        VkImageBlit(
+                            src.VkImageSubresourceLayers,
+                            srcOffsets,
+                            dst.VkImageSubresourceLayers,
+                            dstOffsets
+                        )
+                    
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&blit, filter)
+                )
+
+            }
+
+
+        static member Blit(src : ImageSubresourceLayers, dst : ImageSubresourceLayers, dstRange : Box3i, filter : VkFilter) =
+            Command.Blit(src, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstRange, filter)
+
+        static member Blit(src : ImageSubresourceLayers, srcRange : Box3i, dst : ImageSubresourceLayers, filter : VkFilter) =
+            Command.Blit(src, srcRange, dst, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
+
+        static member Blit(src : ImageSubresourceLayers, dst : ImageSubresourceLayers, filter : VkFilter) =
+            Command.Blit(src, Box3i(V3i.Zero, src.Size - V3i.III), dst, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
+
+
+        static member ClearColor(img : ImageSubresourceRange, color : C4f) =
+            if img.Image.IsNull then
+                Command.Nop
+            else
+                if img.Aspect <> ImageAspect.Color then
+                    failf "cannot clear image with aspect %A using color" img.Aspect
+
+                { new Command() with
+                    member x.Enqueue cmd =
+                        let originalLayout = img.Image.Layout
+            
+                        cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
+                    
+                        let mutable clearValue = VkClearColorValue(float32 = color.ToV4f())
+                        let mutable range = img.VkImageSubresourceRange
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdClearColorImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range)
+
+                        cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
+                        Disposable.Empty
+                }
+
+        static member ClearDepthStencil(img : ImageSubresourceRange, depth : float, stencil : uint32) =
+            if img.Image.IsNull then
+                Command.Nop
+            else
+                if img.Aspect = ImageAspect.Color || img.Aspect = ImageAspect.Metadata then
+                    failf "cannot clear image with aspect %A using depth/stencil" img.Aspect
+
+                { new Command() with
+                    member x.Enqueue cmd =
+                        let originalLayout = img.Image.Layout
+                        cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
+                  
+                        let mutable clearValue = VkClearDepthStencilValue(float32 depth, stencil)
+                        let mutable range = img.VkImageSubresourceRange
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdClearDepthStencilImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range)
+
+                        cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
+                        Disposable.Empty
+                }
+
+
+        static member GenerateMipMaps (img : ImageSubresourceRange) =
+            if img.Image.IsNull then
+                Command.Nop
+            else
+                command {
+                    let oldLayout = img.Image.Layout
+
+                    for l in 1 .. img.LevelCount - 1 do
+                        do! Command.Sync(img.[l - 1, *])
+                        do! Command.Blit(img.[l - 1, *], img.[l, *], VkFilter.Linear)
+
+                    do! Command.TransformLayout(img.Image, oldLayout)
+                }
 
         static member TransformLayout(img : Image, target : VkImageLayout) =
-            if img.Layout = target || target = VkImageLayout.Undefined || target = VkImageLayout.Preinitialized then
-                { new Command<unit>() with
-                    member x.Enqueue _ = ()
-                    member x.Dispose() = ()
-                }
+            if img.IsNull || target = VkImageLayout.Undefined || target = VkImageLayout.Preinitialized then
+                Command.Nop
             else
-                let source = img.Layout
-                img.Layout <- target
-                { new Command<unit>() with
-                    member x.Enqueue (buffer : CommandBuffer) =
-                        let src =
-                            if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
-                            elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                            elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
-                            elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
-                            elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
-                            elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                            else VkAccessFlags.None
+                { new Command() with
+                    member x.Enqueue (cmd : CommandBuffer) =
+                        if img.Layout = target then
+                            Disposable.Empty
+                        else
+                            let source = img.Layout
+                            img.Layout <- target
 
-                        let dst =
-                            if target = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                            elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
-                            elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
-                            elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                            elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit ||| VkAccessFlags.InputAttachmentReadBit
-                            elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
-                            else VkAccessFlags.None
+                            let src =
+                                if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                                elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                                elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                                elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                                elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
+                                elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                                else VkAccessFlags.None
 
-                        let queueIndex = uint32 buffer.QueueFamily.Info.index
+                            let dst =
+                                if target = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                                elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                                elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                                elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                                elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit ||| VkAccessFlags.InputAttachmentReadBit
+                                elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                                else VkAccessFlags.None
+
+                            let mutable barrier =
+                                VkImageMemoryBarrier(
+                                    VkStructureType.ImageMemoryBarrier, 0n, 
+                                    src,
+                                    dst,
+                                    source,
+                                    target,
+                                    VK_QUEUE_FAMILY_IGNORED,
+                                    VK_QUEUE_FAMILY_IGNORED,
+                                    img.Handle,
+                                    VkImageSubresourceRange(
+                                        VkImageAspectFlags.ColorBit ||| VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
+                                        0u, uint32 img.MipMapLevels, 
+                                        0u, uint32 img.Count
+                                    )
+                                )
+
+                            cmd.AppendCommand()
+                            VkRaw.vkCmdPipelineBarrier(
+                                cmd.Handle,
+                                VkPipelineStageFlags.TopOfPipeBit,
+                                VkPipelineStageFlags.TopOfPipeBit,
+                                VkDependencyFlags.None,
+                                0u, NativePtr.zero,
+                                0u, NativePtr.zero,
+                                1u, &&barrier
+                            )
+                            Disposable.Empty
+                }
+
+        static member Sync(img : ImageSubresourceRange) =
+            if img.Image.IsNull then
+                Command.Nop
+            else
+                { new Command() with
+                    member x.Enqueue (cmd : CommandBuffer) =
+                        let layout = img.Image.Layout
                         let mutable barrier =
                             VkImageMemoryBarrier(
                                 VkStructureType.ImageMemoryBarrier, 0n, 
-                                src,
-                                dst,
-                                source,
-                                target,
-                                queueIndex,
-                                queueIndex,
-                                img.Handle,
-                                VkImageSubresourceRange(
-                                    VkImageAspectFlags.ColorBit ||| VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
-                                    0u, uint32 img.MipMapLevels, 
-                                    0u, uint32 img.Count
-                                )
+                                VkAccessFlags.Write,
+                                VkAccessFlags.Read,
+                                layout,
+                                layout,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                img.Image.Handle,
+                                img.VkImageSubresourceRange
                             )
-
+                            
+                        cmd.AppendCommand()
                         VkRaw.vkCmdPipelineBarrier(
-                            buffer.Handle,
-                            VkPipelineStageFlags.BottomOfPipeBit,
-                            VkPipelineStageFlags.BottomOfPipeBit,
+                            cmd.Handle,
+                            VkPipelineStageFlags.TopOfPipeBit,
+                            VkPipelineStageFlags.TopOfPipeBit,
                             VkDependencyFlags.None,
                             0u, NativePtr.zero,
                             0u, NativePtr.zero,
                             1u, &&barrier
                         )
-                    member x.Dispose() =
-                        ()
+                        Disposable.Empty
                 }
 
-        static member Sync(img : Image) =
-            { new Command<unit>() with
-                member x.Enqueue (buffer : CommandBuffer) =
-                    let queueIndex = uint32 buffer.QueueFamily.Info.index
-                    let mutable barrier =
-                        VkImageMemoryBarrier(
-                            VkStructureType.ImageMemoryBarrier, 0n, 
-                            VkAccessFlags.Write,
-                            VkAccessFlags.Read,
-                            img.Layout,
-                            img.Layout,
-                            queueIndex,
-                            queueIndex,
-                            img.Handle,
-                            VkImageSubresourceRange(
-                                VkImageAspectFlags.ColorBit ||| VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
-                                0u, uint32 img.MipMapLevels, 
-                                0u, uint32 img.Count
-                            )
-                        )
-
-                    VkRaw.vkCmdPipelineBarrier(
-                        buffer.Handle,
-                        VkPipelineStageFlags.BottomOfPipeBit,
-                        VkPipelineStageFlags.BottomOfPipeBit,
-                        VkDependencyFlags.None,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        1u, &&barrier
-                    )
-                member x.Dispose() =
-                    ()
-            }
-
-        static member ResolveMultisamples(src : Image, srcLevel : int, srcSlice : int, srcOffset : V3i, dst : Image, dstLevel : int, dstSlice : int, dstOffset : V3i, size : V3i) =
-            { new Command<unit>() with
-                member x.Enqueue (buffer : CommandBuffer) =
-                    let mutable resolve =
-                        VkImageResolve(
-                            VkImageSubresourceLayers(VkFormat.toAspect src.Format, uint32 srcLevel, uint32 srcSlice, 1u),
-                            VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
-                            VkImageSubresourceLayers(VkFormat.toAspect dst.Format, uint32 dstLevel, uint32 dstSlice, 1u),
-                            VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
-                            VkExtent3D(size.X, size.Y, size.Z)
-                        )
-
-                    VkRaw.vkCmdResolveImage(buffer.Handle, src.Handle, src.Layout, dst.Handle, dst.Layout, 1u, &&resolve)
-                member x.Dispose() =
-                    ()
-            }
-
-        static member Blit(src : Image, srcLevel : int, srcSlice : int, srcRange : Box3i, dst : Image, dstLevel : int, dstSlice : int, dstRange : Box3i, filter : VkFilter) =
-            { new Command<unit>() with
-                member x.Enqueue (buffer : CommandBuffer) =
-
-                    let mutable srcOffsets = VkOffset3D_2()
-                    srcOffsets.[0] <- VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z)
-                    srcOffsets.[1] <- VkOffset3D(srcRange.Max.X + 1, srcRange.Max.Y + 1, srcRange.Max.Z + 1)
-
-                    let mutable dstOffsets = VkOffset3D_2()
-                    dstOffsets.[0] <- VkOffset3D(dstRange.Min.X, dstRange.Min.Y, dstRange.Min.Z)
-                    dstOffsets.[1] <- VkOffset3D(dstRange.Max.X + 1, dstRange.Max.Y + 1, dstRange.Max.Z + 1)
-
-                    let srcAspect = VkFormat.toAspect src.Format
-                    let dstAspect = VkFormat.toAspect dst.Format
-
-                    let mutable blit =
-                        VkImageBlit(
-                            VkImageSubresourceLayers(srcAspect, uint32 srcLevel, uint32 srcSlice, 1u),
-                            srcOffsets,
-                            VkImageSubresourceLayers(dstAspect, uint32 dstLevel, uint32 dstSlice, 1u),
-                            dstOffsets
-                        )
-                    
-                    VkRaw.vkCmdBlitImage(buffer.Handle, src.Handle, src.Layout, dst.Handle, dst.Layout, 1u, &&blit, filter)
-
-                member x.Dispose() =
-                    ()
-            }
-
-        static member GenerateMipMaps (img : Image, sourceLevel : int) : Command<unit> =
-            command {
-                let mutable parentSize = img.Size
-                for l in (sourceLevel + 1) .. img.MipMapLevels - 1 do
-                    do! Command.Sync img
-                    let size = V3i(parentSize.X / 2, parentSize.Y / 2, 1)
-                    do! Command.Blit(
-                            img, l - 1, 0, Box3i(V3i.Zero, parentSize - V3i.III), 
-                            img, l,     0, Box3i(V3i.Zero, size - V3i.III),
-                            VkFilter.Linear
-                        )
-                    parentSize <- size
-
-            }
-
-        static member GenerateMipMaps (img : Image) : Command<unit> =
-            Command.GenerateMipMaps(img, 0)
-
-        static member ClearColor(img : Image, color : C4f, levelRange : Range1i, sliceRange : Range1i) =
-            let originalLayout = img.Layout
-            let kind = VkFormat.toImageKind img.Format
-
-            { new Command<unit>() with
-                member x.Enqueue buffer =
-                    buffer.Enqueue (Command.TransformLayout(img, VkImageLayout.TransferDstOptimal))
-                    
-                    match kind with
-                        | ImageKind.Color -> 
-                            let mutable clearValue = VkClearColorValue(float32 = color.ToV4f())
-                            let mutable range =
-                                VkImageSubresourceRange(
-                                    VkImageAspectFlags.ColorBit,
-                                    uint32 levelRange.Min,
-                                    uint32 (1 + levelRange.Max - levelRange.Min),
-                                    uint32 sliceRange.Min,
-                                    uint32 (1 + sliceRange.Max - sliceRange.Min)
-                                )
-                            VkRaw.vkCmdClearColorImage(buffer.Handle, img.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range)
-                        | _ ->
-                            failf "unsupported ImageKind: %A" kind
-
-                    buffer.Enqueue (Command.TransformLayout(img, originalLayout))
-
-                member x.Dispose() =
-                    ()
-            }
-
-        static member ClearDepthStencil(img : Image, depth : float, stencil : uint32, levelRange : Range1i, sliceRange : Range1i) =
-            let originalLayout = img.Layout
-            let kind = VkFormat.toImageKind img.Format
-            let aspectFlags = VkFormat.toAspect img.Format
-
-            { new Command<unit>() with
-                member x.Enqueue buffer =
-                    buffer.Enqueue (Command.TransformLayout(img, VkImageLayout.TransferDstOptimal))
-                    
-                    match kind with
-                        | ImageKind.DepthStencil -> 
-                            let mutable clearValue = VkClearDepthStencilValue(float32 depth, stencil)
-                            let mutable range =
-                                VkImageSubresourceRange(
-                                    aspectFlags,
-                                    uint32 levelRange.Min,
-                                    uint32 (1 + levelRange.Max - levelRange.Min),
-                                    uint32 sliceRange.Min,
-                                    uint32 (1 + sliceRange.Max - sliceRange.Min)
-                                )
-                            VkRaw.vkCmdClearDepthStencilImage(buffer.Handle, img.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range)
-                        | _ ->
-                            failf "unsupported ImageKind: %A" kind
-
-                    buffer.Enqueue (Command.TransformLayout(img, originalLayout))
-
-                member x.Dispose() =
-                    ()
-            }
-
-        static member ClearColor(img : Image, color : C4f) =
-            Command.ClearColor(img, color, Range1i(0,img.MipMapLevels-1), Range1i(0,img.Count-1))
-
-        static member ClearDepthStencil(img : Image, depth : float, stencil : uint32) =
-            Command.ClearDepthStencil(img, depth, stencil, Range1i(0,img.MipMapLevels-1), Range1i(0,img.Count-1))
 
 
 
@@ -1992,16 +2054,18 @@ module Image =
                 table (typeof<'a>) (x, img)
 
 
-    let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (compMapping : VkComponentMapping) (usage : VkImageUsageFlags) (layout : VkImageLayout) (device : Device) =
-        use token = device.ResourceToken
-
+    let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (compMapping : VkComponentMapping) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
             failf "bad image format %A" fmt
+
+        let flags =
+            if dim = TextureDimension.TextureCube then VkImageCreateFlags.CubeCompatibleBit
+            else VkImageCreateFlags.None
 
         let mutable info =
             VkImageCreateInfo(
                 VkStructureType.ImageCreateInfo, 0n,
-                VkImageCreateFlags.None,
+                flags,
                 VkImageType.ofTextureDimension dim,
                 fmt,
                 VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
@@ -2027,11 +2091,6 @@ module Image =
             |> check "could not bind image memory"
 
         let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, compMapping, ptr, VkImageLayout.Undefined)
-
-        token.enqueue {
-            do! Command.TransformLayout(result, layout)
-        }
-
         result
 
     let delete (img : Image) (device : Device) =
@@ -2040,16 +2099,14 @@ module Image =
             img.Memory.Dispose()
             img.Handle <- VkImage.Null
 
-    let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (layout : VkImageLayout) (device : Device) =
+    let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
         let vkfmt = VkFormat.ofTextureFormat fmt
         let swizzle = VkComponentMapping.ofTextureFormat fmt
-        alloc size mipMapLevels count samples dim vkfmt swizzle usage layout device
+        alloc size mipMapLevels count samples dim vkfmt swizzle usage device
 
-
-    let private ofDeviceMipMap (tempImage : DevicePixImageMipMap) (info : TextureParams) (device : Device) =
+    let private ofDeviceMemoryImage (dispose : bool) (tempImage : DeviceMemoryImage) (info : TextureParams) (device : Device) =
         if tempImage.LevelCount <= 0 then failf "empty PixImageMipMap"
 
-        use token           = device.ResourceToken
         let size = tempImage.Size
 
         // figure out whether to create/upload mipmaps or not
@@ -2065,32 +2122,35 @@ module Image =
             else
                 1
 
-        // create the temporary Host-Memory-Image
-        let copyLevels  = min mipMapLevels tempImage.LevelCount 
-
         // allocate the final image
         let format          = tempImage.Image.Format
         let size            = V3i(size, 1)
         let usage           = VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
         let compMapping     = VkComponentMapping.Identity
-        let img             = device |> alloc size mipMapLevels 1 1 TextureDimension.Texture2D format compMapping usage VkImageLayout.TransferDstOptimal
+        let img             = device |> alloc size mipMapLevels 1 1 TextureDimension.Texture2D format compMapping usage
+        let copyLevels      = min tempImage.LevelCount mipMapLevels
 
         // enqueue the copy command and finally delete the temporary image
         // if mipmaps need to be generated do that on the GPU-Memory-Image
-        token.enqueue {
+        device.eventually {
             try 
-                // copy the existing data
-                do! Command.Copy(tempImage, img)
+                do! Command.TransformLayout(tempImage.Image, VkImageLayout.TransferSrcOptimal)
+                do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
+
+                let color = img.[tempImage.Aspect, *, 0]
+                do! Command.Copy(tempImage.[0 .. copyLevels - 1], color.[0 .. copyLevels - 1])
 
                 // generate mipmaps if needed
                 if generateMipMaps then
-                    do! Command.GenerateMipMaps img
+                    do! Command.TransformLayout(img, VkImageLayout.General)
+                    do! Command.GenerateMipMaps color
+                    
 
                 // convert to shader read layout
                 do! Command.TransformLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
 
             finally 
-                device.Delete tempImage
+                if dispose then device.Delete tempImage
         }
 
         // finally return the created image
@@ -2099,19 +2159,90 @@ module Image =
     let ofPixImageMipMap (pi : PixImageMipMap) (info : TextureParams) (device : Device) =
         if pi.LevelCount <= 0 then failf "empty PixImageMipMap"
 
-        let temp = device.CreatePixImageMipMap(pi)
-        device |> ofDeviceMipMap temp info
+        let temp = device.CreateDeviceMemoryImage(pi)
+        device |> ofDeviceMemoryImage true temp info
+
+    let ofPixImageCube (pi : PixImageCube) (info : TextureParams) (device : Device) =
+
+        let levels = pi.MipMapArray |> Seq.map (fun pi -> pi.LevelCount) |> Seq.min
+        if levels < 1 then failf "empty PixImageCube"
+
+        let sizes = pi.MipMapArray |> Seq.map (fun pi -> pi.[0].Size) |> HashSet.ofSeq
+        if sizes.Count <> 1 then failf "PixImageCube faces have differing sizes: %A" (Seq.toList sizes)
+
+        let faceSize = sizes |> Seq.head
+
+        let generateMipMaps = info.wantMipMaps && levels = 1
+
+        let mipMapLevels =
+            if info.wantMipMaps then
+                if levels = 1 then
+                    1 + max faceSize.X faceSize.Y |> Fun.Log2 |> floor |> int 
+                else 
+                    levels
+            else
+                1
+
+        let copyLevels = min mipMapLevels levels
+
+        let faces = pi.MipMapArray |> Array.map (fun img -> device.CreateDeviceMemoryImage(img, copyLevels))
+
+        // allocate the final image
+        let format          = faces.[0].Image.Format
+        let aspect          = faces.[0].Aspect
+        let size            = V3i(faceSize, 1)
+        let usage           = VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
+        let compMapping     = VkComponentMapping.Identity
+        let img             = device |> alloc size mipMapLevels 6 1 TextureDimension.TextureCube format compMapping usage
+
+
+        // enqueue the copy command and finally delete the temporary image
+        // if mipmaps need to be generated do that on the GPU-Memory-Image
+        device.eventually {
+            try 
+                do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
+                for fi in 0 .. 5 do
+                    let src = faces.[fi]
+                    do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
+
+                    let dst = img.[aspect, *, fi]
+                    do! Command.Copy(src.[0 .. copyLevels-1], dst.[0 .. copyLevels - 1])
+
+                 
+                // generate mipmaps if needed
+                if generateMipMaps then
+                    do! Command.TransformLayout(img, VkImageLayout.General)
+                    do! Command.GenerateMipMaps img.[aspect, *, *]
+                    
+                // convert to shader read layout
+                do! Command.TransformLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
+
+            finally 
+                faces |> Array.iter device.Delete
+        }
+
+        // finally return the created image
+        img
 
     let ofFile (file : string) (info : TextureParams) (device : Device) =
         if not (System.IO.File.Exists file) then failf "file does not exists: %A" file
 
-        let temp = device.CreatePixImageMipMap(file)
-        device |> ofDeviceMipMap temp info
+        let temp = device.CreateDeviceMemoryImage(file)
+        device |> ofDeviceMemoryImage true temp info
 
     let ofTexture (t : ITexture) (device : Device) =
         match t with
             | :? PixTexture2d as t ->
                 device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams
+
+            | :? PixTextureCube as c ->
+                device |> ofPixImageCube c.PixImageCube c.TextureParams
+
+            | :? NullTexture as t ->
+                Image(device, VkImage.Null, V3i.Zero, 0, 0, 1, TextureDimension.Texture2D, VkFormat.Undefined, VkComponentMapping.Identity, DevicePtr.Null, VkImageLayout.ShaderReadOnlyOptimal)
+
+            | :? PixTexture3d as t ->
+                failf "please implement volume textures"
 
             | :? FileTexture as t ->
                 device |> ofFile t.FileName t.TextureParams
@@ -2119,26 +2250,42 @@ module Image =
             | :? INativeTexture as nt ->
                 failf "please implement INativeTexture upload"
 
+            | :? BitmapTexture as bt ->
+                failf "BitmapTexture considered obsolete"
+
             | :? Image as t ->
                 t
 
             | _ ->
                 failf "unsupported texture-type: %A" t
 
-    let downloadLevel (src : Image) (level : int) (slice : int) (dst : PixImage) (device : Device) =
-        let temp = device.CreatePixImageMipMap(dst.Size, 1, dst.PixFormat)
+    let downloadLevel (src : ImageSubresource) (dst : PixImage) (device : Device) =
+        let temp = device.CreateDeviceMemoryImage(dst.Size, 1, dst.PixFormat)
         try
-            device.TransferFamily.RunSynchronously(Command.Copy(src, level, slice, temp, 0, 1))
+            device.TransferFamily.run {
+                let layout = src.Image.Layout
+                do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
+                do! Command.Copy(src, temp.[0])
+                do! Command.TransformLayout(src.Image, layout)
+            }
             temp.Download(0, dst)
         finally 
             device.Delete temp
 
-    let uploadLevel (src : PixImage) (dst : Image) (level : int) (slice : int)(device : Device) =
-        use token = device.ResourceToken
-        let temp = device.CreatePixImageMipMap(PixImageMipMap [|src|])
-        token.enqueue {
-            try do! Command.Copy(temp, 0, dst, level, slice, 1)
-            finally device.Delete temp
+    let uploadLevel (src : PixImage) (dst : ImageSubresource) (device : Device) =
+        let temp = device.CreateDeviceMemoryImage(PixImageMipMap [|src|])
+        device.eventually {
+            try 
+                let layout = dst.Image.Layout
+                do! Command.TransformLayout(temp.Image, VkImageLayout.TransferSrcOptimal)
+                do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
+
+                do! Command.Copy(temp.[0], dst)
+                
+                do! Command.TransformLayout(dst.Image, layout)
+
+            finally 
+                device.Delete temp
         }
 
 [<AbstractClass; Sealed; Extension>]
@@ -2161,13 +2308,13 @@ type ContextImageExtensions private() =
         this |> Image.delete img
 
     [<Extension>]
-    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags, layout : VkImageLayout) =
-        this |> Image.create size mipMapLevels count samples dim fmt usage layout
+    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags) =
+        this |> Image.create size mipMapLevels count samples dim fmt usage
 
     [<Extension>]
-    static member inline UploadLevel(this : Device, dst : Image, dstLevel : int, dstSlice : int, src : PixImage) =
-        this |> Image.uploadLevel src dst dstLevel dstSlice
+    static member inline UploadLevel(this : Device, dst : ImageSubresource, src : PixImage) =
+        this |> Image.uploadLevel src dst
 
     [<Extension>]
-    static member inline DownloadLevel(this : Device, src : Image, srcLevel : int, srcSlice : int, dst : PixImage) =
-        this |> Image.downloadLevel src srcLevel srcSlice dst
+    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixImage) =
+        this |> Image.downloadLevel src dst

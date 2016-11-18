@@ -182,12 +182,10 @@ type MappedBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
             let align = device.MinUniformBufferOffsetAlignment
             let alignedSize = size |> Alignment.next align
             let temp = device.HostMemory.Alloc(align, alignedSize)
-
             let res = temp.Mapped writer
 
             let dst = Buffer(device, handle, new DevicePtr(Unchecked.defaultof<_>, 0L, capacity))
-            use token = device.ResourceToken
-            token.enqueue {
+            device.eventually {
                 try do! Command.Copy(temp, 0L, dst, offset, size)
                 finally temp.Dispose()
             }

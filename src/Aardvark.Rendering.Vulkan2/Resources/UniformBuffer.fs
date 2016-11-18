@@ -370,12 +370,13 @@ module UniformBuffer =
 
     let upload (b : UniformBuffer) (device : Device) =
         use t = device.ResourceToken
-        let cmd =
-            { new Command<unit>() with
-                member x.Enqueue cmd = VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
-                member x.Dispose() = ()
+        t.Enqueue
+            { new Command() with
+                member x.Enqueue cmd = 
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
+                    Disposable.Empty
             }
-        t.Enqueue(cmd)
 
     let delete (b : UniformBuffer) (device : Device) =
         device.Delete(b :> Buffer)

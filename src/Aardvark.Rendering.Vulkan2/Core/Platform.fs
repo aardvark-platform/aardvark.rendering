@@ -129,7 +129,6 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
         devices |> Array.mapi (fun i d -> PhysicalDevice(this, d, i))
 
-
     
     static member AvailableLayers = availableLayers
     static member GlobalExtensions = globalExtensions
@@ -138,9 +137,96 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
         VkRaw.vkDestroyInstance(instance, NativePtr.zero)
         instance <- VkInstance.Zero
 
+    member x.EnabledLayers = layers
+    member x.EnabledExtensions = extensions
+
     member x.Handle = instance
 
     member x.Devices = devices
+
+    member x.PrintInfo(verbosity : int) =
+        let section (fmt : Printf.StringFormat<'a, (unit -> 'x) -> 'x>) =
+            fmt |> Printf.kprintf (fun str ->
+                fun cont -> 
+                    try
+                        Report.Begin(verbosity, "{0}", str)
+                        cont()
+                    finally 
+                        Report.End(verbosity) |> ignore
+            )
+
+        let line fmt = Printf.kprintf (fun str -> Report.Line(verbosity, str)) fmt
+
+        section "instance" (fun () ->
+            section "layers:" (fun () ->
+                for l in availableLayers do
+                    let isEnabled = Set.contains l.name layers
+                    let suffix = if isEnabled then "(X)" else "( )"
+                    line "%s (v%A) %s" l.name l.specification suffix
+            )
+
+            section "extensions:" (fun () ->
+                for l in globalExtensions do
+                    let isEnabled = Set.contains l.name extensions
+                    let suffix = if isEnabled then "(X)" else "( )"
+                    line "%s (v%A) %s" l.name l.specification suffix
+            )
+
+            section "devices:" (fun () ->
+                for d in devices do
+                    section "%d:" d.Index (fun () ->
+                        line "type:     %A" d.Type
+                        line "vendor:   %s" d.Vendor
+                        line "name:     %s" d.Name
+                        line "version:  %A" d.APIVersion
+                        line "driver:   %A" d.DriverVersion
+
+                        section "layers:" (fun () ->
+                            for l in d.AvailableLayers do
+                                line "%s (v%A)" l.name l.specification
+                        )
+
+                        section "extensions:" (fun () ->
+                            for l in d.GlobalExtensions do
+                                line "%s (v%A)" l.name l.specification
+                        )
+
+                        section "heaps:" (fun () ->
+                            for (h : MemoryHeapInfo) in d.Heaps do
+                                section "%d:" h.Index (fun () ->
+                                    line "capacity: %A" h.Capacity
+                                    line "flags:    %A" h.Flags
+                                )
+                        )
+
+                        section "memories:" (fun () ->
+                            for (h : MemoryInfo) in d.MemoryTypes do
+                                if h.flags <> MemoryFlags.None then
+                                    section "%d:" h.index (fun () ->
+                                        line "heap:     %A" h.heap.Index
+                                        line "flags:    %A" h.flags
+                                    )
+                        )
+
+                        section "queues:" (fun () ->
+                            for (q : QueueFamilyInfo) in d.QueueFamilies do
+                                section "%d:" q.index (fun () ->
+                                    line "capabilities:   %A" q.flags
+                                    line "count:          %d" q.count
+                                    line "timestamp bits: %d" q.timestampBits
+                                    line "img transfer:   %A" q.minImgTransferGranularity
+                                )
+
+                            line "main-queue: %d" d.MainQueue.index
+
+                        )
+
+
+                    )
+            )
+
+        )
+
 
 and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, index : int) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
@@ -237,9 +323,9 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
         formatProperties.[fmt].bufferFeatures
 
     member x.AvailableLayers = availableLayers
-    member x.GlobalExtensions = globalExtensions
+    member x.GlobalExtensions : ExtensionInfo[] = globalExtensions
     member x.QueueFamilies = queueFamilyInfos
-    member x.MainQueue = mainQueue
+    member x.MainQueue : QueueFamilyInfo = mainQueue
     member x.TransferQueue = pureTransferQueue
     member x.MemoryTypes = memoryTypes
     member x.Heaps = heaps

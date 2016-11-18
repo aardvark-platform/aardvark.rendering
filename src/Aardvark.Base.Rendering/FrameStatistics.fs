@@ -18,8 +18,8 @@ type ResourceKind =
     | IndexBuffer = 12
 
 
-module Map =
-    let unionWith (f : Map<'k,'v>) (g : Map<'k,'v>) (fuse : 'v -> 'v -> 'v) (zero : 'v) =
+module private Map =
+    let unionWith (f : Map<'k,'v0>) (g : Map<'k,'v1>) (fuse : 'v0 -> 'v1 -> 'v0) (zero : 'v0) =
         let mutable result = f
         for (k,right) in g |> Map.toSeq do
             let newValue = 
@@ -30,6 +30,222 @@ module Map =
             result <- result |> Map.add k newValue
         result
 
+    let alter (key : 'k) (f : Option<'a> -> Option<'a>) (m : Map<'k, 'a>) =
+        let input = Map.tryFind key m
+        let result = f input
+        match result with
+            | Some r -> Map.add key r m
+            | None ->
+                match input with
+                    | Some _ -> Map.remove key m
+                    | None -> m
+
+    let inline increment (key : 'k) (value : 'x) (m : Map<'k, 'v>) : Map<'k, 'v> =
+        let newValue = 
+            match Map.tryFind key m with
+                | Some i -> i + value
+                | None -> LanguagePrimitives.GenericZero<'v> + value
+        if newValue = LanguagePrimitives.GenericZero<'v> then
+            Map.remove key m
+        else
+            Map.add key newValue m
+
+    let inline decrement (key : 'k) (value : 'x) (m : Map<'k, 'v>) =
+        let newValue = 
+            match Map.tryFind key m with
+                | Some i -> i - value
+                | None -> LanguagePrimitives.GenericZero<'v> - value
+        if newValue = LanguagePrimitives.GenericZero<'v> then
+            Map.remove key m
+        else
+            Map.add key newValue m
+
+
+type ResourceDelta =
+    struct
+        val mutable public Created          : float
+        val mutable public Deleted          : float
+        val mutable public InPlace          : float
+        val mutable public Replaced         : float
+        val mutable public MemoryDelta      : Mem
+
+        static member Zero = ResourceDelta(0.0,0.0,0.0,0.0,Mem.Zero)
+
+        static member (~-) (v : ResourceDelta) =
+            ResourceDelta(
+                -v.Created,
+                -v.Deleted,
+                -v.InPlace,
+                -v.Replaced,
+                -v.MemoryDelta
+            )
+
+        static member (+) (l : ResourceDelta, r : ResourceDelta) =
+            ResourceDelta(
+                l.Created + r.Created,
+                l.Deleted + r.Deleted,
+                l.InPlace + r.InPlace,
+                l.Replaced + r.Replaced,
+                l.MemoryDelta + r.MemoryDelta
+            )
+                
+        static member (-) (l : ResourceDelta, r : ResourceDelta) =
+            ResourceDelta(
+                l.Created - r.Created,
+                l.Deleted - r.Deleted,
+                l.InPlace - r.InPlace,
+                l.Replaced - r.Replaced,
+                l.MemoryDelta - r.MemoryDelta
+            )   
+                 
+        static member (*) (l : ResourceDelta, r : float) =
+            ResourceDelta(
+                l.Created * r,
+                l.Deleted * r,
+                l.InPlace * r,
+                l.Replaced * r,
+                l.MemoryDelta * r
+            )
+
+        static member (*) (l : float, r : ResourceDelta) =
+            ResourceDelta(
+                l * r.Created,
+                l * r.Deleted,
+                l * r.InPlace,
+                l * r.Replaced,
+                l * r.MemoryDelta
+            )                      
+ 
+        static member (/) (l : ResourceDelta, r : float) =
+            ResourceDelta(
+                l.Created / r,
+                l.Deleted / r,
+                l.InPlace / r,
+                l.Replaced / r,
+                l.MemoryDelta / r
+            )
+                        
+        new(created, deleted, inPlace, replaced, memDelta) =
+            { Created = created; Deleted = deleted; InPlace = inPlace; Replaced = replaced; MemoryDelta = memDelta }
+
+    end
+
+type ResourceCount =
+    struct
+        val mutable public Count            : float
+        val mutable public Memory           : Mem
+
+        static member Zero = ResourceCount(0.0, Mem.Zero)
+
+        static member (+) (l : ResourceCount, r : ResourceCount) =
+            ResourceCount(
+                l.Count +  r.Count,
+                l.Memory + r.Memory
+            )
+
+        static member (-) (l : ResourceCount, r : ResourceCount) =
+            ResourceCount(
+                l.Count - r.Count,
+                l.Memory - r.Memory
+            )
+
+        static member (+) (l : ResourceCount, r : ResourceDelta) =
+            ResourceCount(
+                l.Count + r.Created - r.Deleted,
+                l.Memory + r.MemoryDelta
+            )
+
+        static member (-) (l : ResourceCount, r : ResourceDelta) =
+            ResourceCount(
+                l.Count - r.Created + r.Deleted,
+                l.Memory - r.MemoryDelta
+            )
+
+        static member (*) (l : ResourceCount, r : float) =
+            ResourceCount(
+                l.Count * r,
+                l.Memory * r
+            )
+
+        static member (*) (l : float, r : ResourceCount) =
+            ResourceCount(
+                l * r.Count,
+                l * r.Memory
+            )
+
+        static member (/) (l : ResourceCount, r : float) =
+            ResourceCount(
+                l.Count / r,
+                l.Memory / r
+            )
+        new(cnt, mem) = { Count = cnt; Memory = mem }
+
+
+
+    end
+
+type ResourceDeltas (total : ResourceDelta, store : Map<ResourceKind, ResourceDelta>) =
+    static let zero = ResourceDeltas(ResourceDelta.Zero, Map.empty)
+
+    member x.Total = total
+    member x.Map = store
+
+    static member Zero = zero
+
+    static member (+) (l : ResourceDeltas, r : ResourceKind * ResourceDelta) =
+        let k, d = r
+        ResourceDeltas(l.Total + d, Map.increment k d l.Map)
+
+    static member (-) (l : ResourceDeltas, r : ResourceKind * ResourceDelta) =
+        let k, d = r
+        ResourceDeltas(l.Total - d, Map.decrement k d l.Map)
+ 
+    static member (+) (l : ResourceDeltas, r : ResourceDeltas) =
+        ResourceDeltas(l.Total + r.Total, Map.unionWith l.Map r.Map (+) ResourceDelta.Zero)
+
+    static member (-) (l : ResourceDeltas, r : ResourceDeltas) =
+        ResourceDeltas(l.Total - r.Total, Map.unionWith l.Map r.Map (-) ResourceDelta.Zero)
+          
+    static member (*) (l : ResourceDeltas, r : float) =
+         ResourceDeltas(l.Total * r, l.Map |> Map.map (fun _ v -> v * r))
+
+    static member (/) (l : ResourceDeltas, r : float) =
+         ResourceDeltas(l.Total / r, l.Map |> Map.map (fun _ v -> v / r))
+                   
+    new (kind : ResourceKind, delta : ResourceDelta) =
+        ResourceDeltas(delta, Map.ofList [kind, delta])
+               
+type ResourceCounts (total : ResourceCount, store : Map<ResourceKind, ResourceCount>) =
+    static let zero = ResourceCounts(ResourceCount.Zero, Map.empty)
+        
+    member x.Total = total
+    member x.Map = store
+
+    static member Zero = zero
+
+    static member (+) (l : ResourceCounts, r : ResourceCounts) =
+        ResourceCounts(l.Total + r.Total, Map.unionWith l.Map r.Map (+) ResourceCount.Zero)
+
+    static member (-) (l : ResourceCounts, r : ResourceCounts) =
+        ResourceCounts(l.Total + r.Total, Map.unionWith l.Map r.Map (-) ResourceCount.Zero)
+
+    static member (+) (l : ResourceCounts, r : ResourceDeltas) =
+        ResourceCounts(l.Total + r.Total, Map.unionWith l.Map r.Map (+) ResourceCount.Zero)
+
+
+    static member (+) (l : ResourceCounts, r : ResourceKind * ResourceDelta) =
+        let k, d = r
+        ResourceCounts(l.Total + d, Map.increment k d l.Map)
+
+    static member (-) (l : ResourceCounts, r : ResourceKind * ResourceDelta) =
+        let k, d = r
+        ResourceCounts(l.Total - d, Map.decrement k d l.Map)
+
+    static member (*) (l : ResourceCounts, r : float) =
+         ResourceCounts(l.Total * r, l.Map |> Map.map (fun _ v -> v * r))
+
+    static member (/) (l : ResourceCounts, r : float) =
+         ResourceCounts(l.Total / r, l.Map |> Map.map (fun _ v -> v / r))
 
 type FrameStatistics =
     {
@@ -49,10 +265,7 @@ type FrameStatistics =
         EffectiveDrawCallCount : float
 
         /// the number of updated resources
-        ResourceUpdateCount : float
-
-        /// the number of resource-updates per ResourceKind
-        ResourceUpdateCounts : Map<ResourceKind,float>
+        ResourceDeltas : ResourceDeltas
 
         /// the number of primitives rendered
         PrimitiveCount : float
@@ -83,10 +296,7 @@ type FrameStatistics =
         VirtualResourceCount : float
         
         /// used resources by their kind
-        ResourceCounts : Map<ResourceKind, float>
-        
-        // the total (approximate) memory-size for all resources
-        ResourceSize : Mem
+        ResourceCounts : ResourceCounts
 
         /// the total number of added/removed renderobjects in one frame
         AddedRenderObjects : float
@@ -104,12 +314,11 @@ type FrameStatistics =
             ActiveInstructionCount = 0.0
             DrawCallCount = 0.0
             EffectiveDrawCallCount = 0.0
-            ResourceUpdateCount = 0.0
+            ResourceDeltas = ResourceDeltas.Zero
             PrimitiveCount = 0.0
             JumpDistance = 0.0
             VirtualResourceCount = 0.0
             PhysicalResourceCount = 0.0
-            ResourceUpdateCounts = Map.empty
             AddedRenderObjects = 0.0
             RemovedRenderObjects = 0.0
             SortingTime = MicroTime.Zero
@@ -119,8 +328,7 @@ type FrameStatistics =
             SubmissionTime = MicroTime.Zero
             ExecutionTime = MicroTime.Zero
             ProgramSize = 0UL
-            ResourceCounts = Map.empty
-            ResourceSize = Mem.Zero
+            ResourceCounts = ResourceCounts.Zero
         }
 
     static member DivideByInt(l : FrameStatistics, r : int) =
@@ -133,13 +341,12 @@ type FrameStatistics =
             ActiveInstructionCount = l.ActiveInstructionCount + r.ActiveInstructionCount
             DrawCallCount = l.DrawCallCount + r.DrawCallCount
             EffectiveDrawCallCount = l.EffectiveDrawCallCount + r.EffectiveDrawCallCount
-            ResourceUpdateCount = l.ResourceUpdateCount + r.ResourceUpdateCount
+            ResourceDeltas = l.ResourceDeltas + r.ResourceDeltas
             PrimitiveCount = l.PrimitiveCount + r.PrimitiveCount
             JumpDistance = l.JumpDistance + r.JumpDistance
             VirtualResourceCount = l.VirtualResourceCount + r.VirtualResourceCount
             PhysicalResourceCount = l.PhysicalResourceCount + r.PhysicalResourceCount
-            ResourceUpdateCounts = Map.unionWith l.ResourceUpdateCounts r.ResourceUpdateCounts (+) 0.0
-            ResourceCounts = Map.unionWith l.ResourceCounts r.ResourceCounts (+) 0.0
+            ResourceCounts = l.ResourceCounts + r.ResourceCounts
             AddedRenderObjects = l.AddedRenderObjects + r.AddedRenderObjects
             RemovedRenderObjects = l.RemovedRenderObjects + r.RemovedRenderObjects
             SortingTime = l.SortingTime + r.SortingTime
@@ -149,7 +356,6 @@ type FrameStatistics =
             SubmissionTime = l.SubmissionTime + r.SubmissionTime
             ExecutionTime = l.ExecutionTime + r.ExecutionTime
             ProgramSize = l.ProgramSize + r.ProgramSize
-            ResourceSize = l.ResourceSize + r.ResourceSize
         }
 
     static member (-) (l : FrameStatistics, r : FrameStatistics) =
@@ -159,13 +365,12 @@ type FrameStatistics =
             ActiveInstructionCount = l.ActiveInstructionCount - r.ActiveInstructionCount
             DrawCallCount = l.DrawCallCount - r.DrawCallCount
             EffectiveDrawCallCount = l.EffectiveDrawCallCount - r.EffectiveDrawCallCount
-            ResourceUpdateCount = l.ResourceUpdateCount - r.ResourceUpdateCount
+            ResourceDeltas = l.ResourceDeltas - r.ResourceDeltas
             PrimitiveCount = l.PrimitiveCount - r.PrimitiveCount
             JumpDistance = l.JumpDistance - r.JumpDistance
             VirtualResourceCount = l.VirtualResourceCount - r.VirtualResourceCount
             PhysicalResourceCount = l.PhysicalResourceCount - r.PhysicalResourceCount
-            ResourceUpdateCounts = Map.unionWith l.ResourceUpdateCounts r.ResourceUpdateCounts (-) 0.0
-            ResourceCounts = Map.unionWith l.ResourceCounts r.ResourceCounts (-) 0.0
+            ResourceCounts = l.ResourceCounts - r.ResourceCounts
             AddedRenderObjects = l.AddedRenderObjects - r.AddedRenderObjects
             RemovedRenderObjects = l.RemovedRenderObjects - r.RemovedRenderObjects
             SortingTime = l.SortingTime - r.SortingTime
@@ -175,7 +380,6 @@ type FrameStatistics =
             SubmissionTime = l.SubmissionTime - r.SubmissionTime
             ExecutionTime = l.ExecutionTime - r.ExecutionTime
             ProgramSize = l.ProgramSize - r.ProgramSize
-            ResourceSize = l.ResourceSize - r.ResourceSize
         }
 
     static member (/) (l : FrameStatistics, r : float) =
@@ -185,13 +389,12 @@ type FrameStatistics =
             ActiveInstructionCount = l.ActiveInstructionCount / r
             DrawCallCount = l.DrawCallCount / r
             EffectiveDrawCallCount = l.EffectiveDrawCallCount / r
-            ResourceUpdateCount = l.ResourceUpdateCount / r
+            ResourceDeltas = l.ResourceDeltas / r
             PrimitiveCount = l.PrimitiveCount / r
             JumpDistance = l.JumpDistance / r
             VirtualResourceCount = l.VirtualResourceCount / r
             PhysicalResourceCount = l.PhysicalResourceCount / r
-            ResourceUpdateCounts = Map.map (fun k v -> v / r) l.ResourceUpdateCounts
-            ResourceCounts = Map.map (fun k v -> v / r) l.ResourceCounts
+            ResourceCounts = l.ResourceCounts / r
             AddedRenderObjects = l.AddedRenderObjects / r
             RemovedRenderObjects = l.RemovedRenderObjects / r
             SortingTime = l.SortingTime / r
@@ -201,7 +404,5 @@ type FrameStatistics =
             SubmissionTime = l.SubmissionTime / r
             ExecutionTime = l.ExecutionTime / r
             ProgramSize = uint64 (float l.ProgramSize / r)
-            ResourceSize = l.ResourceSize / r
         }
-
 

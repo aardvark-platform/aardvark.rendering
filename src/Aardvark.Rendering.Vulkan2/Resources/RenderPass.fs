@@ -142,25 +142,30 @@ module RenderPass =
                     VkSubpassDescription(
                         VkSubpassDescriptionFlags.MinValue,
                         VkPipelineBindPoint.Graphics,
+
+                        //inputs
                         0u, NativePtr.zero,
 
+                        //attachments
                         uint32 colorReferences.Length, pColorReferences,
 
+                        //resolve
                         NativePtr.zero,
+
+                        //depth
                         &&depthReference, 
 
+                        //preserve
                         0u,  NativePtr.zero
                     )
 
                 let mutable info =
                     VkRenderPassCreateInfo(
-                        VkStructureType.RenderPassCreateInfo,
-                        0n, VkRenderPassCreateFlags.MinValue,
+                        VkStructureType.RenderPassCreateInfo, 0n, 
+                        VkRenderPassCreateFlags.MinValue,
                         uint32 attachmentDescriptions.Length, pAttachmentDescriptions,
-                        1u,
-                        &&subpassDescription,
-                        0u,
-                        NativePtr.zero
+                        1u, &&subpassDescription,
+                        0u, NativePtr.zero
                     )
 
                 let mutable handle = VkRenderPass.Null

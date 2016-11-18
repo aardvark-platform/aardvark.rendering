@@ -16,9 +16,55 @@ open Aardvark.Base.Runtime
 #nowarn "9"
 #nowarn "51"
 
-type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this =
+type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
+    let instance = device.Instance
     do device.Runtime <- this
     let manager = new ResourceManager(device, None, shareTextures, shareBuffers)
+
+    #if DEBUG 
+    let seen = System.Collections.Concurrent.ConcurrentHashSet()
+
+    let debugBreak (str : string) =
+        let stack = StackTrace().GetFrames() |> Array.toList |> List.map (fun f -> f.GetMethod().MetadataToken)
+        if seen.Add ((stack, str)) then
+            if Debugger.IsAttached then
+                Debugger.Break()
+            else
+                if not (Debugger.Launch()) then
+                    Environment.Exit 1
+    #else
+    let debugBreak (str : string) = ()
+    #endif
+
+    let ignored =
+        HashSet.ofList [
+            Guid.Parse("{7b622240-bc96-b0cf-0cd0-31092e23a138}")
+        ]
+
+    let debugMessage (msg : DebugMessage) =
+        if not (ignored.Contains msg.id) then
+            let str = msg.layerPrefix + ": " + msg.message
+            match msg.severity with
+                | MessageSeverity.Error ->
+                    Report.Error("[Vulkan] {0}", str)
+                    debugBreak str
+
+                | MessageSeverity.Warning ->
+                    Report.Warn("[Vulkan] {0}", str)
+                    debugBreak str
+
+                | MessageSeverity.PerformanceWarning ->
+                    Report.Warn("[Vulkan] {0}", str)
+
+                | _ ->
+                    Report.Line(4, "[Vulkan] {0}", str)
+
+    // install debug output to file (and errors/warnings to console)
+    let debugSubscription = 
+        if debug then instance.DebugMessages.Subscribe debugMessage
+        else { new IDisposable with member x.Dispose() = () }
+
+
 
     member x.Device = device
     member x.ResourceManager = manager
@@ -34,10 +80,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this
 
 
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
-        device.DownloadLevel(unbox t, level, slice, target)
+        let image = unbox<Image> t 
+        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
-        device.UploadLevel(unbox t, level, slice, source)
+        let image = unbox<Image> t 
+        device.UploadLevel(image.[ImageAspect.Color, level, slice], source)
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         manager.PrepareRenderObject(unbox fboSignature, rj) :> IPreparedRenderObject
@@ -123,7 +171,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this
             if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
 
-        device.CreateImage(V3i(size.X, size.Y, 1), levels, count, samples, TextureDimension.Texture2D, format, usage, layout) :> IBackendTexture
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, count, samples, TextureDimension.Texture2D, format, usage) 
+        device.TransferFamily.run {
+            do! Command.TransformLayout(img, layout)
+        }
+        img :> IBackendTexture
 
     member x.CreateTextureCube(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
         let isDepth =
@@ -146,7 +198,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this
             if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
 
-        device.CreateImage(V3i(size.X, size.Y, 1), levels, 6, samples, TextureDimension.TextureCube, format, usage, layout) :> IBackendTexture
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, 6, samples, TextureDimension.TextureCube, format, usage) 
+        device.TransferFamily.run {
+            do! Command.TransformLayout(img, layout)
+        }
+        img :> IBackendTexture
 
 
 
@@ -171,37 +227,40 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool) as this
             if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit 
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit
 
-        device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, samples, TextureDimension.Texture2D, RenderbufferFormat.toTextureFormat format, usage, layout) :> IRenderbuffer
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, samples, TextureDimension.Texture2D, RenderbufferFormat.toTextureFormat format, usage) 
+        device.TransferFamily.run {
+            do! Command.TransformLayout(img, layout)
+        }
+        img :> IRenderbuffer
 
     member x.GenerateMipMaps(t : IBackendTexture) =
-        use token = device.ResourceToken
-        token.enqueue {
+        device.TransferFamily.run {
             do! Command.GenerateMipMaps (unbox t)
         }
 
     member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =
         use token = device.ResourceToken
 
-        let srcImage, srcLevel, srcSlice =
+        let src =
             match source with
                 | :? BackendTextureOutputView as view ->
-                    (unbox<Image> view.texture, view.level, view.slice)
+                    let image = unbox<Image> view.texture
+                    let flags = VkFormat.toAspect image.Format
+                    image.[unbox (int flags), view.level, view.slice]
                 | :? Image as img ->
-                    (img, 0, 0)
+                    let flags = VkFormat.toAspect img.Format
+                    img.[unbox (int flags), 0, 0]
                 | _ ->
                     failf "invalid input for blit: %A" source
 
-        let dstImage = unbox<Image> target
+        let dst = 
+            let img = unbox<Image> target
+            img.[src.Aspect, 0, 0]
 
-        let srcBox = Box3i(0, 0, 0, srcImage.Size.X - 1, srcImage.Size.Y - 1, 0)
-        let dstBox = Box3i(0, 0, 0, dstImage.Size.X - 1, dstImage.Size.Y - 1, 0)
-        
-
-        token.enqueue {
-            do! Command.Blit(srcImage, srcLevel, srcSlice, srcBox, dstImage, 0, 0, dstBox, VkFilter.Linear)
-        }
+        token.Enqueue (Command.ResolveMultisamples(src, dst))
 
     member x.Dispose() = 
+        debugSubscription.Dispose()
         manager.Dispose()
         device.Dispose()
         

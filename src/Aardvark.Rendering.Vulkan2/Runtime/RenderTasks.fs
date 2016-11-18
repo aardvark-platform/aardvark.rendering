@@ -76,13 +76,17 @@ module RenderTasks =
             innerStats
 
     [<AbstractClass>]
-    type DependentCommandBuffer(pool : CommandPool) =
+    type DependentCommandBuffer(renderPass : RenderPass, pool : CommandPool) as this =
         inherit DirtyTrackingAdaptiveObject<IResource>()
 
         let objects = CSet.empty
         let mutable initialized = false
-        let buffers = Dict<Framebuffer, CommandBuffer>()
-        let dependentBuffers = Dict<Framebuffer, IMod<CommandBuffer * FrameStatistics>>()
+        let cmd = pool.CreateCommandBuffer CommandBufferLevel.Secondary
+
+        let mutable renderStats = FrameStatistics.Zero
+        let mutable lastViewports = [||]
+        let mutable version = 0
+        let mutable commandVersion = -1
 
         member private x.init() =
             if not initialized then
@@ -95,16 +99,18 @@ module RenderTasks =
                 o.Update(x) |> ignore
                 objects.Add o |> ignore
             )
+            version <- version + 1
 
         member x.Remove(o : PreparedMultiRenderObject) =
             x.init()
             transact (fun () ->
                 objects.Remove o |> ignore
             )
+            version <- version + 1
 
         abstract member Init : aset<PreparedMultiRenderObject> -> unit
         abstract member UpdateProgram : unit -> FrameStatistics
-        abstract member Fill : Framebuffer * CommandBuffer -> FrameStatistics
+        abstract member Fill : CommandBuffer -> FrameStatistics
         abstract member Release : unit -> unit
 
         member x.Dispose() =
@@ -112,9 +118,7 @@ module RenderTasks =
                 initialized <- false
                 x.Release()
                 transact (fun () -> objects.Clear())
-                buffers.Values |> Seq.iter (fun cmd -> cmd.Dispose())
-                buffers.Clear()
-                dependentBuffers.Clear()
+                cmd.Dispose()
 
         member x.Update(caller : IAdaptiveObject) =
             x.init()
@@ -127,21 +131,28 @@ module RenderTasks =
                 stats + s
             )
 
-        member x.GetCommandBuffer(fbo : Framebuffer) =
-            x.init()
-            dependentBuffers.GetOrCreate(
-                fbo,
-                fun fbo ->
-                    let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
-                    buffers.[fbo] <- cmd
-                    Mod.custom (fun self ->
-                        let mutable stats = x.Update(self)
-                        cmd.Begin(CommandBufferUsage.None)
-                        stats <- stats + x.Fill(fbo, cmd)
-                        cmd.End()
-                        cmd, stats
-                    )   
-            )
+        member x.GetCommandBuffer(caller : IAdaptiveObject, viewports : Box2i[]) =
+            let updateStats = x.Update caller
+
+            let deltas              = updateStats.ResourceDeltas.Total
+            let handlesChanged      = (deltas.Created + deltas.Replaced) <> 0.0
+            let versionChanged      = version <> commandVersion
+            let viewportChanged     = lastViewports <> viewports
+
+            if handlesChanged || versionChanged || viewportChanged then
+                Log.line "{ handles: %A; version: %A; viewport: %A }" handlesChanged versionChanged viewportChanged
+                cmd.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
+                cmd.enqueue {
+                    do! Command.SetViewports viewports
+                    do! Command.SetScissors viewports
+                }
+                renderStats <- this.Fill(cmd)
+                cmd.End()
+
+                lastViewports <- viewports
+                commandVersion <- version
+
+            (cmd, updateStats + renderStats)
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -194,7 +205,7 @@ module RenderTasks =
                 compare left right
 
     type StaticOrderCommandBuffer(renderPass : RenderPass, config : IMod<BackendConfiguration>, pool : CommandPool) =
-        inherit DependentCommandBuffer(pool)
+        inherit DependentCommandBuffer(renderPass, pool)
         let mutable objectsWithKeys = Unchecked.defaultof<aset<IRenderObject * PreparedMultiRenderObject>>
         let mutable scope = { runtimeStats = NativePtr.zero }
 
@@ -267,17 +278,10 @@ module RenderTasks =
             program.Update x |> ignore
             FrameStatistics.Zero
 
-        override x.Fill(fbo : Framebuffer, cmd : CommandBuffer) =
-            let bounds = Box2i(V2i.Zero, fbo.Size - V2i.II)
-            let viewports = Array.create renderPass.AttachmentCount bounds
-
+        override x.Fill(cmd : CommandBuffer) =
             NativePtr.write scope.runtimeStats V2i.Zero
 
-            cmd.BeginPass(renderPass, fbo)
-            cmd.SetViewports(viewports)
-            cmd.SetScissors(viewports)
             program.Run(cmd.Handle)
-            cmd.EndPass()
 
             let calls = NativePtr.read scope.runtimeStats
 
@@ -340,7 +344,7 @@ module RenderTasks =
             stats
 
 
-
+        
 
         override x.Use (f : unit -> 'a) =
             lock x (fun () ->
@@ -359,15 +363,34 @@ module RenderTasks =
             stats
 
         override x.Perform (fbo : Framebuffer) =
+            use token = device.ResourceToken
+
+
+            let bounds = Box2i(V2i.Zero, fbo.Size - V2i.II)
+            let vp = Array.create renderPass.AttachmentCount bounds
+
             let mutable stats = update x
-            
-            for (_,dep) in Map.toSeq commandBuffers do
-                let cmd, s = 
-                    using device.ResourceToken (fun token ->
-                        dep.GetCommandBuffer(fbo).GetValue(x)
+
+            let commandBuffers =
+                commandBuffers 
+                    |> Map.toList 
+                    |> List.map snd
+                    |> List.map (fun dc ->
+                        let cmd, s = dc.GetCommandBuffer(x, vp)
+                        stats <- stats + s
+                        cmd
                     )
-                device.GraphicsFamily.RunSynchronously(cmd)
-                stats <- stats + s
+
+            token.enqueue {
+                for cmd in commandBuffers do
+                    do! Command.Barrier
+
+                    do! Command.BeginPass (renderPass, fbo, false)
+                    do! Command.Execute cmd
+                    do! Command.EndPass
+            }
+    
+            token.Sync()
 
             stats
 
@@ -420,13 +443,12 @@ module RenderTasks =
                     do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
                     image.Layout <- VkImageLayout.TransferDstOptimal
                     do! {
-                        new Command<unit>() with
-                            member x.Enqueue cmd = real cmd
-                            member x.Dispose() = ()
+                        new Command() with
+                            member x.Enqueue cmd = real cmd; Disposable.Empty
                     }
                     do! Command.TransformLayout(image, old)
                 }
-            clear.Enqueue(cmd)
+            cmd.Enqueue clear
             image.Layout <- old
 
         member x.Run(caller : IAdaptiveObject, outputs : OutputDescription) =
@@ -455,6 +477,7 @@ module RenderTasks =
                                 let mutable clearValue = value
                                 let mutable range = VkImageSubresourceRange(aspect, 0u, 1u, 0u, 1u)
                                 clearImage image cmd (fun cmd ->
+                                    cmd.AppendCommand()
                                     VkRaw.vkCmdClearDepthStencilImage(
                                         cmd.Handle, image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range
                                     )
@@ -465,6 +488,7 @@ module RenderTasks =
                         let mutable clearValue = clearColors.[sem].GetValue()
                         let mutable range = VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
                         clearImage image cmd (fun cmd ->
+                            cmd.AppendCommand()
                             VkRaw.vkCmdClearColorImage(
                                 cmd.Handle, image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range
                             )

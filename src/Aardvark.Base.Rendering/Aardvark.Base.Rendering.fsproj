@@ -940,6 +940,7 @@
     <None Include="NativeTensorGenerator.fsx" />
     <Compile Include="NativeTensorGenerated.fs" />
     <Compile Include="ImageTrafo.fs" />
+    <Compile Include="PixImageCube.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
