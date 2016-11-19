@@ -81,6 +81,9 @@
     <Compile Include="Resources\IndirectBuffer.fs" />
     <Compile Include="Resources\MappedBuffer.fs" />
     <Compile Include="Resources\CommandResources.fs" />
+    <Compile Include="Swapchain\Surface.fs" />
+    <Compile Include="Swapchain\SwapchainDescription.fs" />
+    <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\DebugReport.fs" />

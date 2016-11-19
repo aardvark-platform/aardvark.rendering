@@ -50,8 +50,6 @@
     <Compile Include="MessageLoop.fs" />
     <Compile Include="Utilities.fs" />
     <Compile Include="Surface.fs" />
-    <Compile Include="SwapchainDescription.fs" />
-    <Compile Include="Swapchain.fs" />
     <Compile Include="VulkanControl.fs" />
     <Compile Include="Application.fs" />
   </ItemGroup>

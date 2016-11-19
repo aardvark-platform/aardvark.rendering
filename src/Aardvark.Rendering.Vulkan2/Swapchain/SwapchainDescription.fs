@@ -1,9 +1,6 @@
-﻿namespace Aardvark.Application.WinForms.Vulkan
+﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open Aardvark.Application
-open Aardvark.Application.WinForms
-open System.Windows.Forms
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering

@@ -1,9 +1,6 @@
-﻿namespace Aardvark.Application.WinForms.Vulkan
+﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open Aardvark.Application
-open Aardvark.Application.WinForms
-open System.Windows.Forms
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
@@ -18,7 +15,6 @@ open Microsoft.FSharp.NativeInterop
 
 [<AutoOpen>]
 module private EnumExtensions =
-
     type Command with
         static member PresentBarrier(img : Image) =
             if img.Layout = VkImageLayout.PresentSrcKhr then
@@ -55,76 +51,6 @@ module private EnumExtensions =
                         Disposable.Empty
                 }
 
-
-type OldSwapchain(device : Device, handle : VkSwapchainKHR, description : SwapchainDescription, size : V2i, colorLayout : VkImageLayout, depthView : Option<ImageView>, colorViews : ImageView[], framebuffers : Framebuffer[]) =
-    inherit Resource<VkSwapchainKHR>(device, handle)
-
-
-    let mutable currentBuffer = 0u
-
-    member x.Size = size
-    member x.Description = description
-    member x.DepthView = depthView
-    member x.ColorViews = colorViews
-    member x.Framebuffers = framebuffers
-
-    member x.RenderFrame (render : DeviceQueue -> Framebuffer -> 'a) =
-        if x.Handle.IsNull then failf "cannot use disposed Swapchain"
-
-        device.GraphicsFamily.UsingQueue(fun queue ->
-            use sem = device.CreateSemaphore()
-
-            VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, sem.Handle, VkFence.Null, &&currentBuffer)
-                |> check "could not acquire Swapchain Image"
-
-            queue.Wait(sem)
-
-            let view = colorViews.[int currentBuffer]
-            let image = view.Image
-            
-            let cmd0 = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
-            cmd0.Begin(CommandBufferUsage.OneTimeSubmit)
-            cmd0.enqueue {
-                do! Command.ClearColor(image.[ImageAspect.Color, * , *], C4f.Black)
-                match depthView with
-                    | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil, *, *], 1.0, 0u)
-                    | _ -> ()
-                do! Command.TransformLayout(image, colorLayout)
-            }
-            cmd0.End()
-            queue.Start cmd0
-
-            let res = render queue framebuffers.[int currentBuffer]
-            
-            let cmd1 = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
-            cmd1.Begin CommandBufferUsage.OneTimeSubmit
-            cmd1.Enqueue(Command.TransformLayout(image, VkImageLayout.PresentSrcKhr))
-            cmd1.End()
-            queue.Start cmd1
-
-            let mutable result = VkResult.VkSuccess
-            let mutable info =
-                VkPresentInfoKHR(
-                    VkStructureType.PresentInfoKHR,
-                    0n, 
-                    0u, NativePtr.zero,
-                    1u, &&x.Handle,
-                    &&currentBuffer,
-                    &&result
-                )
-
-            VkRaw.vkQueuePresentKHR(queue.Handle, &&info)
-                |> check "could not swap buffers"
-
-            queue.WaitIdle()
-            cmd0.Dispose()
-            cmd1.Dispose()
-
-            result 
-                |> check "something went wrong with swap"
-
-            res
-        )
 
 type Swapchain(device : Device, description : SwapchainDescription) =
     let surface = description.surface

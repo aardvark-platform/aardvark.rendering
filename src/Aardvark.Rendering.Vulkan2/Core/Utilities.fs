@@ -25,6 +25,18 @@ module private Utilities =
 
     let VK_QUEUE_FAMILY_IGNORED = ~~~0u
 
+    module Map =
+        let ofSeqDupl (s : seq<'a * 'b>) =
+            let mutable res = Map.empty
+            for (k,v) in s do
+                match Map.tryFind k res with
+                    | Some set ->
+                        res <- Map.add k (Set.add v set) res
+                    | None ->
+                        res <- Map.add k (Set.singleton v) res
+            res
+
+
 [<AutoOpen>]
 module BaseLibExtensions = 
     module NativePtr =
