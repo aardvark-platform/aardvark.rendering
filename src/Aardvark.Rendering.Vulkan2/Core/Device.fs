@@ -330,6 +330,8 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         with get() : DeviceQueueFamily = family
         and internal set (f : DeviceQueueFamily) = family <- f
 
+    member x.Flags = familyInfo.flags
+    member x.FamilyIndex = familyInfo.index
     member x.Index = index
     member x.Handle = handle
 
@@ -391,6 +393,70 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         VkRaw.vkQueueWaitIdle(x.Handle)
             |> check "could not wait for queue"
 
+and DeviceQueuePool internal(device : Device, queues : list<DeviceQueueFamily>) =
+    let available : HashSet<QueueFlags> = queues |> List.collect (fun f -> Enum.allSubFlags f.Flags) |> HashSet.ofList
+    let store : MultiTable<DeviceQueueFamily, DeviceQueue> = 
+        queues 
+            |> List.collect (fun f -> f.Queues |> List.map (fun q -> f, q)) 
+            |> MultiTable
+
+    
+    let changed = new AutoResetEvent(false)
+
+    let checkFlags (cap : QueueFlags) (f : DeviceQueueFamily) =
+        f.Flags &&& cap = cap
+
+    let tryAcquireFlags (flags : QueueFlags) (queue : byref<DeviceQueue>) =
+        Monitor.Enter store
+        try store.TryRemove(checkFlags flags, &queue)
+        finally Monitor.Exit store
+
+    member x.TryAcquire(flags : QueueFlags, [<Out>] queue : byref<DeviceQueue>) : bool =
+        if available.Contains flags then
+            tryAcquireFlags flags &queue
+        else
+            false
+
+    member x.Acquire (flags : QueueFlags) : DeviceQueue =
+        if available.Contains flags then
+            let mutable res = Unchecked.defaultof<_>
+            while not (tryAcquireFlags flags &res) do
+                changed.WaitOne() |> ignore
+            res
+        else
+            failf "no queue with flags %A exists" flags
+
+    member x.TryPeek(flags : QueueFlags, [<Out>] queue : byref<DeviceQueue>) : bool =
+        if available.Contains flags then
+            Monitor.Enter store
+            try store.TryPeek(checkFlags flags, &queue)
+            finally Monitor.Exit store
+        else
+            false
+
+    member x.TryAcquire(family : DeviceQueueFamily, [<Out>] queue : byref<DeviceQueue>) =
+        Monitor.Enter store
+        try store.TryRemove((fun f -> f = family), &queue)
+        finally Monitor.Exit store
+
+    member x.TryPeek(family : DeviceQueueFamily, [<Out>] queue : byref<DeviceQueue>) =
+        Monitor.Enter store
+        try store.TryPeek((fun f -> f = family), &queue)
+        finally Monitor.Exit store
+
+    member x.Acquire (family : DeviceQueueFamily) : DeviceQueue =
+        let mutable res = Unchecked.defaultof<_>
+        while not (x.TryAcquire(family, &res)) do
+            changed.WaitOne() |> ignore
+        res
+
+    member x.Release (queue : DeviceQueue) : unit =
+        lock store (fun () ->
+            if store.Add(queue.Family, queue) then
+                changed.Set() |> ignore
+        )
+
+
 and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues : list<DeviceQueue>) as this =
     let store = new BlockingCollection<DeviceQueue>()
     do for q in queues do 
@@ -402,6 +468,7 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
     member x.Device = device
     member x.Info = info
     member x.Index = info.index
+    member x.Flags = info.flags
     member x.Queues = queues
     member x.DefaultCommandPool = defaultPool
     member x.CreateCommandPool() = new CommandPool(device, info.index, x)

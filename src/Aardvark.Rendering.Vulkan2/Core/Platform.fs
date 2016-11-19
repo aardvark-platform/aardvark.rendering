@@ -380,6 +380,8 @@ module Instance =
         let ParameterValidation = "VK_LAYER_LUNARG_parameter_validation"
         let CoreValidation      = "VK_LAYER_LUNARG_core_validation"
 
+
+        let Nsight              = "VK_LAYER_NV_nsight"
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PhysicalDevice =
     module Extensions =

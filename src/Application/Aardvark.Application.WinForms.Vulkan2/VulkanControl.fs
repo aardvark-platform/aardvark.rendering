@@ -45,6 +45,7 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
 
         loaded <- true
 
+
     override x.OnPaint(e) =
         base.OnPaint(e)
 
@@ -76,8 +77,18 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     let mutable taskSubscription : IDisposable = null
     let mutable sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
     let mutable needsRedraw = false
+    let mutable renderContiuously = false
 
     let time = Mod.custom(fun _ -> DateTime.Now)
+
+    override x.OnHandleCreated(e) =
+        base.OnHandleCreated(e)
+        x.KeyDown.Add(fun e ->
+            if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
+                renderContiuously <- not renderContiuously
+                x.Invalidate()
+                e.Handled <- true
+        )
 
     override x.OnRenderFrame(pass, queue, fbo) =
         needsRedraw <- false
@@ -93,6 +104,8 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
+        if renderContiuously then
+            x.Invalidate()
 
 
     member x.Time = time
@@ -116,12 +129,13 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     interface IControl with
         member x.IsInvalid = needsRedraw
         member x.Invalidate() =
-            if not x.IsDisposed && not needsRedraw then
-                needsRedraw <- true
-                x.Invalidate()
+            if not x.IsDisposed && not renderContiuously then
+                if not needsRedraw then
+                    needsRedraw <- true
+                    x.Invalidate()
 
         member x.Paint() =
-            if not x.IsDisposed then
+            if not x.IsDisposed && not renderContiuously then
                 use g = x.CreateGraphics()
                 use e = new System.Windows.Forms.PaintEventArgs(g, x.ClientRectangle)
                 x.InvokePaint(x, e)

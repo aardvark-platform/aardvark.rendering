@@ -19,6 +19,7 @@ type private ChangeableRenderTask() =
     member x.Inner
         with get() = current
         and set (v : IRenderTask) =
+            current.Dispose()
             current <- v
             transact (fun () -> x.MarkOutdated())
 

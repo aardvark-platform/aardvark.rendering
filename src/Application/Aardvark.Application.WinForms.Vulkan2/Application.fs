@@ -99,6 +99,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
 
     let requestedLayers =
         [
+            yield Instance.Layers.Nsight
             if debug then
                 yield Instance.Layers.SwapChain
                 yield Instance.Layers.DrawState
@@ -146,7 +147,8 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
         let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
         
-        physicalDevice.CreateDevice(enabledLayers, enabledExtensions, [physicalDevice.QueueFamilies.[0], 4])
+        let mainQueue = physicalDevice.MainQueue
+        physicalDevice.CreateDevice(enabledLayers, enabledExtensions, [mainQueue, min 4 mainQueue.count])
 
     // create a runtime
     let runtime = new Runtime(device, false, false, debug)
