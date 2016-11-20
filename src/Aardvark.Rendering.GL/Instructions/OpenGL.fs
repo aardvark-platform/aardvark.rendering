@@ -434,7 +434,13 @@ module OpenGl =
               address
 
     let getGLVMProcAddress =
-        let lib = DynamicLinker.loadLibrary "glvm"
+        let path =
+            match Environment.OSVersion with
+                | Windows -> "glvm"
+                | Linux -> Path.Combine(Environment.CurrentDirectory, "glvm.so") |> Path.GetFullPath
+                | Mac -> failwithf "cannot load GLVM on Mac"
+
+        let lib = DynamicLinker.loadLibrary path
         fun (name : string) ->
             let ptr = lib.GetFunction(name).Handle
             ptr

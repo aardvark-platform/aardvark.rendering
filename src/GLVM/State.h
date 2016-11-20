@@ -2,19 +2,19 @@
 
 #ifdef __GNUC__
 #include <GL/gl.h>
-#include <unordered_set>
-#include <unordered_map>
-#include <tuple>
+#include <stdio.h>
+#include <string.h>
 #else
 #define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
 #include "stdafx.h"
 #include <windows.h>
 #include <gl/GL.h>
+#endif
+
+#include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <tuple>
-
-#endif
 
 
 typedef struct {

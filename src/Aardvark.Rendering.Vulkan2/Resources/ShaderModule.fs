@@ -201,8 +201,11 @@ module private SpirVReflector =
         ofInstructions m.instructions
 
     let ofBinary (code : uint32[]) =
-        let code = Array.copy(code).UnsafeCoerce<byte>()
-        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(code))
+        let arr : byte[] = Array.zeroCreate (4 * code.Length)
+        let gc = GCHandle.Alloc(code, GCHandleType.Pinned)
+        try Marshal.Copy(gc.AddrOfPinnedObject(), arr, 0, arr.Length)
+        finally gc.Free()
+        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(arr))
         reader 
             |> Serializer.read
             |> ofModule

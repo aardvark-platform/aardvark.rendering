@@ -1,36 +1,39 @@
-// vkvm.cpp : Defines the exported functions for the DLL application.
-//
-
+#ifndef __GNUC__
 #include "stdafx.h"
-
+#endif
 
 #include "vkvm.h"
-
+#include <stdio.h>
 
 DllExport(void) vmBindPipeline(VkCommandBuffer commandBuffer, VkPipeline* pipeline)
 {
+	printf("vmBindPipeline(0x%08x, 0x%08x)\n", commandBuffer, pipeline);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline);
 }
 
 DllExport(void) vmBindDescriptorSets(VkCommandBuffer commandBuffer, DescriptorSetBinding* binding)
 {
+	printf("vmBindDescriptorSets(0x%08x, 0x%08x)\n", commandBuffer, binding);
 	if (binding->Count == 0)return;
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, binding->Layout, binding->FirstIndex, binding->Count, binding->Sets, 0, nullptr);
 }
 
 DllExport(void) vmBindIndexBuffer(VkCommandBuffer commandBuffer, IndexBufferBinding* indexBuffer)
 {
+	printf("vmBindIndexBuffer(0x%08x, 0x%08x)\n", commandBuffer, indexBuffer);
 	vkCmdBindIndexBuffer(commandBuffer, indexBuffer->Buffer, indexBuffer->Offset, indexBuffer->Type);
 }
 
 DllExport(void) vmBindVertexBuffers(VkCommandBuffer commandBuffer, VertexBufferBinding* binding)
 {
+	printf("vmBindVertexBuffers(0x%08x, 0x%08x)\n", commandBuffer, binding);
 	if (binding->BindingCount == 0)return;
 	vkCmdBindVertexBuffers(commandBuffer, binding->FirstBinding, binding->BindingCount, binding->Buffers, binding->Offsets);
 }
 
 DllExport(void) vmDraw(VkCommandBuffer commandBuffer, RuntimeStats* stats, int* isActive, DrawCall* call)
 {
+	printf("vmDraw(0x%08x, 0x%08x, 0x%08x)\n", commandBuffer, isActive, call);
 	if (!*isActive)return;
 
 	if (call->IsIndirect)

@@ -42,7 +42,14 @@ module Compiler =
         extern void vmDraw(VkCommandBuffer buffer, V2i* runtimeStats, int* isActive, DrawCall* call)
 
         module Pointers =
-            let handle = DynamicLinker.loadLibrary lib
+
+            let path =
+                match Environment.OSVersion with
+                    | Windows -> "vkvm.dll"
+                    | Linux -> System.IO.Path.Combine(Environment.CurrentDirectory, "vkvm.so") |> System.IO.Path.GetFullPath
+                    | Mac -> failwithf "cannot load vkvm on Mac"
+
+            let handle = DynamicLinker.loadLibrary path
 
             let private getProcAddress (name : string) =
                 let f = handle.GetFunction name

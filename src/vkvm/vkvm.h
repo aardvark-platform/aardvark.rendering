@@ -1,7 +1,8 @@
 #pragma once
 
 #ifdef __GNUC__
-#include <vulkan.h>
+#include <stdio.h>
+#include <vulkan/vulkan.h>
 #define DllExport(t) extern "C" t
 #else
 #include "stdafx.h"

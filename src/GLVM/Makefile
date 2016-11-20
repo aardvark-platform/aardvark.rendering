@@ -3,8 +3,8 @@ all: deploy
 
 deploy: glvm.so
 	cp glvm.so ../../lib/Native/Aardvark.Rendering.GL/linux/AMD64/glvm.so
-	cp glvm.so ../../bin/Debug/libglvm.so
-	cp glvm.so ../../bin/Release/libglvm.so
+	cp glvm.so ../../bin/Debug/glvm.so
+	cp glvm.so ../../bin/Release/glvm.so
 
 glvm.o: glvm.cpp glvm.h
 	g++ -std=c++11 -fPIC -c glvm.cpp -o glvm.o
