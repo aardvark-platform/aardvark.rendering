@@ -214,7 +214,16 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                             cullMode        : IMod<CullMode>,
                             blendMode       : IMod<BlendMode>,
                             depthTest       : IMod<DepthTestMode>,
-                            stencilMode     : IMod<StencilMode>) =
+                            stencilMode     : IMod<StencilMode>,
+                            writeBuffers    : Option<Set<Symbol>>) =
+
+        let writeBuffers =
+            match writeBuffers with
+                | Some set -> 
+                    if Set.isSuperset set pass.Semantics then pass.Semantics
+                    else set
+                | None ->
+                    pass.Semantics
         let key =
             [ 
                 pass :> obj; 
@@ -226,11 +235,27 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                 blendMode :> obj
                 depthTest :> obj
                 stencilMode :> obj
+                writeBuffers :> obj
             ]
 
         let anyAttachment = pass.ColorAttachments |> Map.toSeq |> Seq.head |> snd |> snd
         pipelineCache.GetOrCreateVulkan(
             key, fun () ->
+                let writeMasks = Array.zeroCreate pass.ColorAttachmentCount
+                for (i, (sem,_)) in Map.toSeq pass.ColorAttachments do 
+                    if Set.contains sem writeBuffers then writeMasks.[i] <- true
+                    else writeMasks.[i] <- false
+
+                let writeDepth = Set.contains DefaultSemantic.Depth writeBuffers
+
+                let vertexInputState = VertexInputState.create inputs
+                let inputAssembly = Mod.map InputAssemblyState.ofIndexedGeometryMode geometryMode
+                let rasterizerState = Mod.map2 RasterizerState.create cullMode fillMode
+                let colorBlendState = Mod.map (ColorBlendState.create writeMasks pass.ColorAttachmentCount) blendMode
+                let multisampleState = MultisampleState.create anyAttachment.samples
+                let depthState = Mod.map (DepthState.create writeDepth) depthTest
+                let stencilState = Mod.map StencilState.create stencilMode
+
                 { new Aardvark.Base.Rendering.Resource<Pipeline>(ResourceKind.ShaderProgram) with
                     member x.GetInfo b = 
                         ResourceInfo.Zero
@@ -242,13 +267,13 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                             {
                                 renderPass              = pass
                                 shaderProgram           = program.Handle.GetValue()
-                                vertexInputState        = VertexInputState.create inputs
-                                inputAssembly           = InputAssemblyState.ofIndexedGeometryMode (geometryMode.GetValue x)
-                                rasterizerState         = RasterizerState.create (cullMode.GetValue x) (fillMode.GetValue x)
-                                colorBlendState         = ColorBlendState.create pass.ColorAttachmentCount (blendMode.GetValue x)
-                                multisampleState        = MultisampleState.create anyAttachment.samples
-                                depthState              = DepthState.create (depthTest.GetValue x)
-                                stencilState            = StencilState.create (stencilMode.GetValue x)
+                                vertexInputState        = vertexInputState
+                                inputAssembly           = inputAssembly.GetValue x
+                                rasterizerState         = rasterizerState.GetValue x
+                                colorBlendState         = colorBlendState.GetValue x
+                                multisampleState        = multisampleState
+                                depthState              = depthState.GetValue x
+                                stencilState            = stencilState.GetValue x
                                 dynamicStates           = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
                             }
 

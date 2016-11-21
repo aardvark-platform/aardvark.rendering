@@ -214,7 +214,8 @@ type DevicePreparedRenderObjectExtensions private() =
                 ro.CullMode,
                 ro.BlendMode,
                 ro.DepthTest,
-                ro.StencilMode
+                ro.StencilMode,
+                ro.WriteBuffers
             )
 
         let indexed = Option.isSome ro.Indices

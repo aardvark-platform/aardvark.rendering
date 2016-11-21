@@ -407,8 +407,9 @@ module ColorBlendState =
         ]
 
     let private rgba = VkColorComponentFlags.RBit ||| VkColorComponentFlags.GBit ||| VkColorComponentFlags.BBit ||| VkColorComponentFlags.ABit
+    let private disable = VkColorComponentFlags.None
 
-    let private toAttachmentState (blend : BlendMode) =
+    let private toAttachmentState (writeMask : bool) (blend : BlendMode) =
         {
             enabled                 = blend.Enabled
             srcFactor               = toVkBlendFactor blend.SourceFactor
@@ -417,14 +418,14 @@ module ColorBlendState =
             srcFactorAlpha          = toVkBlendFactor blend.SourceAlphaFactor
             dstFactorAlpha          = toVkBlendFactor blend.DestinationAlphaFactor
             operationAlpha          = toVkBlendOp blend.AlphaOperation
-            colorWriteMask          = rgba
+            colorWriteMask          = if writeMask then rgba else disable
         }
     
-    let create (count : int) (blend : BlendMode) =
+    let create (writeMasks : array<bool>) (count : int) (blend : BlendMode) =
         {
             logicOpEnable           = false
             logicOp                 = VkLogicOp.NoOp
-            attachmentStates        = Array.create count (toAttachmentState blend)
+            attachmentStates        = Array.init count (fun i -> toAttachmentState writeMasks.[i] blend)
             constants               = V4f.IIII
         }
  
@@ -451,10 +452,10 @@ module DepthState =
             DepthTestMode.LessOrEqual, VkCompareOp.LessOrEqual
         ]
 
-    let create (mode : DepthTestMode) =
+    let create (write : bool) (mode : DepthTestMode) =
         {
             testEnabled             = mode <> DepthTestMode.None
-            writeEnabled            = true
+            writeEnabled            = write
             boundsTest              = false
             compare                 = toVkCompareOp mode
             depthBounds             = Range1d(0.0, 1.0)

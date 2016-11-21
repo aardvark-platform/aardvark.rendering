@@ -17,6 +17,7 @@ type RenderPass =
     class
         inherit Resource<VkRenderPass>
 
+        val mutable public Semantics : Set<Symbol>
         val mutable public ColorAttachmentCount : int
         val mutable public ColorAttachments : Map<int, Symbol * AttachmentSignature>
         val mutable public DepthStencilAttachment : Option<AttachmentSignature>
@@ -45,7 +46,12 @@ type RenderPass =
                         false
 
         new(device : Device, handle : VkRenderPass, colorCount : int, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>) = 
-            { inherit Resource<_>(device, handle); ColorAttachmentCount = colorCount; ColorAttachments = colors; DepthStencilAttachment = depth }
+            let semantics = colors |> Map.toSeq |> Seq.map (fun (_,(sem,_)) -> sem) |> Set.ofSeq
+            let semantics = 
+                match depth with
+                    | Some _ -> Set.add DefaultSemantic.Depth semantics
+                    | _ -> semantics
+            { inherit Resource<_>(device, handle); Semantics = semantics; ColorAttachmentCount = colorCount; ColorAttachments = colors; DepthStencilAttachment = depth }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
