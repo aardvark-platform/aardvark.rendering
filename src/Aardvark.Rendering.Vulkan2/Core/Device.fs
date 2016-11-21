@@ -109,15 +109,12 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
 
     let queueFamilies = 
-        [
-            for info in queueInfos do
-                let family = physical.QueueFamilies.[int info.queueFamilyIndex]
-                for i in 0 .. int info.queueCount - 1 do
-                    yield family, DeviceQueue(this, device, family, i)
-        ]
-        |> Seq.groupBy fst 
-        |> Seq.map (fun (k, vs) -> k, new DeviceQueueFamily(this, k, Seq.toList (Seq.map snd vs)))
-        |> HashMap.ofSeq
+        queueInfos |> Array.map (fun info ->
+            let family = physical.QueueFamilies.[int info.queueFamilyIndex]
+            let queues = List.init (int info.queueCount) (fun i -> DeviceQueue(this, device, family, i))
+            new DeviceQueueFamily(this, family, queues)
+        )
+
 
     let memories = 
         physical.MemoryTypes |> Array.map (fun t ->
@@ -135,46 +132,28 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     let computeFamily = 
         queueFamilies 
-            |> HashMap.toSeq 
-            |> Seq.tryPick (fun (f,pool) -> 
-                if QueueFlags.compute f.flags then
-                    Some pool
-                else
-                    None
-            )
+            |> Seq.tryFind (fun f -> QueueFlags.compute f.Flags)
+
 
     let graphicsFamily = 
         queueFamilies 
-            |> HashMap.toSeq 
-            |> Seq.tryPick (fun (f,pool) -> 
-                if QueueFlags.graphics f.flags then
-                    Some pool
-                else
-                    None
-            )
+            |> Seq.tryFind (fun f -> QueueFlags.graphics f.Flags)
 
     let transferFamily = 
         queueFamilies 
-            |> HashMap.toSeq 
-            |> Seq.tryPick (fun (f,pool) -> 
-                if QueueFlags.transfer f.flags then
-                    Some pool
-                else
-                    None
-            )
+            |> Seq.tryFind (fun f -> QueueFlags.transfer f.Flags)
 
     let currentResourceToken = new ThreadLocal<ref<Option<DeviceToken>>>(fun _ -> ref None)
-
     let mutable runtime = Unchecked.defaultof<IRuntime>
 
-    member x.ResourceToken =
+    member x.Token =
         let ref = currentResourceToken.Value
         match !ref with
             | Some t ->
-                t.AddRefCount()
+                t.AddRef()
                 t
             | None ->
-                let t = new DeviceToken(1, ref, transferFamily.Value.DefaultCommandPool)
+                let t = new DeviceToken(x, ref)
                 ref := Some t
                 t 
 
@@ -226,7 +205,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
         if not instance.IsDisposed then
             let o = Interlocked.Exchange(&isDisposed, 1)
             if o = 0 then 
-                for (_,f) in HashMap.toSeq queueFamilies do f.Dispose()
+                for f in queueFamilies do f.Dispose()
                 VkRaw.vkDestroyDevice(device, NativePtr.zero)
                 device <- VkDevice.Zero
 
@@ -241,7 +220,6 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
-
 
 and [<AbstractClass>] Resource =
     class
@@ -265,50 +243,6 @@ and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
             { inherit Resource(device); Handle = handle }
     end
 
-
-and DeviceToken internal(cnt : int, cell : ref<Option<DeviceToken>>, commandPool : DeviceCommandPool) =
-    let mutable cnt = cnt
-
-    let queueFamily : DeviceQueueFamily = commandPool.QueueFamily
-
-    let mutable current = None
-    
-    let getCmd() =
-        match current with
-            | Some cmd -> cmd 
-            | None ->
-                let res : CommandBuffer = commandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-                res.Begin(CommandBufferUsage.OneTimeSubmit)
-                current <- Some res
-                res
-
-    let run() =
-        match current with
-            | Some cmd ->
-                cmd.End()
-                queueFamily.RunSynchronously(cmd)
-                cmd.Dispose()
-                current <- None
-            | None ->
-                ()
-
-    member x.Device = commandPool.Device
-    member x.QueueFamily = commandPool.QueueFamily
-    member x.CommandBuffer = getCmd()
-
-    member internal x.AddRefCount() =
-        cnt <- cnt + 1
-
-    member x.Sync() = run()
-
-    member x.Dispose() =
-        cnt <- cnt - 1
-        if cnt = 0 then
-            run()
-            cell := None
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
 
 and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : QueueFamilyInfo, index : int) =
     let mutable handle = VkQueue.Zero
@@ -350,10 +284,8 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                 )
 
             let fence = device.CreateFence()
-
             VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
                 |> check "could not submit command buffer"
-
             fence.Wait()
 
     member x.Start(cmd : CommandBuffer) =
@@ -373,7 +305,6 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
 
             VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
                 |> check "could not submit command buffer"
-
 
     member x.Wait(sem : Semaphore) =
         let mutable semHandle = sem.Handle
@@ -458,10 +389,9 @@ and DeviceQueuePool internal(device : Device, queues : list<DeviceQueueFamily>) 
 
 
 and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues : list<DeviceQueue>) as this =
-    let store = new BlockingCollection<DeviceQueue>()
-    do for q in queues do 
-        q.Family <- this
-        store.Add q
+    let store = queues |> List.toArray
+    do for q in store do q.Family <- this
+    let mutable current = 0
 
     let defaultPool = new DeviceCommandPool(device, info.index, this)
 
@@ -474,15 +404,12 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
     member x.CreateCommandPool() = new CommandPool(device, info.index, x)
 
     member x.RunSynchronously(cmd : CommandBuffer) =
-        x.UsingQueue(fun queue ->
-            queue.RunSynchronously(cmd)
-        )
+        let q = x.GetQueue()
+        q.RunSynchronously(cmd)
 
-
-    member x.UsingQueue<'a> (f : DeviceQueue -> 'a) : 'a =
-        let queue = store.Take()
-        try f queue
-        finally store.Add queue
+    member x.GetQueue () : DeviceQueue =
+        let next = Interlocked.Change(&current, fun c -> (c + 1) % store.Length)
+        store.[next]
 
     member x.Dispose() =
         defaultPool.Dispose()
@@ -691,6 +618,9 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     member x.AddCompensation (d : IDisposable) =
         cleanupTasks.Add d
 
+    member x.Cleanup() =
+        cleanup()
+
     abstract member Dispose : unit -> unit
     default x.Dispose() =
         if handle <> 0n && device.Handle <> 0n then
@@ -702,14 +632,18 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
         member x.Dispose() = x.Dispose()
 
 and Fence internal(device : Device, signaled : bool) =
-    let mutable info =
-        VkFenceCreateInfo(
-            VkStructureType.FenceCreateInfo, 0n,
-            (if signaled then VkFenceCreateFlags.SignaledBit else VkFenceCreateFlags.None)
-        )
+    static let infinite = -1L
+
     let mutable handle : VkFence = VkFence.Null
-    do VkRaw.vkCreateFence(device.Handle, &&info, NativePtr.zero, &&handle)
-        |> check "could not create fence"
+    do 
+        let mutable info =
+            VkFenceCreateInfo(
+                VkStructureType.FenceCreateInfo, 0n,
+                (if signaled then VkFenceCreateFlags.SignaledBit else VkFenceCreateFlags.None)
+            )
+        VkRaw.vkCreateFence(device.Handle, &&info, NativePtr.zero, &&handle)
+            |> check "could not create fence"
+
 
     member x.Device = device
     member x.Handle = handle
@@ -720,27 +654,33 @@ and Fence internal(device : Device, signaled : bool) =
         else
             true
 
-    member x.Wait(timeoutInNanoseconds : uint64) =
+    member x.Completed =
         if handle.IsValid then
-            let result = 
-                VkRaw.vkWaitForFences(device.Handle, 1u, &&handle, 1u, timeoutInNanoseconds)
-
-            if result = VkResult.VkTimeout then raise <| TimeoutException("[Vulkan] fence timed out")
-            else result |> check "could not wait for fence"
-            
-            VkRaw.vkDestroyFence(device.Handle, handle, NativePtr.zero)
-            handle <- VkFence.Null
+            VkRaw.vkGetFenceStatus(device.Handle, handle) <> VkResult.VkNotReady
+        else
+            true
+    member x.TryWait(timeoutInNanoseconds : int64) =
+        let waitResult = VkRaw.vkWaitForFences(device.Handle, 1u, &&handle, 1u, uint64 timeoutInNanoseconds)
+        match waitResult with
+            | VkResult.VkTimeout -> false
+            | VkResult.VkSuccess -> 
+                VkRaw.vkDestroyFence(device.Handle, handle, NativePtr.zero)
+                handle <- VkFence.Null
+                true
+            | err -> 
+                VkRaw.vkDestroyFence(device.Handle, handle, NativePtr.zero)
+                handle <- VkFence.Null
+                failf "could not wait for fences: %A" err
     
-    member x.Wait() = x.Wait(~~~0UL)
+    member x.TryWait() = x.TryWait(infinite)
 
-    member x.Dispose() =
-        if handle.IsValid then
-            VkRaw.vkDestroyFence(device.Handle, handle, NativePtr.zero)
-            handle <- VkFence.Null
+    member x.Wait(timeoutInNanoseconds : int64) = 
+        if not (x.TryWait(timeoutInNanoseconds)) then
+            raise <| TimeoutException("Fence")
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
+    member x.Wait() = 
+        if not (x.TryWait()) then
+            raise <| TimeoutException("Fence")
 
 
     new(device : Device) = new Fence(device, false)
@@ -1031,6 +971,133 @@ and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
             finally VkRaw.vkUnmapMemory(device.Handle, memory.Handle)
         else
             failf "cannot map host-invisible memory"
+
+
+and ICommand =
+    abstract member Compatible : QueueFlags
+    abstract member TryEnqueue : CommandBuffer * byref<Disposable> -> bool
+
+and IQueueCommand =
+    abstract member Compatible : QueueFlags
+    abstract member TryEnqueue : DeviceQueue * byref<Disposable> -> bool
+
+and DeviceToken(device : Device, ref : ref<Option<DeviceToken>>) =
+    let cleanup = List<unit -> unit>()
+    let commands = List<Choice<List<ICommand>, List<IQueueCommand>>>()
+    let mutable last = None
+    let mutable cnt = 1
+    let mutable compatible = QueueFlags.All
+
+    let enqueue (disps : List<Disposable>) (q : DeviceQueue) (l : Choice<List<ICommand>, List<IQueueCommand>>) =
+        match l with
+            | Choice1Of2 cmds ->
+                if cmds.Count > 0 then
+                    let buffer = q.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
+                    buffer.Begin(CommandBufferUsage.OneTimeSubmit)
+                    for cmd in cmds do 
+                        let mutable disp = null
+                        if cmd.TryEnqueue(buffer, &disp) then
+                            if not (isNull disp) then
+                                disps.Add disp
+                        else
+                            for d in disps do d.Dispose()
+                            failf "could not enqueue commands"
+                    buffer.End()
+                    disps.Add { new Disposable() with member x.Dispose() = buffer.Dispose() }
+                    q.Start buffer
+
+            | Choice2Of2 cmds ->
+                for cmd in cmds do
+                    let mutable disp = null
+                    if cmd.TryEnqueue(q, &disp) then
+                        if not (isNull disp) then
+                            disps.Add disp
+                    else
+                        for d in disps do d.Dispose()
+                        failf "could not enqueue commands"
+                        
+    let run(clean : bool) =
+        match last with
+            | Some l ->
+                commands.Add l
+                let family = device.QueueFamilies |> Array.tryFind (fun q -> q.Flags &&& compatible <> QueueFlags.None)
+                match family with
+                    | Some f ->
+                        let disp = new List<Disposable>()
+                        let queue = f.GetQueue()
+                        commands |> CSharpList.iter (enqueue disp queue)
+                        queue.WaitIdle()
+                        for d in disp do d.Dispose()
+
+                    | None ->
+                        failf "could not find family with compatible flags %A" compatible
+
+                commands.Clear()
+                last <- None
+                compatible <- QueueFlags.All
+
+            | None ->
+                ()
+
+        if clean then
+            for c in cleanup do c()
+            cleanup.Clear()
+
+    member x.Enqueue (cmd : ICommand) =
+        compatible <- compatible &&& cmd.Compatible
+        let commandList = 
+            match last with
+                | Some (Choice1Of2 cmds) -> cmds
+                | Some queueCommands ->
+                    commands.Add(queueCommands)
+                    let res = List()
+                    last <- Some (Choice1Of2 res)
+                    res
+                | None -> 
+                    let res = List()
+                    last <- Some (Choice1Of2 res)
+                    res
+                        
+        commandList.Add cmd
+
+    member x.Enqueue (cmd : IQueueCommand) =
+        compatible <- compatible &&& cmd.Compatible
+        let queueList = 
+            match last with
+                | Some (Choice2Of2 queueCommands) -> queueCommands
+                | Some cmd ->
+                    commands.Add(cmd)
+                    let res = List()
+                    last <- Some (Choice2Of2 res)
+                    res
+                | None -> 
+                    let res = List()
+                    last <- Some (Choice2Of2 res)
+                    res
+                        
+        queueList.Add cmd
+
+    member x.AddCleanup (d : unit -> unit) =
+        cleanup.Add d
+
+    member x.Sync() = run(false)
+
+    member internal x.AddRef() = 
+        cnt <- cnt + 1
+
+    member internal x.RemoveRef() = 
+        cnt <- cnt - 1
+        if cnt = 0 then 
+            ref := None
+            run(true)
+
+    member x.Dispose() =
+        x.RemoveRef()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+
 
 
 

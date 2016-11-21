@@ -307,9 +307,14 @@ module RenderTasks =
     type RenderTask(man : ResourceManager, renderPass : RenderPass, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractVulkanRenderTask(man, renderPass, config, shareTextures, shareBuffers)
 
+        let prepare (o : IRenderObject) =
+            
+            this.ResourceManager.PrepareRenderObject(renderPass, o)
+
         let device = man.Device
-        let preparedObjects = objects |> ASet.mapUse (fun o -> this.ResourceManager.PrepareRenderObject(renderPass, o))
+        let preparedObjects = objects |> ASet.mapUse prepare
         let preparedObjectReader = preparedObjects.GetReader()
+
 
         let pool = device.GraphicsFamily.CreateCommandPool()
         let mutable commandBuffers = Map.empty
@@ -364,7 +369,7 @@ module RenderTasks =
             stats
 
         override x.Perform (fbo : Framebuffer) =
-            use token = device.ResourceToken
+            use token = device.Token
 
 
             let bounds = Box2i(V2i.Zero, fbo.Size - V2i.II)
@@ -404,101 +409,60 @@ module RenderTasks =
 
     type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
         inherit AdaptiveObject()
+        static let depthStencilFormats =
+            HashSet.ofList [
+                RenderbufferFormat.Depth24Stencil8
+                RenderbufferFormat.Depth32fStencil8
+                RenderbufferFormat.DepthStencil
+            ]
+        
         let device = manager.Device
         let pool = device.GraphicsFamily.CreateCommandPool()
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
 
-        let clearColors = 
-            clearColors |> Map.map (fun i c ->
-                c |> Mod.map (fun c -> 
-                    VkClearColorValue(float32 = V4f(c.R, c.G, c.B, c.A))
-                )
+        let clearColors =
+            renderPass.ColorAttachments |> Map.toSeq |> Seq.choose (fun (i, (s,_)) -> 
+                match Map.tryFind s clearColors with
+                    | Some c -> Some (i,c)
+                    | None -> None
             )
+            |> Seq.toArray
 
-        let clearDepthStencil =
-            if Option.isSome renderPass.DepthStencilAttachment then
-                match clearDepth, clearStencil with
-                    | d, Some s ->
-                        Mod.map2 (fun d s -> 
-                            let d = defaultArg d 1.0
-                            VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit,
-                            VkClearDepthStencilValue(float32 d, s)
-                        ) d s |> Some
-
-                    | d, None ->
-                        d |> Mod.map (fun d -> 
-                            let d = defaultArg d 1.0
-                            VkImageAspectFlags.DepthBit,
-                            VkClearDepthStencilValue(float32 d, 0u)
-
-                        ) |> Some
-
-            else
-                None
-
-
-        let clearImage (image : Image) (cmd : CommandBuffer) (real : CommandBuffer -> unit) =
-            let old = image.Layout
-            let clear =
-                command {
-                    do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
-                    image.Layout <- VkImageLayout.TransferDstOptimal
-                    do! {
-                        new Command() with
-                            member x.Enqueue cmd = real cmd; Disposable.Empty
-                    }
-                    do! Command.TransformLayout(image, old)
-                }
-            cmd.Enqueue clear
-            image.Layout <- old
+        let renderPassDepthAspect =
+            match renderPass.DepthStencilAttachment with
+                | Some signature ->
+                    if depthStencilFormats.Contains signature.format then
+                        ImageAspect.DepthStencil
+                    else
+                        ImageAspect.Depth
+                | _ ->
+                    ImageAspect.None
 
         member x.Run(caller : IAdaptiveObject, outputs : OutputDescription) =
             x.EvaluateAlways caller (fun () ->
                 let fbo = unbox<Framebuffer> outputs.framebuffer
+                use token = device.Token
 
-                cmd.Begin(CommandBufferUsage.OneTimeSubmit)
-                let mutable rect = VkRect3D(VkOffset3D(0,0,0), VkExtent3D(fbo.Size.X, fbo.Size.Y,1))
-                for (sem, view) in Map.toSeq fbo.Attachments do
-                    let image = view.Image
-                    let isDepth =
-                        match image.Format with
-                            | VkFormat.D16Unorm 
-                            | VkFormat.D16UnormS8Uint
-                            | VkFormat.D24UnormS8Uint
-                            | VkFormat.X8D24UnormPack32
-                            | VkFormat.D32Sfloat
-                            | VkFormat.D32SfloatS8Uint -> true
-                            | _ -> false
+                let colors = clearColors |> Array.map (fun (i,c) -> i, c.GetValue x)
+                let depth = clearDepth.GetValue x
+                let stencil = match clearStencil with | Some c -> c.GetValue(x) |> Some | _ -> None
 
-                    if isDepth then
-                        match clearDepthStencil with
-                            | Some cd ->
-                                let aspect, value = cd.GetValue(x)
 
-                                let mutable clearValue = value
-                                let mutable range = VkImageSubresourceRange(aspect, 0u, 1u, 0u, 1u)
-                                clearImage image cmd (fun cmd ->
-                                    cmd.AppendCommand()
-                                    VkRaw.vkCmdClearDepthStencilImage(
-                                        cmd.Handle, image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range
-                                    )
-                                )
-                            | None ->
-                                ()
-                    else
-                        let mutable clearValue = clearColors.[sem].GetValue()
-                        let mutable range = VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
-                        clearImage image cmd (fun cmd ->
-                            cmd.AppendCommand()
-                            VkRaw.vkCmdClearColorImage(
-                                cmd.Handle, image.Handle, VkImageLayout.TransferDstOptimal, &&clearValue, 1u, &&range
-                            )
-                        )
+                token.enqueue {
+                    let views = fbo.ImageViews
+                    for (index, color) in colors do
+                        let image = views.[index].Image
+                        do! Command.ClearColor(image.[ImageAspect.Color], color)
 
-                //cmd.EndPass()
-                cmd.End()
-
-                device.GraphicsFamily.RunSynchronously cmd
+                    if renderPassDepthAspect <> ImageAspect.None then
+                        let image = views.[views.Length-1].Image
+                        match depth, stencil with
+                            | Some d, Some s    -> do! Command.ClearDepthStencil(image.[renderPassDepthAspect], d, s)
+                            | Some d, None      -> do! Command.ClearDepthStencil(image.[ImageAspect.Depth], d, 0u)
+                            | None, Some s      -> do! Command.ClearDepthStencil(image.[ImageAspect.Stencil], 0.0, s)
+                            | None, None        -> ()
+                }
+                token.Sync()
                 FrameStatistics.Zero
             )
 

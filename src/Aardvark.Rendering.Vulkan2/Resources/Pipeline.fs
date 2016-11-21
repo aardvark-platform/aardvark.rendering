@@ -219,6 +219,12 @@ module Pipeline =
                 pDynamicStates
             )
 
+        let mutable tess =
+            VkPipelineTessellationStateCreateInfo(
+                VkStructureType.PipelineTessellationStateCreateInfo, 0n,
+                VkPipelineTessellationStateCreateFlags.MinValue,
+                10u
+            )
 
         let mutable pipelineCreateInfo =
             VkGraphicsPipelineCreateInfo(

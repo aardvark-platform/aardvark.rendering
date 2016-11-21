@@ -369,9 +369,10 @@ module UniformBuffer =
         UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
 
     let upload (b : UniformBuffer) (device : Device) =
-        use t = device.ResourceToken
+        use t = device.Token
         t.Enqueue
             { new Command() with
+                member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd = 
                     cmd.AppendCommand()
                     VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)

@@ -34,8 +34,8 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         swapchainDescription.renderPass
 
 
-    abstract member OnRenderFrame : RenderPass * DeviceQueue * Framebuffer -> unit
-    default x.OnRenderFrame(_,_,_) = ()
+    abstract member OnRenderFrame : RenderPass * Framebuffer -> unit
+    default x.OnRenderFrame(_,_) = ()
 
     override x.OnHandleCreated(e) =
         base.OnHandleCreated e
@@ -51,9 +51,9 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
 
         if loaded then
 
-            swapchain.RenderFrame(fun queue framebuffer ->
+            swapchain.RenderFrame(fun framebuffer ->
                 Aardvark.Base.Incremental.EvaluationUtilities.evaluateTopLevel (fun () ->
-                    x.OnRenderFrame(swapchainDescription.renderPass, queue, framebuffer)
+                    x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
                 )
             )
 
@@ -90,15 +90,11 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
                 e.Handled <- true
         )
 
-    override x.OnRenderFrame(pass, queue, fbo) =
+    override x.OnRenderFrame(pass, fbo) =
         needsRedraw <- false
         let s = V2i(x.ClientSize.Width, x.ClientSize.Height)
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
-
-        queue.WaitIdle()
-
-
 
         renderTask.Run(fbo) |> ignore
 

@@ -242,3 +242,31 @@ type FlagPool<'k, 'v when 'k : enum<int> >(initial : seq<'v>, flags : 'v -> 'k) 
             if table.Add(toInt flags, value) then
                 changed.Set() |> ignore
         )
+
+
+[<AllowNullLiteral; AbstractClass>]
+type Disposable() =
+    abstract member Dispose : unit -> unit
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+    static member inline Empty : Disposable = null
+
+    static member Compose(l : Disposable, r : Disposable) =
+        if isNull l then r
+        elif isNull r then l
+        else new Composite([l; r]) :> Disposable
+
+    static member Compose(l : list<Disposable>) =
+        match List.filter (isNull >> not) l with
+            | [] -> null
+            | l -> new Composite(l) :> Disposable
+
+    static member inline Custom (f : unit -> unit) =
+        { new Disposable() with member x.Dispose() = f() }
+
+    static member inline Dispose (d : Disposable) = d.Dispose()
+
+and private Composite(l : list<Disposable>) =
+    inherit Disposable()
+    override x.Dispose() = l |> List.iter Disposable.Dispose

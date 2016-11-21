@@ -54,111 +54,108 @@ module RenderPass =
     let create (attachments : Map<Symbol, AttachmentSignature>) (device : Device) =
         let depthAtt        = attachments |> Map.tryFind DefaultSemantic.Depth
         let attachments     = attachments |> Map.remove DefaultSemantic.Depth
+        let colorAtt        = attachments |> Map.toSeq |> Seq.mapi (fun i (s,a) -> i,s,a) |> Seq.toArray
+        let depthAtt        = depthAtt |> Option.map (fun s -> colorAtt.Length, s)
 
 
-        let colorAtt = attachments |> Map.toArray
-        
         let colorReferences = 
-            colorAtt |> Array.mapi (fun i a -> VkAttachmentReference(uint32 i, VkImageLayout.ColorAttachmentOptimal))
+            colorAtt |> Array.map (fun (i,s,a) -> VkAttachmentReference(uint32 i, VkImageLayout.ColorAttachmentOptimal))
 
         let mutable depthReference =
             match depthAtt with
-                | Some depth ->
-                    VkAttachmentReference(uint32 colorReferences.Length, VkImageLayout.DepthStencilAttachmentOptimal)
-                | _ ->
-                    // VK_ATTACHMENT_UNUSED
-                    VkAttachmentReference(~~~0u, VkImageLayout.DepthStencilAttachmentOptimal)
+                | Some (i,d) -> VkAttachmentReference(uint32 i, VkImageLayout.DepthStencilAttachmentOptimal)
+                | _ -> VkAttachmentReference(~~~0u, VkImageLayout.DepthStencilAttachmentOptimal)
 
-        let colorAttachmentDescriptions =
-            colorAtt |> Array.map (fun (sem,a) ->
-                    
-                let loadOp = VkAttachmentLoadOp.Load
+        colorReferences |> NativePtr.withA (fun pColorReferences ->
+            let mutable subpassDescription =
+                VkSubpassDescription(
+                    VkSubpassDescriptionFlags.MinValue,
+                    VkPipelineBindPoint.Graphics,
 
-                VkAttachmentDescription(
-                    VkAttachmentDescriptionFlags.None,
-                    VkFormat.ofTextureFormat (unbox (int a.format)),
-                    unbox<VkSampleCountFlags> a.samples,
+                    //inputs
+                    0u, NativePtr.zero,
 
-                    loadOp,
-                    VkAttachmentStoreOp.Store,
-                    VkAttachmentLoadOp.DontCare,
-                    VkAttachmentStoreOp.DontCare,
+                    //attachments
+                    uint32 colorReferences.Length, pColorReferences,
 
-                    VkImageLayout.ColorAttachmentOptimal,
-                    VkImageLayout.ColorAttachmentOptimal
+                    //resolve
+                    NativePtr.zero,
+
+                    //depth
+                    &&depthReference, 
+
+                    //preserve
+                    0u, NativePtr.zero
                 )
-            ) 
 
-        let depthAttachmentDescription =
-            match depthAtt with
-                | Some a ->
-                    let format = VkFormat.ofTextureFormat (unbox (int a.format))
-                    let hasStencil =
-                        match format with
-                            | VkFormat.D16UnormS8Uint -> true
-                            | VkFormat.D24UnormS8Uint -> true
-                            | VkFormat.X8D24UnormPack32 -> true
-                            | VkFormat.D32SfloatS8Uint -> true
-                            | _ -> false
-
+            let colorAttachmentDescriptions =
+                colorAtt |> Array.map (fun (i, sem,a) ->
+                    
                     let loadOp = VkAttachmentLoadOp.Load
 
-                    let stencilLoadOp =
-                        if hasStencil then VkAttachmentLoadOp.Load
-                        else VkAttachmentLoadOp.DontCare
+                    VkAttachmentDescription(
+                        VkAttachmentDescriptionFlags.None,
+                        VkFormat.ofTextureFormat (unbox (int a.format)),
+                        unbox<VkSampleCountFlags> a.samples,
 
-                    let stencilStoreOp =
-                        if hasStencil then VkAttachmentStoreOp.Store
-                        else VkAttachmentStoreOp.DontCare
+                        loadOp,
+                        VkAttachmentStoreOp.Store,
+                        VkAttachmentLoadOp.DontCare,
+                        VkAttachmentStoreOp.DontCare,
 
-                    let desc = 
-                        VkAttachmentDescription(
-                            VkAttachmentDescriptionFlags.None,
-                            format,
-                            unbox<VkSampleCountFlags> a.samples,
-
-                            loadOp,
-                            VkAttachmentStoreOp.Store,
-                            stencilLoadOp,
-                            stencilStoreOp,
-
-                            VkImageLayout.DepthStencilAttachmentOptimal,
-                            VkImageLayout.DepthStencilAttachmentOptimal
-                        )
-
-                    Some desc
-
-                | _ -> 
-                    None
-
-        let attachmentDescriptions =
-            match depthAttachmentDescription with
-                | Some d -> Array.append colorAttachmentDescriptions [|d|]
-                | None -> colorAttachmentDescriptions
-
-        attachmentDescriptions |> NativePtr.withA (fun pAttachmentDescriptions -> 
-            colorReferences |> NativePtr.withA (fun pColorReferences ->
-                let mutable subpassDescription =
-                    VkSubpassDescription(
-                        VkSubpassDescriptionFlags.MinValue,
-                        VkPipelineBindPoint.Graphics,
-
-                        //inputs
-                        0u, NativePtr.zero,
-
-                        //attachments
-                        uint32 colorReferences.Length, pColorReferences,
-
-                        //resolve
-                        NativePtr.zero,
-
-                        //depth
-                        &&depthReference, 
-
-                        //preserve
-                        0u,  NativePtr.zero
+                        VkImageLayout.ColorAttachmentOptimal,
+                        VkImageLayout.ColorAttachmentOptimal
                     )
+                ) 
 
+            let depthAttachmentDescription =
+                match depthAtt with
+                    | Some (i,a) ->
+                        let format = VkFormat.ofTextureFormat (unbox (int a.format))
+                        let hasStencil =
+                            match format with
+                                | VkFormat.D16UnormS8Uint -> true
+                                | VkFormat.D24UnormS8Uint -> true
+                                | VkFormat.X8D24UnormPack32 -> true
+                                | VkFormat.D32SfloatS8Uint -> true
+                                | _ -> false
+
+                        let loadOp = VkAttachmentLoadOp.Load
+
+                        let stencilLoadOp =
+                            if hasStencil then VkAttachmentLoadOp.Load
+                            else VkAttachmentLoadOp.DontCare
+
+                        let stencilStoreOp =
+                            if hasStencil then VkAttachmentStoreOp.Store
+                            else VkAttachmentStoreOp.DontCare
+
+                        let desc = 
+                            VkAttachmentDescription(
+                                VkAttachmentDescriptionFlags.None,
+                                format,
+                                unbox<VkSampleCountFlags> a.samples,
+
+                                loadOp,
+                                VkAttachmentStoreOp.Store,
+                                stencilLoadOp,
+                                stencilStoreOp,
+
+                                VkImageLayout.DepthStencilAttachmentOptimal,
+                                VkImageLayout.DepthStencilAttachmentOptimal
+                            )
+
+                        Some desc
+
+                    | _ -> 
+                        None
+
+            let attachmentDescriptions =
+                match depthAttachmentDescription with
+                    | Some d -> Array.append colorAttachmentDescriptions [|d|]
+                    | None -> colorAttachmentDescriptions
+
+            attachmentDescriptions |> NativePtr.withA (fun pAttachmentDescriptions -> 
                 let mutable info =
                     VkRenderPassCreateInfo(
                         VkStructureType.RenderPassCreateInfo, 0n, 
@@ -172,11 +169,13 @@ module RenderPass =
                 VkRaw.vkCreateRenderPass(device.Handle, &&info, NativePtr.zero, &&handle) |> check "vkCreateRenderPass"
 
 
-                let colorMap = colorAtt |> Array.mapi (fun i v -> i,v) |> Map.ofArray
+                let colorMap = colorAtt |> Array.map (fun (i,s,v) -> i,(s,v)) |> Map.ofArray
 
-                RenderPass(device, handle, colorAtt.Length, colorMap, depthAtt)
+                RenderPass(device, handle, colorAtt.Length, colorMap, depthAtt |> Option.map snd)
             )
         )
+
+
 
     let delete (pass : RenderPass) (device : Device) =
         if pass.Handle.IsValid then

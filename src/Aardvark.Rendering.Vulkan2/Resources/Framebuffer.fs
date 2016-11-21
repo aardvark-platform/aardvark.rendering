@@ -17,6 +17,7 @@ type Framebuffer =
         inherit Resource<VkFramebuffer>
         val mutable public Size : V2i
         val mutable public RenderPass : RenderPass
+        val mutable public ImageViews : ImageView[]
         val mutable public Attachments : Map<Symbol, ImageView>
 
         interface IFramebuffer with
@@ -26,7 +27,7 @@ type Framebuffer =
             member x.Size = x.Size
             member x.Attachments = x.Attachments |> Map.map (fun _ v -> v :> IFramebufferOutput)
 
-        new(device : Device, handle : VkFramebuffer, pass : RenderPass, size : V2i, att : Map<Symbol, ImageView>) = { inherit Resource<_>(device, handle); RenderPass = pass; Size = size; Attachments = att }
+        new(device : Device, handle : VkFramebuffer, pass : RenderPass, size : V2i, att : Map<Symbol, ImageView>, color) = { inherit Resource<_>(device, handle); RenderPass = pass; Size = size; Attachments = att; ImageViews = color }
     end
 
 
@@ -36,6 +37,7 @@ module Framebuffer =
     let create (pass : RenderPass) (views : Map<Symbol, ImageView>) (device : Device) =
         if Map.isEmpty views then
             failf "cannot create empty framebuffer"
+
 
         let attachmentSems =
             let colors = pass.ColorAttachments |> Map.map (fun k (sem,_) -> sem)
@@ -54,11 +56,11 @@ module Framebuffer =
                         | Some view -> 
                             let s = view.Image.Size.XY
                             minSize <- V2i(min minSize.X s.X, min minSize.Y s.Y)
-                            view.Handle
+                            view
                         | _ -> failf "missing framebuffer attachment %A/%A" idx sem
                 )
 
-        attachments |> NativePtr.withA (fun pAttachments ->
+        attachments |> Array.map (fun a -> a.Handle) |> NativePtr.withA (fun pAttachments ->
             let mutable info =
                 VkFramebufferCreateInfo(
                     VkStructureType.FramebufferCreateInfo, 0n,
@@ -78,7 +80,8 @@ module Framebuffer =
                 let sems = attachmentSems |> Map.toSeq |> Seq.map snd |> Set.ofSeq
                 views |> Map.filter (fun k _ -> Set.contains k sems)
 
-            new Framebuffer(device, handle, pass, minSize, real)
+
+            new Framebuffer(device, handle, pass, minSize, real, attachments)
         )
 
     let delete (fbo : Framebuffer) (device : Device) =

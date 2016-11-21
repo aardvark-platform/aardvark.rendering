@@ -1771,10 +1771,11 @@ module ``Image Command Extensions`` =
             if src.SliceCount <> dst.SliceCount then
                 failf "cannot copy image: { srcSlices = %A, dstSlices = %A }" src.SliceCount dst.SliceCount
 
-            command {
-                let srcLayout = src.Image.Layout
-                let dstLayout = dst.Image.Layout
-                do! Command.Custom (fun cmd ->
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let srcLayout = src.Image.Layout
+                    let dstLayout = dst.Image.Layout
                     let mutable copy =
                         VkImageCopy(
                             src.VkImageSubresourceLayers,
@@ -1786,8 +1787,7 @@ module ``Image Command Extensions`` =
 
                     cmd.AppendCommand()
                     VkRaw.vkCmdCopyImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&copy)
-                )
-
+                    Disposable.Empty
             }
 
         static member Copy(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
@@ -1820,6 +1820,7 @@ module ``Image Command Extensions`` =
                 failf "cannot resolve image: { srcSlices = %A; dstSlices = %A }" src.SliceCount dst.SliceCount
                 
             { new Command() with
+                member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue (cmd : CommandBuffer) =
                     let mutable resolve =
                         VkImageResolve(
@@ -1843,11 +1844,12 @@ module ``Image Command Extensions`` =
 
 
         static member Blit(src : ImageSubresourceLayers, srcRange : Box3i, dst : ImageSubresourceLayers, dstRange : Box3i, filter : VkFilter) =
-            command {
-                let srcLayout = src.Image.Layout
-                let dstLayout = dst.Image.Layout
+            { new Command() with
+                member x.Compatible = QueueFlags.Graphics
+                member x.Enqueue cmd =
+                    let srcLayout = src.Image.Layout
+                    let dstLayout = dst.Image.Layout
 
-                do! Command.Custom (fun cmd ->
                     let mutable srcOffsets = VkOffset3D_2()
                     srcOffsets.[0] <- VkOffset3D(srcRange.Min.X, srcRange.Min.Y, srcRange.Min.Z)
                     srcOffsets.[1] <- VkOffset3D(1 + srcRange.Max.X, 1 + srcRange.Max.Y, 1 + srcRange.Max.Z)
@@ -1855,6 +1857,7 @@ module ``Image Command Extensions`` =
                     let mutable dstOffsets = VkOffset3D_2()
                     dstOffsets.[0] <- VkOffset3D(dstRange.Min.X, dstRange.Min.Y, dstRange.Min.Z)
                     dstOffsets.[1] <- VkOffset3D(1 + dstRange.Max.X, 1 + dstRange.Max.Y, 1 + dstRange.Max.Z)
+
 
                     let mutable blit =
                         VkImageBlit(
@@ -1866,10 +1869,8 @@ module ``Image Command Extensions`` =
                     
                     cmd.AppendCommand()
                     VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, &&blit, filter)
-                )
-
+                    Disposable.Empty
             }
-
 
         static member Blit(src : ImageSubresourceLayers, dst : ImageSubresourceLayers, dstRange : Box3i, filter : VkFilter) =
             Command.Blit(src, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstRange, filter)
@@ -1889,6 +1890,7 @@ module ``Image Command Extensions`` =
                     failf "cannot clear image with aspect %A using color" img.Aspect
 
                 { new Command() with
+                    member x.Compatible = QueueFlags.Graphics ||| QueueFlags.Compute
                     member x.Enqueue cmd =
                         let originalLayout = img.Image.Layout
             
@@ -1911,6 +1913,7 @@ module ``Image Command Extensions`` =
                     failf "cannot clear image with aspect %A using depth/stencil" img.Aspect
 
                 { new Command() with
+                    member x.Compatible = QueueFlags.Graphics
                     member x.Enqueue cmd =
                         let originalLayout = img.Image.Layout
                         cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
@@ -1944,6 +1947,7 @@ module ``Image Command Extensions`` =
                 Command.Nop
             else
                 { new Command() with
+                    member x.Compatible = QueueFlags.All
                     member x.Enqueue (cmd : CommandBuffer) =
                         if img.Layout = target then
                             Disposable.Empty
@@ -2004,6 +2008,7 @@ module ``Image Command Extensions`` =
                 Command.Nop
             else
                 { new Command() with
+                    member x.Compatible = QueueFlags.All
                     member x.Enqueue (cmd : CommandBuffer) =
                         let layout = img.Image.Layout
                         let mutable barrier =

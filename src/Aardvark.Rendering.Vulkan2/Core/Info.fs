@@ -112,6 +112,8 @@ type QueueFlags =
     | Compute           = 0x00000002
     | Transfer          = 0x00000004
     | SparseBinding     = 0x00000008
+    | All               = 0x00000007
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module QueueFlags =

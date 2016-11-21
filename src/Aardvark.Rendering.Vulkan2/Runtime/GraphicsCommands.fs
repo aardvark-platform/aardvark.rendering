@@ -18,6 +18,7 @@ module ``Graphics Commands`` =
 
     let private endPass =
         { new Command() with
+            member x.Compatible = QueueFlags.Graphics
             member x.Enqueue cmd =
                 cmd.AppendCommand()
                 VkRaw.vkCmdEndRenderPass(cmd.Handle)
@@ -27,6 +28,7 @@ module ``Graphics Commands`` =
     type Command with
         static member BeginPass(renderPass : RenderPass, framebuffer : Framebuffer, bounds : Box2i, inlineContent : bool) =
             { new Command() with
+                member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
                     let mutable info =
                         VkRenderPassBeginInfo(
@@ -50,6 +52,7 @@ module ``Graphics Commands`` =
 
         static member SetViewports(viewports : Box2i[]) =
             { new Command() with
+                member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
                     let viewports =
@@ -65,6 +68,7 @@ module ``Graphics Commands`` =
 
         static member SetScissors(scissors : Box2i[]) =
             { new Command() with
+                member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
                     let scissors =

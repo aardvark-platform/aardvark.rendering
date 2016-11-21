@@ -61,12 +61,10 @@ type MappedBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                     )
 
                 let fence = device.CreateFence()
-                device.TransferFamily.UsingQueue (fun queue ->
-                    VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
-                        |> check "could not bind buffer memory"
-
-                    fence.Wait()
-                )
+                let queue = device.TransferFamily.GetQueue()
+                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                    |> check "could not bind buffer memory"
+                fence.Wait()
 
                 for m in memories do m.Dispose()
                 memories.Clear()
@@ -108,12 +106,10 @@ type MappedBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                     )
 
                 let fence = device.CreateFence()
-                device.TransferFamily.UsingQueue (fun queue ->
-                    VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
-                        |> check "could not bind buffer memory"
-
-                    fence.Wait()
-                )
+                let queue = device.TransferFamily.GetQueue()
+                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                    |> check "could not bind buffer memory"
+                fence.Wait()
 
                 capacity <- newSize
         
@@ -147,12 +143,10 @@ type MappedBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
                     )
 
                 let fence = device.CreateFence()
-                device.TransferFamily.UsingQueue (fun queue ->
-                    VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
-                        |> check "could not bind buffer memory"
-
-                    fence.Wait()
-                )
+                let queue = device.TransferFamily.GetQueue()
+                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                    |> check "could not bind buffer memory"
+                fence.Wait()
 
                 let mutable last = memories.[memories.Count - 1]
                 let mutable total = capacity

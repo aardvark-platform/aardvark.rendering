@@ -68,7 +68,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.Device = device
     member x.ResourceManager = manager
-    member x.ContextLock = device.ResourceToken :> IDisposable
+    member x.ContextLock = device.Token :> IDisposable
 
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
@@ -239,7 +239,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         }
 
     member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =
-        use token = device.ResourceToken
+        use token = device.Token
 
         let src =
             match source with

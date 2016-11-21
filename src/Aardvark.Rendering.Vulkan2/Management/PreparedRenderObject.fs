@@ -48,7 +48,7 @@ type PreparedRenderObject =
             | None -> ()
 
     member x.Update(caller : IAdaptiveObject) =
-        use token = x.device.ResourceToken
+        use token = x.device.Token
         let mutable stats = FrameStatistics.Zero
         
         for b in x.uniformBuffers do
@@ -296,6 +296,7 @@ type DevicePreparedRenderObjectExtensions private() =
                     ResourceInfo.Zero
             }
         isActive.AddRef()
+
 
         let res = 
             {

@@ -12,6 +12,8 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 #nowarn "51"
 
+
+
 type ShaderProgram =
     class
         val mutable public Device : Device
@@ -25,6 +27,8 @@ type ShaderProgram =
         val mutable public RenderPass : RenderPass
         val mutable public Surface : BackendSurface
 
+        val mutable public InputParameters : ShaderParameter[]
+
         interface IBackendSurface with
             member x.Handle = x.Shaders :> obj
             member x.Inputs = x.Inputs
@@ -34,7 +38,7 @@ type ShaderProgram =
             member x.UniformGetters = x.UniformGetters
         
        
-        new(device : Device, shaders : Map<ShaderStage, ShaderModule>, pipelineLayout : PipelineLayout, pass : RenderPass, inputs, outputs, uniforms, sam, getters, surface : BackendSurface) = { Device = device; Shaders = shaders; PipelineLayout = pipelineLayout; RenderPass = pass; Inputs = inputs; Outputs = outputs; Uniforms = uniforms; SamplerStates = sam; UniformGetters = getters; Surface = surface }
+        new(device : Device, shaders : Map<ShaderStage, ShaderModule>, pipelineLayout : PipelineLayout, pass : RenderPass, inputs, outputs, uniforms, sam, getters, surface : BackendSurface, inputParams) = { Device = device; Shaders = shaders; PipelineLayout = pipelineLayout; RenderPass = pass; Inputs = inputs; Outputs = outputs; Uniforms = uniforms; SamplerStates = sam; UniformGetters = getters; Surface = surface; InputParameters = inputParams }
 
     end
 
@@ -111,7 +115,7 @@ module ShaderProgram =
                     let pipelineLayout =
                         device.CreatePipelineLayout(Array.toList shaders)
 
-                    ShaderProgram(device, map, pipelineLayout, renderPass, inputs, outputs, uniforms, surface.SamplerStates, surface.Uniforms |> SymDict.map (fun _ v -> v :> obj), surface)
+                    ShaderProgram(device, map, pipelineLayout, renderPass, inputs, outputs, uniforms, surface.SamplerStates, surface.Uniforms |> SymDict.map (fun _ v -> v :> obj), surface, List.toArray first.Interface.inputs)
 
                 finally
                     shaders |> Array.iter (fun s -> s.Dispose())

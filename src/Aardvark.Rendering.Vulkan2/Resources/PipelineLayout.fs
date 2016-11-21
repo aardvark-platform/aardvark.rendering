@@ -23,6 +23,13 @@ module VkShaderStageFlags =
             ShaderStage.Pixel, VkShaderStageFlags.FragmentBit
         ]
 
+type PipelineInput =
+    {
+        location : int
+        semantic : Symbol
+
+    }
+
 type PipelineLayout =
     class
         inherit Resource<VkPipelineLayout>
@@ -80,46 +87,43 @@ module PipelineLayout =
         // create DescriptorSetLayouts using the pipelines annotations
         // while using index -1 for non-annotated bindings
         let descriptorSetLayoutsMap = 
-            [
+            List.concat [
                 uniforms |> List.map (fun (a,b) -> VkDescriptorType.UniformBuffer, a, b)
                 images |> List.map (fun (a,b) -> VkDescriptorType.CombinedImageSampler, a, b)
             ]
-                |> List.concat
 
-                // find identical parameter across stages
-                |> Seq.groupBy (fun (dt,s,p) -> p)
-                |> Seq.map (fun (p,instances) ->
-                        let stages = instances |> Seq.fold (fun s (_,p,_) -> s ||| p) VkShaderStageFlags.None
-                        let (dt,_,_) = instances |> Seq.head
-                        (dt, stages, p)
-                    )
+            // find identical parameter across stages
+            |> Seq.groupBy (fun (dt,s,p) -> p)
+            |> Seq.map (fun (p,instances) ->
+                let stages = instances |> Seq.fold (fun s (_,p,_) -> s ||| p) VkShaderStageFlags.None
+                let (dt,_,_) = instances |> Seq.head
+                (dt, stages, p)
+               )
 
-                // group by assigned descriptor-set index (fail if none)
-                |> Seq.groupBy (fun (dt, s, p) ->
-                        match ShaderParameter.tryGetDescriptorSet p with
-                            | Some descSet -> descSet
-                            | None -> 0
-//                                    match dt with
-//                                        | VkDescriptorType.CombinedImageSampler -> 0
-//                                        | _ -> failwithf "no explicit DescriptorSet given for uniform: %A" p
-                    )
-                |> Seq.map (fun (g,s) -> g, Seq.toArray s)
+            // group by assigned descriptor-set index (fail if none)
+            |> Seq.groupBy (fun (dt, s, p) ->
+                match ShaderParameter.tryGetDescriptorSet p with
+                    | Some descSet -> descSet
+                    | None -> 0
+               )
 
-                // create DescriptorLayoutBindings
-                |> Seq.map (fun (setIndex,arr) ->
-                        let bindings = 
-                            arr |> Array.sortBy (fun (_,_,p) -> match ShaderParameter.tryGetBinding p with | Some b -> b | _ -> 0)
-                                |> Array.map (fun (a,b,c) -> device |> DescriptorSetLayoutBinding.create a b c)
-                                |> Array.toList
+            |> Seq.map (fun (g,s) -> g, Seq.toArray s)
 
-                        setIndex,bindings
-                    )
+            // create DescriptorLayoutBindings
+            |> Seq.map (fun (setIndex,arr) ->
+                    let bindings = 
+                        arr |> Array.sortBy (fun (_,_,p) -> match ShaderParameter.tryGetBinding p with | Some b -> b | _ -> 0)
+                            |> Array.map (fun (a,b,c) -> device |> DescriptorSetLayoutBinding.create a b c)
+                            |> Array.toList
 
-                // create DescriptorSetLayouts
-                |> Seq.map (fun (index,bindings) ->
-                        index, device |> DescriptorSetLayout.create bindings
-                    )
-                |> Map.ofSeq
+                    setIndex,bindings
+                )
+
+            // create DescriptorSetLayouts
+            |> Seq.map (fun (index,bindings) ->
+                    index, device |> DescriptorSetLayout.create bindings
+                )
+            |> Map.ofSeq
 
         // make the DescriptorSetLayouts dense by inserting NULL
         // where no bindings given and appending the "default" set at the end

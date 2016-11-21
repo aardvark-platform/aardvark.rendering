@@ -52,6 +52,7 @@ module BufferCommands =
                 failf "bad copy range"
 
             { new Command() with
+                member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     let mutable srcBuffer = VkBuffer.Null
                     let device = src.Memory.Heap.Device
@@ -92,6 +93,7 @@ module BufferCommands =
                 failf "bad copy range"
 
             { new Command() with
+                member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     let mutable dstBuffer = VkBuffer.Null
                     let device = src.Device
@@ -134,6 +136,7 @@ module BufferCommands =
                 failf "bad copy range"
 
             { new Command() with
+                member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     let mutable copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
                     cmd.AppendCommand()
