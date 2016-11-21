@@ -445,20 +445,24 @@ module MultisampleState =
 module DepthState =
     let private toVkCompareOp =
         LookupTable.lookupTable [
-            DepthTestMode.None, VkCompareOp.Always
-            DepthTestMode.Greater, VkCompareOp.Greater
-            DepthTestMode.GreaterOrEqual, VkCompareOp.GreaterOrEqual
-            DepthTestMode.Less, VkCompareOp.Less
-            DepthTestMode.LessOrEqual, VkCompareOp.LessOrEqual
+            DepthTestComparison.None, VkCompareOp.Always
+            DepthTestComparison.Greater, VkCompareOp.Greater
+            DepthTestComparison.GreaterOrEqual, VkCompareOp.GreaterOrEqual
+            DepthTestComparison.Less, VkCompareOp.Less
+            DepthTestComparison.LessOrEqual, VkCompareOp.LessOrEqual
+            DepthTestComparison.Equal, VkCompareOp.Equal
+            DepthTestComparison.NotEqual, VkCompareOp.NotEqual
+            DepthTestComparison.Never, VkCompareOp.Never
+            DepthTestComparison.Always, VkCompareOp.Always
         ]
 
     let create (write : bool) (mode : DepthTestMode) =
         {
-            testEnabled             = mode <> DepthTestMode.None
+            testEnabled             = mode.IsEnabled
             writeEnabled            = write
-            boundsTest              = false
-            compare                 = toVkCompareOp mode
-            depthBounds             = Range1d(0.0, 1.0)
+            boundsTest              = mode.Clamp
+            compare                 = toVkCompareOp mode.Comparison
+            depthBounds             = if mode.Clamp then mode.Bounds else Range1d(0.0, 1.0)
         }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

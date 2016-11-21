@@ -2774,6 +2774,7 @@ let main args =
         shadowGeometry
             |> Sg.stencilMode (Mod.constant writeStencil)
             |> Sg.writeBuffers' (Set.ofList [ DefaultSemantic.Stencil ])
+            |> Sg.depthTest ~~(DepthTestMode(DepthTestComparison.LessOrEqual, Range1d(0.0, 1.0)))
             |> Sg.pass afterMain
             |> Sg.effect [
                 VolumeShader.vertex |> toEffect

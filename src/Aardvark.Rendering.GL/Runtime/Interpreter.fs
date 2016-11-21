@@ -38,6 +38,8 @@ module private Values =
     let GL_DRAW_INDIRECT_BUFFER = 36671
     [<Literal>]
     let GL_TEXTURE0 = 33984 //int OpenGl.Enums.TextureUnit.Texture0
+    [<Literal>]
+    let GL_DEPTH_CLAMP = 0x864F
 
 [<AutoOpen>]
 module OpenGLInterpreter =
@@ -465,11 +467,14 @@ module OpenGLObjectInterpreter =
                 i <- i + 1
 
         member gl.setDepthTestMode (mode : DepthTestMode) =
-            if mode = DepthTestMode.None then
-                gl.disable GL_DEPTH_TEST  
-            else
+            if mode.IsEnabled then
                 gl.enable GL_DEPTH_TEST
-                gl.depthFunc (Translations.toGLComparison mode)
+                gl.depthFunc (Translations.toGLComparison mode.Comparison)
+                if mode.Clamp then gl.enable GL_DEPTH_CLAMP
+                else gl.disable GL_DEPTH_CLAMP
+            else
+                gl.disable GL_DEPTH_TEST  
+                gl.disable GL_DEPTH_CLAMP
 
         member gl.setFillMode (mode : FillMode) =
             gl.polygonMode GL_FRONT_AND_BACK (Translations.toGLPolygonMode mode)

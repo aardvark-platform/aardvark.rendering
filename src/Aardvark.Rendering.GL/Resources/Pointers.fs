@@ -120,11 +120,15 @@ module PointerContextExtensions =
 
 
         member x.CreateDepthTest(mode : DepthTestMode) =
-            let value = Translations.toGLComparison mode
+            let value = Translations.toGLComparison mode.Comparison
+            let clamp = if mode.Clamp then 1 else 0
+            let value = DepthTestInfo(value, clamp)
             DepthTestModeHandle(ptr value)
 
         member x.Update(gl : DepthTestModeHandle, mode : DepthTestMode) =
-            gl.Pointer := Translations.toGLComparison mode
+            let value = Translations.toGLComparison mode.Comparison
+            let clamp = if mode.Clamp then 1 else 0
+            gl.Pointer := DepthTestInfo(value, clamp)
 
         member x.Delete(gl : DepthTestModeHandle) =
             NativePtr.free gl.Pointer

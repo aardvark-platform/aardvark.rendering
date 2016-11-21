@@ -70,9 +70,9 @@ void State::Reset()
 }
 
 
-bool State::HShouldSetDepthTest(GLenum* test)
+bool State::HShouldSetDepthTest(DepthTestMode* test)
 {
-	if (hDepthTest == nullptr || *hDepthTest != *test)
+	if (hDepthTest == nullptr || memcmp(hDepthTest, test, sizeof(DepthTestMode)) != 0)
 	{
 		hDepthTest = test;
 		return true;

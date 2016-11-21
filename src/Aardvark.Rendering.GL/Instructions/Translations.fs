@@ -65,13 +65,17 @@ module Translations =
             | ABlendOperation.Maximum -> GLBlendOperation.Maximum |> int
             | _ -> failwithf "unknown blend operation %A" f
 
-    let toGLComparison (f : DepthTestMode) =
+    let toGLComparison (f : DepthTestComparison) =
         match f with
-            | DepthTestMode.None -> 0
-            | DepthTestMode.Greater -> CompareFunction.Greater |> int
-            | DepthTestMode.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
-            | DepthTestMode.Less -> CompareFunction.Less |> int
-            | DepthTestMode.LessOrEqual -> CompareFunction.LessEqual |> int
+            | DepthTestComparison.None -> 0
+            | DepthTestComparison.Greater -> CompareFunction.Greater |> int
+            | DepthTestComparison.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
+            | DepthTestComparison.Less -> CompareFunction.Less |> int
+            | DepthTestComparison.LessOrEqual -> CompareFunction.LessEqual |> int
+            | DepthTestComparison.Equal -> CompareFunction.Equal |> int
+            | DepthTestComparison.NotEqual -> CompareFunction.NotEqual |> int
+            | DepthTestComparison.Never -> CompareFunction.Never |> int
+            | DepthTestComparison.Always -> CompareFunction.Always |> int
             | _ -> failwithf "unknown comparison %A" f
 
     let toGLFace (f : CullMode) =

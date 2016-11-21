@@ -187,7 +187,7 @@ DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mod
 DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos);
 DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLint* count, GLuint buffer);
 DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLuint buffer);
-DllExport(void) hglSetDepthTest(GLenum* mode);
+DllExport(void) hglSetDepthTest(DepthTestMode* mode);
 DllExport(void) hglSetCullFace(GLenum* face);
 DllExport(void) hglSetPolygonMode(GLenum* mode);
 DllExport(void) hglSetBlendMode(BlendMode* mode);

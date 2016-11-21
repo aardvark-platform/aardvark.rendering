@@ -78,10 +78,18 @@ type DrawCallInfoListHandle =
         new(ptr) = { Pointer = ptr }
     end
 
+type DepthTestInfo =
+    struct
+        val mutable public Comparison : int
+        val mutable public Clamp : int
+
+        new(comparison, clamp) = { Comparison = comparison; Clamp = clamp }
+    end
+
 [<StructLayout(LayoutKind.Sequential)>]
 type DepthTestModeHandle =
     struct
-        val mutable public Pointer : nativeptr<int>
+        val mutable public Pointer : nativeptr<DepthTestInfo>
         new(p) = { Pointer = p }
     end
 
