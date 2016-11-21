@@ -23,130 +23,102 @@ module VkShaderStageFlags =
             ShaderStage.Pixel, VkShaderStageFlags.FragmentBit
         ]
 
-type PipelineInput =
-    {
-        location : int
-        semantic : Symbol
-
-    }
 
 type PipelineLayout =
     class
         inherit Resource<VkPipelineLayout>
 
-        val mutable public DescriptorSetLayouts : list<DescriptorSetLayout>
+        val mutable public DescriptorSetLayouts : array<DescriptorSetLayout>
 
-        new(device, handle, descriptorSetLayouts) = { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts }
+        val mutable public UniformBlocks : list<ShaderUniformBlock * VkShaderStageFlags>
+        val mutable public Textures : list<ShaderTextureInfo * VkShaderStageFlags>
+
+        new(device, handle, descriptorSetLayouts, ubs, tex) = 
+            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; UniformBlocks = ubs; Textures = tex }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PipelineLayout =
-    let create (descriptors : list<DescriptorSetLayout>) (device : Device) =
-        let arr = descriptors |> List.map (fun d -> d.Handle) |> List.toArray
-        arr |> NativePtr.withA (fun pArr ->
+
+    let ofShaders (shaders : array<Shader>) (device : Device) =
+        // figure out which stages reference which uniforms/textures
+        let uniformBlocks = Dict.empty
+        let textures = Dict.empty
+        let mutable setCount = 0
+
+        for shader in shaders do
+            let flags = VkShaderStageFlags.ofShaderStage shader.Stage 
+            let iface = shader.Interface
+            for block in iface.uniformBlocks do
+                setCount <- max setCount (block.set + 1)
+                let key = (block.set, block.binding)
+                let referenced = 
+                    match uniformBlocks.TryGetValue key with
+                        | (true, (_, referencedBy)) -> referencedBy
+                        | _ -> VkShaderStageFlags.None  
+                uniformBlocks.[key] <- (block, referenced ||| flags)
+                                    
+            for tex in iface.textures do
+                setCount <- max setCount (tex.set + 1)
+                let key = (tex.set, tex.binding)
+                let referenced = 
+                    match textures.TryGetValue key with
+                        | (true, (_, referencedBy)) -> referencedBy
+                        | _ -> VkShaderStageFlags.None
+                                    
+                textures.[key] <- (tex, referenced ||| flags)
+                            
+        let uniformBlocks = uniformBlocks.Values |> Seq.toList
+        let textures = textures.Values |> Seq.toList
+
+        // create DescriptorSetLayouts for all used slots (empty if no bindings)
+        let sets = Array.init setCount (fun set -> CSharpList.empty)
+
+        for (block, stageFlags) in uniformBlocks do
+            let binding = 
+                DescriptorSetLayoutBinding.create
+                    VkDescriptorType.UniformBuffer
+                    stageFlags
+                    (UniformBlockParameter block)
+                    device
+
+            sets.[block.set].Add binding
+
+        for (tex, stageFlags) in textures do
+            let binding = 
+                DescriptorSetLayoutBinding.create
+                    VkDescriptorType.CombinedImageSampler
+                    stageFlags
+                    (ImageParameter tex)
+                    device
+
+            sets.[tex.set].Add binding
+
+        let setLayouts =
+            sets |> Array.map (fun l -> 
+                if l.Count = 0 then
+                    device |> DescriptorSetLayout.empty
+                else
+                    device |> DescriptorSetLayout.create (CSharpList.toArray l)
+            )
+
+
+        // create a pipeline layout from the given DescriptorSetLayouts
+        let handles = setLayouts |> Array.map (fun d -> d.Handle)
+        handles |> NativePtr.withA (fun pHandles ->
             let mutable info =
                 VkPipelineLayoutCreateInfo(
                     VkStructureType.PipelineLayoutCreateInfo, 0n,
                     VkPipelineLayoutCreateFlags.MinValue,
-                    uint32 arr.Length, pArr,
+                    uint32 handles.Length, pHandles,
                     0u, NativePtr.zero
                 )
             let mutable handle = VkPipelineLayout.Null
             VkRaw.vkCreatePipelineLayout(device.Handle, &&info, NativePtr.zero, &&handle)
                 |> check "could not create PipelineLayout"
             
-            PipelineLayout(device, handle, descriptors)
+            PipelineLayout(device, handle, setLayouts, uniformBlocks, textures)
         )
-
-    let ofShaderModules (shaders : list<ShaderModule>) (device : Device) =
-        let vs = shaders |> List.find (fun s -> s.Stage = ShaderStage.Vertex)
-        let fs = shaders |> List.find (fun s -> s.Stage = ShaderStage.Pixel)
-
-        let uniforms = 
-            shaders 
-                |> List.collect (fun s -> s.Interface.uniforms |> List.map (fun p -> VkShaderStageFlags.ofShaderStage s.Stage, p))
-
-        let images = 
-            shaders 
-                |> List.collect (fun s -> s.Interface.images |> List.map (fun p -> VkShaderStageFlags.ofShaderStage s.Stage, p))
-
-        let inputs = 
-            vs.Interface.inputs 
-                |> List.filter (ShaderParameter.tryGetBuiltInSemantic >> Option.isNone)
-                |> List.sortBy (fun p -> match ShaderParameter.tryGetLocation p with | Some loc -> loc | None -> failwithf "no explicit input location given for: %A" p)
-                |> List.toArray
-
-        let outputs =
-            fs.Interface.outputs 
-                |> List.filter (ShaderParameter.tryGetBuiltInSemantic >> Option.isNone)
-                |> List.sortBy (fun p -> match ShaderParameter.tryGetLocation p with | Some loc -> loc | None -> failwithf "no explicit output location given for: %A" p)
-                |> List.toArray
-
-
-
-        // create DescriptorSetLayouts using the pipelines annotations
-        // while using index -1 for non-annotated bindings
-        let descriptorSetLayoutsMap = 
-            List.concat [
-                uniforms |> List.map (fun (a,b) -> VkDescriptorType.UniformBuffer, a, b)
-                images |> List.map (fun (a,b) -> VkDescriptorType.CombinedImageSampler, a, b)
-            ]
-
-            // find identical parameter across stages
-            |> Seq.groupBy (fun (dt,s,p) -> p)
-            |> Seq.map (fun (p,instances) ->
-                let stages = instances |> Seq.fold (fun s (_,p,_) -> s ||| p) VkShaderStageFlags.None
-                let (dt,_,_) = instances |> Seq.head
-                (dt, stages, p)
-               )
-
-            // group by assigned descriptor-set index (fail if none)
-            |> Seq.groupBy (fun (dt, s, p) ->
-                match ShaderParameter.tryGetDescriptorSet p with
-                    | Some descSet -> descSet
-                    | None -> 0
-               )
-
-            |> Seq.map (fun (g,s) -> g, Seq.toArray s)
-
-            // create DescriptorLayoutBindings
-            |> Seq.map (fun (setIndex,arr) ->
-                    let bindings = 
-                        arr |> Array.sortBy (fun (_,_,p) -> match ShaderParameter.tryGetBinding p with | Some b -> b | _ -> 0)
-                            |> Array.map (fun (a,b,c) -> device |> DescriptorSetLayoutBinding.create a b c)
-                            |> Array.toList
-
-                    setIndex,bindings
-                )
-
-            // create DescriptorSetLayouts
-            |> Seq.map (fun (index,bindings) ->
-                    index, device |> DescriptorSetLayout.create bindings
-                )
-            |> Map.ofSeq
-
-        // make the DescriptorSetLayouts dense by inserting NULL
-        // where no bindings given and appending the "default" set at the end
-        let maxIndex = 
-            if Map.isEmpty descriptorSetLayoutsMap then -1
-            else descriptorSetLayoutsMap |> Map.toSeq |> Seq.map fst |> Seq.max
-
-        let descriptorSetLayouts =
-            [
-                for i in 0..maxIndex do
-                    match Map.tryFind i descriptorSetLayoutsMap with
-                        | Some l -> yield l
-                        | None -> 
-                            VkRaw.warn "found empty descriptor-set (index = %d) in ShaderProgram" i
-                            yield device |> DescriptorSetLayout.create []
-
-            ]
-
-        // create a pipeline layout from the given DescriptorSetLayouts
-        let pipelineLayout = device |> create descriptorSetLayouts
-
-        
-        pipelineLayout
 
     let delete (layout : PipelineLayout) (device : Device) =
         if layout.Handle.IsValid then
@@ -155,13 +127,13 @@ module PipelineLayout =
 
             VkRaw.vkDestroyPipelineLayout(device.Handle, layout.Handle, NativePtr.zero)
             layout.Handle <- VkPipelineLayout.Null
-            layout.DescriptorSetLayouts <- []
+            layout.DescriptorSetLayouts <- Array.empty
 
 [<AbstractClass; Sealed; Extension>]
 type ContextPipelineLayoutExtensions private() =
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, bindings : list<ShaderModule>) =
-        this |> PipelineLayout.ofShaderModules bindings
+    static member inline CreatePipelineLayout(this : Device, shaders : array<Shader>) =
+        this |> PipelineLayout.ofShaders shaders
 
     [<Extension>]
     static member inline Delete(this : Device, layout : PipelineLayout) =

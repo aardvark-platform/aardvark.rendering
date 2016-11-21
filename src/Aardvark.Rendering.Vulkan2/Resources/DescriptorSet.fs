@@ -17,6 +17,9 @@ type Descriptor =
     | UniformBuffer of UniformBuffer
     | CombinedImageSampler of ImageView * Sampler
 
+type AdaptiveDescriptor =
+    | AdaptiveUniformBuffer of UniformBuffer
+    | AdaptiveCombinedImageSampler of IResource<ImageView> * IResource<Sampler>
 
 type DescriptorSet =
     class
@@ -56,17 +59,16 @@ module DescriptorSet =
 
             desc.Handle <- VkDescriptorSet.Null
 
-    let update (descriptors : Map<int, Descriptor>) (set : DescriptorSet) (pool : DescriptorPool) =
+    let update (descriptors : array<Descriptor>) (set : DescriptorSet) (pool : DescriptorPool) =
         let device = pool.Device
         let layout = set.Layout
-        let cnt = descriptors.Count
+        let cnt = descriptors.Length
         let mutable bufferInfos = NativePtr.stackalloc cnt
         let mutable imageInfos = NativePtr.stackalloc cnt
 
         let writes =
             descriptors
-                |> Map.toSeq
-                |> Seq.map (fun (binding, desc) ->
+                |> Array.mapi (fun binding desc ->
                     match desc with
                         | UniformBuffer ub ->
                             let info = 
@@ -112,7 +114,6 @@ module DescriptorSet =
                             )
 
                    )
-                |> Seq.toArray
 
         let pWrites = NativePtr.pushStackArray writes
         VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero) 
@@ -124,7 +125,7 @@ type ContextDescriptorSetExtensions private() =
         this |> DescriptorSet.alloc layout
 
     [<Extension>]
-    static member inline Update(this : DescriptorPool, set : DescriptorSet, values : Map<int, Descriptor>) =
+    static member inline Update(this : DescriptorPool, set : DescriptorSet, values : array<Descriptor>) =
         this |> DescriptorSet.update values set
 
     [<Extension>]

@@ -336,7 +336,9 @@ module FShadeInterop =
                                                 else
                                                     let sem, sam = v.Value |> unbox<string * SamplerState>
                                                     semanticMap.[Sym.ofString k] <- Sym.ofString sem
-                                                    samplerStates.[Sym.ofString sem] <- toSamplerStateDescription sam
+                                                    let state = toSamplerStateDescription sam
+                                                    samplerStates.[Sym.ofString sem] <- state
+                                                    samplerStates.[Sym.ofString k] <- state
                                                     ()
 
                                             let bs = getOrCreateSurface code 

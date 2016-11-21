@@ -326,7 +326,7 @@ module VertexInputState =
 
         ]
 
-    let create (o : Map<string, bool * Aardvark.Base.BufferView>) =
+    let create (o : Map<Symbol, bool * Aardvark.Base.BufferView>) =
         o |> Map.map (fun k (perInstance, view) ->
             let fmt = toVkFormat view.ElementType
             { 

@@ -164,7 +164,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             kind = ResourceKind.ShaderProgram
         })
 
-    member x.CreateUniformBuffer(scope : Ag.Scope, layout : UniformBufferLayout, u : IUniformProvider, additional : SymbolDict<obj>) =
+    member x.CreateUniformBuffer(scope : Ag.Scope, layout : UniformBufferLayout, u : IUniformProvider, additional : SymbolDict<IMod>) =
         let values =
             layout.fields 
             |> List.map (fun (f) ->
@@ -173,7 +173,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                     | Some v -> f, v
                     | None -> 
                         match additional.TryGetValue sem with
-                            | (true, (:? IMod as m)) -> f, m
+                            | (true, m) -> f, m
                             | _ -> failwithf "[Vulkan] could not get uniform: %A" f
             )
 
@@ -208,7 +208,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
     member x.CreatePipeline(pass            : RenderPass,
                             program         : IResource<ShaderProgram>,
-                            inputs          : Map<string, bool * Aardvark.Base.BufferView>,
+                            inputs          : Map<Symbol, bool * Aardvark.Base.BufferView>,
                             geometryMode    : IMod<IndexedGeometryMode>,
                             fillMode        : IMod<FillMode>,
                             cullMode        : IMod<CullMode>,
@@ -271,11 +271,10 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                 }
         )
 
-    member x.CreateDescriptorSet(layout : DescriptorSetLayout,
-                                 buffers : Map<int, UniformBuffer>, 
-                                 images : Map<int, IResource<ImageView> * IResource<Sampler>>) =
+    member x.CreateDescriptorSet(layout : DescriptorSetLayout, descriptors : array<AdaptiveDescriptor>) =
+        let desc = descriptors |> Array.toList
         descriptorSetCache.GetOrCreate(
-            [layout :> obj; buffers :> obj; images :> obj],
+            [layout :> obj; desc :> obj],
             fun () ->
                 { new Aardvark.Base.Rendering.Resource<DescriptorSet>(ResourceKind.UniformLocation) with
                     member x.Create old =
@@ -287,23 +286,22 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
                         let mutable stats = FrameStatistics.Zero
                         
+                        let descriptors =
+                            descriptors |> Array.map (fun d ->
+                                match d with
+                                    | AdaptiveUniformBuffer b -> 
+                                        Descriptor.UniformBuffer b
 
-                        let buffers = 
-                            buffers |> Map.map (fun _ r -> 
-                                Descriptor.UniformBuffer(r)
-                            )
+                                    | AdaptiveCombinedImageSampler(v, s) ->
+                                        stats <- stats + v.Update(x)
+                                        stats <- stats + s.Update(x)
+                                        Descriptor.CombinedImageSampler(v.Handle.GetValue(), s.Handle.GetValue())
+                            )   
 
-                        let images = 
-                            images |> Map.map (fun _ (v,s) ->
-                                stats <- stats + v.Update(x)
-                                stats <- stats + s.Update(x)
-                                Descriptor.CombinedImageSampler(v.Handle.GetValue(), s.Handle.GetValue())
-                            )
-                        
                         let changes = stats.ResourceDeltas.Total
                         // update if any of the handles changed or there was no old
                         if Option.isNone old || changes.Replaced <> 0.0 then
-                            descriptorPool.Update(desc, Map.union buffers images)
+                            descriptorPool.Update(desc, descriptors)
 
                         desc, stats
 
@@ -311,11 +309,15 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                     member x.Destroy h =
                         descriptorPool.Free h
 
-                        for (_,(i,s)) in Map.toSeq images do
-                            i.RemoveRef()
-                            i.RemoveOutput x
-                            s.RemoveRef()
-                            s.RemoveOutput x
+                        for d in descriptors do
+                            match d with
+                                | AdaptiveCombinedImageSampler(i,s) ->
+                                    i.RemoveRef()
+                                    i.RemoveOutput x
+                                    s.RemoveRef()
+                                    s.RemoveOutput x
+                                | _ ->
+                                    ()
 
                     member x.GetInfo h =
                         ResourceInfo.Zero
@@ -364,14 +366,15 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             )
         )
 
-    member x.CreateDescriptorSetBinding(layout : PipelineLayout, bindings : list<IResource<DescriptorSet>>) =
+    member x.CreateDescriptorSetBinding(layout : PipelineLayout, bindings : array<IResource<DescriptorSet>>) =
+        let key = bindings |> Array.toList
         descriptorSetBindingCache.GetOrCreate(
-            [bindings :> obj; layout :> obj],
+            [key :> obj; layout :> obj],
             (fun () ->
-                let inputs = bindings |> List.map (fun r -> r :> IResource)
+                let inputs = bindings |> Array.map (fun r -> r :> IResource)
 
                 let create (old : Option<nativeptr<DescriptorSetBinding>>) =
-                    let handles = bindings |> List.map (fun b -> Mod.force b.Handle) |> List.toArray
+                    let handles = bindings |> Array.map (fun b -> Mod.force b.Handle)
                     match old with
                         | None ->
                             device.CreateDescriptorSetBinding(layout, 0, handles)
@@ -382,7 +385,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                 let destroy (ptr : nativeptr<DescriptorSetBinding>) =
                     device.Delete(ptr)
 
-                inputs |> Resource.custom create destroy |> unbox<Aardvark.Base.Rendering.Resource<nativeptr<DescriptorSetBinding>>>
+                inputs |> Array.toList |> Resource.custom create destroy |> unbox<Aardvark.Base.Rendering.Resource<nativeptr<DescriptorSetBinding>>>
             )
         )
         

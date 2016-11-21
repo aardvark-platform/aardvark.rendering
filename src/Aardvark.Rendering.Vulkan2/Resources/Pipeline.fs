@@ -16,7 +16,7 @@ type PipelineDescription =
     {
         renderPass              : RenderPass
         shaderProgram           : ShaderProgram
-        vertexInputState        : Map<string, VertexInputDescription>
+        vertexInputState        : Map<Symbol, VertexInputDescription>
         inputAssembly           : InputAssemblyState
         rasterizerState         : RasterizerState
         colorBlendState         : ColorBlendState
@@ -43,15 +43,13 @@ module Pipeline =
 
         let prog = desc.shaderProgram
 
-        let inputs = prog.Shaders.[ShaderStage.Vertex].Interface.inputs
+        let inputs = prog.Inputs
 
         let paramsWithInputs =
             inputs |> List.map (fun p ->
-                match Map.tryFind p.paramName desc.vertexInputState with
+                match Map.tryFind p.semantic desc.vertexInputState with
                     | Some ip -> 
-                        match ShaderParameter.tryGetLocation p with
-                            | Some loc -> loc, p, ip
-                            | _ -> failf "could not get parameter location for %A" p
+                        p.location, p, ip
                     | None ->
                         failf "could not get vertex input-type for %A" p
             )
@@ -191,21 +189,7 @@ module Pipeline =
                 float32 d.depthBounds.Max
             )
 
-        let pEntryName = CStr.salloc "main"
-        let shaderCreateInfos =
-            desc.shaderProgram.Shaders 
-                |> Map.toArray
-                |> Array.map (fun (_,sh) ->
-                    VkPipelineShaderStageCreateInfo(
-                        VkStructureType.PipelineShaderStageCreateInfo, 0n, 
-                        VkPipelineShaderStageCreateFlags.MinValue,
-
-                        VkShaderStageFlags.ofShaderStage sh.Stage,
-                        sh.Handle,
-                        pEntryName,
-                        NativePtr.zero
-                    )
-                )
+        let shaderCreateInfos = desc.shaderProgram.ShaderCreateInfos
         let pShaderCreateInfos = NativePtr.pushStackArray shaderCreateInfos
 
         let pDynamicStates = NativePtr.pushStackArray desc.dynamicStates

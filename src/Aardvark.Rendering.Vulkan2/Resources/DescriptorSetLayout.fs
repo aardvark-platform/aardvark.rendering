@@ -12,27 +12,28 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 #nowarn "51"
 
+[<AllowNullLiteral>]
 type DescriptorSetLayoutBinding =
     class
-        inherit Resource<VkDescriptorSetLayoutBinding>
-        val mutable public Parameter : ShaderParameter
+        val mutable public Device : Device
+        val mutable public Handle : VkDescriptorSetLayoutBinding
+        val mutable public Parameter : ShaderUniformParameter
         member x.StageFlags = x.Handle.stageFlags
         member x.DescriptorCount = int x.Handle.descriptorCount
-        member x.Name = x.Parameter.paramName
-        member x.Type = x.Parameter.paramType
+        member x.Name = x.Parameter.Name
         member x.Binding = int x.Handle.binding 
 
-        new (device, handle, parameter) = { inherit Resource<_>(device, handle); Parameter = parameter }
+        new (device, handle, parameter) = { Device = device; Handle = handle; Parameter = parameter }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayoutBinding =
-    let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderParameter) (device : Device) =
+    let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderUniformParameter) (device : Device) =
         let handle = 
             VkDescriptorSetLayoutBinding(
-                parameter |> ShaderParameter.tryGetBinding |> Option.get |> uint32,
+                uint32 parameter.Binding,
                 descriptorType,
-                parameter |> ShaderParameter.getArraySize |> uint32,
+                1u,
                 stages,
                 NativePtr.zero
             )
@@ -43,14 +44,17 @@ module DescriptorSetLayoutBinding =
 type DescriptorSetLayout =
     class
         inherit Resource<VkDescriptorSetLayout>
-        val mutable public Bindings : list<DescriptorSetLayoutBinding>
+        val mutable public Bindings : array<DescriptorSetLayoutBinding>
         new(device : Device, handle : VkDescriptorSetLayout, bindings) = { inherit Resource<_>(device, handle); Bindings = bindings }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayout =
-    let create (bindings : list<DescriptorSetLayoutBinding>) (device : Device) =
-        let arr = bindings |> List.map (fun b -> b.Handle) |> List.toArray
+
+    let empty (d : Device) = DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
+
+    let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
+        let arr = bindings |> Array.map (fun b -> b.Handle)
 
         arr |> NativePtr.withA (fun pArr ->
             let mutable info =

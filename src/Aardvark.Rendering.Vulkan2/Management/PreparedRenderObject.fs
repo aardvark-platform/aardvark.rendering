@@ -127,66 +127,46 @@ type DevicePreparedRenderObjectExtensions private() =
         let program = this.CreateShaderProgram(renderPass, ro.Surface)
         let prog = program.Handle.GetValue()
 
-        let mutable uniformBuffers = []
+        let uniformBuffers = System.Collections.Generic.HashSet<IResource<UniformBuffer>>()
         let descriptorSets = 
-            prog.PipelineLayout.DescriptorSetLayouts |> List.map (fun ds ->
-                let bufferBindings, imageBindings = 
-                    ds.Bindings |> List.partition (fun b ->
-                        match b.Parameter.paramType with
-                            | ShaderType.Ptr(_, ShaderType.Struct _) -> true
-                            | _ -> false
-                    )
-                    
-                let buffers =
-                    bufferBindings |> List.map (fun b ->
-                        match b.Parameter.paramType with
-                            | ShaderType.Ptr(_, ShaderType.Struct(_,fields)) ->
-                                let layout = UniformBufferLayoutStd140.structLayout fields
-                                let buffer = this.CreateUniformBuffer(ro.AttributeScope, layout, ro.Uniforms, prog.UniformGetters)
-                                uniformBuffers <- buffer :: uniformBuffers
-                                b.Binding, buffer.Handle.GetValue()
-                            | _ ->
-                                failf "impossible"
-                    )
+            prog.PipelineLayout.DescriptorSetLayouts |> Array.map (fun ds ->
+                let descriptors = 
+                    ds.Bindings |> Array.map (fun b ->
+                        match b.Parameter with
+                            | UniformBlockParameter block ->
+                                let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, prog.UniformGetters)
+                                uniformBuffers.Add buffer |> ignore
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (buffer.Handle.GetValue())
 
-                let textures =
-                    imageBindings |> List.map (fun desc ->
-                            match desc.Parameter.paramType with
-                            | ShaderType.Ptr(_, ShaderType.Image(sampledType, dim, isDepth, isArray, isMS, _, _)) 
-                            | ShaderType.Image(sampledType, dim, isDepth, isArray, isMS, _, _) ->
-                                let sym = Symbol.Create desc.Parameter.paramName
+                            | ImageParameter img ->
+                                let name = Symbol.Create img.name
 
-                                let sym =
-                                    match prog.Surface.SemanticMap.TryGetValue sym with
+                                let semantic =
+                                    match prog.Surface.SemanticMap.TryGetValue name with
                                         | (true, sem) -> sem
-                                        | _ -> sym
-
-                                let binding = desc.Binding
+                                        | _ -> name   
 
                                 let samplerState = 
-                                    match prog.Surface.SamplerStates.TryGetValue sym with
+                                    match prog.Surface.SamplerStates.TryGetValue name with
                                         | (true, sam) -> sam
                                         | _ -> 
-                                            Log.warn "could not get sampler for texture: %A" sym
-                                            SamplerStateDescription()
-
-
-
-                                match ro.Uniforms.TryGetUniform(Ag.emptyScope, sym) with
+                                            Log.warn "could not get sampler for texture: %A" name
+                                            SamplerStateDescription()     
+  
+                                match ro.Uniforms.TryGetUniform(Ag.emptyScope, semantic) with
                                     | Some (:? IMod<ITexture> as tex) ->
 
                                         let tex = this.CreateImage(tex)
                                         let view = this.CreateImageView(tex)
                                         let sam = this.CreateSampler(Mod.constant samplerState)
-                                                
-                                        binding, (view, sam)
-                                    | _ -> 
-                                        failwithf "could not find texture: %A" desc.Parameter
-                            | _ ->
-                                failf "bad uniform-type %A" desc
+
+                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler (view, sam)
+
+                                    | _ ->
+                                        failwithf "could not find texture: %A" semantic
                     )
-                    
-                this.CreateDescriptorSet(ds, Map.ofList buffers, Map.ofList textures)
+
+                this.CreateDescriptorSet(ds, descriptors)
             )
 
 
@@ -195,31 +175,18 @@ type DevicePreparedRenderObjectExtensions private() =
             true
 
         let bufferViews =
-            let vs = prog.Shaders.[ShaderStage.Vertex]
-
-            vs.Interface.inputs
-                |> Seq.map (fun param ->
-                    match ShaderParameter.tryGetLocation param with
-                        | Some loc -> loc, param.paramName, param.paramType
-                        | None -> failwithf "no attribute location given for shader input: %A" param
-                    )
-
-                |> Seq.map (fun (location, parameterName, parameterType) ->
-                    let sym = Symbol.Create parameterName
-
+            prog.Inputs
+                |> Seq.map (fun p ->
                     let perInstance, view =
-                        match ro.VertexAttributes.TryGetAttribute sym with
+                        match ro.VertexAttributes.TryGetAttribute p.semantic with
                             | Some att -> false, att
                             | None ->
-                                match ro.InstanceAttributes.TryGetAttribute sym with
+                                match ro.InstanceAttributes.TryGetAttribute p.semantic with
                                     | Some att -> true, att
-                                    | None -> failwithf "could not get vertex data for shader input: %A" parameterName
+                                    | None -> failwithf "could not get vertex data for shader input: %A" p.semantic
 
-                    if isCompatible parameterType view.ElementType then
-                        (parameterName, location, perInstance, view)
-                    else
-                        failwithf "vertex data has incompatible type for shader: %A vs %A" view.ElementType parameterType
-                    )
+                    (p.semantic, p.location, perInstance, view)
+                   )
                 |> Seq.toList
 
         let buffers =
@@ -302,7 +269,7 @@ type DevicePreparedRenderObjectExtensions private() =
             {
                 device                      = this.Device
                 original                    = ro
-                uniformBuffers              = uniformBuffers
+                uniformBuffers              = HashSet.toList uniformBuffers
                 descriptorSets              = descriptorBindings
                 pipeline                    = pipeline
                 vertexBuffers               = bindings
