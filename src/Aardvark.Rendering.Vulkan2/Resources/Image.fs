@@ -1692,7 +1692,7 @@ module ``Devil Loader`` =
                     let rowSize = int64 bytesPerPixel * int64 width
 
                     let target = device |> DeviceMemoryImage.createUntyped (V2i(width, height)) 1 pixFormat
-                    target.Upload(0, pixFormat, ImageTrafo.Rot0, data, rowSize)
+                    target.Upload(0, pixFormat, ImageTrafo.MirrorY, data, rowSize)
                     
                     target
                 finally

@@ -136,7 +136,7 @@ module ShaderProgram =
                             | _ -> failwithf "unsupported shader stage: %A" stage
 
                     let code = surface.Code.Replace(sprintf "%s(" entry, "main(")
-                    stage, versionRx.Replace(code, "#version 140\r\n" + (sprintf "#define %s\r\n" define))
+                    stage, versionRx.Replace(code, "#version 150\r\n" + (sprintf "#define %s\r\n" define))
                 )
 
         printfn "%s" surface.Code

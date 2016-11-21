@@ -909,8 +909,15 @@ module private ShaderInfo =
                 | OpStore(id,_,_) ->
                     match currentFunction with
                         | Some f when variables.Contains id ->
-                            let mode = getMode  f
+                            let mode = getMode f
                             mode.usedVariables.Add id |> ignore
+                            match callers.TryGetValue f with
+                                | (true, callers) ->
+                                    for c in callers do
+                                        let m = getMode c
+                                        m.usedVariables.Add id |> ignore
+                                | _ ->
+                                    ()
                         | _ ->
                             ()
 
@@ -953,7 +960,8 @@ module private ShaderInfo =
                         | Some f -> 
                             usingKill.Add f |> ignore
                             match callers.TryGetValue f with
-                                | (true, callers) -> usingKill.UnionWith callers
+                                | (true, callers) -> 
+                                    usingKill.UnionWith callers
                                 | _ -> ()
 
                         | None -> ()
@@ -965,6 +973,12 @@ module private ShaderInfo =
                             callers.Add current |> ignore
                             if usingKill.Contains f then
                                 usingKill.Add current |> ignore
+
+                            let cm = getMode current
+                            match modes.TryGetValue f with
+                                | (true, fm) -> cm.usedVariables.UnionWith fm.usedVariables
+                                | _ -> ()
+
                         | _ ->
                             ()
 
@@ -1082,14 +1096,20 @@ module private ShaderInfo =
                     let vPar = parameters.[vid]
                     match vPar.paramType with
                         | Ptr(StorageClass.Input,t) -> 
-                            match ShaderParameter.tryGetBuiltInSemantic vPar with
-                                | Some sem -> builtInInputs.[sem] <- t
-                                | None -> inputs.Add(ShaderIOParameter.ofShaderParameter vPar)
+                            match t with
+                                | Struct(name,fields) when name.StartsWith "gl_" -> ()
+                                | _ -> 
+                                    match ShaderParameter.tryGetBuiltInSemantic vPar with
+                                        | Some sem -> builtInInputs.[sem] <- t
+                                        | None -> inputs.Add(ShaderIOParameter.ofShaderParameter vPar)
 
                         | Ptr(StorageClass.Output,t) ->
-                            match ShaderParameter.tryGetBuiltInSemantic vPar with
-                                | Some sem -> builtInOutputs.[sem] <- t
-                                | None -> outputs.Add(ShaderIOParameter.ofShaderParameter vPar)
+                            match t with
+                                | Struct(name,fields) when name.StartsWith "gl_" -> ()
+                                | _ -> 
+                                    match ShaderParameter.tryGetBuiltInSemantic vPar with
+                                        | Some sem -> builtInOutputs.[sem] <- t
+                                        | None -> outputs.Add(ShaderIOParameter.ofShaderParameter vPar)
 
                         | Ptr((StorageClass.Uniform | StorageClass.Image | StorageClass.UniformConstant),_) ->
                             match ShaderUniformParameter.ofShaderParameter vPar with

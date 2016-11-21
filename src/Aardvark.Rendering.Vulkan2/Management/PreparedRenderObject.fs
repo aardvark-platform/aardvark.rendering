@@ -120,6 +120,16 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+module private Array =
+    let choosei (f : int -> 'a -> Option<'b>) (a : 'a[]) =
+        let res = System.Collections.Generic.List<'b>()
+        for i in 0 .. a.Length - 1 do
+            match f i a.[i] with
+                | Some v -> res.Add v
+                | None -> ()
+
+        res.ToArray()
+
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
 
@@ -131,12 +141,12 @@ type DevicePreparedRenderObjectExtensions private() =
         let descriptorSets = 
             prog.PipelineLayout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
-                    ds.Bindings |> Array.map (fun b ->
+                    ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
                                 let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, prog.UniformGetters)
                                 uniformBuffers.Add buffer |> ignore
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (buffer.Handle.GetValue())
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer.Handle.GetValue()) |> Some
 
                             | ImageParameter img ->
                                 let name = Symbol.Create img.name
@@ -160,10 +170,11 @@ type DevicePreparedRenderObjectExtensions private() =
                                         let view = this.CreateImageView(tex)
                                         let sam = this.CreateSampler(Mod.constant samplerState)
 
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler (view, sam)
+                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler (i, view, sam) |> Some
 
                                     | _ ->
-                                        failwithf "could not find texture: %A" semantic
+                                        Log.warn "could not find texture: %A" semantic
+                                        None
                     )
 
                 this.CreateDescriptorSet(ds, descriptors)

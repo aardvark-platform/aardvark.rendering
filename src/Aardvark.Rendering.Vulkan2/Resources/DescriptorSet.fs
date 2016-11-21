@@ -14,12 +14,12 @@ open Microsoft.FSharp.NativeInterop
 
 
 type Descriptor =
-    | UniformBuffer of UniformBuffer
-    | CombinedImageSampler of ImageView * Sampler
+    | UniformBuffer of int * UniformBuffer
+    | CombinedImageSampler of int * ImageView * Sampler
 
 type AdaptiveDescriptor =
-    | AdaptiveUniformBuffer of UniformBuffer
-    | AdaptiveCombinedImageSampler of IResource<ImageView> * IResource<Sampler>
+    | AdaptiveUniformBuffer of int * UniformBuffer
+    | AdaptiveCombinedImageSampler of int * IResource<ImageView> * IResource<Sampler>
 
 type DescriptorSet =
     class
@@ -68,9 +68,9 @@ module DescriptorSet =
 
         let writes =
             descriptors
-                |> Array.mapi (fun binding desc ->
+                |> Array.map (fun desc ->
                     match desc with
-                        | UniformBuffer ub ->
+                        | UniformBuffer (binding, ub) ->
                             let info = 
                                 VkDescriptorBufferInfo(
                                     ub.Handle, 
@@ -91,7 +91,7 @@ module DescriptorSet =
                                 ptr,
                                 NativePtr.zero
                             )
-                        | CombinedImageSampler(view, sam) ->
+                        | CombinedImageSampler(binding, view, sam) ->
                             let info =
                                 VkDescriptorImageInfo(
                                     sam.Handle,

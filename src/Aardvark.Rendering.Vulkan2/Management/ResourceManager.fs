@@ -314,13 +314,13 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                         let descriptors =
                             descriptors |> Array.map (fun d ->
                                 match d with
-                                    | AdaptiveUniformBuffer b -> 
-                                        Descriptor.UniformBuffer b
+                                    | AdaptiveUniformBuffer(i, b) -> 
+                                        Descriptor.UniformBuffer(i, b)
 
-                                    | AdaptiveCombinedImageSampler(v, s) ->
+                                    | AdaptiveCombinedImageSampler(i, v, s) ->
                                         stats <- stats + v.Update(x)
                                         stats <- stats + s.Update(x)
-                                        Descriptor.CombinedImageSampler(v.Handle.GetValue(), s.Handle.GetValue())
+                                        Descriptor.CombinedImageSampler(i, v.Handle.GetValue(), s.Handle.GetValue())
                             )   
 
                         let changes = stats.ResourceDeltas.Total
@@ -336,7 +336,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
                         for d in descriptors do
                             match d with
-                                | AdaptiveCombinedImageSampler(i,s) ->
+                                | AdaptiveCombinedImageSampler(_,i,s) ->
                                     i.RemoveRef()
                                     i.RemoveOutput x
                                     s.RemoveRef()
