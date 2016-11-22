@@ -248,9 +248,10 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
                 let writeDepth = Set.contains DefaultSemantic.Depth writeBuffers
 
+                let usesDiscard = program.Handle.GetValue().HasDiscard
                 let vertexInputState = VertexInputState.create inputs
                 let inputAssembly = Mod.map InputAssemblyState.ofIndexedGeometryMode geometryMode
-                let rasterizerState = Mod.map2 RasterizerState.create cullMode fillMode
+                let rasterizerState = Mod.custom (fun self -> RasterizerState.create usesDiscard (depthTest.GetValue self) (cullMode.GetValue self) (fillMode.GetValue self))
                 let colorBlendState = Mod.map (ColorBlendState.create writeMasks pass.ColorAttachmentCount) blendMode
                 let multisampleState = MultisampleState.create anyAttachment.samples
                 let depthState = Mod.map (DepthState.create writeDepth) depthTest

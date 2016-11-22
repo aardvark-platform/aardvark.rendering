@@ -92,9 +92,12 @@ module TrafoSemantics =
                     cache.[key] <- strong.Weak
                     strong
 
+    let private normalMatrix (model : Trafo3d) =
+        model.Backward.Transposed.UpperLeftM33()
+
     let mulCache = BinaryWeakCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
     let invCache = UnaryWeakCache (Mod.map (fun (t : Trafo3d) -> t.Inverse))
-    let btCache = UnaryWeakCache (Mod.map (fun (t : Trafo3d) -> t.Backward.Transposed.UpperLeftM33()))
+    let btCache = UnaryWeakCache (Mod.map normalMatrix)
 
     let (<*>) a b = 
         if a = rootTrafo then b

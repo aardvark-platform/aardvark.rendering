@@ -354,10 +354,10 @@ module RasterizerState =
         ]
 
    
-    let create (cull : CullMode) (fill : FillMode) =
+    let create (usesDiscard : bool) (depth : DepthTestMode) (cull : CullMode) (fill : FillMode) =
         {
-            depthClampEnable        = false
-            rasterizerDiscardEnable = false
+            depthClampEnable        = depth.Clamp
+            rasterizerDiscardEnable = usesDiscard
             polygonMode             = toVkPolygonMode fill
             cullMode                = toVkCullMode cull
             frontFace               = VkFrontFace.Clockwise
@@ -460,7 +460,7 @@ module DepthState =
         {
             testEnabled             = mode.IsEnabled
             writeEnabled            = write
-            boundsTest              = mode.Clamp
+            boundsTest              = false
             compare                 = toVkCompareOp mode.Comparison
             depthBounds             = if mode.Clamp then mode.Bounds else Range1d(0.0, 1.0)
         }
@@ -492,7 +492,15 @@ module StencilState =
         ]
 
     let private toVkStencilOpState (op : StencilOperation) (cmp : StencilFunction) =
-        VkStencilOpState(toVkStencilOp op.StencilFail, toVkStencilOp op.DepthPass, toVkStencilOp op.DepthFail, toVkStencilCompareOp cmp.Function, cmp.Mask, cmp.Mask, uint32 cmp.Reference)
+        VkStencilOpState(
+            toVkStencilOp op.StencilFail, 
+            toVkStencilOp op.DepthPass, 
+            toVkStencilOp op.DepthFail, 
+            toVkStencilCompareOp cmp.Function, 
+            cmp.Mask, 
+            cmp.Mask, 
+            uint32 cmp.Reference
+        )
     
     let create (mode : StencilMode) =
         {

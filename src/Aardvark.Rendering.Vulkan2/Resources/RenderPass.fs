@@ -122,7 +122,6 @@ module RenderPass =
                             match format with
                                 | VkFormat.D16UnormS8Uint -> true
                                 | VkFormat.D24UnormS8Uint -> true
-                                | VkFormat.X8D24UnormPack32 -> true
                                 | VkFormat.D32SfloatS8Uint -> true
                                 | _ -> false
 

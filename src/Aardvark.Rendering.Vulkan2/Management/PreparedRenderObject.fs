@@ -137,7 +137,7 @@ type DevicePreparedRenderObjectExtensions private() =
         let program = this.CreateShaderProgram(renderPass, ro.Surface)
         let prog = program.Handle.GetValue()
 
-        let uniformBuffers = System.Collections.Generic.HashSet<IResource<UniformBuffer>>()
+        let uniformBuffers = System.Collections.Generic.List<IResource<UniformBuffer>>()
         let descriptorSets = 
             prog.PipelineLayout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
@@ -145,7 +145,7 @@ type DevicePreparedRenderObjectExtensions private() =
                         match b.Parameter with
                             | UniformBlockParameter block ->
                                 let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, prog.UniformGetters)
-                                uniformBuffers.Add buffer |> ignore
+                                uniformBuffers.Add buffer
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer.Handle.GetValue()) |> Some
 
                             | ImageParameter img ->
@@ -281,7 +281,7 @@ type DevicePreparedRenderObjectExtensions private() =
             {
                 device                      = this.Device
                 original                    = ro
-                uniformBuffers              = HashSet.toList uniformBuffers
+                uniformBuffers              = CSharpList.toList uniformBuffers
                 descriptorSets              = descriptorBindings
                 pipeline                    = pipeline
                 vertexBuffers               = bindings
