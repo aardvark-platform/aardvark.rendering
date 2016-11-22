@@ -15,5 +15,8 @@ State.o: State.cpp State.h
 glvm.so: glvm.o State.o
 	g++ State.o glvm.o -shared -o glvm.so -lGL
 
+glvm.dylib: glvm.o State.o
+	g++ State.o glvm.o -shared -o glvm.dylib -framework OpenGL
+
 .PHONY clean:
 	rm -fr *.o glvm.so

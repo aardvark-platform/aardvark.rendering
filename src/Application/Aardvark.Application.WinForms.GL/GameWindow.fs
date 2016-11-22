@@ -200,6 +200,7 @@ module GameWindowIO =
             pp
 
         let mousePos() =
+            try
              match ctrl with
                 | Some ctrl -> 
                     let p = ctrl.PointToClient(Control.MousePosition)
@@ -211,6 +212,9 @@ module GameWindowIO =
                     PixelPosition(x, y, ctrl.ClientSize.Width, ctrl.ClientSize.Height)
                 | _ ->
                     PixelPosition(0,0,0,0)
+             with e -> 
+                Log.warn "could not grab mouse position."
+                lastPos
 
 
         let onMouseDownHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Down(%%e, %e.Button))

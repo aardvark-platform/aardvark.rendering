@@ -5,7 +5,24 @@
 #include "State.h"
 #include "glvm.h"
 
-#ifdef __GNUC__
+#ifdef __APPLE__
+#import <mach-o/dyld.h>
+#import <stdlib.h>
+#import <string.h>
+static void* getProc (const char *name)
+{
+    NSSymbol symbol;
+    char *symbolName;
+    symbolName = (char*)malloc (strlen (name) + 2); // 1
+    strcpy(symbolName + 1, name); // 2
+    symbolName[0] = '_'; // 3
+    symbol = NULL;
+    if (NSIsSymbolNameDefined (symbolName)) // 4
+        symbol = NSLookupAndBindSymbol (symbolName);
+    free (symbolName); // 5
+    return symbol ? NSAddressOfSymbol (symbol) : NULL; // 6
+}
+#elif __GNUC__
 
 static void* getProc(const char* name)
 {
@@ -47,6 +64,14 @@ DllExport(void) vmInit()
 
 	initialized = true;
 
+
+	glDrawArraysInstancedBaseInstance = (PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC)getProc("glDrawArraysInstancedBaseInstance");
+	glDrawElementsInstancedBaseVertexBaseInstance = (PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC)getProc("glDrawElementsInstancedBaseVertexBaseInstance");
+
+	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
+	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
+
+	#ifndef __APPLE__
 	#ifndef __GNUC__
 	glActiveTexture = (PFNGLACTIVETEXTUREPROC)getProc("glActiveTexture");
 	glBlendColor = (PFNGLBLENDCOLORPROC)getProc("glBlendColor");
@@ -66,8 +91,6 @@ DllExport(void) vmInit()
 	glPatchParameteri = (PFNGLPATCHPARAMETERIPROC)getProc("glPatchParameteri");
 	glDrawArraysInstanced = (PFNGLDRAWARRAYSINSTANCEDPROC)getProc("glDrawArraysInstanced");
 	glDrawElementsBaseVertex = (PFNGLDRAWELEMENTSBASEVERTEXPROC)getProc("glDrawElementsBaseVertex");
-	glDrawArraysInstancedBaseInstance = (PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC)getProc("glDrawArraysInstancedBaseInstance");
-	glDrawElementsInstancedBaseVertexBaseInstance = (PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC)getProc("glDrawElementsInstancedBaseVertexBaseInstance");
 	glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)getProc("glVertexAttribPointer");
 	glUniform1fv = (PFNGLUNIFORM1FVPROC)getProc("glUniform1fv");
 	glUniform1iv = (PFNGLUNIFORM1IVPROC)getProc("glUniform1iv");
@@ -85,8 +108,6 @@ DllExport(void) vmInit()
 	glVertexAttrib3f = (PFNGLVERTEXATTRIB3FPROC)getProc("glVertexAttrib3f");
 	glVertexAttrib4f = (PFNGLVERTEXATTRIB4FPROC)getProc("glVertexAttrib4f");
 
-	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
-	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
 	glColorMaski = (PFNGLCOLORMASKIPROC)getProc("glColorMaski");
 	glDrawBuffers = (PFNGLDRAWBUFFERSPROC)getProc("glDrawBuffers");
 	glMapBufferRange = (PFNGLMAPBUFFERRANGEPROC)getProc("glMapBufferRange");
@@ -94,7 +115,7 @@ DllExport(void) vmInit()
 	glGetBufferParameteriv = (PFNGLGETBUFFERPARAMETERIVPROC)getProc("glGetBufferParameteriv");
 
 	glDrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)getProc("glDrawElementsInstanced");
-
+	#endif
 
 }
 

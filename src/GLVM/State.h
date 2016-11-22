@@ -1,6 +1,10 @@
 #pragma once
 
-#ifdef __GNUC__
+#ifdef __APPLE__
+#include <opengl/gl.h>
+#include <stdio.h>
+#include <string.h>
+#elif __GNUC__
 #include <GL/gl.h>
 #include <stdio.h>
 #include <string.h>

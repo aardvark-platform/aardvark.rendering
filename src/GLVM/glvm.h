@@ -1,7 +1,9 @@
 #pragma once
 
-
-#ifdef __GNUC__
+#ifdef __APPLE__
+#include <opengl/gl3.h>
+#define DllExport(t) extern "C" t
+#elif __GNUC__
 #include <GL/gl.h>
 #include <GL/glx.h>
 #define DllExport(t) extern "C" t
@@ -15,7 +17,8 @@
 
 #include <vector>
 
-#ifndef __GNUC__
+#ifndef __APPLE__
+#ifdef __GNUC__
 static PFNGLACTIVETEXTUREPROC							glActiveTexture;
 static PFNGLBLENDCOLORPROC								glBlendColor;
 #endif
@@ -32,9 +35,6 @@ static PFNGLSTENCILFUNCSEPARATEPROC						glStencilFuncSeparate;
 static PFNGLSTENCILOPSEPARATEPROC						glStencilOpSeparate;
 static PFNGLPATCHPARAMETERIPROC							glPatchParameteri;
 static PFNGLDRAWARRAYSINSTANCEDPROC						glDrawArraysInstanced;
-static PFNGLDRAWELEMENTSBASEVERTEXPROC					glDrawElementsBaseVertex;
-static PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC			glDrawArraysInstancedBaseInstance;
-static PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC		glDrawElementsInstancedBaseVertexBaseInstance;
 static PFNGLVERTEXATTRIBPOINTERPROC						glVertexAttribPointer;
 static PFNGLUNIFORM1FVPROC								glUniform1fv;
 static PFNGLUNIFORM1IVPROC								glUniform1iv;
@@ -51,15 +51,25 @@ static PFNGLVERTEXATTRIB1FPROC							glVertexAttrib1f;
 static PFNGLVERTEXATTRIB2FPROC							glVertexAttrib2f;
 static PFNGLVERTEXATTRIB3FPROC							glVertexAttrib3f;
 static PFNGLVERTEXATTRIB4FPROC							glVertexAttrib4f;
-static PFNGLMULTIDRAWARRAYSINDIRECTPROC					glMultiDrawArraysIndirect;
-static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
 static PFNGLCOLORMASKIPROC								glColorMaski;
 static PFNGLDRAWBUFFERSPROC								glDrawBuffers;
 static PFNGLMAPBUFFERRANGEPROC							glMapBufferRange;
 static PFNGLUNMAPBUFFERPROC								glUnmapBuffer;
 static PFNGLGETBUFFERPARAMETERIVPROC					glGetBufferParameteriv;
-
+static PFNGLDRAWELEMENTSBASEVERTEXPROC					glDrawElementsBaseVertex;
 static PFNGLDRAWELEMENTSINSTANCEDPROC					glDrawElementsInstanced;
+#else
+typedef void (APIENTRYP PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC) (GLenum mode, GLint first, GLsizei count, GLsizei primcount, GLuint baseinstance);
+typedef void (APIENTRYP PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC) (GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei primcount, GLint basevertex, GLuint baseinstance);
+typedef void           (APIENTRYP PFNGLMULTIDRAWARRAYSINDIRECTPROC) (GLenum mode, const void *indirect, GLsizei drawcount, GLsizei stride);
+typedef void           (APIENTRYP PFNGLMULTIDRAWELEMENTSINDIRECTPROC) (GLenum mode, GLenum type, const void *indirect, GLsizei drawcount, GLsizei stride);
+#endif
+
+
+static PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC			glDrawArraysInstancedBaseInstance;
+static PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC		glDrawElementsInstancedBaseVertexBaseInstance;
+static PFNGLMULTIDRAWARRAYSINDIRECTPROC					glMultiDrawArraysIndirect;
+static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
 
 // enum holding the available instruction codes
 typedef enum {
