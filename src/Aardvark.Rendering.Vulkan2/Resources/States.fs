@@ -498,7 +498,7 @@ module StencilState =
             toVkStencilOp op.DepthFail, 
             toVkStencilCompareOp cmp.Function, 
             cmp.Mask, 
-            cmp.Mask, 
+            0xFFFFFFFFu, 
             uint32 cmp.Reference
         )
     
