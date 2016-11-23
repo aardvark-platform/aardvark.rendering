@@ -99,7 +99,9 @@ module PipelineLayout =
                 if l.Count = 0 then
                     device |> DescriptorSetLayout.empty
                 else
-                    device |> DescriptorSetLayout.create (CSharpList.toArray l)
+                    let arr = CSharpList.toArray l
+                    arr.QuickSortAscending(fun v -> v.Binding) |> ignore
+                    device |> DescriptorSetLayout.create arr
             )
 
 
