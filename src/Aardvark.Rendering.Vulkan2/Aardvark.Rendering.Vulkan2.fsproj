@@ -89,7 +89,6 @@
     <Compile Include="Resources\IndirectBuffer.fs" />
     <Compile Include="Resources\MappedBuffer.fs" />
     <Compile Include="Resources\CommandResources.fs" />
-    <Compile Include="Resources\PipelineNew.fs" />
     <Compile Include="Swapchain\Surface.fs" />
     <Compile Include="Swapchain\SwapchainDescription.fs" />
     <Compile Include="Swapchain\Swapchain.fs" />
