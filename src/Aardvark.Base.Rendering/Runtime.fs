@@ -15,10 +15,6 @@ type IStreamingTexture =
 
 
 
-type IBackendBuffer =
-    inherit IBuffer
-    abstract member Handle : obj
-
 type IBackendSurface =
     inherit ISurface
     abstract member Handle : obj

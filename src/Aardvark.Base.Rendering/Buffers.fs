@@ -1,6 +1,8 @@
 ﻿namespace Aardvark.Base
 
 open System
+open System.Collections.Generic
+open System.Threading
 open Aardvark.Base.Incremental
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
@@ -124,16 +126,64 @@ type IndirectBuffer(b : IBuffer, count : int) =
         member x.Count = count
 
 
-open System.Threading
-type RenderTaskLock() =
-    let rw = new ReaderWriterLockSlim()
-    member x.Run f = ReaderWriterLock.write rw f
-    member x.Update f = ReaderWriterLock.read rw f
-
+type ResourceUsage =
+    | Access = 1
+    | Render = 2
+    
+type ResourceLock = ColoredLock<ResourceUsage>
 type ILockedResource =
-    abstract member Use         : (unit -> 'a) -> 'a
-    abstract member AddLock     : RenderTaskLock -> unit
-    abstract member RemoveLock  : RenderTaskLock -> unit
+    abstract member Lock : ResourceLock
+
+module LockedResource =
+
+    let render (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter ResourceUsage.Render
+        try f()
+        finally r.Lock.Exit()
+
+    let access (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter ResourceUsage.Access
+        try f()
+        finally r.Lock.Exit()
+
+    let update (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter()
+        try f()
+        finally r.Lock.Exit()
+
+
+type RenderTaskLock() =
+    let lockedResources = ReferenceCountingSet<ILockedResource>()
+
+    member x.Run f = 
+        let res = lock lockedResources (fun () -> Seq.toArray lockedResources)
+        for l in res do l.Lock.Enter(ResourceUsage.Render)
+        try f()
+        finally for l in res do l.Lock.Exit()
+        
+
+    [<Obsolete>]
+    member x.Update f = failwith ""
+    
+    member x.Add(r : ILockedResource) =
+        lock lockedResources (fun () -> lockedResources.Add r |> ignore)
+
+    member x.Remove(r : ILockedResource) =
+        lock lockedResources (fun () -> lockedResources.Remove r |> ignore)
+
+
+type IBackendBuffer =
+    inherit IBuffer
+    abstract member Handle : obj
+    abstract member SizeInBytes : nativeint
+
+type IResizeBuffer =
+    inherit IBackendBuffer
+    inherit ILockedResource
+
+    abstract member Resize : capacity : nativeint -> unit
+    abstract member UseRead : offset : nativeint * size : nativeint * reader : (nativeint -> 'x) -> 'x
+    abstract member UseWrite : offset : nativeint * size : nativeint * writer : (nativeint -> 'x) -> 'x
 
 type IMappedIndirectBuffer =
     inherit IMod<IIndirectBuffer>
@@ -170,8 +220,6 @@ module IndirectBuffer =
         l |> List.toArray |> ofArray
 
     let count (b : IIndirectBuffer) = b.Count
-    
-
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferView =

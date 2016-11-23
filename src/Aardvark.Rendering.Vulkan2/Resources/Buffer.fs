@@ -23,6 +23,7 @@ type Buffer =
 
         interface IBackendBuffer with
             member x.Handle = x.Handle :> obj
+            member x.SizeInBytes = nativeint x.Memory.Size
 
         new(device, handle, memory) = { inherit Resource<_>(device, handle); Memory = memory }
     end

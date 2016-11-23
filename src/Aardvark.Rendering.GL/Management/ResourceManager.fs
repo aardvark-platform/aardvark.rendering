@@ -213,15 +213,14 @@ module Sharing =
                     ctx.Delete b
 
 
-type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>, size : int, fields : list<UniformField>) =
+type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>) =
 
     let alignedSize = (size + 255) &&& ~~~255
 
-    let buffer = ctx.CreateMappedBuffer()
-    do renderTaskInfo |> Option.iter buffer.AddLock
+    let buffer = ctx.CreateResizeBuffer()
     let manager = MemoryManager.createNop()
 
-    let viewCache = ResourceCache<UniformBufferView>(None, renderTaskInfo)
+    let viewCache = ResourceCache<UniformBufferView>(None, None)
     let rw = new ReaderWriterLockSlim()
 
     member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<obj>) : IResource<UniformBufferView> =
@@ -256,16 +255,12 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
                                 | Some old -> old
                                 | None ->
                                     block <- manager.Alloc (nativeint alignedSize)
-                                    ReaderWriterLock.write rw (fun () ->
-                                        let mcap = nativeint manager.Capacity
-                                        if buffer.Capacity <> mcap then buffer.Resize(mcap)
-                                    )
+                                    let mcap = nativeint manager.Capacity
+                                    buffer.ResizeUnsafe(mcap)
                                     UniformBufferView(buffer, block.Offset, nativeint block.Size)
 
-                        ReaderWriterLock.read rw (fun () ->
-                            buffer.UseWrite(handle.Offset, handle.Size, fun ptr ->
-                                for (_,w) in writers do w.Write(x, ptr)
-                            )
+                        buffer.UseWriteUnsafe(handle.Offset, handle.Size, fun ptr ->
+                            for (_,w) in writers do w.Write(x, ptr)
                         )
                         handle, FrameStatistics.Zero
 
@@ -278,7 +273,7 @@ type UniformBufferManager(ctx : Context, renderTaskInfo : Option<RenderTaskLock>
         )
 
     member x.Dispose() =
-        buffer.Dispose()
+        ctx.Delete buffer
         manager.Dispose()
 
 type DrawBufferConfig =
@@ -400,10 +395,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
 
-    let uniformBufferManagers = 
-        match parent with
-            | Some p -> p.UniformBufferManagers
-            | _ -> ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
+    let uniformBufferManagers = ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
 
     member private x.ArrayBufferCache       : ResourceCache<Buffer>                 = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer>                 = bufferCache
@@ -624,7 +616,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 (layout.size, layout.fields), 
                 fun (s,f) -> 
                     let uniformFields = layout.fields |> List.map (fun f -> f.UniformField)
-                    new UniformBufferManager(ctx, Option.map snd renderTaskInfo, s, uniformFields)
+                    new UniformBufferManager(ctx, s, uniformFields)
             )
 
         manager.CreateUniformBuffer(scope, u, program.UniformGetters)

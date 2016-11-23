@@ -236,7 +236,7 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                     | _ -> ()
 
                 match renderTaskLock, m with
-                    | Some l, (:? ILockedResource as r) -> r.AddLock l
+                    | Some l, (:? ILockedResource as r) -> l.Add r
                     | _ -> ()
 
             | _ ->
@@ -248,7 +248,7 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | _ -> ()
 
         match renderTaskLock, m with
-            | Some l, (:? ILockedResource as r) -> r.RemoveLock l
+            | Some l, (:? ILockedResource as r) -> l.Remove r
             | _ -> ()
 
     let stats (m : IMod<'a>) =

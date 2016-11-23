@@ -29,16 +29,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         if seen.Add ((stack, str)) then
             if Debugger.IsAttached then
                 Debugger.Break()
-            else
-                if not (Debugger.Launch()) then
-                    Environment.Exit 1
     #else
     let debugBreak (str : string) = ()
     #endif
 
+
     let ignored =
         HashSet.ofList [
-            Guid.Parse("{7b622240-bc96-b0cf-0cd0-31092e23a138}")
+            Guid.Parse("{d7f7c939-f97a-e8a9-8289-e4faac682bde}")
         ]
 
     let debugMessage (msg : DebugMessage) =

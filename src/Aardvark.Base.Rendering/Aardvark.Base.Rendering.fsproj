@@ -63,6 +63,7 @@
   </Target>
   -->
   <ItemGroup>
+    <Compile Include="ColoredLock.fs" />
     <Compile Include="PrimitiveValueConverter.fs" />
     <Compile Include="RenderPass.fs" />
     <Compile Include="GPUVendor.fs" />

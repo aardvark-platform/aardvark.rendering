@@ -23,7 +23,7 @@ type Buffer =
 
         interface IBackendBuffer with
             member x.Handle = x.Handle :> obj
-
+            member x.SizeInBytes = nativeint x.Size
 
         new(ctx, handle, fmt, mem, flags) = { Context = ctx; Handle = handle; Format = fmt; Memory = mem; Size = DevicePtr.size mem; Flags = flags }
     end

@@ -507,7 +507,7 @@ type UniformBuffer(ctx : Context, handle : int, size : int, fields : list<Unifor
 
 type UniformBufferView =
     class
-        val mutable public Buffer : IMod<IBuffer>
+        val mutable public Buffer : Aardvark.Rendering.GL.Buffer
         val mutable public Offset : nativeint
         val mutable public Size : nativeint
 

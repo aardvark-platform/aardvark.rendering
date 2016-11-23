@@ -120,7 +120,6 @@ module private DebugReportHelpers =
                 computeHash (fun w ->
                     w.Write (int flags)
                     w.Write (int objType)
-                    w.Write location
                     w.Write msgCode
                     w.Write layerPrefix
                 )

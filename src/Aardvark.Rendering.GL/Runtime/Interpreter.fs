@@ -628,7 +628,7 @@ module OpenGLObjectInterpreter =
 
                 for (id, ub) in Map.toSeq o.UniformBuffers do
                     let ub = ub.Handle.GetValue()
-                    let b = ub.Buffer.GetValue() |> unbox<Aardvark.Rendering.GL.Buffer>
+                    let b = ub.Buffer
                     gl.bindBufferRange GL_UNIFORM_BUFFER id b.Handle ub.Offset (nativeint ub.Size)
 
                 for (id, (tex, sam)) in Map.toSeq o.Textures do

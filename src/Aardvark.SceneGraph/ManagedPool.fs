@@ -239,9 +239,7 @@ module private ManagedBufferImplementation =
             member x.GetValue c = x.GetValue c
 
         interface ILockedResource with
-            member x.Use f = store.Use f
-            member x.AddLock r = store.AddLock r
-            member x.RemoveLock r = store.RemoveLock r
+            member x.Lock = store.Lock
 
         interface IManagedBuffer with
             member x.Clear() = x.Clear()
@@ -503,9 +501,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
     let store = runtime.CreateMappedIndirectBuffer(indexed)
 
     let locked x (f : unit -> 'a) =
-        lock x (fun () ->
-            store.Use f
-        )
+        lock x f
 
     let add x (call : DrawCallInfo) =
         locked x (fun () ->
@@ -559,9 +555,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
             false
 
     interface ILockedResource with
-        member x.Use f = store.Use f
-        member x.AddLock l = store.AddLock l
-        member x.RemoveLock l = store.RemoveLock l
+        member x.Lock = store.Lock
 
     override x.Compute() =
         store.GetValue()

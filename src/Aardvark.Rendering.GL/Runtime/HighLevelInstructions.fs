@@ -49,13 +49,11 @@ module Instructions =
         )
 
     let bindUniformBufferView (index : int) (u : IResource<UniformBufferView>) =   
-        u.Handle |> Mod.bind (fun r ->
-            r.Buffer |> Mod.map (fun b ->
-                let b = unbox<Buffer> b
-                //ExecutionContext.bindUniformBuffer index r
-                Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index b.Handle r.Offset (nativeint r.Size)
-            )
-        )
+        u.Handle |> Mod.map (fun r ->
+            let b = r.Buffer
+            //ExecutionContext.bindUniformBuffer index r
+            Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index b.Handle r.Offset (nativeint r.Size)
+    )
 
     let bindIndirectBuffer (u : IResource<IndirectBuffer>) =   
         u.Handle |> Mod.map (fun r -> 
