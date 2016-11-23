@@ -859,7 +859,7 @@ module private ShaderInfo =
                     | None -> map <- Map.add k [v] map
             map
 
-    type private Modes =
+    type private FunctionProperties =
         {
             mutable entryModel      : ExecutionModel
             mutable entryName       : string
@@ -868,6 +868,7 @@ module private ShaderInfo =
             mutable fragFlags       : FragmentFlags
             mutable outputVertices  : int
             mutable invocations     : int
+            mutable discards        : bool
             usedVariables           : HashSet<uint32>
         }
         static member Empty = 
@@ -879,8 +880,14 @@ module private ShaderInfo =
                 fragFlags = FragmentFlags.None
                 outputVertices = 0
                 invocations = 1
+                discards = false
                 usedVariables = HashSet.empty
             }
+
+    let private structType      = Struct("", []).GetType()
+    let private structName      = structType.GetField("_name", System.Reflection.BindingFlags.NonPublic ||| System.Reflection.BindingFlags.Instance)
+    let private structFields    = structType.GetField("_fields", System.Reflection.BindingFlags.NonPublic ||| System.Reflection.BindingFlags.Instance)
+
 
     let ofInstructions (instructions : list<Instruction>) =
         let variables               = Dict.empty
@@ -889,16 +896,35 @@ module private ShaderInfo =
         let memberNames             = Dict.empty
         let memberDecorations       = Dict.empty
         let types                   = Dict.empty
-        let modes                   = Dict.empty
-
-        let usingKill               = HashSet.empty
+        let functions               = Dict.empty
+        let structs                 = HashSet.empty
         let callers                 = Dict.empty
-        
-        let getMode e = modes.GetOrCreate(e, fun _ -> Modes.Empty)
         let mutable currentFunction = None
 
+        let getProps e = functions.GetOrCreate(e, fun _ -> FunctionProperties.Empty)
+
+        // process the instructions maintaining all needed information
         for i in instructions do
             match i with
+                | OpTypeVoid r              -> types.[r] <- Void
+                | OpTypeBool r              -> types.[r] <- Bool
+                | OpTypeInt (r, w, s)       -> types.[r] <- Int(int w, s = 1u)
+                | OpTypeFloat (r, w)        -> types.[r] <- Float(int w)
+                | OpTypeVector (r, c, d)    -> types.[r] <- Vector(types.[c], int d)
+                | OpTypeMatrix (r, c, d)    -> types.[r] <- Matrix(types.[c], int d)
+                | OpTypeArray (r, e, l)     -> types.[r] <- Array(types.[e], int l)
+                | OpTypeSampler r           -> types.[r] <- Sampler
+                | OpTypeSampledImage (r,t)  -> types.[r] <- SampledImage(types.[t])
+                | OpTypePointer (r, c, t)   -> types.[r] <- Ptr(c, types.[t])
+                
+                | OpTypeImage(r,sampledType,dim,depth, arrayed, ms, sampled,format,access) ->
+                    types.[r] <- Image(types.[sampledType], unbox<Dim> dim, int depth, (arrayed = 1u), int ms, (sampled = 1u), format)
+
+                | OpTypeStruct (r, fts) -> 
+                    let fieldTypes = fts |> Array.toList |> List.map (fun ft -> types.[ft])
+                    structs.Add r |> ignore
+                    types.[r] <- ShaderType.Struct("", fieldTypes |> List.map (fun t -> t, "", []))
+
                 | OpFunction(_,id,_,_) -> currentFunction <- Some id
                 | OpFunctionEnd -> currentFunction <- None
 
@@ -909,12 +935,12 @@ module private ShaderInfo =
                 | OpStore(id,_,_) ->
                     match currentFunction with
                         | Some f when variables.Contains id ->
-                            let mode = getMode f
+                            let mode = getProps f
                             mode.usedVariables.Add id |> ignore
                             match callers.TryGetValue f with
                                 | (true, callers) ->
                                     for c in callers do
-                                        let m = getMode c
+                                        let m = getProps c
                                         m.usedVariables.Add id |> ignore
                                 | _ ->
                                     ()
@@ -951,18 +977,22 @@ module private ShaderInfo =
                     decorations.Add(dec, args)
 
                 | OpEntryPoint(model, id, name,_) ->
-                    let mode = getMode id
+                    let mode = getProps id
                     mode.entryModel <- model
                     mode.entryName <- name
 
                 | OpKill ->
                     match currentFunction with
                         | Some f -> 
-                            usingKill.Add f |> ignore
+                            let s = getProps f
+                            s.discards <- true
                             match callers.TryGetValue f with
-                                | (true, callers) -> 
-                                    usingKill.UnionWith callers
-                                | _ -> ()
+                                | (true, callers) ->
+                                    for c in callers do
+                                        let m = getProps c
+                                        m.discards <- true
+                                | _ ->
+                                    ()
 
                         | None -> ()
 
@@ -971,19 +1001,19 @@ module private ShaderInfo =
                         | Some current -> 
                             let callers = callers.GetOrCreate(f, fun _ -> HashSet.empty)
                             callers.Add current |> ignore
-                            if usingKill.Contains f then
-                                usingKill.Add current |> ignore
 
-                            let cm = getMode current
-                            match modes.TryGetValue f with
-                                | (true, fm) -> cm.usedVariables.UnionWith fm.usedVariables
+                            let cm = getProps current
+                            match functions.TryGetValue f with
+                                | (true, fm) -> 
+                                    cm.usedVariables.UnionWith fm.usedVariables
+                                    cm.discards <- cm.discards || fm.discards
                                 | _ -> ()
 
                         | _ ->
                             ()
 
                 | OpExecutionMode(entry, mode, arg) ->
-                    let m = getMode entry
+                    let m = getProps entry
 
                     match mode with
                         | ExecutionMode.SpacingEqual            -> m.tessFlags <- m.tessFlags ||| TessellationFlags.SpacingEqual
@@ -1024,47 +1054,38 @@ module private ShaderInfo =
 
                 | _ ->
                     ()
-
-        for i in instructions do
-            match i with
-                | OpTypeVoid r              -> types.[r] <- Void
-                | OpTypeBool r              -> types.[r] <- Bool
-                | OpTypeInt (r, w, s)       -> types.[r] <- Int(int w, s = 1u)
-                | OpTypeFloat (r, w)        -> types.[r] <- Float(int w)
-                | OpTypeVector (r, c, d)    -> types.[r] <- Vector(types.[c], int d)
-                | OpTypeMatrix (r, c, d)    -> types.[r] <- Matrix(types.[c], int d)
-                | OpTypeArray (r, e, l)     -> types.[r] <- Array(types.[e], int l)
-                | OpTypeSampler r           -> types.[r] <- Sampler
-                | OpTypeSampledImage (r,t)  -> types.[r] <- SampledImage(types.[t])
-                | OpTypePointer (r, c, t)   -> types.[r] <- Ptr(c, types.[t])
-
-                | OpTypeImage(r,sampledType,dim,depth, arrayed, ms, sampled,format,access) ->
-                    types.[r] <- Image(types.[sampledType], unbox<Dim> dim, int depth, (arrayed = 1u), int ms, (sampled = 1u), format)
-
-                | OpTypeStruct (r, fts) -> 
-                    let fieldTypes = fts |> Array.toList |> List.map (fun ft -> types.[ft])
-                    let fieldNames = 
-                        List.init fts.Length (fun fi ->  
-                            match memberNames.TryGetValue ((r, uint32 fi)) with
-                                | (true, name) -> name
-                                | _ -> sprintf "field%d" fi
-                        )
-
-                    let fieldDecorations =
-                        List.init fts.Length (fun fi ->
-                            match memberDecorations.TryGetValue((r, uint32 fi)) with
-                                | (true, dec) -> dec |> CSharpList.toList
-                                | _ -> []
-                        )
-
+          
+        // inject field-names/-decorations into structs via reflection
+        // NOTE: avoids multiple traversals of the instruction list
+        for id in structs do
+            let t = types.[id]
+            match t with
+                | Struct(_, fields) ->
                     let name =
-                        match names.TryGetValue r with
+                        match names.TryGetValue id with
                             | (true, name) -> name
                             | _ -> "noname"
 
-                    types.[r] <- Struct(name, List.zip3 fieldTypes fieldNames fieldDecorations)
+                    let fields =
+                        fields |> List.mapi (fun fi (t,_,_) ->
+                            let name = 
+                                match memberNames.TryGetValue ((id, uint32 fi)) with
+                                    | (true, name) -> name
+                                    | _ -> sprintf "field%d" fi
 
-                | _ -> ()
+                            let decorations =
+                                match memberDecorations.TryGetValue((id, uint32 fi)) with
+                                    | (true, dec) -> dec |> CSharpList.toList
+                                    | _ -> []
+
+                            (t, name, decorations)
+                        )
+
+                    structName.SetValue(t, name)
+                    structFields.SetValue(t, fields)
+                | _ ->
+                    failf "not a struct"
+
 
         let parameters = Dict.empty
         for KeyValue(id, (tid, kind)) in variables do
@@ -1073,16 +1094,17 @@ module private ShaderInfo =
             let vName   = (match names.TryGetValue id with | (true, n) -> n | _ -> "")
             let vPar    = { paramName = vName; paramType = vType; paramDecorations = vDec }
             parameters.[id] <- vPar
+        
 
-        modes 
-            |> Seq.map (fun (KeyValue(entryId, m)) ->
+        functions.Values
+            |> Seq.map (fun m ->
                 let stage, kind =
                     match m.entryModel with
                         | ExecutionModel.Vertex -> ShaderStage.Vertex, Vertex
                         | ExecutionModel.TessellationControl -> ShaderStage.TessControl, TessControl { flags = m.tessFlags; outputVertices = m.outputVertices }
                         | ExecutionModel.TessellationEvaluation -> ShaderStage.TessEval, TessEval m.tessFlags
                         | ExecutionModel.Geometry -> ShaderStage.Geometry, Geometry { flags = m.geometryFlags; outputVertices = m.outputVertices; invocations = m.invocations }
-                        | ExecutionModel.Fragment -> ShaderStage.Pixel, Fragment { flags = m.fragFlags; discard = usingKill.Contains entryId }
+                        | ExecutionModel.Fragment -> ShaderStage.Pixel, Fragment { flags = m.fragFlags; discard = m.discards }
                         | m -> failf "unsupported ExecutionModel %A" m
 
                 let inputs          = CSharpList.empty

@@ -118,7 +118,7 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderProgram =
-    let private versionRx = System.Text.RegularExpressions.Regex @"\#version[ \t][0-9]+[\r\n]*"
+    let private versionRx = System.Text.RegularExpressions.Regex @"\#version[ \t]+[0-9]+[\r\n]*"
     let private layoutRx = System.Text.RegularExpressions.Regex @"layout[ \t]*\([ \t]*set[ \t]*\=[ \t]*(?<set>[0-9]+),[ \t]*binding[ \t]*\=[ \t]*(?<binding>[0-9]+)[ \t]*\)[ \t\r\n]*uniform[ \t]+(?<name>[_a-zA-Z0-9]+)[ \t\r\n]*\{"
     let ofBackendSurface (renderPass : RenderPass) (surface : BackendSurface) (device : Device) =
 
@@ -145,7 +145,7 @@ module ShaderProgram =
                             | _ -> failwithf "unsupported shader stage: %A" stage
 
                     let code = code.Replace(sprintf "%s(" entry, "main(")
-                    stage, versionRx.Replace(code, "#version 150\r\n" + (sprintf "#define %s\r\n" define))
+                    stage, versionRx.Replace(code, "#version 420\r\n" + (sprintf "#define %s\r\n" define))
                 )
 
         printfn "%s" code
