@@ -244,9 +244,10 @@ type DevicePreparedRenderObjectExtensions private() =
 
         let calls =
             match ro.IndirectBuffer with
-                | null -> this.CreateDrawCall(indexed, ro.DrawCallInfos)
+                | null -> 
+                    this.CreateDrawCall(indexed, ro.DrawCallInfos)
                 | b -> 
-                    let indirect = this.CreateIndirectBuffer(b)
+                    let indirect = this.CreateIndirectBuffer(indexed, b)
                     this.CreateDrawCall(indexed, indirect)
 
         let bindings =

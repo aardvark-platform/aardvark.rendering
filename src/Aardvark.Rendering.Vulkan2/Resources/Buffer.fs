@@ -216,7 +216,7 @@ module Buffer =
 
         Buffer(device, handle, ptr)
     
-    let inline private ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
+    let inline internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
         let align = int64 device.MinUniformBufferOffsetAlignment
 
         let deviceAlignedSize = Alignment.next align (int64 size)

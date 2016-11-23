@@ -114,10 +114,10 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             kind = ResourceKind.Buffer
         })
 
-    member x.CreateIndirectBuffer(data : IMod<IIndirectBuffer>) =
-        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, {
-            create = fun b      -> device.CreateIndirectBuffer(b)
-            update = fun h b    -> device.Delete(h); device.CreateIndirectBuffer(b)
+    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IIndirectBuffer>) =
+        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed], {
+            create = fun b      -> device.CreateIndirectBuffer(indexed, b)
+            update = fun h b    -> device.Delete(h); device.CreateIndirectBuffer(indexed, b)
             delete = fun h      -> device.Delete(h)
             info =   fun h      -> h.Size |> Mem |> ResourceInfo
             kind = ResourceKind.Buffer

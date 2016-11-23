@@ -28,13 +28,54 @@ type IndirectBuffer =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module IndirectBuffer =
-    
-    let create (b : IIndirectBuffer) (device : Device) =
+    open Microsoft.FSharp.NativeInterop
+
+    let private flags = VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit
+
+    let inline private copyIndexed (src : nativeptr<DrawCallInfo>) (dst : nativeptr<DrawCallInfo>) (cnt : int) =
+        let mutable src = src
+        let mutable dst = dst
+        for i in 1 .. cnt do
+            let mutable c = NativePtr.read src
+            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+            NativePtr.write dst c
+            src <- NativePtr.add src 1
+            dst <- NativePtr.add dst 1
+
+    let inline private copyNonIndexed (src : nativeptr<DrawCallInfo>) (dst : nativeptr<DrawCallInfo>) (cnt : int) =
+        Marshal.Copy(NativePtr.toNativeInt src, NativePtr.toNativeInt dst, sizeof<DrawCallInfo> * cnt)
+
+
+    let private copy (indexed : bool)  (src : nativeint) (dst : nativeint) (cnt : int) =
+        let src = NativePtr.ofNativeInt src
+        let dst = NativePtr.ofNativeInt dst
+        if indexed then copyIndexed src dst cnt
+        else copyNonIndexed src dst cnt
+
+    let create (indexed : bool) (b : IIndirectBuffer) (device : Device) =
         match b with
             | :? IndirectBuffer as b ->
                 b
 
             | :? Aardvark.Base.IndirectBuffer as b ->
+                let buffer = 
+                    match b.Buffer with
+                        | :? ArrayBuffer as ab ->
+                            let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
+                            let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
+                            try device |> Buffer.ofWriter flags size (fun dst -> copy indexed (gc.AddrOfPinnedObject()) dst ab.Data.Length)
+                            finally gc.Free()
+
+                        | :? INativeBuffer as nb ->
+                            let size = nativeint nb.SizeInBytes
+                            let count = nb.SizeInBytes / sizeof<DrawCallInfo>
+                            nb.Use(fun src ->
+                                device |> Buffer.ofWriter flags size (fun dst -> copy indexed src dst count)
+                            )
+
+                        | _ ->
+                            failf "unsupported indirect buffer type %A" b.Buffer
+
                 let res = device.CreateBuffer(VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit, b.Buffer)
                 
                 IndirectBuffer(device, res.Handle, res.Memory, b.Count)
@@ -48,8 +89,8 @@ module IndirectBuffer =
 type ContextIndirectBufferExtensions private() =
 
     [<Extension>]
-    static member inline CreateIndirectBuffer(device : Device, data : IIndirectBuffer) =
-        device |> IndirectBuffer.create data
+    static member inline CreateIndirectBuffer(device : Device, indexed : bool, data : IIndirectBuffer) =
+        device |> IndirectBuffer.create indexed data
 
     [<Extension>]
     static member inline Delete(device : Device, buffer : IndirectBuffer) =
