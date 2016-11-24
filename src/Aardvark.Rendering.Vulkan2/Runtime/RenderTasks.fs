@@ -329,7 +329,8 @@ module RenderTasks =
                                 new StaticOrderCommandBuffer(renderPass, config, pool) :> DependentCommandBuffer
 
                             | order ->
-                                failf "sorting not implemented"
+                                VkRaw.warn "sorting not implemented"
+                                new StaticOrderCommandBuffer(renderPass, config, pool) :> DependentCommandBuffer
 
                     commandBuffers <- Map.add pass task commandBuffers
                     task
@@ -395,8 +396,9 @@ module RenderTasks =
                     do! Command.Execute cmd
                     do! Command.EndPass
             }
-    
-            token.Sync()
+
+            // really run the stuff
+            x.RenderTaskLock.Run token.Sync
 
             stats
 

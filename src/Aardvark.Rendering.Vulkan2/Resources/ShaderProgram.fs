@@ -197,6 +197,7 @@ type ContextShaderProgramExtensions private() =
     [<Extension>]
     static member inline CreateShaderProgram(this : Device, pass : RenderPass, surface : ISurface) =
         match surface with
+            | :? SignaturelessBackendSurface as s -> s.Get pass |> unbox<ShaderProgram>
             | :? ShaderProgram as p -> p
             | :? BackendSurface as bs -> this |> ShaderProgram.ofBackendSurface pass bs
             | :? IGeneratedSurface as gs ->

@@ -16,7 +16,7 @@ type PipelineDescription =
     {
         renderPass              : RenderPass
         shaderProgram           : ShaderProgram
-        vertexInputState        : Map<Symbol, VertexInputDescription>
+        vertexInputState        : Map<Symbol, list<VertexInputDescription>>
         inputAssembly           : InputAssemblyState
         rasterizerState         : RasterizerState
         colorBlendState         : ColorBlendState
@@ -55,21 +55,25 @@ module Pipeline =
             )
 
         let inputBindings =
-            paramsWithInputs |> List.map (fun (loc, p, ip) ->
-                VkVertexInputBindingDescription(
-                    uint32 loc,
-                    uint32 ip.stride,
-                    ip.stepRate
+            paramsWithInputs |> List.collect (fun (loc, p, ip) ->
+                ip |> List.mapi (fun i ip ->
+                    VkVertexInputBindingDescription(
+                        uint32 (loc + i),
+                        uint32 ip.stride,
+                        ip.stepRate
+                    )
                 )
             )
 
         let inputAttributes =
-            paramsWithInputs |> List.map (fun (loc, p, ip) ->
-                VkVertexInputAttributeDescription(
-                    uint32 loc,
-                    uint32 loc,
-                    ip.inputFormat,
-                    uint32 ip.offset
+            paramsWithInputs |> List.collect (fun (loc, p, ip) ->
+                ip |> List.mapi (fun i ip ->
+                    VkVertexInputAttributeDescription(
+                        uint32 (loc + i),
+                        uint32 (loc + i),
+                        ip.inputFormat,
+                        uint32 ip.offset
+                    )
                 )
             )
 

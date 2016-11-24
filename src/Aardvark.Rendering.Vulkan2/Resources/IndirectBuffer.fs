@@ -61,24 +61,28 @@ module IndirectBuffer =
                 let buffer = 
                     match b.Buffer with
                         | :? ArrayBuffer as ab ->
-                            let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
-                            let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                            try device |> Buffer.ofWriter flags size (fun dst -> copy indexed (gc.AddrOfPinnedObject()) dst ab.Data.Length)
-                            finally gc.Free()
+                            if ab.Data.Length <> 0 then
+                                let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
+                                let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
+                                try device |> Buffer.ofWriter flags size (fun dst -> copy indexed (gc.AddrOfPinnedObject()) dst ab.Data.Length)
+                                finally gc.Free()
+                            else
+                                Buffer(device, VkBuffer.Null, DevicePtr.Null)
 
                         | :? INativeBuffer as nb ->
-                            let size = nativeint nb.SizeInBytes
-                            let count = nb.SizeInBytes / sizeof<DrawCallInfo>
-                            nb.Use(fun src ->
-                                device |> Buffer.ofWriter flags size (fun dst -> copy indexed src dst count)
-                            )
+                            if nb.SizeInBytes <> 0 then
+                                let size = nativeint nb.SizeInBytes
+                                let count = nb.SizeInBytes / sizeof<DrawCallInfo>
+                                nb.Use(fun src ->
+                                    device |> Buffer.ofWriter flags size (fun dst -> copy indexed src dst count)
+                                )
+                            else
+                                Buffer(device, VkBuffer.Null, DevicePtr.Null)
 
                         | _ ->
                             failf "unsupported indirect buffer type %A" b.Buffer
 
-                let res = device.CreateBuffer(VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit, b.Buffer)
-                
-                IndirectBuffer(device, res.Handle, res.Memory, b.Count)
+                IndirectBuffer(device, buffer.Handle, buffer.Memory, b.Count)
             
             | _ -> failf "bad indirect buffer: %A" b
 

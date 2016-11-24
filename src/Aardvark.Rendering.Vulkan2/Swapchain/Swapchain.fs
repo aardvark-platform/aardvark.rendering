@@ -224,20 +224,22 @@ type Swapchain(device : Device, description : SwapchainDescription) =
         { new QueueCommand() with
             member x.Compatible = QueueFlags.Graphics
             member x.Enqueue queue =
-                let mutable handle = handle
-                let mutable currentBuffer = currentBuffer
-                let mutable result = VkResult.VkSuccess
-                let mutable info =
-                    VkPresentInfoKHR(
-                        VkStructureType.PresentInfoKHR,
-                        0n, 
-                        0u, NativePtr.zero,
-                        1u, &&handle,
-                        &&currentBuffer,
-                        &&result
-                    )
+                lock queue (fun () -> 
+                    let mutable handle = handle
+                    let mutable currentBuffer = currentBuffer
+                    let mutable result = VkResult.VkSuccess
+                    let mutable info =
+                        VkPresentInfoKHR(
+                            VkStructureType.PresentInfoKHR,
+                            0n, 
+                            0u, NativePtr.zero,
+                            1u, &&handle,
+                            &&currentBuffer,
+                            &&result
+                        )
 
-                VkRaw.vkQueuePresentKHR(queue.Handle, &&info) |> check "could not swap buffers"
+                    VkRaw.vkQueuePresentKHR(queue.Handle, &&info) |> check "could not swap buffers"
+                )
                 Disposable.Empty
         }
 

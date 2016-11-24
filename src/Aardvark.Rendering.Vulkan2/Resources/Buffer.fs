@@ -216,7 +216,7 @@ module Buffer =
 
         Buffer(device, handle, ptr)
     
-    let inline internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
+    let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
         let align = int64 device.MinUniformBufferOffsetAlignment
 
         let deviceAlignedSize = Alignment.next align (int64 size)
@@ -242,16 +242,23 @@ module Buffer =
     let ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
         match buffer with
             | :? ArrayBuffer as ab ->
-                let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
-                let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                try device |> ofWriter flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
-                finally gc.Free()
+                if ab.Data.Length <> 0 then
+                    let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
+                    let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
+                    try device |> ofWriter flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
+                    finally gc.Free()
+                else
+                    Buffer(device, VkBuffer.Null, DevicePtr.Null)
 
             | :? INativeBuffer as nb ->
-                let size = nb.SizeInBytes |> nativeint
-                nb.Use(fun src ->
-                    device |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
-                )
+                if nb.SizeInBytes <> 0 then
+                    let size = nb.SizeInBytes |> nativeint
+                    nb.Use(fun src ->
+                        device |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
+                    )
+                else
+                    Buffer(device, VkBuffer.Null, DevicePtr.Null)
+                    
 
             | :? Buffer as b ->
                 b
@@ -263,21 +270,24 @@ module Buffer =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferView =
     let create (fmt : VkFormat) (b : Buffer) (offset : uint64) (size : uint64) (device : Device) =
-        let mutable info = 
-            VkBufferViewCreateInfo(
-                VkStructureType.BufferViewCreateInfo, 0n,
-                VkBufferViewCreateFlags.MinValue,
-                b.Handle, 
-                fmt,
-                offset,
-                size
-            )
+        if b.Size = 0L then
+            BufferView(device, VkBufferView.Null, b, fmt, offset, size)
+        else
+            let mutable info = 
+                VkBufferViewCreateInfo(
+                    VkStructureType.BufferViewCreateInfo, 0n,
+                    VkBufferViewCreateFlags.MinValue,
+                    b.Handle, 
+                    fmt,
+                    offset,
+                    size
+                )
 
-        let mutable handle = VkBufferView.Null
-        VkRaw.vkCreateBufferView(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create BufferView"
+            let mutable handle = VkBufferView.Null
+            VkRaw.vkCreateBufferView(device.Handle, &&info, NativePtr.zero, &&handle)
+                |> check "could not create BufferView"
 
-        BufferView(device, handle, b, fmt, offset, size)
+            BufferView(device, handle, b, fmt, offset, size)
 
     let delete (view : BufferView) (device : Device) =
         if view.Handle.IsValid then

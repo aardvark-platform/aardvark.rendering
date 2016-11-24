@@ -13,173 +13,409 @@ open Aardvark.Rendering.Vulkan
 #nowarn "9"
 #nowarn "51"
 
+[<AllowNullLiteral>]
+type private SparseBlock =
+    class
+        val mutable public Min      : int64
+        val mutable public Max      : int64
+        val mutable public Pointer  : Option<DevicePtr>
+        val mutable public Next     : SparseBlock
+        val mutable public Prev     : SparseBlock
 
-type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer) =
-    inherit Resource<VkBuffer>(device, handle)
+        member inline x.Overlaps(other : SparseBlock) =
+            //not (x.Min > other.Max || x.Min < other.Min)
 
+            x.Min <= other.Max && x.Max >= other.Min
+
+        interface IComparable with
+            member x.CompareTo o =
+                match o with
+                    | :? SparseBlock as o -> compare x.Min o.Min
+                    | _ -> failf "cannot compare SparseBlock to %A" o
+
+        interface IComparable<SparseBlock> with
+            member x.CompareTo o = compare x.Min o.Min
+
+        override x.GetHashCode() =
+            System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode x
+
+        override x.Equals o =
+            System.Object.ReferenceEquals(x,o)
+
+        new(min : int64, max : int64, ptr, prev, next) = { Min = min; Max = max; Pointer = ptr; Prev = prev; Next = next }
+    end
+
+[<Obsolete("not finished yet")>]
+type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
+    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, virtualSize))
+    
     let mutable reqs = VkMemoryRequirements()
     do VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
     let align = int64 reqs.alignment
     let memoryTypeBits = reqs.memoryTypeBits
 
-    let memories = List<DevicePtr>()
-    let mutable capacity = 0L
-
-    let lock = new ResourceLock()
-
-
-    member x.Lock = lock
-    member x.Capacity = capacity
-    member x.Size = Mem capacity
-
-    interface IBackendBuffer with
-        member x.Handle = x.Handle :> obj
-        member x.SizeInBytes = capacity |> nativeint
-
-    interface ILockedResource with
-        member x.Lock = lock
-
-    interface IResizeBuffer with
-        member x.Resize c = x.Resize (int64 c)
-        member x.UseRead(offset, size, reader) = x.UseRead(int64 offset, int64 size, reader)
-        member x.UseWrite(offset, size, writer) = x.UseWrite(int64 offset, int64 size, writer)
+    let malloc(size : int64) =
+        let reqs = VkMemoryRequirements(uint64 size, uint64 align, memoryTypeBits)
+        device.Alloc(reqs, true)
 
 
-    member x.Resize(newSize : int64) =
-        let newSize = Fun.NextPowerOfTwo newSize |> Alignment.next align
 
-        LockedResource.update x (fun () ->
-            if capacity <> 0L && newSize = 0L then
-                let mutable unbind =
-                    VkSparseMemoryBind(
-                        0UL,
-                        uint64 capacity,
-                        VkDeviceMemory.Null,
-                        0UL,
-                        VkSparseMemoryBindFlags.None
-                    ) 
+    let mutable first = SparseBlock(0L, virtualSize-1L, None, null, null)
+    let mutable last = first
+    let blocks = SortedSetExt<SparseBlock>([first])
 
-                let mutable bufferInfo =
-                    VkSparseBufferMemoryBindInfo(
-                        handle, 
-                        1u, &&unbind
-                    )
+    let free (block : SparseBlock) =
+        block.Pointer <- None
 
-                let mutable bindInfo =
-                    VkBindSparseInfo(
-                        VkStructureType.BindSparseInfo, 0n,
-                        0u, NativePtr.zero,
-                        1u, &&bufferInfo,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero
-                    )
+        let l = block.Prev
+        let r = block.Next
 
-                let fence = device.CreateFence()
-                let queue = device.TransferFamily.GetQueue()
-                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
-                    |> check "could not bind buffer memory"
-                fence.Wait()
+        if not (isNull l) && Option.isNone l.Pointer then
+            blocks.Remove l |> ignore
+            blocks.Remove block |> ignore
 
-                for m in memories do m.Dispose()
-                memories.Clear()
+            block.Min <- l.Min
+            if isNull l.Prev then first <- block
+            else l.Prev.Next <- block
+            block.Prev <- l.Prev
 
-                capacity <- 0L
+            blocks.Add block |> ignore
 
+        if not (isNull r) && Option.isNone r.Pointer then
+            blocks.Remove r |> ignore
 
-            elif capacity < newSize then
-                let delta = newSize - capacity |> Alignment.next align
-                let newSize = capacity + delta
+            block.Max <- r.Max
+            if isNull r.Next then last <- block
+            else r.Next.Prev <- block
+            block.Next <- r.Next
 
-                let part = VkMemoryRequirements(uint64 delta, uint64 align, memoryTypeBits)
-                let ptr = device.Alloc(part, true)
-                memories.Add ptr
+    let setMax (current : SparseBlock) (max : int64) =
+        let rest = SparseBlock(max + 1L, current.Max, None, current, current.Next)
+        if isNull current.Next then last <- rest
+        else current.Next.Prev <- rest
+        current.Next <- rest
+        current.Max <- max
+        blocks.Add rest |> ignore
+        let o = current.Pointer
+        current.Pointer <- Some Unchecked.defaultof<_>
+        free rest
+        current.Pointer <- o
 
-                let mutable bind =
-                    VkSparseMemoryBind(
-                        uint64 capacity,
-                        uint64 delta,
-                        ptr.Memory.Handle,
-                        uint64 ptr.Offset,
-                        VkSparseMemoryBindFlags.None
-                    )
+    let getFirstOverlapping (min : int64) =
+        let self = SparseBlock(min, min, None, null, null)
+        let mutable current =
+            let found, smaller = blocks.TryFindSmaller(self)
+            if found then smaller
+            else first
 
-                let mutable bufferInfo =
-                    VkSparseBufferMemoryBindInfo(
-                        handle, 
-                        1u, &&bind
-                    )
+        if not (current.Overlaps self) then
+            current <- current.Next
 
-                let mutable bindInfo =
-                    VkBindSparseInfo(
-                        VkStructureType.BindSparseInfo, 0n,
-                        0u, NativePtr.zero,
-                        1u, &&bufferInfo,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero
-                    )
+        assert (current.Overlaps self)
+        current
 
-                let fence = device.CreateFence()
-                let queue = device.TransferFamily.GetQueue()
-                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
-                    |> check "could not bind buffer memory"
-                fence.Wait()
+    let rec commitEverythingTo commits (current : SparseBlock) (max : int64) =
+        if current.Min > max then
+            commits
+        else
+            match current.Pointer with
+                | Some ptr ->
+                    commitEverythingTo commits current.Next max
+                | None ->
+                    if current.Max <= max then
+                        let mem = malloc (1L + current.Max - current.Min)
+                        current.Pointer <- Some mem
+                        commitEverythingTo ((current.Min, current.Max, mem) :: commits) current.Next max
+                    else
+                        setMax current max
+                        commitEverythingTo commits current max
+                        
+    let rec decommitEverythingTo decommits (current : SparseBlock) (max : int64) =
+        if current.Min > max then
+            decommits
+        else
+            match current.Pointer with
+                | None -> 
+                    decommitEverythingTo decommits current.Next max
 
-                capacity <- newSize
+                | Some ptr ->
+                    if current.Max <= max then
+                        current.Pointer <- None
+                        let cmin = current.Min
+                        let cmax = current.Max
+                        ptr.Dispose()
+                        free current
+                        decommitEverythingTo ((cmin, cmax) :: decommits) current.Next max
+                    else
+                        failf "cannot decommit the start of a committed region"
+//                        let cmax = current.Max
+//                        ptr.TryResize(1L + max - current.Min) |> ignore
+//                        setMax current max
+//                        (cmax, max) :: decommits
+
+    let commit (min : int64) (max : int64) =
+        let current = getFirstOverlapping min
+
+        match current.Pointer with
+            | Some ptr -> 
+                commitEverythingTo [] current max
+
+            | None ->
+                if current.Min = min then
+                    commitEverythingTo [] current max
+                else
+                    setMax current (min - 1L)
+                    commitEverythingTo [] current.Next max
+     
+    let decommit (min : int64) (max : int64) =
+        let current = getFirstOverlapping min
         
-            elif capacity > newSize then
-                let delta = capacity - newSize |> Alignment.next align
-                let newSize = capacity - delta
+        match current.Pointer with
+            | Some ptr ->
+                ptr.TryResize(1L + min - current.Min) |> ignore
+                setMax current (min - 1L)
+                decommitEverythingTo [] current.Next max
 
-                let mutable unbind =
-                    VkSparseMemoryBind(
-                        uint64 newSize,
-                        uint64 delta,
-                        VkDeviceMemory.Null,
-                        0UL,
-                        VkSparseMemoryBindFlags.None
-                    ) 
+            | None ->
+                decommitEverythingTo [] current max
+          
+          
+    let resourceLock = ResourceLock()
+    
+    member x.Lock = resourceLock
+    interface ILockedResource with
+        member x.Lock = resourceLock
+         
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+         
+    member x.Clear() =
+        x.Decommit(0L, virtualSize)
+        
+    member x.Dispose() =
+        x.Clear()
+        device.Delete x
 
-                let mutable bufferInfo =
-                    VkSparseBufferMemoryBindInfo(
-                        handle, 
-                        1u, &&unbind
+    member x.Commit(offset : int64, size : int64) =
+        LockedResource.update x (fun () ->
+            let commits = commit offset (offset + size - 1L)
+
+            let binds =
+                commits
+                    |> List.toArray
+                    |> Array.map (fun (min, max, ptr) ->
+                        VkSparseMemoryBind(
+                            uint64 min, 
+                            uint64 (max - min + 1L),
+                            ptr.Memory.Handle,
+                            uint64 ptr.Offset,
+                            VkSparseMemoryBindFlags.None
+                        )
                     )
 
-                let mutable bindInfo =
-                    VkBindSparseInfo(
-                        VkStructureType.BindSparseInfo, 0n,
-                        0u, NativePtr.zero,
-                        1u, &&bufferInfo,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero
-                    )
-
-                let fence = device.CreateFence()
+            if binds.Length > 0 then
                 let queue = device.TransferFamily.GetQueue()
-                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
-                    |> check "could not bind buffer memory"
+                let fence = device.CreateFence()
+
+                lock queue (fun () ->
+                    binds |> NativePtr.withA (fun pBinds ->
+
+                        let mutable bufferInfo =
+                            VkSparseBufferMemoryBindInfo(
+                                handle, 
+                                uint32 binds.Length, pBinds
+                            )
+
+                        let mutable bindInfo =
+                            VkBindSparseInfo(
+                                VkStructureType.BindSparseInfo, 0n,
+                                0u, NativePtr.zero,
+                                1u, &&bufferInfo,
+                                0u, NativePtr.zero,
+                                0u, NativePtr.zero,
+                                0u, NativePtr.zero
+                            )
+
+                        VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                            |> check "could not bind buffer memory"
+                    )
+                )
                 fence.Wait()
+        )
 
-                let mutable last = memories.[memories.Count - 1]
-                let mutable total = capacity
-                while total - last.Size >= newSize do
-                    memories.RemoveAt(memories.Count-1)
-                    total <- total - last.Size
-                    last.Dispose()
-                    last <- memories.[memories.Count - 1]
+    member x.Decommit(offset : int64, size : int64) =
+        LockedResource.update x (fun () ->
+            let decommits = decommit offset (offset + size - 1L)
 
-                if total > newSize then
-                    let tooMuch = total - newSize
-                    let worked = last.TryResize(last.Size - tooMuch)
-                    if not worked then failf "cannot resize memory"
+            let unbinds =
+                decommits
+                    |> List.toArray
+                    |> Array.map (fun (min, max) ->
+                        VkSparseMemoryBind(
+                            uint64 min, 
+                            uint64 (max - min + 1L),
+                            VkDeviceMemory.Null,
+                            0UL,
+                            VkSparseMemoryBindFlags.None
+                        )
+                    )
 
-                capacity <- newSize
+            if unbinds.Length > 0 then
+                let queue = device.TransferFamily.GetQueue()
+                let fence = device.CreateFence()
+
+                lock queue (fun () ->
+                    unbinds |> NativePtr.withA (fun pUnbinds ->
+
+                        let mutable bufferInfo =
+                            VkSparseBufferMemoryBindInfo(
+                                handle, 
+                                uint32 unbinds.Length, pUnbinds
+                            )
+
+                        let mutable bindInfo =
+                            VkBindSparseInfo(
+                                VkStructureType.BindSparseInfo, 0n,
+                                0u, NativePtr.zero,
+                                1u, &&bufferInfo,
+                                0u, NativePtr.zero,
+                                0u, NativePtr.zero,
+                                0u, NativePtr.zero
+                            )
+
+                        VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                            |> check "could not bind buffer memory"
+                    )
+                )
+                fence.Wait()
 
         )
-    
+
+
+
+type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
+    inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, 2L <<< 30))
+
+    let align, memoryTypeBits = 
+        let mutable reqs = VkMemoryRequirements()
+        VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
+        int64 reqs.alignment, reqs.memoryTypeBits
+
+    let resourceLock = new ResourceLock()
+
+    let malloc (size : int64) =
+        assert (size % align = 0L)
+        device.Alloc(VkMemoryRequirements(uint64 size, uint64 align, memoryTypeBits), true)
+
+    let memories = List<int64 * DevicePtr>()
+    let mutable capacity = 0L
+
+    let grow (additionalBytes : int64) =
+        let offset = capacity
+        let ptr = malloc additionalBytes
+        memories.Add(offset, ptr)
+
+        VkSparseMemoryBind(
+            uint64 offset,
+            uint64 additionalBytes,
+            ptr.Memory.Handle,
+            uint64 ptr.Offset,
+            VkSparseMemoryBindFlags.None
+        )
+
+    let rec shrink (i : int) (freeBytes : int64) =
+        if i < 0 || freeBytes <= 0L then 
+            []
+        else
+            let offset, mem = memories.[i]
+            let size = mem.Size
+            if size <= freeBytes then
+                mem.Dispose()
+                memories.RemoveAt i
+
+                let unbind =
+                    VkSparseMemoryBind(
+                        uint64 offset,
+                        uint64 size,
+                        VkDeviceMemory.Null,
+                        0UL,
+                        VkSparseMemoryBindFlags.None
+                    )
+
+                unbind :: shrink (i-1) (freeBytes - size)
+
+            else
+                let newSize = size - freeBytes
+                let worked = mem.TryResize newSize
+                if not worked then failf "could not resize memory"
+
+                let unbind =
+                    VkSparseMemoryBind(
+                        uint64 (offset + newSize),
+                        uint64 freeBytes,
+                        VkDeviceMemory.Null,
+                        0UL,
+                        VkSparseMemoryBindFlags.None
+                    )
+
+                [unbind]
+
+    member x.Lock = resourceLock
+
+    member x.Capacity = capacity
+
+    member x.Resize(newCapacity : int64) =
+        let newCapacity = Fun.NextPowerOfTwo newCapacity |> Alignment.next align
+        if capacity <> newCapacity then
+            LockedResource.update x (fun () ->
+                let binds = 
+                    if capacity < newCapacity then
+                        [ grow (newCapacity - capacity) ]
+
+                    elif capacity > newCapacity then
+                        if memories.Count > 0 then
+                            shrink (memories.Count - 1) (capacity - newCapacity)
+                        else
+                            []
+                    else
+                        []
+
+                match binds with
+                    | [] -> ()
+                    | binds ->
+                        let binds = List.toArray binds
+                        let queue = device.TransferFamily.GetQueue()
+                        let fence = device.CreateFence()
+
+                        lock queue (fun () ->
+                            binds |> NativePtr.withA (fun pBinds ->
+
+                                let mutable bufferInfo =
+                                    VkSparseBufferMemoryBindInfo(
+                                        handle, 
+                                        uint32 binds.Length, pBinds
+                                    )
+
+                                let mutable bindInfo =
+                                    VkBindSparseInfo(
+                                        VkStructureType.BindSparseInfo, 0n,
+                                        0u, NativePtr.zero,
+                                        1u, &&bufferInfo,
+                                        0u, NativePtr.zero,
+                                        0u, NativePtr.zero,
+                                        0u, NativePtr.zero
+                                    )
+
+                                VkRaw.vkQueueBindSparse(queue.Handle, 1u, &&bindInfo, fence.Handle)
+                                    |> check "could not bind buffer memory"
+                            )
+                        )
+                        fence.Wait()
+
+
+                capacity <- newCapacity
+            )
+
     member x.UseWrite(offset : int64, size : int64, writer : nativeint -> 'a) =
         if offset < 0L || size < 0L || offset + size > capacity then
             failf "MappedBuffer range out of bounds { offset = %A; size = %A; capacity = %A" offset size capacity
@@ -192,13 +428,10 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
             let alignedSize = size |> Alignment.next align
             let temp = device.HostMemory.Alloc(align, alignedSize)
             let res = temp.Mapped writer
-
-            let dst = Buffer(device, handle, new DevicePtr(Unchecked.defaultof<_>, 0L, capacity))
-            device.eventually {
-                try do! Command.Copy(temp, 0L, dst, offset, size)
+            device.TransferFamily.run {
+                try do! Command.Copy(temp, 0L, x, offset, size)
                 finally temp.Dispose()
             }
-
             res
         )
 
@@ -212,61 +445,48 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         LockedResource.access x (fun () ->
             let align = device.MinUniformBufferOffsetAlignment
             let alignedSize = size |> Alignment.next align
-            use temp = device.HostMemory.Alloc(align, alignedSize)
-            let src = Buffer(device, handle, new DevicePtr(Unchecked.defaultof<_>, 0L, capacity))
+            let temp = device.HostMemory.Alloc(align, alignedSize)
 
-            let family = device.TransferFamily
-            use cmd = family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-            cmd.Begin(CommandBufferUsage.OneTimeSubmit)
-            cmd.enqueue {
-                try do! Command.Copy(src, offset, temp, 0L, size)
+            device.TransferFamily.run {
+                try do! Command.Copy(x, offset, temp, 0L, size)
                 finally temp.Dispose()
             }
-            cmd.End()
-            family.RunSynchronously(cmd)
 
 
             let res = temp.Mapped reader
             res
         )
 
-    member x.Write<'a when 'a : unmanaged> (offset : int64, data : 'a[], startIndex : int, count : int) =
-        let sa = int64 sizeof<'a>
-        let size = sa * int64 count
-        let srcOffset = sa * int64 startIndex |> nativeint
-        x.UseWrite(offset, size, fun ptr ->
-            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            try Marshal.Copy(gc.AddrOfPinnedObject() + srcOffset, ptr, size) 
-            finally gc.Free()
-        )
+    member x.Dispose() =
+        if x.Handle.IsValid then
+            x.Resize 0L
+            device.Delete x
 
-    member x.Read<'a when 'a : unmanaged> (offset : int64, data : 'a[], startIndex : int, count : int) =
-        let sa = int64 sizeof<'a>
-        let size = sa * int64 count
-        let srcOffset = sa * int64 startIndex |> nativeint
-        x.UseRead(offset, size, fun ptr ->
-            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            try Marshal.Copy(ptr, gc.AddrOfPinnedObject() + srcOffset, size) 
-            finally gc.Free()
-        )
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
-    member x.Write<'a when 'a : unmanaged> (offset : int64, data : 'a[]) = x.Write(offset, data, 0, data.Length)
-    member x.Read<'a when 'a : unmanaged> (offset : int64, data : 'a[]) = x.Read(offset, data, 0, data.Length)
-    member x.Read<'a when 'a : unmanaged>(offset : int64, count : int) = 
-        let arr : 'a[] = Array.zeroCreate count
-        x.Read(offset, arr)
-        arr
+    interface ILockedResource with
+        member x.Lock = resourceLock
+
+    interface IResizeBuffer with
+        member x.Resize c = x.Resize (int64 c)
+        member x.UseRead(offset, size, reader) = x.UseRead(int64 offset, int64 size, reader)
+        member x.UseWrite(offset, size, writer) = x.UseWrite(int64 offset, int64 size, writer)
+
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ResizeBuffer =
     let create (usage : VkBufferUsageFlags) (device : Device) =
-        let virtualSize = 2UL <<< 30
+        let usage = usage ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit
+
+        let virtualSize = 2L <<< 30
         let mutable info =
             VkBufferCreateInfo(
                 VkStructureType.BufferCreateInfo, 0n,
                 VkBufferCreateFlags.SparseBindingBit ||| VkBufferCreateFlags.SparseResidencyBit,
-                virtualSize,
-                usage ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit,
+                uint64 virtualSize,
+                usage,
                 device.AllSharingMode,
                 device.AllQueueFamiliesCnt,
                 device.AllQueueFamiliesPtr
@@ -277,10 +497,7 @@ module ResizeBuffer =
         VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&handle)
             |> check "could not create sparse buffer"
 
-        ResizeBuffer(device, usage, handle)
+        new ResizeBuffer(device, usage, handle, virtualSize)
 
     let delete (b : ResizeBuffer) (d : Device) =
-        if b.Handle.IsValid then
-            b.Resize 0L
-            VkRaw.vkDestroyBuffer(d.Handle, b.Handle, NativePtr.zero)
-            b.Handle <- VkBuffer.Null
+        b.Dispose()

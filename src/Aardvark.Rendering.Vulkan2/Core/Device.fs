@@ -364,18 +364,20 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
             failf "cannot submit recording CommandBuffer"
 
         if not cmd.IsEmpty then
-            let mutable handle = cmd.Handle
-            let mutable submitInfo =
-                VkSubmitInfo(
-                    VkStructureType.SubmitInfo, 0n,
-                    0u, NativePtr.zero, NativePtr.zero,
-                    1u, &&handle,
-                    0u, NativePtr.zero
-                )
-
             let fence = device.CreateFence()
-            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
-                |> check "could not submit command buffer"
+            lock x (fun () ->
+                let mutable handle = cmd.Handle
+                let mutable submitInfo =
+                    VkSubmitInfo(
+                        VkStructureType.SubmitInfo, 0n,
+                        0u, NativePtr.zero, NativePtr.zero,
+                        1u, &&handle,
+                        0u, NativePtr.zero
+                    )
+
+                VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, fence.Handle)
+                    |> check "could not submit command buffer"
+            )
             fence.Wait()
 
     member x.Start(cmd : CommandBuffer) =
@@ -383,47 +385,50 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
             failf "cannot submit recording CommandBuffer"
 
         if not cmd.IsEmpty then
-            let mutable handle = cmd.Handle
+            lock x (fun () ->
+                let mutable handle = cmd.Handle
+                let mutable submitInfo =
+                    VkSubmitInfo(
+                        VkStructureType.SubmitInfo, 0n,
+                        0u, NativePtr.zero, NativePtr.zero,
+                        1u, &&handle,
+                        0u, NativePtr.zero
+                    )
+
+                VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
+                    |> check "could not submit command buffer"
+            )
+
+    member x.Wait(sem : Semaphore) =
+        lock x (fun () ->
+            let mutable semHandle = sem.Handle
             let mutable submitInfo =
+                let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
                 VkSubmitInfo(
-                    VkStructureType.SubmitInfo, 0n,
-                    0u, NativePtr.zero, NativePtr.zero,
-                    1u, &&handle,
+                    VkStructureType.SubmitInfo, 0n, 
+                    1u, &&semHandle, &&dstStage,
+                    0u, NativePtr.zero,
                     0u, NativePtr.zero
                 )
 
-
-            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
-                |> check "could not submit command buffer"
-
-    member x.Wait(sem : Semaphore) =
-        let mutable semHandle = sem.Handle
-        let mutable submitInfo =
-            let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
-            VkSubmitInfo(
-                VkStructureType.SubmitInfo, 0n, 
-                1u, &&semHandle, &&dstStage,
-                0u, NativePtr.zero,
-                0u, NativePtr.zero
-            )
-
-        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
-            |> check "vkQueueWaitSemaphore"
+            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
+                |> check "vkQueueWaitSemaphore"
+        )
 
     member x.Signal() =
         let sem = device.CreateSemaphore()
-        let mutable semHandle = sem.Handle
-        let mutable submitInfo =
-            VkSubmitInfo(
-                VkStructureType.SubmitInfo, 0n, 
-                0u, NativePtr.zero, NativePtr.zero,
-                0u, NativePtr.zero,
-                1u, &&semHandle
-            )
-
-        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
-            |> check "vkQueueWaitSemaphore"
-
+        lock x (fun () ->
+            let mutable semHandle = sem.Handle
+            let mutable submitInfo =
+                VkSubmitInfo(
+                    VkStructureType.SubmitInfo, 0n, 
+                    0u, NativePtr.zero, NativePtr.zero,
+                    0u, NativePtr.zero,
+                    1u, &&semHandle
+                )
+            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
+                |> check "vkQueueWaitSemaphore"
+        )
         sem
 
     member x.WaitIdle() =

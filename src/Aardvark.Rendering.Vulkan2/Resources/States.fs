@@ -328,13 +328,36 @@ module VertexInputState =
 
     let create (o : Map<Symbol, bool * Aardvark.Base.BufferView>) =
         o |> Map.map (fun k (perInstance, view) ->
-            let fmt = toVkFormat view.ElementType
-            { 
-                inputFormat = fmt
-                stride = if view.IsSingleValue then 0 else getFormatSize fmt
-                stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                offset = view.Offset
-            }
+            match view.ElementType with
+                | TypeInfo.Patterns.MatrixOf(s, et) ->
+                    let rowFormat =
+                        match s.X with
+                            | 2 -> VkFormat.R32g32Sfloat
+                            | 3 -> VkFormat.R32g32b32Sfloat
+                            | _ -> VkFormat.R32g32b32a32Sfloat
+
+                    let rowSize = getFormatSize rowFormat
+                    let totalSize = s.Y * rowSize
+
+                    List.init s.Y (fun r ->
+                        { 
+                            inputFormat = rowFormat
+                            stride = if view.IsSingleValue then 0 else totalSize
+                            stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                            offset = view.Offset + r * rowSize
+                        }
+                    )
+
+                | _ -> 
+                    let fmt = toVkFormat view.ElementType
+                    [
+                        { 
+                            inputFormat = fmt
+                            stride = if view.IsSingleValue then 0 else getFormatSize fmt
+                            stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                            offset = view.Offset
+                        }
+                    ]
         )
  
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
