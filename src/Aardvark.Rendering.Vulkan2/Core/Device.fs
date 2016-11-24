@@ -115,6 +115,11 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
             new DeviceQueueFamily(this, family, queues)
         )
 
+    let pAllFamilies =
+        let ptr = NativePtr.alloc queueFamilies.Length
+        for i in 0 .. queueFamilies.Length-1 do
+            NativePtr.set ptr i (uint32 queueFamilies.[i].Index)
+        ptr
 
     let memories = 
         physical.MemoryTypes |> Array.map (fun t ->
@@ -178,6 +183,9 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     member x.Instance = instance
     member x.QueueFamilies = queueFamilies
+
+    member internal x.AllQueueFamiliesPtr = pAllFamilies
+    member internal y.AllQueueFamiliesCnt = uint32 queueFamilies.Length
 
     member x.ComputeFamily = 
         match computeFamily with
@@ -948,6 +956,11 @@ and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
     member x.View(off : int64, s : int64) = new DevicePtr(memory, offset + off, s)
     member x.Skip(off : int64) = new DevicePtr(memory, offset + off, size - off)
     member x.Take(s : int64) = new DevicePtr(memory, offset, s)
+
+    member x.GetSlice(min : Option<int64>, max : Option<int64>) =
+        let min = defaultArg min 0L
+        let max = defaultArg max (size - 1L)
+        new DevicePtr(memory, min, 1L + max - min)
 
     static member (+) (ptr : DevicePtr, off : int64) = new DevicePtr(ptr.Memory, ptr.Offset + off, ptr.Size - off)
     static member (+) (ptr : DevicePtr, off : int) = ptr + int64 off

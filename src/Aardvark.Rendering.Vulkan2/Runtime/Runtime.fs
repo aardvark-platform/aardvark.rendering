@@ -16,6 +16,67 @@ open Aardvark.Base.Runtime
 #nowarn "9"
 #nowarn "51"
 
+type private MappedBuffer(d : Device, store : ResizeBuffer) =
+    inherit ConstantMod<IBuffer>(store)
+
+    let onDispose = Event<_>()
+
+    interface IDisposable with
+        member x.Dispose() = 
+            onDispose.Trigger()
+            d |> ResizeBuffer.delete store
+
+    interface ILockedResource with
+        member x.Lock = store.Lock
+
+    interface IMappedBuffer with
+        member x.Write(sourcePtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun dst -> Marshal.Copy(sourcePtr, dst, size))
+        member x.Read(targetPtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun src -> Marshal.Copy(src, targetPtr, size))
+        member x.Capacity = nativeint store.Capacity
+        member x.Resize(newCapacity) = store.Resize(int64 newCapacity) 
+        member x.OnDispose = onDispose.Publish :> IObservable<_>
+        member x.UseRead(offset, size, f) = store.UseRead(int64 offset, int64 size, f)
+        member x.UseWrite(offset, size, f) = store.UseWrite(int64 offset, int64 size, f)
+
+type private MappedIndirectBuffer private(device : Device, indexed : bool, store : ResizeBuffer, indirect : IndirectBuffer) =
+    inherit ConstantMod<IIndirectBuffer>(indirect)
+    static let drawCallSize = int64 sizeof<DrawCallInfo>
+
+    let transform (c : DrawCallInfo) =
+        if indexed then 
+            let mutable c = c
+            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+            c
+        else
+            c
+
+    new(device : Device, indexed : bool, store : ResizeBuffer) = new MappedIndirectBuffer(device, indexed, store, IndirectBuffer(device, store.Handle, Unchecked.defaultof<_>, 0))
+
+    interface IDisposable with
+        member x.Dispose() = 
+            device |> ResizeBuffer.delete store
+
+    interface ILockedResource with
+        member x.Lock = store.Lock
+
+    interface IMappedIndirectBuffer with
+        member x.Indexed = indexed
+        member x.Resize cnt = store.Resize (int64 cnt * drawCallSize)
+        member x.Capacity = store.Capacity / drawCallSize |> int
+        member x.Count 
+            with get() = indirect.Count
+            and set c = indirect.Count <- c
+
+        member x.Item
+            with get (i : int) =
+                let res = store.UseRead(int64 i * drawCallSize, drawCallSize, NativeInt.read<DrawCallInfo>)
+                transform res
+
+            and set (i : int) (v : DrawCallInfo) =
+                let v = transform v
+                store.UseWrite(int64 i * drawCallSize, drawCallSize, fun ptr -> NativeInt.write ptr v)
+
+
 type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
     let instance = device.Instance
     do device.Runtime <- this
@@ -71,8 +132,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
 
-    member x.CreateMappedBuffer() = failf "not implemented"
-    member x.CreateMappedIndirectBuffer(indexed : bool) = failf "not implemented"
+    member x.CreateMappedBuffer() =
+        let store = device |> ResizeBuffer.create VkBufferUsageFlags.VertexBufferBit
+        new MappedBuffer(device, store) :> IMappedBuffer
+
+    member x.CreateMappedIndirectBuffer(indexed : bool) =
+        let store = device |> ResizeBuffer.create VkBufferUsageFlags.IndirectBufferBit
+        new MappedIndirectBuffer(device, indexed, store) :> IMappedIndirectBuffer
+
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
     member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
 
