@@ -12,7 +12,7 @@ open Aardvark.Base
 #nowarn "9"
 #nowarn "51"
 
-type QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
+type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
     let available = Array.copy allFamilies
 
     let familyScore (f : QueueFamilyInfo) =
@@ -231,7 +231,8 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
                 t.AddRef()
                 t
             | None ->
-                let t = new DeviceToken(x, ref)
+                let queue = graphicsFamily.Value.GetQueue()
+                let t = new DeviceToken(queue, ref)
                 ref := Some t
                 t 
 
@@ -403,6 +404,22 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
             |> check "vkQueueWaitSemaphore"
 
+    member x.Signal() =
+        let sem = device.CreateSemaphore()
+        let mutable semHandle = sem.Handle
+        let mutable submitInfo =
+            VkSubmitInfo(
+                VkStructureType.SubmitInfo, 0n, 
+                0u, NativePtr.zero, NativePtr.zero,
+                0u, NativePtr.zero,
+                1u, &&semHandle
+            )
+
+        VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
+            |> check "vkQueueWaitSemaphore"
+
+        sem
+
     member x.WaitIdle() =
         VkRaw.vkQueueWaitIdle(x.Handle)
             |> check "could not wait for queue"
@@ -489,6 +506,7 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
     member x.RunSynchronously(cmd : CommandBuffer) =
         let q = x.GetQueue()
         q.RunSynchronously(cmd)
+
 
     member x.GetQueue () : DeviceQueue =
         let next = Interlocked.Change(&current, fun c -> (c + 1) % store.Length)
@@ -1067,128 +1085,92 @@ and ICommand =
 
 and IQueueCommand =
     abstract member Compatible : QueueFlags
-    abstract member TryEnqueue : DeviceQueue * byref<Disposable> -> bool
+    abstract member TryEnqueue : queue : DeviceQueue * disp : byref<Disposable> -> bool
 
-and DeviceToken(device : Device, ref : ref<Option<DeviceToken>>) =
-    let cleanup = List<unit -> unit>()
-    let commands = List<Choice<List<ICommand>, List<IQueueCommand>>>()
-    let mutable last = None
-    let mutable cnt = 1
-    let mutable compatible = QueueFlags.All
+and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
+    let mutable current             : Option<CommandBuffer> = None
+    let disposables                 : List<Disposable>      = List()
 
-    let enqueue (disps : List<Disposable>) (q : DeviceQueue) (l : Choice<List<ICommand>, List<IQueueCommand>>) =
-        match l with
-            | Choice1Of2 cmds ->
-                if cmds.Count > 0 then
-                    let buffer = q.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
-                    buffer.Begin(CommandBufferUsage.OneTimeSubmit)
-                    for cmd in cmds do 
-                        let mutable disp = null
-                        if cmd.TryEnqueue(buffer, &disp) then
-                            if not (isNull disp) then
-                                disps.Add disp
-                        else
-                            for d in disps do d.Dispose()
-                            failf "could not enqueue commands"
-                    buffer.End()
-                    disps.Add { new Disposable() with member x.Dispose() = buffer.Dispose() }
-                    q.Start buffer
+    let mutable isEmpty = true
+    let mutable refCount = 1
 
-            | Choice2Of2 cmds ->
-                for cmd in cmds do
-                    let mutable disp = null
-                    if cmd.TryEnqueue(q, &disp) then
-                        if not (isNull disp) then
-                            disps.Add disp
-                    else
-                        for d in disps do d.Dispose()
-                        failf "could not enqueue commands"
-                        
-    let run(clean : bool) =
-        match last with
-            | Some l ->
-                commands.Add l
-                let family = device.QueueFamilies |> Array.tryFind (fun q -> q.Flags &&& compatible <> QueueFlags.None)
-                match family with
-                    | Some f ->
-                        let disp = new List<Disposable>()
-                        let queue = f.GetQueue()
-                        commands |> CSharpList.iter (enqueue disp queue)
-                        queue.WaitIdle()
-                        for d in disp do d.Dispose()
+    let cleanup() =
+        for d in disposables do d.Dispose()
+        disposables.Clear()
 
-                    | None ->
-                        failf "could not find family with compatible flags %A" compatible
+        match current with
+            | Some b -> 
+                b.Dispose()
+                current <- None
+            | _ -> ()
 
-                commands.Clear()
-                last <- None
-                compatible <- QueueFlags.All
+    let enqueue (buffer : CommandBuffer) (cmd : ICommand) =
+        let mutable disp = Disposable.Empty
+        if cmd.TryEnqueue(buffer, &disp) then
+            if not (isNull disp) then disposables.Add disp
+        else
+            cleanup()
+            failf "could not enqueue command: %A" cmd
+
+    let flush() =
+        match current with
+            | Some buffer ->
+                buffer.End()
+                disposables.Add { new Disposable() with member x.Dispose() = buffer.Dispose() }
+                if not buffer.IsEmpty then
+                    isEmpty <- false
+                    queue.Start(buffer)
+                current <- None
 
             | None ->
                 ()
 
-        if clean then
-            for c in cleanup do c()
-            cleanup.Clear()
+    member x.Flush() =
+        flush()
+
+    member x.Sync() =
+        flush()
+        if not isEmpty then queue.WaitIdle()
+
+    member x.AddCleanup(f : unit -> unit) =
+        disposables.Add { new Disposable() with member x.Dispose() = f() }
 
     member x.Enqueue (cmd : ICommand) =
-        compatible <- compatible &&& cmd.Compatible
-        let commandList = 
-            match last with
-                | Some (Choice1Of2 cmds) -> cmds
-                | Some queueCommands ->
-                    commands.Add(queueCommands)
-                    let res = List()
-                    last <- Some (Choice1Of2 res)
-                    res
-                | None -> 
-                    let res = List()
-                    last <- Some (Choice1Of2 res)
-                    res
-                        
-        commandList.Add cmd
+        match current with
+            | Some buffer -> 
+                enqueue buffer cmd
+                
+            | None ->
+                let buffer = queue.Family.DefaultCommandPool.CreateCommandBuffer CommandBufferLevel.Primary
+                buffer.Begin CommandBufferUsage.OneTimeSubmit
+                current <- Some buffer
+                enqueue buffer cmd
 
     member x.Enqueue (cmd : IQueueCommand) =
-        compatible <- compatible &&& cmd.Compatible
-        let queueList = 
-            match last with
-                | Some (Choice2Of2 queueCommands) -> queueCommands
-                | Some cmd ->
-                    commands.Add(cmd)
-                    let res = List()
-                    last <- Some (Choice2Of2 res)
-                    res
-                | None -> 
-                    let res = List()
-                    last <- Some (Choice2Of2 res)
-                    res
-                        
-        queueList.Add cmd
-
-    member x.AddCleanup (d : unit -> unit) =
-        cleanup.Add d
-
-    member x.Sync() = run(false)
+        flush ()
+        let mutable disp = Disposable.Empty
+        if cmd.TryEnqueue(queue, &disp) then
+            if not (isNull disp) then disposables.Add disp
+            isEmpty <- false
+        else
+            cleanup()
+            failf "could not enqueue command: %A" cmd
 
     member internal x.AddRef() = 
-        cnt <- cnt + 1
+        refCount <- refCount + 1
 
     member internal x.RemoveRef() = 
-        cnt <- cnt - 1
-        if cnt = 0 then 
+        refCount <- refCount - 1
+        if refCount = 0 then 
             ref := None
-            run(true)
+            x.Sync()
+            cleanup()
 
     member x.Dispose() =
         x.RemoveRef()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
-
-
-
-
-
 
 [<AbstractClass; Sealed; Extension>]
 type DeviceExtensions private() =
