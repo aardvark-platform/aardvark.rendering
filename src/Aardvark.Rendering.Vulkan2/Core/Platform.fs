@@ -11,7 +11,6 @@ open Aardvark.Base
 #nowarn "9"
 #nowarn "51"
 
-
 type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<string>) as this =   
     inherit VulkanObject()
 
@@ -144,80 +143,84 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
     member x.Devices = devices
 
-    member x.PrintInfo(verbosity : int) =
-        let section (fmt : Printf.StringFormat<'a, (unit -> 'x) -> 'x>) =
-            fmt |> Printf.kprintf (fun str ->
-                fun cont -> 
-                    try
-                        Report.Begin(verbosity, "{0}", str)
-                        cont()
-                    finally 
-                        Report.End(verbosity) |> ignore
-            )
+    member x.PrintInfo(l : ILogger) =
+        let caps = 
+            [
+                QueueFlags.Compute, "compute"
+                QueueFlags.Graphics, "graphics"
+                QueueFlags.Transfer, "transfer"
+                QueueFlags.SparseBinding, "sparsebinding"
+            ]
 
-        let line fmt = Printf.kprintf (fun str -> Report.Line(verbosity, str)) fmt
+        let capString (c : QueueFlags) =
+            caps |> List.choose (fun (f,n) ->
+                if c.HasFlag(f) then Some n
+                else None
+            ) |> String.concat ", "
 
-        section "instance" (fun () ->
-            section "layers:" (fun () ->
-                for l in availableLayers do
-                    let isEnabled = Set.contains l.name layers
+
+        l.section "instance:" (fun () ->
+            l.section "layers:" (fun () ->
+                for layer in availableLayers do
+                    let isEnabled = Set.contains layer.name layers
                     let suffix = if isEnabled then "(X)" else "( )"
-                    line "%s (v%A) %s" l.name l.specification suffix
+                    l.line "%s (v%A) %s" layer.name layer.specification suffix
             )
 
-            section "extensions:" (fun () ->
-                for l in globalExtensions do
-                    let isEnabled = Set.contains l.name extensions
+            l.section "extensions:" (fun () ->
+                for ext in globalExtensions do
+                    let isEnabled = Set.contains ext.name extensions
                     let suffix = if isEnabled then "(X)" else "( )"
-                    line "%s (v%A) %s" l.name l.specification suffix
+                    l.line "%s (v%A) %s" ext.name ext.specification suffix
             )
 
-            section "devices:" (fun () ->
+            l.section "devices:" (fun () ->
                 for d in devices do
-                    section "%d:" d.Index (fun () ->
-                        line "type:     %A" d.Type
-                        line "vendor:   %s" d.Vendor
-                        line "name:     %s" d.Name
-                        line "version:  %A" d.APIVersion
-                        line "driver:   %A" d.DriverVersion
+                    l.section "%d:" d.Index (fun () ->
+                        l.line "type:     %A" d.Type
+                        l.line "vendor:   %s" d.Vendor
+                        l.line "name:     %s" d.Name
+                        l.line "version:  %A" d.APIVersion
+                        l.line "driver:   %A" d.DriverVersion
 
-                        section "layers:" (fun () ->
-                            for l in d.AvailableLayers do
-                                line "%s (v%A)" l.name l.specification
+                        l.section "layers:" (fun () ->
+                            for layer in d.AvailableLayers do
+                                l.line "%s (v%A)" layer.name layer.specification
                         )
 
-                        section "extensions:" (fun () ->
-                            for l in d.GlobalExtensions do
-                                line "%s (v%A)" l.name l.specification
+                        l.section "extensions:" (fun () ->
+                            for ext in d.GlobalExtensions do
+                                l.line "%s (v%A)" ext.name ext.specification
                         )
 
-                        section "heaps:" (fun () ->
+                        l.section "limits:" (fun () ->
+                            d.Limits.Print(l)
+                        )
+
+                        l.section "heaps:" (fun () ->
                             for (h : MemoryHeapInfo) in d.Heaps do
-                                section "%d:" h.Index (fun () ->
-                                    line "capacity: %A" h.Capacity
-                                    line "flags:    %A" h.Flags
-                                )
+                                match h.Flags with
+                                    | MemoryHeapFlags.DeviceLocalBit -> l.line "%d: %A (device local)" h.Index h.Capacity
+                                    | _  -> l.line "%d: %A" h.Index h.Capacity
                         )
 
-                        section "memories:" (fun () ->
+                        l.section "memories:" (fun () ->
                             for (h : MemoryInfo) in d.MemoryTypes do
                                 if h.flags <> MemoryFlags.None then
-                                    section "%d:" h.index (fun () ->
-                                        line "heap:     %A" h.heap.Index
-                                        line "flags:    %A" h.flags
-                                    )
+                                    l.line "%d: %A (heap: %d)" h.index h.flags h.heap.Index
                         )
 
-                        section "queues:" (fun () ->
+                        l.section "queues:" (fun () ->
                             for (q : QueueFamilyInfo) in d.QueueFamilies do
-                                section "%d:" q.index (fun () ->
-                                    line "capabilities:   %A" q.flags
-                                    line "count:          %d" q.count
-                                    line "timestamp bits: %d" q.timestampBits
-                                    line "img transfer:   %A" q.minImgTransferGranularity
+                                l.section "%d:" q.index (fun () ->
+                                    
+                                    l.line "capabilities:   %s" (capString q.flags)
+                                    l.line "count:          %d" q.count
+                                    l.line "timestamp bits: %d" q.timestampBits
+                                    l.line "img transfer:   %A" q.minImgTransferGranularity
                                 )
 
-                            line "main-queue: %d" d.MainQueue.index
+                            l.line "main-queue: %d" d.MainQueue.index
 
                         )
 
@@ -259,7 +262,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     let mutable properties = VkPhysicalDeviceProperties()
     do VkRaw.vkGetPhysicalDeviceProperties(handle, &&properties)
 
-    let limits = properties.limits
+    let limits = DeviceLimits.ofVkDeviceLimits properties.limits
     let vendor = PCI.vendorName (int properties.vendorID)
 
     let name = properties.deviceName.Value
@@ -342,7 +345,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     member x.HostMemory = hostMemory
 
     member x.Instance = instance
-    member x.Limits = limits
+    member x.Limits : DeviceLimits = limits
 
     override x.ToString() =
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion

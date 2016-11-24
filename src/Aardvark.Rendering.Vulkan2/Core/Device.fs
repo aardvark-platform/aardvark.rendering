@@ -129,11 +129,11 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     let deviceMemory = memories.[physical.DeviceMemory.index]
     let hostMemory = memories.[physical.HostMemory.index]
 
-    let minMemoryMapAlignment = int64 physical.Limits.minMemoryMapAlignment
-    let minTexelBufferOffsetAlignment = int64 physical.Limits.minTexelBufferOffsetAlignment
-    let minUniformBufferOffsetAlignment = int64 physical.Limits.minUniformBufferOffsetAlignment
-    let minStorageBufferOffsetAlignment = int64 physical.Limits.minStorageBufferOffsetAlignment
-    let bufferImageGranularity = int64 physical.Limits.bufferImageGranularity
+//    let minMemoryMapAlignment = int64 physical.Limits.minMemoryMapAlignment
+//    let minTexelBufferOffsetAlignment = int64 physical.Limits.minTexelBufferOffsetAlignment
+//    let minUniformBufferOffsetAlignment = int64 physical.Limits.minUniformBufferOffsetAlignment
+//    let minStorageBufferOffsetAlignment = int64 physical.Limits.minStorageBufferOffsetAlignment
+//    let bufferImageGranularity = int64 physical.Limits.bufferImageGranularity
 
     let computeFamily = 
         queueFamilies 
@@ -150,6 +150,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     let currentResourceToken = new ThreadLocal<ref<Option<DeviceToken>>>(fun _ -> ref None)
     let mutable runtime = Unchecked.defaultof<IRuntime>
+    let memoryLimits = physical.Limits.Memory
 
     member x.Token =
         let ref = currentResourceToken.Value
@@ -175,11 +176,11 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member x.EnabledLayers = layers
     member x.EnabledExtensions = extensions
 
-    member x.MinMemoryMapAlignment = minMemoryMapAlignment
-    member x.MinTexelBufferOffsetAlignment = minTexelBufferOffsetAlignment
-    member x.MinUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment
-    member x.MinStorageBufferOffsetAlignment = minStorageBufferOffsetAlignment
-    member x.BufferImageGranularity = bufferImageGranularity
+    member x.MinMemoryMapAlignment = memoryLimits.MinMemoryMapAlignment
+    member x.MinTexelBufferOffsetAlignment = memoryLimits.MinTexelBufferOffsetAlignment
+    member x.MinUniformBufferOffsetAlignment = memoryLimits.MinUniformBufferOffsetAlignment
+    member x.MinStorageBufferOffsetAlignment = memoryLimits.MinStorageBufferOffsetAlignment
+    member x.BufferImageGranularity = memoryLimits.BufferImageGranularity
 
     member x.Instance = instance
     member x.QueueFamilies = queueFamilies

@@ -10,6 +10,8 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Application.WinForms.Vulkan
 
+
+[<AbstractClass>]
 type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     inherit UserControl()
 
@@ -33,36 +35,34 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         if not x.IsHandleCreated then x.CreateHandle()
         swapchainDescription.renderPass
 
-
+    abstract member OnLoad : SwapchainDescription -> unit
+    abstract member OnUnload : unit -> unit
     abstract member OnRenderFrame : RenderPass * Framebuffer -> unit
-    default x.OnRenderFrame(_,_) = ()
 
     override x.OnHandleCreated(e) =
         base.OnHandleCreated e
         surface <- device.CreateSurface(x)
         swapchainDescription <- device.CreateSwapchainDescription(surface, graphicsMode)
         swapchain <- device.CreateSwapchain(swapchainDescription)
-
+        x.OnLoad swapchainDescription
         loaded <- true
-
 
     override x.OnPaint(e) =
         base.OnPaint(e)
 
         if loaded then
-
             swapchain.RenderFrame(fun framebuffer ->
                 Aardvark.Base.Incremental.EvaluationUtilities.evaluateTopLevel (fun () ->
                     x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
                 )
             )
 
-
     override x.Dispose(d) =
         base.Dispose(d)
 
         if loaded then
             loaded <- false
+            x.OnUnload()
             device.Delete swapchain
             device.Delete swapchainDescription
             device.Delete surface
@@ -81,8 +81,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
     let time = Mod.custom(fun _ -> DateTime.Now)
 
-    override x.OnHandleCreated(e) =
-        base.OnHandleCreated(e)
+    override x.OnLoad(desc : SwapchainDescription) =
         x.KeyDown.Add(fun e ->
             if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
                 renderContiuously <- not renderContiuously
@@ -103,6 +102,8 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         if renderContiuously then
             x.Invalidate()
 
+    override x.OnUnload() =
+        ()
 
     member x.Time = time
     member x.Sizes = sizes :> IMod<_>

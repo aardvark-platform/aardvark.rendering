@@ -23,7 +23,8 @@ module VisualDeviceChooser =
     let private appHash =
         try
             let ass = Assembly.GetEntryAssembly()
-            if isNull ass || String.IsNullOrWhiteSpace ass.Location then newHash()
+            if isNull ass || String.IsNullOrWhiteSpace ass.Location then 
+                newHash()
             else
                 ass.Location 
                     |> System.Text.Encoding.Unicode.GetBytes
@@ -99,8 +100,8 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
 
     let requestedLayers =
         [
-            yield Instance.Layers.Nsight
             if debug then
+                yield Instance.Layers.Nsight
                 yield Instance.Layers.SwapChain
                 yield Instance.Layers.DrawState
                 yield Instance.Layers.ParamChecker
@@ -127,7 +128,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     
         new Instance(Version(1,0,0), enabledLayers, enabledExtensions)
 
-    do instance.PrintInfo(2)
+    do instance.PrintInfo(Logger.Get 2)
 
     // choose a physical device
     let physicalDevice = 

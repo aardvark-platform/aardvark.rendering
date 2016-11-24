@@ -66,6 +66,8 @@
     <Compile Include="Wrapper\PCI.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Info.fs" />
+    <Compile Include="Core\Limits.fs" />
+    <Compile Include="Core\Features.fs" />
     <Compile Include="Core\Platform.fs" />
     <Compile Include="Core\Device.fs" />
     <Compile Include="Core\Commands.fs" />
