@@ -47,7 +47,6 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="MessageLoop.fs" />
     <Compile Include="Utilities.fs" />
     <Compile Include="Surface.fs" />
     <Compile Include="VulkanControl.fs" />

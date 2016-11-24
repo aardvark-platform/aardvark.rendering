@@ -56,6 +56,7 @@
     <Compile Include="Mouse.fs" />
     <Compile Include="RenderControl.fs" />
     <Compile Include="SimpleRenderWindow.fs" />
+    <Compile Include="MessageLoop.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
