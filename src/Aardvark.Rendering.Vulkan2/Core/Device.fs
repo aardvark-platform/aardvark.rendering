@@ -193,24 +193,29 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
             Option.toArray transferFamily
         ]
 
-    let usedFamilyIndices = 
-        Set.ofList [
-            match graphicsQueues with
-                | Some (f,_) -> yield f.index
-                | _ -> ()
-            match computeQueues with
-                | Some (f,_) -> yield f.index
-                | _ -> ()
-            match transferQueues with
-                | Some (f,_) -> yield f.index
-                | _ -> ()
-        ] |> Set.toArray
+    let usedFamilies = 
+        List.concat [ Option.toList graphicsQueues; Option.toList computeQueues; Option.toList transferQueues ]
+            |> List.map (fun (f,_) -> f.index)
+            |> Set.ofList
+            |> Set.toArray
 
     let pAllFamilies =
-        let ptr = NativePtr.alloc usedFamilyIndices.Length
-        for i in 0 .. usedFamilyIndices.Length-1 do
-            NativePtr.set ptr i (uint32 usedFamilyIndices.[i])
-        ptr
+        if usedFamilies.Length <= 1 then
+            NativePtr.zero
+        else
+            let ptr = NativePtr.alloc usedFamilies.Length
+            for i in 0 .. usedFamilies.Length-1 do
+                NativePtr.set ptr i (uint32 usedFamilies.[i])
+            ptr
+
+    let pAllFamiliesCnt =
+        if usedFamilies.Length <= 1 then 0u
+        else uint32 usedFamilies.Length
+
+    let concurrentSharingMode =
+        if usedFamilies.Length = 1 then VkSharingMode.Exclusive
+        else VkSharingMode.Concurrent
+
 
     let memories = 
         physical.MemoryTypes |> Array.map (fun t ->
@@ -261,17 +266,18 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member x.Instance = instance
 
     member internal x.AllQueueFamiliesPtr = pAllFamilies
-    member internal y.AllQueueFamiliesCnt = uint32 usedFamilyIndices.Length
-
-    member x.ComputeFamily = 
-        match computeFamily with
-            | Some pool -> pool
-            | None -> failf "the device does not support compute-queues"
+    member internal x.AllQueueFamiliesCnt = pAllFamiliesCnt
+    member internal x.AllSharingMode = concurrentSharingMode
 
     member x.GraphicsFamily = 
         match graphicsFamily with
             | Some pool -> pool
             | None -> failf "the device does not support graphics-queues"
+
+    member x.ComputeFamily = 
+        match computeFamily with
+            | Some pool -> pool
+            | None -> failf "the device does not support compute-queues"
 
     member x.TransferFamily = 
         match transferFamily with

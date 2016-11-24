@@ -267,7 +267,7 @@ module ResizeBuffer =
                 VkBufferCreateFlags.SparseBindingBit ||| VkBufferCreateFlags.SparseResidencyBit,
                 virtualSize,
                 usage ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit,
-                VkSharingMode.Concurrent,
+                device.AllSharingMode,
                 device.AllQueueFamiliesCnt,
                 device.AllQueueFamiliesPtr
             )
