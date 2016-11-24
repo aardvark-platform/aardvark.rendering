@@ -213,14 +213,11 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
                         l.section "queues:" (fun () ->
                             for (q : QueueFamilyInfo) in d.QueueFamilies do
                                 l.section "%d:" q.index (fun () ->
-                                    
                                     l.line "capabilities:   %s" (capString q.flags)
                                     l.line "count:          %d" q.count
                                     l.line "timestamp bits: %d" q.timestampBits
                                     l.line "img transfer:   %A" q.minImgTransferGranularity
                                 )
-
-                            l.line "main-queue: %d" d.MainQueue.index
 
                         )
 
@@ -314,9 +311,6 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
     let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
 
-    let mainQueue = queueFamilyInfos |> Array.maxBy (QueueFamilyInfo.flags >> QueueFlags.score)
-    let pureTransferQueue = queueFamilyInfos |> Array.tryFind (QueueFamilyInfo.flags >> QueueFlags.transferOnly)
-
     member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
         match tiling with
             | VkImageTiling.Linear -> formatProperties.[fmt].linearTilingFeatures
@@ -328,8 +322,6 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     member x.AvailableLayers = availableLayers
     member x.GlobalExtensions : ExtensionInfo[] = globalExtensions
     member x.QueueFamilies = queueFamilyInfos
-    member x.MainQueue : QueueFamilyInfo = mainQueue
-    member x.TransferQueue = pureTransferQueue
     member x.MemoryTypes = memoryTypes
     member x.Heaps = heaps
 

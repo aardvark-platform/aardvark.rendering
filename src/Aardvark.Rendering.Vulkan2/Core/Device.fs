@@ -12,8 +12,72 @@ open Aardvark.Base
 #nowarn "9"
 #nowarn "51"
 
+type QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
+    let available = Array.copy allFamilies
 
-type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>, queues : list<QueueFamilyInfo * int>) as this =
+    let familyScore (f : QueueFamilyInfo) =
+        let flagScore = QueueFlags.score f.flags
+        10 + flagScore * f.count
+
+    member x.Take(caps : QueueFlags, count : int) =
+        let families = 
+            available 
+                |> Array.toList
+                |> List.indexed
+                |> List.filter (fun (i, f) -> f.count > 0 && (f.flags &&& caps) = caps)
+                |> List.sortByDescending (snd >> familyScore)
+
+
+        let usedQueues = Dictionary.empty
+        let mutable missing = count
+        for (i, f) in families  do
+            if missing > 0 then
+                if f.count <= missing then
+                    available.[i] <- { f with count = 0 }
+                    usedQueues.[f.index] <- f.count
+                    missing <- missing - f.count
+                else
+                    available.[i] <- { f with count = f.count - missing }
+                    usedQueues.[f.index] <- missing
+                    missing <- 0
+     
+        usedQueues
+            |> Dictionary.toList
+            |> List.map (fun (i,cnt) -> allFamilies.[i], cnt)    
+
+    member x.TryTakeSingleFamily(caps : QueueFlags, count : int) =
+        let families = 
+            available 
+                |> Array.toList
+                |> List.indexed
+                |> List.filter (fun (i, f) -> f.count > 0 && (f.flags &&& caps) = caps)
+                |> List.sortByDescending (snd >> familyScore)
+        
+        let mutable chosen = None
+
+        for (i, f) in families  do
+            if Option.isNone chosen then
+                if f.count >= count then
+                    available.[i] <- { f with count = f.count - count }
+                    chosen <- Some (f.index, count)
+
+        match chosen with
+            | Some (familyIndex, count) -> 
+                Some (allFamilies.[familyIndex], count)
+
+            | None ->
+                match families with
+                    | [] -> None
+                    | (_, fam) :: _ -> 
+                        available.[fam.index] <- { fam with count = fam.count - count }
+                        Some (allFamilies.[fam.index], count)
+
+type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
+    let pool = QueueFamilyPool(physical.QueueFamilies)
+    let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
+    let computeQueues   = pool.TryTakeSingleFamily(QueueFlags.Compute, 2)
+    let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
+
 
     let layers, extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
@@ -47,39 +111,33 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
         enabledLayers, enabledExtensions
     let mutable isDisposed = 0
 
-    let maxQueueCount = queues |> Seq.map snd |> Seq.max
-    let queuePriorities =
-        let ptr = NativePtr.alloc maxQueueCount
-        for i in 0 .. maxQueueCount - 1 do NativePtr.set ptr i 1.0f
-        ptr
+    let instance = physical.Instance
 
-    let queueInfos = 
-        queues |> List.toArray |> Array.choose (fun (q,c) ->
-            if c < 0 then 
-                None
-            else
-                let count = 
-                    if c > q.count then
-                        VkRaw.warn "could not create %d queues for family %A (only %d available)" c q.index q.count
-                        q.count
-                    else
-                        c 
+    let mutable device =
+        let queuePriorities =
+            let ptr = NativePtr.alloc 32
+            for i in 0 .. 31 do NativePtr.set ptr i 1.0f
+            ptr
 
-                let result =
+        let queueInfos =
+            let counts = Dictionary.empty
+            for (fam, cnt) in List.concat [Option.toList graphicsQueues; Option.toList computeQueues; Option.toList transferQueues] do
+                match counts.TryGetValue fam.index with
+                    | (true, o) -> counts.[fam.index] <- o + cnt
+                    | _ -> counts.[fam.index] <- cnt
+
+            counts 
+                |> Dictionary.toArray 
+                |> Array.map (fun (familyIndex, count) ->
                     VkDeviceQueueCreateInfo(
                         VkStructureType.DeviceQueueCreateInfo, 0n,
                         0u,
-                        uint32 q.index,
+                        uint32 familyIndex,
                         uint32 count,
                         queuePriorities
                     )
+                )
 
-                Some result
-        )
-
-
-    let instance = physical.Instance
-    let mutable device =
         queueInfos |> NativePtr.withA (fun ptr ->
             let layers = Set.toArray layers
             let extensions = Set.toArray extensions
@@ -107,18 +165,51 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
             device
         )
 
+    let graphicsFamily, computeFamily, transferFamily =
+        let offsets = Array.zeroCreate physical.QueueFamilies.Length
 
-    let queueFamilies = 
-        queueInfos |> Array.map (fun info ->
-            let family = physical.QueueFamilies.[int info.queueFamilyIndex]
-            let queues = List.init (int info.queueCount) (fun i -> DeviceQueue(this, device, family, i))
-            new DeviceQueueFamily(this, family, queues)
-        )
+        let toFamily (fam : QueueFamilyInfo, count : int) =
+            let offset = offsets.[fam.index]
+            offsets.[fam.index] <- offset + count
+
+            let queues =
+                List.init count (fun i ->
+                    DeviceQueue(this, device, fam, offset + i)
+                )
+
+            let family = new DeviceQueueFamily(this, fam, queues)
+            family
+
+        let graphicsFamily  = graphicsQueues |> Option.map toFamily
+        let computeFamily   = computeQueues |> Option.map toFamily
+        let transferFamily  = transferQueues |> Option.map toFamily
+
+        graphicsFamily, computeFamily, transferFamily
+
+    let queueFamilies =
+        Array.concat [
+            Option.toArray graphicsFamily
+            Option.toArray computeFamily
+            Option.toArray transferFamily
+        ]
+
+    let usedFamilyIndices = 
+        Set.ofList [
+            match graphicsQueues with
+                | Some (f,_) -> yield f.index
+                | _ -> ()
+            match computeQueues with
+                | Some (f,_) -> yield f.index
+                | _ -> ()
+            match transferQueues with
+                | Some (f,_) -> yield f.index
+                | _ -> ()
+        ] |> Set.toArray
 
     let pAllFamilies =
-        let ptr = NativePtr.alloc queueFamilies.Length
-        for i in 0 .. queueFamilies.Length-1 do
-            NativePtr.set ptr i (uint32 queueFamilies.[i].Index)
+        let ptr = NativePtr.alloc usedFamilyIndices.Length
+        for i in 0 .. usedFamilyIndices.Length-1 do
+            NativePtr.set ptr i (uint32 usedFamilyIndices.[i])
         ptr
 
     let memories = 
@@ -128,25 +219,6 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     let deviceMemory = memories.[physical.DeviceMemory.index]
     let hostMemory = memories.[physical.HostMemory.index]
-
-//    let minMemoryMapAlignment = int64 physical.Limits.minMemoryMapAlignment
-//    let minTexelBufferOffsetAlignment = int64 physical.Limits.minTexelBufferOffsetAlignment
-//    let minUniformBufferOffsetAlignment = int64 physical.Limits.minUniformBufferOffsetAlignment
-//    let minStorageBufferOffsetAlignment = int64 physical.Limits.minStorageBufferOffsetAlignment
-//    let bufferImageGranularity = int64 physical.Limits.bufferImageGranularity
-
-    let computeFamily = 
-        queueFamilies 
-            |> Seq.tryFind (fun f -> QueueFlags.compute f.Flags)
-
-
-    let graphicsFamily = 
-        queueFamilies 
-            |> Seq.tryFind (fun f -> QueueFlags.graphics f.Flags)
-
-    let transferFamily = 
-        queueFamilies 
-            |> Seq.tryFind (fun f -> QueueFlags.transfer f.Flags)
 
     let currentResourceToken = new ThreadLocal<ref<Option<DeviceToken>>>(fun _ -> ref None)
     let mutable runtime = Unchecked.defaultof<IRuntime>
@@ -173,6 +245,9 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
         with get() = runtime
         and internal set r = runtime <- r
 
+    [<Obsolete>]
+    member x.QueueFamilies = queueFamilies
+
     member x.EnabledLayers = layers
     member x.EnabledExtensions = extensions
 
@@ -183,10 +258,9 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member x.BufferImageGranularity = memoryLimits.BufferImageGranularity
 
     member x.Instance = instance
-    member x.QueueFamilies = queueFamilies
 
     member internal x.AllQueueFamiliesPtr = pAllFamilies
-    member internal y.AllQueueFamiliesCnt = uint32 queueFamilies.Length
+    member internal y.AllQueueFamiliesCnt = uint32 usedFamilyIndices.Length
 
     member x.ComputeFamily = 
         match computeFamily with
@@ -1131,8 +1205,8 @@ type DeviceExtensions private() =
                 tryAlloc reqs (i + 1) memories
 
     [<Extension>]
-    static member CreateDevice(this : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>, queues : list<QueueFamilyInfo * int>) =
-        new Device(this, wantedLayers, wantedExtensions, queues)
+    static member CreateDevice(this : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) =
+        new Device(this, wantedLayers, wantedExtensions)
 
     [<Extension>]
     static member Alloc(this : Device, reqs : VkMemoryRequirements, preferDevice : bool) =

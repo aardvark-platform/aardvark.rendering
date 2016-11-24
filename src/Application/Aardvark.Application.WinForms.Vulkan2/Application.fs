@@ -148,8 +148,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
         let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
         
-        let mainQueue = physicalDevice.MainQueue
-        physicalDevice.CreateDevice(enabledLayers, enabledExtensions, [mainQueue, min 4 mainQueue.count])
+        physicalDevice.CreateDevice(enabledLayers, enabledExtensions)
 
     // create a runtime
     let runtime = new Runtime(device, false, false, debug)

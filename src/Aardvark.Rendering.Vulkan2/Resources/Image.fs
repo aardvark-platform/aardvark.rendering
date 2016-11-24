@@ -2281,7 +2281,7 @@ module Image =
     let downloadLevel (src : ImageSubresource) (dst : PixImage) (device : Device) =
         let temp = device.CreateDeviceMemoryImage(dst.Size, 1, dst.PixFormat)
         try
-            device.TransferFamily.run {
+            device.GraphicsFamily.run {
                 let layout = src.Image.Layout
                 do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
                 do! Command.Copy(src, temp.[0])

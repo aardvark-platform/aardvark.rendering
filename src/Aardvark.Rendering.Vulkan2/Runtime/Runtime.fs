@@ -237,7 +237,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
 
         let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, count, samples, TextureDimension.Texture2D, format, usage) 
-        device.TransferFamily.run {
+        device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
         img :> IBackendTexture
@@ -264,7 +264,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
 
         let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, 6, samples, TextureDimension.TextureCube, format, usage) 
-        device.TransferFamily.run {
+        device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
         img :> IBackendTexture
@@ -293,13 +293,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit
 
         let img = device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, samples, TextureDimension.Texture2D, RenderbufferFormat.toTextureFormat format, usage) 
-        device.TransferFamily.run {
+        device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
         img :> IRenderbuffer
 
     member x.GenerateMipMaps(t : IBackendTexture) =
-        device.TransferFamily.run {
+        device.GraphicsFamily.run {
             do! Command.GenerateMipMaps (unbox t)
         }
 
