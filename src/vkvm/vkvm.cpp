@@ -56,11 +56,16 @@ DllExport(void) vmDraw(VkCommandBuffer commandBuffer, RuntimeStats* stats, int* 
 		stats->DrawCalls += count;
 		for (int i = 0; i < count; i++, info += 1)
 		{
-			stats->EffectiveDrawCalls += info->InstanceCount;
-			if (indexed)
-				vkCmdDrawIndexed(commandBuffer, info->FaceVertexCount, info->InstanceCount, info->FirstIndex, info->BaseVertex, info->FirstInstance);
-			else
-				vkCmdDraw(commandBuffer, info->FaceVertexCount, info->InstanceCount, info->FirstIndex, info->FirstInstance);
+			auto instanceCount = info->InstanceCount;
+			auto faceVertexCount = info->FaceVertexCount;
+			if (instanceCount != 0 && faceVertexCount != 0)
+			{
+				stats->EffectiveDrawCalls += instanceCount;
+				if (indexed)
+					vkCmdDrawIndexed(commandBuffer, faceVertexCount, instanceCount, info->FirstIndex, info->BaseVertex, info->FirstInstance);
+				else
+					vkCmdDraw(commandBuffer, faceVertexCount, instanceCount, info->FirstIndex, info->FirstInstance);
+			}
 		}
 	}
 }

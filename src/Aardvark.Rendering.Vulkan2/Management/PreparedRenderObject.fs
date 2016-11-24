@@ -13,6 +13,9 @@ open Aardvark.Base.Incremental
 #nowarn "9"
 #nowarn "51"
 
+[<AutoOpen>]
+module private PreparedRenderObjectUtils =
+    let updated = { FrameStatistics.Zero with ResourceDeltas = ResourceDeltas(ResourceKind.Unknown, ResourceDelta(0.0, 0.0, 0.0, 1.0, Mem.Zero)) }
 
 
 type PreparedRenderObject =
@@ -25,7 +28,7 @@ type PreparedRenderObject =
         uniformBuffers          : list<IResource<UniformBuffer>>
         descriptorSets          : IResource<nativeptr<DescriptorSetBinding>>
         vertexBuffers           : IResource<nativeptr<VertexBufferBinding>>
-        drawCalls               : IResource<nativeptr<DrawCall>>
+        drawCalls               : IResource<nativeint>
         isActive                : IResource<nativeint>
         activation              : IDisposable
     }
@@ -187,7 +190,8 @@ type DevicePreparedRenderObjectExtensions private() =
 
         let bufferViews =
             prog.Inputs
-                |> Seq.map (fun p ->
+                |> List.sortBy (fun p -> p.location)
+                |> List.map (fun p ->
                     let perInstance, view =
                         match ro.VertexAttributes.TryGetAttribute p.semantic with
                             | Some att -> false, att
@@ -197,23 +201,18 @@ type DevicePreparedRenderObjectExtensions private() =
                                     | None -> failwithf "could not get vertex data for shader input: %A" p.semantic
 
                     (p.semantic, p.location, perInstance, view)
-                   )
-                |> Seq.toList
+                )
 
         let buffers =
             bufferViews 
-                |> Seq.sortBy (fun (_,l,_,_) -> l)
-                |> Seq.map (fun (name,loc, _, view) ->
+                |> List.map (fun (name,loc, _, view) ->
                     let buffer = this.CreateBuffer(view.Buffer)
                     buffer, int64 view.Offset
-                    )
-                |> Seq.toList
+                )
 
 
         let bufferFormats = 
-            bufferViews |> Seq.map (fun (name,location, perInstance, view) ->
-                name, (perInstance, view)
-            ) |> Map.ofSeq
+            bufferViews |> List.map (fun (name,location, perInstance, view) -> name, (perInstance, view)) |> Map.ofSeq
 
 
         let pipeline =
@@ -267,7 +266,7 @@ type DevicePreparedRenderObjectExtensions private() =
                     let v = ro.IsActive.GetValue(x)
                     NativeInt.write ptr (if v then 1 else 0)
                     
-                    ptr, FrameStatistics.Zero
+                    ptr, updated
 
                 member x.Destroy (h : nativeint) =
                     Marshal.FreeHGlobal h

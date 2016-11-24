@@ -67,7 +67,7 @@ type VertexInputDescription =
         inputFormat             : VkFormat
         stride                  : int
         stepRate                : VkVertexInputRate
-        offset                  : int
+        offsets                 : list<int>
     }
 
 type DepthState =
@@ -338,26 +338,21 @@ module VertexInputState =
 
                     let rowSize = getFormatSize rowFormat
                     let totalSize = s.Y * rowSize
-
-                    List.init s.Y (fun r ->
-                        { 
-                            inputFormat = rowFormat
-                            stride = if view.IsSingleValue then 0 else totalSize
-                            stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                            offset = view.Offset + r * rowSize
-                        }
-                    )
+                    { 
+                        inputFormat = rowFormat
+                        stride = if view.IsSingleValue then 0 else totalSize
+                        stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                        offsets = List.init s.Y (fun r -> view.Offset + r * rowSize)
+                    }
 
                 | _ -> 
                     let fmt = toVkFormat view.ElementType
-                    [
-                        { 
-                            inputFormat = fmt
-                            stride = if view.IsSingleValue then 0 else getFormatSize fmt
-                            stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                            offset = view.Offset
-                        }
-                    ]
+                    { 
+                        inputFormat = fmt
+                        stride = if view.IsSingleValue then 0 else getFormatSize fmt
+                        stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                        offsets = [view.Offset]
+                    }
         )
  
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

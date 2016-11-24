@@ -16,7 +16,7 @@ type PipelineDescription =
     {
         renderPass              : RenderPass
         shaderProgram           : ShaderProgram
-        vertexInputState        : Map<Symbol, list<VertexInputDescription>>
+        vertexInputState        : Map<Symbol, VertexInputDescription>
         inputAssembly           : InputAssemblyState
         rasterizerState         : RasterizerState
         colorBlendState         : ColorBlendState
@@ -38,12 +38,17 @@ type Pipeline =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Pipeline =
+
+    module private List =
+        let collecti (f : int -> 'a -> list<'b>) (m : list<'a>) =
+            m |> List.indexed |> List.collect (fun (i,v) -> f i v)
+
     let createGraphics (desc : PipelineDescription) (device : Device) =
         let vkbool b = if b then 1u else 0u
 
         let prog = desc.shaderProgram
 
-        let inputs = prog.Inputs
+        let inputs = prog.Inputs |> List.sortBy (fun p -> p.location)
 
         let paramsWithInputs =
             inputs |> List.map (fun p ->
@@ -55,24 +60,22 @@ module Pipeline =
             )
 
         let inputBindings =
-            paramsWithInputs |> List.collect (fun (loc, p, ip) ->
-                ip |> List.mapi (fun i ip ->
-                    VkVertexInputBindingDescription(
-                        uint32 (loc + i),
-                        uint32 ip.stride,
-                        ip.stepRate
-                    )
+            paramsWithInputs |> List.mapi (fun i (loc, p, ip) ->
+                VkVertexInputBindingDescription(
+                    uint32 i,
+                    uint32 ip.stride,
+                    ip.stepRate
                 )
             )
 
         let inputAttributes =
-            paramsWithInputs |> List.collect (fun (loc, p, ip) ->
-                ip |> List.mapi (fun i ip ->
+            paramsWithInputs |> List.collecti (fun bi (loc, p, ip) ->
+                ip.offsets |> List.mapi (fun i off ->
                     VkVertexInputAttributeDescription(
                         uint32 (loc + i),
-                        uint32 (loc + i),
+                        uint32 bi,
                         ip.inputFormat,
-                        uint32 ip.offset
+                        uint32 off
                     )
                 )
             )

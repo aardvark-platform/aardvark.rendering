@@ -13,6 +13,27 @@ open Aardvark.Base.Incremental
 #nowarn "9"
 #nowarn "51"
 
+type private DrawCallResource(device : Device, indexed : bool, calls : IMod<list<DrawCallInfo>>) =
+    inherit Rendering.Resource<nativeint>(ResourceKind.Unknown)
+
+    static let updated = { FrameStatistics.Zero with ResourceDeltas = ResourceDeltas(ResourceKind.Unknown, ResourceDelta(0.0, 0.0, 0.0, 1.0, Mem.Zero)) }
+
+    override x.Create(old : Option<nativeint>) =
+        match old with
+            | Some o ->
+                device.UpdateDrawCall(NativePtr.ofNativeInt o, indexed, calls.GetValue x)
+                o, updated
+            | None -> 
+                let ptr = device.CreateDrawCall(indexed, calls.GetValue x)
+                NativePtr.toNativeInt ptr, FrameStatistics.Zero
+
+    override x.Destroy(old : nativeint) =
+        device.Delete(NativePtr.ofNativeInt<DrawCall> old)
+
+    override x.GetInfo _ =
+        ResourceInfo.Zero
+
+
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, device : Device, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     let derivedCache (f : ResourceManager -> ResourceCache<'a>) =
@@ -53,8 +74,8 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
     member private x.UniformBufferCache : ResourceCache<UniformBuffer> = uniformBufferCache
     member private x.PipelineCache : ResourceCache<nativeptr<VkPipeline>> = pipelineCache
     member private x.DescriptorSetCache : ResourceCache<DescriptorSet> = descriptorSetCache
-    member private x.DirectCallCache : ResourceCache<nativeptr<DrawCall>> = directCallCache
-    member private x.IndirectCallCache : ResourceCache<nativeptr<DrawCall>> = indirectCallCache
+    member private x.DirectCallCache : ResourceCache<nativeint> = directCallCache
+    member private x.IndirectCallCache : ResourceCache<nativeint> = indirectCallCache
     member private x.VertexBindingCache : ResourceCache<nativeptr<VertexBufferBinding>> = vertexBindingCache
     member private x.DescriptorSetBindingCache : ResourceCache<nativeptr<DescriptorSetBinding>> = descriptorSetBindingCache
     member private x.IndexBufferBindingCache : ResourceCache<nativeptr<IndexBufferBinding>> = indexBufferBindingCache
@@ -353,19 +374,16 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
 
     member x.CreateDrawCall(indexed : bool, calls : IMod<list<DrawCallInfo>>) =
-        directCallCache.GetOrCreate(calls, [indexed :> obj], {
-            create = fun b      -> device.CreateDrawCall(indexed, b)
-            update = fun h b    -> device.UpdateDrawCall(h, indexed, b); h
-            delete = fun h      -> device.Delete(h)
-            info =   fun h      -> ResourceInfo.Zero
-            kind = ResourceKind.Unknown
-        })
+        directCallCache.GetOrCreate(
+            [calls :> obj; indexed :> obj],
+            fun () -> new DrawCallResource(device, indexed, calls) :> Rendering.Resource<_>
+        )
 
     member x.CreateDrawCall(indexed : bool, calls : IResource<IndirectBuffer>) =
-        directCallCache.GetOrCreateDependent(calls, [indexed :> obj], {
-            create = fun b      -> device.CreateDrawCall(indexed, b)
-            update = fun h b    -> device.UpdateDrawCall(h, indexed, b); h
-            delete = fun h      -> device.Delete(h)
+        indirectCallCache.GetOrCreateDependent(calls, [indexed :> obj], {
+            create = fun b      -> device.CreateDrawCall(indexed, b) |> NativePtr.toNativeInt
+            update = fun h b    -> device.UpdateDrawCall(NativePtr.ofNativeInt h, indexed, b); h
+            delete = fun h      -> device.Delete(NativePtr.ofNativeInt<DrawCall> h)
             info =   fun h      -> ResourceInfo.Zero
             kind = ResourceKind.Unknown
         })
