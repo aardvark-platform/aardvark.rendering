@@ -229,7 +229,7 @@ let main argv =
             // textures can also be bound (using file-texture here)
             do! Air.BindTexture(
                     DefaultSemantic.DiffuseColorTexture, 
-                    @"C:\Aardwork\pattern.jpg"
+                    @"E:\Development\WorkDirectory\DataSVN\pattern.jpg"
                 )
 
             do! Air.BindVertexBuffers [
