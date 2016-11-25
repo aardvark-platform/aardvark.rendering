@@ -305,11 +305,11 @@ type Swapchain(device : Device, description : SwapchainDescription) =
         let o = System.Threading.Interlocked.Exchange(&disposed, 1)
         if o = 0 then
             // delete old things
+            VkRaw.vkDestroySwapchainKHR(device.Handle, handle, NativePtr.zero)
             framebuffers |> Array.iter device.Delete
             depthView |> Option.iter (fun view -> device.Delete view; device.Delete view.Image)
             renderViews |> Array.iter device.Delete
             colorView |> Option.iter (fun view -> device.Delete view; device.Delete view.Image)
-            VkRaw.vkDestroySwapchainKHR(device.Handle, handle, NativePtr.zero)
 
             handle <- VkSwapchainKHR.Null
             size <- V2i.Zero

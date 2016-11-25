@@ -7,6 +7,7 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Application
 
+
 type RenderControl() as this =
     inherit Control()
 
@@ -35,11 +36,20 @@ type RenderControl() as this =
                 | None -> DateTime.Now
            )
 
-    let setControl (self : RenderControl) (c : Control) (cr : IRenderTarget) =
-        match impl with
-            | Some i -> failwith "implementation can only be set once per control"
-            | None -> ()
+    let gotFocusHandler = EventHandler onGotFocus
+    let lostFocusHandler = EventHandler onLostFocus
 
+    let setControl (self : RenderControl) (c : Control) (cr : IRenderTarget) =
+        self.SuspendLayout()
+        match impl with
+            | Some i -> 
+                c.GotFocus.RemoveHandler gotFocusHandler
+                c.LostFocus.RemoveHandler lostFocusHandler
+                i.Time.RemoveOutput time
+            | None -> 
+                ()
+
+        self.Controls.Clear()
         c.Dock <- DockStyle.Fill
         self.Controls.Add c
 
@@ -56,10 +66,10 @@ type RenderControl() as this =
         )
         ctrl <- Some c
         impl <- Some cr
-
-        c.GotFocus.AddHandler (EventHandler onGotFocus)
-        c.LostFocus.AddHandler (EventHandler onLostFocus)
-
+        
+        c.GotFocus.AddHandler gotFocusHandler
+        c.LostFocus.AddHandler lostFocusHandler
+        self.ResumeLayout()
 
     static let rec subscribeToLocationChange (ctrl : Control) (action : EventHandler) : IDisposable =
         if ctrl <> null then

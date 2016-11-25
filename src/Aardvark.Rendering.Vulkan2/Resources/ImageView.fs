@@ -84,7 +84,7 @@ module ImageView =
         ImageView(device, handle, img, viewType, levelRange, arrayRange)
 
     let delete (view : ImageView) (device : Device) =
-        if view.Handle.IsValid then
+        if device.Handle <> 0n && view.Handle.IsValid then
             VkRaw.vkDestroyImageView(device.Handle, view.Handle, NativePtr.zero)
             view.Handle <- VkImageView.Null
 

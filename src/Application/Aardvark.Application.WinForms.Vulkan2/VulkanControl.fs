@@ -58,14 +58,14 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
             )
 
     override x.Dispose(d) =
-        base.Dispose(d)
-
         if loaded then
             loaded <- false
             x.OnUnload()
             device.Delete swapchain
             device.Delete swapchainDescription
             device.Delete surface
+
+        base.Dispose(d)
 
 type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode) as this =
     inherit VulkanControl(runtime.Device, graphicsMode)

@@ -85,7 +85,7 @@ module Framebuffer =
         )
 
     let delete (fbo : Framebuffer) (device : Device) =
-        if fbo.Handle.IsValid then
+        if device.Handle <> 0n && fbo.Handle.IsValid then
             VkRaw.vkDestroyFramebuffer(device.Handle, fbo.Handle, NativePtr.zero)
             fbo.Handle <- VkFramebuffer.Null
 
