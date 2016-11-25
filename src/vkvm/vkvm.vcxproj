@@ -70,26 +70,26 @@
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\x86\</OutDir>
-    <IntDir>$(SolutionDir)..\bin\Debug\x86\</IntDir>
+    <OutDir>$(SolutionDir)..\bin\Debug\</OutDir>
+    <IntDir>$(SolutionDir)..\bin\Debug\x86\vkvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\AMD64\</OutDir>
-    <IntDir>$(SolutionDir)..\bin\Debug\AMD64\</IntDir>
+    <OutDir>$(SolutionDir)..\bin\Debug\</OutDir>
+    <IntDir>$(SolutionDir)..\bin\Debug\AMD64\vkvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\x86\</OutDir>
-    <IntDir>$(SolutionDir)..\bin\Release\x86\</IntDir>
+    <IntDir>$(SolutionDir)..\bin\Release\x86\vkvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\AMD64\</OutDir>
-    <IntDir>$(SolutionDir)..\bin\Release\AMD64\</IntDir>
+    <IntDir>$(SolutionDir)..\bin\Release\AMD64\vkvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -108,9 +108,9 @@
       <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\x86\*" "$(SolutionDir)..\bin\Debug" /y</Command>
-      <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\vkvm.dll;$(SolutionDir)..\bin\Debug\vkvm.exp</Outputs>
+      <Command>xcopy $(SolutionDir)..\bin\Debug\vkvm.* $(SolutionDir)..\bin\Release\ /Y</Command>
+      <Message>copying binaries to bin\Release</Message>
+      <Outputs>$(SolutionDir)..\bin\Release\vkvm.dll;$(SolutionDir)..\bin\Release\vkvm.exp;$(SolutionDir)..\bin\Release\vkvm.lib;$(SolutionDir)..\bin\Release\vkvm.pdb;%(Outputs)</Outputs>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -129,9 +129,9 @@
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.30.0\Bin</AdditionalLibraryDirectories>
     </Link>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y</Command>
-      <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\vkvm.dll;$(SolutionDir)..\bin\Debug\vkvm.exp</Outputs>
+      <Command>xcopy $(SolutionDir)..\bin\Debug\vkvm.* $(SolutionDir)..\bin\Release\ /Y</Command>
+      <Message>copying binaries to bin\Release</Message>
+      <Outputs>$(SolutionDir)..\bin\Release\vkvm.dll;$(SolutionDir)..\bin\Release\vkvm.exp;$(SolutionDir)..\bin\Release\vkvm.lib;$(SolutionDir)..\bin\Release\vkvm.pdb;%(Outputs)</Outputs>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -154,9 +154,10 @@
       <AdditionalDependencies>vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\x86\*" "$(SolutionDir)..\bin\Debug" /y</Command>
+      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\x86\*" "$(SolutionDir)..\bin\Debug" /y
+xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\x86\*" "$(SolutionDir)..\bin\Release" /y</Command>
       <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\vkvm.dll;$(SolutionDir)..\bin\Debug\vkvm.exp</Outputs>
+      <Outputs>$(SolutionDir)..\bin\Debug\vkvm.dll;$(SolutionDir)..\bin\Debug\vkvm.exp;$(SolutionDir)..\bin\Debug\vkvm.lib;$(SolutionDir)..\bin\Debug\vkvm.pdb;$(SolutionDir)..\bin\Release\vkvm.dll;$(SolutionDir)..\bin\Release\vkvm.exp;$(SolutionDir)..\bin\Release\vkvm.lib;$(SolutionDir)..\bin\Release\vkvm.pdb</Outputs>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -179,9 +180,10 @@
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.0.30.0\Bin</AdditionalLibraryDirectories>
     </Link>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y</Command>
+      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y
+xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.Vulkan2\windows\AMD64\*" "$(SolutionDir)..\bin\Release" /y</Command>
       <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\vkvm.dll;$(SolutionDir)..\bin\Debug\vkvm.exp</Outputs>
+      <Outputs>$(SolutionDir)..\bin\Debug\vkvm.dll;$(SolutionDir)..\bin\Debug\vkvm.exp;$(SolutionDir)..\bin\Debug\vkvm.lib;$(SolutionDir)..\bin\Debug\vkvm.pdb;$(SolutionDir)..\bin\Release\vkvm.dll;$(SolutionDir)..\bin\Release\vkvm.exp;$(SolutionDir)..\bin\Release\vkvm.lib;$(SolutionDir)..\bin\Release\vkvm.pdb</Outputs>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>

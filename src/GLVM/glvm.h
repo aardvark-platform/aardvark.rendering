@@ -18,7 +18,7 @@
 #include <vector>
 
 #ifndef __APPLE__
-#ifdef __GNUC__
+#ifndef __GNUC__
 static PFNGLACTIVETEXTUREPROC							glActiveTexture;
 static PFNGLBLENDCOLORPROC								glBlendColor;
 #endif
