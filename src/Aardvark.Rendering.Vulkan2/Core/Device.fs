@@ -77,7 +77,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
     let computeQueues   = pool.TryTakeSingleFamily(QueueFlags.Compute, 2)
     let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
-
+    let onDispose = Event<unit>()
 
     let layers, extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
@@ -219,7 +219,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
 
     let memories = 
         physical.MemoryTypes |> Array.map (fun t ->
-            DeviceHeap(this, t, t.heap)
+            new DeviceHeap(this, t, t.heap)
         )
 
     let deviceMemory = memories.[physical.DeviceMemory.index]
@@ -291,10 +291,14 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member x.DeviceMemory = deviceMemory
     member x.HostMemory = hostMemory
 
+    member x.OnDispose = onDispose.Publish :> IObservable<_>
+
     member x.Dispose() =
         if not instance.IsDisposed then
             let o = Interlocked.Exchange(&isDisposed, 1)
             if o = 0 then 
+                onDispose.Trigger()
+                for h in memories do h.Dispose()
                 for f in queueFamilies do f.Dispose()
                 VkRaw.vkDestroyDevice(device, NativePtr.zero)
                 device <- VkDevice.Zero
@@ -562,7 +566,7 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
 
         match bag.TryTake() with
             | (true, cmd) -> cmd
-            | _ ->
+            | _ -> 
                 { new CommandBuffer(device, pool, queueFamily, level) with
                     override x.Dispose() =
                         x.Reset()
@@ -865,6 +869,23 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
     let manager = DeviceMemoryManager(this, heap.Capacity.Bytes, 128L <<< 20)
     let mask = 1u <<< memory.index
 
+    let nullptr = 
+        lazy (
+            let mutable mem = VkDeviceMemory.Null
+
+            let mutable info =
+                VkMemoryAllocateInfo(
+                    VkStructureType.MemoryAllocateInfo, 0n, 
+                    16UL,
+                    uint32 memory.index
+                )
+
+            VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
+                |> check "could not 'allocate' null pointer for device heap"
+
+            new DeviceMemory(this, mem, 0L)
+        )
+
     member x.Device = device
     member x.Info = memory
     member x.Index = memory.index
@@ -877,8 +898,14 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
     member x.Capacity = heap.Capacity
 
 
+    member x.Null = nullptr.Value
+
     member x.Alloc(align : int64, size : int64) = manager.Alloc(align, size)
     member x.Free(ptr : DevicePtr) = ptr.Dispose()
+
+    member x.AllocTemp(align : int64, size : int64) =
+        x.AllocRaw(size) :> DevicePtr
+
 
     member x.TryAllocRaw(size : int64, [<Out>] ptr : byref<DeviceMemory>) =
         if heap.TryAdd size then
@@ -909,14 +936,24 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
     member x.AllocRaw(mem : Mem) = x.AllocRaw(mem.Bytes)
     member x.AllocRaw(mem : VkDeviceSize) = x.AllocRaw(int64 mem)
 
+
+
     member x.Free(ptr : DeviceMemory) =
-        lock ptr (fun () ->
-            if ptr.Handle.IsValid then
-                heap.Remove ptr.Size
-                VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
-                ptr.Handle <- VkDeviceMemory.Null
-                ptr.Size <- 0L
-        )
+        if ptr.Size <> 0L then
+            lock ptr (fun () ->
+                if ptr.Handle.IsValid then
+                    heap.Remove ptr.Size
+                    VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
+                    ptr.Handle <- VkDeviceMemory.Null
+                    ptr.Size <- 0L
+            )
+
+    member x.Dispose() =
+        if nullptr.IsValueCreated then
+            VkRaw.vkFreeMemory(device.Handle, nullptr.Value.Handle, NativePtr.zero)
+        
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSize : int64) =
     let manager = MemoryManager.createNop()
@@ -1077,15 +1114,20 @@ and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
     static member (-) (ptr : DevicePtr, off : nativeint) = ptr - int64 off
 
     member x.Mapped (f : nativeint -> 'a) =
+        let memory = x.Memory
         if memory.Heap.IsHostVisible then
             let device = memory.Heap.Device
-            let mutable ptr = 0n
-
-            VkRaw.vkMapMemory(device.Handle, memory.Handle, uint64 x.Offset, uint64 x.Size, 0u, &&ptr)
-                |> check "could not map memory"
-
-            try f ptr
-            finally VkRaw.vkUnmapMemory(device.Handle, memory.Handle)
+            let mutable mapped = false
+            Monitor.Enter memory
+            try
+                let mutable ptr = 0n
+                VkRaw.vkMapMemory(device.Handle, memory.Handle, uint64 x.Offset, uint64 x.Size, 0u, &&ptr)
+                    |> check "could not map memory"
+                mapped <- true
+                f ptr
+            finally 
+                if mapped then VkRaw.vkUnmapMemory(device.Handle, memory.Handle)
+                Monitor.Exit memory
         else
             failf "cannot map host-invisible memory"
 
@@ -1105,6 +1147,18 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
     let mutable isEmpty = true
     let mutable refCount = 1
 
+//    #if DEBUG
+//    let owner = Thread.CurrentThread.ManagedThreadId
+//    let check() =
+//        if Thread.CurrentThread.ManagedThreadId <> owner then
+//            Log.warn "token accessed by different thread"
+//
+//    #else
+//    let check () = ()
+//    #endif
+
+    let check () = ()
+
     let cleanup() =
         for d in disposables do d.Dispose()
         disposables.Clear()
@@ -1114,6 +1168,10 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
                 b.Dispose()
                 current <- None
             | _ -> ()
+
+        refCount <- 1
+        isEmpty <- true
+        ref := None
 
     let enqueue (buffer : CommandBuffer) (cmd : ICommand) =
         let mutable disp = Disposable.Empty
@@ -1137,16 +1195,20 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
                 ()
 
     member x.Flush() =
+        check()
         flush()
 
     member x.Sync() =
+        check()
         flush()
         if not isEmpty then queue.WaitIdle()
 
     member x.AddCleanup(f : unit -> unit) =
+        check()
         disposables.Add { new Disposable() with member x.Dispose() = f() }
 
     member x.Enqueue (cmd : ICommand) =
+        check()
         match current with
             | Some buffer -> 
                 enqueue buffer cmd
@@ -1158,6 +1220,7 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
                 enqueue buffer cmd
 
     member x.Enqueue (cmd : IQueueCommand) =
+        check()
         flush ()
         let mutable disp = Disposable.Empty
         if cmd.TryEnqueue(queue, &disp) then
@@ -1168,9 +1231,11 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
             failf "could not enqueue command: %A" cmd
 
     member internal x.AddRef() = 
+        check()
         refCount <- refCount + 1
 
     member internal x.RemoveRef() = 
+        check()
         refCount <- refCount - 1
         if refCount = 0 then 
             ref := None
@@ -1178,6 +1243,7 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
             cleanup()
 
     member x.Dispose() =
+        check()
         x.RemoveRef()
 
     interface IDisposable with

@@ -1583,7 +1583,7 @@ module DeviceMemoryImage =
         let memalign = int64 requirements.alignment |> Alignment.next device.BufferImageGranularity
         let memsize = int64 requirements.size |> Alignment.next device.BufferImageGranularity
 
-        let memory = device.HostMemory.Alloc(memalign, memsize)
+        let memory = device.HostMemory.AllocTemp(memalign, memsize)
         VkRaw.vkBindImageMemory(device.Handle, handle, memory.Memory.Handle, uint64 memory.Offset)
             |> check "could not bind image memory for DeviceVolume"
 

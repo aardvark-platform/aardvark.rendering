@@ -90,8 +90,10 @@ module private DebugReportHelpers =
             let ptr = VkRaw.vkGetInstanceProcAddr(instance.Handle, name)
             if ptr = 0n then failf "could not get %s" name
             else Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>
-        static let md5 = System.Security.Cryptography.MD5.Create()
 
+        static let md5 = new System.Security.Cryptography.MD5Cng()
+        static let ignoreRx = System.Text.RegularExpressions.Regex @"vkBeginCommandBuffer\(\)[ \t]*:[ \t]*Secondary[ \t]+Command[ \t]+Buffers[ \t]+\(0x[0-9A-Fa-f]+\)[ \t]+may[ \t]+perform[ \t]+better[ \t]+if[ \t]+a[ \t]+valid[ \t]+framebuffer[ \t]+parameter[ \t]+is[ \t]+specified\."
+        
         let vkCreateDebugReportCallbackEXT : VkCreateDebugReportCallbackEXTDelegate = load "vkCreateDebugReportCallbackEXT"
         let vkDestroyDebugReportCallbackEXT : VkDestroyDebugReportCallbackEXTDelegate = load "vkDestroyDebugReportCallbackEXT"
      
@@ -109,29 +111,32 @@ module private DebugReportHelpers =
 
         let computeHash (f : BinaryWriter -> unit) =
             use ms = new MemoryStream()
-            f (new BinaryWriter(ms))
+            f (new BinaryWriter(ms, Text.Encoding.UTF8, true))
             ms.ToArray() |> md5.ComputeHash |> Guid
+
+
 
         let callback (flags : VkDebugReportFlagBitsEXT) (objType : VkDebugReportObjectTypeEXT) (srcObject : uint64) (location : uint64) (msgCode : int) (layerPrefix : cstr) (msg : cstr) (userData : nativeint) =
             let layerPrefix = layerPrefix |> CStr.toString
             let msg = msg |> CStr.toString
 
-            let hash = 
-                computeHash (fun w ->
-                    w.Write (int flags)
-                    w.Write (int objType)
-                    w.Write msgCode
-                    w.Write layerPrefix
-                )
+            let hash = Guid.Empty
+//                computeHash (fun w ->
+//                    w.Write (int flags)
+//                    w.Write (int objType)
+//                    w.Write msgCode
+//                    w.Write layerPrefix
+//                )
 
-            raise {
-                id              = hash
-                severity        = unbox (int flags)
-                objectType      = unbox (int objType)
-                sourceObject    = srcObject
-                layerPrefix     = layerPrefix
-                message         = msg
-            }
+            if not (ignoreRx.IsMatch msg) then
+                raise {
+                    id              = hash
+                    severity        = unbox (int flags)
+                    objectType      = unbox (int objType)
+                    sourceObject    = srcObject
+                    layerPrefix     = layerPrefix
+                    message         = msg
+                }
 
             0u
 

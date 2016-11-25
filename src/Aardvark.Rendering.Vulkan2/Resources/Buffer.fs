@@ -181,6 +181,38 @@ module Buffer =
                )
             |> Seq.toList
 
+    let private emptyBuffers = ConcurrentDictionary<Device * VkBufferUsageFlags, Buffer>()
+
+    let empty (usage : VkBufferUsageFlags) (device : Device) =
+        let key = (device, usage)
+        emptyBuffers.GetOrAdd(key, fun (device, usage) ->
+            let mutable info =
+                VkBufferCreateInfo(
+                    VkStructureType.BufferCreateInfo, 0n,
+                    VkBufferCreateFlags.None,
+                    0UL,
+                    usage,
+                    device.AllSharingMode,
+                    device.AllQueueFamiliesCnt,
+                    device.AllQueueFamiliesPtr
+                )
+
+            let mutable handle = VkBuffer.Null
+            VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&handle)
+                |> check "could not create empty buffer"
+
+            let ptr = device.DeviceMemory.Null
+            VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, 0UL)
+                |> check "could not bind empty buffer's memory"
+
+            device.OnDispose.Add (fun () ->
+                VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
+                emptyBuffers.TryRemove(key) |> ignore
+            )   
+
+            Buffer(device, handle, ptr)
+        )
+
     let ofDevicePtr (flags : VkBufferUsageFlags) (ptr : DevicePtr) (device : Device) =    
         let mutable info =
             VkBufferCreateInfo(
@@ -223,7 +255,7 @@ module Buffer =
         let deviceMem = device.DeviceMemory.Alloc(align, deviceAlignedSize)
         let buffer = device |> ofDevicePtr flags deviceMem
         
-        let hostPtr = device.HostMemory.Alloc(align, deviceAlignedSize)
+        let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
         hostPtr.Mapped (fun dst -> writer dst)
 
         device.eventually {
@@ -234,7 +266,7 @@ module Buffer =
         buffer
 
     let delete (buffer : Buffer) (device : Device) =
-        if buffer.Handle.IsValid then
+        if buffer.Handle.IsValid && buffer.Size > 0L then
             VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
             buffer.Handle <- VkBuffer.Null
             buffer.Memory.Dispose()
@@ -248,7 +280,7 @@ module Buffer =
                     try device |> ofWriter flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
                     finally gc.Free()
                 else
-                    Buffer(device, VkBuffer.Null, DevicePtr.Null)
+                    device |> empty flags
 
             | :? INativeBuffer as nb ->
                 if nb.SizeInBytes <> 0 then
@@ -257,7 +289,7 @@ module Buffer =
                         device |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
                     )
                 else
-                    Buffer(device, VkBuffer.Null, DevicePtr.Null)
+                    device |> empty flags
                     
 
             | :? Buffer as b ->

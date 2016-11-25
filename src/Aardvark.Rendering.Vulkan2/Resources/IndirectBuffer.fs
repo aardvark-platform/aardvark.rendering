@@ -67,7 +67,7 @@ module IndirectBuffer =
                                 try device |> Buffer.ofWriter flags size (fun dst -> copy indexed (gc.AddrOfPinnedObject()) dst ab.Data.Length)
                                 finally gc.Free()
                             else
-                                Buffer(device, VkBuffer.Null, DevicePtr.Null)
+                                Buffer.empty flags device
 
                         | :? INativeBuffer as nb ->
                             if nb.SizeInBytes <> 0 then
@@ -77,7 +77,7 @@ module IndirectBuffer =
                                     device |> Buffer.ofWriter flags size (fun dst -> copy indexed src dst count)
                                 )
                             else
-                                Buffer(device, VkBuffer.Null, DevicePtr.Null)
+                                Buffer.empty flags device
 
                         | _ ->
                             failf "unsupported indirect buffer type %A" b.Buffer

@@ -92,7 +92,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             | :? SingleValueBuffer as data ->
                 let update (h : Buffer) (v : V4f) =
                     device.eventually {
-                        let temp = device.HostMemory.Alloc(device.MinUniformBufferOffsetAlignment, 16L)
+                        let temp = device.HostMemory.AllocTemp(device.MinUniformBufferOffsetAlignment, 16L)
                         temp.Mapped(fun ptr -> NativeInt.write ptr v)
                         try do! Command.Copy(temp, h)
                         finally temp.Dispose()
