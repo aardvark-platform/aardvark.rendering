@@ -282,7 +282,7 @@ module Markdown =
                 )
 
             module Paragraph = 
-                let fontName        = "Kunstler Script"
+                let fontName        = "Arial"
                 let regular         = new Font(fontName, FontStyle.Regular)
                 let bold            = new Font(fontName, FontStyle.Bold)
                 let italic          = new Font(fontName, FontStyle.Italic)

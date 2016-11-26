@@ -118,81 +118,83 @@ module Sg =
             shapes.Mode <- Mod.constant IndexedGeometryMode.TriangleList
             shapes.Surface <- Mod.constant cache.Surface
 
-            if not t.RenderBoundary then
-                ASet.single (shapes :> IRenderObject)
-            else
-                let boundary = RenderObject.create()
-                boundary.RenderPass <- RenderPass.shapes
-                boundary.BlendMode <- Mod.constant BlendMode.Blend
-                boundary.VertexAttributes <- cache.VertexBuffers
-                let drawCall =
-                    let range = cache.GetBufferRange Shape.Quad
-                    DrawCallInfo(
-                        FirstIndex = range.Min,
-                        FaceVertexCount = range.Size + 1,
-                        FirstInstance = 0,
-                        InstanceCount = 1,
-                        BaseVertex = 0
-                    )
 
-                boundary.DrawCallInfos <- [drawCall] |> Mod.constant
-                boundary.Mode <- Mod.constant IndexedGeometryMode.TriangleList
-                boundary.Uniforms <-
-                    let old = boundary.Uniforms
-                    { new IUniformProvider with
-                        member x.TryGetUniform(scope, sem) =
-                            match string sem with
-                                | "BoundaryColor" -> t.BoundaryColor |> Mod.constant :> IMod |> Some
-                                | "ModelTrafo" -> 
-                                    let scaleTrafo = 
-                                        content |> Mod.map (fun s -> 
-                                            let bounds = s.bounds.EnlargedByRelativeEps t.BoundaryExtent
-                                            Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
-                                            Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
+            let boundary = RenderObject.create()
+            boundary.RenderPass <- RenderPass.shapes
+            boundary.BlendMode <- Mod.constant BlendMode.Blend
+            boundary.VertexAttributes <- cache.VertexBuffers
+            let drawCall =
+                let range = cache.GetBufferRange Shape.Quad
+                DrawCallInfo(
+                    FirstIndex = range.Min,
+                    FaceVertexCount = range.Size + 1,
+                    FirstInstance = 0,
+                    InstanceCount = 1,
+                    BaseVertex = 0
+                )
+
+            boundary.DrawCallInfos <- [drawCall] |> Mod.constant
+            boundary.Mode <- Mod.constant IndexedGeometryMode.TriangleList
+            boundary.Uniforms <-
+                let old = boundary.Uniforms
+                { new IUniformProvider with
+                    member x.TryGetUniform(scope, sem) =
+                        match string sem with
+                            | "BoundaryColor" -> t.BoundaryColor |> Mod.constant :> IMod |> Some
+                            | "ModelTrafo" -> 
+                                let scaleTrafo = 
+                                    content |> Mod.map (fun s -> 
+                                        let bounds = s.bounds.EnlargedByRelativeEps t.BoundaryExtent
+                                        Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
+                                        Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
                                             
-                                        )
+                                    )
 
-                                    match old.TryGetUniform(scope, sem) with
-                                        | Some (:? IMod<Trafo3d> as m) ->
-                                            Mod.map2 (*) scaleTrafo m :> IMod |> Some
-                                        | _ ->
-                                            scaleTrafo :> IMod |> Some
+                                match old.TryGetUniform(scope, sem) with
+                                    | Some (:? IMod<Trafo3d> as m) ->
+                                        Mod.map2 (*) scaleTrafo m :> IMod |> Some
+                                    | _ ->
+                                        scaleTrafo :> IMod |> Some
 
-                                | _ -> old.TryGetUniform(scope, sem)
+                            | _ -> old.TryGetUniform(scope, sem)
 
-                        member x.Dispose() =
-                            old.Dispose()
-                    }
-                boundary.Surface <- Mod.constant cache.BoundarySurface
-
-
-                let writeStencil =
-                    StencilMode(
-                        StencilOperationFunction.Replace,
-                        StencilOperationFunction.Zero,
-                        StencilOperationFunction.Keep,
-                        StencilCompareFunction.Always,
-                        1,
-                        0xFFFFFFFFu
-                    )
-
-                let readStencil =
-                    StencilMode(
-                        StencilOperationFunction.Keep,
-                        StencilOperationFunction.Keep,
-                        StencilOperationFunction.Keep,
-                        StencilCompareFunction.Equal,
-                        1,
-                        0xFFFFFFFFu
-                    )
+                    member x.Dispose() =
+                        old.Dispose()
+                }
+            boundary.Surface <- Mod.constant cache.BoundarySurface
 
 
-                boundary.StencilMode <- Mod.constant writeStencil
-                shapes.DepthTest <- Mod.constant DepthTestMode.None
-                shapes.StencilMode <- Mod.constant readStencil
+            let writeStencil =
+                StencilMode(
+                    StencilOperationFunction.Replace,
+                    StencilOperationFunction.Zero,
+                    StencilOperationFunction.Keep,
+                    StencilCompareFunction.Always,
+                    1,
+                    0xFFFFFFFFu
+                )
+
+            let readStencil =
+                StencilMode(
+                    StencilOperationFunction.Keep,
+                    StencilOperationFunction.Keep,
+                    StencilOperationFunction.Keep,
+                    StencilCompareFunction.Equal,
+                    1,
+                    0xFFFFFFFFu
+                )
+
+            let writeBuffers =
+                if t.RenderBoundary then None
+                else Some (Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Stencil])
+
+            boundary.WriteBuffers <- writeBuffers
+            boundary.StencilMode <- Mod.constant writeStencil
+            shapes.DepthTest <- Mod.constant DepthTestMode.None
+            shapes.StencilMode <- Mod.constant readStencil
 
 
-                MultiRenderObject [boundary; shapes] :> IRenderObject |> ASet.single
+            MultiRenderObject [boundary; shapes] :> IRenderObject |> ASet.single
                 //ASet.ofList [boundary :> IRenderObject; shapes :> IRenderObject]
 
         member x.FillGlyphs(s : ISg) =
