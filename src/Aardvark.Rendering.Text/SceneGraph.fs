@@ -190,6 +190,7 @@ module Sg =
 
             boundary.WriteBuffers <- writeBuffers
             boundary.StencilMode <- Mod.constant writeStencil
+            boundary.FillMode <- Mod.constant FillMode.Fill
             shapes.DepthTest <- Mod.constant DepthTestMode.None
             shapes.StencilMode <- Mod.constant readStencil
 
