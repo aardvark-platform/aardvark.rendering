@@ -505,6 +505,12 @@ module ProgramExtensions =
                     if fs then yield "Pixel", "PS", ShaderStage.Pixel
                 ]
 
+            let code = if (code.Contains("layout(location = 0) out vec4 Colors2Out")) then 
+                            code.Replace("out vec4 Colors2Out", "out vec4 Colors3Out")
+                                .Replace("out vec4 ColorsOut", "out vec4 Colors2Out")
+                                .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
+                       else code
+
 #if DEBUG
             let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
             Report.Line("CODE: {0}", codeWithDefine)
