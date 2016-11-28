@@ -104,7 +104,9 @@ module ResizeBufferImplementation =
                 let oldCapacity = x.SizeInBytes
                 if oldCapacity <> newCapacity then
                     using ctx.ResourceLock (fun _ ->
-                        x.Realloc(oldCapacity, newCapacity)
+                        let res = x.Realloc(oldCapacity, newCapacity)
+                        //GL.Sync()
+                        res
                     )
                     x.SizeInBytes <- newCapacity
             )
@@ -119,7 +121,9 @@ module ResizeBufferImplementation =
                     if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
 
                     using ctx.ResourceLock (fun _ ->
-                        x.MapRead(offset, size, reader)
+                        let res = x.MapRead(offset, size, reader)
+                        //GL.Sync()
+                        res
                     )
                 )
 
@@ -133,7 +137,9 @@ module ResizeBufferImplementation =
                     if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
 
                     using ctx.ResourceLock (fun _ ->
-                        x.MapWrite(offset, size, writer)
+                        let res = x.MapWrite(offset, size, writer)
+                        //GL.Sync()
+                        res
                     )
                 )
 
@@ -269,7 +275,7 @@ module ResizeBufferImplementation =
         member x.CreateResizeBuffer() =
             using x.ResourceLock (fun _ ->
                 SparseBuffers.init()
-                if SparseBuffers.supported then
+                if not RuntimeConfig.SupressSparseBuffers && SparseBuffers.supported then
                     let pageSize = GL.GetInteger64(GetPName.BufferPageSize)
 
                     let buffer = GL.GenBuffer()
