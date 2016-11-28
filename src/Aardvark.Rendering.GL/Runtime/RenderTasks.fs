@@ -186,13 +186,13 @@ module RenderTasks =
             let fboState = x.pushFbo desc
 
             x.ProcessDeltas()
+            let stats = x.UpdateResources()
+
             let innerStats = 
                 renderTaskLock.Run (fun () ->
-                    let mutable stats = x.UpdateResources()
-
                     beforeRender.OnNext()
                     NativePtr.write runtimeStats V2i.Zero
-                    stats <- stats + x.Perform fbo
+                    let stats = x.Perform fbo
 
                     afterRender.OnNext()
                     let rt = NativePtr.read runtimeStats
@@ -208,7 +208,7 @@ module RenderTasks =
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
             
 
-            innerStats
+            stats + innerStats
 
             
 
