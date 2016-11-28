@@ -168,35 +168,61 @@ module ResizeBufferImplementation =
             GL.Check "[ResizeableBuffer] could not unbind buffer"
 
         override x.MapWrite(offset : nativeint, size : nativeint, writer : nativeint -> 'a) =
-            let data = Marshal.AllocHGlobal size
-            let res = writer data
+            let temp = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.CopyReadBuffer, temp)
+            GL.Check "[ResizeableBuffer] could not bind buffer"
+
+            GL.BufferStorage(BufferTarget.CopyReadBuffer, size, 0n, BufferStorageFlags.MapWriteBit)
+            GL.Check "[ResizeableBuffer] could not allocate temp buffer"
+
+            let ptr = GL.MapBufferRange(BufferTarget.CopyReadBuffer, 0n, size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateBufferBit)
+            let res = writer ptr
+            GL.UnmapBuffer(BufferTarget.CopyReadBuffer) |> ignore
 
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
             GL.Check "[ResizeableBuffer] could not bind buffer"
 
-            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
-            GL.Check "[ResizeableBuffer] could not upload buffer"
+            GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, offset, size)
+            GL.Check "[ResizeableBuffer] could not copy buffer"
 
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
             GL.Check "[ResizeableBuffer] could not unbind buffer"
                     
-            Marshal.FreeHGlobal data
+            GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
+            GL.Check "[ResizeableBuffer] could not unbind buffer"
+
+            GL.DeleteBuffer(temp)
+            GL.Check "[ResizeableBuffer] could not delete temp buffer"
+
             res
 
         override x.MapRead(offset : nativeint, size : nativeint, reader : nativeint -> 'a) =
-            let data = Marshal.AllocHGlobal size
-
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
+            let temp = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, temp)
             GL.Check "[ResizeableBuffer] could not bind buffer"
 
-            GL.GetBufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
-            GL.Check "[ResizeableBuffer] could not download buffer"
+            GL.BufferStorage(BufferTarget.CopyWriteBuffer, size, 0n, BufferStorageFlags.MapReadBit)
+            GL.Check "[ResizeableBuffer] could not allocate temp buffer"
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+            GL.BindBuffer(BufferTarget.CopyReadBuffer, x.Handle)
+            GL.Check "[ResizeableBuffer] could not bind buffer"
+
+            GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, offset, 0n, size)
+            GL.Check "[ResizeableBuffer] could not copy buffer"
+
+            GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
             GL.Check "[ResizeableBuffer] could not unbind buffer"
 
-            let res = reader data
-            Marshal.FreeHGlobal data
+            let ptr = GL.MapBufferRange(BufferTarget.CopyWriteBuffer, 0n, size, BufferAccessMask.MapReadBit)
+            let res = reader ptr
+            GL.UnmapBuffer(BufferTarget.CopyWriteBuffer) |> ignore
+
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+            GL.Check "[ResizeableBuffer] could not unbind temp buffer"
+
+            GL.DeleteBuffer(temp)
+            GL.Check "[ResizeableBuffer] could not delete temp buffer"
+
             res
 
     type internal CopyResizeBuffer(ctx : Context, handle : int) =
@@ -283,7 +309,7 @@ module ResizeBufferImplementation =
                     GL.BufferStorage(
                         BufferTarget.CopyWriteBuffer, 
                         2n <<< 30, 0n, 
-                        BufferStorageFlags.DynamicStorageBit ||| BufferStorageFlags.SparseStorageBit
+                        BufferStorageFlags.SparseStorageBit
                     )
                     GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
 
