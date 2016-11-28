@@ -202,16 +202,17 @@ module Sg =
             let mode = s.FillMode
             mode |> Mod.map (fun m -> m = FillMode.Fill)
 
+        member x.Antialias(r : Root<ISg>) =
+            r.Child?Antialias <- Mod.constant true
+
     let billboard (sg : ISg) =
         sg |> Mod.constant |> BillboardApplicator :> ISg
 
     let shape (content : IMod<ShapeList>) =
         Shape(content)
-            |> Sg.uniform "Antialias" (Mod.constant true)
 
     let shapeWithBackground (color : C4b) (content : IMod<ShapeList>) =
         Shape(color, content)
-            |> Sg.uniform "Antialias" (Mod.constant true)
 
     let text (f : Font) (color : C4b) (content : IMod<string>) =
         content 
