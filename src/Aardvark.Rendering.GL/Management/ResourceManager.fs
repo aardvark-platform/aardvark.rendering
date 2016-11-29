@@ -212,6 +212,115 @@ module Sharing =
                 else
                     ctx.Delete b
 
+open OpenTK.Graphics.OpenGL4
+
+type PersistentlyMappedUniformManager(ctx : Context, size : int, fields : list<UniformField>) =
+
+    static let flags =
+        BufferStorageFlags.MapPersistentBit ||| 
+        BufferStorageFlags.MapCoherentBit ||| 
+        BufferStorageFlags.MapWriteBit
+
+    let alignedSize = (size + 255) &&& ~~~255
+
+
+    let mutable pointer = 0n
+    let handle = Buffer(ctx, 0n, 0)
+    let modHandle = Mod.custom (fun _ -> handle)
+
+    let manager = MemoryManager.createNop()
+    let viewCache = ResourceCache<UniformBufferView>(None, None)
+
+    let realloc (newCapacity : nativeint) =
+        let capacity = handle.SizeInBytes
+        let newCapacity = Fun.NextPowerOfTwo(int64 newCapacity) |> nativeint
+
+        if capacity < newCapacity then
+            use t = ctx.ResourceLock
+
+            let b = GL.GenBuffer()
+
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, b)
+            GL.BufferStorage(BufferTarget.CopyWriteBuffer, newCapacity, 0n, flags)
+
+            if capacity > 0n then
+                GL.BindBuffer(BufferTarget.CopyReadBuffer, handle.Handle)
+                GL.UnmapBuffer(BufferTarget.CopyReadBuffer) |> ignore
+                GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, handle.SizeInBytes)
+                GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
+                GL.DeleteBuffer(handle.Handle)
+
+            let ptr = GL.MapBufferRange(BufferTarget.CopyWriteBuffer, 0n, newCapacity, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapPersistentBit ||| BufferAccessMask.MapCoherentBit)
+            pointer <- ptr
+
+            handle.SizeInBytes <- newCapacity
+            handle.Handle <- b
+            transact (fun () -> modHandle.MarkOutdated())
+
+        elif capacity > newCapacity then
+            ()
+
+
+    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<obj>) : IResource<UniformBufferView> =
+        let values =
+            fields 
+            |> List.map (fun f ->
+                let sem = Symbol.Create f.semantic
+                match u.TryGetUniform(scope, sem) with
+                    | Some v -> sem, v
+                    | None -> 
+                        match additional.TryGetValue sem with
+                            | (true, (:? IMod as m)) -> sem, m
+                            | _ -> failwithf "[GL] could not get uniform: %A" f
+            )
+
+        let key = values |> List.map (fun (_,v) -> v :> obj)
+
+        viewCache.GetOrCreate(
+            key,
+            fun () ->
+                let values = values |> List.map (fun (s,v) -> s, v :> IAdaptiveObject) |> Map.ofList
+                let writers = UnmanagedUniformWriters.writers true fields values
+     
+                let mutable block = Unchecked.defaultof<_>
+                { new Resource<UniformBufferView>(ResourceKind.UniformBuffer) with
+                    member x.GetInfo b = 
+                        b.Size |> Mem |> ResourceInfo
+
+                    member x.Create old =
+                        let handle = 
+                            match old with
+                                | Some old -> old
+                                | None ->
+                                    block <- manager.Alloc (nativeint alignedSize)
+                                    let mcap = nativeint manager.Capacity
+                                    realloc mcap
+                                    UniformBufferView(handle, block.Offset, nativeint block.Size)
+
+                        for (_,w) in writers do w.Write(x, pointer + handle.Offset)
+                        handle, FrameStatistics.Zero
+
+                    member x.Destroy h =
+                        manager.Free block
+                        if manager.AllocatedBytes = 0n then
+                            realloc 0n
+
+                }
+        )
+
+    member x.Dispose() =
+        use t = ctx.ResourceLock
+        GL.DeleteBuffer(handle.Handle)
+        pointer <- 0n
+        handle.Handle <- 0
+        handle.SizeInBytes <- 0n
+        manager.Dispose()
+        transact (fun () -> modHandle.MarkOutdated())
+
+        
+
+        
+
 
 type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>) =
 
@@ -395,7 +504,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
 
-    let uniformBufferManagers = ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
+    let uniformBufferManagers = ConcurrentDictionary<int * list<ActiveUniform>, PersistentlyMappedUniformManager>()
 
     member private x.ArrayBufferCache       : ResourceCache<Buffer>                 = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer>                 = bufferCache
@@ -616,7 +725,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 (layout.size, layout.fields), 
                 fun (s,f) -> 
                     let uniformFields = layout.fields |> List.map (fun f -> f.UniformField)
-                    new UniformBufferManager(ctx, s, uniformFields)
+                    new PersistentlyMappedUniformManager(ctx, s, uniformFields)
             )
 
         manager.CreateUniformBuffer(scope, u, program.UniformGetters)
