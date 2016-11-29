@@ -177,6 +177,73 @@ let naiveLoD() =
 
 
 
+[<Demo>]
+let manymany() =
+
+    let sphere = Sg.sphere 0 (Mod.constant C4b.Red) (Mod.constant 0.2)
+
+    let controller = 
+        controller {
+            let! dt = App.Time |> differentiate
+            return fun (t : Trafo3d) -> Trafo3d.RotationZ(dt.TotalSeconds) * t
+        }
+
+    let input =
+        [
+            for x in -10.0 .. 2.0 .. 10.0 do 
+                for y in -10.0 .. 2.0 .. 10.0 do
+                    for z in -10.0 .. 2.0 .. 10.0 do 
+                        let m = Mod.init (Trafo3d.RotationZ(0.0))
+
+                        let t = Trafo3d.Translation(x,y,z)
+                        let m = AFun.integrate controller t
+
+
+                        yield 
+                            sphere |> Sg.trafo m//, m
+                        //yield scene |> Sg.uniform "Urdar" (Mod.constant (M44d.Translation(x,y,z)))
+        ]
+
+        
+    let many = input |> List.map id |> Sg.ofSeq
+    //let mods = List.map snd input |> List.toArray
+
+    //printfn "changing %d mods per frame" mods.Length
+
+    let sg = 
+        many
+            |> Sg.effect [
+               // Shader.trafo |> toEffect
+                DefaultSurfaces.trafo  |> toEffect
+                DefaultSurfaces.vertexColor    |> toEffect
+                DefaultSurfaces.simpleLighting |> toEffect
+               ]
+            |> App.WithCam
+
+    let mutable last = System.Diagnostics.Stopwatch()
+    let mutable framecount = 0
+    App.Time |> Mod.unsafeRegisterCallbackKeepDisposable (fun _ -> 
+        framecount <- framecount + 1
+        if framecount % 100 = 0 then 
+            printfn "fps = %f" (100000.0 / last.Elapsed.TotalMilliseconds) 
+            last.Restart()
+    ) |> ignore
+
+    let objs = 
+        sg 
+        |> Aardvark.SceneGraph.Semantics.RenderObjectSemantics.Semantic.renderObjects 
+        //|> Aardvark.Rendering.Optimizer.optimize App.Runtime App.FramebufferSignature
+       
+//    let rnd = System.Random()
+//    App.Time |> Mod.unsafeRegisterCallbackKeepDisposable (fun a -> 
+//        transact (fun () -> 
+//            for m in mods do 
+//                m.Value <- Trafo3d.RotationZ(rnd.NextDouble())
+//        )
+//    )|> ignore
+
+    App.Runtime.CompileRender(App.FramebufferSignature, objs)
+
 
 [<EntryPoint>]
 let main argv = 
