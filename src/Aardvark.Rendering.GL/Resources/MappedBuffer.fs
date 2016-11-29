@@ -67,45 +67,98 @@ module ResizeBufferImplementation =
     [<Literal>]
     let private GL_TIMEOUT_IGNORED = 0xFFFFFFFFFFFFFFFFUL
 
-    [<AbstractClass>]
-    type AbstractResizeBuffer(ctx : Context, handle : int, pageSize : int64) =
-        inherit Buffer(ctx, 0n, handle)
 
-        let lock = new ResourceLock()
+    type Fence private(ctx : ContextHandle, handle : nativeint) =
+        let mutable handle = handle
 
-        let mutable fence = 0n
+        member x.Context = ctx
 
-        let insertFence() =
+        static member Create() =
+            let ctx = Option.get ContextHandle.Current
             let f = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
-            let o = Interlocked.Exchange(&fence, f)
-            if o <> 0n then GL.DeleteSync(o)
+            new Fence(ctx, f)
+//
+//        static member WaitAllGPU(fences : list<Fence>, current : ContextHandle) =
+//            for f in fences do f.WaitGPU(current)
+//
+//        static member WaitAllCPU(fences : list<Fence>) =
+//            for f in fences do f.WaitCPU()
 
-        let cpuWait() =
-            if fence <> 0n then
-                // wait for the fence
-                match GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, GL_TIMEOUT_IGNORED) with
+        member x.WaitGPU(current : ContextHandle) =
+            let handle = handle
+            if handle <> 0n then
+                let status = GL.ClientWaitSync(handle, ClientWaitSyncFlags.SyncFlushCommandsBit, 0UL)
+                if status = WaitSyncStatus.AlreadySignaled then
+                    x.Dispose()
+                    false
+                else
+                    if ctx <> current then GL.WaitSync(handle, WaitSyncFlags.None, GL_TIMEOUT_IGNORED) |> ignore
+                    true
+            else
+                false
+
+        member x.WaitCPU() =
+            if handle <> 0n then
+                match GL.ClientWaitSync(handle, ClientWaitSyncFlags.SyncFlushCommandsBit, GL_TIMEOUT_IGNORED) with
                     | WaitSyncStatus.WaitFailed -> failwith "[GL] failed to wait for fence"
                     | WaitSyncStatus.TimeoutExpired -> failwith "[GL] fance timeout"
                     | _ -> ()
 
+        member x.Dispose() = 
+            let o = Interlocked.Exchange(&handle, 0n)
+            if o <> 0n then GL.DeleteSync(o)
 
-        let gpuWait() =
-            if fence <> 0n then 
-                // wait for the fence
-                GL.WaitSync(fence, WaitSyncFlags.None, GL_TIMEOUT_IGNORED) |> ignore
-                        
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+
+    [<AbstractClass>]
+    type AbstractResizeBuffer(ctx : Context, handle : int, pageSize : int64) =
+        inherit Buffer(ctx, 0n, handle)
+
+        let resourceLock = new ResourceLock()
+
+        let mutable pendingWrites : HashMap<ContextHandle, Fence> = HashMap.empty
+
+        let afterWrite() =
+            lock resourceLock (fun () ->
+                let f = Fence.Create()
+                match HashMap.tryFind f.Context pendingWrites with
+                    | Some old -> old.Dispose()
+                    | None -> ()
+                pendingWrites <- HashMap.add f.Context f pendingWrites
+            )
+
+        let beforeResize() =
+            if not (HashMap.isEmpty pendingWrites) then
+                for (_,f) in pendingWrites |> HashMap.toSeq do 
+                    f.WaitCPU()
+                    f.Dispose()
+
+                pendingWrites <- HashMap.empty
+
+        let afterResize() =
+            use f = Fence.Create()
+            f.WaitCPU()
+
+        let beforeRead() =
+            lock resourceLock (fun () ->
+                if not (HashMap.isEmpty pendingWrites) then
+                    let handle = ctx.CurrentContextHandle |> Option.get
+                    pendingWrites <- pendingWrites |> HashMap.filter (fun _ f -> f.WaitGPU(handle))
+            )
             
 
-        member x.Lock = lock
+        member x.Lock = resourceLock
 
         interface ILockedResource with
-            member x.Lock = lock
+            member x.Lock = resourceLock
             member x.OnLock u = x.OnLock u
             member x.OnUnlock u = x.OnUnlock u
         
         member x.OnLock (usage : Option<ResourceUsage>) =
             match usage with
-                | Some ResourceUsage.Render -> gpuWait()
+                | Some ResourceUsage.Render -> beforeRead()
                 | _ -> ()
 
         member x.OnUnlock (usage : Option<ResourceUsage>) = ()
@@ -120,24 +173,23 @@ module ResizeBufferImplementation =
             let oldCapacity = x.SizeInBytes
             if oldCapacity <> newCapacity then
                 using ctx.ResourceLock (fun _ ->
-                    cpuWait()
+                    beforeResize()
                     x.Realloc(oldCapacity, newCapacity)
-                    insertFence()
+                    afterResize()
                 )
                 x.SizeInBytes <- newCapacity
 
         member x.UseReadUnsafe(offset : nativeint, size : nativeint, reader : nativeint -> 'x) =
             using ctx.ResourceLock (fun _ ->
-                cpuWait()
+                beforeRead()
                 let res = x.MapRead(offset, size, reader)
-                insertFence()
                 res
             )
 
         member x.UseWriteUnsafe(offset : nativeint, size : nativeint, writer : nativeint -> 'x) =
             using ctx.ResourceLock (fun _ ->
                 let res = x.MapWrite(offset, size, writer)
-                insertFence()
+                afterWrite()
                 res
             )
 
@@ -148,10 +200,9 @@ module ResizeBufferImplementation =
                 let oldCapacity = x.SizeInBytes
                 if oldCapacity <> newCapacity then
                     using ctx.ResourceLock (fun _ ->
-                        GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, ~~~0UL) |> ignore
-                        let res = x.Realloc(oldCapacity, newCapacity)
-                        insertFence()
-                        res
+                        beforeResize()
+                        x.Realloc(oldCapacity, newCapacity)
+                        afterResize()
                     )
                     x.SizeInBytes <- newCapacity
             )
@@ -166,9 +217,8 @@ module ResizeBufferImplementation =
                     if size + offset > x.SizeInBytes then failwith "insufficient buffer size"
 
                     using ctx.ResourceLock (fun _ ->
-                        cpuWait()
+                        beforeRead()
                         let res = x.MapRead(offset, size, reader)
-                        insertFence()
                         res
                     )
                 )
@@ -184,7 +234,7 @@ module ResizeBufferImplementation =
 
                     using ctx.ResourceLock (fun _ ->
                         let res = x.MapWrite(offset, size, writer)
-                        insertFence()
+                        afterWrite()
                         res
                     )
                 )

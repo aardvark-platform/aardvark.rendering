@@ -395,16 +395,19 @@ type ResourceManagerExtensions private() =
                         | Some value ->
 
                             let shaderSampler =
-                                match prog.SamplerStates.TryGetValue (Symbol.Create uniform.semantic) with
+                                match prog.SamplerStates.TryGetValue (Symbol.Create uniform.name) with
                                     | (true, sampler) -> sampler
                                     | _ -> 
-                                        match uniform.samplerState with
-                                            | Some sam ->
-                                                match prog.SamplerStates.TryGetValue (Symbol.Create sam) with
-                                                    | (true, sampler) -> sampler
-                                                    | _ -> SamplerStateDescription()
-                                            | None ->
-                                                SamplerStateDescription()
+                                        match prog.SamplerStates.TryGetValue (Symbol.Create uniform.semantic) with
+                                            | (true, sampler) -> sampler
+                                            | _ -> 
+                                                match uniform.samplerState with
+                                                    | Some sam ->
+                                                        match prog.SamplerStates.TryGetValue (Symbol.Create sam) with
+                                                            | (true, sampler) -> sampler
+                                                            | _ -> SamplerStateDescription()
+                                                    | None ->
+                                                        SamplerStateDescription()
 
                             let sampler =
                                 match samplerModifier with
