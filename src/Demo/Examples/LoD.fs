@@ -77,7 +77,7 @@ module Helpers =
 
 module LoD = 
 
-    Interactive.Renderer <- RendererConfiguration.Vulkan
+    Interactive.Renderer <- RendererConfiguration.GL
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
     let win = Interactive.Window

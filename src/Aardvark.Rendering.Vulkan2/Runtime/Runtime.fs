@@ -28,6 +28,8 @@ type private MappedBuffer(d : Device, store : ResizeBuffer) =
 
     interface ILockedResource with
         member x.Lock = store.Lock
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
     interface IMappedBuffer with
         member x.Write(sourcePtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun dst -> Marshal.Copy(sourcePtr, dst, size))
@@ -58,6 +60,8 @@ type private MappedIndirectBuffer private(device : Device, indexed : bool, store
 
     interface ILockedResource with
         member x.Lock = store.Lock
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
     interface IMappedIndirectBuffer with
         member x.Indexed = indexed

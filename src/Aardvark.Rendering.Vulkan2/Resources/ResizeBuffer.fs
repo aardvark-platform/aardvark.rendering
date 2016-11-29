@@ -185,6 +185,8 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
     member x.Lock = resourceLock
     interface ILockedResource with
         member x.Lock = resourceLock
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
          
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -467,6 +469,8 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
 
     interface ILockedResource with
         member x.Lock = resourceLock
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
     interface IResizeBuffer with
         member x.Resize c = x.Resize (int64 c)

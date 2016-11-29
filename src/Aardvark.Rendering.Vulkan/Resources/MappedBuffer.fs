@@ -156,6 +156,8 @@ type MappedBufferOld(ctx : Context) =
 
     interface ILockedResource with
         member x.Lock = failwith "not implemented"
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
     interface IMappedBuffer with
         member x.Dispose() = x.Dispose()
@@ -239,6 +241,8 @@ type MappedBuffer(ctx : Context) =
 
     interface ILockedResource with
         member x.Lock = failwith "not implemented"
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
     interface IMappedBuffer with
         member x.Dispose() = x.Dispose()

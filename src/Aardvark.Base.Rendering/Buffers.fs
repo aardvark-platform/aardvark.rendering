@@ -129,27 +129,30 @@ type IndirectBuffer(b : IBuffer, count : int) =
 type ResourceUsage =
     | Access = 1
     | Render = 2
-    
+
 type ResourceLock = ColoredLock<ResourceUsage>
 type ILockedResource =
     abstract member Lock : ResourceLock
+    abstract member OnLock : usage : Option<ResourceUsage> -> unit
+    abstract member OnUnlock : usage : Option<ResourceUsage> -> unit
+
 
 module LockedResource =
 
-    let render (r : ILockedResource) (f : unit -> 'x) =
-        r.Lock.Enter ResourceUsage.Render
+    let inline render (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter(ResourceUsage.Render, r.OnLock)
         try f()
-        finally r.Lock.Exit()
+        finally r.Lock.Exit(r.OnUnlock)
 
-    let access (r : ILockedResource) (f : unit -> 'x) =
-        r.Lock.Enter ResourceUsage.Access
+    let inline access (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter(ResourceUsage.Access, r.OnLock)
         try f()
-        finally r.Lock.Exit()
+        finally r.Lock.Exit(r.OnUnlock)
 
-    let update (r : ILockedResource) (f : unit -> 'x) =
-        r.Lock.Enter()
+    let inline update (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter(r.OnLock)
         try f()
-        finally r.Lock.Exit()
+        finally r.Lock.Exit(r.OnUnlock)
 
 
 type RenderTaskLock() =
@@ -157,9 +160,10 @@ type RenderTaskLock() =
 
     member x.Run f = 
         let res = lock lockedResources (fun () -> Seq.toArray lockedResources)
-        for l in res do l.Lock.Enter(ResourceUsage.Render)
+        for l in res do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
         try f()
-        finally for l in res do l.Lock.Exit()
+        finally for l in res do l.Lock.Exit(l.OnUnlock)
+
         
 
     [<Obsolete>]

@@ -240,6 +240,8 @@ module private ManagedBufferImplementation =
 
         interface ILockedResource with
             member x.Lock = store.Lock
+            member x.OnLock u = ()
+            member x.OnUnlock u = ()
 
         interface IManagedBuffer with
             member x.Clear() = x.Clear()
@@ -556,6 +558,8 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
 
     interface ILockedResource with
         member x.Lock = store.Lock
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
     override x.Compute() =
         store.GetValue()
