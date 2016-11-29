@@ -228,28 +228,32 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, renderTaskLock : Option<RenderTaskLock>) =
     let store = ConcurrentDictionary<list<obj>, Resource<'h>>()
 
-    let acquire (old : Option<'x>) (m : IMod<'a>) =
+
+    let acquireOutput (old : Option<'x>) (m : IMod<'a>) =
         match old with
             | None ->
                 match m with
                     | :? IOutputMod<'a> as om -> om.Acquire()
                     | _ -> ()
 
-                match renderTaskLock, m with
-                    | Some l, (:? ILockedResource as r) -> l.Add r
-                    | _ -> ()
-
             | _ ->
                 ()
 
-    let release  (m : IMod<'a>) =
+    let releaseOutput  (m : IMod<'a>) =
         match m with
             | :? IOutputMod<'a> as om -> om.Release()
             | _ -> ()
 
-        match renderTaskLock, m with
-            | Some l, (:? ILockedResource as r) -> l.Remove r
+    let acquireLock (v : 'a) =
+        match renderTaskLock, v :> obj with
+            | Some rt, (:? ILockedResource as l) -> rt.Add l
             | _ -> ()
+
+    let releaseLock (v : 'a) =
+        match renderTaskLock, v :> obj with
+            | Some rt, (:? ILockedResource as l) -> rt.Remove l
+            | _ -> ()
+        
 
     let stats (m : IMod<'a>) =
         match m with
@@ -302,17 +306,28 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                     | :? ILockedResource as r ->
                         x.GetOrCreateLocal(key, fun () ->
                             v.AddRef()
+                            let mutable oldData = None
                             { new Resource<'h>(v.Kind) with
                                 member x.GetInfo(h : 'h) =
                                     v.GetInfo h
 
                                 member x.Create(old : Option<'h>) =
-                                    acquire old dataMod
+                                    let newData = dataMod.GetValue x
+                                    match oldData with
+                                        | Some d -> releaseLock d
+                                        | None -> ()
+                                    oldData <- Some newData
+                                    acquireLock newData
+                                    acquireOutput old dataMod
+
                                     let stats = v.Update(x)
                                     v.Handle.GetValue(), stats
 
                                 member x.Destroy(h : 'h) =
-                                    release dataMod
+                                    match oldData with
+                                        | Some d -> releaseLock d; oldData <- None
+                                        | None -> ()
+                                    releaseOutput dataMod
                                     lock v (fun () -> 
                                         v.Outputs.Remove x |> ignore
                                         v.Handle.Outputs.Remove x |> ignore
@@ -326,16 +341,23 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | None ->
                 x.GetOrCreateLocal(key, fun _ -> 
                     let mutable ownsHandle = false
-                
+                    let mutable oldData = None
+
                     let resource = 
                         { new Resource<'x>(desc.kind) with
                             member x.GetInfo (h : 'x) =
                                 desc.info h
 
                             member x.Create(old : Option<'x>) =
-                                acquire old dataMod
+                                acquireOutput old dataMod
                                 let data = dataMod.GetValue x
                                 let stats = stats dataMod
+
+                                match oldData with
+                                    | Some d -> releaseLock d
+                                    | None -> ()
+                                acquireLock data
+                                oldData <- Some data
 
                                 match old with
                                     | Some old ->
@@ -367,7 +389,11 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                                                 handle, stats
 
                             member x.Destroy(h : 'x) =
-                                release dataMod
+                                match oldData with
+                                    | Some d -> releaseLock d
+                                    | _ -> ()
+
+                                releaseOutput dataMod
                                 if ownsHandle then
                                     ownsHandle <- false
                                     desc.delete h
