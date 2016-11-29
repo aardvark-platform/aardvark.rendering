@@ -504,7 +504,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
 
-    let uniformBufferManagers = ConcurrentDictionary<int * list<ActiveUniform>, PersistentlyMappedUniformManager>()
+    let uniformBufferManagers = ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
 
     member private x.ArrayBufferCache       : ResourceCache<Buffer>                 = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer>                 = bufferCache
@@ -725,7 +725,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 (layout.size, layout.fields), 
                 fun (s,f) -> 
                     let uniformFields = layout.fields |> List.map (fun f -> f.UniformField)
-                    new PersistentlyMappedUniformManager(ctx, s, uniformFields)
+                    new UniformBufferManager(ctx,s,uniformFields)
+                    //new PersistentlyMappedUniformManager(ctx, s, uniformFields)
             )
 
         manager.CreateUniformBuffer(scope, u, program.UniformGetters)
