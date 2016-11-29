@@ -4,6 +4,7 @@ open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
+open System.Security
 open Aardvark.Base
 
 #nowarn "9"
@@ -65,6 +66,8 @@ type PFN_vkDebugReportCallbackEXT = nativeint
 
 type VkExternalMemoryHandleTypeFlagsNV = uint32
 type VkExternalMemoryFeatureFlagsNV = uint32
+type VkIndirectCommandsLayoutUsageFlagsNVX = uint32
+type VkObjectEntryUsageFlagsNVX = uint32
 type VkInstance = nativeint
 type VkPhysicalDevice = nativeint
 type VkDevice = nativeint
@@ -266,6 +269,26 @@ type VkPipelineCache =
         val mutable public Handle : int64
         new(h) = { Handle = h }
         static member Null = VkPipelineCache(0L)
+        member x.IsNull = x.Handle = 0L
+        member x.IsValid = x.Handle <> 0L
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkObjectTableNVX = 
+    struct
+        val mutable public Handle : int64
+        new(h) = { Handle = h }
+        static member Null = VkObjectTableNVX(0L)
+        member x.IsNull = x.Handle = 0L
+        member x.IsValid = x.Handle <> 0L
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkIndirectCommandsLayoutNVX = 
+    struct
+        val mutable public Handle : int64
+        new(h) = { Handle = h }
+        static member Null = VkIndirectCommandsLayoutNVX(0L)
         member x.IsNull = x.Handle = 0L
         member x.IsValid = x.Handle <> 0L
     end
@@ -1182,6 +1205,37 @@ type VkExternalMemoryFeatureFlagBitsNV =
 type VkValidationCheckEXT = 
     | VkValidationCheckAllExt = 0
 
+[<Flags>]
+type VkIndirectCommandsLayoutUsageFlagBitsNVX = 
+    | None = 0
+    | VkIndirectCommandsLayoutUsageUnorderedSequencesBitNvx = 0x00000001
+    | VkIndirectCommandsLayoutUsageSparseSequencesBitNvx = 0x00000002
+    | VkIndirectCommandsLayoutUsageEmptyExecutionsBitNvx = 0x00000004
+    | VkIndirectCommandsLayoutUsageIndexedSequencesBitNvx = 0x00000008
+
+[<Flags>]
+type VkObjectEntryUsageFlagBitsNVX = 
+    | None = 0
+    | VkObjectEntryUsageGraphicsBitNvx = 0x00000001
+    | VkObjectEntryUsageComputeBitNvx = 0x00000002
+
+type VkIndirectCommandsTokenTypeNVX = 
+    | VkIndirectCommandsTokenPipelineNvx = 0
+    | VkIndirectCommandsTokenDescriptorSetNvx = 1
+    | VkIndirectCommandsTokenIndexBufferNvx = 2
+    | VkIndirectCommandsTokenVertexBufferNvx = 3
+    | VkIndirectCommandsTokenPushConstantNvx = 4
+    | VkIndirectCommandsTokenDrawIndexedNvx = 5
+    | VkIndirectCommandsTokenDrawNvx = 6
+    | VkIndirectCommandsTokenDispatchNvx = 7
+
+type VkObjectEntryTypeNVX = 
+    | VkObjectEntryDescriptorSetNvx = 0
+    | VkObjectEntryPipelineNvx = 1
+    | VkObjectEntryIndexBufferNvx = 2
+    | VkObjectEntryVertexBufferNvx = 3
+    | VkObjectEntryPushConstantNvx = 4
+
 [<StructLayout(LayoutKind.Sequential)>]
 type VkAllocationCallbacks = 
     struct
@@ -1581,6 +1635,53 @@ type VkClearRect =
         new(rect : VkRect2D, baseArrayLayer : uint32, layerCount : uint32) = { rect = rect; baseArrayLayer = baseArrayLayer; layerCount = layerCount }
         override x.ToString() =
             sprintf "VkClearRect { rect = %A; baseArrayLayer = %A; layerCount = %A }" x.rect x.baseArrayLayer x.layerCount
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkIndirectCommandsTokenNVX = 
+    struct
+        val mutable public tokenType : VkIndirectCommandsTokenTypeNVX
+        val mutable public buffer : VkBuffer
+        val mutable public offset : VkDeviceSize
+
+        new(tokenType : VkIndirectCommandsTokenTypeNVX, buffer : VkBuffer, offset : VkDeviceSize) = { tokenType = tokenType; buffer = buffer; offset = offset }
+        override x.ToString() =
+            sprintf "VkIndirectCommandsTokenNVX { tokenType = %A; buffer = %A; offset = %A }" x.tokenType x.buffer x.offset
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkCmdProcessCommandsInfoNVX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public objectTable : VkObjectTableNVX
+        val mutable public indirectCommandsLayout : VkIndirectCommandsLayoutNVX
+        val mutable public indirectCommandsTokenCount : uint32
+        val mutable public pIndirectCommandsTokens : nativeptr<VkIndirectCommandsTokenNVX>
+        val mutable public maxSequencesCount : uint32
+        val mutable public targetCommandBuffer : VkCommandBuffer
+        val mutable public sequencesCountBuffer : VkBuffer
+        val mutable public sequencesCountOffset : VkDeviceSize
+        val mutable public sequencesIndexBuffer : VkBuffer
+        val mutable public sequencesIndexOffset : VkDeviceSize
+
+        new(sType : VkStructureType, pNext : nativeint, objectTable : VkObjectTableNVX, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, indirectCommandsTokenCount : uint32, pIndirectCommandsTokens : nativeptr<VkIndirectCommandsTokenNVX>, maxSequencesCount : uint32, targetCommandBuffer : VkCommandBuffer, sequencesCountBuffer : VkBuffer, sequencesCountOffset : VkDeviceSize, sequencesIndexBuffer : VkBuffer, sequencesIndexOffset : VkDeviceSize) = { sType = sType; pNext = pNext; objectTable = objectTable; indirectCommandsLayout = indirectCommandsLayout; indirectCommandsTokenCount = indirectCommandsTokenCount; pIndirectCommandsTokens = pIndirectCommandsTokens; maxSequencesCount = maxSequencesCount; targetCommandBuffer = targetCommandBuffer; sequencesCountBuffer = sequencesCountBuffer; sequencesCountOffset = sequencesCountOffset; sequencesIndexBuffer = sequencesIndexBuffer; sequencesIndexOffset = sequencesIndexOffset }
+        override x.ToString() =
+            sprintf "VkCmdProcessCommandsInfoNVX { sType = %A; pNext = %A; objectTable = %A; indirectCommandsLayout = %A; indirectCommandsTokenCount = %A; pIndirectCommandsTokens = %A; maxSequencesCount = %A; targetCommandBuffer = %A; sequencesCountBuffer = %A; sequencesCountOffset = %A; sequencesIndexBuffer = %A; sequencesIndexOffset = %A }" x.sType x.pNext x.objectTable x.indirectCommandsLayout x.indirectCommandsTokenCount x.pIndirectCommandsTokens x.maxSequencesCount x.targetCommandBuffer x.sequencesCountBuffer x.sequencesCountOffset x.sequencesIndexBuffer x.sequencesIndexOffset
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkCmdReserveSpaceForCommandsInfoNVX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public objectTable : VkObjectTableNVX
+        val mutable public indirectCommandsLayout : VkIndirectCommandsLayoutNVX
+        val mutable public maxSequencesCount : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, objectTable : VkObjectTableNVX, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, maxSequencesCount : uint32) = { sType = sType; pNext = pNext; objectTable = objectTable; indirectCommandsLayout = indirectCommandsLayout; maxSequencesCount = maxSequencesCount }
+        override x.ToString() =
+            sprintf "VkCmdReserveSpaceForCommandsInfoNVX { sType = %A; pNext = %A; objectTable = %A; indirectCommandsLayout = %A; maxSequencesCount = %A }" x.sType x.pNext x.objectTable x.indirectCommandsLayout x.maxSequencesCount
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2010,6 +2111,34 @@ type VkDeviceCreateInfo =
         new(sType : VkStructureType, pNext : nativeint, flags : VkDeviceCreateFlags, queueCreateInfoCount : uint32, pQueueCreateInfos : nativeptr<VkDeviceQueueCreateInfo>, enabledLayerCount : uint32, ppEnabledLayerNames : nativeptr<cstr>, enabledExtensionCount : uint32, ppEnabledExtensionNames : nativeptr<cstr>, pEnabledFeatures : nativeptr<VkPhysicalDeviceFeatures>) = { sType = sType; pNext = pNext; flags = flags; queueCreateInfoCount = queueCreateInfoCount; pQueueCreateInfos = pQueueCreateInfos; enabledLayerCount = enabledLayerCount; ppEnabledLayerNames = ppEnabledLayerNames; enabledExtensionCount = enabledExtensionCount; ppEnabledExtensionNames = ppEnabledExtensionNames; pEnabledFeatures = pEnabledFeatures }
         override x.ToString() =
             sprintf "VkDeviceCreateInfo { sType = %A; pNext = %A; flags = %A; queueCreateInfoCount = %A; pQueueCreateInfos = %A; enabledLayerCount = %A; ppEnabledLayerNames = %A; enabledExtensionCount = %A; ppEnabledExtensionNames = %A; pEnabledFeatures = %A }" x.sType x.pNext x.flags x.queueCreateInfoCount x.pQueueCreateInfos x.enabledLayerCount x.ppEnabledLayerNames x.enabledExtensionCount x.ppEnabledExtensionNames x.pEnabledFeatures
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGeneratedCommandsFeaturesNVX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public computeBindingPointSupport : VkBool32
+
+        new(sType : VkStructureType, pNext : nativeint, computeBindingPointSupport : VkBool32) = { sType = sType; pNext = pNext; computeBindingPointSupport = computeBindingPointSupport }
+        override x.ToString() =
+            sprintf "VkDeviceGeneratedCommandsFeaturesNVX { sType = %A; pNext = %A; computeBindingPointSupport = %A }" x.sType x.pNext x.computeBindingPointSupport
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceGeneratedCommandsLimitsNVX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public maxIndirectCommandsLayoutTokenCount : uint32
+        val mutable public maxObjectEntryCounts : uint32
+        val mutable public minSequenceCountBufferOffsetAlignment : uint32
+        val mutable public minSequenceIndexBufferOffsetAlignment : uint32
+        val mutable public minCommandsTokenBufferOffsetAlignment : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, maxIndirectCommandsLayoutTokenCount : uint32, maxObjectEntryCounts : uint32, minSequenceCountBufferOffsetAlignment : uint32, minSequenceIndexBufferOffsetAlignment : uint32, minCommandsTokenBufferOffsetAlignment : uint32) = { sType = sType; pNext = pNext; maxIndirectCommandsLayoutTokenCount = maxIndirectCommandsLayoutTokenCount; maxObjectEntryCounts = maxObjectEntryCounts; minSequenceCountBufferOffsetAlignment = minSequenceCountBufferOffsetAlignment; minSequenceIndexBufferOffsetAlignment = minSequenceIndexBufferOffsetAlignment; minCommandsTokenBufferOffsetAlignment = minCommandsTokenBufferOffsetAlignment }
+        override x.ToString() =
+            sprintf "VkDeviceGeneratedCommandsLimitsNVX { sType = %A; pNext = %A; maxIndirectCommandsLayoutTokenCount = %A; maxObjectEntryCounts = %A; minSequenceCountBufferOffsetAlignment = %A; minSequenceIndexBufferOffsetAlignment = %A; minCommandsTokenBufferOffsetAlignment = %A }" x.sType x.pNext x.maxIndirectCommandsLayoutTokenCount x.maxObjectEntryCounts x.minSequenceCountBufferOffsetAlignment x.minSequenceIndexBufferOffsetAlignment x.minCommandsTokenBufferOffsetAlignment
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2674,6 +2803,34 @@ type VkImportMemoryWin32HandleInfoNV =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkIndirectCommandsLayoutTokenNVX = 
+    struct
+        val mutable public tokenType : VkIndirectCommandsTokenTypeNVX
+        val mutable public bindingUnit : uint32
+        val mutable public dynamicCount : uint32
+        val mutable public divisor : uint32
+
+        new(tokenType : VkIndirectCommandsTokenTypeNVX, bindingUnit : uint32, dynamicCount : uint32, divisor : uint32) = { tokenType = tokenType; bindingUnit = bindingUnit; dynamicCount = dynamicCount; divisor = divisor }
+        override x.ToString() =
+            sprintf "VkIndirectCommandsLayoutTokenNVX { tokenType = %A; bindingUnit = %A; dynamicCount = %A; divisor = %A }" x.tokenType x.bindingUnit x.dynamicCount x.divisor
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkIndirectCommandsLayoutCreateInfoNVX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public pipelineBindPoint : VkPipelineBindPoint
+        val mutable public flags : VkIndirectCommandsLayoutUsageFlagsNVX
+        val mutable public tokenCount : uint32
+        val mutable public pTokens : nativeptr<VkIndirectCommandsLayoutTokenNVX>
+
+        new(sType : VkStructureType, pNext : nativeint, pipelineBindPoint : VkPipelineBindPoint, flags : VkIndirectCommandsLayoutUsageFlagsNVX, tokenCount : uint32, pTokens : nativeptr<VkIndirectCommandsLayoutTokenNVX>) = { sType = sType; pNext = pNext; pipelineBindPoint = pipelineBindPoint; flags = flags; tokenCount = tokenCount; pTokens = pTokens }
+        override x.ToString() =
+            sprintf "VkIndirectCommandsLayoutCreateInfoNVX { sType = %A; pNext = %A; pipelineBindPoint = %A; flags = %A; tokenCount = %A; pTokens = %A }" x.sType x.pNext x.pipelineBindPoint x.flags x.tokenCount x.pTokens
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkInstanceCreateInfo = 
     struct
         val mutable public sType : VkStructureType
@@ -2831,6 +2988,99 @@ type VkMirSurfaceCreateInfoKHR =
         new(sType : VkStructureType, pNext : nativeint, flags : VkMirSurfaceCreateFlagsKHR, connection : nativeptr<nativeint>, mirSurface : nativeptr<nativeint>) = { sType = sType; pNext = pNext; flags = flags; connection = connection; mirSurface = mirSurface }
         override x.ToString() =
             sprintf "VkMirSurfaceCreateInfoKHR { sType = %A; pNext = %A; flags = %A; connection = %A; mirSurface = %A }" x.sType x.pNext x.flags x.connection x.mirSurface
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkObjectTableCreateInfoNVX = 
+    struct
+        val mutable public sType : VkStructureType
+        val mutable public pNext : nativeint
+        val mutable public objectCount : uint32
+        val mutable public pObjectEntryTypes : nativeptr<VkObjectEntryTypeNVX>
+        val mutable public pObjectEntryCounts : nativeptr<uint32>
+        val mutable public pObjectEntryUsageFlags : nativeptr<VkObjectEntryUsageFlagsNVX>
+        val mutable public maxUniformBuffersPerDescriptor : uint32
+        val mutable public maxStorageBuffersPerDescriptor : uint32
+        val mutable public maxStorageImagesPerDescriptor : uint32
+        val mutable public maxSampledImagesPerDescriptor : uint32
+        val mutable public maxPipelineLayouts : uint32
+
+        new(sType : VkStructureType, pNext : nativeint, objectCount : uint32, pObjectEntryTypes : nativeptr<VkObjectEntryTypeNVX>, pObjectEntryCounts : nativeptr<uint32>, pObjectEntryUsageFlags : nativeptr<VkObjectEntryUsageFlagsNVX>, maxUniformBuffersPerDescriptor : uint32, maxStorageBuffersPerDescriptor : uint32, maxStorageImagesPerDescriptor : uint32, maxSampledImagesPerDescriptor : uint32, maxPipelineLayouts : uint32) = { sType = sType; pNext = pNext; objectCount = objectCount; pObjectEntryTypes = pObjectEntryTypes; pObjectEntryCounts = pObjectEntryCounts; pObjectEntryUsageFlags = pObjectEntryUsageFlags; maxUniformBuffersPerDescriptor = maxUniformBuffersPerDescriptor; maxStorageBuffersPerDescriptor = maxStorageBuffersPerDescriptor; maxStorageImagesPerDescriptor = maxStorageImagesPerDescriptor; maxSampledImagesPerDescriptor = maxSampledImagesPerDescriptor; maxPipelineLayouts = maxPipelineLayouts }
+        override x.ToString() =
+            sprintf "VkObjectTableCreateInfoNVX { sType = %A; pNext = %A; objectCount = %A; pObjectEntryTypes = %A; pObjectEntryCounts = %A; pObjectEntryUsageFlags = %A; maxUniformBuffersPerDescriptor = %A; maxStorageBuffersPerDescriptor = %A; maxStorageImagesPerDescriptor = %A; maxSampledImagesPerDescriptor = %A; maxPipelineLayouts = %A }" x.sType x.pNext x.objectCount x.pObjectEntryTypes x.pObjectEntryCounts x.pObjectEntryUsageFlags x.maxUniformBuffersPerDescriptor x.maxStorageBuffersPerDescriptor x.maxStorageImagesPerDescriptor x.maxSampledImagesPerDescriptor x.maxPipelineLayouts
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkObjectTableDescriptorSetEntryNVX = 
+    struct
+        val mutable public _type : VkObjectEntryTypeNVX
+        val mutable public flags : VkObjectEntryUsageFlagsNVX
+        val mutable public pipelineLayout : VkPipelineLayout
+        val mutable public descriptorSet : VkDescriptorSet
+
+        new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, pipelineLayout : VkPipelineLayout, descriptorSet : VkDescriptorSet) = { _type = _type; flags = flags; pipelineLayout = pipelineLayout; descriptorSet = descriptorSet }
+        override x.ToString() =
+            sprintf "VkObjectTableDescriptorSetEntryNVX { _type = %A; flags = %A; pipelineLayout = %A; descriptorSet = %A }" x._type x.flags x.pipelineLayout x.descriptorSet
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkObjectTableEntryNVX = 
+    struct
+        val mutable public _type : VkObjectEntryTypeNVX
+        val mutable public flags : VkObjectEntryUsageFlagsNVX
+
+        new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX) = { _type = _type; flags = flags }
+        override x.ToString() =
+            sprintf "VkObjectTableEntryNVX { _type = %A; flags = %A }" x._type x.flags
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkObjectTableIndexBufferEntryNVX = 
+    struct
+        val mutable public _type : VkObjectEntryTypeNVX
+        val mutable public flags : VkObjectEntryUsageFlagsNVX
+        val mutable public buffer : VkBuffer
+
+        new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, buffer : VkBuffer) = { _type = _type; flags = flags; buffer = buffer }
+        override x.ToString() =
+            sprintf "VkObjectTableIndexBufferEntryNVX { _type = %A; flags = %A; buffer = %A }" x._type x.flags x.buffer
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkObjectTablePipelineEntryNVX = 
+    struct
+        val mutable public _type : VkObjectEntryTypeNVX
+        val mutable public flags : VkObjectEntryUsageFlagsNVX
+        val mutable public pipeline : VkPipeline
+
+        new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, pipeline : VkPipeline) = { _type = _type; flags = flags; pipeline = pipeline }
+        override x.ToString() =
+            sprintf "VkObjectTablePipelineEntryNVX { _type = %A; flags = %A; pipeline = %A }" x._type x.flags x.pipeline
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkObjectTablePushConstantEntryNVX = 
+    struct
+        val mutable public _type : VkObjectEntryTypeNVX
+        val mutable public flags : VkObjectEntryUsageFlagsNVX
+        val mutable public pipelineLayout : VkPipelineLayout
+        val mutable public stageFlags : VkShaderStageFlags
+
+        new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, pipelineLayout : VkPipelineLayout, stageFlags : VkShaderStageFlags) = { _type = _type; flags = flags; pipelineLayout = pipelineLayout; stageFlags = stageFlags }
+        override x.ToString() =
+            sprintf "VkObjectTablePushConstantEntryNVX { _type = %A; flags = %A; pipelineLayout = %A; stageFlags = %A }" x._type x.flags x.pipelineLayout x.stageFlags
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkObjectTableVertexBufferEntryNVX = 
+    struct
+        val mutable public _type : VkObjectEntryTypeNVX
+        val mutable public flags : VkObjectEntryUsageFlagsNVX
+        val mutable public buffer : VkBuffer
+
+        new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, buffer : VkBuffer) = { _type = _type; flags = flags; buffer = buffer }
+        override x.ToString() =
+            sprintf "VkObjectTableVertexBufferEntryNVX { _type = %A; flags = %A; buffer = %A }" x._type x.flags x.buffer
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3459,359 +3709,377 @@ module VkRaw =
     [<Literal>]
     let lib = "vulkan-1.dll"
 
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateInstance(VkInstanceCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkInstance* pInstance)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyInstance(VkInstance instance, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkEnumeratePhysicalDevices(VkInstance instance, uint32* pPhysicalDeviceCount, VkPhysicalDevice* pPhysicalDevices)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern PFN_vkVoidFunction vkGetDeviceProcAddr(VkDevice device, string pName)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern PFN_vkVoidFunction vkGetInstanceProcAddr(VkInstance instance, string pName)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32* pQueueFamilyPropertyCount, VkQueueFamilyProperties* pQueueFamilyProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* pMemoryProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDeviceImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType _type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkImageFormatProperties* pImageFormatProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateDevice(VkPhysicalDevice physicalDevice, VkDeviceCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkDevice* pDevice)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyDevice(VkDevice device, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkEnumerateInstanceLayerProperties(uint32* pPropertyCount, VkLayerProperties* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkEnumerateInstanceExtensionProperties(string pLayerName, uint32* pPropertyCount, VkExtensionProperties* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice, uint32* pPropertyCount, VkLayerProperties* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkEnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, string pLayerName, uint32* pPropertyCount, VkExtensionProperties* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetDeviceQueue(VkDevice device, uint32 queueFamilyIndex, uint32 queueIndex, VkQueue* pQueue)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkQueueSubmit(VkQueue queue, uint32 submitCount, VkSubmitInfo* pSubmits, VkFence fence)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkQueueWaitIdle(VkQueue queue)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkDeviceWaitIdle(VkDevice device)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkAllocateMemory(VkDevice device, VkMemoryAllocateInfo* pAllocateInfo, VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkFreeMemory(VkDevice device, VkDeviceMemory memory, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkMapMemory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, VkMemoryMapFlags flags, nativeint* ppData)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkUnmapMemory(VkDevice device, VkDeviceMemory memory)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkFlushMappedMemoryRanges(VkDevice device, uint32 memoryRangeCount, VkMappedMemoryRange* pMemoryRanges)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkInvalidateMappedMemoryRanges(VkDevice device, uint32 memoryRangeCount, VkMappedMemoryRange* pMemoryRanges)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements* pMemoryRequirements)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkBindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkBindImageMemory(VkDevice device, VkImage image, VkDeviceMemory memory, VkDeviceSize memoryOffset)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint32* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetPhysicalDeviceSparseImageFormatProperties(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType _type, VkSampleCountFlags samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32* pPropertyCount, VkSparseImageFormatProperties* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkQueueBindSparse(VkQueue queue, uint32 bindInfoCount, VkBindSparseInfo* pBindInfo, VkFence fence)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateFence(VkDevice device, VkFenceCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkFence* pFence)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyFence(VkDevice device, VkFence fence, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkResetFences(VkDevice device, uint32 fenceCount, VkFence* pFences)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetFenceStatus(VkDevice device, VkFence fence)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkWaitForFences(VkDevice device, uint32 fenceCount, VkFence* pFences, VkBool32 waitAll, uint64 timeout)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateSemaphore(VkDevice device, VkSemaphoreCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSemaphore* pSemaphore)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroySemaphore(VkDevice device, VkSemaphore semaphore, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateEvent(VkDevice device, VkEventCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkEvent* pEvent)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyEvent(VkDevice device, VkEvent event, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetEventStatus(VkDevice device, VkEvent event)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkSetEvent(VkDevice device, VkEvent event)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkResetEvent(VkDevice device, VkEvent event)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateQueryPool(VkDevice device, VkQueryPoolCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkQueryPool* pQueryPool)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetQueryPoolResults(VkDevice device, VkQueryPool queryPool, uint32 firstQuery, uint32 queryCount, uint64 dataSize, nativeint pData, VkDeviceSize stride, VkQueryResultFlags flags)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateBuffer(VkDevice device, VkBufferCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkBuffer* pBuffer)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyBuffer(VkDevice device, VkBuffer buffer, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateBufferView(VkDevice device, VkBufferViewCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkBufferView* pView)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyBufferView(VkDevice device, VkBufferView bufferView, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateImage(VkDevice device, VkImageCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkImage* pImage)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyImage(VkDevice device, VkImage image, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetImageSubresourceLayout(VkDevice device, VkImage image, VkImageSubresource* pSubresource, VkSubresourceLayout* pLayout)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateImageView(VkDevice device, VkImageViewCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkImageView* pView)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyImageView(VkDevice device, VkImageView imageView, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateShaderModule(VkDevice device, VkShaderModuleCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreatePipelineCache(VkDevice device, VkPipelineCacheCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkPipelineCache* pPipelineCache)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyPipelineCache(VkDevice device, VkPipelineCache pipelineCache, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPipelineCacheData(VkDevice device, VkPipelineCache pipelineCache, uint64* pDataSize, nativeint pData)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkMergePipelineCaches(VkDevice device, VkPipelineCache dstCache, uint32 srcCacheCount, VkPipelineCache* pSrcCaches)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32 createInfoCount, VkGraphicsPipelineCreateInfo* pCreateInfos, VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32 createInfoCount, VkComputePipelineCreateInfo* pCreateInfos, VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyPipeline(VkDevice device, VkPipeline pipeline, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreatePipelineLayout(VkDevice device, VkPipelineLayoutCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkPipelineLayout* pPipelineLayout)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateSampler(VkDevice device, VkSamplerCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSampler* pSampler)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroySampler(VkDevice device, VkSampler sampler, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateDescriptorSetLayout(VkDevice device, VkDescriptorSetLayoutCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkDescriptorSetLayout* pSetLayout)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateDescriptorPool(VkDevice device, VkDescriptorPoolCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkDescriptorPool* pDescriptorPool)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkAllocateDescriptorSets(VkDevice device, VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32 descriptorSetCount, VkDescriptorSet* pDescriptorSets)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkUpdateDescriptorSets(VkDevice device, uint32 descriptorWriteCount, VkWriteDescriptorSet* pDescriptorWrites, uint32 descriptorCopyCount, VkCopyDescriptorSet* pDescriptorCopies)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateFramebuffer(VkDevice device, VkFramebufferCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkFramebuffer* pFramebuffer)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateRenderPass(VkDevice device, VkRenderPassCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyRenderPass(VkDevice device, VkRenderPass renderPass, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetRenderAreaGranularity(VkDevice device, VkRenderPass renderPass, VkExtent2D* pGranularity)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateCommandPool(VkDevice device, VkCommandPoolCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkCommandPool* pCommandPool)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkAllocateCommandBuffers(VkDevice device, VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkFreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32 commandBufferCount, VkCommandBuffer* pCommandBuffers)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkBeginCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferBeginInfo* pBeginInfo)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkEndCommandBuffer(VkCommandBuffer commandBuffer)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetViewport(VkCommandBuffer commandBuffer, uint32 firstViewport, uint32 viewportCount, VkViewport* pViewports)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetScissor(VkCommandBuffer commandBuffer, uint32 firstScissor, uint32 scissorCount, VkRect2D* pScissors)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetLineWidth(VkCommandBuffer commandBuffer, float32 lineWidth)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetDepthBias(VkCommandBuffer commandBuffer, float32 depthBiasConstantFactor, float32 depthBiasClamp, float32 depthBiasSlopeFactor)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetBlendConstants(VkCommandBuffer commandBuffer, V4f blendConstants)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetDepthBounds(VkCommandBuffer commandBuffer, float32 minDepthBounds, float32 maxDepthBounds)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetStencilCompareMask(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32 compareMask)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetStencilWriteMask(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32 writeMask)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetStencilReference(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask, uint32 reference)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32 firstSet, uint32 descriptorSetCount, VkDescriptorSet* pDescriptorSets, uint32 dynamicOffsetCount, uint32* pDynamicOffsets)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32 firstBinding, uint32 bindingCount, VkBuffer* pBuffers, VkDeviceSize* pOffsets)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDraw(VkCommandBuffer commandBuffer, uint32 vertexCount, uint32 instanceCount, uint32 firstVertex, uint32 firstInstance)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32 indexCount, uint32 instanceCount, uint32 firstIndex, int vertexOffset, uint32 firstInstance)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32 drawCount, uint32 stride)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, uint32 drawCount, uint32 stride)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDispatch(VkCommandBuffer commandBuffer, uint32 x, uint32 y, uint32 z)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, uint32 regionCount, VkBufferCopy* pRegions)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32 regionCount, VkImageCopy* pRegions)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32 regionCount, VkImageBlit* pRegions, VkFilter filter)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32 regionCount, VkBufferImageCopy* pRegions)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32 regionCount, VkBufferImageCopy* pRegions)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize dataSize, nativeint pData)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32 data)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, VkClearColorValue* pColor, uint32 rangeCount, VkImageSubresourceRange* pRanges)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, VkClearDepthStencilValue* pDepthStencil, uint32 rangeCount, VkImageSubresourceRange* pRanges)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdClearAttachments(VkCommandBuffer commandBuffer, uint32 attachmentCount, VkClearAttachment* pAttachments, uint32 rectCount, VkClearRect* pRects)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdResolveImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32 regionCount, VkImageResolve* pRegions)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdSetEvent(VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags stageMask)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdResetEvent(VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags stageMask)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32 eventCount, VkEvent* pEvents, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, uint32 memoryBarrierCount, VkMemoryBarrier* pMemoryBarriers, uint32 bufferMemoryBarrierCount, VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32 imageMemoryBarrierCount, VkImageMemoryBarrier* pImageMemoryBarriers)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32 memoryBarrierCount, VkMemoryBarrier* pMemoryBarriers, uint32 bufferMemoryBarrierCount, VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32 imageMemoryBarrierCount, VkImageMemoryBarrier* pImageMemoryBarriers)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32 query, VkQueryControlFlags flags)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32 query)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdResetQueryPool(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32 firstQuery, uint32 queryCount)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdWriteTimestamp(VkCommandBuffer commandBuffer, VkPipelineStageFlags pipelineStage, VkQueryPool queryPool, uint32 query)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32 firstQuery, uint32 queryCount, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize stride, VkQueryResultFlags flags)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32 offset, uint32 size, nativeint pValues)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdBeginRenderPass(VkCommandBuffer commandBuffer, VkRenderPassBeginInfo* pRenderPassBegin, VkSubpassContents contents)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32 commandBufferCount, VkCommandBuffer* pCommandBuffers)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateAndroidSurfaceKHR(VkInstance instance, VkAndroidSurfaceCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32* pPropertyCount, VkDisplayPropertiesKHR* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32 planeIndex, uint32* pDisplayCount, VkDisplayKHR* pDisplays)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32* pPropertyCount, VkDisplayModePropertiesKHR* pProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, VkDisplayModeCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32 planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateDisplayPlaneSurfaceKHR(VkInstance instance, VkDisplaySurfaceCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateSharedSwapchainsKHR(VkDevice device, uint32 swapchainCount, VkSwapchainCreateInfoKHR* pCreateInfos, VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchains)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateMirSurfaceKHR(VkInstance instance, VkMirSurfaceCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkBool32 vkGetPhysicalDeviceMirPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32 queueFamilyIndex, nativeint* connection)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32 queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32* pSurfaceFormatCount, VkSurfaceFormatKHR* pSurfaceFormats)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32* pPresentModeCount, VkPresentModeKHR* pPresentModes)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateSwapchainKHR(VkDevice device, VkSwapchainCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSwapchainKHR* pSwapchain)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain, uint32* pSwapchainImageCount, VkImage* pSwapchainImages)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64 timeout, VkSemaphore semaphore, VkFence fence, uint32* pImageIndex)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkQueuePresentKHR(VkQueue queue, VkPresentInfoKHR* pPresentInfo)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateWaylandSurfaceKHR(VkInstance instance, VkWaylandSurfaceCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkBool32 vkGetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32 queueFamilyIndex, nativeint* display)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateWin32SurfaceKHR(VkInstance instance, VkWin32SurfaceCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkBool32 vkGetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32 queueFamilyIndex)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateXlibSurfaceKHR(VkInstance instance, VkXlibSurfaceCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkBool32 vkGetPhysicalDeviceXlibPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32 queueFamilyIndex, nativeint* dpy, nativeint visualID)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateXcbSurfaceKHR(VkInstance instance, VkXcbSurfaceCreateInfoKHR* pCreateInfo, VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkBool32 vkGetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice, uint32 queueFamilyIndex, nativeint* connection, nativeint visual_id)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackCreateInfoEXT* pCreateInfo, VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, VkAllocationCallbacks* pAllocator)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64 _object, uint64 location, int messageCode, string pLayerPrefix, string pMessage)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkDebugMarkerSetObjectNameEXT(VkDevice device, VkDebugMarkerObjectNameInfoEXT* pNameInfo)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkDebugMarkerSetObjectTagEXT(VkDevice device, VkDebugMarkerObjectTagInfoEXT* pTagInfo)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDebugMarkerInsertEXT(VkCommandBuffer commandBuffer, VkDebugMarkerMarkerInfoEXT* pMarkerInfo)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetPhysicalDeviceExternalImageFormatPropertiesNV(VkPhysicalDevice physicalDevice, VkFormat format, VkImageType _type, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkExternalMemoryHandleTypeFlagsNV externalHandleType, VkExternalImageFormatPropertiesNV* pExternalImageFormatProperties)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetMemoryWin32HandleNV(VkDevice device, VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagsNV handleType, nativeint* pHandle)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32 maxDrawCount, uint32 stride)
-    [<DllImport(lib)>]
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkCmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32 maxDrawCount, uint32 stride)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdProcessCommandsNVX(VkCommandBuffer commandBuffer, VkCmdProcessCommandsInfoNVX* pProcessCommandsInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer, VkCmdReserveSpaceForCommandsInfoNVX* pReserveSpaceInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutCreateInfoNVX* pCreateInfo, VkAllocationCallbacks* pAllocator, VkIndirectCommandsLayoutNVX* pIndirectCommandsLayout)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkDestroyIndirectCommandsLayoutNVX(VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout, VkAllocationCallbacks* pAllocator)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateObjectTableNVX(VkDevice device, VkObjectTableCreateInfoNVX* pCreateInfo, VkAllocationCallbacks* pAllocator, VkObjectTableNVX* pObjectTable)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkDestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable, VkAllocationCallbacks* pAllocator)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkRegisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32 objectCount, nativeint* ppObjectTableEntries, uint32* pObjectIndices)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkUnregisterObjectsNVX(VkDevice device, VkObjectTableNVX objectTable, uint32 objectCount, VkObjectEntryTypeNVX* pObjectEntryTypes, uint32* pObjectIndices)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX(VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX* pFeatures, VkDeviceGeneratedCommandsLimitsNVX* pLimits)

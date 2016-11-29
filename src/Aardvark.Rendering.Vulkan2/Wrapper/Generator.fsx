@@ -372,6 +372,7 @@ module FSharpWriter =
         printfn "open System.Runtime.InteropServices"
         printfn "open System.Runtime.CompilerServices"
         printfn "open Microsoft.FSharp.NativeInterop"
+        printfn "open System.Security"
         printfn "open Aardvark.Base"
         printfn ""
         printfn "#nowarn \"9\""
@@ -442,7 +443,8 @@ module FSharpWriter =
         printfn ""
         printfn "type VkExternalMemoryHandleTypeFlagsNV = uint32"
         printfn "type VkExternalMemoryFeatureFlagsNV = uint32"
-
+        printfn "type VkIndirectCommandsLayoutUsageFlagsNVX = uint32"
+        printfn "type VkObjectEntryUsageFlagsNVX = uint32"
     let extendedEnums() =
         printfn "[<AutoOpen>]"
         printfn "module WSIEnums = "
@@ -673,6 +675,7 @@ module FSharpWriter =
                             elif n = "DWORD" then "uint32"
                             elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
                             else failwithf "strange type: %A" n
+            | Ptr (Ptr t) -> "nativeint*"
             | Ptr t ->
                 sprintf "%s*" (externTypeName t)
             | FixedArray(t, s) ->
@@ -686,7 +689,7 @@ module FSharpWriter =
         printfn ""
         for c in l do
             let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
-            printfn "    [<DllImport(lib)>]"
+            printfn "    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]"
             printfn "    extern %s %s(%s)" (externTypeName c.returnType) c.name args
 
 
