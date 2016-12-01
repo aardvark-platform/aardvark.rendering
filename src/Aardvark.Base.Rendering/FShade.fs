@@ -331,15 +331,22 @@ module FShadeInterop =
                                             let semanticMap = SymDict.empty
 
                                             for KeyValue(k,v) in map do
-                                                if not v.IsSamplerUniform then
-                                                    uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
-                                                else
+                                                if v.IsSamplerUniform then
                                                     let sem, sam = v.Value |> unbox<string * SamplerState>
                                                     semanticMap.[Sym.ofString k] <- Sym.ofString sem
                                                     let state = toSamplerStateDescription sam
                                                     samplerStates.[Sym.ofString sem] <- state
                                                     samplerStates.[Sym.ofString k] <- state
                                                     ()
+                                                elif v.IsSamplerArrayUniform then
+                                                    let sem, sam = v.Value |> unbox<string * SamplerState>
+                                                    semanticMap.[Sym.ofString k] <- Sym.ofString sem
+                                                    let state = toSamplerStateDescription sam
+                                                    samplerStates.[Sym.ofString sem] <- state
+                                                    samplerStates.[Sym.ofString k] <- state
+                                                    ()
+                                                else
+                                                    uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
 
                                             let bs = getOrCreateSurface code 
                                             let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplerStates, semanticMap, glslConfig.expectRowMajorMatrices) 

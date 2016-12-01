@@ -345,7 +345,7 @@ module ProgramExtensions =
 
     let private rx = Regex @"^(?<name>[a-zA-Z_0-9]+)((\[(?<index>[0-9]+)\])|(\.)|)(?<rest>.*)$"
 
-    let private parsePath path =
+    let private parsePath uniformIndex path =
         let rec parsePath (parent : Option<UniformPath>) (path : string) =
             if path.Length = 0 then
                 match parent with
@@ -366,6 +366,12 @@ module ProgramExtensions =
                     let index = m.Groups.["index"]
                     if index.Success then
                         let index = index.Value |> Int32.Parse
+
+                        let index =
+                            match parent with
+                                | None -> uniformIndex + index
+                                | _ -> index
+
                         parsePath (Some (IndexPath(path, index))) rest
                     else
                         parsePath (Some path) rest
@@ -383,7 +389,7 @@ module ProgramExtensions =
 
         { 
             UniformField.semantic = sem
-            UniformField.path = parsePath u.name
+            UniformField.path = parsePath u.index u.name
             UniformField.offset = u.offset
             arrayStride = u.arrayStride
             UniformField.uniformType = u.uniformType

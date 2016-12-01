@@ -154,8 +154,49 @@ let main argv =
     
 
 
+
     let w = app.CreateSimpleRenderWindow()
     //w.Size <- V2i(1280, 1024)
+
+    let bs =
+        BackendSurface("""#version 410
+
+            uniform sampler2D samplers[4];
+
+            #ifdef Vertex
+
+            layout(location = 0) in vec4 pos;
+            layout(location = 0) out vec2 tc;
+            void VS() 
+            {
+                gl_Position = pos;
+                tc = pos.xy;
+            }
+
+            #endif
+
+            #ifdef Pixel 
+
+            layout(location = 0) in vec2 tc;
+            layout(location = 0) out vec4 ColorsOut;
+            void PS() 
+            {
+                vec4 res;
+                for(int i = 0; i < 4; i++)
+                {
+                    res += texture(samplers[i], tc);
+                }
+
+                ColorsOut = res / 4.0;
+            }
+
+            #endif
+
+        
+        """, Dictionary.ofList [ShaderStage.Vertex, "VS"; ShaderStage.Pixel, "PS"])
+
+    let test = app.Runtime.PrepareSurface(w.FramebufferSignature, bs)
+    Environment.Exit 0
 
     // initialize a viewport (small part of the world currently)
     let viewportOrigin, viewportSize = 
