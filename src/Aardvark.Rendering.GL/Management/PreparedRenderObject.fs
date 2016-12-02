@@ -389,36 +389,27 @@ type ResourceManagerExtensions private() =
             textureUniforms
                 |> List.choose (fun uniform ->
                     let sem = Sym.ofString uniform.semantic
-                    let tex = rj.Uniforms.TryGetUniform(rj.AttributeScope, sem)
 
-                    match tex with
-                        | Some value ->
-
-                            let shaderSampler =
-                                match prog.SamplerStates.TryGetValue (Symbol.Create uniform.name) with
-                                    | (true, sampler) -> sampler
-                                    | _ -> 
-                                        match prog.SamplerStates.TryGetValue (Symbol.Create uniform.semantic) with
-                                            | (true, sampler) -> sampler
-                                            | _ -> 
-                                                match uniform.samplerState with
-                                                    | Some sam ->
-                                                        match prog.SamplerStates.TryGetValue (Symbol.Create sam) with
-                                                            | (true, sampler) -> sampler
-                                                            | _ -> SamplerStateDescription()
-                                                    | None ->
-                                                        SamplerStateDescription()
-
+                    match rj.Uniforms.TryGetUniform(rj.AttributeScope, sem) with
+                        | Some tex ->
+                            let samplerState = 
+                                match uniform.samplerState with
+                                    | Some samplerState -> 
+                                        samplerState
+                                    | None -> 
+                                        Log.warn "could not get samplerstate for uniform %A" uniform
+                                        SamplerStateDescription()
+        
                             let sampler =
                                 match samplerModifier with
                                     | Some modifier -> 
-                                        modifier |> Mod.map (fun f -> f sem shaderSampler)
+                                        modifier |> Mod.map (fun f -> f sem samplerState)
                                     | None -> 
-                                        Mod.constant shaderSampler
+                                        Mod.constant samplerState
 
                             let s = x.CreateSampler(sampler)
 
-                            match value with
+                            match tex with
                                 | :? IMod<ITexture> as value ->
                                     let t = x.CreateTexture(value)
                                     lastTextureSlot := uniform.slot
@@ -430,7 +421,7 @@ type ResourceManagerExtensions private() =
                                     Some (uniform.slot, (t, s))
 
                                 | _ ->
-                                    Log.warn "unexpected texture type %s: %A" uniform.semantic value
+                                    Log.warn "unexpected texture type %s: %A" uniform.semantic tex
                                     None
                         | _ ->
                             Log.warn "texture %s not found" uniform.semantic

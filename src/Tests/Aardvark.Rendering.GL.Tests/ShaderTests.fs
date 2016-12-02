@@ -72,7 +72,7 @@ module ShaderTests =
         inputs |> List.sortBy fst |> should equal ["v2", typeof<V2f>; "v3", typeof<V3f>; "v4", typeof<V4f>]
         outputs |> List.sortBy fst |> should equal ["color", typeof<V4f>]
 
-        prep.SamplerStates.Count |> should equal 0
+        prep.Samplers |> List.length |> should equal 0
         prep.UniformGetters.Count |> should equal 0
 
 

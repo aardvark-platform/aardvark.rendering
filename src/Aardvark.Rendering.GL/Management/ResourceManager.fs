@@ -332,7 +332,7 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>
     let viewCache = ResourceCache<UniformBufferView>(None, None)
     let rw = new ReaderWriterLockSlim()
 
-    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<obj>) : IResource<UniformBufferView> =
+    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView> =
         let values =
             fields 
             |> List.map (fun f ->
@@ -341,7 +341,7 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>
                     | Some v -> sem, v
                     | None -> 
                         match additional.TryGetValue sem with
-                            | (true, (:? IMod as m)) -> sem, m
+                            | (true, m) -> sem, m
                             | _ -> failwithf "[GL] could not get uniform: %A" f
             )
 

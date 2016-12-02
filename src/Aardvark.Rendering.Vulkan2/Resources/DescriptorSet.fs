@@ -15,11 +15,11 @@ open Microsoft.FSharp.NativeInterop
 
 type Descriptor =
     | UniformBuffer of int * UniformBuffer
-    | CombinedImageSampler of int * ImageView * Sampler
+    | CombinedImageSampler of int * array<Option<ImageView * Sampler>>
 
 type AdaptiveDescriptor =
     | AdaptiveUniformBuffer of int * UniformBuffer
-    | AdaptiveCombinedImageSampler of int * IResource<ImageView> * IResource<Sampler>
+    | AdaptiveCombinedImageSampler of int * array<Option<IResource<ImageView> * IResource<Sampler>>>
 
 type DescriptorSet =
     class
@@ -62,13 +62,13 @@ module DescriptorSet =
     let update (descriptors : array<Descriptor>) (set : DescriptorSet) (pool : DescriptorPool) =
         let device = pool.Device
         let layout = set.Layout
-        let cnt = descriptors.Length
+        let cnt = descriptors |> Array.sumBy (function CombinedImageSampler(_, arr) -> arr.Length | _ -> 1)
         let mutable bufferInfos = NativePtr.stackalloc cnt
         let mutable imageInfos = NativePtr.stackalloc cnt
 
         let writes =
             descriptors
-                |> Array.map (fun desc ->
+                |> Array.collect (fun desc ->
                     match desc with
                         | UniformBuffer (binding, ub) ->
                             let info = 
@@ -82,35 +82,45 @@ module DescriptorSet =
                             let ptr = bufferInfos
                             bufferInfos <- NativePtr.step 1 bufferInfos
 
-                            VkWriteDescriptorSet(
-                                VkStructureType.WriteDescriptorSet, 0n,
-                                set.Handle,
-                                uint32 binding,
-                                0u, 1u, VkDescriptorType.UniformBuffer,
-                                NativePtr.zero,
-                                ptr,
-                                NativePtr.zero
-                            )
-                        | CombinedImageSampler(binding, view, sam) ->
-                            let info =
-                                VkDescriptorImageInfo(
-                                    sam.Handle,
-                                    view.Handle,
-                                    view.Image.Layout
+                            [|
+                                VkWriteDescriptorSet(
+                                    VkStructureType.WriteDescriptorSet, 0n,
+                                    set.Handle,
+                                    uint32 binding,
+                                    0u, 1u, VkDescriptorType.UniformBuffer,
+                                    NativePtr.zero,
+                                    ptr,
+                                    NativePtr.zero
                                 )
+                            |]
+                        | CombinedImageSampler(binding, arr) ->
+                            arr |> Array.choosei (fun i vs ->
+                                match vs with
+                                    | Some(view, sam) -> 
+                                        let info =
+                                            VkDescriptorImageInfo(
+                                                sam.Handle,
+                                                view.Handle,
+                                                view.Image.Layout
+                                            )
 
-                            NativePtr.write imageInfos info
-                            let ptr = imageInfos
-                            imageInfos <- NativePtr.step 1 imageInfos
+                                        NativePtr.write imageInfos info
+                                        let ptr = imageInfos
+                                        imageInfos <- NativePtr.step 1 imageInfos
 
-                            VkWriteDescriptorSet(
-                                VkStructureType.WriteDescriptorSet, 0n,
-                                set.Handle,
-                                uint32 binding,
-                                0u, 1u, VkDescriptorType.CombinedImageSampler,
-                                ptr,
-                                NativePtr.zero,
-                                NativePtr.zero
+                                        let write = 
+                                            VkWriteDescriptorSet(
+                                                VkStructureType.WriteDescriptorSet, 0n,
+                                                set.Handle,
+                                                uint32 binding,
+                                                uint32 i, 1u, VkDescriptorType.CombinedImageSampler,
+                                                ptr,
+                                                NativePtr.zero,
+                                                NativePtr.zero
+                                            )
+                                        Some write
+                                    | _ ->
+                                        None
                             )
 
                    )

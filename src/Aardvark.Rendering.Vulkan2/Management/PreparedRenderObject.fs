@@ -123,15 +123,6 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-module private Array =
-    let choosei (f : int -> 'a -> Option<'b>) (a : 'a[]) =
-        let res = System.Collections.Generic.List<'b>()
-        for i in 0 .. a.Length - 1 do
-            match f i a.[i] with
-                | Some v -> res.Add v
-                | None -> ()
-
-        res.ToArray()
 
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
@@ -152,32 +143,49 @@ type DevicePreparedRenderObjectExtensions private() =
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer.Handle.GetValue()) |> Some
 
                             | ImageParameter img ->
-                                let name = Symbol.Create img.name
-
-                                let semantic =
-                                    match prog.Surface.SemanticMap.TryGetValue name with
-                                        | (true, sem) -> sem
-                                        | _ -> name   
-
-                                let samplerState = 
-                                    match prog.Surface.SamplerStates.TryGetValue name with
-                                        | (true, sam) -> sam
-                                        | _ -> 
-                                            Log.warn "could not get sampler for texture: %A" name
-                                            SamplerStateDescription()     
-  
-                                match ro.Uniforms.TryGetUniform(Ag.emptyScope, semantic) with
-                                    | Some (:? IMod<ITexture> as tex) ->
-
-                                        let tex = this.CreateImage(tex)
-                                        let view = this.CreateImageView(tex)
-                                        let sam = this.CreateSampler(Mod.constant samplerState)
-
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler (i, view, sam) |> Some
-
-                                    | _ ->
-                                        Log.warn "could not find texture: %A" semantic
+                                match img.description with
+                                    | [] ->
+                                        Log.warn "could not get sampler information for: %A" img
                                         None
+
+                                    | descriptions ->
+                                        let viewSam = 
+                                            descriptions |> List.map (fun desc -> 
+                                                let textureName = desc.textureName
+                                                let samplerState = desc.samplerState
+                                                match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                                | Some (:? IMod<ITexture> as tex) ->
+
+                                                    let tex = this.CreateImage(tex)
+                                                    let view = this.CreateImageView(tex)
+                                                    let sam = this.CreateSampler(Mod.constant samplerState)
+
+                                                    Some(view, sam)
+
+                                                | _ ->
+                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
+                                                    None
+                                            )
+
+                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
+//                                        descriptions |> List.choosei (fun ai desc -> 
+//                                            let textureName = desc.textureName
+//                                            let samplerState = desc.samplerState
+//
+//                                            match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+//                                                | Some (:? IMod<ITexture> as tex) ->
+//
+//                                                    let tex = this.CreateImage(tex)
+//                                                    let view = this.CreateImageView(tex)
+//                                                    let sam = this.CreateSampler(Mod.constant samplerState)
+//
+//                                                    AdaptiveDescriptor.AdaptiveCombinedImageSampler (i + ai, view, sam) |> Some
+//
+//                                                | _ ->
+//                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
+//                                                    None
+//                                        )
+                                
                     )
 
                 this.CreateDescriptorSet(ds, descriptors)

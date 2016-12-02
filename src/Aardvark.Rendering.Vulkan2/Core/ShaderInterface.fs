@@ -578,6 +578,8 @@ type ShaderTextureInfo =
         set             : int
         binding         : int
         name            : string
+        count           : int
+        description     : list<SamplerDescription>
         resultType      : PrimitiveType
         dimension       : TextureDimension 
         isDepth         : Option<bool>
@@ -691,6 +693,24 @@ module ShaderUniformParameter =
                             set             = set
                             binding         = binding
                             name            = p.paramName
+                            count           = 1
+                            description     = []
+                            resultType      = PrimitiveType.ofShaderType resultType
+                            dimension       = Dim.toTextureDimension dim
+                            isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
+                            isArray         = isArray
+                            isMultisampled  = (if isMS = 0 then false else true)
+                            isSampled       = isSampled
+                            format          = ImageFormat.toTextureFormat fmt
+                        }
+
+                    | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
+                        ImageParameter {
+                            set             = set
+                            binding         = binding
+                            name            = p.paramName
+                            count           = len
+                            description     = []
                             resultType      = PrimitiveType.ofShaderType resultType
                             dimension       = Dim.toTextureDimension dim
                             isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
@@ -717,7 +737,7 @@ module ShaderUniformParameter =
                                 size = uniformType.size
                                 fields = [ { name = p.paramName; fieldType = uniformType; offset = 0 } ] 
                             }
-
+                        
                         UniformBlockParameter {
                             set         = set
                             binding     = binding
@@ -899,20 +919,29 @@ module private ShaderInfo =
         let functions               = Dict.empty
         let structs                 = HashSet.empty
         let callers                 = Dict.empty
+        let constants               = Dict.empty
         let mutable currentFunction = None
 
         let getProps e = functions.GetOrCreate(e, fun _ -> FunctionProperties.Empty)
 
+        
+
         // process the instructions maintaining all needed information
         for i in instructions do
             match i with
+
+                | OpConstant(t,r,v) ->
+                    match types.[t] with
+                        | Int(32,_) ->  constants.[r] <- int v.[0]
+                        | _ -> ()
+
                 | OpTypeVoid r              -> types.[r] <- Void
                 | OpTypeBool r              -> types.[r] <- Bool
                 | OpTypeInt (r, w, s)       -> types.[r] <- Int(int w, s = 1u)
                 | OpTypeFloat (r, w)        -> types.[r] <- Float(int w)
                 | OpTypeVector (r, c, d)    -> types.[r] <- Vector(types.[c], int d)
                 | OpTypeMatrix (r, c, d)    -> types.[r] <- Matrix(types.[c], int d)
-                | OpTypeArray (r, e, l)     -> types.[r] <- Array(types.[e], int l)
+                | OpTypeArray (r, e, l)     -> types.[r] <- Array(types.[e], constants.[l])
                 | OpTypeSampler r           -> types.[r] <- Sampler
                 | OpTypeSampledImage (r,t)  -> types.[r] <- SampledImage(types.[t])
                 | OpTypePointer (r, c, t)   -> types.[r] <- Ptr(c, types.[t])
@@ -1157,12 +1186,8 @@ module private ShaderInfo =
     let ofModule (m : Module) =
         ofInstructions m.instructions
 
-    let ofBinary (code : uint32[]) =
-        let arr : byte[] = Array.zeroCreate (4 * code.Length)
-        let gc = GCHandle.Alloc(code, GCHandleType.Pinned)
-        try Marshal.Copy(gc.AddrOfPinnedObject(), arr, 0, arr.Length)
-        finally gc.Free()
-        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(arr))
+    let ofBinary (code : byte[]) =
+        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(code))
         reader 
             |> Serializer.read
             |> ofModule
@@ -1172,3 +1197,13 @@ module private ShaderInfo =
         reader 
             |> Serializer.read
             |> ofModule
+
+
+    let resolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) (info : ShaderInfo) =
+        { info with
+            textures = info.textures |> List.map (fun t ->
+                match resolve t with
+                    | [] -> t
+                    | sampler -> { t with description = sampler }
+            )
+        }

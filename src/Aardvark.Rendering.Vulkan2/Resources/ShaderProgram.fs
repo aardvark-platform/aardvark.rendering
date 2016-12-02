@@ -74,8 +74,6 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
             )
         )
 
-    let uniformValues = original.Uniforms |> SymDict.map (fun _ v -> v :> obj)
-    
     member x.Device = device
     member x.RenderPass = renderPass
     member x.Shaders = shaders
@@ -88,7 +86,7 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
 
     member x.Surface = original
     member x.UniformGetters = original.Uniforms
-    member x.SamplerStates = original.SamplerStates
+    member x.Samplers = original.Samplers
 
     member x.HasTessellation = Option.isSome tessInfo
     member x.HasDiscard = fragInfo.discard
@@ -100,8 +98,8 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
         member x.Inputs = inputs |> List.map (fun p -> p.name, p.hostType)
         member x.Outputs = outputs |> List.map (fun p -> p.name, p.hostType)
         member x.Uniforms = failf "not implemented"
-        member x.SamplerStates = original.SamplerStates
-        member x.UniformGetters = uniformValues
+        member x.Samplers = original.Samplers |> Dictionary.toList |> List.map (fun ((a,b),c) -> (a,b,c))
+        member x.UniformGetters = original.Uniforms
 
     member x.Dispose() =
         for s in shaders do device.Delete(s.Module)
@@ -145,10 +143,10 @@ module ShaderProgram =
                             | _ -> failwithf "unsupported shader stage: %A" stage
 
                     let code = code.Replace(sprintf "%s(" entry, "main(")
-                    stage, versionRx.Replace(code, "#version 150\r\n" + (sprintf "#define %s\r\n" define))
+                    stage, versionRx.Replace(code, "#version 420 core\r\n" + (sprintf "#define %s\r\n" define))
                 )
 
-        printfn "%s" code
+        printfn "%s" (snd codes.[0])
 
         let shaders = Array.zeroCreate codes.Length
         let mutable program = Unchecked.defaultof<_>
@@ -166,12 +164,21 @@ module ShaderProgram =
         match GLSLang.GLSLang.tryCreateProgram shaders with
             | Success prog ->
                 try
+                    let tryGetSamplerDescription (info : ShaderTextureInfo) =
+                        List.init info.count (fun index ->
+                            match surface.Samplers.TryGetValue((info.name, index)) with
+                                | (true, sam) -> sam
+                                | _ -> 
+                                    Log.warn "[Vulkan] could not resolve sampler/texture for %s[%d]" info.name index
+                                    { textureName = Symbol.Create(info.name + string index); samplerState = SamplerStateDescription() }
+                        )
+
                     let shaders = 
                         codes |> Array.map (fun (stage,_) ->
                             match prog.TryGetSpirVForStage (ShaderModule.glslangStage stage) with
                                 | Some spirv ->
                                     let m = device.CreateShaderModule(stage, spirv)
-                                    m.[stage]
+                                    m.[stage].ResolveSamplerDescriptions tryGetSamplerDescription
                                 | _ ->
                                     failf "could not get spirv for stage: %A" stage
                         )

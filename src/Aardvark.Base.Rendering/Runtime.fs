@@ -14,12 +14,13 @@ type IStreamingTexture =
     abstract member ReadPixel : pos : V2i -> C4f
 
 
+type SamplerDescription = { textureName : Symbol; samplerState : SamplerStateDescription }
 
 type IBackendSurface =
     inherit ISurface
     abstract member Handle : obj
-    abstract member UniformGetters : SymbolDict<obj>
-    abstract member SamplerStates : SymbolDict<SamplerStateDescription>
+    abstract member UniformGetters : SymbolDict<IMod>
+    abstract member Samplers : list<string * int * SamplerDescription>
     abstract member Inputs : list<string * Type>
     abstract member Outputs : list<string * Type>
     abstract member Uniforms : list<string * Type>
@@ -161,17 +162,16 @@ type ShaderStage =
 
 
 
-type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, uniforms : SymbolDict<IMod>, samplerStates : SymbolDict<SamplerStateDescription>, semanticMap : SymbolDict<Symbol>, expectsRowMajorMatrices : bool) =
+type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, uniforms : SymbolDict<IMod>, samplers : Dictionary<string * int, SamplerDescription>, expectsRowMajorMatrices : bool) =
     interface ISurface
     member x.Code = code
     member x.EntryPoints = entryPoints
     member x.Uniforms = uniforms
-    member x.SamplerStates = samplerStates
-    member x.SemanticMap = semanticMap
+    member x.Samplers = samplers
     member x.ExpectsRowMajorMatrices = expectsRowMajorMatrices
-    new(code, entryPoints) = BackendSurface(code, entryPoints, SymDict.empty, SymDict.empty, SymDict.empty, false)
-    new(code, entryPoints, uniforms) = BackendSurface(code, entryPoints, uniforms, SymDict.empty, SymDict.empty, false)
-    new(code, entryPoints, uniforms, samplerStates) = BackendSurface(code, entryPoints, uniforms, samplerStates, SymDict.empty, false)
+    new(code, entryPoints) = BackendSurface(code, entryPoints, SymDict.empty, Dictionary.empty, false)
+    new(code, entryPoints, uniforms) = BackendSurface(code, entryPoints, uniforms, Dictionary.empty, false)
+    new(code, entryPoints, uniforms, samplers) = BackendSurface(code, entryPoints, uniforms, samplers, false)
 
 type IGeneratedSurface =
     inherit ISurface
