@@ -578,6 +578,8 @@ type ShaderTextureInfo =
         set             : int
         binding         : int
         name            : string
+        index           : int
+        description     : Option<SamplerDescription>
         resultType      : PrimitiveType
         dimension       : TextureDimension 
         isDepth         : Option<bool>
@@ -691,6 +693,8 @@ module ShaderUniformParameter =
                             set             = set
                             binding         = binding
                             name            = p.paramName
+                            index           = 0
+                            description     = None
                             resultType      = PrimitiveType.ofShaderType resultType
                             dimension       = Dim.toTextureDimension dim
                             isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
@@ -1157,12 +1161,8 @@ module private ShaderInfo =
     let ofModule (m : Module) =
         ofInstructions m.instructions
 
-    let ofBinary (code : uint32[]) =
-        let arr : byte[] = Array.zeroCreate (4 * code.Length)
-        let gc = GCHandle.Alloc(code, GCHandleType.Pinned)
-        try Marshal.Copy(gc.AddrOfPinnedObject(), arr, 0, arr.Length)
-        finally gc.Free()
-        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(arr))
+    let ofBinary (code : byte[]) =
+        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(code))
         reader 
             |> Serializer.read
             |> ofModule
@@ -1172,3 +1172,13 @@ module private ShaderInfo =
         reader 
             |> Serializer.read
             |> ofModule
+
+
+    let resolveSamplerDescriptions (resolve : ShaderTextureInfo -> Option<SamplerDescription>) (info : ShaderInfo) =
+        { info with
+            textures = info.textures |> List.map (fun t ->
+                match resolve t with
+                    | Some sampler -> { t with description = Some sampler }
+                    | None -> t
+            )
+        }

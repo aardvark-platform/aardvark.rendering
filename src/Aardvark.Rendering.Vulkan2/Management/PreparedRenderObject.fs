@@ -152,32 +152,27 @@ type DevicePreparedRenderObjectExtensions private() =
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer.Handle.GetValue()) |> Some
 
                             | ImageParameter img ->
-                                let name = Symbol.Create img.name
+                                match img.description with
+                                    | Some desc ->
+                                        let textureName = desc.textureName
+                                        let samplerState = desc.samplerState
 
-                                let semantic =
-                                    match prog.Surface.SemanticMap.TryGetValue name with
-                                        | (true, sem) -> sem
-                                        | _ -> name   
+                                        match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
+                                            | Some (:? IMod<ITexture> as tex) ->
 
-                                let samplerState = 
-                                    match prog.Surface.SamplerStates.TryGetValue name with
-                                        | (true, sam) -> sam
-                                        | _ -> 
-                                            Log.warn "could not get sampler for texture: %A" name
-                                            SamplerStateDescription()     
-  
-                                match ro.Uniforms.TryGetUniform(Ag.emptyScope, semantic) with
-                                    | Some (:? IMod<ITexture> as tex) ->
+                                                let tex = this.CreateImage(tex)
+                                                let view = this.CreateImageView(tex)
+                                                let sam = this.CreateSampler(Mod.constant samplerState)
 
-                                        let tex = this.CreateImage(tex)
-                                        let view = this.CreateImageView(tex)
-                                        let sam = this.CreateSampler(Mod.constant samplerState)
+                                                AdaptiveDescriptor.AdaptiveCombinedImageSampler (i, view, sam) |> Some
 
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler (i, view, sam) |> Some
-
-                                    | _ ->
-                                        Log.warn "could not find texture: %A" semantic
+                                            | _ ->
+                                                Log.warn "could not find texture: %A" textureName
+                                                None
+                                    | None ->
+                                        Log.warn "could not get sampler information for: %A" img
                                         None
+                                
                     )
 
                 this.CreateDescriptorSet(ds, descriptors)

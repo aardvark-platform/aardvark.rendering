@@ -22,27 +22,22 @@ module SurfaceCompilers =
     let compileBackendSurface (ctx : Context) (signature : IFramebufferSignature) (b : BackendSurface) =
         match ctx.TryCompileProgram(signature, b.ExpectsRowMajorMatrices, b.Code) with
             | Success s ->
-                let remapSemantic (sem : string) =
-                    match b.SemanticMap.TryGetValue (Sym.ofString sem) with
-                        | (true, sem) -> sem.ToString()
-                        | _ -> sem
-
-                    
-                let getSamplerState (sem : string) =
-                    match b.SamplerStates.ContainsKey (Sym.ofString sem) with
-                        | true -> Some sem
+                let tryGetSamplerDescription (samplerName : string) (index : int) =
+                    match b.Samplers.TryGetValue ((samplerName, index)) with
+                        | (true, desc) -> Some desc
                         | _ -> None
 
-                let ub = s.UniformBlocks |> List.map (fun b -> { b with fields = b.fields |> List.map (fun f -> { f with semantic = remapSemantic f.semantic }) })
-                let u = s.Uniforms |> List.map (fun f -> let sem = remapSemantic f.semantic in { f with semantic = sem; samplerState = getSamplerState sem})
+                let ub = s.UniformBlocks // |> List.map (fun b -> { b with fields = b.fields |> List.map (fun f -> { f with semantic = remapSemantic f.semantic }) })
+                let topLevelUniforms = 
+                    s.Uniforms |> List.map (fun f -> 
+                        match tryGetSamplerDescription f.name f.index with
+                            | Some sampler -> 
+                                { f with semantic = string sampler.textureName; samplerState = Some sampler.samplerState }
+                            | None -> 
+                                f
+                    )
 
-                let uniformGetters =
-                    b.Uniforms 
-                        |> SymDict.toSeq 
-                        |> Seq.map (fun (k,v) -> (k, v :> obj)) 
-                        |> SymDict.ofSeq
-
-                Success { s with UniformBlocks = ub; Uniforms = u; SamplerStates = b.SamplerStates; UniformGetters = uniformGetters }
+                Success { s with UniformBlocks = ub; Uniforms = topLevelUniforms; UniformGetters = b.Uniforms }
 
             | Error e -> Error e
 

@@ -41,6 +41,9 @@ and Shader =
         val mutable public Stage : ShaderStage
         val mutable public Interface : ShaderInfo
 
+        member x.ResolveSamplerDescriptions (resolve : ShaderTextureInfo -> Option<SamplerDescription>) =
+            Shader(x.Module, x.Stage, x.Interface |> ShaderInfo.resolveSamplerDescriptions resolve)
+
         override x.GetHashCode() = HashCode.Combine(x.Module.GetHashCode(), x.Stage.GetHashCode())
         override x.Equals o =
             match o with
@@ -62,14 +65,14 @@ module ShaderModule =
             ShaderStage.Pixel, GLSLang.ShaderStage.Fragment
         ]
 
-    let private createRaw (binary : uint32[]) (device : Device) =
+    let private createRaw (binary : byte[]) (device : Device) =
         binary |> NativePtr.withA (fun pBinary ->
             let mutable info =
                 VkShaderModuleCreateInfo(
                     VkStructureType.ShaderModuleCreateInfo, 0n, 
                     VkShaderModuleCreateFlags.MinValue,
-                    uint64 (4L * binary.LongLength),
-                    pBinary
+                    uint64 binary.LongLength,
+                    NativePtr.cast pBinary
                 )
 
             let mutable handle = VkShaderModule.Null
@@ -79,7 +82,7 @@ module ShaderModule =
             handle
         )
 
-    let ofBinary (stage : ShaderStage) (binary : uint32[]) (device : Device) =
+    let ofBinary (stage : ShaderStage) (binary : byte[]) (device : Device) =
         let iface = ShaderInfo.ofBinary binary
         let handle = device |> createRaw binary
         let result = ShaderModule(device, handle, stage, iface)
@@ -117,7 +120,7 @@ type ContextShaderModuleExtensions private() =
         this |> ShaderModule.ofGLSL stage glsl
 
     [<Extension>]
-    static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : uint32[]) =
+    static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[]) =
         this |> ShaderModule.ofBinary stage spirv
         
     [<Extension>]

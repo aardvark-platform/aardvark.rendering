@@ -4,9 +4,11 @@
 
 open System
 open System.Threading
+open System.Collections.Generic
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
+open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
 open OpenTK
 open OpenTK.Platform
@@ -24,7 +26,7 @@ module private ShaderProgramCounters =
         Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
 
 
-type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<string>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
+type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<SamplerStateDescription>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
     member x.Interface =
 
         let name =
@@ -33,7 +35,7 @@ type ActiveUniform = { slot : int; index : int; location : int; name : string; s
 
         match x.samplerState with
             | Some sam ->
-                sprintf "%A %s; // sampler: %s" x.uniformType name sam
+                sprintf "%A %s; // sampler: %A" x.uniformType name sam
             | None ->
                 sprintf "%A %s;" x.uniformType name
                 
@@ -58,8 +60,7 @@ type Program =
        Shaders : list<Shader>
        UniformBlocks : list<UniformBlock>
        Uniforms : list<ActiveUniform>
-       UniformGetters : SymbolDict<obj>
-       SamplerStates : SymbolDict<SamplerStateDescription>
+       UniformGetters : SymbolDict<IMod>
        Inputs : list<ActiveAttribute>
        Outputs : list<ActiveAttribute>
        SupportedModes : Option<Set<IndexedGeometryMode>>
@@ -75,7 +76,12 @@ type Program =
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
         member x.UniformGetters = x.UniformGetters
-        member x.SamplerStates = x.SamplerStates
+        member x.Samplers = 
+            x.Uniforms |> List.choose (fun u ->
+                match u.uniformType, u.samplerState with
+                    | SamplerType, Some samplerState -> Some (u.name, u.index, { textureName = Symbol.Create u.semantic; samplerState = samplerState})
+                    | _ -> None
+            )
 
         member x.Inputs = 
             match x._inputs with
@@ -172,7 +178,7 @@ module ProgramReflector =
         ]
 
     let samplerHackRegex = System.Text.RegularExpressions.Regex("_samplerState[0-9]+(\[[0-9]+\])?$")
-
+    let arrayRx = System.Text.RegularExpressions.Regex @"^(?<name>[^\.\[\]]*)\[[0]\]$"
     let getActiveUniform (expectsRowMajorMatrices : bool) (p : int) (slot : int) =
         let mutable length = 0
         let mutable size = 0
@@ -193,11 +199,16 @@ module ProgramReflector =
 
         let location = GL.GetUniformLocation(p, name)
 
-        let semantic = samplerHackRegex.Replace(name,"")
-        if semantic <> name 
-        then Log.warn "replaced uniform semantic value (%s -> %s), this might be an error or due to usage of lins." name semantic
+        let newName = samplerHackRegex.Replace(name,"")
+        if newName <> name then 
+            Log.warn "replaced uniform semantic value (%s -> %s), this might be an error or due to usage of lins." name newName
 
-        { slot = slot; index = 0; location = location; name = name; semantic = semantic; samplerState = None; size = size; uniformType = uniformType; offset = -1; arrayStride = stride; isRowMajor = isRowMajor }
+        let newName = 
+            let m = arrayRx.Match newName
+            if m.Success then m.Groups.["name"].Value
+            else newName
+
+        { slot = slot; index = 0; location = location; name = newName; semantic = newName; samplerState = None; size = size; uniformType = uniformType; offset = -1; arrayStride = stride; isRowMajor = isRowMajor }
 
     let getActiveUniformBlocks (expectsRowMajorMatrices : bool) (p : int) =
         [
@@ -676,7 +687,6 @@ module ProgramExtensions =
                         UniformBlocks = ProgramReflector.getActiveUniformBlocks expectsRowMajorMatrices handle
                         Uniforms = ProgramReflector.getActiveUniforms expectsRowMajorMatrices handle firstTexture imageSlots
                         UniformGetters = SymDict.empty
-                        SamplerStates = SymDict.empty
                         Inputs = ProgramReflector.getActiveInputs handle
                         Outputs = outputs
                         SupportedModes = supported
