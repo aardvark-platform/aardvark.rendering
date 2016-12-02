@@ -578,8 +578,8 @@ type ShaderTextureInfo =
         set             : int
         binding         : int
         name            : string
-        index           : int
-        description     : Option<SamplerDescription>
+        count           : int
+        description     : list<SamplerDescription>
         resultType      : PrimitiveType
         dimension       : TextureDimension 
         isDepth         : Option<bool>
@@ -693,8 +693,24 @@ module ShaderUniformParameter =
                             set             = set
                             binding         = binding
                             name            = p.paramName
-                            index           = 0
-                            description     = None
+                            count           = 1
+                            description     = []
+                            resultType      = PrimitiveType.ofShaderType resultType
+                            dimension       = Dim.toTextureDimension dim
+                            isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
+                            isArray         = isArray
+                            isMultisampled  = (if isMS = 0 then false else true)
+                            isSampled       = isSampled
+                            format          = ImageFormat.toTextureFormat fmt
+                        }
+
+                    | ShaderType.Array((ShaderType.SampledImage(ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)) | ShaderType.Image(resultType,dim,isDepth,isArray,isMS,isSampled,fmt)), len) ->
+                        ImageParameter {
+                            set             = set
+                            binding         = binding
+                            name            = p.paramName
+                            count           = len
+                            description     = []
                             resultType      = PrimitiveType.ofShaderType resultType
                             dimension       = Dim.toTextureDimension dim
                             isDepth         = (match isDepth with | 0 -> Some false | 1 -> Some true | _ -> None)
@@ -721,7 +737,7 @@ module ShaderUniformParameter =
                                 size = uniformType.size
                                 fields = [ { name = p.paramName; fieldType = uniformType; offset = 0 } ] 
                             }
-
+                        
                         UniformBlockParameter {
                             set         = set
                             binding     = binding
@@ -903,20 +919,29 @@ module private ShaderInfo =
         let functions               = Dict.empty
         let structs                 = HashSet.empty
         let callers                 = Dict.empty
+        let constants               = Dict.empty
         let mutable currentFunction = None
 
         let getProps e = functions.GetOrCreate(e, fun _ -> FunctionProperties.Empty)
 
+        
+
         // process the instructions maintaining all needed information
         for i in instructions do
             match i with
+
+                | OpConstant(t,r,v) ->
+                    match types.[t] with
+                        | Int(32,_) ->  constants.[r] <- int v.[0]
+                        | _ -> ()
+
                 | OpTypeVoid r              -> types.[r] <- Void
                 | OpTypeBool r              -> types.[r] <- Bool
                 | OpTypeInt (r, w, s)       -> types.[r] <- Int(int w, s = 1u)
                 | OpTypeFloat (r, w)        -> types.[r] <- Float(int w)
                 | OpTypeVector (r, c, d)    -> types.[r] <- Vector(types.[c], int d)
                 | OpTypeMatrix (r, c, d)    -> types.[r] <- Matrix(types.[c], int d)
-                | OpTypeArray (r, e, l)     -> types.[r] <- Array(types.[e], int l)
+                | OpTypeArray (r, e, l)     -> types.[r] <- Array(types.[e], constants.[l])
                 | OpTypeSampler r           -> types.[r] <- Sampler
                 | OpTypeSampledImage (r,t)  -> types.[r] <- SampledImage(types.[t])
                 | OpTypePointer (r, c, t)   -> types.[r] <- Ptr(c, types.[t])
@@ -1174,11 +1199,11 @@ module private ShaderInfo =
             |> ofModule
 
 
-    let resolveSamplerDescriptions (resolve : ShaderTextureInfo -> Option<SamplerDescription>) (info : ShaderInfo) =
+    let resolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) (info : ShaderInfo) =
         { info with
             textures = info.textures |> List.map (fun t ->
                 match resolve t with
-                    | Some sampler -> { t with description = Some sampler }
-                    | None -> t
+                    | [] -> t
+                    | sampler -> { t with description = sampler }
             )
         }

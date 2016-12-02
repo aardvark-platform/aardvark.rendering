@@ -95,6 +95,39 @@ module BaseLibExtensions =
 
         let debug fmt = Printf.kprintf (fun str -> Report.Line(2, "[Vulkan] {0}", str)) fmt
 
+
+    module Array =
+        let choosei (f : int -> 'a -> Option<'b>) (a : 'a[]) =
+            let res = System.Collections.Generic.List<'b>()
+            for i in 0 .. a.Length - 1 do
+                match f i a.[i] with
+                    | Some v -> res.Add v
+                    | None -> ()
+
+            res.ToArray()
+
+        let collecti (f : int -> 'a -> list<'b>) (a : 'a[]) =
+            let mutable i = 0
+            let res = System.Collections.Generic.List<'b>()
+            for v in a do
+                res.AddRange(f i v)
+                i <- i + 1
+
+            res.ToArray()
+
+    module List =
+        let choosei (f : int -> 'a -> Option<'b>) (a : list<'a>) =
+            let res = System.Collections.Generic.List<'b>()
+            let mutable i = 0
+            for v in a do
+                match f i v with
+                    | Some v -> res.Add v
+                    | None -> ()
+                i <- i + 1
+
+            res |> CSharpList.toList
+
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module private Alignment = 
     let prev (align : int64) (v : int64) =

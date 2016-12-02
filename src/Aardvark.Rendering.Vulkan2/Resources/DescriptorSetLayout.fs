@@ -29,11 +29,16 @@ type DescriptorSetLayoutBinding =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayoutBinding =
     let create (descriptorType : VkDescriptorType) (stages : VkShaderStageFlags) (parameter : ShaderUniformParameter) (device : Device) =
+        let count = 
+            match parameter with
+                | ImageParameter p -> p.count
+                | _ -> 1
+
         let handle = 
             VkDescriptorSetLayoutBinding(
                 uint32 parameter.Binding,
                 descriptorType,
-                1u,
+                uint32 count,
                 stages,
                 NativePtr.zero
             )

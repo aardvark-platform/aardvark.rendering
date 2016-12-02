@@ -339,10 +339,18 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                                     | AdaptiveUniformBuffer(i, b) -> 
                                         Descriptor.UniformBuffer(i, b)
 
-                                    | AdaptiveCombinedImageSampler(i, v, s) ->
-                                        stats <- stats + v.Update(x)
-                                        stats <- stats + s.Update(x)
-                                        Descriptor.CombinedImageSampler(i, v.Handle.GetValue(), s.Handle.GetValue())
+                                    | AdaptiveCombinedImageSampler(i, viewSam) ->
+                                        let vs = Array.zeroCreate viewSam.Length
+                                        for i in 0 .. viewSam.Length - 1 do
+                                            match viewSam.[i] with
+                                                | Some(v,s) ->
+                                                    stats <- stats + v.Update(x)
+                                                    stats <- stats + s.Update(x)
+                                                    vs.[i] <- Some (v.Handle.GetValue(), s.Handle.GetValue())
+                                                | _ ->
+                                                    vs.[i] <- None
+
+                                        Descriptor.CombinedImageSampler(i, vs)
                             )   
 
                         let changes = stats.ResourceDeltas.Total
@@ -358,11 +366,16 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
                         for d in descriptors do
                             match d with
-                                | AdaptiveCombinedImageSampler(_,i,s) ->
-                                    i.RemoveRef()
-                                    i.RemoveOutput x
-                                    s.RemoveRef()
-                                    s.RemoveOutput x
+                                | AdaptiveCombinedImageSampler(_,vs) ->
+                                    for vv in vs do
+                                        match vv with
+                                            | Some(i,s) -> 
+                                                i.RemoveRef()
+                                                i.RemoveOutput x
+                                                s.RemoveRef()
+                                                s.RemoveOutput x
+                                            | None ->
+                                                ()
                                 | _ ->
                                     ()
 

@@ -165,9 +165,13 @@ module ShaderProgram =
             | Success prog ->
                 try
                     let tryGetSamplerDescription (info : ShaderTextureInfo) =
-                        match surface.Samplers.TryGetValue((info.name, info.index)) with
-                            | (true, sam) -> Some sam
-                            | _ -> None
+                        List.init info.count (fun index ->
+                            match surface.Samplers.TryGetValue((info.name, index)) with
+                                | (true, sam) -> sam
+                                | _ -> 
+                                    Log.warn "[Vulkan] could not resolve sampler/texture for %s[%d]" info.name index
+                                    { textureName = Symbol.Create(info.name + string index); samplerState = SamplerStateDescription() }
+                        )
 
                     let shaders = 
                         codes |> Array.map (fun (stage,_) ->

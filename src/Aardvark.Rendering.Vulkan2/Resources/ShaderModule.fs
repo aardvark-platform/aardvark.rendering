@@ -41,7 +41,7 @@ and Shader =
         val mutable public Stage : ShaderStage
         val mutable public Interface : ShaderInfo
 
-        member x.ResolveSamplerDescriptions (resolve : ShaderTextureInfo -> Option<SamplerDescription>) =
+        member x.ResolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) =
             Shader(x.Module, x.Stage, x.Interface |> ShaderInfo.resolveSamplerDescriptions resolve)
 
         override x.GetHashCode() = HashCode.Combine(x.Module.GetHashCode(), x.Stage.GetHashCode())
