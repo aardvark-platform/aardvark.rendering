@@ -41,3 +41,4 @@ src/GLVM/*.so
 /lib/Native/Aardvark.Rendering.Vulkan2/windows/x86/*.ilk
 /src/vkvm/.vs/VKVM/v14/*.suo
 /src/vkvm/*.so
+.ionide.debug

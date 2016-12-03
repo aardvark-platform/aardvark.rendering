@@ -30,7 +30,7 @@ static void* getProc(const char* name)
 	if(ptr == nullptr)
 		printf("could not import function %s\n", name);
 
-	printf("function address for %s: %lX\n", name, (unsigned long int)ptr);
+	//printf("function address for %s: %lX\n", name, (unsigned long int)ptr);
 
 	return ptr;
 }
