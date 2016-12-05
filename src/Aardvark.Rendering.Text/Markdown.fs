@@ -17,11 +17,14 @@ type TextStyle =
 
 type MarkdownConfig =
     {
+
         color               : C4b
         lineSpacing         : float
         characterSpacing    : float
         headingStyles       : Map<int, TextStyle>
-
+        
+        paragraphFont       : string
+        codeFont            : string
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -38,6 +41,8 @@ module MarkdownConfig =
             color                   = C4b(51uy, 51uy, 51uy, 255uy)
             lineSpacing             = 1.5
             characterSpacing        = 1.0
+            paragraphFont           = "Arial"
+            codeFont                = "Consolas"
 
             headingStyles =
                 Map.ofList [
@@ -48,6 +53,7 @@ module MarkdownConfig =
                     5, { TextStyle.empty with scale = V2d.II * 1.2; strong = true }
                     6, { TextStyle.empty with scale = V2d.II * 1.1; strong = true }
                 ]  
+
         }
 
     let dark =
@@ -60,8 +66,32 @@ module Markdown =
     open Aardvark.Base.Monads
     open Aardvark.Base.Monads.StateOld
 
+    type FontCollection =
+        {
+            regular     : Font
+            bold        : Font
+            italic      : Font
+            boldItalic  : Font
+        }
+
+    let private fontCollectionCache = System.Collections.Concurrent.ConcurrentDictionary<string, FontCollection>()
+
+    let getFontCollection(name : string) =
+        fontCollectionCache.GetOrAdd(name, fun name ->
+            {
+                regular     = Font.create name FontStyle.Regular
+                bold        = Font.create name FontStyle.Bold
+                italic      = Font.create name FontStyle.Italic
+                boldItalic  = Font.create name FontStyle.BoldItalic
+            }
+        )
+
+
     type LayoutState = 
         {
+            paragraph   : FontCollection
+            code        : FontCollection
+
             x           : float
             y           : float
             indent      : float
@@ -80,6 +110,9 @@ module Markdown =
 
         static member empty = 
             { 
+                paragraph = getFontCollection "Arial"
+                code      = getFontCollection "Consolas"
+
                 x = 0.0
                 y = 0.0
                 indent = 0.0
@@ -281,34 +314,19 @@ module Markdown =
                     }
                 )
 
-            module Paragraph = 
-                let fontName        = "Arial"
-                let regular         = new Font(fontName, FontStyle.Regular)
-                let bold            = new Font(fontName, FontStyle.Bold)
-                let italic          = new Font(fontName, FontStyle.Italic)
-                let boldItalic      = new Font(fontName, FontStyle.Italic ||| FontStyle.Bold)
-
-            module Code = 
-                let fontName        = "Consolas"
-                let regular         = new Font(fontName, FontStyle.Regular)
-                let bold            = new Font(fontName, FontStyle.Bold)
-                let italic          = new Font(fontName, FontStyle.Italic)
-                let boldItalic      = new Font(fontName, FontStyle.Italic ||| FontStyle.Bold)
-
-
             let getFont =
                 state {
                     let! s = getState
                     let ts = s.textState
                     match ts.strong, ts.emph, ts.code with
-                        | false,    false,      false   -> return Paragraph.regular
-                        | false,    false,      true    -> return Code.regular
-                        | false,    true,       false   -> return Paragraph.italic
-                        | false,    true,       true    -> return Code.italic
-                        | true,     false,      false   -> return Paragraph.bold
-                        | true,     false,      true    -> return Code.bold
-                        | true,     true,       false   -> return Paragraph.boldItalic
-                        | true,     true,       true    -> return Code.boldItalic
+                        | false,    false,      false   -> return s.paragraph.bold
+                        | false,    false,      true    -> return s.code.regular
+                        | false,    true,       false   -> return s.paragraph.italic
+                        | false,    true,       true    -> return s.code.italic
+                        | true,     false,      false   -> return s.paragraph.bold
+                        | true,     false,      true    -> return s.code.bold
+                        | true,     true,       false   -> return s.paragraph.boldItalic
+                        | true,     true,       true    -> return s.code.boldItalic
 
                 }
 
@@ -425,6 +443,8 @@ module Markdown =
             let ((), s) = 
                 run.runState {
                     LayoutState.empty with
+                        paragraph   = getFontCollection config.paragraphFont
+                        code        = getFontCollection config.codeFont
                         color       = config.color 
                         config      = config
                 }

@@ -270,16 +270,22 @@ let main argv =
 
 
     let mode = Mod.init FillMode.Fill
-    let font = new Font("Comic Sans")
+    let font = Font "Comic Sans"
 
+
+    let config = 
+        { MarkdownConfig.light with 
+            codeFont = "Kunstler Script"
+            paragraphFont = "Kunstler Script" 
+        }
 
     let label1 =
-        Sg.markdown MarkdownConfig.light (Mod.constant md)
+        Sg.markdown config (Mod.constant md)
             |> Sg.scale 0.1
             |> Sg.billboard
 
 
-    let f = new Font("Consolas")
+    let f = Font "Consolas"
     let label2 =
         Sg.text f C4b.Green (Mod.constant message)
         //Sg.markdown MarkdownConfig.light (Mod.constant message)
