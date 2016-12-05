@@ -278,8 +278,11 @@ let main argv =
             |> Sg.scale 0.1
             |> Sg.billboard
 
+
+    let f = new Font("Consolas")
     let label2 =
-        Sg.markdown MarkdownConfig.light (Mod.constant message)
+        Sg.text f C4b.Green (Mod.constant message)
+        //Sg.markdown MarkdownConfig.light (Mod.constant message)
             |> Sg.scale 0.1
             |> Sg.billboard
             |> Sg.translate 5.0 0.0 0.0

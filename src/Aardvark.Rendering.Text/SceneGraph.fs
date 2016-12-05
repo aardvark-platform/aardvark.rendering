@@ -209,10 +209,10 @@ module Sg =
         sg |> Mod.constant |> BillboardApplicator :> ISg
 
     let shape (content : IMod<ShapeList>) =
-        Shape(content)
+        Shape(content) :> ISg
 
     let shapeWithBackground (color : C4b) (content : IMod<ShapeList>) =
-        Shape(color, content)
+        Shape(color, content) :> ISg
 
     let text (f : Font) (color : C4b) (content : IMod<string>) =
         content 
