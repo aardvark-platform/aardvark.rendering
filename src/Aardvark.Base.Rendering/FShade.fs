@@ -378,7 +378,22 @@ type FShadeRuntimeExtensions private() =
         )
 
     [<Extension>]
+    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, [<ParamArray>] effects : array<FShadeEffect>) =
+        let l = List.ofArray(effects)
+        this.PrepareSurface(
+            signature,
+            toSurface l
+        )
+
+    [<Extension>]
     static member PrepareEffect (this : IRuntime, l : list<FShadeEffect>) =
+        this.PrepareSurface(
+            toSurface l
+        )
+
+    [<Extension>]
+    static member PrepareEffect (this : IRuntime, [<ParamArray>] effects : array<FShadeEffect>) =
+        let l = List.ofArray(effects)
         this.PrepareSurface(
             toSurface l
         )
