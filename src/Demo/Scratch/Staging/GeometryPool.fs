@@ -750,6 +750,80 @@ module ``Pool Tests`` =
                 ]
         sg
 
+    [<Demo("Pooling Test (Lazy)")>]
+    let sg2 ()=
+        let r = App.Runtime
+        let pool =
+            r.CreateManagedPool {
+                indexType = typeof<int>
+                vertexBufferTypes = 
+                    Map.ofList [ 
+                        DefaultSemantic.Positions, typeof<V3f>
+                        DefaultSemantic.Normals, typeof<V3f> 
+                    ]
+                uniformTypes = 
+                    Map.ofList [ 
+                        Sem.Hugo, typeof<M44f> 
+                    ]
+            }
+
+        let rnd = Random()
+
+        let geometries = CSet.empty
+    
+        let addRandom() = 
+            let pos = V3d( 
+                        rnd.NextDouble() * 10.0 - 5.0, 
+                        rnd.NextDouble() * 10.0 - 5.0,
+                        rnd.NextDouble() * 10.0 - 5.0 )
+            let trafo = Trafo3d.Scale 0.1 * Trafo3d.Translation pos
+            let ig = Primitives.unitCone (rnd.Next(10, 2000))
+            geometries.Add (ig, trafo) |> ignore
+
+        for i in 0 .. 10 do
+            addRandom()
+
+        let initial = geometries.Count
+
+        App.Keyboard.DownWithRepeats.Values.Add(fun k ->
+                    
+            if k = Keys.R then
+                transact (fun () ->
+                    geometries.Clear()
+                )
+
+            if k = Keys.Z then
+                transact (fun () ->
+                    
+                    Report.Line("adding new random stuff: Seed={0}", rnd.Next())
+             
+                    for i in 0 .. 1 do
+                        addRandom()
+                )
+
+                Report.Line("new geometry count: {0}", geometries.Count)
+                
+        )
+
+        let geometriesLazy = 
+            geometries |> ASet.map (fun (ig, trafo) -> ig
+                                                        |> AdaptiveGeometry.ofIndexedGeometry [Sem.Hugo, Mod.constant trafo :> IMod ]
+                                                        |> pool.Add)
+
+        // initial evaluation
+        ASet.toArray geometriesLazy |> ignore
+
+        let sg = 
+            Sg.PoolNode(pool, geometriesLazy, Mod.constant IndexedGeometryMode.TriangleList)
+                |> Sg.uniform "LightLocation" (Mod.constant (10.0 * V3d.III))
+                |> Sg.effect [
+                    hugoShade |> toEffect
+                    DefaultSurfaces.trafo |> toEffect
+                    DefaultSurfaces.constantColor C4f.Red |> toEffect
+                    DefaultSurfaces.simpleLighting |> toEffect
+                ]
+        sg
+
 
 
 module Pooling =
