@@ -73,7 +73,9 @@ type Interactive private() =
 //            )
 
 
-    static member Window = window :> IRenderWindow
+    static member Window =
+        initWindow false
+        window :> IRenderWindow
 
     static member Samples 
         with get () = samples
