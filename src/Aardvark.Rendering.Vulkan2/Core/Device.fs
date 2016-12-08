@@ -222,7 +222,6 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
             new DeviceHeap(this, t, t.heap)
         )
 
-    let deviceMemory = memories.[physical.DeviceMemory.index]
     let hostMemory = memories.[physical.HostMemory.index]
 
     let currentResourceToken = new ThreadLocal<ref<Option<DeviceToken>>>(fun _ -> ref None)
@@ -288,7 +287,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member x.IsDisposed = instance.IsDisposed || isDisposed <> 0
 
     member x.Memories = memories
-    member x.DeviceMemory = deviceMemory
+
     member x.HostMemory = hostMemory
 
     member x.OnDispose = onDispose.Publish :> IObservable<_>
@@ -1252,6 +1251,26 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
 [<AbstractClass; Sealed; Extension>]
 type DeviceExtensions private() =
 
+    static let rec tryFindMemory (bits : uint32) (i : int)  (memories : DeviceHeap[]) =
+        if i >= memories.Length then
+            None
+        else
+            let mem = memories.[i]
+            if mem.Mask &&& bits <> 0u then
+                Some mem
+            else
+                tryFindMemory bits (i + 1) memories
+
+    static let rec tryFindDeviceMemory (bits : uint32) (i : int)  (memories : DeviceHeap[]) =
+        if i >= memories.Length then
+            None
+        else
+            let mem = memories.[i]
+            if mem.Mask &&& bits <> 0u && mem.Info.flags &&& MemoryFlags.DeviceLocal <> MemoryFlags.None then
+                Some mem
+            else
+                tryFindDeviceMemory bits (i + 1) memories
+
     static let rec tryAlloc (reqs : VkMemoryRequirements) (i : int) (memories : DeviceHeap[]) =
         if i >= memories.Length then
             None
@@ -1263,24 +1282,53 @@ type DeviceExtensions private() =
             else
                 tryAlloc reqs (i + 1) memories
 
+    static let rec tryAllocDevice (reqs : VkMemoryRequirements) (i : int) (memories : DeviceHeap[]) =
+        if i >= memories.Length then
+            None
+        else
+            let mem = memories.[i]
+            if mem.Mask &&& reqs.memoryTypeBits <> 0u && mem.Info.flags &&& MemoryFlags.DeviceLocal <> MemoryFlags.None then
+                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size)
+                Some ptr
+            else
+                tryAllocDevice reqs (i + 1) memories
+
+
     [<Extension>]
     static member CreateDevice(this : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) =
         new Device(this, wantedLayers, wantedExtensions)
 
     [<Extension>]
+    static member GetMemory(this : Device, bits : uint32, preferDevice : bool) =
+        if preferDevice then
+            match tryFindDeviceMemory bits 0 this.Memories with
+                 | Some mem -> mem
+                 | None -> 
+                    match tryFindMemory bits 0 this.Memories with
+                        | Some mem -> mem
+                        | None -> failf "could not find compatible memory for types: %A" bits
+        else
+            match tryFindMemory bits 0 this.Memories with
+                | Some mem -> mem
+                | None -> failf "could not find compatible memory for types: %A" bits
+
+    [<Extension>]
     static member Alloc(this : Device, reqs : VkMemoryRequirements, preferDevice : bool) =
         if preferDevice then
-            let mem = this.DeviceMemory
-            if reqs.memoryTypeBits &&& mem.Mask <> 0u then
-                mem.Alloc(int64 reqs.alignment, int64 reqs.size)
-            else
-                match tryAlloc reqs 0 this.Memories with
-                    | Some mem -> mem
-                    | None -> failf "could not find compatible memory for %A" reqs
+            match tryAllocDevice reqs 0 this.Memories with
+                 | Some mem -> mem
+                 | None -> 
+                    match tryAlloc reqs 0 this.Memories with
+                        | Some mem -> mem
+                        | None -> failf "could not find compatible memory for %A" reqs
         else
             match tryAlloc reqs 0 this.Memories with
                 | Some mem -> mem
                 | None -> failf "could not find compatible memory for %A" reqs
+
+    [<Extension>]
+    static member GetMemory(this : Device, bits : uint32) =
+        DeviceExtensions.GetMemory(this, bits, false)
 
     [<Extension>]
     static member Alloc(this : Device, reqs : VkMemoryRequirements) =

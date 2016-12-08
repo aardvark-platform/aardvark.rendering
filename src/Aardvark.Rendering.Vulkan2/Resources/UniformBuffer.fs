@@ -95,8 +95,7 @@ module UniformBuffer =
         let align = device.MinUniformBufferOffsetAlignment
         let alignedSize = Alignment.next align (int64 layout.size)
 
-        let mem = device.DeviceMemory.Alloc(align, alignedSize)
-        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, mem)
+        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, alignedSize)
 
         UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
 

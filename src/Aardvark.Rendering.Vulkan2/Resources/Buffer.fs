@@ -201,7 +201,10 @@ module Buffer =
             VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&handle)
                 |> check "could not create empty buffer"
 
-            let ptr = device.DeviceMemory.Null
+            let mutable reqs = VkMemoryRequirements()
+            VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
+
+            let ptr = device.GetMemory(reqs.memoryTypeBits).Null
             VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, 0UL)
                 |> check "could not bind empty buffer's memory"
 
@@ -213,12 +216,13 @@ module Buffer =
             Buffer(device, handle, ptr)
         )
 
-    let ofDevicePtr (flags : VkBufferUsageFlags) (ptr : DevicePtr) (device : Device) =    
+
+    let alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
         let mutable info =
             VkBufferCreateInfo(
                 VkStructureType.BufferCreateInfo, 0n,
                 VkBufferCreateFlags.None,
-                uint64 ptr.Size, 
+                uint64 size, 
                 flags,
                 VkSharingMode.Exclusive,
                 0u, NativePtr.zero
@@ -231,29 +235,20 @@ module Buffer =
         let mutable reqs = VkMemoryRequirements()
         VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
 
-        if ptr.Offset % int64 reqs.alignment <> 0L then
-            failf "ill-aligned buffer memory: { offset = %A; align = %A }" ptr.Offset reqs.alignment
-
-        if ptr.Size < int64 reqs.size then
-            failf "insufficient buffer-memory size: { is = %A; should = %A }" ptr.Size reqs.size
-            
-        let heap = 1u <<< ptr.Memory.Heap.Info.index
-        if heap &&& reqs.memoryTypeBits = 0u then
-            let types = memoryTypes device reqs.memoryTypeBits
-            failf "invalid memory-type: %A (expected one of %A)" ptr.Memory.Heap types
+        let ptr = device.Alloc(reqs, true)
 
         VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind buffer-memory"
 
 
         Buffer(device, handle, ptr)
-    
+
     let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
         let align = int64 device.MinUniformBufferOffsetAlignment
 
         let deviceAlignedSize = Alignment.next align (int64 size)
-        let deviceMem = device.DeviceMemory.Alloc(align, deviceAlignedSize)
-        let buffer = device |> ofDevicePtr flags deviceMem
+        let buffer = device |> alloc flags deviceAlignedSize
+        let deviceMem = buffer.Memory
         
         let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
         hostPtr.Mapped (fun dst -> writer dst)
@@ -334,8 +329,8 @@ module BufferView =
 type ContextBufferExtensions private() =
 
     [<Extension>]
-    static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, ptr : DevicePtr) =
-        device |> Buffer.ofDevicePtr flags ptr
+    static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, size : int64) =
+        device |> Buffer.alloc flags size
 
     [<Extension>]
     static member inline Delete(device : Device, buffer : Buffer) =

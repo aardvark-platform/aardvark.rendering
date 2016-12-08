@@ -1973,6 +1973,8 @@ module ``Image Command Extensions`` =
                                 elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
                                 else VkAccessFlags.None
 
+                            let aspect = VkFormat.toAspect img.Format
+
                             let mutable barrier =
                                 VkImageMemoryBarrier(
                                     VkStructureType.ImageMemoryBarrier, 0n, 
@@ -1984,7 +1986,7 @@ module ``Image Command Extensions`` =
                                     VK_QUEUE_FAMILY_IGNORED,
                                     img.Handle,
                                     VkImageSubresourceRange(
-                                        VkImageAspectFlags.ColorBit ||| VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
+                                        aspect, 
                                         0u, uint32 img.MipMapLevels, 
                                         0u, uint32 img.Count
                                     )
@@ -2104,7 +2106,7 @@ module Image =
         VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&reqs)
         let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
         let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
-        let ptr = device.DeviceMemory.Alloc(memalign, memsize)
+        let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true)
 
         VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind image memory"

@@ -308,7 +308,6 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
                 yield fmt, props
         ]
 
-    let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
     let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
 
     member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
@@ -333,7 +332,6 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     member x.APIVersion = apiVersion
     member x.DriverVersion = driverVersion
 
-    member x.DeviceMemory = deviceMemory
     member x.HostMemory = hostMemory
 
     member x.Instance = instance
