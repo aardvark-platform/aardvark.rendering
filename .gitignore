@@ -33,3 +33,12 @@ src/GLVM/*.so
 /lib/Native/Aardvark.Rendering.GL/windows/x86/glvm.ipdb
 /lib/Native/Aardvark.Rendering.GL/windows/AMD64/glvm.ilk
 /src/ipch/GLVM-7bf6b518/*.ipch
+/lib/Native/Aardvark.Rendering.Vulkan2/windows/x86/*.ipdb
+/lib/Native/Aardvark.Rendering.Vulkan2/windows/AMD64/*.ipdb
+/lib/Native/Aardvark.Rendering.Vulkan2/windows/AMD64/*.iobj
+/lib/Native/Aardvark.Rendering.Vulkan2/windows/x86/*.iobj
+/lib/Native/Aardvark.Rendering.Vulkan2/windows/AMD64/*.ilk
+/lib/Native/Aardvark.Rendering.Vulkan2/windows/x86/*.ilk
+/src/vkvm/.vs/VKVM/v14/*.suo
+/src/vkvm/*.so
+.ionide.debug

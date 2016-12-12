@@ -1,6 +1,8 @@
 ﻿namespace Aardvark.Base
 
 open System
+open System.Collections.Generic
+open System.Threading
 open Aardvark.Base.Incremental
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
@@ -14,11 +16,36 @@ type IIndirectBuffer =
     abstract member Count : int
 
 
+type SingleValueBuffer(value : IMod<V4f>) =
+    inherit Mod.AbstractMod<IBuffer>()
+
+    member x.Value = value
+
+    override x.Compute() = 
+        let v = value.GetValue x
+        failwithf "NullBuffer cannot be evaluated"
+
+    override x.GetHashCode() = value.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? SingleValueBuffer as o -> value = o.Value
+            | _ -> false
+
+    new() = SingleValueBuffer(Mod.constant V4f.Zero)
+
+
 type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : int) =
+    let singleValue =
+        match b with
+            | :? SingleValueBuffer as nb -> Some nb.Value
+            | _ -> None
+
     member x.Buffer = b
     member x.ElementType = elementType
     member x.Stride = stride
     member x.Offset = offset
+    member x.SingleValue = singleValue
+    member x.IsSingleValue = Option.isSome singleValue
 
     new(b : IMod<IBuffer>, elementType : Type, offset : int) =
         BufferView(b, elementType, offset, 0)
@@ -34,19 +61,6 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
             | :? BufferView as o ->
                 o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
             | _ -> false
-
-type NullBuffer(value : V4f) =
-    interface IBuffer
-
-    member x.Value = value
-
-    override x.GetHashCode() = value.GetHashCode()
-    override x.Equals o =
-        match o with
-            | :? NullBuffer as o -> value = o.Value
-            | _ -> false
-
-    new() = NullBuffer(V4f.Zero)
 
 
 type INativeBuffer =
@@ -112,16 +126,68 @@ type IndirectBuffer(b : IBuffer, count : int) =
         member x.Count = count
 
 
-open System.Threading
-type RenderTaskLock() =
-    let rw = new ReaderWriterLockSlim()
-    member x.Run f = ReaderWriterLock.write rw f
-    member x.Update f = ReaderWriterLock.read rw f
+type ResourceUsage =
+    | Access = 1
+    | Render = 2
 
+type ResourceLock = ColoredLock<ResourceUsage>
 type ILockedResource =
-    abstract member Use         : (unit -> 'a) -> 'a
-    abstract member AddLock     : RenderTaskLock -> unit
-    abstract member RemoveLock  : RenderTaskLock -> unit
+    abstract member Lock : ResourceLock
+    abstract member OnLock : usage : Option<ResourceUsage> -> unit
+    abstract member OnUnlock : usage : Option<ResourceUsage> -> unit
+
+
+module LockedResource =
+
+    let inline render (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter(ResourceUsage.Render, r.OnLock)
+        try f()
+        finally r.Lock.Exit(r.OnUnlock)
+
+    let inline access (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter(ResourceUsage.Access, r.OnLock)
+        try f()
+        finally r.Lock.Exit(r.OnUnlock)
+
+    let inline update (r : ILockedResource) (f : unit -> 'x) =
+        r.Lock.Enter(r.OnLock)
+        try f()
+        finally r.Lock.Exit(r.OnUnlock)
+
+
+type RenderTaskLock() =
+    let lockedResources = ReferenceCountingSet<ILockedResource>()
+
+    member x.Run f = 
+        let res = lock lockedResources (fun () -> Seq.toArray lockedResources)
+        for l in res do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
+        try f()
+        finally for l in res do l.Lock.Exit(l.OnUnlock)
+
+        
+
+    [<Obsolete>]
+    member x.Update f = failwith ""
+    
+    member x.Add(r : ILockedResource) =
+        lock lockedResources (fun () -> lockedResources.Add r |> ignore)
+
+    member x.Remove(r : ILockedResource) =
+        lock lockedResources (fun () -> lockedResources.Remove r |> ignore)
+
+
+type IBackendBuffer =
+    inherit IBuffer
+    abstract member Handle : obj
+    abstract member SizeInBytes : nativeint
+
+type IResizeBuffer =
+    inherit IBackendBuffer
+    inherit ILockedResource
+
+    abstract member Resize : capacity : nativeint -> unit
+    abstract member UseRead : offset : nativeint * size : nativeint * reader : (nativeint -> 'x) -> 'x
+    abstract member UseWrite : offset : nativeint * size : nativeint * writer : (nativeint -> 'x) -> 'x
 
 type IMappedIndirectBuffer =
     inherit IMod<IIndirectBuffer>
@@ -158,8 +224,6 @@ module IndirectBuffer =
         l |> List.toArray |> ofArray
 
     let count (b : IIndirectBuffer) = b.Count
-    
-
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferView =
@@ -217,26 +281,27 @@ module BufferView =
             if view.Stride = 0 then elementSize
             else view.Stride
 
-        view.Buffer |> Mod.map (fun b -> 
-            match b with
-                | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
-                    if count = a.Data.Length then 
-                        a.Data
-                    else
-                        let res = Array.CreateInstance(elementType, count)
-                        Array.Copy(a.Data, res, count)
-                        res
+        match view.SingleValue with
+            | Some value ->
+                value |> Mod.map (fun v -> reader.Initialize(v, count))
+            | _ -> 
+                view.Buffer |> Mod.map (fun b -> 
+                    match b with
+                        | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
+                            if count = a.Data.Length then 
+                                a.Data
+                            else
+                                let res = Array.CreateInstance(elementType, count)
+                                Array.Copy(a.Data, res, count)
+                                res
 
-                | :? INativeBuffer as b ->
-                    let available = (b.SizeInBytes - view.Offset) / elementSize
-                    if count > available then
-                        raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements")
+                        | :? INativeBuffer as b ->
+                            let available = (b.SizeInBytes - view.Offset) / elementSize
+                            if count > available then
+                                raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements")
 
-                    b.Use (fun ptr -> reader.Read(ptr + nativeint offset, count, stride))
+                            b.Use (fun ptr -> reader.Read(ptr + nativeint offset, count, stride))
 
-                | :? NullBuffer as nb ->
-                    reader.Initialize(nb.Value, count)
-
-                | _ ->
-                    failwith "[BufferView] unknown buffer-type"
-        )
+                        | _ ->
+                            failwith "[BufferView] unknown buffer-type"
+                )

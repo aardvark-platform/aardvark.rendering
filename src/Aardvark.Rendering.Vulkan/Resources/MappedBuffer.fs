@@ -155,9 +155,9 @@ type MappedBufferOld(ctx : Context) =
     member x.OnDispose = onDispose :> IObservable<_>
 
     interface ILockedResource with
-        member x.Use _ = failwith "not implemented"
-        member x.AddLock _ = failwith "not implemented"
-        member x.RemoveLock _ = failwith "not implemented"
+        member x.Lock = failwith "not implemented"
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
     interface IMappedBuffer with
         member x.Dispose() = x.Dispose()
@@ -240,9 +240,9 @@ type MappedBuffer(ctx : Context) =
         buffer :> IBuffer
 
     interface ILockedResource with
-        member x.Use _ = failwith "not implemented"
-        member x.AddLock _ = failwith "not implemented"
-        member x.RemoveLock _ = failwith "not implemented"
+        member x.Lock = failwith "not implemented"
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
     interface IMappedBuffer with
         member x.Dispose() = x.Dispose()

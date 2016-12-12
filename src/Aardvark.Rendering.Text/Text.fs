@@ -19,8 +19,6 @@ type ShapeList =
         shapes      : list<Shape>
     }
 
-
-
 type TextAlignment =
     | Left = 0
     | Right = 1
@@ -41,6 +39,8 @@ type Text private() =
 
         let mutable cy = 0.0
         let allLines = lineBreak.Split content
+
+        let mutable realBounds = Box2d.Invalid
 
         for l in allLines do
             let mutable cx = 0.0
@@ -71,6 +71,7 @@ type Text private() =
 
             for (x,g) in chars do
                 let pos = bounds.Min + V2d(shift + x,y)
+                realBounds.ExtendBy(g.Bounds.Translated(pos))
                 offsets.Add(pos)
                 scales.Add(V2d(1.0, 1.0))
                 colors.Add(color)
@@ -78,8 +79,9 @@ type Text private() =
 
             cy <- cy - font.LineHeight
 
+
         {
-            bounds      = bounds
+            bounds      = realBounds
             offsets     = offsets |> CSharpList.toList
             scales      = scales |> CSharpList.toList
             colors      = colors |> CSharpList.toList

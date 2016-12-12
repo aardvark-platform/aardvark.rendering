@@ -38,6 +38,8 @@ module private Values =
     let GL_DRAW_INDIRECT_BUFFER = 36671
     [<Literal>]
     let GL_TEXTURE0 = 33984 //int OpenGl.Enums.TextureUnit.Texture0
+    [<Literal>]
+    let GL_DEPTH_CLAMP = 0x864F
 
 [<AutoOpen>]
 module OpenGLInterpreter =
@@ -465,11 +467,14 @@ module OpenGLObjectInterpreter =
                 i <- i + 1
 
         member gl.setDepthTestMode (mode : DepthTestMode) =
-            if mode = DepthTestMode.None then
-                gl.disable GL_DEPTH_TEST  
-            else
+            if mode.IsEnabled then
                 gl.enable GL_DEPTH_TEST
-                gl.depthFunc (Translations.toGLComparison mode)
+                gl.depthFunc (Translations.toGLComparison mode.Comparison)
+                if mode.Clamp then gl.enable GL_DEPTH_CLAMP
+                else gl.disable GL_DEPTH_CLAMP
+            else
+                gl.disable GL_DEPTH_TEST  
+                gl.disable GL_DEPTH_CLAMP
 
         member gl.setFillMode (mode : FillMode) =
             gl.polygonMode GL_FRONT_AND_BACK (Translations.toGLPolygonMode mode)
@@ -623,7 +628,7 @@ module OpenGLObjectInterpreter =
 
                 for (id, ub) in Map.toSeq o.UniformBuffers do
                     let ub = ub.Handle.GetValue()
-                    let b = ub.Buffer.GetValue() |> unbox<Aardvark.Rendering.GL.Buffer>
+                    let b = ub.Buffer
                     gl.bindBufferRange GL_UNIFORM_BUFFER id b.Handle ub.Offset (nativeint ub.Size)
 
                 for (id, (tex, sam)) in Map.toSeq o.Textures do
@@ -643,9 +648,7 @@ module OpenGLObjectInterpreter =
                 gl.bindVertexArray vao
 
                 for (id,v) in Map.toSeq o.VertexAttributeValues do
-                    match v.GetValue() with
-                        | Some v -> gl.vertexAttrib4f id v
-                        | None -> ()
+                    gl.vertexAttrib4f id (Mod.force v)
 
                 if hasTess then
                     gl.patchVertices patchSize

@@ -83,6 +83,8 @@ module RuntimeConfig =
     /// If true, no frame statistics is accumulated for render tasks 
     let mutable SupressRuntimeStats = false
 
+    let mutable SupressSparseBuffers = false
+
 [<AutoOpen>]
 module Error =
 

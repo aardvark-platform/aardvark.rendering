@@ -210,7 +210,7 @@ module SgFSharp =
             Sg.VertexAttributeApplicator(s, view, sg) :> ISg
 
         let vertexBufferValue (s : Symbol) (value : IMod<V4f>) (sg : ISg) =
-            let view = BufferView(value |> Mod.map (fun v -> NullBuffer(v) :> IBuffer), typeof<V4f>)
+            let view = BufferView(SingleValueBuffer(value), typeof<V4f>)
             Sg.VertexAttributeApplicator(s, view, sg) :> ISg
 
         let draw (mode : IndexedGeometryMode) =

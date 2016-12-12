@@ -5,7 +5,24 @@
 #include "State.h"
 #include "glvm.h"
 
-#ifdef __GNUC__
+#ifdef __APPLE__
+#import <mach-o/dyld.h>
+#import <stdlib.h>
+#import <string.h>
+static void* getProc (const char *name)
+{
+    NSSymbol symbol;
+    char *symbolName;
+    symbolName = (char*)malloc (strlen (name) + 2); // 1
+    strcpy(symbolName + 1, name); // 2
+    symbolName[0] = '_'; // 3
+    symbol = NULL;
+    if (NSIsSymbolNameDefined (symbolName)) // 4
+        symbol = NSLookupAndBindSymbol (symbolName);
+    free (symbolName); // 5
+    return symbol ? NSAddressOfSymbol (symbol) : NULL; // 6
+}
+#elif __GNUC__
 
 static void* getProc(const char* name)
 {
@@ -13,7 +30,7 @@ static void* getProc(const char* name)
 	if(ptr == nullptr)
 		printf("could not import function %s\n", name);
 
-	printf("function address for %s: %lX\n", name, (unsigned long int)ptr);
+	//printf("function address for %s: %lX\n", name, (unsigned long int)ptr);
 
 	return ptr;
 }
@@ -47,6 +64,14 @@ DllExport(void) vmInit()
 
 	initialized = true;
 
+
+	glDrawArraysInstancedBaseInstance = (PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC)getProc("glDrawArraysInstancedBaseInstance");
+	glDrawElementsInstancedBaseVertexBaseInstance = (PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC)getProc("glDrawElementsInstancedBaseVertexBaseInstance");
+
+	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
+	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
+
+	#ifndef __APPLE__
 	#ifndef __GNUC__
 	glActiveTexture = (PFNGLACTIVETEXTUREPROC)getProc("glActiveTexture");
 	glBlendColor = (PFNGLBLENDCOLORPROC)getProc("glBlendColor");
@@ -66,8 +91,6 @@ DllExport(void) vmInit()
 	glPatchParameteri = (PFNGLPATCHPARAMETERIPROC)getProc("glPatchParameteri");
 	glDrawArraysInstanced = (PFNGLDRAWARRAYSINSTANCEDPROC)getProc("glDrawArraysInstanced");
 	glDrawElementsBaseVertex = (PFNGLDRAWELEMENTSBASEVERTEXPROC)getProc("glDrawElementsBaseVertex");
-	glDrawArraysInstancedBaseInstance = (PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC)getProc("glDrawArraysInstancedBaseInstance");
-	glDrawElementsInstancedBaseVertexBaseInstance = (PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC)getProc("glDrawElementsInstancedBaseVertexBaseInstance");
 	glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)getProc("glVertexAttribPointer");
 	glUniform1fv = (PFNGLUNIFORM1FVPROC)getProc("glUniform1fv");
 	glUniform1iv = (PFNGLUNIFORM1IVPROC)getProc("glUniform1iv");
@@ -85,8 +108,6 @@ DllExport(void) vmInit()
 	glVertexAttrib3f = (PFNGLVERTEXATTRIB3FPROC)getProc("glVertexAttrib3f");
 	glVertexAttrib4f = (PFNGLVERTEXATTRIB4FPROC)getProc("glVertexAttrib4f");
 
-	glMultiDrawArraysIndirect = (PFNGLMULTIDRAWARRAYSINDIRECTPROC)getProc("glMultiDrawArraysIndirect");
-	glMultiDrawElementsIndirect = (PFNGLMULTIDRAWELEMENTSINDIRECTPROC)getProc("glMultiDrawElementsIndirect");
 	glColorMaski = (PFNGLCOLORMASKIPROC)getProc("glColorMaski");
 	glDrawBuffers = (PFNGLDRAWBUFFERSPROC)getProc("glDrawBuffers");
 	glMapBufferRange = (PFNGLMAPBUFFERRANGEPROC)getProc("glMapBufferRange");
@@ -94,7 +115,7 @@ DllExport(void) vmInit()
 	glGetBufferParameteriv = (PFNGLGETBUFFERPARAMETERIVPROC)getProc("glGetBufferParameteriv");
 
 	glDrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)getProc("glDrawElementsInstanced");
-
+	#endif
 
 }
 
@@ -350,7 +371,7 @@ void runInstruction(Instruction* i)
 		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (int*)i->Arg4, (GLuint)i->Arg5);
 		break;
 	case HSetDepthTest:
-		hglSetDepthTest((GLenum*)i->Arg0);
+		hglSetDepthTest((DepthTestMode*)i->Arg0);
 		break;
 	case HSetCullFace:
 		hglSetCullFace((GLenum*)i->Arg0);
@@ -649,9 +670,9 @@ Statistics runRedundancyChecks(Fragment* frag)
 					break;
 
 				case HSetDepthTest:
-					if (state.HShouldSetDepthTest((GLenum*)i->Arg0))
+					if (state.HShouldSetDepthTest((DepthTestMode*)i->Arg0))
 					{
-						hglSetDepthTest((GLenum*)i->Arg0);
+						hglSetDepthTest((DepthTestMode*)i->Arg0);
 					}
 					break;
 				case HSetCullFace:
@@ -776,7 +797,7 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	auto v = mode->PatchVertices;
 	if (m == GL_PATCHES) glPatchParameteri(GL_PATCH_VERTICES, v);
 
-	stats->DrawCalls+=cnt;
+	stats->DrawCalls+=(int)cnt;
 	for (int i = 0; i < cnt; i++, info += 1)
 	{
 		stats->EffectiveDrawCalls += info->InstanceCount;
@@ -911,18 +932,22 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 }
 
 
-DllExport(void) hglSetDepthTest(GLenum* mode)
+DllExport(void) hglSetDepthTest(DepthTestMode* mode)
 {
 	trace("hglSetDepthTest\n");
 	auto m = *mode;
-	if (m == 0)
+	if (m.Comparison == 0)
 	{
 		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_DEPTH_CLAMP);
 	}
 	else
 	{
 		glEnable(GL_DEPTH_TEST);
-		glDepthFunc(m);
+		glDepthFunc(m.Comparison);
+		if (m.Clamp) glEnable(GL_DEPTH_CLAMP);
+		else glDisable(GL_DEPTH_CLAMP);
+		
 	}
 	endtrace("a")
 }

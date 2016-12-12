@@ -73,8 +73,11 @@ module Helpers =
             |> Sg.ofIndexedGeometry
             |> Sg.trafo invViewProj
 
+
+
 module LoD = 
 
+    Interactive.Renderer <- RendererConfiguration.GL
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
     let win = Interactive.Window
@@ -244,12 +247,12 @@ module LoD =
         ]
         let e = FShade.SequentialComposition.compose effects
         FShadeSurface(e) :> ISurface 
-
-    let surf = 
-        win.Runtime.PrepareSurface(
-            win.FramebufferSignature,
-            eff
-        ) :> ISurface |> Mod.constant
+//
+//    let surf = 
+//        win.Runtime.PrepareSurface(
+//            win.FramebufferSignature,
+//            eff
+//        ) :> ISurface |> Mod.constant
 
     let cloud =
         Sg.pointCloud data {
@@ -265,7 +268,7 @@ module LoD =
                     DefaultSemantic.Colors, typeof<C4b>
                     DefaultSemantic.Normals, typeof<V3f>
                 ]
-            boundingBoxSurface      = Some surf
+            boundingBoxSurface      = None //Some surf
         } 
                      
     let sg = 
@@ -280,8 +283,8 @@ module LoD =
             Helpers.frustum gridCam gridProj
 
             data.BoundingBox.EnlargedByRelativeEps(0.005)
-                |> Helpers.wireBox C4b.VRVisGreen
-                |> Sg.ofIndexedGeometry
+                |> Sg.wireBox' C4b.VRVisGreen 
+
         ]
 
     let final =

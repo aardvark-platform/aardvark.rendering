@@ -439,8 +439,7 @@ module private RefCountedResources =
 
         static let updatedTexture = 
             { FrameStatistics.Zero with
-                ResourceUpdateCount = 1.0
-                ResourceUpdateCounts = Map.ofList [ResourceKind.Texture, 1.0] 
+                ResourceDeltas = ResourceDeltas(ResourceKind.Texture, ResourceDelta(0.0, 0.0, 1.0, 0.0, Mem.Zero))
             }
 
         override x.Create() =

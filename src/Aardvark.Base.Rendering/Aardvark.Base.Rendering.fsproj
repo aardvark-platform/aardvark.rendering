@@ -63,6 +63,7 @@
   </Target>
   -->
   <ItemGroup>
+    <Compile Include="ColoredLock.fs" />
     <Compile Include="PrimitiveValueConverter.fs" />
     <Compile Include="RenderPass.fs" />
     <Compile Include="GPUVendor.fs" />
@@ -107,6 +108,10 @@
     <Compile Include="DefaultSurfaces\InstanceTrafo.fs" />
     <Compile Include="DefaultSurfaces.fs" />
     <Compile Include="GridCell.fs" />
+    <None Include="NativeTensorGenerator.fsx" />
+    <Compile Include="NativeTensorGenerated.fs" />
+    <Compile Include="ImageTrafo.fs" />
+    <Compile Include="PixImageCube.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

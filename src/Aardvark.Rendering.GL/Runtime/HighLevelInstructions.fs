@@ -49,13 +49,11 @@ module Instructions =
         )
 
     let bindUniformBufferView (index : int) (u : IResource<UniformBufferView>) =   
-        u.Handle |> Mod.bind (fun r ->
-            r.Buffer |> Mod.map (fun b ->
-                let b = unbox<Buffer> b
-                //ExecutionContext.bindUniformBuffer index r
-                Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index b.Handle r.Offset (nativeint r.Size)
-            )
-        )
+        u.Handle |> Mod.map (fun r ->
+            let b = r.Buffer
+            //ExecutionContext.bindUniformBuffer index r
+            Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index b.Handle r.Offset (nativeint r.Size)
+    )
 
     let bindIndirectBuffer (u : IResource<IndirectBuffer>) =   
         u.Handle |> Mod.map (fun r -> 
@@ -92,11 +90,9 @@ module Instructions =
             [ Instruction.BindTexture target r.Handle ]
         )
 
-    let bindVertexAttribValue (index : int) (value : IMod<Option<V4f>>) =
+    let bindVertexAttribValue (index : int) (value : IMod<V4f>) =
         value |> Mod.map (fun v ->
-            match v with
-                | Some v -> [Instruction.VertexAttrib4f index v.X v.Y v.Z v.W]
-                | _ -> []
+            [Instruction.VertexAttrib4f index v.X v.Y v.Z v.W]
         )
 
     let drawIndirect (program : Program) (indexBuffer : Option<BufferView>) (buffer : IResource<IndirectBuffer>) (mode : IMod<IndexedGeometryMode>) (isActive : IMod<bool>) =

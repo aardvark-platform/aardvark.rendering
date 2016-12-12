@@ -2,10 +2,10 @@
 open System
 open System.IO
 open System.Runtime.InteropServices
-open Aardvark.Base  
+open Aardvark.Base
 
 /// <summary>
-/// This module contains enumerations provided by OpenGL and 
+/// This module contains enumerations provided by OpenGL and
 /// searches for OpenGL entry-points exposing them as wrapped
 /// functions and as pointers
 /// </summary>
@@ -181,9 +181,9 @@ module OpenGl =
                        | AccumBuffer = 0x00000200
                        | StencilBuffer = 0x00000400
 
-        type Access = ReadOnly = 35000 
+        type Access = ReadOnly = 35000
                     | WriteOnly = 35001
-                    | ReadWrite = 35002 
+                    | ReadWrite = 35002
 
         type All =
               Texture0 = 0x84C0
@@ -324,20 +324,20 @@ module OpenGl =
             | DepthBuffer = 0x00000100
             | AccumBuffer = 0x00000200
             | StencilBuffer = 0x00000400
-            | ReadOnly = 35000 
+            | ReadOnly = 35000
             | WriteOnly = 35001
-            | ReadWrite = 35002 
+            | ReadWrite = 35002
 
     let mutable opengl32Lib = Unchecked.defaultof<_>
     let mutable private opengl32 = 0n
-    
+
     /// <summary>
     /// imports some WGL functions. By using a separate module
     /// we ensure that those imports are not loaded until their first use
     /// which allows the system to work on other platforms dynamically.
     /// </summary>
     module private Wgl =
-        
+
         [<Literal>]
         let gl = "opengl32.dll"
 
@@ -378,7 +378,7 @@ module OpenGl =
     let getProcAddressInternal (name : string) =
         match System.Environment.OSVersion with
             | Linux ->
-                if opengl32 = 0n then 
+                if opengl32 = 0n then
                     opengl32Lib <- DynamicLinker.loadLibrary "libGL.so.1"
                     opengl32 <- opengl32Lib.Handle
 
@@ -392,7 +392,7 @@ module OpenGl =
                 let handle = ctx.GetAddress name
                 if handle = 0n then printfn "could not grab: %s" name
                 handle
-                (*if opengl32 = 0n then 
+                (*if opengl32 = 0n then
                     let ctx : OpenTK.Graphics.IGraphicsContextInternal = failwith ""
 
                     ctx.GetAddress(name)
@@ -405,7 +405,7 @@ module OpenGl =
                 handle*)
 
             | Windows ->
-                if opengl32 = 0n then 
+                if opengl32 = 0n then
                     opengl32Lib <- DynamicLinker.loadLibrary "Opengl32.dll"
                     opengl32 <- opengl32Lib.Handle
 
@@ -415,12 +415,12 @@ module OpenGl =
                                             | 0n -> 0n
                                             | ptr -> ptr
                                 | ptr -> ptr
-                        | ptr -> ptr  
+                        | ptr -> ptr
 
 
     let rec getProcAddressProbing (suffixes : list<string>) (name : string) =
         match suffixes with
-            | s::rest -> 
+            | s::rest ->
                 let ptr = getProcAddressInternal (name + s)
                 if ptr <> 0n then ptr
                 else getProcAddressProbing rest name
@@ -434,32 +434,38 @@ module OpenGl =
               address
 
     let getGLVMProcAddress =
-        let lib = DynamicLinker.loadLibrary "glvm"
+        let path =
+            match Environment.OSVersion with
+                | Windows -> "glvm"
+                | Linux -> Path.Combine(Environment.CurrentDirectory, "libglvm.so") |> Path.GetFullPath
+                | Mac -> failwithf "cannot load GLVM on Mac"
+
+        let lib = DynamicLinker.loadLibrary path
         fun (name : string) ->
             let ptr = lib.GetFunction(name).Handle
             ptr
 
     /// <summary>
     /// wraps the given ptr as function efficiently
-    /// 
-    /// </summary>  
+    ///
+    /// </summary>
     let private wrap (ptr : nativeint) =
         UnmanagedFunctions.wrap ptr
 
     /// <summary>
     /// contains function-pointers for all needed OpenGL entry-points.
     /// </summary>
-    module Pointers = 
+    module Pointers =
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindVertexArray.xml
         /// </summary>
         let BindVertexArray  = getProcAddress "glBindVertexArray"
- 
+
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glUseProgram.xml
         /// </summary>
         let BindProgram  = getProcAddress "glUseProgram"
- 
+
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glActiveTexture.xml
         /// </summary>
@@ -684,9 +690,9 @@ module OpenGl =
 
 
 
-        let private pointerNames = 
-            [ BindVertexArray, "glBindVertexArray" 
-              BindProgram, "glUseProgram" 
+        let private pointerNames =
+            [ BindVertexArray, "glBindVertexArray"
+              BindProgram, "glUseProgram"
               ActiveTexture, "glActiveTexture"
               BindSampler, "glBindSampler"
               BindTexture, "glBindTexture"
@@ -845,4 +851,3 @@ module OpenGl =
         let HSetPolygonMode : nativeint -> unit = wrap Pointers.HSetPolygonMode
         let HSetBlendMode : nativeint -> unit = wrap Pointers.HSetBlendMode
         let HSetStencilMode : nativeint -> unit = wrap Pointers.HSetStencilMode
-

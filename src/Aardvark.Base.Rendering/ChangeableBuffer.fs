@@ -30,7 +30,7 @@ module private Range =
         Range1i.FromMinAndSize(int offset, int size - 1)
 
     let inline ofPtr (ptr : managedptr) =
-        Range1i.FromMinAndSize(int ptr.Offset, ptr.Size - 1)
+        Range1i.FromMinAndSize(int ptr.Offset, int ptr.Size - 1)
 
 
 [<CompiledName("ChangeableBuffer")>]

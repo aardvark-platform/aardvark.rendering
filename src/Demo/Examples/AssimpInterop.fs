@@ -148,7 +148,7 @@ module Assimp =
                                     if m.Normals.Count = m.Vertices.Count then
                                         yield DefaultSemantic.Normals, m.Normals |> mapAttribute (fun v -> V3f(v.X, v.Y, v.Z))
                                     else
-                                        yield DefaultSemantic.Normals, BufferView(Mod.constant (NullBuffer(V4f.OOOO) :> IBuffer), typeof<V4f>)
+                                        yield DefaultSemantic.Normals, BufferView(SingleValueBuffer(Mod.constant V4f.OOOO), typeof<V4f>)
                                 
                                 if m.TextureCoordinateChannelCount > 0 then
                                     let tc = m.TextureCoordinateChannels.[0]
@@ -360,16 +360,16 @@ module AssimpInterop =
 
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
     System.Environment.CurrentDirectory <- Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"]
-    DynamicLinker.tryUnpackNativeLibrary "Assimp" |> ignore
+    Aardvark.SceneGraph.IO.Loader.Assimp.initialize ()
 
 
     let win = Interactive.Window
-    let model = Assimp.load (Path.combine [__SOURCE_DIRECTORY__;"..";"Demo";"eigi";"eigi.dae" ])
+    let model = Assimp.load (Path.combine [__SOURCE_DIRECTORY__;"..";"..";"..";"data";"eigi";"eigi.dae" ])
 
 
     let sg =
         model 
-            |> Helpers.normalizeTo ( Box3d(-V3d.III, V3d.III) )
+            |> Sg.normalizeTo ( Box3d(-V3d.III, V3d.III) )
             |> Sg.trafo (Mod.constant Trafo3d.ChangeYZ)
             |> Sg.blendMode (Mod.constant Rendering.BlendMode.Blend)
             |> Sg.effect [

@@ -112,7 +112,22 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
     let mutable refCount = 0
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
-    let updateStats = { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
+    //let updateStats = ResourceDeltas(kind, ResourceDelta(1, 0, 0, 0,  { FrameStatistics.Zero with ResourceUpdateCount = 1.0; ResourceUpdateCounts = Map.ofList [kind, 1.0] }
+
+    let inPlaceStats (oldInfo : ResourceInfo) (newInfo : ResourceInfo) =
+        { FrameStatistics.Zero with
+            ResourceDeltas = ResourceDeltas(kind, ResourceDelta(0.0, 0.0, 1.0, 0.0, newInfo.AllocatedSize - oldInfo.AllocatedSize))
+        }
+
+    let replaceStats (oldInfo : ResourceInfo) (newInfo : ResourceInfo) =
+        { FrameStatistics.Zero with
+            ResourceDeltas = ResourceDeltas(kind, ResourceDelta(0.0, 0.0, 0.0, 1.0, newInfo.AllocatedSize - oldInfo.AllocatedSize))
+        }
+
+    let createStats (newInfo : ResourceInfo) =
+        { FrameStatistics.Zero with
+            ResourceDeltas = ResourceDeltas(kind, ResourceDelta(1.0, 0.0, 0.0, 0.0, newInfo.AllocatedSize))
+        }
 
     let mutable info = ResourceInfo.Zero
     let lockObj = obj()
@@ -133,20 +148,24 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
         if refCount <= 0 then
             failwithf "[Resource] cannot update unreferenced resource"
 
+        let oldInfo = info
         let (h, stats) = x.Create current
         info <- x.GetInfo h
+        let memDelta = info.AllocatedSize - oldInfo.AllocatedSize
 
         match current with
             | Some old when old = h -> 
-                updateStats + stats
+                stats + inPlaceStats oldInfo info
 
-            | _ -> 
+            | Some old ->  
                 current <- Some h
-                    
-                if h <> handle.Value then
-                    transact (fun () -> handle.Value <- h)
+                if h <> handle.Value then transact (fun () -> handle.Value <- h)
+                stats + replaceStats oldInfo info
 
-                updateStats + stats
+            | None -> 
+                current <- Some h
+                if h <> handle.Value then transact (fun () -> handle.Value <- h)
+                stats + createStats info
 
     member x.AddRef() =
         lock lockObj (fun () -> 
@@ -181,6 +200,19 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
     member x.Dispose() = x.RemoveRef()
 
+    member x.ForceDispose() =
+        lock lockObj (fun () -> 
+            if Interlocked.Exchange(&refCount, 0) <> 0 then
+                onDispose.OnNext()
+                x.Destroy handle.Value
+                current <- None
+                info <- ResourceInfo.Zero
+                transact (fun () -> 
+                    x.MarkOutdated()
+                    handle.Value <- Unchecked.defaultof<_>
+                )
+        )
+
     interface IDisposable with
         member x.Dispose() = x.RemoveRef()
 
@@ -196,28 +228,32 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, renderTaskLock : Option<RenderTaskLock>) =
     let store = ConcurrentDictionary<list<obj>, Resource<'h>>()
 
-    let acquire (old : Option<'h>) (m : IMod<'a>) =
+
+    let acquireOutput (old : Option<'x>) (m : IMod<'a>) =
         match old with
             | None ->
                 match m with
                     | :? IOutputMod<'a> as om -> om.Acquire()
                     | _ -> ()
 
-                match renderTaskLock, m with
-                    | Some l, (:? ILockedResource as r) -> r.AddLock l
-                    | _ -> ()
-
             | _ ->
                 ()
 
-    let release  (m : IMod<'a>) =
+    let releaseOutput  (m : IMod<'a>) =
         match m with
             | :? IOutputMod<'a> as om -> om.Release()
             | _ -> ()
 
-        match renderTaskLock, m with
-            | Some l, (:? ILockedResource as r) -> r.RemoveLock l
+    let acquireLock (v : 'a) =
+        match renderTaskLock, v :> obj with
+            | Some rt, (:? ILockedResource as l) -> rt.Add l
             | _ -> ()
+
+    let releaseLock (v : 'a) =
+        match renderTaskLock, v :> obj with
+            | Some rt, (:? ILockedResource as l) -> rt.Remove l
+            | _ -> ()
+        
 
     let stats (m : IMod<'a>) =
         match m with
@@ -234,15 +270,18 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | (true,v) -> Some v
             | _ -> None
      
-    member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'h>) =
+    member x.GetOrCreateLocalWrapped<'x when 'x : equality>(key : list<obj>, create : unit -> Resource<'x>, wrap : Resource<'x> -> Resource<'h>) =
         let resource = 
             store.GetOrAdd(key, fun _ -> 
                 let res = create()
                 res.OnDispose.Add(fun () -> store.TryRemove key |> ignore)
-                res
+                wrap res
             )
         resource.AddRef()
         resource :> IResource<_>
+
+    member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'h>) =
+        x.GetOrCreateLocalWrapped<'h>(key, create, id)
 
     member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h>) =
         match tryGetParent key with
@@ -251,7 +290,15 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                 r :> IResource<_>
             | None -> x.GetOrCreateLocal(key, create)
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+    member x.GetOrCreateWrapped<'x when 'x : equality>(key : list<obj>, create : unit -> Resource<'x>, wrap : Resource<'x> -> Resource<'h>) =
+        match tryGetParent key with
+            | Some r -> 
+                r.AddRef()
+                r :> IResource<_>
+            | None -> 
+                x.GetOrCreateLocalWrapped(key, create, wrap)
+
+    member x.GetOrCreateWrapped<'a, 'x when 'x : equality>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x>, wrap : Resource<'x> -> Resource<'h>) =
         let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
@@ -259,17 +306,28 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                     | :? ILockedResource as r ->
                         x.GetOrCreateLocal(key, fun () ->
                             v.AddRef()
+                            let mutable oldData = None
                             { new Resource<'h>(v.Kind) with
                                 member x.GetInfo(h : 'h) =
                                     v.GetInfo h
 
                                 member x.Create(old : Option<'h>) =
-                                    acquire old dataMod
+                                    let newData = dataMod.GetValue x
+                                    match oldData with
+                                        | Some d -> releaseLock d
+                                        | None -> ()
+                                    oldData <- Some newData
+                                    acquireLock newData
+                                    acquireOutput old dataMod
+
                                     let stats = v.Update(x)
                                     v.Handle.GetValue(), stats
 
                                 member x.Destroy(h : 'h) =
-                                    release dataMod
+                                    match oldData with
+                                        | Some d -> releaseLock d; oldData <- None
+                                        | None -> ()
+                                    releaseOutput dataMod
                                     lock v (fun () -> 
                                         v.Outputs.Remove x |> ignore
                                         v.Handle.Outputs.Remove x |> ignore
@@ -283,15 +341,88 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | None ->
                 x.GetOrCreateLocal(key, fun _ -> 
                     let mutable ownsHandle = false
+                    let mutable oldData = None
+
+                    let resource = 
+                        { new Resource<'x>(desc.kind) with
+                            member x.GetInfo (h : 'x) =
+                                desc.info h
+
+                            member x.Create(old : Option<'x>) =
+                                acquireOutput old dataMod
+                                let data = dataMod.GetValue x
+                                let stats = stats dataMod
+
+                                match oldData with
+                                    | Some d -> releaseLock d
+                                    | None -> ()
+                                acquireLock data
+                                oldData <- Some data
+
+                                match old with
+                                    | Some old ->
+                                        match data :> obj with
+                                            | :? 'x as handle ->
+                                                if ownsHandle then desc.delete old
+                                                ownsHandle <- false
+                                                handle, stats
+
+                                            | _ ->
+                                                if ownsHandle then
+                                                    let newHandle = desc.update old data
+                                                    newHandle, stats
+                                                else
+                                                    let newHandle = desc.create data
+                                                    ownsHandle <- true
+                                                    newHandle, stats
+
+                                    | None -> 
+
+
+                                        match data :> obj with
+                                            | :? 'x as handle -> 
+                                                ownsHandle <- false
+                                                handle, stats
+                                            | _ ->
+                                                let handle = desc.create data
+                                                ownsHandle <- true
+                                                handle, stats
+
+                            member x.Destroy(h : 'x) =
+                                match oldData with
+                                    | Some d -> releaseLock d
+                                    | _ -> ()
+
+                                releaseOutput dataMod
+                                if ownsHandle then
+                                    ownsHandle <- false
+                                    desc.delete h
+                        }
+
+                    wrap resource
+                )
+
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+        x.GetOrCreateWrapped<'a, 'h>(dataMod, additionalKeys, desc, id)
+
+    member x.GetOrCreateDependent<'a when 'a : equality>(res : IResource<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+        let key = (res :> obj)::additionalKeys
+        match tryGetParent key with
+            | Some v -> 
+                v.AddRef()
+                v :> IResource<_>
+            | None ->
+                x.GetOrCreateLocal(key, fun _ -> 
+                    let mutable ownsHandle = false
                 
                     { new Resource<'h>(desc.kind) with
                         member x.GetInfo (h : 'h) =
                             desc.info h
 
                         member x.Create(old : Option<'h>) =
-                            acquire old dataMod
-                            let data = dataMod.GetValue x
-                            let stats = stats dataMod
+                            
+                            let stats = res.Update(x)
+                            let data = res.Handle.GetValue()
 
                             match old with
                                 | Some old ->
@@ -311,8 +442,6 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                                                 newHandle, stats
 
                                 | None -> 
-
-
                                     match data :> obj with
                                         | :? 'h as handle -> 
                                             ownsHandle <- false
@@ -323,18 +452,25 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                                             handle, stats
 
                         member x.Destroy(h : 'h) =
-                            release dataMod
+                            res.RemoveRef()
+                            res.RemoveOutput x
                             if ownsHandle then
                                 ownsHandle <- false
                                 desc.delete h
                     }
                 )
 
+
     member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
         x.GetOrCreate(dataMod, [], desc)
 
     member x.Count = store.Count
-    member x.Clear() = store.Clear()
+    member x.Clear() = 
+        let remaining = store |> Seq.map (fun (KeyValue(_,r)) -> r) |> Seq.toArray
+        for r in remaining do
+            Log.warn "leaking resource: %A" r
+            r.ForceDispose()
+        store.Clear()
 
 type ConstantResource<'h when 'h : equality>(kind : ResourceKind, handle : 'h) =
     inherit ConstantObject()
@@ -382,24 +518,16 @@ type ResourceInputSet() =
     inherit DirtyTrackingAdaptiveObject<IResource>()
 
     let all = ReferenceCountingSet<IResource>()
-    let resourceInfos = Dictionary<ResourceKind, ResourceInfo>()
-    let mutable resourceInfo = ResourceInfo.Zero
+    let mutable resourceCounts = ResourceCounts.Zero
 
-    let applyResourceInfo (kind : ResourceKind) (oldInfo : ResourceInfo) (newInfo : ResourceInfo) =
-        let dInfo = newInfo - oldInfo
-        resourceInfo <- resourceInfo + dInfo
-
-        match resourceInfos.TryGetValue kind with
-            | (true, total) ->
-                resourceInfos.[kind] <- total + dInfo
-            | _ ->
-                resourceInfos.[kind] <- dInfo
+    let applyResourceDeltas (deltas : ResourceDeltas) =
+        resourceCounts <- resourceCounts + deltas
 
     let updateOne (x : ResourceInputSet) (r : IResource)  =
         let oldInfo = r.Info
         let ret = r.Update x
         let newInfo = r.Info
-        applyResourceInfo r.Kind oldInfo newInfo
+        applyResourceDeltas ret.ResourceDeltas
         ret
 
     let updateDirty(x : ResourceInputSet) =
@@ -427,10 +555,7 @@ type ResourceInputSet() =
 
         run 0 FrameStatistics.Zero
 
-    let mutable resourceCounts = Map.empty
-
-    member x.ResourceInfo = resourceInfo
-    member x.ResourceInfos = resourceInfos :> IDictionary<_,_>
+    member x.ResourceCounts = resourceCounts
 
     member x.Count = all.Count
 
@@ -439,11 +564,6 @@ type ResourceInputSet() =
             lock all (fun () ->
                 if all.Add r then
                     lock r (fun () ->
-                        match Map.tryFind r.Kind resourceCounts with
-                            | Some old -> resourceCounts <- Map.add r.Kind (old + 1.0) resourceCounts
-                            | None -> resourceCounts <- Map.add r.Kind 1.0 resourceCounts
-
-                        applyResourceInfo r.Kind ResourceInfo.Zero r.Info
                         if r.OutOfDate then 
                             x.Dirty.Add r |> ignore
                             true
@@ -466,13 +586,11 @@ type ResourceInputSet() =
         lock all (fun () ->
 
             if all.Remove r then
-                match Map.tryFind r.Kind resourceCounts with
-                    | Some old when old > 1.0 -> resourceCounts <- Map.add r.Kind (old - 1.0) resourceCounts
-                    | _ -> resourceCounts <- Map.remove r.Kind resourceCounts
+                let deltas = ResourceDeltas(r.Kind, ResourceDelta(0.0, 1.0, 0.0, 0.0, -r.Info.AllocatedSize))
 
                 x.Dirty.Remove r |> ignore
                 lock r (fun () -> r.Outputs.Remove x |> ignore)
-                applyResourceInfo r.Kind r.Info ResourceInfo.Zero
+                applyResourceDeltas deltas
         )
 
     member x.Update (caller : IAdaptiveObject) =
@@ -480,7 +598,6 @@ type ResourceInputSet() =
             x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () -> updateDirty x)
 
         { updateStats with
-            ResourceSize = resourceInfo.AllocatedSize
             PhysicalResourceCount = float all.Count 
             ResourceCounts = resourceCounts
         }
@@ -492,8 +609,6 @@ type ResourceInputSet() =
 
             all.Clear()
             x.Dirty.Clear()
-            resourceInfos.Clear()
-            resourceInfo <- ResourceInfo.Zero
         )
 
     interface IDisposable with

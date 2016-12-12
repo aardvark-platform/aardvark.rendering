@@ -62,8 +62,7 @@ module Loader =
                         let b = arr |> ArrayBuffer :> IBuffer |> Mod.constant
                         Some (BufferView(b, arr.GetType().GetElementType()))
                     | _ ->
-                        let nb = NullBuffer(V4f.Zero) :> IBuffer |> Mod.constant
-                        Some (BufferView(nb, typeof<V4f>))
+                        Some (BufferView(SingleValueBuffer(Mod.constant V4f.Zero), typeof<V4f>))
 
             member x.All = Seq.empty
             member x.Dispose() = ()
@@ -518,6 +517,18 @@ module Loader =
 
             node
 
+        [<CompiledName("Initialize")>]
+        let initialize () =
+            Log.start "unpacking native dependencies for assimp"
+            let r = 
+                try
+                    DynamicLinker.tryUnpackNativeLibrary "Assimp"
+                with e -> 
+                    Log.warn "failed to unpack native dependencies: %s" e.Message
+                    false
+            Log.stop ()
+            if r then Log.line "Assimp native dependencies successfully unpacked."
+            else Log.line "Failed to unpack native assimp dependencies. Did you forget Aardvark.Init()? Make sure Aardvark.SceneGraph.IO.dll is in your output directory."
 
 
         let load (file : string) =

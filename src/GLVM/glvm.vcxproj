@@ -23,6 +23,7 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>glvm</RootNamespace>
     <TargetPlatformVersion>8.1</TargetPlatformVersion>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -70,26 +71,26 @@
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\x86\</OutDir>
-    <IntDir>$(SolutionDir)..\bin\Debug\x86\</IntDir>
+    <OutDir>$(SolutionDir)..\bin\Debug\</OutDir>
+    <IntDir>$(SolutionDir)..\bin\Debug\x86\glvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\</OutDir>
-    <IntDir>$(SolutionDir)..\bin\Debug\AMD64\</IntDir>
+    <OutDir>$(SolutionDir)..\bin\Debug\</OutDir>
+    <IntDir>$(SolutionDir)..\bin\Debug\AMD64\glvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\x86\</OutDir>
-    <IntDir>$(SolutionDir)..\bin\Release\x86\</IntDir>
+    <IntDir>$(SolutionDir)..\bin\Release\x86\glvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\</OutDir>
-    <IntDir>$(SolutionDir)..\bin\Release\AMD64\</IntDir>
+    <IntDir>$(SolutionDir)..\bin\Release\AMD64\glvm\</IntDir>
     <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -114,9 +115,9 @@
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\x86\*" "$(SolutionDir)..\bin\Debug" /y</Command>
-      <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.ilk;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;%(Outputs)</Outputs>
-      <Message>copying binaries to bin\Debug</Message>
+      <Command>xcopy $(SolutionDir)..\bin\Debug\glvm.* $(SolutionDir)..\bin\Release\ /Y</Command>
+      <Outputs>$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb;%(Outputs)</Outputs>
+      <Message>copying binaries to bin\Release</Message>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -139,12 +140,11 @@
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y
-xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release" /y</Command>
+      <Command>xcopy $(SolutionDir)..\bin\Debug\glvm.* $(SolutionDir)..\bin\Release\ /Y</Command>
     </CustomBuildStep>
     <CustomBuildStep>
-      <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.ilk;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;%(Outputs)</Outputs>
+      <Message>copying binaries to bin\Release</Message>
+      <Outputs>$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb;%(Outputs)</Outputs>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -174,7 +174,7 @@ xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(Sol
     <CustomBuildStep>
       <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\x86\*" "$(SolutionDir)..\bin\Debug" /y</Command>
       <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;%(Outputs)</Outputs>
+      <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb</Outputs>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -205,7 +205,7 @@ xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(Sol
       <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y
 xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release" /y</Command>
       <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;%(Outputs)</Outputs>
+      <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb</Outputs>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>

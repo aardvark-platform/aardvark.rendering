@@ -1,20 +1,24 @@
 #pragma once
 
-#ifdef __GNUC__
+#ifdef __APPLE__
+#include <opengl/gl.h>
+#include <stdio.h>
+#include <string.h>
+#elif __GNUC__
 #include <GL/gl.h>
-#include <unordered_set>
-#include <unordered_map>
-#include <tuple>
+#include <stdio.h>
+#include <string.h>
 #else
 #define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
 #include "stdafx.h"
 #include <windows.h>
 #include <gl/GL.h>
+#endif
+
+#include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <tuple>
-
-#endif
 
 
 typedef struct {
@@ -81,6 +85,11 @@ typedef struct {
 	int PatchVertices;
 } BeginMode;
 
+typedef struct {
+	GLenum Comparison;
+	int Clamp;
+} DepthTestMode;
+
 class State
 {
 private:
@@ -110,7 +119,7 @@ private:
 	std::unordered_map<int, std::tuple<intptr_t, intptr_t, intptr_t>> currentBuffer;
 	std::unordered_map<intptr_t, bool> modes;
 	
-	GLenum* hDepthTest;
+	DepthTestMode* hDepthTest;
 	GLenum* hCullFace;
 	GLenum* hPolygonMode;
 	BlendMode* hBlendMode;
@@ -146,7 +155,7 @@ public:
 	bool ShouldSetColorMask(intptr_t index, intptr_t r, intptr_t g, intptr_t b, intptr_t a);
 	bool ShouldSetDrawBuffers(GLuint n, const GLenum* buffers);
 
-	bool HShouldSetDepthTest(GLenum* test);
+	bool HShouldSetDepthTest(DepthTestMode* test);
 	bool HShouldSetCullFace(GLenum* face);
 	bool HShouldSetPolygonMode(GLenum* mode);
 	bool HShouldSetBlendMode(BlendMode* mode);

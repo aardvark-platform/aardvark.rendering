@@ -46,10 +46,10 @@ type Buffer =
         interface IContextChild with
             member x.Context = x.Context
             member x.Handle = x.Handle
-
+            
         interface IBackendBuffer with
             member x.Handle = x.Handle :> obj
-
+            member x.SizeInBytes = x.SizeInBytes
 
         new(ctx : Context, size : nativeint, handle : int) = { Context = ctx; SizeInBytes = size; Handle = handle}
     end
@@ -176,8 +176,6 @@ module BufferExtensions =
                     bb
                 | :? ArrayBuffer as ab ->
                     x.CreateBuffer(ab.Data)
-                | :? NullBuffer -> 
-                    Buffer(x,0n,0)
 
                 | :? INativeBuffer as nb ->
                     nb.Use (fun ptr -> x.CreateBuffer(ptr, nb.SizeInBytes, Static))
@@ -194,9 +192,6 @@ module BufferExtensions =
 
                 | :? Buffer as bb ->
                     if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
-
-                | :? NullBuffer ->
-                    failwith "cannot create null buffer out of non-null buffer"
 
                 | :? INativeBuffer as n ->
                     n.Use (fun ptr -> x.Upload(b, ptr, n.SizeInBytes))

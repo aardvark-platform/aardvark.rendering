@@ -516,7 +516,7 @@ type UniformBufferExtensions private() =
     static member Upload(x : Context, ub : UniformBuffer) =
         Command.custom( fun s ->
             if ub.IsDirty then
-                VkRaw.vkCmdUpdateBuffer(s.buffer.Handle, ub.Handle, 0UL, uint64 ub.Storage.Size, NativePtr.ofNativeInt ub.Storage.Pointer)
+                VkRaw.vkCmdUpdateBuffer(s.buffer.Handle, ub.Handle, 0UL, uint64 ub.Storage.Size, ub.Storage.Pointer)
                 let updated() = ub.IsDirty <- false
                 { s with cleanupActions = updated::s.cleanupActions; isEmpty = false }
             else

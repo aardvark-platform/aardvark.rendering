@@ -229,7 +229,7 @@ let main argv =
             // textures can also be bound (using file-texture here)
             do! Air.BindTexture(
                     DefaultSemantic.DiffuseColorTexture, 
-                    @"C:\Aardwork\pattern.jpg"
+                    @"E:\Development\WorkDirectory\DataSVN\pattern.jpg"
                 )
 
             do! Air.BindVertexBuffers [
@@ -270,19 +270,30 @@ let main argv =
 
 
     let mode = Mod.init FillMode.Fill
-    let font = new Font("Comic Sans")
+    let font = Font "Comic Sans"
 
+
+    let config = 
+        { MarkdownConfig.light with 
+            codeFont = "Kunstler Script"
+            paragraphFont = "Kunstler Script" 
+        }
 
     let label1 =
-        Sg.markdown MarkdownConfig.light (Mod.constant md)
+        Sg.markdown config (Mod.constant md)
             |> Sg.scale 0.1
             |> Sg.billboard
 
+
+    let f = Font "Consolas"
     let label2 =
-        Sg.markdown MarkdownConfig.light (Mod.constant message)
+        Sg.text f C4b.Green (Mod.constant message)
+        //Sg.markdown MarkdownConfig.light (Mod.constant message)
             |> Sg.scale 0.1
             |> Sg.billboard
             |> Sg.translate 5.0 0.0 0.0
+
+    let aa = Mod.init true
 
     let sg = 
         Sg.group [label1; label2]
@@ -290,6 +301,7 @@ let main argv =
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
             |> Sg.fillMode mode
+            |> Sg.uniform "Antialias" aa
 //            |> Sg.shader {
 //                    do! DefaultSurfaces.trafo 
 //                    let! mode = mode
@@ -307,7 +319,14 @@ let main argv =
                 | _ -> mode.Value <- FillMode.Fill
         )
     )
+    win.Keyboard.KeyDown(Keys.F7).Values.Add (fun _ ->
+        transact (fun () ->
+            aa.Value <- not aa.Value
 
+            if aa.Value then Log.warn "AA enabled"
+            else Log.warn "AA disabled"
+        )
+    )
     let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) |> DefaultOverlays.withStatistics
     let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
 

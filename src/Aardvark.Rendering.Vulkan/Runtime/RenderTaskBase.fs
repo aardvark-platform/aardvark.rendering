@@ -165,8 +165,6 @@ type AbstractRenderTaskWithResources(manager : ResourceManager, fboSignature : R
 
                 let own = 
                     { stats with
-                        ResourceUpdateCount = stats.ResourceUpdateCount + float count
-                        ResourceUpdateCounts = counts
                         ResourceUpdateTime = MicroTime (updateCPUTime.Elapsed + updateGPUTime.Elapsed)
                     }
 

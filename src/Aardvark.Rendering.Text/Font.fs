@@ -20,6 +20,7 @@ type FontStyle =
     | Regular = 0
     | Bold = 1
     | Italic = 2
+    | BoldItalic = 3
 
 module private GDI32 =
 
@@ -146,6 +147,8 @@ type Glyph internal(path : Path, graphics : Graphics, font : System.Drawing.Font
 
     member x.Character = c
     
+    member x.Bounds = path.bounds
+
     member x.Path = path
     member x.Advance = 
         let sizes = widths.Value
@@ -153,12 +156,7 @@ type Glyph internal(path : Path, graphics : Graphics, font : System.Drawing.Font
 
     member x.Before = -0.1666
 
-
-type Font private(f : System.Drawing.Font) =
-    static let mutable fontCount = 0
-
-    do Interlocked.Increment &fontCount |> ignore
-
+type private FontImpl(f : System.Drawing.Font) =
     let largeScaleFont = new System.Drawing.Font(f.FontFamily, 2000.0f, f.Style, f.Unit, f.GdiCharSet, f.GdiVerticalFont)
     let graphics = Graphics.FromHwnd(0n, PageUnit = f.Unit)
 
@@ -176,7 +174,7 @@ type Font private(f : System.Drawing.Font) =
 
 
         if path.PointCount = 0 then
-            { outline = [||] }
+            { bounds = Box2d.Invalid; outline = [||] }
         else
             // build the interior polygon and boundary triangles using the 
             // given GraphicsPath
@@ -185,7 +183,8 @@ type Font private(f : System.Drawing.Font) =
 
             let mutable start = V2d.NaN
             let currentPoints = List<V2d>()
-            let segments = List<PathSegment>()
+            let segment = List<PathSegment>()
+            let components = List<PathSegment[]>()
 
             for (p, t) in Array.zip points types do
                 let t = t |> int |> unbox<PathPointType>
@@ -197,7 +196,9 @@ type Font private(f : System.Drawing.Font) =
                     | PathPointType.Line ->
                         if currentPoints.Count > 0 then
                             let last = currentPoints.[currentPoints.Count - 1]
-                            segments.Add(Line(last, p))
+                            match PathSegment.tryLine last p with
+                                | Some s -> segment.Add s
+                                | _ -> ()
                             currentPoints.Clear()
                         currentPoints.Add p
                         
@@ -210,7 +211,9 @@ type Font private(f : System.Drawing.Font) =
                             let p1 = currentPoints.[1]
                             let p2 = currentPoints.[2]
                             let p3 = currentPoints.[3]
-                            segments.Add(Bezier3(p0, p1, p2, p3))
+                            match PathSegment.tryBezier3 p0 p1 p2 p3 with
+                                | Some s -> segment.Add(s)
+                                | None -> ()
                             currentPoints.Clear()
                             currentPoints.Add p3
 
@@ -221,32 +224,28 @@ type Font private(f : System.Drawing.Font) =
 
                 if close then
                     if not start.IsNaN && p <> start then
-                        segments.Add(Line(p, start))
+                        segment.Add(Line(p, start))
+                    components.Add(CSharpList.toArray segment)
+                    segment.Clear()
                     currentPoints.Clear()
                     start <- V2d.NaN
 
-            let bounds = segments |> Seq.map PathSegment.bounds |> Box2d
+            let bounds = components |> Seq.collect (Seq.map PathSegment.bounds) |> Box2d
 
 
 
 
-            { outline = CSharpList.toArray segments }
+            CSharpList.toArray components |> Array.concat |> Path.ofArray
 
-    let glyphCache = ConcurrentDictionary<char, Glyph>()
+    let glyphCache = Dict<char, Glyph>()
 
     let get (c : char) =
-        glyphCache.GetOrAdd(c, fun c ->
-            let path = getPath c
-            Glyph(path, graphics, largeScaleFont, c)
+        lock glyphCache (fun () ->
+            glyphCache.GetOrCreate(c, fun c ->
+                let path = getPath c
+                Glyph(path, graphics, largeScaleFont, c)
+            )
         )
-
-
-
-    member x.Dispose() =
-        f.Dispose()
-        kerningTable.Clear()
-        largeScaleFont.Dispose()
-        graphics.Dispose()
 
     member x.Family = f.FontFamily.Name
     member x.LineHeight = lineHeight
@@ -261,19 +260,26 @@ type Font private(f : System.Drawing.Font) =
             | (true, v) -> v
             | _ -> 0.0
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+type Font(family : string, style : FontStyle) =
+    static let table = System.Collections.Concurrent.ConcurrentDictionary<string * FontStyle, FontImpl>()
 
-    new(family : string, style : FontStyle) = 
-        let f = new System.Drawing.Font(family, 1.0f, unbox (int style), GraphicsUnit.Point)
-        new Font(f)
+    let impl =
+        table.GetOrAdd((family, style), fun (family, style) ->
+            let f = new System.Drawing.Font(family, 1.0f, unbox (int style), GraphicsUnit.Point)
+            new FontImpl(f)
+        )
 
-    new(family : string) = 
-        new Font(family, FontStyle.Regular)
+    member x.Family = family
+    member x.LineHeight = impl.LineHeight
+    member x.Style = style
+    member x.Spacing = impl.Spacing
+    member x.GetGlyph(c : char) = impl.GetGlyph c
+    member x.GetKerning(l : char, r : char) = impl.GetKerning(l,r)
+
+    new(family : string) = Font(family, FontStyle.Regular)
 
 type ShapeCache(r : IRuntime) =
     static let cache = ConcurrentDictionary<IRuntime, ShapeCache>()
-
 
     let pool = Aardvark.Base.Rendering.GeometryPool.createAsync r
     let ranges = ConcurrentDictionary<Shape, Range1i>()
@@ -290,8 +296,6 @@ type ShapeCache(r : IRuntime) =
             DefaultSurfaces.trafo       |> toEffect
             Path.Shader.boundary        |> toEffect
         ]
-
-
 
     let types =
         Map.ofList [
@@ -319,9 +323,9 @@ type ShapeCache(r : IRuntime) =
     member x.BoundarySurface = boundarySurface :> ISurface
     member x.VertexBuffers = vertexBuffers
 
-    member x.GetBufferRange(glyph : Shape) =
-        ranges.GetOrAdd(glyph, fun glyph ->
-            let range = pool.Add(glyph.Geometry)
+    member x.GetBufferRange(shape : Shape) =
+        ranges.GetOrAdd(shape, fun shape ->
+            let range = pool.Add(shape.Geometry)
             range
         )
 
@@ -334,9 +338,16 @@ type ShapeCache(r : IRuntime) =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Font =
+    let inline family (f : Font) = f.Family
+    let inline style (f : Font) = f.Style
+    let inline spacing (f : Font) = f.Spacing
+    let inline lineHeight (f : Font) = f.LineHeight
+
     let inline glyph (c : char) (f : Font) = f.GetGlyph c
     let inline kerning (l : char) (r : char) (f : Font) = f.GetKerning(l,r)
-    let inline lineHeight (f : Font) = f.LineHeight
+
+    let inline create (family : string) (style : FontStyle) = Font(family, style)
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Glyph =

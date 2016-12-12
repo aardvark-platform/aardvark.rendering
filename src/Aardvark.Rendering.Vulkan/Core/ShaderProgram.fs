@@ -75,8 +75,8 @@ type ShaderProgram =
                     |> Seq.toList
             member x.Inputs = x.Inputs |> Array.toList |> List.map (fun p -> p.paramName, ShaderType.toType p.paramType)
             member x.Outputs = x.Outputs |> Array.toList |> List.map (fun p -> p.paramName, ShaderType.toType p.paramType)
-            member x.SamplerStates = x.Surface.SamplerStates
-            member x.UniformGetters = x.Surface.Uniforms |> SymDict.map (fun _ a -> a :> obj)
+            member x.Samplers = failwith "not implemented"
+            member x.UniformGetters = x.Surface.Uniforms
 
         member x.PrintSignature() =
             
@@ -163,8 +163,10 @@ type ShaderProgramExtensions private() =
 //                let fileName = sprintf @"C:\Users\Schorsch\Desktop\%A.spv" shaderStage
 //                File.writeAllBytes fileName spirvBinary
 
+                let spirvBinary = spirvBinary.UnsafeCoerce<byte>()
+
                 let vkStage = toVkStage shaderStage
-                let m =
+                let m = 
                     use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(spirvBinary))
                     reader |> SpirV.Serializer.read
 

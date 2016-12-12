@@ -587,21 +587,21 @@ module AttributePackingV2 =
         let write (g : IndexedGeometry) (ptr : managedptr) =
             lock lockObj (fun () ->
                 for (sem, b) in SymDict.toSeq buffers do
-                    b.Resize(manager.Capacity)
+                    b.Resize(int manager.Capacity)
                     b.Write(g, ptr)
             )
 
         let remove (g : IndexedGeometry) =
             lock lockObj (fun () ->
                 for (sem, b) in SymDict.toSeq buffers do
-                    b.Resize(manager.Capacity)
+                    b.Resize(int manager.Capacity)
                     b.Remove(g)
             )   
     
         let resize () =
             lock lockObj (fun () ->
                 for (sem, b) in SymDict.toSeq buffers do
-                    b.Resize(manager.Capacity)
+                    b.Resize(int manager.Capacity)
             )
 
         member private x.CreateBuffer (elementType : Type, sem : Symbol) =
@@ -615,7 +615,7 @@ module AttributePackingV2 =
                         match Map.tryFind sem elementTypes with
                             | Some et ->
                                 let b = x.CreateBuffer(et, sem)
-                                b.Resize(manager.Capacity)
+                                b.Resize(int manager.Capacity)
                                 buffers.[sem] <- b
                                 Some b
                             | _ ->
@@ -628,12 +628,12 @@ module AttributePackingV2 =
             for d in deltas do
                 match d with
                     | Add g ->
-                        let ptr = g |> faceVertexCount |> manager.Alloc
+                        let ptr = g |> faceVertexCount |> nativeint |> manager.Alloc
                         lock dataRanges (fun () -> dataRanges.[g] <- ptr)
                         write g ptr
 
 
-                        let r = Range1i.FromMinAndSize(int ptr.Offset, ptr.Size - 1)
+                        let r = Range1i.FromMinAndSize(int ptr.Offset, int ptr.Size - 1)
                         drawRanges <- RangeSet.insert r drawRanges
 
 
@@ -642,7 +642,7 @@ module AttributePackingV2 =
                             | (true, ptr) ->
                                 dataRanges.Remove g |> ignore
 
-                                let r = Range1i.FromMinAndSize(int ptr.Offset, ptr.Size - 1)
+                                let r = Range1i.FromMinAndSize(int ptr.Offset, int ptr.Size - 1)
                                 drawRanges <- RangeSet.remove r drawRanges
 
                                 remove g
@@ -865,7 +865,7 @@ module GeometrySetUtilities =
                     if buffer.Capacity <> cap then 
                         buffer.Resize(cap)
 
-                    buffer.Write(int (region.Offset * elementSize), arr, region.Size * int elementSize)
+                    buffer.Write(int (region.Offset * elementSize), arr, int region.Size * int elementSize)
                 | _ ->
                     // TODO: write NullBuffer content or 0 here
                     ()
@@ -876,7 +876,7 @@ module GeometrySetUtilities =
                 buffers.GetOrAdd(sem, fun sem ->
                     isNew <- true
                     let elementSize = getElementSize sem |> int
-                    let b = ChangeableBuffer(elementSize * manager.Capacity)
+                    let b = ChangeableBuffer(elementSize * int manager.Capacity)
                     b
                 )
 
@@ -887,12 +887,12 @@ module GeometrySetUtilities =
             result
                      
         member private x.AddRange (ptr : managedptr) =
-            let r = Range1i.FromMinAndSize(int ptr.Offset, ptr.Size - 1)
+            let r = Range1i.FromMinAndSize(int ptr.Offset, int ptr.Size - 1)
             Interlocked.Change(&ranges, RangeSet.insert r) |> ignore
             transact (fun () -> x.MarkOutdated())
 
         member private x.RemoveRange (ptr : managedptr) =
-            let r = Range1i.FromMinAndSize(int ptr.Offset, ptr.Size - 1)
+            let r = Range1i.FromMinAndSize(int ptr.Offset, int ptr.Size - 1)
             Interlocked.Change(&ranges, RangeSet.remove r) |> ignore
             transact (fun () -> x.MarkOutdated())
            
@@ -920,7 +920,7 @@ module GeometrySetUtilities =
                             g.IndexArray.Length
                     
                     isNew <- true
-                    manager.Alloc(faceVertexCount)
+                    manager.Alloc(nativeint faceVertexCount)
                 )
             
             if isNew then

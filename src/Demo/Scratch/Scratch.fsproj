@@ -27,6 +27,7 @@
     <DocumentationFile>
     </DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
+    <EnableUnmanagedDebugging>true</EnableUnmanagedDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -79,7 +80,10 @@
     <Compile Include="Experiments\NullBufferTest.fs" />
     <Compile Include="Experiments\Playground.fs" />
     <Compile Include="Experiments\Vulkan.fs" />
+    <Compile Include="Experiments\ChangeBufferHandle.fs" />
+    <Compile Include="Experiments\SamplerArray.fs" />
     <Compile Include="PGM.fs" />
+    <Compile Include="ImageFormat.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
@@ -126,9 +130,9 @@
       <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
-      <Name>Aardvark.Rendering.Vulkan</Name>
-      <Project>{67c2dd0d-8892-4953-b916-ced3aed034b1}</Project>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan2\Aardvark.Rendering.Vulkan2.fsproj">
+      <Name>Aardvark.Rendering.Vulkan2</Name>
+      <Project>{8bbc1ef6-9c85-4baf-a732-fc46dca64ec3}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj">
@@ -146,9 +150,9 @@
       <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj">
-      <Name>Aardvark.Application.WinForms.Vulkan</Name>
-      <Project>{be9c26c3-b846-4356-923d-12e7d88ab309}</Project>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.Vulkan2\Aardvark.Application.WinForms.Vulkan2.fsproj">
+      <Name>Aardvark.Application.WinForms.Vulkan2</Name>
+      <Project>{99dd80b4-b1b8-4042-beea-b3a7fd617242}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
@@ -300,17 +304,6 @@
       <ItemGroup>
         <Reference Include="FSharp.Quotations.Evaluator">
           <HintPath>..\..\..\packages\FSharp.Quotations.Evaluator\lib\portable-net45+netcore45+MonoAndroid1+MonoTouch1\FSharp.Quotations.Evaluator.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And ($(TargetFrameworkVersion) == 'v3.5' Or $(TargetFrameworkVersion) == 'v4.0' Or $(TargetFrameworkVersion) == 'v4.5' Or $(TargetFrameworkVersion) == 'v4.5.1' Or $(TargetFrameworkVersion) == 'v4.5.2' Or $(TargetFrameworkVersion) == 'v4.5.3' Or $(TargetFrameworkVersion) == 'v4.6' Or $(TargetFrameworkVersion) == 'v4.6.1' Or $(TargetFrameworkVersion) == 'v4.6.2' Or $(TargetFrameworkVersion) == 'v4.6.3')">
-      <ItemGroup>
-        <Reference Include="Poly2Tri">
-          <HintPath>..\..\..\packages\Poly2Tri\lib\net35-Client\Poly2Tri.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>

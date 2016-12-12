@@ -143,22 +143,15 @@ type ResourceMangerExtensions private() =
                                         | ShaderType.Image(sampledType, dim, isDepth, isArray, isMS, _, _) ->
                                             let sym = Symbol.Create desc.Parameter.paramName
 
-                                            let sym =
-                                                match prog.Surface.SemanticMap.TryGetValue sym with
-                                                    | (true, sem) -> sem
-                                                    | _ -> sym
-
+                             
                                             let binding =
                                                 match Parameter.tryGetBinding desc.Parameter with
                                                     | Some b -> b
                                                     | None -> failwithf "image has not been given an explicit binding: %A" desc.Parameter
 
                                             let samplerState = 
-                                                match prog.Surface.SamplerStates.TryGetValue sym with
-                                                    | (true, sam) -> sam
-                                                    | _ -> 
-                                                        Log.warn "could not get sampler for texture: %A" sym
-                                                        SamplerStateDescription()
+                                                Log.warn "could not get sampler for texture: %A" sym
+                                                SamplerStateDescription()
 
 
 

@@ -683,11 +683,9 @@ module TextureUploadExtensions =
         
             let channels =
                 LookupTable.lookupTable [
-                    PixelFormat.Alpha, 1
                     PixelFormat.Bgr, 3
                     PixelFormat.Bgra, 4
-                    PixelFormat.Luminance, 1
-                    PixelFormat.LuminanceAlpha, 2
+                    PixelFormat.Red, 1
                     PixelFormat.Rg, 2
                     PixelFormat.Rgb, 3
                     PixelFormat.Rgba, 4
@@ -695,13 +693,13 @@ module TextureUploadExtensions =
 
             let ofColFormat =
                 LookupTable.lookupTable [
-                    Col.Format.Alpha, PixelFormat.Alpha
+                    Col.Format.Alpha, PixelFormat.Red
                     Col.Format.BGR, PixelFormat.Bgr
                     Col.Format.BGRA, PixelFormat.Bgra
                     Col.Format.BGRP, PixelFormat.Bgra
-                    Col.Format.BW, PixelFormat.Luminance
-                    Col.Format.Gray, PixelFormat.Luminance
-                    Col.Format.GrayAlpha, PixelFormat.LuminanceAlpha
+                    Col.Format.BW, PixelFormat.Red
+                    Col.Format.Gray, PixelFormat.Red
+                    Col.Format.GrayAlpha, PixelFormat.Rg
                     Col.Format.NormalUV, PixelFormat.Rg
                     Col.Format.RGB, PixelFormat.Rgb
                     Col.Format.RGBA, PixelFormat.Rgba
@@ -929,32 +927,30 @@ module TextureUploadExtensions =
 
         module PixelFormat =
         
-            let channels =
-                LookupTable.lookupTable [
-                    PixelFormat.Alpha, 1
-                    PixelFormat.Bgr, 3
-                    PixelFormat.Bgra, 4
-                    PixelFormat.Luminance, 1
-                    PixelFormat.LuminanceAlpha, 2
-                    PixelFormat.Rg, 2
-                    PixelFormat.Rgb, 3
-                    PixelFormat.Rgba, 4
-                ]
-
-            let ofColFormat =
-                LookupTable.lookupTable [
-                    Col.Format.Alpha, PixelFormat.Alpha
-                    Col.Format.BGR, PixelFormat.Bgr
-                    Col.Format.BGRA, PixelFormat.Bgra
-                    Col.Format.BGRP, PixelFormat.Bgra
-                    Col.Format.BW, PixelFormat.Luminance
-                    Col.Format.Gray, PixelFormat.Luminance
-                    Col.Format.GrayAlpha, PixelFormat.LuminanceAlpha
-                    Col.Format.NormalUV, PixelFormat.Rg
-                    Col.Format.RGB, PixelFormat.Rgb
-                    Col.Format.RGBA, PixelFormat.Rgba
-                    Col.Format.RGBP, PixelFormat.Rgba
-                ]
+//            let channels =
+//                LookupTable.lookupTable [
+//                    PixelFormat.Bgr, 3
+//                    PixelFormat.Bgra, 4
+//                    PixelFormat.Red, 1
+//                    PixelFormat.Rg, 2
+//                    PixelFormat.Rgb, 3
+//                    PixelFormat.Rgba, 4
+//                ]
+//
+//            let ofColFormat =
+//                LookupTable.lookupTable [
+//                    Col.Format.Alpha, PixelFormat.Red
+//                    Col.Format.BGR, PixelFormat.Bgr
+//                    Col.Format.BGRA, PixelFormat.Bgra
+//                    Col.Format.BGRP, PixelFormat.Bgra
+//                    Col.Format.BW, PixelFormat.Red
+//                    Col.Format.Gray, PixelFormat.Red
+//                    Col.Format.GrayAlpha, PixelFormat.Rg
+//                    Col.Format.NormalUV, PixelFormat.Rg
+//                    Col.Format.RGB, PixelFormat.Rgb
+//                    Col.Format.RGBA, PixelFormat.Rgba
+//                    Col.Format.RGBP, PixelFormat.Rgba
+//                ]
 
             let ofDevil =
                 LookupTable.lookupTable [
@@ -962,9 +958,9 @@ module TextureUploadExtensions =
                     ChannelFormat.BGR, PixelFormat.Bgr
                     ChannelFormat.RGBA, PixelFormat.Rgba
                     ChannelFormat.BGRA, PixelFormat.Bgra
-                    ChannelFormat.Luminance, PixelFormat.Luminance
-                    ChannelFormat.Alpha, PixelFormat.Alpha
-                    ChannelFormat.LuminanceAlpha, PixelFormat.LuminanceAlpha
+                    ChannelFormat.Luminance, PixelFormat.Red
+                    ChannelFormat.Alpha, PixelFormat.Red
+                    ChannelFormat.LuminanceAlpha, PixelFormat.Rg
 
                 ]
 

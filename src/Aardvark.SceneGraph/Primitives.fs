@@ -455,6 +455,24 @@ module SgPrimitives =
                 |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.constant normals)
                 |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant texcoords)
 
+        let farPlaneQuad =
+            let drawCall = 
+                DrawCallInfo(
+                    FaceVertexCount = 4,
+                    InstanceCount = 1
+                )
+
+            let positions =     [| V3f(-1,-1,1); V3f(1,-1,1); V3f(-1,1,1); V3f(1,1,1) |]
+            let texcoords =     [| V2f(0,0); V2f(1,0); V2f(0,1); V2f(1,1) |]
+            let normals =       [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |]
+
+            drawCall
+                |> Sg.render IndexedGeometryMode.TriangleStrip 
+                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant positions)
+                |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.constant normals)
+                |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant texcoords)
+
+
 
         let box (color : IMod<C4b>) (bounds : IMod<Box3d>) =
             let trafo = bounds |> Mod.map (fun box -> Trafo3d.Scale(box.Size) * Trafo3d.Translation(box.Min))

@@ -154,8 +154,10 @@ let main argv =
     
 
 
+
     let w = app.CreateSimpleRenderWindow()
     //w.Size <- V2i(1280, 1024)
+
 
     // initialize a viewport (small part of the world currently)
     let viewportOrigin, viewportSize = 

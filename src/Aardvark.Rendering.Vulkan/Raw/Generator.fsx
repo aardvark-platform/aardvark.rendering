@@ -440,6 +440,8 @@ module FSharpWriter =
         printfn "type VkDebugReportFlagsEXT = uint32"
         printfn "type PFN_vkDebugReportCallbackEXT = nativeint"
         printfn ""
+        printfn "type VkExternalMemoryHandleTypeFlagsNV = uint32"
+        printfn "type VkExternalMemoryFeatureFlagsNV = uint32"
 
     let extendedEnums() =
         printfn "[<AutoOpen>]"
@@ -539,7 +541,8 @@ module FSharpWriter =
                         | Some n -> n
                         | None -> 
                             if n.StartsWith "Vk" || n.StartsWith "PFN" then n
-                            elif n = "ANativeWindow" || n = "HINSTANCE" || n = "HWND" || n = "Display" || n = "Window" || n = "VisualID" || n = "xcb_connection_t"  || n = "xcb_window_t"  || n = "xcb_visualid_t"then "nativeint"
+                            elif n = "HANDLE" || n = "ANativeWindow" || n = "HINSTANCE" || n = "HWND" || n = "Display" || n = "Window" || n = "VisualID" || n = "xcb_connection_t"  || n = "xcb_window_t"  || n = "xcb_visualid_t" || n = "SECURITY_ATTRIBUTES" then "nativeint"
+                            elif n = "DWORD" then "uint32"
                             elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
                             else failwithf "strange type: %A" n
             | Ptr t ->
@@ -666,7 +669,8 @@ module FSharpWriter =
                         | Some n -> n
                         | None -> 
                             if n.StartsWith "Vk" || n.StartsWith "PFN" then n
-                            elif n = "ANativeWindow" || n = "HINSTANCE" || n = "HWND" || n = "Display" || n = "Window" || n = "VisualID" || n = "xcb_connection_t" || n = "xcb_window_t" || n = "xcb_visualid_t" then "nativeint"
+                            elif n = "HANDLE" || n = "ANativeWindow" || n = "HINSTANCE" || n = "HWND" || n = "Display" || n = "Window" || n = "VisualID" || n = "xcb_connection_t"  || n = "xcb_window_t"  || n = "xcb_visualid_t" || n = "SECURITY_ATTRIBUTES" then "nativeint"
+                            elif n = "DWORD" then "uint32"
                             elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
                             else failwithf "strange type: %A" n
             | Ptr t ->
@@ -688,7 +692,7 @@ module FSharpWriter =
 
 
 let run () = 
-    let vk = XElement.Load(@"C:\VulkanSDK\1.0.8.0\vk.xml")
+    let vk = XElement.Load(@"C:\VulkanSDK\1.0.30.0\vk.xml")
     
     let defines = XmlReader.defines vk
     let enums = XmlReader.enums vk

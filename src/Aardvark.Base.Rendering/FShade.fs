@@ -248,7 +248,7 @@ module FShadeInterop =
         static let vulkan =
             {
                 languageVersion = Version(1,4)
-                enabledExtensions = Set.ofList [ "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack"; "GL_KHR_vulkan_GLSL" ]
+                enabledExtensions = Set.ofList [ "GL_ARB_tessellation_shader"; "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack" ]
                 createUniformBuffers = true
                 createGlobalUniforms = false
                 createBindings = true
@@ -328,19 +328,22 @@ module FShadeInterop =
                                             |> Map.ofList
                                     match effect |> compileEffect needed with
                                         | Success(map, code) ->
-                                            let semanticMap = SymDict.empty
+                                            let samplers = Dictionary.empty
 
                                             for KeyValue(k,v) in map do
-                                                if not v.IsSamplerUniform then
-                                                    uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
-                                                else
+                                                if v.IsSamplerUniform then
                                                     let sem, sam = v.Value |> unbox<string * SamplerState>
-                                                    semanticMap.[Sym.ofString k] <- Sym.ofString sem
-                                                    samplerStates.[Sym.ofString sem] <- toSamplerStateDescription sam
-                                                    ()
+                                                    samplers.[(k, 0)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
+                                                elif v.IsSamplerArrayUniform then
+                                                    let semSams = v.Value |> unbox<list<string * SamplerState>> |> List.toArray
+                                                    for i in 0 .. semSams.Length - 1 do
+                                                        let (sem, sam) = semSams.[i]
+                                                        samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
+                                                else
+                                                    uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
 
                                             let bs = getOrCreateSurface code 
-                                            let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplerStates, semanticMap, glslConfig.expectRowMajorMatrices) 
+                                            let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplers, glslConfig.expectRowMajorMatrices) 
                                             cache.[signature] <- result
                                             result
     
@@ -375,7 +378,22 @@ type FShadeRuntimeExtensions private() =
         )
 
     [<Extension>]
+    static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, [<ParamArray>] effects : array<FShadeEffect>) =
+        let l = List.ofArray(effects)
+        this.PrepareSurface(
+            signature,
+            toSurface l
+        )
+
+    [<Extension>]
     static member PrepareEffect (this : IRuntime, l : list<FShadeEffect>) =
+        this.PrepareSurface(
+            toSurface l
+        )
+
+    [<Extension>]
+    static member PrepareEffect (this : IRuntime, [<ParamArray>] effects : array<FShadeEffect>) =
+        let l = List.ofArray(effects)
         this.PrepareSurface(
             toSurface l
         )

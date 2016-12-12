@@ -152,7 +152,15 @@ module PrimitiveValueConverter =
 
     let private booleanConversions =
         [
+            ( fun (b : bool)        -> if b then 1uy else 0uy ) :> obj
+            ( fun (b : bool)        -> if b then 1y else 0y ) :> obj
+            ( fun (b : bool)        -> if b then 1us else 0us ) :> obj
+            ( fun (b : bool)        -> if b then 1s else 0s ) :> obj
+            ( fun (b : bool)        -> if b then 1u else 0u ) :> obj
             ( fun (b : bool)        -> if b then 1 else 0 ) :> obj
+            ( fun (b : bool)        -> if b then 1UL else 0UL ) :> obj
+            ( fun (b : bool)        -> if b then 1L else 0L ) :> obj
+
             ( fun (b : bool)        -> if b then 1.0f else 0.0f ) :> obj
             ( fun (b : bool)        -> if b then 1.0  else 0.0 ) :> obj
         ]

@@ -141,15 +141,23 @@ module RenderTasks =
             GL.Viewport(old.[0], old.[1], old.[2], old.[3])
             GL.Check "could not set viewport"
 
-
+        abstract member ProcessDeltas : unit -> unit
+        abstract member UpdateResources : unit -> FrameStatistics
         abstract member Perform : Framebuffer -> FrameStatistics
         abstract member Release : unit -> unit
+
+
 
         member x.Config = config
         member x.Context = ctx
         member x.Scope = scope
         member x.RenderTaskLock = renderTaskLock
         member x.ResourceManager = manager
+
+        override x.Update() =
+            use t = ctx.ResourceLock
+            x.ProcessDeltas()
+            x.UpdateResources()
 
         override x.Dispose() =
             if not isDisposed then
@@ -177,15 +185,18 @@ module RenderTasks =
             let debugState = x.pushDebugOutput()
             let fboState = x.pushFbo desc
 
+            x.ProcessDeltas()
+            let stats = x.UpdateResources()
+
             let innerStats = 
-                renderTaskLock.Run (fun () -> 
+                renderTaskLock.Run (fun () ->
                     beforeRender.OnNext()
                     NativePtr.write runtimeStats V2i.Zero
-                    let r = x.Perform fbo
+                    let stats = x.Perform fbo
 
                     afterRender.OnNext()
                     let rt = NativePtr.read runtimeStats
-                    { r with DrawCallCount = float rt.X; EffectiveDrawCallCount = float rt.Y }
+                    { stats with DrawCallCount = float rt.X; EffectiveDrawCallCount = float rt.Y }
                 )
 
             x.popFbo (desc, fboState)
@@ -197,7 +208,7 @@ module RenderTasks =
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
             
 
-            innerStats
+            stats + innerStats
 
             
 
@@ -401,7 +412,7 @@ module RenderTasks =
             reinit x config
 
             //TODO
-            let programStats = x.ProgramUpdate (fun () -> program.Update parent)
+            let programStats = x.ProgramUpdate (fun () -> program.Update null)
             FrameStatistics.Zero
 
         override x.Perform() =
@@ -727,7 +738,7 @@ module RenderTasks =
             reinit x cfg
 
             let updateStats = 
-                x.ProgramUpdate (fun () -> program.Update parent)
+                x.ProgramUpdate (fun () -> program.Update null)
             FrameStatistics.Zero
 
 
@@ -875,13 +886,8 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-        let update ( x : AbstractOpenGlRenderTask ) =
-            let mutable stats = FrameStatistics.Zero
+        let processDeltas (x : AbstractOpenGlRenderTask) =
             let deltas = preparedObjectReader.GetDelta x
-
-            resourceUpdateWatch.Restart()
-            stats <- stats + resources.Update(x)
-            resourceUpdateWatch.Stop()
 
             match deltas with
                 | [] -> ()
@@ -894,7 +900,12 @@ module RenderTasks =
                         task.Add v
                     | Rem v ->
                         let task = getSubTask v.RenderPass
-                        task.Remove v
+                        task.Remove v            
+
+        let updateResources ( x : AbstractOpenGlRenderTask ) =
+            resourceUpdateWatch.Restart()
+            let stats = resources.Update(x)
+            resourceUpdateWatch.Stop()
 
             { stats with
                 ResourceUpdateSubmissionTime = resourceUpdateWatch.ElapsedCPU
@@ -902,18 +913,13 @@ module RenderTasks =
             } 
 
 
-        override x.Update() =
-            let mutable stats = update x
+        override x.ProcessDeltas() =
+            processDeltas x
 
-            let mutable runStats = []
-            for (_,t) in Map.toSeq subtasks do
-                stats <- stats + t.Update()
-
-            stats
+        override x.UpdateResources() =
+            updateResources x
 
         override x.Perform(fbo : Framebuffer) =
-            let updateStats = update x
-
             x.ResourceManager.DrawBufferManager.Write(fbo)
 
             if not RuntimeConfig.SupressGLTimers then
@@ -938,7 +944,7 @@ module RenderTasks =
                 if RuntimeConfig.SupressRuntimeStats then FrameStatistics.Zero
                 else runStats |> List.sumBy (fun l -> l.Value)
 
-            updateStats + runStats + primitiveCnt
+            runStats + primitiveCnt
 
 
         override x.Release() =

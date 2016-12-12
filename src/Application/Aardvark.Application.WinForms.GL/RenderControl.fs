@@ -73,7 +73,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     let mutable needsRedraw = false
     let mutable first = true
     
-    let mutable renderContiuously = false
+    let mutable renderContinuously = false
     let mutable autoInvalidate = true
     let mutable threadStealing : StopStealing = 
         { new StopStealing with member x.StopStealing () = { new IDisposable with member x.Dispose() = () } }
@@ -95,13 +95,13 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
     interface IControl with
         member x.IsInvalid = needsRedraw
         member x.Invalidate() =
-            if not x.IsDisposed && not renderContiuously then
+            if not x.IsDisposed && not renderContinuously then
                 if not needsRedraw then
                     needsRedraw <- true
                     x.Invalidate()
 
         member x.Paint() =
-            if not x.IsDisposed && not renderContiuously then
+            if not x.IsDisposed && not renderContinuously then
                 use g = x.CreateGraphics()
                 use e = new PaintEventArgs(g, x.ClientRectangle)
                 x.InvokePaint(x, e)
@@ -113,8 +113,16 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                 f()
 
     member private x.ForceRedraw() =
-        if renderContiuously then () 
+        if renderContinuously then () 
         else messageLoop.Draw x
+
+    member x.RenderContinuously
+        with get() = renderContinuously
+        and set v = 
+            renderContinuously <- v
+            // if continuous rendering is enabled make sure rendering is initiated
+            if v then 
+                x.Invalidate()
 
 
     member x.RenderTask
@@ -145,14 +153,6 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
         base.OnHandleCreated(e)
         loaded <- true
         base.MakeCurrent()
-
-        x.KeyDown.Add(fun e ->
-            if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
-                renderContiuously <- not renderContiuously
-                x.Invalidate()
-                e.Handled <- true
-        )
-
          
     member x.Render() = 
         if loaded then
@@ -227,7 +227,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
 
                     needsRedraw <- false
 
-            if renderContiuously then
+            if renderContinuously then
                 x.Invalidate()
 
     override x.OnPaint(e) =

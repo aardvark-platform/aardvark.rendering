@@ -31,7 +31,7 @@ module RandomCubesPerformanceTest =
         let cameraView  = Mod.constant initialView
 
         let candidates = 
-            [| for _ in 1 .. 9 do yield Helpers.box C4b.Red Box3d.Unit |> Sg.ofIndexedGeometry |]
+            [| for _ in 1 .. 9 do yield Sg.box' C4b.Red Box3d.Unit |]
 
         let scale = 100.0
         let rnd = Random()
@@ -115,7 +115,7 @@ module RandomCubesPerformanceTest =
         let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
         let candidates = 
-            [| for _ in 1 .. 9 do yield Helpers.box C4b.Red Box3d.Unit |> Sg.ofIndexedGeometry |]
+            [| for _ in 1 .. 9 do yield Sg.box' C4b.Red Box3d.Unit  |]
 
         let scale = 100.0
         let rnd = Random()
@@ -175,7 +175,7 @@ module RenderTaskPerformance =
         let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
         let candidates = 
-            [| for _ in 0 .. 8 do yield Helpers.box C4b.Red Box3d.Unit |> Sg.ofIndexedGeometry |]
+            [| for _ in 0 .. 8 do yield Sg.box' C4b.Red Box3d.Unit  |]
 
         let scale = 100.0
         let rnd = Random()
@@ -283,7 +283,7 @@ module StartupPerformance =
             Report.BeginTimed("{0} objects one-shot rendering", n)
 
             Report.BeginTimed("Generating Geometries")
-            let geo = Sphere.solidSphere C4b.Red 1
+            let geo = Sg.sphere' 2 C4b.Red 1.0
             let objects = 
                 [| for _ in 1 .. n do yield geo |]
             Report.End() |> ignore
@@ -413,7 +413,7 @@ module IsActiveFlagPerformance =
 
             let r = System.Random()
             let isActives = Array.init n (fun _ -> Mod.init (r.NextDouble() > 0.5))
-            let sphere = Sphere.solidSphere C4b.Red 1
+            let sphere = Sg.sphere' 2 C4b.Red 1.0
             let objects = 
                 [| for i in 1 .. n - 1 do 
                     let sg = Sg.onOff isActives.[i] sphere
