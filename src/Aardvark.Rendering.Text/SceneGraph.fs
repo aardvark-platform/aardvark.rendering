@@ -1,4 +1,4 @@
-﻿namespace Aardvark.SceneGraph
+﻿namespace Aardvark.Rendering.Text
 
 open System
 open System.Collections.Concurrent
@@ -6,7 +6,7 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Text
-
+open Aardvark.SceneGraph
 
 module RenderPass =
     let shapes = RenderPass.main |> RenderPass.after "shapes" RenderPassOrder.BackToFront

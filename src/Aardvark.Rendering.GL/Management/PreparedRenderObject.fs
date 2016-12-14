@@ -459,7 +459,6 @@ type ResourceManagerExtensions private() =
                             match rj.InstanceAttributes with
                                 | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" v.semantic rj
                                 | _ -> 
-                                    printfn "looking up %s in instance attribs" v.semantic
                                     match rj.InstanceAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
                                         | Some value ->
                                             let dep = x.CreateBuffer(value.Buffer)
