@@ -20,6 +20,8 @@ module TextureParams =
     
     let empty = { wantMipMaps = false; wantSrgb = false; wantCompressed = false}
     let compressed = { wantMipMaps = false; wantSrgb = false; wantCompressed = true }
+    let mipmapped = { wantMipMaps = false; wantSrgb = false; wantCompressed = true }
+    let mipmappedCompressed = { wantMipMaps = true; wantSrgb = false; wantCompressed = true }
 
 type BitmapTexture(bmp : System.Drawing.Bitmap, textureParams : TextureParams) =
     [<Obsolete("use texture params instead")>]
