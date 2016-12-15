@@ -252,6 +252,6 @@ let main argv =
     Aardvark.Init()
 
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
-    App.run()
+    App.run(blubber())
 
     0 // return an integer exit code
