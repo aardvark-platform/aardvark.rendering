@@ -51,29 +51,29 @@ module Surface =
                 let window = ctrl.Handle
                 
 
-                if Set.contains Instance.Extensions.XlibSurface instance.EnabledExtensions then
-                    let dpy = NativePtr.alloc 1
-                    NativePtr.write dpy display
-                    
-                    Log.warn "display: %A" display
-                    Log.warn "window:  %A" window
+//                if Set.contains Instance.Extensions.XlibSurface instance.EnabledExtensions then
+//                    let dpy = NativePtr.alloc 1
+//                    NativePtr.write dpy display
+//                    
+//                    Log.warn "display: %A" display
+//                    Log.warn "window:  %A" window
+//
+//                    let info = XLib { dpy = NativePtr.ofNativeInt display; window = window }
+//                    let res = device.CreateSurface info
+//                    res.OnDispose.Add (fun () -> NativePtr.free dpy)
+//                    res
+//
+//                else
 
-                    let info = XLib { dpy = NativePtr.ofNativeInt display; window = window }
-                    let res = device.CreateSurface info
-                    res.OnDispose.Add (fun () -> NativePtr.free dpy)
-                    res
+                let connection = Xcb.XGetXCBConnection(display)
 
-                else
+//                let dpy = NativePtr.alloc 1
+//                NativePtr.write dpy connection
 
-                    let connection = Xcb.XGetXCBConnection(display)
-
-                    let dpy = NativePtr.alloc 1
-                    NativePtr.write dpy connection
-
-                    let info = Xcb { connection = dpy; window = window }
-                    let res = device.CreateSurface info
-                    res.OnDispose.Add (fun () -> NativePtr.free dpy)
-                    res
+                let info = Xcb { connection = NativePtr.ofNativeInt connection; window = window }
+                let res = device.CreateSurface info
+                //res.OnDispose.Add (fun () -> NativePtr.free dpy)
+                res
 
             | Mac ->
                 failf "Apple sadly decided not to support Vulkan"
