@@ -252,7 +252,7 @@ module TextureCreationExtensions =
 
                 GL.Check "could not allocate texture"
 
-                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels)
+                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
                 GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
 
 
