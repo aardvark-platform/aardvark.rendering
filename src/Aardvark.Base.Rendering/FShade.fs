@@ -340,7 +340,8 @@ module FShadeInterop =
                                                         let (sem, sam) = semSams.[i]
                                                         samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
                                                 else
-                                                    uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
+                                                    if not (isNull v.Value) then
+                                                        uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
 
                                             let bs = getOrCreateSurface code 
                                             let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplers, glslConfig.expectRowMajorMatrices) 
