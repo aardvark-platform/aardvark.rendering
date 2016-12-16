@@ -5,6 +5,7 @@ nuget Aardvark.Base.Incremental          ~> 2.4.5
 nuget Aardvark.Base.Runtime              ~> 2.4.5
                                          
 nuget FShade.Core                        ~> 2.3.5
+nuget FSharp.Core
 nuget GLSLangSharp                       ~> 0.3.2
      
 nuget FSharp.Quotations.Evaluator        ~> 1.0.6
