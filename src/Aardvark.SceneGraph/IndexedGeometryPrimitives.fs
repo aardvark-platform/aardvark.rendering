@@ -292,6 +292,8 @@ module IndexedGeometryPrimitives =
     let solidSubdivisionSphere (sphere : Sphere3d) level (color : C4b) =
         Sphere.subdivisionWithMode sphere level color IndexedGeometryMode.TriangleList
 
+    
+
 
     let cameraFrustum (v : IMod<CameraView>) (p : IMod<Frustum>) (c : IMod<C4b>) =
         adaptive {
