@@ -52,13 +52,13 @@ module IndexedGeometry =
         let private cylinderLineIndices1 (indices : List<int>) (i : int) (tessellation : int) =
                 indices.Add(i * 2)
                 indices.Add(i * 2 + 1)
-                indices.Add(i * 2 + 1)
-                indices.Add((i * 2 + 2) % (tessellation * 2))
+//                indices.Add(i * 2 + 1)
+//                indices.Add((i * 2 + 2) % (tessellation * 2))
 
 //                indices.Add(i * 2 + 1)
 //                indices.Add((i * 2 + 3) % (tessellation * 2))
-                indices.Add((i * 2 + 3) % (tessellation * 2))
-                indices.Add((i * 2 + 2) % (tessellation * 2))
+//                indices.Add((i * 2 + 3) % (tessellation * 2))
+//                indices.Add((i * 2 + 2) % (tessellation * 2))
 
         let private cylinderLineIndices2 (indices : List<int>) (i : int) (tessellation : int) =
                 // top
@@ -144,6 +144,12 @@ module IndexedGeometry =
         let wireframeCylinder (center : V3d) (axis : V3d) (height : float) (radiusBottom : float) (radiusTop : float) (tessellation : int) (color : C4b) =
             cylinderWithCol center axis height radiusBottom radiusTop tessellation IndexedGeometryMode.LineList color
 
+        let solidCone (center : V3d) (axis : V3d) (height : float) (radius : float) (tessellation : int) (color : C4b) =
+            cylinderWithCol center axis height radius 0.0 tessellation IndexedGeometryMode.TriangleList color
+        
+        let wireframeCone (center : V3d) (axis : V3d) (height : float) (radius : float) (tessellation : int) (color : C4b) =
+            cylinderWithCol center axis height radius 0.0 tessellation IndexedGeometryMode.LineList color
+
     open lol
 
     Interactive.Samples <- 1
@@ -195,7 +201,7 @@ module IndexedGeometry =
                 IndexedGeometryPrimitives.solidPhiThetaSphere
                     (Sphere3d((V3d(1.0,2.0,-2.5)),0.45)) 6 (C4b(60, 200, 220))
 
-                wireframeCylinder (V3d(4.0,4.0,5.0)) (V3d.OOI) 3.0 4.0 2.0 16 (C4b(250,240,230))
+                wireframeCone (V3d(4.0,4.0,5.0)) (V3d.OOI) 3.0 4.0 16 (C4b(250,240,230))
             ]
 
         prims
