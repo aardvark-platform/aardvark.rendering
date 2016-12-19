@@ -545,6 +545,8 @@ module ProgramExtensions =
                     let shaders = results |> List.choose (function (_,Success r) -> Some r | _ -> None)
                     Success shaders
                 else
+                    let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
+                    Report.Line("Failed to compile shader:\n{0}", codeWithDefine)
                     let err = errors |> List.map (fun (stage, e) -> sprintf "%A:\r\n%s" stage (String.indent 1 e)) |> String.concat "\r\n\r\n" 
                     Error err
             

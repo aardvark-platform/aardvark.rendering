@@ -67,12 +67,12 @@ module Surface =
 
                 let connection = Xcb.XGetXCBConnection(display)
 
-                let dpy = NativePtr.alloc 1
-                NativePtr.write dpy connection
+//                let dpy = NativePtr.alloc 1
+//                NativePtr.write dpy connection
 
-                let info = Xcb { connection = dpy; window = window }
+                let info = Xcb { connection = NativePtr.ofNativeInt connection; window = window }
                 let res = device.CreateSurface info
-                res.OnDispose.Add (fun () -> NativePtr.free dpy)
+                //res.OnDispose.Add (fun () -> NativePtr.free dpy)
                 res
 
             | Mac ->
