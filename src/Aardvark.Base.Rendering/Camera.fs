@@ -358,7 +358,7 @@ module ViewProjection =
 
         view, proj
 
-         
+    
 
     let intersects (b : Box3d) (viewProj : Trafo3d) =
         let fw = viewProj.Forward
@@ -388,6 +388,40 @@ module ViewProjection =
         Vec.dot (r3 - r1) p >= 0.0 &&
         Vec.dot (r3 + r2) p >= 0.0 &&
         Vec.dot (r3 - r2) p >= 0.0       
+
+    let private frustumCorners =
+        [|
+            V3d(-1.0, -1.0, -1.0)
+            V3d( 1.0, -1.0, -1.0)
+            V3d( 1.0,  1.0, -1.0)
+            V3d(-1.0,  1.0, -1.0)
+            V3d(-1.0, -1.0,  1.0)
+            V3d( 1.0, -1.0,  1.0)
+            V3d( 1.0,  1.0,  1.0)
+            V3d(-1.0,  1.0,  1.0)
+        |]
+
+    let private cornerIndices =
+        [|
+            1;2; 2;6; 6;5; 5;1;
+            2;3; 3;7; 7;6; 4;5; 
+            7;4; 3;0; 0;4; 0;1;
+        |]
+
+    let toIndexedGeometry (v : CameraView) (p : Frustum) (color : C4b) =
+        let invViewProj = (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse
+
+        let positions = frustumCorners |> Array.map (invViewProj.Forward.TransformPosProj)
+
+        IndexedGeometry(
+            Mode = IndexedGeometryMode.LineList,
+            IndexedAttributes =
+                SymDict.ofList [
+                    DefaultSemantic.Positions, cornerIndices |> Array.map (fun i -> positions.[i].ToV3f()) :> Array
+                    DefaultSemantic.Colors, Array.create cornerIndices.Length color :> Array
+                ]
+        )
+
 
     let toHull3d (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0

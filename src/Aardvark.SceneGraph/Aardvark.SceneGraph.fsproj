@@ -67,6 +67,7 @@
     <Compile Include="HighLevelSceneGraph\Culling.fs" />
     <Compile Include="SgFSharp.fs" />
     <Compile Include="Primitives.fs" />
+    <Compile Include="IndexedGeometryPrimitives.fs" />
     <Compile Include="PointCloud.fs" />
     <Compile Include="ManagedPool.fs" />
     <Compile Include="FShadeSceneGraph.fs" />

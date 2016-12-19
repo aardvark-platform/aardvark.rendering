@@ -17,7 +17,7 @@
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
     <TargetFrameworkProfile />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debfug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -69,7 +69,6 @@
     <Compile Include="GPUVendor.fs" />
     <Compile Include="DefaultSemantic.fs" />
     <Compile Include="IndexedGeometry.fs" />
-    <Compile Include="IndexedGeometryPrimitives.fs" />
     <Compile Include="FrameStatistics.fs" />
     <Compile Include="DrawCallInfo.fs" />
     <Compile Include="Buffers.fs" />

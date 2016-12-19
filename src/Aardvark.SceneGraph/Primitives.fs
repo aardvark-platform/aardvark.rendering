@@ -17,7 +17,7 @@ open Aardvark.Base.Incremental
 [<AutoOpen>]
 module SgPrimitives =
 
-    module private Sphere =
+    module Sphere =
         
         let private cube = 
             let V3d(x : int,y : int,z : int) = V3d(x,y,z).Normalized

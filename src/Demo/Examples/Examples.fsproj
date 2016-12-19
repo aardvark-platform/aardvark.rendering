@@ -64,6 +64,7 @@
   <ItemGroup>
     <Compile Include="HelloWorld.fs" />
     <Compile Include="Tutorial.fs" />
+    <Compile Include="IndexedGeometryPrimitives.fs" />
     <Compile Include="PostProcessing.fs" />
     <Compile Include="Shadows.fs" />
     <Compile Include="LoD.fs" />
