@@ -292,8 +292,189 @@ module IndexedGeometryPrimitives =
     let solidSubdivisionSphere (sphere : Sphere3d) level (color : C4b) =
         Sphere.subdivisionWithMode sphere level color IndexedGeometryMode.TriangleList
 
-    
+    module Cylinder =
+        
+        
+        let getCirclePos (i : int) (tessellation : int) (trafo : Trafo3d) =
+            let angle = float i * Constant.PiTimesTwo / float tessellation
+            trafo.Forward.TransformPos(V3d(Fun.Cos(angle), Fun.Sin(angle), 0.0))
 
+        let private cylinderTriangleIndices1 (indices : List<int>) (i : int) (tessellation : int) =
+                indices.Add(i * 2)
+                indices.Add(i * 2 + 1)
+                indices.Add((i * 2 + 2) % (tessellation * 2))
+
+                indices.Add(i * 2 + 1)
+                indices.Add((i * 2 + 3) % (tessellation * 2))
+                indices.Add((i * 2 + 2) % (tessellation * 2))
+
+        let private cylinderTriangleIndices2 (indices : List<int>) (i : int) (tessellation : int) =
+                // top
+                indices.Add(i * 2 + tessellation * 2)
+                indices.Add(((i * 2 + 2) % (tessellation * 2)) + tessellation * 2)
+                indices.Add(tessellation * 4)
+
+                // bottom
+                indices.Add(((i * 2 + 3) % (tessellation * 2)) + tessellation * 2)
+                indices.Add(i * 2 + 1 + tessellation * 2)
+                indices.Add(tessellation * 4 + 1)
+           
+        let private cylinderLineIndices1 (indices : List<int>) (i : int) (tessellation : int) =
+                indices.Add(i * 2)
+                indices.Add(i * 2 + 1)
+
+        let private cylinderLineIndices2 (indices : List<int>) (i : int) (tessellation : int) =
+                // top
+                indices.Add(i * 2 + tessellation * 2)
+                indices.Add(((i * 2 + 2) % (tessellation * 2)) + tessellation * 2)
+                indices.Add(((i * 2 + 2) % (tessellation * 2)) + tessellation * 2)
+                indices.Add(tessellation * 4)
+
+                // bottom
+                indices.Add(((i * 2 + 3) % (tessellation * 2)) + tessellation * 2)
+                indices.Add(i * 2 + 1 + tessellation * 2)
+                indices.Add(i * 2 + 1 + tessellation * 2)
+                indices.Add(tessellation * 4 + 1)
+            
+
+        let cylinder (center : V3d) (axis : V3d) (height : float) (radius : float) (radiusTop : float) (tessellation : int) (mode : IndexedGeometryMode) =
+            
+            let vertices = List<V3d>()
+            let normals = List<V3d>()
+            let indices = List<int>()
+
+            let axisNormalized = axis.Normalized
+            let trafo = Trafo3d.FromNormalFrame(V3d.OOO, axisNormalized)
+
+            // create a ring of triangles around the outside of the cylinder
+            for i in 0 .. tessellation - 1 do
+                let normal = getCirclePos i tessellation trafo
+
+                vertices.Add(normal * radiusTop + axis * height)
+                normals.Add(normal)
+
+                vertices.Add(normal * radius)
+                normals.Add(normal)
+
+                match mode with
+                | IndexedGeometryMode.TriangleList ->
+                    cylinderTriangleIndices1 indices i tessellation
+                | IndexedGeometryMode.LineList ->
+                    cylinderLineIndices1 indices i tessellation 
+                | _ -> failwith "implement me"
+
+            // top and bottom caps need replicated vertices because of
+            // different normals
+            for i in 0 .. tessellation - 1 do
+                // top
+                vertices.Add(vertices.[i * 2])
+                normals.Add(axisNormalized)
+
+                // bottom
+                vertices.Add(vertices.[i * 2 + 1])
+                normals.Add(-axisNormalized)
+                
+                match mode with
+                | IndexedGeometryMode.TriangleList ->
+                    cylinderTriangleIndices2 indices i tessellation
+                | IndexedGeometryMode.LineList ->
+                    cylinderLineIndices2 indices i tessellation 
+                | _ -> failwith "implement me"
+
+            // top cap center
+            vertices.Add(axis * height)
+            normals.Add(axisNormalized)
+
+            // bottom cap center
+            vertices.Add(V3d.OOO)
+            normals.Add(-axisNormalized)
+
+            let pos = vertices |> Seq.toArray |> Array.map (Trafo3d.Translation(center).Forward.TransformPos)
+            let norm = normals |> Seq.toArray
+            let idx = indices  |> Seq.toArray
+
+            pos,norm,idx
+
+        let cylinderWithCol (center : V3d) (axis : V3d) (height : float) (radius : float) (radiusTop : float) (tessellation : int) (mode : IndexedGeometryMode) (col : C4b) =
+            let (pos,norm,idx) = cylinder center axis height radius radiusTop tessellation mode
+            let col = Array.replicate (pos |> Array.length) col
+
+            IndexedGeometry.fromPosColNorm pos col norm (Some idx) mode
+
+    open Cylinder
+
+    let solidCylinder (center : V3d) (axis : V3d) (height : float) (radiusBottom : float) (radiusTop : float) (tessellation : int) (color : C4b) =
+        cylinderWithCol center axis height radiusBottom radiusTop tessellation IndexedGeometryMode.TriangleList color
+
+    let wireframeCylinder (center : V3d) (axis : V3d) (height : float) (radiusBottom : float) (radiusTop : float) (tessellation : int) (color : C4b) =
+        cylinderWithCol center axis height radiusBottom radiusTop tessellation IndexedGeometryMode.LineList color
+
+    let solidCone (center : V3d) (axis : V3d) (height : float) (radius : float) (tessellation : int) (color : C4b) =
+        cylinderWithCol center axis height radius 0.0 tessellation IndexedGeometryMode.TriangleList color
+        
+    let wireframeCone (center : V3d) (axis : V3d) (height : float) (radius : float) (tessellation : int) (color : C4b) =
+        cylinderWithCol center axis height radius 0.0 tessellation IndexedGeometryMode.LineList color
+
+    module Torus =
+        
+        let private triIndices (indices : List<int>) c =
+            indices.AddRange [|c; c + 1; c + 2; c; c + 2; c + 3|]
+
+        let private lineIndices (indices : List<int>) c =
+            indices.AddRange [|c; c + 1; c + 1; c + 2; c + 2; c + 3; c + 3; c|]
+
+        let torusWithMode (torus : Torus3d) (majorTessellation : int) (minorTessellation : int) (mode : IndexedGeometryMode) =
+            
+            let majorCircle = torus.GetMajorCircle()
+
+            let tPoints = [| 0..majorTessellation |]
+                            |> Array.map ( fun i -> 
+                                    let angle = (float i) / float majorTessellation * Constant.PiTimesTwo
+                                    let majorP = majorCircle.GetPoint(angle)
+                                    let uAxis = (majorP - torus.Position).Normalized * torus.MinorRadius
+                                    let vAxis = torus.Direction.Normalized * torus.MinorRadius
+
+                                    [| 0..minorTessellation |]
+                                        |> Array.map ( fun j ->
+                                            let angle2 = (float j) / float minorTessellation * Constant.PiTimesTwo;
+                                            majorP + uAxis * angle2.Cos() + vAxis * angle2.Sin();
+                                        )
+                                )
+                                
+            let indices = List<int>()
+            let positions = List<V3d>()
+            let normals = List<V3d>()
+
+            for i in 1..tPoints.Length-1 do
+                for j in 1..tPoints.[i].Length-1 do
+                    let c = positions.Count
+                    match mode with
+                    | IndexedGeometryMode.TriangleList -> triIndices indices c
+                    | IndexedGeometryMode.LineList -> lineIndices indices c
+                    | _ -> failwith "implement me"
+                    let quad = [| tPoints.[i].[j]; tPoints.[i].[j - 1]; tPoints.[i - 1].[j - 1]; tPoints.[i - 1].[j] |]
+                    positions.AddRange quad
+                    normals.AddRange (Triangle3d(quad).Normal |> Array.replicate 4)
+            
+            let pos = positions |> Seq.toArray
+            let idx = indices   |> Seq.toArray
+            let norm = normals  |> Seq.toArray
+
+            idx,pos,norm
+        
+        let torus (torus : Torus3d) (color : C4b) (majorTessellation : int) (minorTessellation : int) (mode : IndexedGeometryMode) =
+            let (idx,pos,norm) = torusWithMode torus majorTessellation minorTessellation mode
+            let col = Array.replicate (pos |> Array.length) color
+
+            IndexedGeometry.fromPosColNorm pos col norm (Some idx) mode
+
+    open Torus
+
+    let solidTorus torus3D color majorTess minorTess =
+        torus torus3D color majorTess minorTess IndexedGeometryMode.TriangleList
+
+    let wireframeTorus torus3D color majorTess minorTess =
+        torus torus3D color majorTess minorTess IndexedGeometryMode.LineList
 
     let cameraFrustum (v : IMod<CameraView>) (p : IMod<Frustum>) (c : IMod<C4b>) =
         adaptive {
