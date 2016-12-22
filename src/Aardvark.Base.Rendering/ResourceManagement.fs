@@ -132,6 +132,19 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
     let mutable info = ResourceInfo.Zero
     let lockObj = obj()
 
+    let destroy(x : Resource<_>) =
+        onDispose.OnNext()
+        x.Destroy handle.Value
+        current <- None
+        info <- ResourceInfo.Zero
+
+        lock x (fun () ->
+            let mutable foo = 0
+            x.Outputs.Consume(&foo) |> ignore
+            x.OutOfDate <- true
+            handle.UnsafeCache <- Unchecked.defaultof<_>
+        )
+
     abstract member Create : Option<'h> -> 'h * FrameStatistics
     abstract member Destroy : 'h -> unit
     abstract member GetInfo : 'h -> ResourceInfo
@@ -176,14 +189,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
     member x.RemoveRef() =
         lock lockObj (fun () -> 
             if Interlocked.Decrement(&refCount) = 0 then
-                onDispose.OnNext()
-                x.Destroy handle.Value
-                current <- None
-                info <- ResourceInfo.Zero
-                transact (fun () -> 
-                    x.MarkOutdated()
-                    handle.Value <- Unchecked.defaultof<_>
-                )
+                destroy x
         )
 
     member x.Update(caller : IAdaptiveObject) =
@@ -203,14 +209,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
     member x.ForceDispose() =
         lock lockObj (fun () -> 
             if Interlocked.Exchange(&refCount, 0) <> 0 then
-                onDispose.OnNext()
-                x.Destroy handle.Value
-                current <- None
-                info <- ResourceInfo.Zero
-                transact (fun () -> 
-                    x.MarkOutdated()
-                    handle.Value <- Unchecked.defaultof<_>
-                )
+                destroy x
         )
 
     interface IDisposable with
