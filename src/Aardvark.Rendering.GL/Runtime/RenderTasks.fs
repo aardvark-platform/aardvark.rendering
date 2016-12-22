@@ -32,12 +32,15 @@ module RenderTasks =
 
         let mutable isDisposed = false
         let currentContext = Mod.init Unchecked.defaultof<ContextHandle>
+        let contextHandle = NativePtr.alloc 1
+        do NativePtr.write contextHandle 0n
 
 
         let scope =
             { 
                 runtimeStats = runtimeStats
                 currentContext = currentContext
+                contextHandle = contextHandle
                 drawBuffers = NativePtr.toNativeInt allBuffers.Buffers
                 drawBufferCount = allBuffers.Count 
                 usedTextureSlots = ref RefSet.empty
@@ -174,6 +177,12 @@ module RenderTasks =
 
             use token = ctx.ResourceLock 
             if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
+                let intCtx = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
+//
+//                let rand = Random()
+//                let ctxHandle = rand.Next() |> nativeint
+
+                NativePtr.write contextHandle intCtx.Context.Handle
                 transact (fun () -> Mod.change currentContext ctx.CurrentContextHandle.Value)
 
             let fbo =
@@ -203,7 +212,6 @@ module RenderTasks =
             x.popDebugOutput debugState
 
                 
-
             GL.BindVertexArray 0
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
             
@@ -668,7 +676,7 @@ module RenderTasks =
             )
 
         override x.Run() =
-            Interpreter.run (fun gl ->
+            Interpreter.run parent.Scope.contextHandle (fun gl ->
                 for a in arr do gl.render a
 
                 { FrameStatistics.Zero with
@@ -804,33 +812,6 @@ module RenderTasks =
         let vaoCache = ResourceCache(None, Some this.RenderTaskLock)
 
         let add (ro : PreparedRenderObject) = 
-            let res = 
-                vaoCache.GetOrCreate(
-                    [this.Scope.currentContext :> obj; ro.VertexArray.Handle :> obj],
-                    (fun () ->
-                        { new Resource<nativeint>(ResourceKind.Unknown) with
-                            override x.Create (old) = 
-                                let ctx = this.Scope.currentContext.GetValue x
-                                let handle = ro.VertexArray.Handle.GetValue x
-                                match old with
-                                    | Some old ->
-                                        NativeInt.write old handle.Handle
-                                        old, FrameStatistics.Zero
-
-                                    | None -> 
-                                        let ptr = System.Runtime.InteropServices.Marshal.AllocHGlobal sizeof<int>
-                                        NativeInt.write ptr handle.Handle
-                                        ptr, FrameStatistics.Zero
-
-                            override x.Destroy handle = System.Runtime.InteropServices.Marshal.FreeHGlobal handle
-                            override x.GetInfo handle = ResourceInfo.Zero
-                        }
-                    )
-                )
-
-            let ro = { ro with VertexArrayHandle = res }
-
-
             let all = ro.Resources |> Seq.toList
             for r in all do resources.Add r
 
@@ -839,7 +820,6 @@ module RenderTasks =
             ro.Activation <- 
                 { new IDisposable with
                     member x.Dispose() =
-                        res.Dispose()
                         old.Dispose()
                         for r in all do resources.Remove r
                         //callStats.Remove ro

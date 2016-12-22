@@ -14,6 +14,7 @@ type MetaInstruction = IMod<list<Instruction>>
 type CompilerInfo =
     {
         //stats : ref<FrameStatistics>
+        contextHandle : nativeptr<nativeint>
         runtimeStats : nativeptr<V2i>
         currentContext : IMod<ContextHandle>
         drawBuffers : nativeint

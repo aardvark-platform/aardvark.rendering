@@ -115,6 +115,13 @@ DllExport(void) vmInit()
 	glGetBufferParameteriv = (PFNGLGETBUFFERPARAMETERIVPROC)getProc("glGetBufferParameteriv");
 
 	glDrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)getProc("glDrawElementsInstanced");
+
+	glGenVertexArrays = (PFNGLGENVERTEXARRAYSPROC)getProc("glGenVertexArrays");
+	glDeleteVertexArrays = (PFNGLDELETEVERTEXARRAYSPROC)getProc("glDeleteVertexArrays");
+	glEnableVertexAttribArray = (PFNGLENABLEVERTEXATTRIBARRAYPROC)getProc("glEnableVertexAttribArray");
+	glDisableVertexAttribArray = (PFNGLDISABLEVERTEXATTRIBARRAYPROC)getProc("glDisableVertexAttribArray");
+	glVertexAttribDivisor = (PFNGLVERTEXATTRIBDIVISORPROC)getProc("glVertexAttribDivisor");
+
 	#endif
 
 }
@@ -385,7 +392,9 @@ void runInstruction(Instruction* i)
 	case HSetStencilMode:
 		hglSetStencilMode((StencilMode*)i->Arg0);
 		break;
-
+	case HBindVertexAttributes:
+		hglBindVertexAttributes((void**)i->Arg0, (VertexInputBinding*)i->Arg1);
+		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
 		break;
@@ -700,7 +709,12 @@ Statistics runRedundancyChecks(Fragment* frag)
 					}
 					break;
 
-
+				case HBindVertexAttributes:
+					if (state.HShouldBindVertexAttributes((VertexInputBinding*)i->Arg1))
+					{
+						hglBindVertexAttributes((void**)i->Arg0, (VertexInputBinding*)i->Arg1);
+					}
+					break;
 
 				default:
 					printf("unknown instruction code: %d\n", i->Code);
@@ -1017,5 +1031,56 @@ DllExport(void) hglBindVertexArray(int* vao)
 	glBindVertexArray(*vao);
 }
 
+DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding* binding)
+{
+	auto currentContext = *contextHandle;
+	if (binding == nullptr || contextHandle == nullptr)
+	{
+		glBindVertexArray(0);
+	}
 
+	else if (currentContext != binding->VAOContext)
+	{
+		if (binding->VAO >= 0)
+		{
+			uint32_t vao = binding->VAO;
+			glDeleteVertexArrays(1, &vao);
+		}
+
+		uint32_t vao = 0u;
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+
+		for (uint32_t i = 0; i < (uint32_t)binding->Count; i++)
+		{
+			auto b = binding->Bindings + i;
+			auto index = b->Index;
+
+			if (b->Divisor >= 0)
+			{
+				auto ptr = &b->Attribute.Pointer;
+				glEnableVertexAttribArray(index);
+				glBindBuffer(GL_ARRAY_BUFFER, ptr->Buffer);
+				glVertexAttribPointer(index, b->Size, ptr->Type, ptr->Normalized, ptr->Stride, nullptr);
+				glVertexAttribDivisor(index, (uint32_t)b->Divisor);
+			}
+			else
+			{
+				auto value = b->Attribute.Value;
+				glDisableVertexAttribArray(index);
+				glVertexAttrib4f(index, value.X, value.Y, value.Z, value.W);
+			}
+		}
+
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, binding->IndexBuffer);
+
+		binding->VAOContext = currentContext;
+		binding->VAO = vao;
+	}
+
+	else
+	{
+		glBindVertexArray((uint32_t)binding->VAO);
+	}
+}
 

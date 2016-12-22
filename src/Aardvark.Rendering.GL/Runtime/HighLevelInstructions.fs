@@ -39,6 +39,9 @@ module Instructions =
     let setStencilMode (m : IResource<StencilModeHandle>) =
         m.Handle |> Mod.force |> Instruction.HSetStencilMode 
 
+    let bindVertexAttributes (contextHandle : nativeptr<nativeint>) (m : IResource<VertexInputBindingHandle>) =
+        Instruction.HBindVertexAttributes (contextHandle, Mod.force m.Handle)
+
     let bindProgram (p : IResource<Program>) =
         p.Handle |> Mod.map (fun r -> Instruction.BindProgram(r.Handle))
 

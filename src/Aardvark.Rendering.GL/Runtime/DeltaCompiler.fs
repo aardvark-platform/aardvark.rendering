@@ -30,6 +30,7 @@ module DeltaCompiler =
 
     let compileDelta (prev : PreparedRenderObject) (me : PreparedRenderObject) =
         compiled {
+            let! s = compilerState
 
             // set the output-buffers
             if prev.DepthBufferMask <> me.DepthBufferMask then
@@ -108,16 +109,9 @@ module DeltaCompiler =
 
 
             // bind the VAO (if needed)
-            if prev.VertexArray <> me.VertexArray then
-                let ptr = me.VertexArrayHandle.Handle |> Mod.force 
-                yield Instruction.HBindVertexArray ptr
-
-            // bind vertex attribute default values
-            for (id,v) in Map.toSeq me.VertexAttributeValues do
-                match Map.tryFind id prev.VertexAttributeValues with
-                    | Some ov when v = ov -> ()
-                    | _ -> 
-                        yield Instructions.bindVertexAttribValue id v
+            if prev.VertexInputBinding <> me.VertexInputBinding then
+                let ptr = me.VertexInputBinding.Handle |> Mod.force 
+                yield Instruction.HBindVertexAttributes(s.info.contextHandle, ptr)
 
             // draw the thing
             // TODO: surface assumed to be constant here

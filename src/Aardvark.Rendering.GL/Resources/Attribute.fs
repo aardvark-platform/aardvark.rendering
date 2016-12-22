@@ -66,7 +66,8 @@ type AttributeDescription =
         /// <summary>
         /// the buffer containing the attribute-data
         /// </summary>        
-        Buffer : Buffer 
+        Content : Either<Buffer, V4f>
+
     }
 
 [<AutoOpen>]
@@ -161,29 +162,15 @@ module AttributeDescriptionExtensions =
         member x.VertexAttributeType =
             glTypes.[x.BaseType]
 
-    module ExecutionContext =
-        let bindVertexAttribute (index : int) (a : AttributeDescription) =
-            seq {
-                yield Instruction.EnableVertexAttribArray index
-
-                yield! ExecutionContext.bindBuffer BufferTarget.ArrayBuffer a.Buffer
-                
-                yield Instruction.VertexAttribPointer index a.Dimension (int a.VertexAttributeType) a.Normalized a.Stride 0n
-
-                if ExecutionContext.instancingSupported then
-                    match a.Frequency with
-                        | PerVertex -> yield Instruction.VertexAttribDivisor index 0
-                        | PerInstances d -> yield Instruction.VertexAttribDivisor index d
-            }
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module AttributeDescription =
-
-    let simple (t : Type) (buffer : Buffer) =
-        { Type = t; Frequency = PerVertex; Normalized = false; Stride = 0; Offset = 0; Buffer = buffer }
-
-    let normalized (t : Type) (buffer : Buffer) =
-        { Type = t; Frequency = PerVertex; Normalized = false; Stride = 0; Offset = 0; Buffer = buffer }
-
+//
+//[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+//module AttributeDescription =
+//
+//    let simple (t : Type) (buffer : Buffer) =
+//        { Type = t; Frequency = PerVertex; Normalized = false; Stride = 0; Offset = 0; Buffer = buffer }
+//
+//    let normalized (t : Type) (buffer : Buffer) =
+//        { Type = t; Frequency = PerVertex; Normalized = false; Stride = 0; Offset = 0; Buffer = buffer }
+//
 
 

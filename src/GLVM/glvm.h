@@ -58,6 +58,12 @@ static PFNGLUNMAPBUFFERPROC								glUnmapBuffer;
 static PFNGLGETBUFFERPARAMETERIVPROC					glGetBufferParameteriv;
 static PFNGLDRAWELEMENTSBASEVERTEXPROC					glDrawElementsBaseVertex;
 static PFNGLDRAWELEMENTSINSTANCEDPROC					glDrawElementsInstanced;
+static PFNGLGENVERTEXARRAYSPROC							glGenVertexArrays;
+static PFNGLDELETEVERTEXARRAYSPROC						glDeleteVertexArrays;
+static PFNGLENABLEVERTEXATTRIBARRAYPROC					glEnableVertexAttribArray;
+static PFNGLDISABLEVERTEXATTRIBARRAYPROC				glDisableVertexAttribArray;
+static PFNGLVERTEXATTRIBDIVISORPROC						glVertexAttribDivisor;
+
 #else
 typedef void (APIENTRYP PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC) (GLenum mode, GLint first, GLsizei count, GLsizei primcount, GLuint baseinstance);
 typedef void (APIENTRYP PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC) (GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei primcount, GLint basevertex, GLuint baseinstance);
@@ -70,6 +76,7 @@ static PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC			glDrawArraysInstancedBaseInsta
 static PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC		glDrawElementsInstancedBaseVertexBaseInstance;
 static PFNGLMULTIDRAWARRAYSINDIRECTPROC					glMultiDrawArraysIndirect;
 static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
+
 
 // enum holding the available instruction codes
 typedef enum {
@@ -139,8 +146,8 @@ typedef enum {
 	HSetCullFace = 105,
 	HSetPolygonMode = 106,
 	HSetBlendMode = 107,
-	HSetStencilMode = 108
-
+	HSetStencilMode = 108,
+	HBindVertexAttributes = 109
 
 } InstructionCode;
 
@@ -203,3 +210,4 @@ DllExport(void) hglSetPolygonMode(GLenum* mode);
 DllExport(void) hglSetBlendMode(BlendMode* mode);
 DllExport(void) hglSetStencilMode(StencilMode* mode);
 DllExport(void) hglBindVertexArray(int* vao);
+DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding* binding);

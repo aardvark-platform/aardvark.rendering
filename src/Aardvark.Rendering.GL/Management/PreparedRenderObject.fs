@@ -38,9 +38,7 @@ type PreparedRenderObject =
         BlendMode : IResource<BlendModeHandle>
         StencilMode : IResource<StencilModeHandle>
 
-        mutable VertexArray : IResource<VertexArrayObject>
-        VertexArrayHandle : IResource<nativeint>
-        VertexAttributeValues : Map<int, IMod<V4f>>
+        VertexInputBinding : IResource<VertexInputBindingHandle>
         
         ColorAttachmentCount : int
         DrawBuffers : Option<DrawBufferConfig>
@@ -94,9 +92,7 @@ type PreparedRenderObject =
                 | _ -> yield x.DrawCallInfos :> _
 
 
-            yield x.VertexArray :> _ 
-            if not (isNull (x.VertexArrayHandle :> obj)) then
-                yield x.VertexArrayHandle :> _
+            yield x.VertexInputBinding :> _ 
             yield x.IsActive :> _
             yield x.BeginMode :> _
             
@@ -136,9 +132,7 @@ type PreparedRenderObject =
             | Some ib -> ib.Update(caller) |> add
             | _ -> x.DrawCallInfos.Update(caller) |> add
 
-        x.VertexArray.Update(caller) |> add
-        if not (isNull (x.VertexArrayHandle :> obj)) then
-            x.VertexArrayHandle.Update(caller) |> add
+        x.VertexInputBinding.Update(caller) |> add
 
 
         x.IsActive.Update(caller) |> add
@@ -171,7 +165,7 @@ type PreparedRenderObject =
                         match x.DrawBuffers with
                             | Some b -> b.RemoveRef()
                             | _ -> ()
-                        x.VertexArray.Dispose() 
+                        x.VertexInputBinding.Dispose() 
                         x.Buffers |> List.iter (fun (_,_,_,b) -> b.Dispose())
                         x.IndexBuffer |> Option.iter (fun (_,b) -> b.Dispose())
                         match x.IndirectBuffer with
@@ -182,7 +176,6 @@ type PreparedRenderObject =
                         x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
                         x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
                         x.Program.Dispose() 
-                        x.VertexArray <- Unchecked.defaultof<_>
 
                         x.IsActive.Dispose()
                         x.BeginMode.Dispose()
@@ -231,8 +224,7 @@ module PreparedRenderObject =
             Buffers = []
             IndexBuffer = None
             IndirectBuffer = None
-            VertexArray = Unchecked.defaultof<_>
-            VertexAttributeValues = Map.empty
+            VertexInputBinding = Unchecked.defaultof<_>
             ColorAttachmentCount = 0
             DrawBuffers = None
             ColorBufferMasks = None
@@ -249,7 +241,6 @@ module PreparedRenderObject =
             PolygonMode = Unchecked.defaultof<_>
             BlendMode = Unchecked.defaultof<_>
             StencilMode = Unchecked.defaultof<_>
-            VertexArrayHandle = Unchecked.defaultof<_>
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -276,8 +267,7 @@ module PreparedRenderObject =
                 Buffers = o.Buffers
                 IndexBuffer = o.IndexBuffer
                 IndirectBuffer = o.IndirectBuffer
-                VertexArray = o.VertexArray
-                VertexAttributeValues = o.VertexAttributeValues
+                VertexInputBinding = o.VertexInputBinding
                 ColorAttachmentCount = o.ColorAttachmentCount
                 DrawBuffers = drawBuffers
                 ColorBufferMasks = o.ColorBufferMasks
@@ -295,7 +285,6 @@ module PreparedRenderObject =
                 PolygonMode  = o.PolygonMode 
                 BlendMode  = o.BlendMode 
                 StencilMode  = o.StencilMode 
-                VertexArrayHandle = o.VertexArrayHandle
             }  
 
         for r in res.Resources do
@@ -497,18 +486,18 @@ type ResourceManagerExtensions private() =
         GL.Check "[Prepare] Indirect Buffer"
 
         // create the VertexArrayObject
-        let vao =
-            x.CreateVertexArrayObject(buffers, index)
+        let vibh =
+            x.CreateVertexInputBinding(buffers, index)
 
         GL.Check "[Prepare] VAO"
-
-        let attributeValues =
-            buffers 
-                |> List.choose (fun (i,v,_,_) ->
-                    match v.SingleValue with
-                        | Some v -> Some (i,v)
-                        | _ -> None
-                ) |> Map.ofList
+//
+//        let attributeValues =
+//            buffers 
+//                |> List.choose (fun (i,v,_,_) ->
+//                    match v.SingleValue with
+//                        | Some v -> Some (i,v)
+//                        | _ -> None
+//                ) |> Map.ofList
 
         let attachments = fboSignature.ColorAttachments |> Map.toList
         let attachmentCount = if attachments.Length > 0 then 1 + (attachments |> List.map (fun (i,_) -> i) |> List.max) else 0
@@ -578,8 +567,8 @@ type ResourceManagerExtensions private() =
                 Buffers = buffers
                 IndexBuffer = index
                 IndirectBuffer = indirect
-                VertexArray = vao
-                VertexAttributeValues = attributeValues
+                VertexInputBinding = vibh
+                //VertexAttributeValues = attributeValues
                 ColorAttachmentCount = attachmentCount
                 DrawBuffers = drawBuffers
                 ColorBufferMasks = colorMasks
@@ -597,7 +586,6 @@ type ResourceManagerExtensions private() =
                 PolygonMode = polygonMode
                 BlendMode = blendMode
                 StencilMode = stencilMode
-                VertexArrayHandle = Unchecked.defaultof<_>
 
             }
 

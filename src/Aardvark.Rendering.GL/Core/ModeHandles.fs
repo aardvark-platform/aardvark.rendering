@@ -134,3 +134,61 @@ type StencilModeHandle =
         val mutable public Pointer : nativeptr<GLStencilMode>
         new(p) = { Pointer = p }
     end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VertexAttribPointer =
+    struct
+        val mutable public Type         : VertexAttribPointerType
+        val mutable public Normalized   : int
+        val mutable public Stride       : int
+        val mutable public Buffer       : int
+
+        new(t,n,s,b) = { Type = t; Normalized = n; Stride = s; Buffer = b }
+    end
+
+[<StructLayout(LayoutKind.Explicit, Size = 28)>]
+type VertexAttribBinding =
+    struct
+        [<FieldOffset(0)>]
+        val mutable public Index    : uint32
+        [<FieldOffset(4)>]
+        val mutable public Size     : int
+        [<FieldOffset(8)>]
+        val mutable public Divisor  : int
+        [<FieldOffset(12)>]
+        val mutable Value : V4f
+        [<FieldOffset(12)>]
+        val mutable Pointer : VertexAttribPointer
+
+        private new(index, size, divisor) = { Index = index; Size = size; Divisor = divisor; Value = V4f.Zero; Pointer = VertexAttribPointer(VertexAttribPointerType.Byte, 0, 0, 0) }
+
+        static member CreateValue(index : uint32, size : int, divisor : int, v : V4f) =
+            let mutable res = VertexAttribBinding(index, size, divisor)
+            res.Value <- v
+            res
+
+        static member CreatePointer(index : uint32, size : int, divisor : int, v : VertexAttribPointer) =
+            let mutable res = VertexAttribBinding(index, size, divisor)
+            res.Pointer <- v
+            res
+
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VertexInputBinding =
+    struct
+    
+        val mutable public IndexBuffer  : int
+        val mutable public Count        : int
+        val mutable public Bindings     : nativeptr<VertexAttribBinding>
+        val mutable public VAO          : int
+        val mutable public VAOContext   : nativeint
+        new(i,c,b,v,vc) = { IndexBuffer = i; Count = c; Bindings = b; VAO = v; VAOContext = vc }
+    end
+    
+[<StructLayout(LayoutKind.Sequential)>]
+type VertexInputBindingHandle =
+    struct
+        val mutable public Pointer : nativeptr<VertexInputBinding>
+        new(p) = { Pointer = p }
+    end

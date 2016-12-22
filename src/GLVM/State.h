@@ -90,6 +90,43 @@ typedef struct {
 	int Clamp;
 } DepthTestMode;
 
+struct VertexAttribPointer
+{
+	GLenum		Type;
+	int			Normalized;
+	int			Stride;
+	int			Buffer;
+};
+
+struct VertexAttribValue
+{
+	float 		X;
+	float 		Y;
+	float 		Z;
+	float 		W;
+};
+
+union VertexAttrib {
+	struct VertexAttribValue Value;
+	struct VertexAttribPointer Pointer;
+};
+
+typedef struct {
+	uint32_t 			Index;
+	int					Size;
+	int					Divisor;
+	union VertexAttrib	Attribute;
+} VertexAttribBinding;
+
+typedef struct {
+	int						IndexBuffer;
+	int						Count;
+	VertexAttribBinding*	Bindings;
+
+	int						VAO;
+	void*					VAOContext;
+} VertexInputBinding;
+
 class State
 {
 private:
@@ -124,7 +161,7 @@ private:
 	GLenum* hPolygonMode;
 	BlendMode* hBlendMode;
 	StencilMode* hStencilMode;
-
+	VertexInputBinding* currentVertexInput;
 
 public:
 
@@ -160,6 +197,8 @@ public:
 	bool HShouldSetPolygonMode(GLenum* mode);
 	bool HShouldSetBlendMode(BlendMode* mode);
 	bool HShouldSetStencilMode(StencilMode* mode);
+	bool HShouldBindVertexAttributes(VertexInputBinding* binding);
+
 
 	int GetRemovedInstructions();
 };

@@ -79,6 +79,8 @@ type InstructionCode =
     | HSetPolygonMode               = 106
     | HSetBlendMode                 = 107
     | HSetStencilMode               = 108
+    | HBindVertexAttributes         = 109
+
 
 /// <summary>
 /// an instrution consists of an instruction-code and the corresponding arguments
@@ -229,3 +231,6 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
 
     static member HBindVertexArray (arr : nativeint) =
         Instruction(InstructionCode.BindVertexArray, [| Aardvark.Base.Ptr32 arr :> obj |])
+
+    static member HBindVertexAttributes (contextHandle : nativeptr<nativeint>, binding : VertexInputBindingHandle) =
+        Instruction(InstructionCode.HBindVertexAttributes, [| contextHandle :> obj; binding.Pointer :> obj |])

@@ -492,7 +492,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let indirectBufferCache     = derivedCache (fun m -> m.IndirectBufferCache)
     let programCache            = derivedCache (fun m -> m.ProgramCache)
     let samplerCache            = derivedCache (fun m -> m.SamplerCache)
-    let vaoCache                = derivedCache (fun m -> m.VAOCache)
+    let vertexInputCache        = derivedCache (fun m -> m.VertexInputCache)
     let uniformLocationCache    = derivedCache (fun m -> m.UniformLocationCache)
 
     let isActiveCache           = derivedCache (fun m -> m.IsActiveCache)
@@ -512,7 +512,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer>         = indirectBufferCache
     member private x.ProgramCache           : ResourceCache<Program>                = programCache
     member private x.SamplerCache           : ResourceCache<Sampler>                = samplerCache
-    member private x.VAOCache               : ResourceCache<VertexArrayObject>      = vaoCache
+    member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle>   = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation>        = uniformLocationCache
     member private x.UniformBufferManagers                                          = uniformBufferManagers
                                                                                     
@@ -649,38 +649,48 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.SamplerState
         })
 
-    member x.CreateVertexArrayObject( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer>>) =
+    member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer>>) =
         let createView (self : IAdaptiveObject) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =
-            index, { 
-                Type = view.ElementType
-                Frequency = frequency
-                Normalized = false; 
-                Stride = view.Stride
-                Offset = view.Offset
-                Buffer = buffer.Handle.GetValue self
-            }
+            match view.SingleValue with
+                | Some value ->
+                    index, {
+                        Type = view.ElementType
+                        Frequency = frequency
+                        Normalized = false; 
+                        Stride = view.Stride
+                        Offset = view.Offset
+                        Content = Right (value.GetValue self)
+                    }
 
-        vaoCache.GetOrCreate(
+                | _ ->
+            
+                    index, { 
+                        Type = view.ElementType
+                        Frequency = frequency
+                        Normalized = false; 
+                        Stride = view.Stride
+                        Offset = view.Offset
+                        Content = Left (buffer.Handle.GetValue self)
+                    }
+
+        vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
-                { new Resource<VertexArrayObject>(ResourceKind.VertexArrayObject) with
+                { new Resource<VertexInputBindingHandle>(ResourceKind.VertexArrayObject) with
 
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (old : Option<VertexArrayObject>) =
+                    member x.Create (old : Option<VertexInputBindingHandle>) =
                         let attributes = bindings |> List.map (createView x)
                         let index = match index with | Some (_,i) -> i.Handle.GetValue x |> Some | _ -> None
-                        
                         match old with
-                            | Some old -> ctx.Delete old
-                            | None -> ()
+                            | Some old ->
+                                ctx.Update(old, index, attributes)
+                                old, FrameStatistics.Zero
 
-                        let handle = 
-                            match index with
-                                | Some i -> ctx.CreateVertexArrayObject(i, attributes)
-                                | None -> ctx.CreateVertexArrayObject(attributes)
-
-                        handle, FrameStatistics.Zero
+                            | None ->
+                                let h = ctx.CreateVertexInputBinding(index, attributes)
+                                h, FrameStatistics.Zero
                         
                     member x.Destroy vao =
                         ctx.Delete vao

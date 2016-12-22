@@ -13,7 +13,9 @@ State::State()
 	currentDepthFunc = -1;
 	currentCullFace = -1;
 	currentDepthMask = 1;
-	currentStencilMask = -1;
+	currentStencilMask = 0xFFFFFFFF;
+	currentVertexInput = nullptr;
+
 	currentColorMask = std::unordered_map<intptr_t, int>();
 	currentDrawBuffers = std::vector<GLenum>();
 
@@ -29,6 +31,7 @@ State::State()
 	blendColor = std::tuple<intptr_t, intptr_t, intptr_t, intptr_t>(-1, -1, -1, -1);
 	stencilFunc = std::tuple<intptr_t, intptr_t, intptr_t, intptr_t>(-1, -1, -1, -1);
 	stencilOp = std::tuple<intptr_t, intptr_t, intptr_t, intptr_t>(-1, -1, -1, -1);	
+	
 }
 
 State::~State()
@@ -46,6 +49,7 @@ void State::Reset()
 	currentCullFace = -1;
 	currentDepthMask = 1;
 	currentStencilMask = 0xFFFFFFFF;
+	currentVertexInput = nullptr;
 	currentColorMask.clear();
 	currentDrawBuffers.clear();
 
@@ -509,4 +513,18 @@ bool State::ShouldSetPatchParameter(intptr_t parameter, intptr_t value)
 int State::GetRemovedInstructions()
 {
 	return removedInstructions;
+}
+
+bool State::HShouldBindVertexAttributes(VertexInputBinding* binding)
+{
+	if (currentVertexInput != binding)
+	{
+		currentVertexInput = binding;
+		return true;
+	}
+	else
+	{
+		removedInstructions++;
+		return false;
+	}
 }

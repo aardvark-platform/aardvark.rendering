@@ -177,3 +177,63 @@ module PointerContextExtensions =
         member x.Delete(handle : StencilModeHandle) =
             NativePtr.free handle.Pointer
 
+
+
+        member private x.GetVertexBindings(index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
+            let res = System.Collections.Generic.List<_>()
+
+            for (index, att) in attributes do
+                match att.Content with
+                    | Left buffer ->
+                        let divisor =
+                            match att.Frequency with
+                                | PerVertex -> 0
+                                | PerInstances i -> i
+
+                        let ptr = VertexAttribPointer(att.VertexAttributeType, (if att.Normalized then 1 else 0), att.Stride, buffer.Handle)
+                        res.Add (VertexAttribBinding.CreatePointer(uint32 index, att.Dimension, divisor, ptr))
+
+                    | Right value ->
+                        res.Add (VertexAttribBinding.CreateValue(uint32 index, att.Dimension, -1, value))
+            
+            let ibo =
+                match index with
+                    | Some i -> i.Handle
+                    | _ -> 0
+
+            ibo, res.ToArray()
+
+        member x.CreateVertexInputBinding (index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
+            let index, bindings = x.GetVertexBindings(index, attributes)
+            let ptr = NativePtr.alloc bindings.Length
+            for i in 0 .. bindings.Length - 1 do NativePtr.set ptr i bindings.[i]
+            let value = VertexInputBinding(index, bindings.Length, ptr, -1, 0n)
+            let res = NativePtr.alloc 1
+            NativePtr.write res value
+            VertexInputBindingHandle res
+
+        member x.Update(binding : VertexInputBindingHandle, index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
+            let index, bindings = x.GetVertexBindings(index, attributes)
+
+            let mutable value = NativePtr.read binding.Pointer
+            if bindings.Length = value.Count then
+                for i in 0 .. bindings.Length - 1 do  
+                    NativePtr.set value.Bindings i bindings.[i]
+            else
+                NativePtr.free value.Bindings
+                let ptr = NativePtr.alloc bindings.Length
+                for i in 0 .. bindings.Length - 1 do NativePtr.set ptr i bindings.[i]
+                value.Count <- bindings.Length
+                value.Bindings <- ptr
+
+            value.IndexBuffer <- index
+            value.VAOContext <- 0n
+            NativePtr.write binding.Pointer value
+
+        member x.Delete(b : VertexInputBindingHandle) =
+            let v = NativePtr.read b.Pointer
+            if v.VAO > 0 then
+                use t = x.ResourceLock
+                GL.DeleteVertexArray(v.VAO)
+            NativePtr.free v.Bindings
+            NativePtr.free b.Pointer

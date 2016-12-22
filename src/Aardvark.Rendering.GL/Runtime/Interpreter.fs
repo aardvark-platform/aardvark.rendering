@@ -45,13 +45,14 @@ module private Values =
 module OpenGLInterpreter =
     module GL = OpenGl.Unsafe
 
-    type GLState() =
+    type GLState(contextHandle : nativeptr<nativeint>) =
         let mutable effectiveInstructions   = 0
         let mutable removedInstructions     = 0
 
 
         let mutable currentActiveTexture    = -1
         let mutable currentVAO              = -1
+        let mutable currentVIBH             = NativePtr.zero
         let mutable currentProgram          = -1
         let mutable currentDepthFunc        = -1
         let mutable currentCullFace         = -1
@@ -108,6 +109,7 @@ module OpenGLInterpreter =
 
         member x.EffectiveInstructions = effectiveInstructions
         member x.TotalInstructions = effectiveInstructions + removedInstructions
+        member x.ContextHandle = contextHandle
 
         member x.Clear() =
             effectiveInstructions   <- 0
@@ -143,6 +145,9 @@ module OpenGLInterpreter =
 
         member x.ShouldSetVertexArray (vao : int) =
             x.set(&currentVAO, vao)
+
+        member x.ShouldBindVertexAttributes (vibh : VertexInputBindingHandle) =
+            x.set(&currentVIBH, vibh.Pointer)
 
         member x.ShouldSetProgram (program : int) =
             x.set(&currentProgram, program)
@@ -292,12 +297,14 @@ module OpenGLInterpreter =
         member x.ShouldSetViewport(b : Box2i) =
             x.set(&currentViewport, b)
 
-    let private statePool = new System.Collections.Concurrent.ConcurrentBag<GLState>()
-
     type GLState with
         member inline x.bindVertexArray (vao : int) =
             if x.ShouldSetVertexArray vao then
                 GL.BindVertexArray vao
+                
+        member inline x.bindVertexAttributes (contextHandle : nativeptr<nativeint>) (vibh : VertexInputBindingHandle) =
+            if x.ShouldBindVertexAttributes vibh then
+                GL.HBindVertexAttributes (NativePtr.toNativeInt contextHandle) (NativePtr.toNativeInt vibh.Pointer)
 
         member inline x.bindProgram (prog : int) =
             if x.ShouldSetProgram prog then
@@ -432,20 +439,15 @@ module OpenGLInterpreter =
 
     module Interpreter = 
 
-        let start() = 
-            match statePool.TryTake() with
-                | (true, state) -> 
-                    state
-                | _ -> 
-                    let s = GLState()
-                    s
+        let start(contextHandle : nativeptr<nativeint>) = 
+            let s = GLState(contextHandle)
+            s
 
         let stop(s : GLState) =
             s.Clear()
-            statePool.Add(s)
 
-        let inline run (f : GLState -> 'a) =
-            let state = start()
+        let inline run (contextHandle : nativeptr<nativeint>) (f : GLState -> 'a) =
+            let state = start(contextHandle)
             try f state
             finally stop state
 
@@ -586,7 +588,7 @@ module OpenGLObjectInterpreter =
                 gl.setStencilMode stencilMode
 
                 let program = o.Program.Handle.GetValue()
-                let vao = o.VertexArray.Handle.GetValue().Handle
+                let vibh = o.VertexInputBinding.Handle.GetValue()
                 let indexed = Option.isSome o.IndexBuffer
 
                 let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
@@ -645,10 +647,7 @@ module OpenGLObjectInterpreter =
                     let u = u.Handle.GetValue()
                     gl.bindUniformLocation id u
 
-                gl.bindVertexArray vao
-
-                for (id,v) in Map.toSeq o.VertexAttributeValues do
-                    gl.vertexAttrib4f id (Mod.force v)
+                gl.bindVertexAttributes gl.ContextHandle vibh
 
                 if hasTess then
                     gl.patchVertices patchSize
@@ -708,7 +707,7 @@ module ``Interpreter Extensions`` =
         override x.Update() = ()
         override x.Dispose() = ()
         override x.Run() = 
-            Interpreter.run (fun gl -> 
+            Interpreter.run scope.contextHandle (fun gl -> 
                 for o in content do gl.render o
 
                 { FrameStatistics.Zero with

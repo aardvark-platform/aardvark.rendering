@@ -67,7 +67,6 @@
     <Content Include="Resources\Resources.txt" />
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\Attribute.fs" />
-    <Compile Include="Resources\VertexArrayObject.fs" />
     <Compile Include="Resources\Texture.fs" />
     <Compile Include="Resources\UniformBuffer.fs" />
     <Compile Include="Resources\UniformLocation.fs" />
