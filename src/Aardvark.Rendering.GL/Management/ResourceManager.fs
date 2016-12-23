@@ -653,25 +653,26 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let createView (self : IAdaptiveObject) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =
             match view.SingleValue with
                 | Some value ->
-                    index, {
-                        Type = view.ElementType
-                        Frequency = frequency
-                        Normalized = false; 
-                        Stride = view.Stride
-                        Offset = view.Offset
-                        Content = Right (value.GetValue self)
-                    }
+                    [ index, {
+                            Type = view.ElementType
+                            Frequency = frequency
+                            Normalized = false; 
+                            Stride = view.Stride
+                            Offset = view.Offset
+                            Content = Right (value.GetValue self)
+                        } 
+                    ]
 
                 | _ ->
-            
-                    index, { 
-                        Type = view.ElementType
-                        Frequency = frequency
-                        Normalized = false; 
-                        Stride = view.Stride
-                        Offset = view.Offset
-                        Content = Left (buffer.Handle.GetValue self)
-                    }
+                    let attribute =  { 
+                            Type = view.ElementType
+                            Frequency = frequency
+                            Normalized = false; 
+                            Stride = view.Stride
+                            Offset = view.Offset
+                            Content = Left (buffer.Handle.GetValue self)
+                        }
+                    VertexArrayObjectExtensions.unpackAttributeBindingForMatrices index attribute
 
         vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
@@ -681,7 +682,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     member x.GetInfo _ = ResourceInfo.Zero
 
                     member x.Create (old : Option<VertexInputBindingHandle>) =
-                        let attributes = bindings |> List.map (createView x)
+                        let attributes = bindings |> List.collect (createView x)
                         let index = match index with | Some (_,i) -> i.Handle.GetValue x |> Some | _ -> None
                         match old with
                             | Some old ->

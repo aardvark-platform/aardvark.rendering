@@ -74,6 +74,7 @@
     <Compile Include="Render2TexturePrimitiveFloat.fs" />
     <Compile Include="AssimpInterop.fs" />
     <Compile Include="LiveDemo.fs" />
+    <Compile Include="Instancing.fs" />
     <None Include="LiveDemo.fsx" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
