@@ -77,7 +77,6 @@
     <Compile Include="Resources\Pointers.fs" />
     <Compile Include="Resources\StreamingTexture.fs" />
     <Compile Include="Resources\MappedBuffer.fs" />
-    <Compile Include="Resources\VertexArrayObjectUtilities.fs" />
     <Compile Include="Management\SurfaceCompilers.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />

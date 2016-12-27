@@ -40,6 +40,7 @@ module Instancing =
             |> Sg.instancedGeometry (Mod.constant trafos)
             |> Sg.effect [
                 DefaultSurfaces.instanceTrafo |> toEffect        
+                DefaultSurfaces.trafo |> toEffect
                 DefaultSurfaces.constantColor C4f.Red |> toEffect  
                 ]
             |> Sg.viewTrafo cameraView

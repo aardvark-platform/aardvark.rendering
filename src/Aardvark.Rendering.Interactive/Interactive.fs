@@ -20,7 +20,7 @@ type Interactive private() =
 
     static let emptySg = Sg.ofList []
     static let mutable samples = 8
-    static let mutable config = BackendConfiguration.Default
+    static let mutable config = { BackendConfiguration.Default with useDebugOutput = true }
 
     static let sg = Mod.init emptySg
     static let window = new SimpleRenderWindow()

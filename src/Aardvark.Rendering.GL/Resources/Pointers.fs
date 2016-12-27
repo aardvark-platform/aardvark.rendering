@@ -135,7 +135,7 @@ module PointerContextExtensions =
                                         else att.Stride
                                     for r in 0 .. r - 1 do
                                         let ptr = VertexAttribPointer(bt, normalized, stride, att.Offset + r * rowSize, buffer.Handle)
-                                        res.Add (VertexAttribBinding.CreatePointer(uint32 index, c, divisor, ptr))
+                                        res.Add (VertexAttribBinding.CreatePointer(uint32 (index + r), c, divisor, ptr))
 
                                 | Rgba ->
                                     let ptr = VertexAttribPointer(att.VertexAttributeType, 1, att.Stride, att.Offset, buffer.Handle)
