@@ -141,12 +141,23 @@ type VertexAttribPointer =
         val mutable public Type         : VertexAttribPointerType
         val mutable public Normalized   : int
         val mutable public Stride       : int
+        val mutable public Offset       : int
         val mutable public Buffer       : int
-
-        new(t,n,s,b) = { Type = t; Normalized = n; Stride = s; Buffer = b }
+        
+        new(t,n,s,o,b) = { Type = t; Normalized = n; Stride = s; Offset = o; Buffer = b }
     end
-
-[<StructLayout(LayoutKind.Explicit, Size = 28)>]
+[<StructLayout(LayoutKind.Sequential)>]
+type VertexAttribValue =
+    struct
+        val mutable public X        : float32
+        val mutable public Y        : float32
+        val mutable public Z        : float32
+        val mutable public W        : float32
+        val mutable public Dummy    : int
+        
+        new(x,y,z,w) = { X = x; Y = y; Z = z; W = w; Dummy = 0 }
+    end
+[<StructLayout(LayoutKind.Explicit, Size = 32)>]
 type VertexAttribBinding =
     struct
         [<FieldOffset(0)>]
@@ -156,15 +167,15 @@ type VertexAttribBinding =
         [<FieldOffset(8)>]
         val mutable public Divisor  : int
         [<FieldOffset(12)>]
-        val mutable Value : V4f
+        val mutable Value : VertexAttribValue
         [<FieldOffset(12)>]
         val mutable Pointer : VertexAttribPointer
 
-        private new(index, size, divisor) = { Index = index; Size = size; Divisor = divisor; Value = V4f.Zero; Pointer = VertexAttribPointer(VertexAttribPointerType.Byte, 0, 0, 0) }
+        private new(index, size, divisor) = { Index = index; Size = size; Divisor = divisor; Value = VertexAttribValue(0.0f,0.0f,0.0f,0.0f); Pointer = VertexAttribPointer(VertexAttribPointerType.Byte, 0, 0, 0, 0) }
 
         static member CreateValue(index : uint32, size : int, divisor : int, v : V4f) =
             let mutable res = VertexAttribBinding(index, size, divisor)
-            res.Value <- v
+            res.Value <- VertexAttribValue(v.X, v.Y, v.Z, v.W)
             res
 
         static member CreatePointer(index : uint32, size : int, divisor : int, v : VertexAttribPointer) =

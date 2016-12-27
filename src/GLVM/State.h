@@ -95,6 +95,7 @@ struct VertexAttribPointer
 	GLenum		Type;
 	int			Normalized;
 	int			Stride;
+	int			Offset;
 	int			Buffer;
 };
 
@@ -104,6 +105,7 @@ struct VertexAttribValue
 	float 		Y;
 	float 		Z;
 	float 		W;
+	int			Dummy;
 };
 
 union VertexAttrib {

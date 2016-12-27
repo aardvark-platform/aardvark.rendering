@@ -68,6 +68,88 @@ module PointerContextExtensions =
                 OpBackPass = Translations.toGLStencilOperation mode.OperationBack.DepthPass
             )
 
+        module Attribute =
+
+            let private vertexAttribPointerTypeSize =
+                LookupTable.lookupTable [
+                    VertexAttribPointerType.Byte, sizeof<int8>
+                    VertexAttribPointerType.UnsignedByte, sizeof<uint8>
+                    VertexAttribPointerType.Short, sizeof<int16>
+                    VertexAttribPointerType.UnsignedShort, sizeof<uint16>
+                    VertexAttribPointerType.Int, sizeof<int32>
+                    VertexAttribPointerType.UnsignedInt, sizeof<uint32>
+                    VertexAttribPointerType.HalfFloat, sizeof<float16>
+                    VertexAttribPointerType.Float, sizeof<float32>
+                    VertexAttribPointerType.Double, sizeof<double>
+                ]
+
+            let private matrixTypes =
+                Dictionary.ofList [
+                    typeof<M22f>, (VertexAttribPointerType.Float, 2, 2)
+                    typeof<M23f>, (VertexAttribPointerType.Float, 2, 3)
+                    typeof<M33f>, (VertexAttribPointerType.Float, 3, 3)
+                    typeof<M34f>, (VertexAttribPointerType.Float, 3, 4)
+                    typeof<M44f>, (VertexAttribPointerType.Float, 4, 4)
+
+                    typeof<M22d>, (VertexAttribPointerType.Double, 2, 2)
+                    typeof<M23d>, (VertexAttribPointerType.Double, 2, 3)
+                    typeof<M33d>, (VertexAttribPointerType.Double, 3, 3)
+                    typeof<M34d>, (VertexAttribPointerType.Double, 3, 4)
+                    typeof<M44d>, (VertexAttribPointerType.Double, 4, 4)
+
+                    typeof<M22i>, (VertexAttribPointerType.Int, 2, 2)
+                    typeof<M23i>, (VertexAttribPointerType.Int, 2, 3)
+                    typeof<M33i>, (VertexAttribPointerType.Int, 3, 3)
+                    typeof<M34i>, (VertexAttribPointerType.Int, 3, 4)
+                    typeof<M44i>, (VertexAttribPointerType.Int, 4, 4)
+
+                ]
+
+            let private (|MatrixOf|_|) (t : Type) =
+                match matrixTypes.TryGetValue t with
+                    | (true, (bt,r,c)) -> Some (bt,r,c)
+                    | _ -> None
+
+            let private (|Rgba|_|) (t : Type) =
+                if t = typeof<C4b> then Some ()
+                else None
+
+            let bindings (attributes : list<int * AttributeDescription>) =
+                let res = System.Collections.Generic.List<_>()
+
+                for (index, att) in attributes do
+                    match att.Content with
+                        | Left buffer ->
+                            let divisor =
+                                match att.Frequency with
+                                    | PerVertex -> 0
+                                    | PerInstances i -> i
+
+             
+                            match att.Type with
+                                | MatrixOf(bt, r, c) ->
+                                    let normalized = if att.Normalized then 1 else 0
+                                    let rowSize = vertexAttribPointerTypeSize bt * c
+                                    let stride =
+                                        if att.Stride = 0 then rowSize * r
+                                        else att.Stride
+                                    for r in 0 .. r - 1 do
+                                        let ptr = VertexAttribPointer(bt, normalized, stride, att.Offset + r * rowSize, buffer.Handle)
+                                        res.Add (VertexAttribBinding.CreatePointer(uint32 index, c, divisor, ptr))
+
+                                | Rgba ->
+                                    let ptr = VertexAttribPointer(att.VertexAttributeType, 1, att.Stride, att.Offset, buffer.Handle)
+                                    res.Add (VertexAttribBinding.CreatePointer(uint32 index, att.Dimension, divisor, ptr))
+
+                                | _ -> 
+                                    let ptr = VertexAttribPointer(att.VertexAttributeType, (if att.Normalized then 1 else 0), att.Stride, att.Offset, buffer.Handle)
+                                    res.Add (VertexAttribBinding.CreatePointer(uint32 index, att.Dimension, divisor, ptr))
+
+                        | Right value ->
+                            res.Add (VertexAttribBinding.CreateValue(uint32 index, att.Dimension, -1, value))
+                
+                res.ToArray()
+
     type Context with
 
         member x.CreateIsActive(active : bool) =
@@ -178,33 +260,36 @@ module PointerContextExtensions =
             NativePtr.free handle.Pointer
 
 
-
-        member private x.GetVertexBindings(index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
-            let res = System.Collections.Generic.List<_>()
-
-            for (index, att) in attributes do
-                match att.Content with
-                    | Left buffer ->
-                        let divisor =
-                            match att.Frequency with
-                                | PerVertex -> 0
-                                | PerInstances i -> i
-
-                        let ptr = VertexAttribPointer(att.VertexAttributeType, (if att.Normalized then 1 else 0), att.Stride, buffer.Handle)
-                        res.Add (VertexAttribBinding.CreatePointer(uint32 index, att.Dimension, divisor, ptr))
-
-                    | Right value ->
-                        res.Add (VertexAttribBinding.CreateValue(uint32 index, att.Dimension, -1, value))
-            
-            let ibo =
-                match index with
-                    | Some i -> i.Handle
-                    | _ -> 0
-
-            ibo, res.ToArray()
+//
+//        member private x.GetVertexBindings(index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
+//            let res = System.Collections.Generic.List<_>()
+//
+//            for (index, att) in attributes do
+//                match att.Content with
+//                    | Left buffer ->
+//                        let divisor =
+//                            match att.Frequency with
+//                                | PerVertex -> 0
+//                                | PerInstances i -> i
+//
+//                       
+//
+//                        let ptr = VertexAttribPointer(att.VertexAttributeType, (if att.Normalized then 1 else 0), att.Stride, buffer.Handle)
+//                        res.Add (VertexAttribBinding.CreatePointer(uint32 index, att.Dimension, divisor, ptr))
+//
+//                    | Right value ->
+//                        res.Add (VertexAttribBinding.CreateValue(uint32 index, att.Dimension, -1, value))
+//            
+//            let ibo =
+//                match index with
+//                    | Some i -> i.Handle
+//                    | _ -> 0
+//
+//            ibo, res.ToArray()
 
         member x.CreateVertexInputBinding (index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
-            let index, bindings = x.GetVertexBindings(index, attributes)
+            let bindings = Attribute.bindings attributes
+            let index = match index with | Some i -> i.Handle | _ -> 0
             let ptr = NativePtr.alloc bindings.Length
             for i in 0 .. bindings.Length - 1 do NativePtr.set ptr i bindings.[i]
             let value = VertexInputBinding(index, bindings.Length, ptr, -1, 0n)
@@ -213,7 +298,8 @@ module PointerContextExtensions =
             VertexInputBindingHandle res
 
         member x.Update(binding : VertexInputBindingHandle, index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
-            let index, bindings = x.GetVertexBindings(index, attributes)
+            let bindings = Attribute.bindings attributes
+            let index = match index with | Some i -> i.Handle | _ -> 0
 
             let mutable value = NativePtr.read binding.Pointer
             if bindings.Length = value.Count then

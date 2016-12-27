@@ -327,7 +327,10 @@ let main argv =
             else Log.warn "AA disabled"
         )
     )
-    let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) |> DefaultOverlays.withStatistics
+
+    let config = { BackendConfiguration.Default with useDebugOutput = true }
+
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, config, sg) |> DefaultOverlays.withStatistics
     let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
 
     win.RenderTask <- RenderTask.ofList [clear; main]

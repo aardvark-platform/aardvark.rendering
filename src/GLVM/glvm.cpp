@@ -1061,7 +1061,7 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 				auto ptr = &b->Attribute.Pointer;
 				glEnableVertexAttribArray(index);
 				glBindBuffer(GL_ARRAY_BUFFER, ptr->Buffer);
-				glVertexAttribPointer(index, b->Size, ptr->Type, ptr->Normalized, ptr->Stride, nullptr);
+				glVertexAttribPointer(index, b->Size, ptr->Type, ptr->Normalized, ptr->Stride, (void*)ptr->Offset);
 				glVertexAttribDivisor(index, (uint32_t)b->Divisor);
 			}
 			else
