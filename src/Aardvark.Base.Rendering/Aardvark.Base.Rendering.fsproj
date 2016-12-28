@@ -114,7 +114,6 @@
     <Compile Include="PixImageCube.fs" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="FSharp.Data.TypeProviders" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Data" />
