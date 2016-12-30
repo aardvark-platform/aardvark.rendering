@@ -82,6 +82,7 @@
     <Compile Include="Experiments\Vulkan.fs" />
     <Compile Include="Experiments\ChangeBufferHandle.fs" />
     <Compile Include="Experiments\SamplerArray.fs" />
+    <Compile Include="Experiments\InteractionExperiments.fs" />
     <Compile Include="PGM.fs" />
     <Compile Include="ImageFormat.fs" />
     <Compile Include="Program.fs" />
@@ -118,6 +119,11 @@
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj">
       <Name>Aardvark.Rendering.GL</Name>
       <Project>{88b586f5-a5e2-4321-bd5d-27d296da0fdd}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj">
+      <Name>Aardvark.Rendering.Interactive</Name>
+      <Project>{79d48400-f885-461a-b747-e3675a7ef2ef}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.Rendering.NanoVg\Aardvark.Rendering.NanoVg.fsproj">

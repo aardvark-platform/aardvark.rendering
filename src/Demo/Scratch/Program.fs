@@ -251,6 +251,8 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    //Examples.Controllers.run()
+
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
     App.run(blubber())
 
