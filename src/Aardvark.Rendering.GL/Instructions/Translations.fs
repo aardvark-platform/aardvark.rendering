@@ -117,9 +117,12 @@ module Translations =
             | _ -> failwithf "unknown FillMode: %A" f
 
     let toGLTarget (d : TextureDimension) (isArray : bool) (samples : int) =
-        match d with
-            | TextureDimension.Texture1D -> int TextureTarget.Texture1D
-            | TextureDimension.Texture2D -> int TextureTarget.Texture2D
-            | TextureDimension.Texture3D -> int TextureTarget.Texture3D
-            | TextureDimension.TextureCube -> int TextureTarget.TextureCubeMap
+        match (d, isArray) with
+            | (TextureDimension.Texture1D, false) -> int TextureTarget.Texture1D
+            | (TextureDimension.Texture1D, true) -> int TextureTarget.Texture1DArray
+            | (TextureDimension.Texture2D, false) -> int TextureTarget.Texture2D
+            | (TextureDimension.Texture2D, true) -> int TextureTarget.Texture2DArray
+            | (TextureDimension.Texture3D, false) -> int TextureTarget.Texture3D
+            | (TextureDimension.TextureCube, false) -> int TextureTarget.TextureCubeMap
+            | (TextureDimension.TextureCube, true) -> int TextureTarget.TextureCubeMapArray
             | _ -> failwithf "unknown TextureDimension: %A" d
