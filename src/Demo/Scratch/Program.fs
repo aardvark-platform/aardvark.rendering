@@ -248,10 +248,12 @@ let manymany() =
 [<EntryPoint>]
 let main argv = 
 
+    //Scratch.Controllers.run() |> ignore
+    Scratch.FablishInterop.run argv |> ignore
+    System.Environment.Exit 0
+
     Ag.initialize()
     Aardvark.Init()
-
-    //Examples.Controllers.run()
 
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
     App.run(blubber())

@@ -7,6 +7,9 @@ nuget Aardvark.Base.Runtime              ~> 2.4.5
 nuget FShade.Core                        ~> 2.3.5
 nuget FSharp.Core
 nuget GLSLangSharp                       ~> 0.3.2
+
+nuget Fablish                            ~> 1.2.5
+nuget Another.Unofficial.Xilium.CefGlue.UnpackNativeDependencies ~> 0.0.9
      
 nuget FSharp.Quotations.Evaluator        ~> 1.0.6
 nuget FSharp.Charting                    ~> 0.90.14

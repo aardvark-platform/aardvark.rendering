@@ -3,7 +3,7 @@
 #I @"../../../../bin/Release"
 #load "LoadReferences.fsx"
 #else
-namespace Examples
+namespace Scratch
 #endif
 
 open System
