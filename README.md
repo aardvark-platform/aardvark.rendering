@@ -8,7 +8,7 @@ How to build:
 
 Windows:
 - Visual Studio 2015,
-- Visual FSharp Tools 4.0 installed: visit http://fsharp.org/use/windows/ or download directly [1]
+- Visual FSharp Tools 4.0 installed: visit http://fsharp.org/use/windows/ or download directly [[1]]
 - run build.cmd which will install all dependencies
 - msbuild src\Aardvark.Rendering.sln or use VisualStudio to build the solution
 
@@ -31,6 +31,6 @@ https://github.com/vrvis/aardvark.rendering/tree/master/src/Demo/Examples
 
 
 
-[1] https://www.microsoft.com/en-us/download/details.aspx?id=48179
+[1]: https://www.microsoft.com/en-us/download/details.aspx?id=48179
 
 
