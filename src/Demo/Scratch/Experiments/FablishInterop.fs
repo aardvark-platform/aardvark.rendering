@@ -26,7 +26,7 @@ module FablishInterop =
         let update m a = m
         let view m : DomNode<Action> = 
             div [attribute "class" "container"; Style ["diplay","inline-block"]] [
-                div [ attribute "id" "left_renderControl"; Style [ "height", "600px"; "width", "300px"; "float", "left" ]] [text "render control"]
+                div [ attribute "id" "left_renderControl"; Style [ "height", "600px"; "width", "300px"; "float", "left" ; "background-color", "red"]] [text "render control"]
                 div [ attribute "id" "right_renderControl"; Style [ "height", "600px"; "width", "300px" ; "float", "right"]] [text "render control"]
                 div [] [ button [] [text "abc"]; button [] [text "cde"]]
             ]
@@ -95,6 +95,9 @@ module FablishInterop =
             ]
 
         use w = new Form()
+        w.TransparencyKey <- Drawing.Color.Red
+        w.AllowTransparency <- true
+        w.BackColor <- Drawing.Color.CadetBlue
         let desiredSize = V2i(1024,768)
         let mutable initialized = false
         w.Width <- desiredSize.X
@@ -144,13 +147,17 @@ module FablishInterop =
         panel.Controls.Add browser
         panel.Size <- Drawing.Size(640,480)
         panel.Dock <- DockStyle.Fill
+        panel.BackColor <- Drawing.Color.Transparent
+        
 
         w.Controls.Add leftCtrl
         w.Controls.Add rightCtrl
         w.Controls.Add panel
         w.Width <- desiredSize.X
         w.Height <- desiredSize.Y
+        //panel.BringToFront()
         leftCtrl.BringToFront()
+        panel.BringToFront()
         rightCtrl.BringToFront()
 
         Application.Run(w) 

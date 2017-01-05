@@ -249,8 +249,8 @@ let manymany() =
 let main argv = 
 
     //Scratch.Controllers.run() |> ignore
-    Scratch.FablishInterop.run argv |> ignore
-    System.Environment.Exit 0
+    //Scratch.FablishInterop.run argv |> ignore
+    //System.Environment.Exit 0
 
     Ag.initialize()
     Aardvark.Init()
