@@ -1,4 +1,6 @@
-﻿using System;
+﻿#if __MonoCS__ 
+#else
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data;
@@ -15,3 +17,4 @@ namespace WpfDemo
     {
     }
 }
+#endif
