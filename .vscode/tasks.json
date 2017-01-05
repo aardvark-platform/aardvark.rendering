@@ -11,11 +11,6 @@
             "taskName": "compile",
             "args": [],
             "isBuildCommand": true
-        },
-        {
-            "taskName": "run",
-            "args": ["Run"],
-            "isBuildCommand": false
         }
     ]
 }
