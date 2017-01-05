@@ -1,4 +1,7 @@
-﻿using Aardvark.Base;
+﻿
+#if WINDOWS
+
+using Aardvark.Base;
 using Aardvark.Base.Incremental.CSharp;
 using Aardvark.SceneGraph;
 using System.Windows;
@@ -60,3 +63,5 @@ namespace WpfDemo
         }
     }
 }
+
+#endif
