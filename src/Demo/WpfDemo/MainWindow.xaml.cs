@@ -32,7 +32,15 @@ namespace WpfDemo
             var whiteShader = Aardvark.Base.Rendering.Effects.SimpleLighting.Effect;
             var trafo = Effects.Trafo.Effect;
 
-            var angle = renderControl.Time.Select(t => (float) t.TimeOfDay.TotalMilliseconds / 100.0);
+            var currentAngle = 0.0;
+            var angle = renderControl.Time.Select(t =>
+            {
+                if (checkBox.IsChecked.Value)
+                {
+                    return currentAngle += 0.001;
+                }
+                else return currentAngle;
+            });
             var rotatingTrafo = angle.Select((whyCantShadowName) => Trafo3d.RotationZ(whyCantShadowName));
 
             var sg =

@@ -28,6 +28,8 @@ type QuickUniformHolder(values : SymbolDict<IMod>) =
 [<Sealed>]
 type SceneGraphExtensions =
 
+    [<Extension>]
+    static member ToSg(sg : seq<ISg>) = Sg.ofSeq sg
 
     [<Extension>]
     static member CameraView(sg : ISg, view : ICameraView) = Sg.ViewTrafoApplicator(view.ViewTrafos, sg) :> ISg

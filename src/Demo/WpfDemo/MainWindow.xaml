@@ -9,7 +9,8 @@
         Title="WPF render control demo" Height="350" Width="525">
     <Grid>
 
-        <WPF:RenderControl BorderBrush="Black" BorderThickness="1" HorizontalAlignment="Left" Height="299" Margin="10,10,0,0" VerticalAlignment="Top" Width="334" Name="renderControl"/>
+        <WPF:RenderControl BorderBrush="Black" BorderThickness="1" Name="renderControl" Margin="0,0,94,0"/>
+        <CheckBox x:Name="checkBox" Content="Rotate" HorizontalAlignment="Left" Margin="441,0,0,0" VerticalAlignment="Top" IsChecked="True" Panel.ZIndex="2"/>
 
     </Grid>
 </Window>
