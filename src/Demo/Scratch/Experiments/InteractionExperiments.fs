@@ -17,23 +17,24 @@ open Aardvark.Application
 
 module ImmutableSceneGraph = 
 
-    type Kind = Move of V3d | Down of V3d
+    type Kind = Move of V3d | Down of MouseButtons * V3d
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Event =
         let move = function Move _ -> true | _ -> false
-        let down = function Down _ -> true | _ -> false        
-        let position = function Move s -> s | Down s -> s
+        let down = function Down _ -> true | _ -> false       
+        let down' p = function Down(p',_) when p = p' -> true | _ -> false 
+        let position = function Move s -> s | Down(_, s) -> s
 
     type PickOperation<'msg> = Kind -> Option<'msg>
     module Pick =
         let ignore = []
 
     type Primitive = 
-        | Quad        of Quad3d
         | Sphere      of Sphere3d
         | Cone        of center : V3d * dir : V3d * height : float * radius : float
         | Cylinder    of center : V3d * dir : V3d * height : float * radius : float
+        | Quad        of Quad3d 
 
     type Scene<'msg> = 
             | Transform of Trafo3d * seq<Scene<'msg>>
@@ -46,6 +47,7 @@ module ImmutableSceneGraph =
     let translate x y z xs  = transformed ( Trafo3d.Translation(x,y,z) ) xs
     let cylinder c d h r = Cylinder(c,d,h,r)
     let render pick g = Render(pick,g)
+    let group xs = Group(xs)
 
     let on (p : Kind -> bool) (r : V3d -> 'msg) (k : Kind) = if p k then Some (r (Event.position k)) else None
 
@@ -58,16 +60,6 @@ module ImmutableSceneGraph =
                     children |> Seq.map ( toSg { s with trafo = s.trafo * t } ) |> Sg.group'
                 | Colored(c,children) ->
                     children |> Seq.map ( toSg { s with color = c } ) |> Sg.group'
-                | Render (_, Quad q) -> 
-                    let geom = 
-                        IndexedGeometry(
-                            Mode = IndexedGeometryMode.TriangleList,
-                            IndexedAttributes = SymDict.ofList [ 
-                                DefaultSemantic.Positions,  q.Points |> Seq.toArray   :> System.Array 
-                                DefaultSemantic.Colors,     Array.replicate 4 s.color :> System.Array
-                            ]
-                        )
-                    Sg.ofIndexedGeometry geom
                 | Render (_, Cone(center,dir,height,radius)) -> 
                     let ig = IndexedGeometryPrimitives.solidCone center dir height radius 10 s.color
                     ig
@@ -86,6 +78,15 @@ module ImmutableSceneGraph =
                     ig
                      |> Sg.ofIndexedGeometry
                      |> Sg.transform (Trafo3d.Translation(g.Center)) 
+                     |> Sg.transform s.trafo
+                | Render(_, Quad(p)) ->
+                    let vertices = p.Points |> Seq.map V3f |> Seq.toArray
+                    let index = [| 0; 1; 2; 0; 2; 3 |]
+                    let colors = Array.replicate vertices.Length s.color 
+                    let normals = Array.replicate vertices.Length (p.Edge03.Cross(p.P2-p.P0)).Normalized
+                    let ig = IndexedGeometry(IndexedGeometryMode.TriangleList, index, SymDict.ofList [DefaultSemantic.Positions, vertices :> Array; DefaultSemantic.Colors, colors :> System.Array; DefaultSemantic.Normals, normals :> System.Array], SymDict.empty)
+                    ig
+                     |> Sg.ofIndexedGeometry
                      |> Sg.transform s.trafo
                 | Group xs -> xs |> Seq.map ( toSg s) |> Sg.group'
 
@@ -109,16 +110,21 @@ module ImmutableSceneGraph =
                     if r.Hits(cylinder,0.0,Double.MaxValue,&ha) then
                         [ha.T, action]
                     else []
-                | _ -> failwith ""
+                | Render(action,Quad(q)) -> 
+                    let transformed = Quad3d(q.Points |> Seq.map state.trafo.Forward.TransformPos)
+                    let mutable ha = RayHit3d.MaxRange
+                    if r.HitsPlane(Plane3d.ZPlane,0.0,Double.MaxValue,&ha) then [ha.T, action]
+                    else []
         match s |> go { trafo = Trafo3d.Identity; color = C4b.White } with
             | [] -> []
-            | xs -> xs |>  List.sortBy fst 
+            | xs -> 
+                xs |> List.filter (not << List.isEmpty << snd) |>  List.sortBy fst 
 
 module Elmish3D = 
 
     open ImmutableSceneGraph
 
-    type MouseEvent = Down | Move | Click | Up
+    type MouseEvent = Down of MouseButtons | Move | Click of MouseButtons | Up of MouseButtons
     type NoPick = NoPick of MouseEvent * Ray3d
     
     type App<'model,'msg,'view> =
@@ -134,8 +140,10 @@ module Elmish3D =
         let mutable model = app.initial
         let view = Mod.init (app.view model)
         let sceneGraph = view |> Mod.map ImmutableSceneGraph.toSg |> Sg.dynamic
+        let mutable history = []
 
-        let updateScene (m : 'model) =
+        let updateScene (m : 'model) shouldTrack =
+            if shouldTrack then history <- m :: history
             let newView = app.view m
             transact (fun _ -> 
                 view.Value <- newView
@@ -156,29 +164,39 @@ module Elmish3D =
                             | Some r -> model <- app.update model r
                             | _ -> ()
                 | [] -> ()
-            updateScene model
+            updateScene model false
         ) |> ignore
 
-        ctrl.Mouse.Down.Values.Subscribe(fun p ->   
+        ctrl.Mouse.Down.Values.Subscribe(fun p ->  
             down <- true
             let ray = ctrl.Mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
             match pick ray view.Value with
                 | ((d,f)::_) -> 
                     for msg in f do
-                        match msg (Kind.Down (ray.GetPointOnRay d)) with
+                        match msg (Kind.Down(p, ray.GetPointOnRay d)) with
                             | Some r -> 
                                 model <- app.update model r
                             | _ -> ()
                 | [] -> 
-                    model <-  updatePickMsg (NoPick(MouseEvent.Click, ray)) model
-            updateScene model
+                    model <-  updatePickMsg (NoPick(MouseEvent.Click p, ray)) model
+            updateScene model true
         ) |> ignore
 
+        let mutable ctrlDown = false
+        ctrl.Keyboard.KeyDown(Keys.LeftCtrl).Values.Subscribe(fun _ -> ctrlDown <- true) |> ignore
+        ctrl.Keyboard.KeyUp(Keys.LeftCtrl).Values.Subscribe(fun _ -> ctrlDown <- false) |> ignore
+        ctrl.Keyboard.KeyDown(Keys.Z).Values.Subscribe(fun _ -> 
+            if ctrlDown then
+                match history with
+                    | x::xs -> model <- x; history <- xs; updateScene model false
+                    | [] -> ()
+        ) |> ignore
+ 
         ctrl.Mouse.Up.Values.Subscribe(fun p ->     
             down <- false
             let ray = ctrl.Mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
-            model <- updatePickMsg (NoPick(MouseEvent.Up, ray)) model
-            updateScene model
+            model <- updatePickMsg (NoPick(MouseEvent.Up p, ray)) model
+            updateScene model false
         ) |> ignore
 
         sceneGraph
@@ -272,12 +290,89 @@ module TranslateController =
             ofPickMsg =
                 fun model (NoPick(kind,ray)) ->
                     match kind with   
-                        | MouseEvent.Click | MouseEvent.Down  -> [NoHit]
+                        | MouseEvent.Click _ | MouseEvent.Down _  -> [NoHit]
                         | MouseEvent.Move when Option.isNone model.activeTranslation ->
                              [NoHit; MoveRay ray]
                         | MouseEvent.Move ->  [MoveRay ray]
-                        | MouseEvent.Up    -> [EndTranslation]
+                        | MouseEvent.Up _   -> [EndTranslation]
             view = view
+        }
+
+module SimpleDrawingApp =
+
+    open ImmutableSceneGraph
+    open Elmish3D
+
+    type Polygon = list<V3d>
+    type OpenPolygon = {
+        cursor         : Option<V3d>
+        finishedPoints : list<V3d>
+    }
+    type Model = {
+        finished : list<Polygon>
+        working  : Option<OpenPolygon>
+    }
+    type Action =
+        | ClosePolygon
+        | AddPoint   of V3d
+        | MoveCursor of V3d
+
+    let update (m : Model) (cmd : Action) =
+        match cmd with
+            | ClosePolygon -> 
+                match m.working with
+                    | None -> m
+                    | Some p -> 
+                        { m with 
+                            working = None 
+                            finished = p.finishedPoints :: m.finished
+                        }
+            | AddPoint p ->
+                match m.working with
+                    | None -> { m with working = Some { finishedPoints = [ p ]; cursor = None }}
+                    | Some v -> 
+                        { m with working = Some { v with finishedPoints = p :: v.finishedPoints }}
+            | MoveCursor p ->
+                match m.working with
+                    | None -> { m with working = Some { finishedPoints = []; cursor = Some p }}
+                    | Some v -> { m with working = Some { v with cursor = Some p }}
+
+
+    let viewPolygon (p : list<V3d>) =
+        [ for edge in Polygon3d(p |> List.toSeq).EdgeLines do
+            let v = edge.P1 - edge.P0
+            yield cylinder edge.P0 v.Normalized v.Length 0.03 |> render Pick.ignore 
+        ] |> group
+
+
+    let view (m : Model) = 
+        group [
+            yield [ Quad (Quad3d [| V3d(-1,-1,0); V3d(1,-1,0); V3d(1,1,0); V3d(-1,1,0) |]) 
+                        |> render [ 
+                             on Event.move MoveCursor
+                             on (Event.down' MouseButtons.Left)  AddPoint 
+                             on (Event.down' MouseButtons.Right) (constF ClosePolygon)
+                           ] 
+                  ] |> colored C4b.Gray
+            match m.working with
+                | Some v when v.cursor.IsSome -> 
+                    yield 
+                        [[ Sphere3d(V3d.OOO,0.1) |> Sphere |> render Pick.ignore ] 
+                            |> colored C4b.Red] 
+                            |> transformed (Trafo3d.Translation(v.cursor.Value))
+                    yield viewPolygon (v.cursor.Value :: v.finishedPoints)
+                | _ -> ()
+            for p in m.finished do yield viewPolygon p
+        ]
+
+    let initial = { finished = []; working = None }
+
+    let app =
+        {
+            initial = initial
+            update = update
+            view = view
+            ofPickMsg = fun _ _ -> []
         }
 
 module InteractionExperiments = 
@@ -297,7 +392,9 @@ module InteractionExperiments =
 
     let camera = Mod.map2 Camera.create cameraView frustum
 
-    let sg = Elmish3D.createApp win camera TranslateController.app
+    let sg = 
+        //Elmish3D.createApp win camera TranslateController.app
+        Elmish3D.createApp win camera SimpleDrawingApp.app
 
     let fullScene =
           sg 
