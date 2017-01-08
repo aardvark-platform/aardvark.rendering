@@ -248,7 +248,7 @@ let manymany() =
 [<EntryPoint>]
 let main argv = 
 
-    //Scratch.Controllers.run() |> ignore
+    //Scratch.InteractionExperiments.run() |> ignore
     //Scratch.FablishInterop.run argv |> ignore
     //System.Environment.Exit 0
 

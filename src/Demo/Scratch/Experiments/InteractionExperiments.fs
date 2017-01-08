@@ -111,22 +111,20 @@ module ImmutableSceneGraph =
                     else []
                 | _ -> failwith ""
         match s |> go { trafo = Trafo3d.Identity; color = C4b.White } with
-            | [] -> None
-            | xs -> xs |>  List.sortBy fst |> Some
+            | [] -> []
+            | xs -> xs |>  List.sortBy fst 
 
 module Elmish3D = 
 
     open ImmutableSceneGraph
 
-    type PickMsg =
-        | Click of Ray3d
-        | Move  of Ray3d
-        | Up    of Ray3d
+    type MouseEvent = Down | Move | Click | Up
+    type NoPick = NoPick of MouseEvent * Ray3d
     
     type App<'model,'msg,'view> =
         {
             initial   : 'model
-            ofPickMsg :  PickMsg -> Option<'msg>
+            ofPickMsg : 'model -> NoPick  -> list<'msg>
             update    : 'model   -> 'msg -> 'model
             view      : 'model   -> 'view
         }
@@ -143,42 +141,43 @@ module Elmish3D =
                 view.Value <- newView
             )
 
-        let updatePickMsg (m : PickMsg) (model : 'model) =
-            match app.ofPickMsg m with
-                | Some msg -> app.update model msg
-                | None -> model
+        let updatePickMsg (m : NoPick) (model : 'model) =
+            app.ofPickMsg model m |> List.fold app.update model
+
+        let mutable down = false
 
         ctrl.Mouse.Move.Values.Subscribe(fun (oldP,newP) -> 
-            let ray = newP |> Camera.pickRay (camera |> Mod.force)
+            let ray = newP |> Camera.pickRay (camera |> Mod.force) 
+            model <- updatePickMsg (NoPick(MouseEvent.Move,ray)) model // wrong
             match pick ray view.Value with
-                | Some ((d,f)::_) -> 
+                | (d,f)::_ -> 
                     for msg in f do
                         match msg (Kind.Move (ray.GetPointOnRay d)) with
                             | Some r -> model <- app.update model r
                             | _ -> ()
-                | _ -> model <- updatePickMsg (PickMsg.Click ray) model
-            model <- updatePickMsg (PickMsg.Move ray) model
-
+                | [] -> ()
             updateScene model
         ) |> ignore
 
-        ctrl.Mouse.Down.Values.Subscribe(fun p -> 
+        ctrl.Mouse.Down.Values.Subscribe(fun p ->   
+            down <- true
             let ray = ctrl.Mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
             match pick ray view.Value with
-                | Some ((d,f)::_) -> 
+                | ((d,f)::_) -> 
                     for msg in f do
                         match msg (Kind.Down (ray.GetPointOnRay d)) with
                             | Some r -> 
                                 model <- app.update model r
                             | _ -> ()
-                | _ -> 
-                    model <-  updatePickMsg (PickMsg.Click ray) model
+                | [] -> 
+                    model <-  updatePickMsg (NoPick(MouseEvent.Click, ray)) model
             updateScene model
         ) |> ignore
 
-        ctrl.Mouse.Up.Values.Subscribe(fun p -> 
+        ctrl.Mouse.Up.Values.Subscribe(fun p ->     
+            down <- false
             let ray = ctrl.Mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
-            model <- updatePickMsg (PickMsg.Up ray) model
+            model <- updatePickMsg (NoPick(MouseEvent.Up, ray)) model
             updateScene model
         ) |> ignore
 
@@ -271,10 +270,13 @@ module TranslateController =
             initial = { hovered = None; activeTranslation = None; trafo = Trafo3d.Identity }
             update = update
             ofPickMsg =
-                function   
-                    | PickMsg.Click  _ -> Some NoHit
-                    | PickMsg.Move   r -> Some (MoveRay r)
-                    | PickMsg.Up     _ -> Some EndTranslation
+                fun model (NoPick(kind,ray)) ->
+                    match kind with   
+                        | MouseEvent.Click | MouseEvent.Down  -> [NoHit]
+                        | MouseEvent.Move when Option.isNone model.activeTranslation ->
+                             [NoHit; MoveRay ray]
+                        | MouseEvent.Move ->  [MoveRay ray]
+                        | MouseEvent.Up    -> [EndTranslation]
             view = view
         }
 
