@@ -29,6 +29,11 @@ module ImmutableSceneGraph =
     type PickOperation<'msg> = Kind -> Option<'msg>
     module Pick =
         let ignore = []
+        let map f (p : PickOperation<'a>) =
+            fun k -> 
+                match p k with
+                    | Some r -> Some (f r)
+                    | None -> None
 
     type Primitive = 
         | Sphere      of Sphere3d
@@ -42,8 +47,19 @@ module ImmutableSceneGraph =
             | Render    of list<PickOperation<'msg>> * Primitive 
             | Group     of seq<Scene<'msg>>
 
+    module Scene =
+        let rec map (f : 'a -> 'b) (s : Scene<'a>) =
+            match s with
+                | Transform(t,xs) -> Transform(t, Seq.map (map f) xs )
+                | Colored(t,xs) -> Colored(t, Seq.map (map f) xs )
+                | Render(picks,p) -> 
+                    Render(picks |> List.map (Pick.map f), p)
+                | Group xs -> xs |> Seq.map (map f) |> Group
+
     let colored c xs  = Colored(c,xs)
     let transformed t xs = Transform(t,xs)
+    let transformed' t x = Transform(t,[x])
+    let colored' c x = Colored(c,[x])
     let translate x y z xs  = transformed ( Trafo3d.Translation(x,y,z) ) xs
     let cylinder c d h r = Cylinder(c,d,h,r)
     let render pick g = Render(pick,g)
@@ -201,6 +217,17 @@ module Elmish3D =
 
         sceneGraph
 
+    
+    module List =
+        let updateAt i f xs =
+            let rec work current xs =
+                match xs with 
+                    | x::xs -> 
+                        if i = current then f x :: xs
+                        else x :: work (current+1) xs
+                    | [] -> []
+            work 0 xs
+
 
 
 module TranslateController =
@@ -218,7 +245,7 @@ module TranslateController =
             | Y -> Plane3d.ZPlane
             | Z -> Plane3d.XPlane
 
-    type Msg = 
+    type Action = 
 
         // hover overs
         | Hover           of Axis * V3d
@@ -229,6 +256,11 @@ module TranslateController =
         | Translate       of Axis * V3d
         | EndTranslation 
 
+    let hasEnded a =
+        match a with
+            | EndTranslation -> true
+            | _ -> false
+
     let hover      = curry Hover
     let translate_ = curry Translate
 
@@ -238,12 +270,12 @@ module TranslateController =
         trafo             : Trafo3d
     }
 
-    let update (m : Model) (a : Msg) =
+    let update (m : Model) (a : Action) =
         match a, m.activeTranslation with
             | NoHit, _             ->  { m with hovered = None; }
             | Hover (v,_), _       ->  { m with hovered = Some v}
             | Translate (dir,s), _ -> { m with activeTranslation = Some (Axis.moveAxis dir, s) }
-            | EndTranslation, _    -> { m with activeTranslation = None; trafo = Trafo3d.Identity }
+            | EndTranslation, _    -> { m with activeTranslation = None;  }
             | MoveRay r, Some (t,start) -> 
                 let mutable ha = RayHit3d.MaxRange
                 if r.HitsPlane(t,0.0,Double.MaxValue,&ha) then
@@ -283,18 +315,19 @@ module TranslateController =
                 ]
         ]
 
+    let ofPickMsg model (NoPick(kind,ray)) =
+        match kind with   
+            | MouseEvent.Click _ | MouseEvent.Down _  -> [NoHit]
+            | MouseEvent.Move when Option.isNone model.activeTranslation ->
+                    [NoHit; MoveRay ray]
+            | MouseEvent.Move ->  [MoveRay ray]
+            | MouseEvent.Up _   -> [EndTranslation]
+
     let app  = 
         {
             initial = { hovered = None; activeTranslation = None; trafo = Trafo3d.Identity }
             update = update
-            ofPickMsg =
-                fun model (NoPick(kind,ray)) ->
-                    match kind with   
-                        | MouseEvent.Click _ | MouseEvent.Down _  -> [NoHit]
-                        | MouseEvent.Move when Option.isNone model.activeTranslation ->
-                             [NoHit; MoveRay ray]
-                        | MouseEvent.Move ->  [MoveRay ray]
-                        | MouseEvent.Up _   -> [EndTranslation]
+            ofPickMsg = ofPickMsg
             view = view
         }
 
@@ -357,8 +390,9 @@ module SimpleDrawingApp =
             match m.working with
                 | Some v when v.cursor.IsSome -> 
                     yield 
-                        [[ Sphere3d(V3d.OOO,0.1) |> Sphere |> render Pick.ignore ] 
-                            |> colored C4b.Red] 
+                        [ Sphere3d(V3d.OOO,0.1) |> Sphere |> render Pick.ignore ] 
+                            |> colored C4b.Red
+                            |> List.singleton
                             |> transformed (Trafo3d.Translation(v.cursor.Value))
                     yield viewPolygon (v.cursor.Value :: v.finishedPoints)
                 | _ -> ()
@@ -374,6 +408,101 @@ module SimpleDrawingApp =
             view = view
             ofPickMsg = fun _ _ -> []
         }
+
+module PlaceTransformObjects =
+
+    open ImmutableSceneGraph
+    open Elmish3D
+
+    type Model = {
+        objects : list<Trafo3d>
+        hoveredObj : Option<int>
+        selectedObj : Option<int * TranslateController.Model>
+    }
+
+    let initial =
+        {
+            objects = [ Trafo3d.Translation V3d.OOO; Trafo3d.Translation V3d.IOO; Trafo3d.Translation V3d.OIO ]
+            hoveredObj = None
+            selectedObj = None
+        }
+
+    type Action =
+        | PlaceObject of V3d
+        | SelectObject of int
+        | HoverObject  of int
+        | Unselect
+        | TransformObject of int * TranslateController.Action
+
+    let update (m : Model) (msg : Action) =
+        match msg with
+            | PlaceObject p -> { m with objects = (Trafo3d.Translation p) :: m.objects }
+            | SelectObject i -> { m with selectedObj = Some (i, { TranslateController.app.initial with trafo = List.item i m.objects }) }
+            | TransformObject(index,translation) ->
+                match m.selectedObj with
+                    | Some (i,tmodel) ->
+                        let t = TranslateController.update tmodel translation
+                        { m with 
+                            selectedObj = Some (i,t)
+                            objects = List.updateAt i (constF t.trafo) m.objects }
+                    | _ -> m
+            | HoverObject i -> { m with hoveredObj = Some i }
+            | Unselect -> { m with selectedObj = None }
+
+    let isSelected m i =
+        match m.selectedObj with
+            | Some (s,_) when s = i -> true
+            | _ -> false
+
+    let isHovered m i =
+        match m.hoveredObj with
+            | Some s when s = i -> true
+            | _ -> false
+
+    let viewObjects (m : Model) =
+        m.objects |> List.mapi (fun i o -> 
+            Sphere3d(V3d.OOO,0.1) 
+               |> Sphere 
+               |> render [
+                    yield on Event.move (constF (HoverObject i))
+                    yield on (Event.down' MouseButtons.Middle) (constF Unselect)
+                    if m.selectedObj.IsNone then 
+                        yield on Event.down (constF (SelectObject i))
+                   ]
+               |> transformed' o 
+               |> colored' (if isSelected m i then C4b.Red elif isHovered m i then C4b.Blue else C4b.Gray)
+        )
+
+    let view (m : Model) =
+        [
+            yield! viewObjects m
+            yield 
+                Quad (Quad3d [| V3d(-1,-1,0); V3d(1,-1,0); V3d(1,1,0); V3d(-1,1,0) |]) 
+                 |> render [ 
+                        on (Event.down' MouseButtons.Right) PlaceObject 
+                    ] 
+                 |> colored' C4b.Gray
+            match m.selectedObj with
+                | None -> ()
+                | Some (i,inner) -> 
+                    yield TranslateController.view inner |> Scene.map (fun a -> TransformObject(i,a))
+        ] |> group
+
+    let app =
+        {
+            initial = initial
+            update = update
+            view = view
+            ofPickMsg = 
+                fun m (NoPick(me,r)) -> 
+                    match m.selectedObj with
+                        | None -> []
+                        | Some (i,inner) -> 
+                            match me with
+                                | MouseEvent.Click MouseButtons.Middle -> [Unselect]
+                                | _ -> TranslateController.ofPickMsg inner (NoPick(me,r)) |> List.map (fun a -> TransformObject(i,a))
+        }
+        
 
 module InteractionExperiments = 
 
@@ -395,6 +524,7 @@ module InteractionExperiments =
     let sg = 
         //Elmish3D.createApp win camera TranslateController.app
         Elmish3D.createApp win camera SimpleDrawingApp.app
+        //Elmish3D.createApp win camera PlaceTransformObjects.app
 
     let fullScene =
           sg 
