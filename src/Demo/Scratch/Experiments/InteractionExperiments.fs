@@ -47,9 +47,7 @@ module ImmutableSceneGraph =
     let cylinder c d h r = Cylinder(c,d,h,r)
     let render pick g = Render(pick,g)
 
-        let on  (p : Kind -> bool) (r : V3d -> 'msg) (k : Kind) = if p k then Some (r (Event.position k)) else None
-
-
+    let on (p : Kind -> bool) (r : V3d -> 'msg) (k : Kind) = if p k then Some (r (Event.position k)) else None
 
     type State = { trafo : Trafo3d; color : C4b }
 
@@ -188,103 +186,103 @@ module Elmish3D =
 
 
 
-
-module Controllers = 
+module TranslateController =
 
     open ImmutableSceneGraph
     open Elmish3D
 
+    type Axis = X | Y | Z
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module Axis =
+        let dir = function | X -> V3d.XAxis | Y -> V3d.YAxis | Z -> V3d.ZAxis
+        let moveAxis = function
+            | X -> Plane3d.YPlane
+            | Y -> Plane3d.ZPlane
+            | Z -> Plane3d.XPlane
+
+    type Msg = 
+
+        // hover overs
+        | Hover           of Axis * V3d
+        | NoHit       
+        | MoveRay         of Ray3d
+
+        // translations    
+        | Translate       of Axis * V3d
+        | EndTranslation 
+
+    let hover      = curry Hover
+    let translate_ = curry Translate
+
+    type Model = {
+        hovered           : Option<Axis>
+        activeTranslation : Option<Plane3d * V3d>
+        trafo             : Trafo3d
+    }
+
+    let update (m : Model) (a : Msg) =
+        match a, m.activeTranslation with
+            | NoHit, _             ->  { m with hovered = None; }
+            | Hover (v,_), _       ->  { m with hovered = Some v}
+            | Translate (dir,s), _ -> { m with activeTranslation = Some (Axis.moveAxis dir, s) }
+            | EndTranslation, _    -> { m with activeTranslation = None; trafo = Trafo3d.Identity }
+            | MoveRay r, Some (t,start) -> 
+                let mutable ha = RayHit3d.MaxRange
+                if r.HitsPlane(t,0.0,Double.MaxValue,&ha) then
+                    { m with trafo = Trafo3d.Translation (ha.Point - start) }
+                else m
+            | MoveRay r, None -> m
+
+
+    let view (m : Model) =
+        let arrow dir = Cone(V3d.OOO,dir,0.3,0.1)
+
+        let ifHit (a : Axis) (selection : C4b) (defaultColor : C4b) =
+            match m.hovered with
+                | Some v when v = a -> selection
+                | _ -> defaultColor
+            
+        transformed m.trafo [
+                translate 1.0 0.0 0.0 [
+                    [ arrow V3d.IOO |> render [on Event.move (hover X); on Event.down (translate_ X)] ] 
+                        |> colored (ifHit X C4b.White C4b.DarkRed)
+                ]
+                translate 0.0 1.0 0.0 [
+                    [ arrow V3d.OIO |> render [on Event.move (hover Y); on Event.down (translate_ Y)] ] 
+                        |> colored (ifHit Y C4b.White C4b.DarkBlue)
+                ]
+                translate 0.0 0.0 1.0 [
+                    [ arrow V3d.OOI |> render [on Event.move (hover Z); on Event.down (translate_ Z)] ] 
+                        |> colored (ifHit Z C4b.White C4b.DarkGreen)
+                ]
+
+                [ cylinder V3d.OOO V3d.IOO 1.0 0.05 |> render [ on Event.move (hover X); on Event.down (translate_ X) ] ] |> colored (ifHit X C4b.White C4b.DarkRed)
+                [ cylinder V3d.OOO V3d.OIO 1.0 0.05 |> render [ on Event.move (hover Y); on Event.down (translate_ Y) ] ] |> colored (ifHit Y C4b.White C4b.DarkBlue)
+                [ cylinder V3d.OOO V3d.OOI 1.0 0.05 |> render [ on Event.move (hover Z); on Event.down (translate_ Z) ] ] |> colored (ifHit Z C4b.White C4b.DarkGreen)
+                
+                translate 0.0 0.0 0.0 [
+                    [ Sphere3d(V3d.OOO,0.1) |> Sphere |> render Pick.ignore ] |> colored C4b.Gray
+                ]
+        ]
+
+    let app  = 
+        {
+            initial = { hovered = None; activeTranslation = None; trafo = Trafo3d.Identity }
+            update = update
+            ofPickMsg =
+                function   
+                    | PickMsg.Click  _ -> Some NoHit
+                    | PickMsg.Move   r -> Some (MoveRay r)
+                    | PickMsg.Up     _ -> Some EndTranslation
+            view = view
+        }
+
+module InteractionExperiments = 
+
     FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
     let win = Interactive.Window
-
-    module TranslateController =
-
-        type Axis = X | Y | Z
-
-        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-        module Axis =
-            let dir = function | X -> V3d.XAxis | Y -> V3d.YAxis | Z -> V3d.ZAxis
-            let moveAxis = function
-                | X -> Plane3d.YPlane
-                | Y -> Plane3d.ZPlane
-                | Z -> Plane3d.XPlane
-
-        type Msg = 
-            // hover overs
-            | Hover           of Axis * V3d
-            | NoHit       
-            | MoveRay         of Ray3d
-            // translations    
-            | Translate       of Axis * V3d
-            | EndTranslation 
-
-        let hover      = curry Hover
-        let translate_ = curry Translate
-
-        type Model = {
-            hovered           : Option<Axis>
-            activeTranslation : Option<Plane3d * V3d>
-            trafo             : Trafo3d
-        }
-
-        let update (m : Model) (a : Msg) =
-            match a, m.activeTranslation with
-                | NoHit, _             ->  { m with hovered = None; }
-                | Hover (v,_), _       ->  { m with hovered = Some v}
-                | Translate (dir,s), _ -> { m with activeTranslation = Some (Axis.moveAxis dir, s) }
-                | EndTranslation, _    -> { m with activeTranslation = None; trafo = Trafo3d.Identity }
-                | MoveRay r, Some (t,start) -> 
-                    let mutable ha = RayHit3d.MaxRange
-                    if r.HitsPlane(t,0.0,Double.MaxValue,&ha) then
-                        { m with trafo = Trafo3d.Translation (ha.Point - start) }
-                    else m
-                | MoveRay r, None -> m
-
-
-        let view (m : Model) =
-            let arrow dir = Cone(V3d.OOO,dir,0.3,0.1)
-
-            let ifHit (a : Axis) (selection : C4b) (defaultColor : C4b) =
-                match m.hovered with
-                    | Some v when v = a -> selection
-                    | _ -> defaultColor
-            
-            transformed m.trafo [
-                    translate 1.0 0.0 0.0 [
-                        [ arrow V3d.IOO |> render [on Event.move (hover X); on Event.down (translate_ X)] ] 
-                            |> colored (ifHit X C4b.White C4b.DarkRed)
-                    ]
-                    translate 0.0 1.0 0.0 [
-                        [ arrow V3d.OIO |> render [on Event.move (hover Y); on Event.down (translate_ Y)] ] 
-                            |> colored (ifHit Y C4b.White C4b.DarkBlue)
-                    ]
-                    translate 0.0 0.0 1.0 [
-                        [ arrow V3d.OOI |> render [on Event.move (hover Z); on Event.down (translate_ Z)] ] 
-                            |> colored (ifHit Z C4b.White C4b.DarkGreen)
-                    ]
-
-                    [ cylinder V3d.OOO V3d.IOO 1.0 0.05 |> render [ on Event.move (hover X); on Event.down (translate_ X) ] ] |> colored (ifHit X C4b.White C4b.DarkRed)
-                    [ cylinder V3d.OOO V3d.OIO 1.0 0.05 |> render [ on Event.move (hover Y); on Event.down (translate_ Y) ] ] |> colored (ifHit Y C4b.White C4b.DarkBlue)
-                    [ cylinder V3d.OOO V3d.OOI 1.0 0.05 |> render [ on Event.move (hover Z); on Event.down (translate_ Z) ] ] |> colored (ifHit Z C4b.White C4b.DarkGreen)
-                
-                    translate 0.0 0.0 0.0 [
-                        [ Sphere3d(V3d.OOO,0.1) |> Sphere |> render Pick.ignore ] |> colored C4b.Gray
-                    ]
-            ]
-
-        let app  = 
-            {
-                initial = { hovered = None; activeTranslation = None; trafo = Trafo3d.Identity }
-                update = update
-                ofPickMsg =
-                    function   
-                        | PickMsg.Click  _ -> Some NoHit
-                        | PickMsg.Move   r -> Some (MoveRay r)
-                        | PickMsg.Up     _ -> Some EndTranslation
-                view = view
-            }
-
 
     let cameraView = 
         CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
@@ -297,7 +295,7 @@ module Controllers =
 
     let camera = Mod.map2 Camera.create cameraView frustum
 
-    let sg = createApp win camera TranslateController.app
+    let sg = Elmish3D.createApp win camera TranslateController.app
 
     let fullScene =
           sg 
@@ -315,7 +313,7 @@ module Controllers =
         Interactive.SceneGraph <- fullScene
         Interactive.RunMainLoop()
 
-open Controllers
+open InteractionExperiments
 
 #if INTERACTIVE
 Interactive.SceneGraph <- fullScene
