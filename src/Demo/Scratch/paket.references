@@ -4,3 +4,5 @@ AssimpNet
 FShade.Core
 FSharp.Quotations.Evaluator
 Fablish
+
+Aardvark.Compiler.DomainTypes

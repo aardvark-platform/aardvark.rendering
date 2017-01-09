@@ -30,6 +30,8 @@ nuget FsUnit                             ~> 2.1.0
 nuget NUnit                              ~> 3.2.0
 nuget NUnit.Console                      ~> 3.2.0
 
+nuget Aardvark.Compiler.DomainTypes ~> 0.0.6
+
 group Build
 content: none
 source https://api.nuget.org/v3/index.json

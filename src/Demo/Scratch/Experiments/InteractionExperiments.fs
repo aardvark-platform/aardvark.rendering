@@ -1,10 +1,4 @@
-﻿#if INTERACTIVE
-#I @"../../../../bin/Debug"
-#I @"../../../../bin/Release"
-#load "LoadReferences.fsx"
-#else
-namespace Scratch
-#endif
+﻿namespace Scratch
 
 open System
 open Aardvark.Base
@@ -15,8 +9,10 @@ open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 open Aardvark.Application
 
-module ImmutableSceneGraph = 
+open Scratch.DomainTypes
 
+[<AutoOpen>]
+module PickStuff = 
     type Kind = Move of V3d | Down of MouseButtons * V3d
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -34,6 +30,14 @@ module ImmutableSceneGraph =
                 match p k with
                     | Some r -> Some (f r)
                     | None -> None
+
+    
+    let on (p : Kind -> bool) (r : V3d -> 'msg) (k : Kind) = if p k then Some (r (Event.position k)) else None
+
+
+
+module ImmutableSceneGraph = 
+
 
     type Primitive = 
         | Sphere      of Sphere3d
@@ -64,8 +68,6 @@ module ImmutableSceneGraph =
     let cylinder c d h r = Cylinder(c,d,h,r)
     let render pick g = Render(pick,g)
     let group xs = Group(xs)
-
-    let on (p : Kind -> bool) (r : V3d -> 'msg) (k : Kind) = if p k then Some (r (Event.position k)) else None
 
     type State = { trafo : Trafo3d; color : C4b }
 
@@ -135,6 +137,148 @@ module ImmutableSceneGraph =
             | [] -> []
             | xs -> 
                 xs |> List.filter (not << List.isEmpty << snd) |>  List.sortBy fst 
+
+module AnotherSceneGraph =
+
+    open ImmutableSceneGraph
+
+    type ISg<'msg> = inherit ISg
+
+    let on (p : Kind -> bool) (r : V3d -> 'msg) (k : Kind) = if p k then Some (r (Event.position k)) else None
+
+    type Primitive = 
+        | Sphere      of Sphere3d
+        | Cone        of center : V3d * dir : V3d * height : float * radius : float
+        | Cylinder    of center : V3d * dir : V3d * height : float * radius : float
+        | Quad        of Quad3d 
+
+    let cylinder c d h r = Cylinder(c,d,h,r)
+
+    type AbstractApplicator<'msg>(child : IMod<ISg<'msg>>) =
+        interface IApplicator with
+            member x.Child = child |> Mod.map (fun a -> a :> ISg)
+        member x.Child = child
+        new(s : ISg<'msg>) = AbstractApplicator<'msg>(Mod.constant s)
+
+    type Group<'msg>(xs : aset<ISg<'msg>>) =
+        interface ISg<'msg>
+        interface IGroup with
+            member x.Children = xs |> ASet.map (fun a -> a :> ISg)
+
+        member x.Children = xs
+
+        new(l : list<ISg<'msg>>) = Group<'msg>(ASet.ofList l)
+
+    type Transform<'msg>(trafo : IMod<Trafo3d>, xs : list<ISg<'msg>>) =
+        inherit Sg.TrafoApplicator(trafo, Group xs)
+        interface ISg<'msg>
+
+    type Colored<'msg>(color : IMod<C4b>, xs : list<ISg<'msg>>) =
+        inherit AbstractApplicator<'msg>(Group xs)
+        interface ISg<'msg>
+        member x.Color = color
+
+    type On<'msg>(picks : list<PickOperation<'msg>>, children : list<ISg<'msg>>) =
+        inherit AbstractApplicator<'msg>(Group children)
+        member x.PickOperations = picks
+        interface ISg<'msg>
+
+    type Leaf<'msg>(xs : Primitive) =
+        interface ISg<'msg>
+        member x.Primitive = xs
+
+
+    open Aardvark.Base.Ag
+    open Aardvark.SceneGraph.Semantics
+    [<Semantic>]
+    type LeafSemantics() =
+        
+        member x.InhColor(c : Colored<'msg>) =
+            c.Child?InhColor <- c.Color
+
+        member x.InColor(r : Root<ISg>) =
+            r.Child?InhColor <- Mod.constant C4b.White
+
+        member x.RenderObjects(l : Leaf<'msg>) =
+            match l.Primitive with
+                | Sphere s -> 
+                    Sg.sphere 5 (l?InhColor) (Mod.constant s.Radius) |> Sg.transform (Trafo3d.Translation s.Center)
+                    |> Semantic.renderObjects
+                | Cone(c,d,h,r) -> 
+                    l?InhColor |> Mod.map (fun (color : C4b) -> IndexedGeometryPrimitives.solidCone c d h r 10 color |> Sg.ofIndexedGeometry) 
+                    |> Sg.dynamic
+                    |> Semantic.renderObjects
+                | Cylinder(c,d,h,r) ->
+                    l?InhColor |> Mod.map (fun (color : C4b) -> IndexedGeometryPrimitives.solidCylinder c d h r r 10 color |> Sg.ofIndexedGeometry) 
+                    |> Sg.dynamic
+                    |> Semantic.renderObjects
+                | Quad p -> 
+                    let vertices = p.Points |> Seq.map V3f |> Seq.toArray
+                    let index = [| 0; 1; 2; 0; 2; 3 |]
+                    let colors = l?InhColor |> Mod.map  (fun c -> Array.replicate vertices.Length c)
+                    let normals = Array.replicate vertices.Length (p.Edge03.Cross(p.P2-p.P0)).Normalized
+                    let ig = IndexedGeometry(IndexedGeometryMode.TriangleList, index, SymDict.ofList [DefaultSemantic.Positions, vertices :> Array; DefaultSemantic.Normals, normals :> System.Array], SymDict.empty)
+                    ig
+                     |> Sg.ofIndexedGeometry
+                     |> Sg.vertexAttribute DefaultSemantic.Colors colors
+                     |> Semantic.renderObjects
+      
+      
+
+    type PickObject<'msg> =
+        {
+            trafo : IMod<Trafo3d>
+            primitive : Primitive
+            actions : list<PickOperation<'msg>>
+        }    
+
+    [<AutoOpen>]
+    module SgExt = 
+        type ISg<'msg> with
+            member x.PickObjects() : aset<PickObject<'msg>> = x?PickObjects()
+            member x.PickOperations : list<PickOperation<'msg>> = x?PickOperations
+
+    [<Semantic>]
+    type PickingSemantics() =
+    
+
+        member x.PickOperations(o : Root<ISg<'msg>>) =
+            o.Child?PickOperations <- List.empty<PickOperation<'msg>>
+
+        member x.PickOperations(o : On<'msg>) =
+            o.Child?PickOperations <- o.PickOperations
+
+
+
+        member x.PickObjects(g : Group<'msg>) : aset<PickObject<'msg>> =
+            g.Children |> ASet.collect (fun s -> s.PickObjects())
+
+        member x.PickObjects(s : Transform<'msg>) : aset<PickObject<'msg>> =
+            s.Child |> ASet.bind (fun c -> c?PickObjects())
+               
+        member x.PickObjects(c : AbstractApplicator<'msg>) : aset<PickObject<'msg>> =
+            c.Child |> ASet.bind (fun c -> c?PickObjects())
+                   
+        member x.PickObjects(l : Leaf<'msg>)  : aset<PickObject<'msg>> =
+            match l.PickOperations with
+                | [] -> ASet.empty
+                | ops -> 
+                    ASet.single {
+                        trafo = l.ModelTrafo
+                        primitive = l.Primitive
+                        actions = ops
+                    }
+
+
+    let transform t xs = Transform<'msg>(t,xs) :> ISg<'msg>
+    let translate x y z xs = Transform<'msg>(Trafo3d.Translation(x,y,z) |> Mod.constant, xs) :> ISg<_>
+    let translate' x y z c = Transform<'msg>(Trafo3d.Translation(x,y,z) |> Mod.constant, List.singleton c) :> ISg<_>
+    let colored c xs = Colored<'msg>(c,xs) :> ISg<'msg>
+    let colored' c x = Colored<'msg>(c,x |> List.singleton) :> ISg<'msg>
+    let pick picks xs = On<'msg>(picks,xs) :> ISg<'msg>
+    let group (xs : list<_>) = Group<'msg>(xs) :> ISg<'msg>
+    let leaf x = Leaf<'msg>(x) :> ISg<'msg> 
+    let render picks p = pick picks [leaf p]
 
 module Elmish3D = 
 
@@ -234,8 +378,7 @@ module TranslateController =
 
     open ImmutableSceneGraph
     open Elmish3D
-
-    type Axis = X | Y | Z
+    open TranslateController
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Axis =
@@ -264,11 +407,7 @@ module TranslateController =
     let hover      = curry Hover
     let translate_ = curry Translate
 
-    type Model = {
-        hovered           : Option<Axis>
-        activeTranslation : Option<Plane3d * V3d>
-        trafo             : Trafo3d
-    }
+    let initial = { hovered = None; activeTranslation = None; trafo = Trafo3d.Identity; _id = null }
 
     let update (m : Model) (a : Action) =
         match a, m.activeTranslation with
@@ -315,6 +454,10 @@ module TranslateController =
                 ]
         ]
 
+    let view2 (m : MModel) =
+        failwith ""
+
+
     let ofPickMsg model (NoPick(kind,ray)) =
         match kind with   
             | MouseEvent.Click _ | MouseEvent.Down _  -> [NoHit]
@@ -325,26 +468,119 @@ module TranslateController =
 
     let app  = 
         {
-            initial = { hovered = None; activeTranslation = None; trafo = Trafo3d.Identity }
+            initial = initial
             update = update
             ofPickMsg = ofPickMsg
             view = view
         }
 
+module TranslateController2 =
+
+    open AnotherSceneGraph
+    open Elmish3D
+    open TranslateController
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module Axis =
+        let dir = function | X -> V3d.XAxis | Y -> V3d.YAxis | Z -> V3d.ZAxis
+        let moveAxis = function
+            | X -> Plane3d.YPlane
+            | Y -> Plane3d.ZPlane
+            | Z -> Plane3d.XPlane
+
+    type Action = 
+
+        // hover overs
+        | Hover           of Axis * V3d
+        | NoHit       
+        | MoveRay         of Ray3d
+
+        // translations    
+        | Translate       of Axis * V3d
+        | EndTranslation 
+
+    let hasEnded a =
+        match a with
+            | EndTranslation -> true
+            | _ -> false
+
+    let hover      = curry Hover
+    let translate_ = curry Translate
+
+    let initial = { hovered = None; activeTranslation = None; trafo = Trafo3d.Identity; _id = null }
+
+    let update (m : Model) (a : Action) =
+        match a, m.activeTranslation with
+            | NoHit, _             ->  { m with hovered = None; }
+            | Hover (v,_), _       ->  { m with hovered = Some v}
+            | Translate (dir,s), _ -> { m with activeTranslation = Some (Axis.moveAxis dir, s) }
+            | EndTranslation, _    -> { m with activeTranslation = None;  }
+            | MoveRay r, Some (t,start) -> 
+                let mutable ha = RayHit3d.MaxRange
+                if r.HitsPlane(t,0.0,Double.MaxValue,&ha) then
+                    { m with trafo = Trafo3d.Translation (ha.Point - start) }
+                else m
+            | MoveRay r, None -> m
+
+
+    let view (m : MModel) =
+        let arrow dir = Cone(V3d.OOO,dir,0.3,0.1)
+
+        let ifHit (a : Axis) (selection : C4b) (defaultColor : C4b) =
+            adaptive {
+                let! hovered = m.mhovered
+                match hovered with
+                    | Some v when v = a -> return selection
+                    | _ -> return defaultColor
+            }
+            
+        transform m.mtrafo [
+                translate 1.0 0.0 0.0 [
+                    [ arrow V3d.IOO |> render [on Event.move (hover X); on Event.down (translate_ X)] ] 
+                        |> colored (ifHit X C4b.White C4b.DarkRed)
+                ]
+                translate 0.0 1.0 0.0 [
+                    [ arrow V3d.OIO |> render [on Event.move (hover Y); on Event.down (translate_ Y)] ] 
+                        |> colored (ifHit Y C4b.White C4b.DarkBlue)
+                ]
+                translate 0.0 0.0 1.0 [
+                    [ arrow V3d.OOI |> render [on Event.move (hover Z); on Event.down (translate_ Z)] ] 
+                        |> colored (ifHit Z C4b.White C4b.DarkGreen)
+                ]
+
+                [ cylinder V3d.OOO V3d.IOO 1.0 0.05 |> render [ on Event.move (hover X); on Event.down (translate_ X) ] ] |> colored (ifHit X C4b.White C4b.DarkRed)
+                [ cylinder V3d.OOO V3d.OIO 1.0 0.05 |> render [ on Event.move (hover Y); on Event.down (translate_ Y) ] ] |> colored (ifHit Y C4b.White C4b.DarkBlue)
+                [ cylinder V3d.OOO V3d.OOI 1.0 0.05 |> render [ on Event.move (hover Z); on Event.down (translate_ Z) ] ] |> colored (ifHit Z C4b.White C4b.DarkGreen)
+                
+                translate 0.0 0.0 0.0 [
+                    [ Sphere3d(V3d.OOO,0.1) |> Sphere |> render Pick.ignore ] |> colored (Mod.constant C4b.Gray)
+                ]
+        ]
+
+
+    let ofPickMsg model (NoPick(kind,ray)) =
+        match kind with   
+            | MouseEvent.Click _ | MouseEvent.Down _  -> [NoHit]
+            | MouseEvent.Move when Option.isNone model.activeTranslation ->
+                    [NoHit; MoveRay ray]
+            | MouseEvent.Move ->  [MoveRay ray]
+            | MouseEvent.Up _   -> [EndTranslation]
+
+//    let app  = 
+//        {
+//            initial = initial
+//            update = update
+//            ofPickMsg = ofPickMsg
+//            view = view
+//        }
+
 module SimpleDrawingApp =
 
     open ImmutableSceneGraph
     open Elmish3D
+    open SimpleDrawingApp
 
-    type Polygon = list<V3d>
-    type OpenPolygon = {
-        cursor         : Option<V3d>
-        finishedPoints : list<V3d>
-    }
-    type Model = {
-        finished : list<Polygon>
-        working  : Option<OpenPolygon>
-    }
+
     type Action =
         | ClosePolygon
         | AddPoint   of V3d
@@ -362,7 +598,7 @@ module SimpleDrawingApp =
                         }
             | AddPoint p ->
                 match m.working with
-                    | None -> { m with working = Some { finishedPoints = [ p ]; cursor = None }}
+                    | None -> { m with working = Some { finishedPoints = [ p ]; cursor = None;  }}
                     | Some v -> 
                         { m with working = Some { v with finishedPoints = p :: v.finishedPoints }}
             | MoveCursor p ->
@@ -392,14 +628,13 @@ module SimpleDrawingApp =
                     yield 
                         [ Sphere3d(V3d.OOO,0.1) |> Sphere |> render Pick.ignore ] 
                             |> colored C4b.Red
-                            |> List.singleton
-                            |> transformed (Trafo3d.Translation(v.cursor.Value))
+                            |> transformed' (Trafo3d.Translation(v.cursor.Value))
                     yield viewPolygon (v.cursor.Value :: v.finishedPoints)
                 | _ -> ()
             for p in m.finished do yield viewPolygon p
         ]
 
-    let initial = { finished = []; working = None }
+    let initial = { finished = []; working = None; _id = null }
 
     let app =
         {
@@ -414,17 +649,16 @@ module PlaceTransformObjects =
     open ImmutableSceneGraph
     open Elmish3D
 
-    type Model = {
-        objects : list<Trafo3d>
-        hoveredObj : Option<int>
-        selectedObj : Option<int * TranslateController.Model>
-    }
+    open TranslateController
+    open PlaceTransformObjects
+
 
     let initial =
         {
             objects = [ Trafo3d.Translation V3d.OOO; Trafo3d.Translation V3d.IOO; Trafo3d.Translation V3d.OIO ]
             hoveredObj = None
             selectedObj = None
+            _id = null
         }
 
     type Action =
@@ -506,7 +740,8 @@ module PlaceTransformObjects =
 
 module InteractionExperiments = 
 
-    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+    //FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; ".."; "bin";"Release";"Examples.exe"])
+    open AnotherSceneGraph
 
     let win = Interactive.Window
 
@@ -521,10 +756,43 @@ module InteractionExperiments =
 
     let camera = Mod.map2 Camera.create cameraView frustum
 
+    let scope = ReuseCache()
+
+    let model   = Mod.init TranslateController2.initial
+    let mmodel  = model.Value.ToMod(scope)
+
+    let updateModel (m : TranslateController.Model) =
+        transact (fun () -> 
+            model.Value <- m
+            mmodel.Apply(m, scope)
+        )
+
+    let view = mmodel |> TranslateController2.view
+    let objects = view.PickObjects() |> ASet.toMod
+
+    
+    objects |> Mod.force |> printfn "%A"
+
+
+//    let models = List.replicate 10000 TranslateController.app.initial
+//    let sw = System.Diagnostics.Stopwatch()
+//    let mutable blubber = Unchecked.defaultof<_>
+//    for i in 0 .. 100 do
+//        sw.Restart()
+//        let r = models |> List.map TranslateController.view
+//        blubber <- r
+//        sw.Stop()
+//        GC.Collect()
+//        GC.Collect()
+//        GC.Collect()
+//        GC.WaitForFullGCComplete()
+//        printfn "took: %A" sw.MicroTime
+
     let sg = 
         //Elmish3D.createApp win camera TranslateController.app
-        Elmish3D.createApp win camera SimpleDrawingApp.app
+        //Elmish3D.createApp win camera SimpleDrawingApp.app
         //Elmish3D.createApp win camera PlaceTransformObjects.app
+        view :> ISg
 
     let fullScene =
           sg 
@@ -538,7 +806,9 @@ module InteractionExperiments =
             |> Sg.projTrafo (Mod.map Frustum.projTrafo frustum)
 
     let run () =
-        FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+        Aardvark.Base.Ag.initialize()
+        Aardvark.Init()
+        //FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; ".."; "bin";"Release";"Examples.exe"])
         Interactive.SceneGraph <- fullScene
         Interactive.RunMainLoop()
 
