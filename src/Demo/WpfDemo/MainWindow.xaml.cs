@@ -1,6 +1,5 @@
 ﻿
-#if __MonoCS__
-#else
+#if WINDOWS
 
 using Aardvark.Base;
 using Aardvark.Base.Incremental.CSharp;
