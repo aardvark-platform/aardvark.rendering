@@ -23,6 +23,7 @@ module PickStuff =
         let position = function Move s -> s | Down(_, s) -> s
 
     type PickOperation<'msg> = Kind -> Option<'msg>
+
     module Pick =
         let ignore = []
         let map f (p : PickOperation<'a>) =
@@ -34,7 +35,18 @@ module PickStuff =
     
     let on (p : Kind -> bool) (r : V3d -> 'msg) (k : Kind) = if p k then Some (r (Event.position k)) else None
 
+    type MouseEvent = Down of MouseButtons | Move | Click of MouseButtons | Up of MouseButtons
+    type NoPick = NoPick of MouseEvent * Ray3d
 
+    module List =
+        let updateAt i f xs =
+            let rec work current xs =
+                match xs with 
+                    | x::xs -> 
+                        if i = current then f x :: xs
+                        else x :: work (current+1) xs
+                    | [] -> []
+            work 0 xs
 
 module ImmutableSceneGraph = 
 
@@ -280,12 +292,10 @@ module AnotherSceneGraph =
     let leaf x = Leaf<'msg>(x) :> ISg<'msg> 
     let render picks p = pick picks [leaf p]
 
+
 module Elmish3D = 
 
     open ImmutableSceneGraph
-
-    type MouseEvent = Down of MouseButtons | Move | Click of MouseButtons | Up of MouseButtons
-    type NoPick = NoPick of MouseEvent * Ray3d
     
     type App<'model,'msg,'view> =
         {
@@ -295,8 +305,7 @@ module Elmish3D =
             view      : 'model   -> 'view
         }
 
-
-    let createApp (ctrl : IRenderControl) (camera : IMod<Camera>) (app : App<'model,'msg, Scene<'msg>>) =
+    let createApp (ctrl : IRenderControl) (camera : IMod<Camera>) (app : App<'model,'msg, Scene<'msg>>) = 
         let mutable model = app.initial
         let view = Mod.init (app.view model)
         let sceneGraph = view |> Mod.map ImmutableSceneGraph.toSg |> Sg.dynamic
@@ -361,17 +370,90 @@ module Elmish3D =
 
         sceneGraph
 
-    
-    module List =
-        let updateAt i f xs =
-            let rec work current xs =
-                match xs with 
-                    | x::xs -> 
-                        if i = current then f x :: xs
-                        else x :: work (current+1) xs
-                    | [] -> []
-            work 0 xs
+module Elmish3DADaptive =
 
+    open AnotherSceneGraph
+
+    type App<'model,'mmodel,'msg,'view> =
+        {
+            initial   : 'model
+            ofPickMsg : 'model  -> NoPick  -> list<'msg>
+            update    : 'model  -> 'msg -> 'model
+            view      : 'mmodel -> 'view
+        }
+
+    type Unpersist<'immut,'mut> =
+        {
+            unpersist : 'immut -> 'mut
+            apply     : 'immut -> unit
+        }
+
+
+    let createAppAdaptive (ctrl : IRenderControl) (camera : IMod<Camera>) (unpersist : Unpersist<'model,'mmodel>) (app : App<'model,'mmodel,'msg, ISg<'msg>>) =
+
+        let model = Mod.init app.initial
+        let mmodel = unpersist.unpersist model.Value
+
+        let updateModel (m : 'model) =
+            transact (fun () -> 
+                model.Value <- m
+                unpersist.apply m
+            )
+        let view = app.view mmodel
+        let pickObjects = view.PickObjects()
+        let pickReader = pickObjects.GetReader()
+
+        let pick (r : Ray3d) : list<float * list<PickOperation<'msg>>> =
+            pickReader.GetDelta() |> ignore
+            pickReader.Content |> ignore
+            failwith ""
+
+        let updatePickMsg (m : NoPick) (model : 'model) =
+            app.ofPickMsg model m |> List.fold app.update model
+
+        let mutable down = false
+
+        ctrl.Mouse.Move.Values.Subscribe(fun (oldP,newP) -> 
+            let ray = newP |> Camera.pickRay (camera |> Mod.force) 
+            let mutable model = updatePickMsg (NoPick(MouseEvent.Move,ray)) model.Value // wrong
+            match pick ray with
+                | (d,f)::_ -> 
+                    for msg in f do
+                        match msg (Kind.Move (ray.GetPointOnRay d)) with
+                            | Some r -> model <- app.update model r
+                            | _ -> ()
+                | [] -> ()
+            updateModel model 
+        ) |> ignore
+
+        ctrl.Mouse.Down.Values.Subscribe(fun p ->  
+            down <- true
+            let ray = ctrl.Mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
+            let mutable model = model.Value
+            match pick ray with
+                | ((d,f)::_) -> 
+                    for msg in f do
+                        match msg (Kind.Down(p, ray.GetPointOnRay d)) with
+                            | Some r -> 
+                                model <- app.update model r
+                            | _ -> ()
+                | [] -> 
+                    model <- updatePickMsg (NoPick(MouseEvent.Click p, ray)) model
+            updateModel model 
+        ) |> ignore
+ 
+        ctrl.Mouse.Up.Values.Subscribe(fun p ->     
+            down <- false
+            let ray = ctrl.Mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
+            let model = updatePickMsg (NoPick(MouseEvent.Up p, ray)) model.Value
+            updateModel model 
+        ) |> ignore
+
+        view
+
+    
+    let inline createAppAdaptive2< ^model, ^mmodel, ^msg when ^model: (member ToMod : ^model -> ^mmodel) and  ^model: (member Apply : ^model -> unit)> (ctrl : IRenderControl) (camera : IMod<Camera>) (app : App< ^model, ^mmodel,^ msg, ISg< ^msg>>) =
+        failwith ""
 
 
 module TranslateController =
@@ -565,14 +647,6 @@ module TranslateController2 =
                     [NoHit; MoveRay ray]
             | MouseEvent.Move ->  [MoveRay ray]
             | MouseEvent.Up _   -> [EndTranslation]
-
-//    let app  = 
-//        {
-//            initial = initial
-//            update = update
-//            ofPickMsg = ofPickMsg
-//            view = view
-//        }
 
 module SimpleDrawingApp =
 
