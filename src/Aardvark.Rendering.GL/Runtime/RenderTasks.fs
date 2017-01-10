@@ -943,6 +943,8 @@ module RenderTasks =
                 GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                 GL.Check "could not bind framebuffer"
 
+                
+
                 let depthValue = depth.GetValue x
                 let colorValues = color.GetValue x
                     

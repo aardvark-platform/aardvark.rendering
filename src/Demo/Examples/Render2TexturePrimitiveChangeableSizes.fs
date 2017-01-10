@@ -117,7 +117,7 @@ module Test =
     // check out how to change render targets imperatively
     let mkSmall () = transact (fun () -> Mod.change sizeM (V2i(16,16)))
     let renderAgain () = 
-        clear.Run(Mod.force fbo) |> ignore
-        task.Run(Mod.force fbo) |> ignore
+        clear.Run(RenderToken.Empty, Mod.force fbo)
+        task.Run(RenderToken.Empty, Mod.force fbo) |> ignore
         printfn "move camera in order to see new result"
 

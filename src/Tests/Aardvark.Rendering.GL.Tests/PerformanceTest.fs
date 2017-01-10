@@ -76,7 +76,7 @@ module RandomCubesPerformanceTest =
             ]
 
         for i in 1..10 do
-            task.Run(fbo) |> ignore
+            task.Run(RenderToken.Empty, fbo)
 
 
         let sw = System.Diagnostics.Stopwatch()
@@ -85,7 +85,7 @@ module RandomCubesPerformanceTest =
         let iter = 500
         sw.Start()
         for i in 1 .. iter do
-            task.Run(fbo) |> ignore
+            task.Run(RenderToken.Empty, fbo)
         sw.Stop()
 
         // let tex = fbo.Attachments.[DefaultSemantic.Colors] |> unbox<BackendTextureOutputView>
@@ -227,11 +227,10 @@ module RenderTaskPerformance =
             ]
 
         let customTask = 
-            RenderTask.custom (fun (s,output) ->
+            RenderTask.custom (fun (s,t,output) ->
                 for i in 0 .. 100 do
                     for (r,fbo) in renderTasks do
-                        r.Run output.framebuffer |> ignore
-                FrameStatistics.Zero
+                        r.Run(t, output.framebuffer)
             )
 
         win.RenderTask <- DefaultOverlays.withStatistics customTask
@@ -319,19 +318,20 @@ module StartupPerformance =
             let sw = System.Diagnostics.Stopwatch()
             Report.BeginTimed("Preparing Task")
             sw.Start()
-            let rs = renderTask.Run(fbo)
+            renderTask.Run(RenderToken.Empty, fbo)
             Report.End() |> ignore
 
             Report.BeginTimed("RenderTask Execution 1")
-            let rs = renderTask.Run(fbo)
+            renderTask.Run(RenderToken.Empty, fbo)
             sw.Stop()
             Report.End() |> ignore
 
             Report.BeginTimed("RenderTask Execution 2")
-            let rs = renderTask.Run(fbo)
+            let rs = RenderToken()
+            renderTask.Run(rs, fbo)
             Report.End() |> ignore
 
-            Report.Line("Stats: DC={0} Instr={1} Prim={2}", rs.DrawCallCount, rs.InstructionCount, rs.PrimitiveCount)
+            Report.Line("Stats: DC={0} Instr={1} Prim={2}", rs.DrawCallCount, rs.TotalInstructions, rs.PrimitiveCount)
 
             Report.End() |> ignore
             Report.Line()
@@ -450,7 +450,7 @@ module IsActiveFlagPerformance =
             //Console.ReadLine() |> ignore
 
             let secondRenderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
-            secondRenderTask.Run(fbo) |> ignore
+            secondRenderTask.Run(RenderToken.Empty, fbo)
             secondRenderTask.Dispose()
 
             let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
@@ -459,13 +459,13 @@ module IsActiveFlagPerformance =
             let sw = System.Diagnostics.Stopwatch()
             Report.BeginTimed("RenderTask Execution 1")
             sw.Start()
-            let rs = renderTask.Run(fbo)
+            renderTask.Run(RenderToken.Empty, fbo)
             sw.Stop()
             Report.End() |> ignore
 
             let renderOnce () =
                 sw.Restart()
-                let r = renderTask.Run(fbo)
+                renderTask.Run(RenderToken.Empty, fbo)
                 sw.Stop()
                 sw.Elapsed.TotalSeconds
 

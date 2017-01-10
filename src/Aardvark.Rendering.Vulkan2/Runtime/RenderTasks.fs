@@ -37,7 +37,7 @@ module RenderTasks =
         member x.Scope = scope
 
 
-        abstract member Perform : Framebuffer -> FrameStatistics
+        abstract member Perform : RenderToken * Framebuffer -> unit
         abstract member Release : unit -> unit
 
         member x.Config = config
@@ -55,7 +55,7 @@ module RenderTasks =
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some device.Runtime
 
-        override x.Run(desc : OutputDescription) =
+        override x.Run(token : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| fboSignature.IsAssignableFrom fbo.Signature then
                 failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
@@ -65,15 +65,13 @@ module RenderTasks =
                     | :? Framebuffer as fbo -> fbo
                     | _ -> failwithf "unsupported framebuffer: %A" fbo
 
-            let innerStats = 
-                renderTaskLock.Run (fun () -> 
-                    NativePtr.write runtimeStats V2i.Zero
-                    let r = x.Perform fbo
-                    let rt = NativePtr.read runtimeStats
-                    { r with DrawCallCount = float rt.X; EffectiveDrawCallCount = float rt.Y }
-                )
+            renderTaskLock.Run (fun () -> 
+                NativePtr.write runtimeStats V2i.Zero
+                let r = x.Perform(token, fbo)
+                let rt = NativePtr.read runtimeStats
+                token.AddDrawCalls(rt.X, rt.Y)
+            )
 
-            innerStats
 
     [<AbstractClass>]
     type DependentCommandBuffer(renderPass : RenderPass, pool : CommandPool) as this =
@@ -83,7 +81,6 @@ module RenderTasks =
         let mutable initialized = false
         let cmd = pool.CreateCommandBuffer CommandBufferLevel.Secondary
 
-        let mutable renderStats = FrameStatistics.Zero
         let mutable lastViewports = [||]
         let mutable version = 0
         let mutable commandVersion = -1
@@ -97,7 +94,7 @@ module RenderTasks =
             x.init()
             version <- version + 1
             transact (fun () ->
-                o.Update(x) |> ignore
+                o.Update(x, RenderToken.Empty) |> ignore
                 objects.Add o |> ignore
             )
 
@@ -109,8 +106,8 @@ module RenderTasks =
             )
 
         abstract member Init : aset<PreparedMultiRenderObject> -> unit
-        abstract member UpdateProgram : unit -> FrameStatistics
-        abstract member Fill : CommandBuffer -> FrameStatistics
+        abstract member UpdateProgram : RenderToken -> unit
+        abstract member Fill : RenderToken * CommandBuffer -> unit
         abstract member Release : unit -> unit
 
         member x.Dispose() =
@@ -120,23 +117,21 @@ module RenderTasks =
                 transact (fun () -> objects.Clear())
                 cmd.Dispose()
 
-        member x.Update(caller : IAdaptiveObject) =
+        member x.Update(caller : IAdaptiveObject, token : RenderToken) =
             x.init()
-            x.EvaluateIfNeeded' caller FrameStatistics.Zero (fun dirty ->
-                let mutable stats = FrameStatistics.Zero
+            x.EvaluateIfNeeded' caller () (fun dirty ->
                 for d in dirty do
                     if not d.IsDisposed then
-                        stats <- stats + d.Update x
+                        d.Update(x, token)
 
-                let s = x.UpdateProgram()
-                stats + s
+                x.UpdateProgram(token)
             )
 
-        member x.GetCommandBuffer(caller : IAdaptiveObject, viewports : Box2i[]) =
-            let updateStats = x.Update caller
+        member x.GetCommandBuffer(caller : IAdaptiveObject, token : RenderToken, viewports : Box2i[]) =
+            let inner = RenderToken(token)
+            x.Update(caller, inner)
 
-            let deltas              = updateStats.ResourceDeltas.Total
-            let handlesChanged      = (deltas.Created + deltas.Replaced) <> 0.0
+            let handlesChanged      = inner.CreatedResources <> 0 || inner.ReplacedResources <> 0
             let versionChanged      = version <> commandVersion
             let viewportChanged     = lastViewports <> viewports
 
@@ -147,13 +142,13 @@ module RenderTasks =
                     do! Command.SetViewports viewports
                     do! Command.SetScissors viewports
                 }
-                renderStats <- this.Fill(cmd)
+                this.Fill(token, cmd)
                 cmd.End()
 
                 lastViewports <- viewports
                 commandVersion <- version
 
-            (cmd, updateStats + renderStats)
+            cmd
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -273,23 +268,19 @@ module RenderTasks =
             let config = config.GetValue x
             reinit x config
 
-        override x.UpdateProgram() =
+        override x.UpdateProgram(t) =
             let config = config.GetValue x
             reinit x config
             program.Update x |> ignore
-            FrameStatistics.Zero
 
-        override x.Fill(cmd : CommandBuffer) =
+        override x.Fill(t : RenderToken, cmd : CommandBuffer) =
             NativePtr.write scope.runtimeStats V2i.Zero
 
             program.Run(cmd.Handle)
 
             let calls = NativePtr.read scope.runtimeStats
+            t.AddDrawCalls(calls.X, calls.Y)
 
-            { FrameStatistics.Zero with
-                DrawCallCount = float calls.X
-                EffectiveDrawCallCount = float calls.Y
-            }
 
         override x.Release() =
             if not (NativePtr.isNull scope.runtimeStats) then
@@ -336,7 +327,6 @@ module RenderTasks =
                     task
 
         let update ( x : AbstractVulkanRenderTask ) =
-            let mutable stats = FrameStatistics.Zero
             let deltas = preparedObjectReader.GetDelta x
 
             for d in deltas do 
@@ -348,7 +338,6 @@ module RenderTasks =
                         let task = getCommandBuffer v.RenderPass
                         task.Remove v
 
-            stats
 
 
         
@@ -360,35 +349,31 @@ module RenderTasks =
                 )
             )
 
-        override x.Update() =
-            let mutable stats = update x
-
-            let mutable runStats = []
+        override x.Update(token) =
+            update x
             for (_,t) in Map.toSeq commandBuffers do
-                stats <- stats + t.Update(x)
+                t.Update(x,token)
 
-            stats
 
-        override x.Perform (fbo : Framebuffer) =
-            use token = device.Token
+        override x.Perform (token : RenderToken, fbo : Framebuffer) =
+            use devToken = device.Token
 
 
             let bounds = Box2i(V2i.Zero, fbo.Size - V2i.II)
             let vp = Array.create renderPass.AttachmentCount bounds
 
-            let mutable stats = update x
+            update x
 
             let commandBuffers =
                 commandBuffers 
                     |> Map.toList 
                     |> List.map snd
                     |> List.map (fun dc ->
-                        let cmd, s = dc.GetCommandBuffer(x, vp)
-                        stats <- stats + s
+                        let cmd = dc.GetCommandBuffer(x, token, vp)
                         cmd
                     )
 
-            token.enqueue {
+            devToken.enqueue {
                 for cmd in commandBuffers do
                     do! Command.Barrier
 
@@ -398,9 +383,8 @@ module RenderTasks =
             }
 
             // really run the stuff
-            x.RenderTaskLock.Run token.Sync
+            x.RenderTaskLock.Run devToken.Sync
 
-            stats
 
         override x.Release() =
             commandBuffers |> Map.iter (fun _ c -> c.Dispose())
@@ -440,7 +424,7 @@ module RenderTasks =
                 | _ ->
                     ImageAspect.None
 
-        member x.Run(caller : IAdaptiveObject, outputs : OutputDescription) =
+        member x.Run(caller : IAdaptiveObject, t : RenderToken, outputs : OutputDescription) =
             x.EvaluateAlways caller (fun () ->
                 let fbo = unbox<Framebuffer> outputs.framebuffer
                 use token = device.Token
@@ -465,12 +449,11 @@ module RenderTasks =
                             | None, None        -> ()
                 }
                 token.Sync()
-                FrameStatistics.Zero
             )
 
         interface IRenderTask with
-            member x.Update(c) = FrameStatistics.Zero
-            member x.Run(c,o) = x.Run(c,o)
+            member x.Update(c, t) = ()
+            member x.Run(c,t,o) = x.Run(c,t,o)
             member x.Dispose() = ()
             member x.FrameId = 0UL
             member x.FramebufferSignature = Some (renderPass :> _)

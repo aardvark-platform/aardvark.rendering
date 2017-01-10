@@ -394,7 +394,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         inputs.Clear()
 
 
-    member x.Run(caller : IAdaptiveObject, fbo : OutputDescription) =
+    member x.Run(caller : IAdaptiveObject, t : RenderToken, fbo : OutputDescription) =
         let fbo = fbo.framebuffer
         x.EvaluateAlways caller (fun () ->
             r.Update x
@@ -444,10 +444,10 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     interface IRenderTask with
         member x.FramebufferSignature = None
         member x.Runtime = runtime :> IRuntime |> Some
-        member x.Update(caller) = FrameStatistics.Zero
-        member x.Run(caller, fbo) = 
-            x.Run(caller, fbo)
-            FrameStatistics.Zero
+        member x.Update(caller,t) = ()
+        member x.Run(caller, t,fbo) = 
+            x.Run(caller, t,fbo)
+            ()
 
         member x.Dispose() =
             x.Dispose()

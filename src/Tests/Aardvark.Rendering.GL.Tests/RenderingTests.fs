@@ -74,7 +74,7 @@ module ``Rendering Tests`` =
                 |> Sg.compile runtime fbos
 
 
-        render.Run(fbo) |> ignore
+        render.Run(RenderToken.Empty, fbo)
 
         let test = runtime.Download(tex)
         
@@ -518,9 +518,10 @@ module RenderingTests =
                 ]
             )
 
-        clear.Run fbo |> ignore
-        let stats = task.Run fbo
-        Log.line "%.0f objects" stats.DrawCallCount
+        clear.Run(RenderToken.Empty, fbo)
+        let token = RenderToken()
+        task.Run(token, fbo)
+        Log.line "%d objects" token.DrawCallCount
 
 
         runtime.GenerateMipMaps(color)
@@ -538,8 +539,8 @@ module RenderingTests =
         let sw = Stopwatch()
         sw.Start()
         while sw.Elapsed.TotalSeconds < 10.0 do
-            clear.Run fbo |> ignore
-            task.Run fbo |> ignore
+            clear.Run(RenderToken.Empty, fbo)
+            task.Run(RenderToken.Empty, fbo)
             iterations <- iterations + 1
         sw.Stop()
 
@@ -552,8 +553,8 @@ module RenderingTests =
         sw.Start()
         while sw.Elapsed.TotalSeconds < 20.0 || iterations < 50 do
             transact(fun () -> Mod.change rootTrafo (rootTrafo.Value * Trafo3d.Scale(1.00001)))
-            clear.Run fbo |> ignore
-            task.Run fbo |> ignore
+            clear.Run(RenderToken.Empty, fbo) |> ignore
+            task.Run(RenderToken.Empty, fbo) |> ignore
             iterations <- iterations + 1
         sw.Stop()
 
@@ -637,11 +638,12 @@ module RenderingTests =
 
 
 
-        clear.Run fbo |> ignore
+        clear.Run(RenderToken.Empty, fbo) |> ignore
         OpenTK.Graphics.OpenGL4.GL.Sync()
-        let stats = task.Run fbo
+        let token = RenderToken()
+        task.Run(token, fbo)
         OpenTK.Graphics.OpenGL4.GL.Sync()
-        Log.line "%.0f objects" stats.DrawCallCount
+        Log.line "%d objects" token.DrawCallCount
         let pi = runtime.Download(color, PixFormat.ByteRGBA)
         pi.SaveAsImage(@"C:\Aardwork\gugu.png")
         OpenTK.Graphics.OpenGL4.GL.Sync()
@@ -658,8 +660,8 @@ module RenderingTests =
         sw.Start()
         while sw.Elapsed.TotalSeconds < 20.0 do
             let t = runtime.CompileRender(signature,renderJobs)
-            clear.Run fbo |> ignore
-            t.Run fbo |> ignore
+            clear.Run(RenderToken.Empty, fbo)
+            t.Run(RenderToken.Empty, fbo)
             iterations <- iterations + 1
             disp.Add t
         sw.Stop()
@@ -793,11 +795,12 @@ module RenderingTests =
                 ]
         
 
-            clear.Run fbo |> ignore
+            clear.Run(RenderToken.Empty, fbo)
             OpenTK.Graphics.OpenGL4.GL.Sync()
-            let stats = task.Run fbo
+            let token = RenderToken()
+            task.Run(token, fbo)
             OpenTK.Graphics.OpenGL4.GL.Sync()
-            Log.line "%.0f objects" stats.DrawCallCount
+            Log.line "%d objects" token.DrawCallCount
             let pi = runtime.Download(color, PixFormat.ByteRGBA)
             pi.SaveAsImage(@"C:\Aardwork\urdar.png")
             OpenTK.Graphics.OpenGL4.GL.Sync()
@@ -808,8 +811,8 @@ module RenderingTests =
             let disp = System.Collections.Generic.List()
             sw.Start()
             while sw.Elapsed.TotalSeconds < 5.0 do
-                clear.Run fbo |> ignore
-                task.Run fbo |> ignore
+                clear.Run(RenderToken.Empty, fbo)
+                task.Run(RenderToken.Empty, fbo)
             sw.Stop()
 
         ()
@@ -1001,10 +1004,10 @@ module UseTest =
         let render (cam0 : CameraView) (cam1 : CameraView) =
             task.Use (fun () ->
                 transact (fun () -> view.Value <- cam0)
-                task.Run(o0) |> ignore
+                task.Run(RenderToken.Empty, o0) |> ignore
 
                 transact (fun () -> view.Value <- cam1)
-                task.Run(o1) |> ignore
+                task.Run(RenderToken.Empty, o1) |> ignore
             )
 
         let trafos =  [| Trafo3d.Scale 0.1 ; Trafo3d.Scale 1.0 |]
