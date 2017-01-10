@@ -108,11 +108,6 @@
       <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
-      <Name>Aardvark.Rendering.Vulkan</Name>
-      <Project>{67c2dd0d-8892-4953-b916-ced3aed034b1}</Project>
-      <Private>True</Private>
-    </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
       <Name>Aardvark.SceneGraph</Name>
       <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
