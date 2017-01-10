@@ -21,6 +21,44 @@ type ResourceKind =
     | IndexBuffer = 12
 
 
+[<AutoOpen>]
+module private IntHelpers =
+    let inline add (cell : byref<'a>) (value : 'a) =
+        cell <- cell + value
+
+    let inline notNull (v : 'a) = not (isNull v)
+
+    let inline dictadd (l : Dict<'k, int>) (r : Dict<'k, int>) =
+        let res = Dict.empty
+        for (KeyValue(k,lv)) in l do
+            match r.TryGetValue(k) with
+                | (true, rv) -> res.[k] <- lv + rv
+                | _ -> res.[k] <- lv
+
+        for (KeyValue(k,rv)) in r do
+            if not (l.ContainsKey k) then
+                res.[k] <- rv
+
+        res
+
+    let inline dictsub (l : Dict<'k, int>) (r : Dict<'k, int>) =
+        let res = Dict.empty
+        for (KeyValue(k,lv)) in l do
+            match r.TryGetValue(k) with
+                | (true, rv) -> res.[k] <- lv - rv
+                | _ -> res.[k] <- lv
+
+        for (KeyValue(k,rv)) in r do
+            if not (l.ContainsKey k) then
+                res.[k] <- -rv
+
+        res
+
+    let inline dictneg (l : Dict<'k, int>)  =
+        let res = Dict.empty
+        for (KeyValue(k,lv)) in l do
+            res.[k] <- -lv
+        res
 
 
 [<AllowNullLiteral>]
@@ -59,6 +97,7 @@ type RenderToken =
                     CreatedResources = -x.CreatedResources,
                     UpdateSubmissionTime = -x.UpdateSubmissionTime,
                     UpdateExecutionTime = -x.UpdateExecutionTime,
+                    UpdateCounts = dictneg x.UpdateCounts,
                     RenderPasses = -x.RenderPasses,
                     TotalInstructions = -x.TotalInstructions,
                     ActiveInstructions = -x.ActiveInstructions,
@@ -81,6 +120,7 @@ type RenderToken =
                     CreatedResources = l.CreatedResources + r.CreatedResources,
                     UpdateSubmissionTime = l.UpdateSubmissionTime + r.UpdateSubmissionTime,
                     UpdateExecutionTime = l.UpdateExecutionTime + r.UpdateExecutionTime,
+                    UpdateCounts = dictadd l.UpdateCounts r.UpdateCounts,
                     RenderPasses = l.RenderPasses + r.RenderPasses,
                     TotalInstructions = l.TotalInstructions + r.TotalInstructions,
                     ActiveInstructions = l.ActiveInstructions + r.ActiveInstructions,
@@ -103,6 +143,7 @@ type RenderToken =
                     CreatedResources = l.CreatedResources - r.CreatedResources,
                     UpdateSubmissionTime = l.UpdateSubmissionTime - r.UpdateSubmissionTime,
                     UpdateExecutionTime = l.UpdateExecutionTime - r.UpdateExecutionTime,
+                    UpdateCounts = dictsub l.UpdateCounts r.UpdateCounts,
                     RenderPasses = l.RenderPasses - r.RenderPasses,
                     TotalInstructions = l.TotalInstructions - r.TotalInstructions,
                     ActiveInstructions = l.ActiveInstructions - r.ActiveInstructions,
@@ -139,13 +180,6 @@ type RenderToken =
         new() = RenderToken(null)
             
     end
-
-[<AutoOpen>]
-module private IntHelpers =
-    let inline add (cell : byref<'a>) (value : 'a) =
-        cell <- cell + value
-
-    let inline notNull (v : 'a) = not (isNull v)
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

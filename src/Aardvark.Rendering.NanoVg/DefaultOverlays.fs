@@ -197,11 +197,12 @@ module DefaultOverlays =
          | ResourceKind.IndexBuffer -> "I"
          | _ -> "?"
          
-    let printResourceUpdateCounts (max : int) (r : Map<ResourceKind,float>) =
+    let printResourceUpdateCounts (max : int) (r : Dict<ResourceKind,int>) (count : int)=
         let sorted = 
-            r |> Map.filter (fun k v -> k <> ResourceKind.DrawCall && int v <> 0) 
+            r |> Dict.toMap
+              |> Map.filter (fun k v -> k <> ResourceKind.DrawCall && v <> 0) 
               |> Map.toArray
-              |> Array.map (fun (k,v) -> mapKind k, int v)
+              |> Array.map (fun (k,v) -> mapKind k, int (float v / float count))
         
         sorted.QuickSort(fun (lk,lv) (rk,rv) -> 
             let c = compare lv rv
@@ -246,7 +247,7 @@ module DefaultOverlays =
                 "primitives", "0"
                 "execute", "0"
                 "resource update", "0"
-                //"resource updates", printResourceUpdateCounts 3 resourceDeltas
+                "resource updates", "none"
                 "program update", "0"
     //            "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
     //            "resources", printResourceUpdateCounts 3 resourceCounts
@@ -256,7 +257,6 @@ module DefaultOverlays =
         else 
             let sortTime = s.SortingTime / cnt
             let updateTime = s.DrawUpdateTime / cnt - sortTime
-    //        let resourceDeltas = s.ResourceDeltas.Map |> Map.map (fun _ v -> v.InPlace + v.Replaced)
     //        let resourceCounts = s.ResourceCounts.Map |> Map.map (fun _ v -> v.Count)
 
             [
@@ -265,7 +265,7 @@ module DefaultOverlays =
                 "primitives", sprintf "%.0f" (float s.PrimitiveCount / float cnt)
                 "execute", splittime s.DrawSubmissionTime s.DrawExecutionTime
                 "resource update", splittime s.UpdateSubmissionTime s.UpdateExecutionTime
-                //"resource updates", printResourceUpdateCounts 3 resourceDeltas
+                "resource updates", printResourceUpdateCounts 3 s.UpdateCounts cnt
                 "program update", sprintf "%A" updateTime
     //            "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
     //            "resources", printResourceUpdateCounts 3 resourceCounts
