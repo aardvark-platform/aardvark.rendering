@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Base
 
 open System
+open System.Collections.Generic
 open System.Runtime.CompilerServices
 open Aardvark.Base
 
@@ -20,6 +21,8 @@ type ResourceKind =
     | IndexBuffer = 12
 
 
+
+
 [<AllowNullLiteral>]
 type RenderToken =
     class
@@ -29,6 +32,7 @@ type RenderToken =
         val mutable public CreatedResources : int
         val mutable public UpdateSubmissionTime : MicroTime
         val mutable public UpdateExecutionTime : MicroTime
+        val mutable public UpdateCounts : Dict<ResourceKind, int>
 
         val mutable public RenderPasses : int
         val mutable public TotalInstructions : int
@@ -41,47 +45,31 @@ type RenderToken =
         val mutable public DrawExecutionTime : MicroTime
         val mutable public PrimitiveCount : int64
 
-        static member Empty : RenderToken = null
 
-        static member Zero = RenderToken()
+        static member inline Empty : RenderToken = null
 
-        member x.Copy =
-            RenderToken(
-                InPlaceUpdates = x.InPlaceUpdates,
-                ReplacedResources = x.ReplacedResources,
-                CreatedResources = x.CreatedResources,
-                UpdateSubmissionTime = x.UpdateSubmissionTime,
-                UpdateExecutionTime = x.UpdateExecutionTime,
-                RenderPasses = x.RenderPasses,
-                TotalInstructions = x.TotalInstructions,
-                ActiveInstructions = x.ActiveInstructions,
-                DrawCallCount = x.DrawCallCount,
-                EffectiveDrawCallCount = x.EffectiveDrawCallCount,
-                SortingTime = x.SortingTime,
-                DrawUpdateTime = x.DrawUpdateTime,
-                DrawSubmissionTime = x.DrawSubmissionTime,
-                DrawExecutionTime = x.DrawExecutionTime,
-                PrimitiveCount = x.PrimitiveCount
-            )
+        static member inline Zero = RenderToken()
 
         static member (~-) (x : RenderToken) =
-            RenderToken(
-                InPlaceUpdates = -x.InPlaceUpdates,
-                ReplacedResources = -x.ReplacedResources,
-                CreatedResources = -x.CreatedResources,
-                UpdateSubmissionTime = -x.UpdateSubmissionTime,
-                UpdateExecutionTime = -x.UpdateExecutionTime,
-                RenderPasses = -x.RenderPasses,
-                TotalInstructions = -x.TotalInstructions,
-                ActiveInstructions = -x.ActiveInstructions,
-                DrawCallCount = -x.DrawCallCount,
-                EffectiveDrawCallCount = -x.EffectiveDrawCallCount,
-                SortingTime = -x.SortingTime,
-                DrawUpdateTime = -x.DrawUpdateTime,
-                DrawSubmissionTime = -x.DrawSubmissionTime,
-                DrawExecutionTime = -x.DrawExecutionTime,
-                PrimitiveCount = -x.PrimitiveCount
-            )
+            if isNull x then null
+            else
+                RenderToken(
+                    InPlaceUpdates = -x.InPlaceUpdates,
+                    ReplacedResources = -x.ReplacedResources,
+                    CreatedResources = -x.CreatedResources,
+                    UpdateSubmissionTime = -x.UpdateSubmissionTime,
+                    UpdateExecutionTime = -x.UpdateExecutionTime,
+                    RenderPasses = -x.RenderPasses,
+                    TotalInstructions = -x.TotalInstructions,
+                    ActiveInstructions = -x.ActiveInstructions,
+                    DrawCallCount = -x.DrawCallCount,
+                    EffectiveDrawCallCount = -x.EffectiveDrawCallCount,
+                    SortingTime = -x.SortingTime,
+                    DrawUpdateTime = -x.DrawUpdateTime,
+                    DrawSubmissionTime = -x.DrawSubmissionTime,
+                    DrawExecutionTime = -x.DrawExecutionTime,
+                    PrimitiveCount = -x.PrimitiveCount
+                )
 
         static member (+) (l : RenderToken, r : RenderToken) =
             if isNull l then r
@@ -135,6 +123,7 @@ type RenderToken =
                 CreatedResources = 0
                 UpdateSubmissionTime = MicroTime.Zero
                 UpdateExecutionTime = MicroTime.Zero
+                UpdateCounts = Dict()
                 RenderPasses = 0
                 TotalInstructions = 0
                 ActiveInstructions = 0
@@ -159,7 +148,6 @@ module private IntHelpers =
     let inline notNull (v : 'a) = not (isNull v)
 
 
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderToken =
 
@@ -169,19 +157,31 @@ module RenderToken =
             f current
             current <- current.Parent
 
+    let inline isEmpty (t : RenderToken) = isNull t
+    let inline isValid (t : RenderToken) = not (isNull t)
+
 [<AbstractClass; Sealed; Extension>]
 type RenderTokenExtensions private() =
     [<Extension>]
     static member InPlaceResourceUpdate(this : RenderToken, kind : ResourceKind) =
-        this |> RenderToken.forall (fun x -> inc &x.InPlaceUpdates)
+        this |> RenderToken.forall (fun x -> 
+            inc &x.InPlaceUpdates
+            x.UpdateCounts.[kind] <- 1 + x.UpdateCounts.GetOrDefault(kind)
+        )
 
     [<Extension>]
     static member ReplacedResource(this : RenderToken, kind : ResourceKind) =
-        this |> RenderToken.forall (fun x -> inc &x.ReplacedResources)
+        this |> RenderToken.forall (fun x -> 
+            inc &x.ReplacedResources
+            x.UpdateCounts.[kind] <- 1 + x.UpdateCounts.GetOrDefault(kind)
+        )
 
     [<Extension>]
     static member CreatedResource(this : RenderToken, kind : ResourceKind) =
-        this |> RenderToken.forall (fun x -> inc &x.CreatedResources)
+        this |> RenderToken.forall (fun x -> 
+            inc &x.CreatedResources
+            x.UpdateCounts.[kind] <- 1 + x.UpdateCounts.GetOrDefault(kind)
+        )
 
     [<Extension>]
     static member AddInstructions(this : RenderToken, total : int, active : int) =
@@ -213,6 +213,7 @@ type RenderTokenExtensions private() =
             add &x.UpdateSubmissionTime submission
             add &x.UpdateExecutionTime execution
         )
+
     [<Extension>]
     static member AddPrimitiveCount(this : RenderToken, cnt : int64) =
         this |> RenderToken.forall (fun x -> 

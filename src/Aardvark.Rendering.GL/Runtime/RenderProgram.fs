@@ -13,6 +13,7 @@ open Aardvark.Rendering.GL.Compiler
 
 type IRenderProgram =
     inherit IAdaptiveProgram<unit>
+    abstract member Update : IAdaptiveObject * RenderToken -> AdaptiveProgramStatistics
     abstract member Run : RenderToken -> unit
 
 
@@ -21,18 +22,21 @@ type AbstractRenderProgram<'input when 'input :> IAdaptiveObject>() =
     inherit DirtyTrackingAdaptiveObject<'input>()
     
     abstract member Dispose : unit -> unit
-    abstract member Update : HashSet<'input> -> unit
+    abstract member Update : RenderToken * HashSet<'input> -> unit
     abstract member Run : RenderToken -> unit
+
+    member x.Update(caller, token) =
+        x.EvaluateIfNeeded' caller AdaptiveProgramStatistics.Zero (fun dirty ->
+            x.Update(token, dirty)
+            AdaptiveProgramStatistics.Zero
+        )
 
     interface IRenderProgram with
         member x.Run(t) = x.Run(t)
-
+        member x.Update(caller, token) = x.Update(caller, token)
+            
     interface IAdaptiveProgram<unit> with
-        member x.Update caller =
-            x.EvaluateIfNeeded' caller AdaptiveProgramStatistics.Zero (fun dirty ->
-                x.Update dirty
-                AdaptiveProgramStatistics.Zero
-            )
+        member x.Update caller = x.Update(caller, RenderToken.Empty)
 
         member x.Run s = x.Run(RenderToken.Empty)
         member x.Disassemble() = null
@@ -52,18 +56,19 @@ type AbstractRenderProgram() =
     inherit AdaptiveObject()
     
     abstract member Dispose : unit -> unit
-    abstract member Update : unit -> unit
+    abstract member Update : RenderToken -> unit
     abstract member Run : RenderToken -> unit
-
+    
+    member x.Update(caller, t) =
+        x.EvaluateIfNeeded caller () (fun () ->
+            x.Update t
+        )
     interface IRenderProgram with
+        member x.Update(caller, t) = x.Update(caller, t); AdaptiveProgramStatistics.Zero
         member x.Run(t) = x.Run(t)
 
     interface IAdaptiveProgram<unit> with
-        member x.Update caller =
-            x.EvaluateIfNeeded caller AdaptiveProgramStatistics.Zero (fun () ->
-                x.Update ()
-                AdaptiveProgramStatistics.Zero
-            )
+        member x.Update caller = x.Update(caller, RenderToken.Empty); AdaptiveProgramStatistics.Zero
 
         member x.Run s = x.Run(RenderToken.Empty) |> ignore
         member x.Disassemble() = null
@@ -89,15 +94,18 @@ module RenderProgram =
 
         member x.RunInner() = inner.Run()
 
+        
+        member x.Update (caller, token) =
+            x.EvaluateIfNeeded caller AdaptiveProgramStatistics.Zero (fun () ->
+                inner.Update(x)
+            )
 
         interface IRenderProgram with
             member x.Run(t) = x.Run(t)
+            member x.Update (caller, token) = x.Update(caller, token)
 
         interface IAdaptiveProgram<unit> with
-            member x.Update caller =
-                x.EvaluateIfNeeded caller AdaptiveProgramStatistics.Zero (fun () ->
-                    inner.Update(x)
-                )
+            member x.Update caller = x.Update(caller, RenderToken.Empty)
 
             member x.Run s = x.Run(RenderToken.Empty) |> ignore
             member x.Disassemble() = inner.Disassemble()

@@ -215,28 +215,38 @@ module RenderTasks =
 
     [<AbstractClass>]
     type AbstractSubTask(parent : AbstractRenderTask) =
+        static let nop = System.Lazy<unit>(id)
 
         let programUpdateWatch  = Stopwatch()
         let sortWatch           = Stopwatch()
         let runWatch            = OpenGlStopwatch()
 
-        member x.ProgramUpdate (f : unit -> 'a) =
-            programUpdateWatch.Restart()
-            let res = f()
-            programUpdateWatch.Stop()
-            res
+        member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                programUpdateWatch.Restart()
+                let res = f()
+                programUpdateWatch.Stop()
+                res
 
-        member x.Sorting (f : unit -> 'a) =
-            sortWatch.Restart()
-            let res = f()
-            sortWatch.Stop()
-            res
+        member x.Sorting (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                sortWatch.Restart()
+                let res = f()
+                sortWatch.Stop()
+                res
 
-        member x.Execution (f : unit -> 'a) =
-            runWatch.Restart()
-            let res = f()
-            runWatch.Stop()
-            res
+        member x.Execution (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                runWatch.Restart()
+                let res = f()
+                runWatch.Stop()
+                res
 
         member x.Parent = parent
 
@@ -249,14 +259,17 @@ module RenderTasks =
 
         member x.Run(t) =
             x.Perform(t)
-            lazy (
-                t.AddSubTask(
-                    MicroTime sortWatch.Elapsed,
-                    MicroTime programUpdateWatch.Elapsed,
-                    runWatch.ElapsedGPU,
-                    runWatch.ElapsedCPU
+            if RenderToken.isEmpty t then
+                nop
+            else
+                lazy (
+                    t.AddSubTask(
+                        MicroTime sortWatch.Elapsed,
+                        MicroTime programUpdateWatch.Elapsed,
+                        runWatch.ElapsedGPU,
+                        runWatch.ElapsedCPU
+                    )
                 )
-            )
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -412,13 +425,12 @@ module RenderTasks =
             reinit x config
 
             //TODO
-            let programStats = x.ProgramUpdate (fun () -> program.Update null)
+            let programStats = x.ProgramUpdate (t, fun () -> program.Update null)
             ()
         override x.Perform(t) =
             x.Update(t) |> ignore
 
-            let stats = 
-                x.Execution (fun () -> program.Run(t))
+            let stats = x.Execution (t, fun () -> program.Run(t))
 
             stats
                
@@ -512,7 +524,7 @@ module RenderTasks =
 
         member x.BoundingBox = currentBox
 
-        member x.Update(caller : IAdaptiveObject) =
+        member x.Update(caller : IAdaptiveObject, token : RenderToken) =
             x.EvaluateIfNeeded caller () (fun () ->
                 let blocks = 
                     lock dirtyBlocks (fun () ->
@@ -588,16 +600,16 @@ module RenderTasks =
             let cmp = comparer.GetValue x
             f |> Seq.sortWith (fun a b -> cmp.Compare(a.Object, b.Object)) |> Seq.toList
 
-        override x.Update(dirty : HashSet<_>) =
+        override x.Update(token : RenderToken, dirty : HashSet<_>) =
             let deltas = fragmentReader.GetDelta()
             for d in deltas do
                 match d with
                     | Add f -> dirty.Add f |> ignore
                     | Rem f -> dirty.Remove f |> ignore
 
-            for d in dirty do d.Update x
+            for d in dirty do d.Update(x, token)
 
-            parent.Sorting (fun () ->
+            parent.Sorting (token, fun () ->
                 let ordered = x.sort fragmentReader.Content
 
                 let mutable current = null
@@ -654,10 +666,10 @@ module RenderTasks =
                         c
 
 
-        override x.Update() =
+        override x.Update(t : RenderToken) =
             reader.Update(x)
 
-            parent.Sorting (fun () ->
+            parent.Sorting (t, fun () ->
                 let comparer = getComparer reader.Content
                 let cmp = comparer.GetValue x
                 arr <- reader.Content |> Seq.sortWith (fun a b -> cmp.Compare(a,b)) |> Seq.toArray
@@ -730,17 +742,13 @@ module RenderTasks =
             let cfg = parent.Config.GetValue parent
             reinit x cfg
 
-            let updateStats = 
-                x.ProgramUpdate (fun () -> program.Update null)
+            let updateStats = x.ProgramUpdate (t, fun () -> program.Update(null, t))
             ()
 
         override x.Perform(t) =
             x.Update(t) |> ignore
 
-            let stats = 
-                x.Execution (fun () -> program.Run(t))
-
-            stats
+            x.Execution (t, fun () -> program.Run(t))
 
 
 
@@ -883,7 +891,7 @@ module RenderTasks =
         override x.Perform(token : RenderToken, fbo : Framebuffer) =
             x.ResourceManager.DrawBufferManager.Write(fbo)
 
-            if not RuntimeConfig.SupressGLTimers then
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid token then
                 primitivesGenerated.Restart()
 
             let mutable runStats = []
@@ -894,7 +902,7 @@ module RenderTasks =
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
             
-            if not RuntimeConfig.SupressGLTimers then 
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid token then 
                 primitivesGenerated.Stop()
                 runStats |> List.iter (fun l -> l.Value)
                 token.AddPrimitiveCount(primitivesGenerated.Value)
