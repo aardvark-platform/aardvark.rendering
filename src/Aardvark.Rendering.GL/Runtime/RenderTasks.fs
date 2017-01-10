@@ -875,11 +875,14 @@ module RenderTasks =
                         task.Remove v            
 
         let updateResources (x : AbstractOpenGlRenderTask) (t : RenderToken) =
-            resourceUpdateWatch.Restart()
-            let stats = resources.Update(x, t)
-            resourceUpdateWatch.Stop()
+            if RenderToken.isEmpty t then
+                resources.Update(x, t)
+            else
+                resourceUpdateWatch.Restart()
+                resources.Update(x, t)
+                resourceUpdateWatch.Stop()
 
-            t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
+                t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
 
 
         override x.ProcessDeltas() =
