@@ -144,7 +144,7 @@ module RenderTasks =
             GL.Viewport(old.[0], old.[1], old.[2], old.[3])
             GL.Check "could not set viewport"
 
-        abstract member ProcessDeltas : unit -> unit
+        abstract member ProcessDeltas : RenderToken -> unit
         abstract member UpdateResources : RenderToken -> unit
         abstract member Perform : RenderToken * Framebuffer -> unit
         abstract member Release : unit -> unit
@@ -159,7 +159,7 @@ module RenderTasks =
 
         override x.Update(t) =
             use ct = ctx.ResourceLock
-            x.ProcessDeltas()
+            x.ProcessDeltas(t)
             x.UpdateResources(t)
 
         override x.Dispose() =
@@ -190,7 +190,7 @@ module RenderTasks =
             let debugState = x.pushDebugOutput()
             let fboState = x.pushFbo desc
 
-            x.ProcessDeltas()
+            x.ProcessDeltas(t)
             x.UpdateResources(t)
 
             renderTaskLock.Run (fun () ->
@@ -858,21 +858,27 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-        let processDeltas (x : AbstractOpenGlRenderTask) =
+        let processDeltas (x : AbstractOpenGlRenderTask) (t : RenderToken) =
             let deltas = preparedObjectReader.GetDelta x
 
             match deltas with
                 | [] -> ()
                 | _ -> x.StructureChanged()
 
+            let mutable added = 0
+            let mutable removed = 0
             for d in deltas do 
                 match d with
                     | Add v ->
                         let task = getSubTask v.RenderPass
+                        added <- added + 1
                         task.Add v
                     | Rem v ->
                         let task = getSubTask v.RenderPass
+                        removed <- removed + 1
                         task.Remove v            
+
+            t.RenderObjectDeltas(added, removed)
 
         let updateResources (x : AbstractOpenGlRenderTask) (t : RenderToken) =
             if RenderToken.isEmpty t then
@@ -885,8 +891,8 @@ module RenderTasks =
                 t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
 
 
-        override x.ProcessDeltas() =
-            processDeltas x
+        override x.ProcessDeltas(t) =
+            processDeltas x t
 
         override x.UpdateResources(t) =
             updateResources x t

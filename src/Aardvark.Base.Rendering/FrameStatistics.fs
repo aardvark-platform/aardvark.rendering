@@ -83,6 +83,8 @@ type RenderToken =
         val mutable public DrawExecutionTime : MicroTime
         val mutable public PrimitiveCount : int64
 
+        val mutable public AddedRenderObjects : int
+        val mutable public RemovedRenderObjects : int
 
         static member inline Empty : RenderToken = null
 
@@ -107,7 +109,9 @@ type RenderToken =
                     DrawUpdateTime = -x.DrawUpdateTime,
                     DrawSubmissionTime = -x.DrawSubmissionTime,
                     DrawExecutionTime = -x.DrawExecutionTime,
-                    PrimitiveCount = -x.PrimitiveCount
+                    PrimitiveCount = -x.PrimitiveCount,
+                    AddedRenderObjects = -x.AddedRenderObjects,
+                    RemovedRenderObjects = -x.RemovedRenderObjects
                 )
 
         static member (+) (l : RenderToken, r : RenderToken) =
@@ -130,7 +134,9 @@ type RenderToken =
                     DrawUpdateTime = l.DrawUpdateTime + r.DrawUpdateTime,
                     DrawSubmissionTime = l.DrawSubmissionTime + r.DrawSubmissionTime,
                     DrawExecutionTime = l.DrawExecutionTime + r.DrawExecutionTime,
-                    PrimitiveCount = l.PrimitiveCount + r.PrimitiveCount
+                    PrimitiveCount = l.PrimitiveCount + r.PrimitiveCount,
+                    AddedRenderObjects = l.AddedRenderObjects + r.AddedRenderObjects,
+                    RemovedRenderObjects = l.RemovedRenderObjects + r.RemovedRenderObjects
                 )
 
         static member (-) (l : RenderToken, r : RenderToken) =
@@ -153,7 +159,9 @@ type RenderToken =
                     DrawUpdateTime = l.DrawUpdateTime - r.DrawUpdateTime,
                     DrawSubmissionTime = l.DrawSubmissionTime - r.DrawSubmissionTime,
                     DrawExecutionTime = l.DrawExecutionTime - r.DrawExecutionTime,
-                    PrimitiveCount = l.PrimitiveCount - r.PrimitiveCount
+                    PrimitiveCount = l.PrimitiveCount - r.PrimitiveCount,
+                    AddedRenderObjects = l.AddedRenderObjects - r.AddedRenderObjects,
+                    RemovedRenderObjects = l.RemovedRenderObjects - r.RemovedRenderObjects
                 )
 
         new(p) =
@@ -174,7 +182,9 @@ type RenderToken =
                 DrawUpdateTime = MicroTime.Zero
                 DrawSubmissionTime = MicroTime.Zero
                 DrawExecutionTime = MicroTime.Zero
-                PrimitiveCount= 0L
+                PrimitiveCount = 0L
+                AddedRenderObjects = 0
+                RemovedRenderObjects = 0
             }
 
         new() = RenderToken(null)
@@ -254,3 +264,10 @@ type RenderTokenExtensions private() =
             add &x.PrimitiveCount cnt
         )
 
+
+    [<Extension>]
+    static member RenderObjectDeltas(this : RenderToken, added : int, removed : int) =
+        this |> RenderToken.forall (fun x -> 
+            add &x.AddedRenderObjects added
+            add &x.RemovedRenderObjects removed
+        )

@@ -249,7 +249,7 @@ module DefaultOverlays =
                 "resource update", "0"
                 "resource updates", "none"
                 "program update", "0"
-    //            "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
+                "renderobjects", "+0/-0"
     //            "resources", printResourceUpdateCounts 3 resourceCounts
     //            //"resources", sprintf "%.0f" s.PhysicalResourceCount
     //            "memory", string s.ResourceCounts.Total.Memory
@@ -267,7 +267,7 @@ module DefaultOverlays =
                 "resource update", splittime s.UpdateSubmissionTime s.UpdateExecutionTime
                 "resource updates", printResourceUpdateCounts 3 s.UpdateCounts cnt
                 "program update", sprintf "%A" updateTime
-    //            "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
+                "renderobjects", sprintf "+%.0f/-%.0f" (float s.AddedRenderObjects / float cnt) (float s.RemovedRenderObjects / float cnt)
     //            "resources", printResourceUpdateCounts 3 resourceCounts
     //            //"resources", sprintf "%.0f" s.PhysicalResourceCount
     //            "memory", string s.ResourceCounts.Total.Memory
