@@ -1039,48 +1039,47 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 		glBindVertexArray(0);
 	}
 
-	else if (currentContext != binding->VAOContext)
-	{
-		if (binding->VAO >= 0)
-		{
-			uint32_t vao = binding->VAO;
-			glDeleteVertexArrays(1, &vao);
-		}
-
-		uint32_t vao = 0u;
-		glGenVertexArrays(1, &vao);
-		glBindVertexArray(vao);
-
-		for (uint32_t i = 0; i < (uint32_t)binding->Count; i++)
-		{
-			auto b = binding->Bindings + i;
-			auto index = b->Index;
-
-			if (b->Divisor >= 0)
-			{
-				auto ptr = &b->Attribute.Pointer;
-				glEnableVertexAttribArray(index);
-				glBindBuffer(GL_ARRAY_BUFFER, ptr->Buffer);
-				glVertexAttribPointer(index, b->Size, ptr->Type, ptr->Normalized, ptr->Stride, (void*)ptr->Offset);
-				glVertexAttribDivisor(index, (uint32_t)b->Divisor);
-			}
-			else
-			{
-				auto value = b->Attribute.Value;
-				glDisableVertexAttribArray(index);
-				glVertexAttrib4f(index, value.X, value.Y, value.Z, value.W);
-			}
-		}
-
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, binding->IndexBuffer);
-
-		binding->VAOContext = currentContext;
-		binding->VAO = vao;
-	}
-
 	else
 	{
-		glBindVertexArray((uint32_t)binding->VAO);
+		if (currentContext != binding->VAOContext)
+		{
+			if (binding->VAO >= 0)
+			{
+				uint32_t vao = binding->VAO;
+				glDeleteVertexArrays(1, &vao);
+			}
+
+			uint32_t vao = 0u;
+			glGenVertexArrays(1, &vao);
+			glBindVertexArray(vao);
+
+			for (uint32_t i = 0; i < (uint32_t)binding->BufferBindingCount; i++)
+			{
+				auto b = binding->BufferBindings + i;
+				auto index = b->Index;
+				glEnableVertexAttribArray(index);
+				glBindBuffer(GL_ARRAY_BUFFER, b->Buffer);
+				glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
+				glVertexAttribDivisor(index, (uint32_t)b->Divisor);
+			}
+
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, binding->IndexBuffer);
+
+			binding->VAOContext = currentContext;
+			binding->VAO = vao;
+		}
+
+		else
+		{
+			glBindVertexArray((uint32_t)binding->VAO);
+		}
+
+		for (uint32_t i = 0; i < (uint32_t)binding->ValueBindingCount; i++)
+		{
+			auto b = binding->ValueBindings[i];
+			glVertexAttrib4f(b.Index, b.X, b.Y, b.Z, b.W);
+		}
 	}
+
 }
 

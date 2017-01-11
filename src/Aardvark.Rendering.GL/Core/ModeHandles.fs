@@ -136,65 +136,44 @@ type StencilModeHandle =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VertexAttribPointer =
+type VertexBufferBinding =
     struct
-        val mutable public Type         : VertexAttribPointerType
-        val mutable public Normalized   : int
-        val mutable public Stride       : int
-        val mutable public Offset       : int
-        val mutable public Buffer       : int
-        
-        new(t,n,s,o,b) = { Type = t; Normalized = n; Stride = s; Offset = o; Buffer = b }
+        val mutable public Index       : uint32 
+        val mutable public Size        : int
+        val mutable public Divisor     : int
+        val mutable public Type        : VertexAttribPointerType
+        val mutable public Normalized  : int
+        val mutable public Stride      : int
+        val mutable public Offset      : int
+        val mutable public Buffer      : int
+
+        new(i,s,d,t,n,st,o,b) = { Index = i; Size = s; Divisor = d; Type = t; Normalized = n; Stride = st; Offset = o; Buffer = b }
     end
+
 [<StructLayout(LayoutKind.Sequential)>]
-type VertexAttribValue =
+type VertexValueBinding =
     struct
-        val mutable public X        : float32
-        val mutable public Y        : float32
-        val mutable public Z        : float32
-        val mutable public W        : float32
-        val mutable public Dummy    : int
-        
-        new(x,y,z,w) = { X = x; Y = y; Z = z; W = w; Dummy = 0 }
-    end
-[<StructLayout(LayoutKind.Explicit, Size = 32)>]
-type VertexAttribBinding =
-    struct
-        [<FieldOffset(0)>]
-        val mutable public Index    : uint32
-        [<FieldOffset(4)>]
-        val mutable public Size     : int
-        [<FieldOffset(8)>]
-        val mutable public Divisor  : int
-        [<FieldOffset(12)>]
-        val mutable Value : VertexAttribValue
-        [<FieldOffset(12)>]
-        val mutable Pointer : VertexAttribPointer
+        val mutable public Index       : uint32 
+        val mutable public X           : float32
+        val mutable public Y           : float32
+        val mutable public Z           : float32
+        val mutable public W           : float32
 
-        private new(index, size, divisor) = { Index = index; Size = size; Divisor = divisor; Value = VertexAttribValue(0.0f,0.0f,0.0f,0.0f); Pointer = VertexAttribPointer(VertexAttribPointerType.Byte, 0, 0, 0, 0) }
-
-        static member CreateValue(index : uint32, size : int, divisor : int, v : V4f) =
-            let mutable res = VertexAttribBinding(index, size, divisor)
-            res.Value <- VertexAttribValue(v.X, v.Y, v.Z, v.W)
-            res
-
-        static member CreatePointer(index : uint32, size : int, divisor : int, v : VertexAttribPointer) =
-            let mutable res = VertexAttribBinding(index, size, divisor)
-            res.Pointer <- v
-            res
-
+        new(i,x,y,z,w) = { Index = i; X = x; Y = y; Z = z; W = w }
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VertexInputBinding =
     struct
     
-        val mutable public IndexBuffer  : int
-        val mutable public Count        : int
-        val mutable public Bindings     : nativeptr<VertexAttribBinding>
-        val mutable public VAO          : int
-        val mutable public VAOContext   : nativeint
-        new(i,c,b,v,vc) = { IndexBuffer = i; Count = c; Bindings = b; VAO = v; VAOContext = vc }
+        val mutable public IndexBuffer              : int
+        val mutable public BufferBindingCount       : int
+        val mutable public BufferBindings           : nativeptr<VertexBufferBinding>
+        val mutable public ValueBindingCount        : int
+        val mutable public ValueBindings            : nativeptr<VertexValueBinding>
+        val mutable public VAO                      : int
+        val mutable public VAOContext               : nativeint
+        new(i,bc,bb,vc,vb,v,vaoc) = { IndexBuffer = i; BufferBindingCount = bc; BufferBindings = bb; ValueBindingCount = vc; ValueBindings = vb; VAO = v; VAOContext = vaoc }
     end
     
 [<StructLayout(LayoutKind.Sequential)>]
