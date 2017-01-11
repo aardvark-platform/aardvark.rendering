@@ -42,3 +42,4 @@ src/GLVM/*.so
 /src/vkvm/.vs/VKVM/v14/*.suo
 /src/vkvm/*.so
 .ionide.debug
+/src/Demo/Scratch/InteractionModels.g.fs
