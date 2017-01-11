@@ -1,6 +1,7 @@
 bin/Release
 bin/Debug
 !/bin/*.nuspec
+*.g.fs
 *.swp
 *.userprefs
 **/obj

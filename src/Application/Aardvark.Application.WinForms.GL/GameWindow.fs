@@ -337,8 +337,6 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 
 
     let mutable loaded = false
-    let statistics = EventSource<FrameStatistics>(FrameStatistics.Zero)
-
     let mutable task : Option<IRenderTask> = None
 
     let depthSignature =
@@ -440,9 +438,8 @@ type GameWindow(runtime : Runtime, samples : int) as this =
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
                         let desc = OutputDescription.ofFramebuffer defaultFramebuffer
-                        let res = t.Run(null, defaultOutput)
+                        t.Run(null, RenderToken.Empty, defaultOutput)
                         
-                        statistics.Emit res
 
                         x.SwapBuffers()
 

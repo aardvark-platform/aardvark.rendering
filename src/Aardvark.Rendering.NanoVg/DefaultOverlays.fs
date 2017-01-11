@@ -197,11 +197,12 @@ module DefaultOverlays =
          | ResourceKind.IndexBuffer -> "I"
          | _ -> "?"
          
-    let printResourceUpdateCounts (max : int) (r : Map<ResourceKind,float>) =
+    let printResourceUpdateCounts (max : int) (r : Dict<ResourceKind,int>) (count : int)=
         let sorted = 
-            r |> Map.filter (fun k v -> k <> ResourceKind.DrawCall && int v <> 0) 
+            r |> Dict.toMap
+              |> Map.filter (fun k v -> k <> ResourceKind.DrawCall && v <> 0) 
               |> Map.toArray
-              |> Array.map (fun (k,v) -> mapKind k, int v)
+              |> Array.map (fun (k,v) -> mapKind k, int (float v / float count))
         
         sorted.QuickSort(fun (lk,lv) (rk,rv) -> 
             let c = compare lv rv
@@ -238,25 +239,39 @@ module DefaultOverlays =
         else
             sprintf "%db" mem
 
-    let statisticsTable (s : FrameStatistics) =
-        let sortTime = s.SortingTime
-        let updateTime = s.ProgramUpdateTime - sortTime
-        let resourceDeltas = s.ResourceDeltas.Map |> Map.map (fun _ v -> v.InPlace + v.Replaced)
-        let resourceCounts = s.ResourceCounts.Map |> Map.map (fun _ v -> v.Count)
+    let statisticsTable (s : RenderToken, cnt : int) =
+        if cnt = 0 then
+            [
+                "draw calls", "0"
+                "instructions", "0"
+                "primitives", "0"
+                "execute", "0"
+                "resource update", "0"
+                "resource updates", "none"
+                "program update", "0"
+                "renderobjects", "+0/-0"
+    //            "resources", printResourceUpdateCounts 3 resourceCounts
+    //            //"resources", sprintf "%.0f" s.PhysicalResourceCount
+    //            "memory", string s.ResourceCounts.Total.Memory
+            ]
+        else 
+            let sortTime = s.SortingTime / cnt
+            let updateTime = s.DrawUpdateTime / cnt - sortTime
+    //        let resourceCounts = s.ResourceCounts.Map |> Map.map (fun _ v -> v.Count)
 
-        [
-            "draw calls", (if s.DrawCallCount = s.EffectiveDrawCallCount then sprintf "%.0f" s.DrawCallCount else sprintf "%.0f (%.0f)" s.DrawCallCount s.EffectiveDrawCallCount)
-            "instructions", (if s.InstructionCount = s.ActiveInstructionCount then sprintf "%.0f" s.InstructionCount else sprintf "%.0f (%.0f)" s.ActiveInstructionCount s.InstructionCount)
-            "primitives", sprintf "%.0f" s.PrimitiveCount
-            "execute", splittime s.SubmissionTime s.ExecutionTime
-            "resource update", splittime s.ResourceUpdateSubmissionTime s.ResourceUpdateTime
-            "resource updates", printResourceUpdateCounts 3 resourceDeltas
-            "program update", sprintf "%A" updateTime
-            "renderobjects", sprintf "+%.0f/-%.0f" s.AddedRenderObjects s.RemovedRenderObjects
-            "resources", printResourceUpdateCounts 3 resourceCounts
-            //"resources", sprintf "%.0f" s.PhysicalResourceCount
-            "memory", string s.ResourceCounts.Total.Memory
-        ]
+            [
+                "draw calls", (if s.DrawCallCount = s.EffectiveDrawCallCount then sprintf "%.0f" (float s.DrawCallCount / float cnt) else sprintf "%.0f (%.0f)" (float s.DrawCallCount / float cnt) (float s.EffectiveDrawCallCount / float cnt))
+                "instructions", (if s.TotalInstructions = s.ActiveInstructions then sprintf "%.0f" (float s.TotalInstructions / float cnt) else sprintf "%.0f (%.0f)" (float s.ActiveInstructions / float cnt) (float s.TotalInstructions / float cnt))
+                "primitives", sprintf "%.0f" (float s.PrimitiveCount / float cnt)
+                "execute", splittime s.DrawSubmissionTime s.DrawExecutionTime
+                "resource update", splittime s.UpdateSubmissionTime s.UpdateExecutionTime
+                "resource updates", printResourceUpdateCounts 3 s.UpdateCounts cnt
+                "program update", sprintf "%A" updateTime
+                "renderobjects", sprintf "+%.0f/-%.0f" (float s.AddedRenderObjects / float cnt) (float s.RemovedRenderObjects / float cnt)
+    //            "resources", printResourceUpdateCounts 3 resourceCounts
+    //            //"resources", sprintf "%.0f" s.PhysicalResourceCount
+    //            "memory", string s.ResourceCounts.Total.Memory
+            ]
 
     let tableString (t : list<string * string>) =
         let labelwidth = t |> List.map fst |> List.map String.length |> List.max
@@ -275,7 +290,7 @@ module DefaultOverlays =
           |> String.concat "\r\n"
 
 
-    let statisticsOverlay (runtime : IRuntime) (m : IMod<FrameStatistics>) =
+    let statisticsOverlay (runtime : IRuntime) (m : IMod<RenderToken * int>) =
         let content = m |> Mod.map (statisticsTable >> tableString)
 
         let text =
@@ -310,7 +325,14 @@ module DefaultOverlays =
     type StatisticsOverlayTask(inner : IRenderTask) =
         inherit AdaptiveObject()
 
-        let realStats : Statistics.TimeFrame<FrameStatistics> = Statistics.timeFrame (TimeSpan.FromMilliseconds 100.0)
+        let realStats : Statistics.TimeFrame<RenderToken * int> = 
+            Statistics.TimeFrame(
+                TimeSpan.FromMilliseconds 100.0, 
+                (RenderToken.Zero, 0),
+                (fun (l,lc) (r,rc) -> (l + r, lc + rc)),
+                (fun (l,lc) (r,rc) -> (l - r, lc - rc)),
+                (fun (v,c) cc -> v,c)
+            )
         let stats = Mod.initDefault realStats.Average
         let overlay = statisticsOverlay inner.Runtime.Value stats
 
@@ -324,7 +346,7 @@ module DefaultOverlays =
             if notRendering.Elapsed > TimeSpan.FromMilliseconds(100.0) then
                 if Interlocked.Increment(&render0) = 1 then
                     transact (fun () -> 
-                        stats.Value <- FrameStatistics.Zero
+                        stats.Value <- RenderToken.Zero, 0
                         self.MarkOutdated()
                     )
 
@@ -344,23 +366,25 @@ module DefaultOverlays =
 
             member x.Runtime = inner.Runtime
 
-            member x.Update(caller) =
-                x.EvaluateIfNeeded caller FrameStatistics.Zero (fun () -> 
-                    inner.Update x
+            member x.Update(caller, t) =
+                x.EvaluateIfNeeded caller () (fun () -> 
+                    inner.Update(x, t)
                 )
 
-            member x.Run(caller, f) =
+            member x.Run(caller, t, f) =
                 notRendering.Reset()
                 installTick x
                 let isUseless = Interlocked.Exchange(&render0, 0) > 0
-
+                
                 x.EvaluateAlways caller (fun () ->
-                    let res = inner.Run(x,f)
+
+                    let innerToken = RenderToken(t)
+                    inner.Run(x, innerToken, f)
 
                     if not isUseless then
-                        realStats.Emit res
+                        realStats.Emit (innerToken,1)
 
-                    overlay.Run(f) |> ignore
+                    overlay.Run(t, f) |> ignore
 
 
                     if isUseless then
@@ -369,7 +393,6 @@ module DefaultOverlays =
                     frameId <- frameId + 1UL
                     if not isUseless then
                         notRendering.Start()
-                    res
                 )
 
             member x.FrameId = frameId

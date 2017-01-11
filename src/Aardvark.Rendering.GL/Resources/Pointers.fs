@@ -115,7 +115,8 @@ module PointerContextExtensions =
                 else None
 
             let bindings (attributes : list<int * AttributeDescription>) =
-                let res = System.Collections.Generic.List<_>()
+                let buffers = System.Collections.Generic.List<_>()
+                let values = System.Collections.Generic.List<_>()
 
                 for (index, att) in attributes do
                     match att.Content with
@@ -134,21 +135,27 @@ module PointerContextExtensions =
                                         if att.Stride = 0 then rowSize * r
                                         else att.Stride
                                     for r in 0 .. r - 1 do
-                                        let ptr = VertexAttribPointer(bt, normalized, stride, att.Offset + r * rowSize, buffer.Handle)
-                                        res.Add (VertexAttribBinding.CreatePointer(uint32 (index + r), c, divisor, ptr))
+                                        let ptr = VertexBufferBinding(uint32 (index + r), c, divisor, bt, normalized, stride, att.Offset + r * rowSize, buffer.Handle)
+                                        buffers.Add ptr
 
                                 | Rgba ->
-                                    let ptr = VertexAttribPointer(att.VertexAttributeType, 1, att.Stride, att.Offset, buffer.Handle)
-                                    res.Add (VertexAttribBinding.CreatePointer(uint32 index, att.Dimension, divisor, ptr))
+                                    let ptr = VertexBufferBinding(uint32 index, att.Dimension, divisor, att.VertexAttributeType, 1, att.Stride, att.Offset, buffer.Handle)
+                                    buffers.Add ptr
 
                                 | _ -> 
-                                    let ptr = VertexAttribPointer(att.VertexAttributeType, (if att.Normalized then 1 else 0), att.Stride, att.Offset, buffer.Handle)
-                                    res.Add (VertexAttribBinding.CreatePointer(uint32 index, att.Dimension, divisor, ptr))
+                                    let ptr = VertexBufferBinding(uint32 index, att.Dimension, divisor, att.VertexAttributeType, (if att.Normalized then 1 else 0), att.Stride, att.Offset, buffer.Handle)
+                                    buffers.Add ptr
 
                         | Right value ->
-                            res.Add (VertexAttribBinding.CreateValue(uint32 index, att.Dimension, -1, value))
+                            values.Add(VertexValueBinding(uint32 index, value.X, value.Y, value.Z, value.W))
                 
-                res.ToArray()
+                buffers.ToArray(), values.ToArray()
+
+    module NativePtr =
+        let allocArray (a :'a[]) =
+            let ptr = NativePtr.alloc a.Length
+            for i in 0 .. a.Length-1 do NativePtr.set ptr i a.[i]
+            ptr
 
     type Context with
 
@@ -288,29 +295,41 @@ module PointerContextExtensions =
 //            ibo, res.ToArray()
 
         member x.CreateVertexInputBinding (index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
-            let bindings = Attribute.bindings attributes
+            let buffers, values = Attribute.bindings attributes
             let index = match index with | Some i -> i.Handle | _ -> 0
-            let ptr = NativePtr.alloc bindings.Length
-            for i in 0 .. bindings.Length - 1 do NativePtr.set ptr i bindings.[i]
-            let value = VertexInputBinding(index, bindings.Length, ptr, -1, 0n)
+
+            let pBuffers = NativePtr.allocArray buffers
+            let pValues = NativePtr.allocArray values
+
+            let value = VertexInputBinding(index, buffers.Length, pBuffers, values.Length, pValues, -1, 0n)
             let res = NativePtr.alloc 1
             NativePtr.write res value
             VertexInputBindingHandle res
 
         member x.Update(binding : VertexInputBindingHandle, index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
-            let bindings = Attribute.bindings attributes
+            let buffers, values = Attribute.bindings attributes
             let index = match index with | Some i -> i.Handle | _ -> 0
 
             let mutable value = NativePtr.read binding.Pointer
-            if bindings.Length = value.Count then
-                for i in 0 .. bindings.Length - 1 do  
-                    NativePtr.set value.Bindings i bindings.[i]
+
+            if buffers.Length = value.BufferBindingCount then
+                for i in 0 .. buffers.Length - 1 do  
+                    NativePtr.set value.BufferBindings i buffers.[i]
             else
-                NativePtr.free value.Bindings
-                let ptr = NativePtr.alloc bindings.Length
-                for i in 0 .. bindings.Length - 1 do NativePtr.set ptr i bindings.[i]
-                value.Count <- bindings.Length
-                value.Bindings <- ptr
+                NativePtr.free value.BufferBindings
+                let pBuffers = NativePtr.allocArray buffers
+                value.BufferBindingCount <- buffers.Length
+                value.BufferBindings <- pBuffers
+
+            if values.Length = value.ValueBindingCount then
+                for i in 0 .. values.Length - 1 do  
+                    NativePtr.set value.ValueBindings i values.[i]
+            else
+                NativePtr.free value.ValueBindings
+                let pValues = NativePtr.allocArray values
+                value.ValueBindingCount <- values.Length
+                value.ValueBindings <- pValues
+
 
             value.IndexBuffer <- index
             value.VAOContext <- 0n
@@ -321,5 +340,6 @@ module PointerContextExtensions =
             if v.VAO > 0 then
                 use t = x.ResourceLock
                 GL.DeleteVertexArray(v.VAO)
-            NativePtr.free v.Bindings
+            NativePtr.free v.BufferBindings
+            NativePtr.free v.ValueBindings
             NativePtr.free b.Pointer

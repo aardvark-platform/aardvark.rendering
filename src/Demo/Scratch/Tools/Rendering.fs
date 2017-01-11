@@ -23,12 +23,12 @@ type private ChangeableRenderTask() =
             current <- v
             transact (fun () -> x.MarkOutdated())
 
-    override x.Run (o : OutputDescription) = 
-        current.Run(x, o)
+    override x.Run (t : RenderToken, o : OutputDescription) = 
+        current.Run(x, t, o)
 
     override x.Dispose() = current <- RenderTask.empty
 
-    override x.Update() = current.Update(x)
+    override x.Update(t) = current.Update(x, t)
 
     override x.Use(f) = current.Use(f)
 

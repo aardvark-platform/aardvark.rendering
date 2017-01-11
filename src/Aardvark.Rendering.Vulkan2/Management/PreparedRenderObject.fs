@@ -13,10 +13,6 @@ open Aardvark.Base.Incremental
 #nowarn "9"
 #nowarn "51"
 
-[<AutoOpen>]
-module private PreparedRenderObjectUtils =
-    let updated = { FrameStatistics.Zero with ResourceDeltas = ResourceDeltas(ResourceKind.Unknown, ResourceDelta(0.0, 0.0, 0.0, 1.0, Mem.Zero)) }
-
 
 type PreparedRenderObject =
     {
@@ -50,22 +46,19 @@ type PreparedRenderObject =
             | Some ib -> ib.Dispose()
             | None -> ()
 
-    member x.Update(caller : IAdaptiveObject) =
-        use token = x.device.Token
-        let mutable stats = FrameStatistics.Zero
-        
+    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+        use devToken = x.device.Token
         for b in x.uniformBuffers do
-            stats <- stats + b.Update(caller)
-        stats <- stats + x.pipeline.Update(caller)
-        stats <- stats + x.descriptorSets.Update(caller)
-        stats <- stats + x.vertexBuffers.Update(caller)
-        stats <- stats + x.drawCalls.Update(caller)
+            b.Update(caller, token)
+        x.pipeline.Update(caller, token)
+        x.descriptorSets.Update(caller, token)
+        x.vertexBuffers.Update(caller, token)
+        x.drawCalls.Update(caller, token)
 
         match x.indexBuffer with
-            | Some b -> stats <- stats + b.Update(caller)
+            | Some b -> b.Update(caller, token)
             | None -> ()
 
-        stats
 
     member x.IncrementReferenceCount() =
         x.pipeline.AddRef()
@@ -84,7 +77,7 @@ type PreparedRenderObject =
         member x.Id = x.original.Id
         member x.RenderPass = x.original.RenderPass
         member x.AttributeScope = x.original.AttributeScope
-        member x.Update(caller) = x.Update(caller) |> ignore
+        member x.Update(caller, token) = x.Update(caller, token) |> ignore
         member x.Original = Some x.original
         member x.Dispose() = x.Dispose()
 
@@ -101,8 +94,8 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     member x.Dispose() =
         children |> List.iter (fun c -> c.Dispose())
 
-    member x.Update(caller : IAdaptiveObject) =
-        children |> List.sumBy (fun c -> c.Update(caller))
+    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+        children |> List.iter (fun c -> c.Update(caller, token))
         
 
     member x.RenderPass = first.RenderPass
@@ -118,7 +111,7 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
 
     interface IPreparedRenderObject with
         member x.Original = Some first.original
-        member x.Update caller = x.Update caller |> ignore
+        member x.Update(caller, token) = x.Update(caller, token) |> ignore
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -265,7 +258,7 @@ type DevicePreparedRenderObjectExtensions private() =
 
         let isActive =
             { new Rendering.Resource<nativeint>(ResourceKind.Unknown) with
-                member x.Create (old : Option<nativeint>) =
+                member x.Create (token : RenderToken, old : Option<nativeint>) =
                     let ptr =
                         match old with
                             | Some ptr -> ptr
@@ -273,8 +266,7 @@ type DevicePreparedRenderObjectExtensions private() =
 
                     let v = ro.IsActive.GetValue(x)
                     NativeInt.write ptr (if v then 1 else 0)
-                    
-                    ptr, updated
+                    ptr
 
                 member x.Destroy (h : nativeint) =
                     Marshal.FreeHGlobal h

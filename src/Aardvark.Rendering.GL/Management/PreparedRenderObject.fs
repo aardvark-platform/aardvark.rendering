@@ -59,7 +59,7 @@ type PreparedRenderObject =
         member x.AttributeScope = x.AttributeScope
 
     interface IPreparedRenderObject with
-        member x.Update(caller) = x.Update(caller) |> ignore
+        member x.Update(caller, token) = x.Update(caller, token) |> ignore
         member x.Original = Some x.Original
 
     member x.Id = x.Original.Id
@@ -103,47 +103,43 @@ type PreparedRenderObject =
             yield x.StencilMode :> _
         }
 
-    member x.Update(caller : IAdaptiveObject) =
-        use token = x.Context.ResourceLock
+    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+        use ctxToken = x.Context.ResourceLock
 
-        let mutable stats = FrameStatistics.Zero
-        let add s = stats <- stats + s
-
-        x.Program.Update(caller) |> add
+        x.Program.Update(caller, token)
 
         for (_,ub) in x.UniformBuffers |> Map.toSeq do
-            ub.Update(caller) |> add
+            ub.Update(caller, token)
 
         for (_,ul) in x.Uniforms |> Map.toSeq do
-            ul.Update(caller) |> add
+            ul.Update(caller, token)
 
         for (_,(t,s)) in x.Textures |> Map.toSeq do
-            t.Update(caller) |> add
-            s.Update(caller) |> add
+            t.Update(caller, token)
+            s.Update(caller, token)
 
         for (_,_,_,b) in x.Buffers  do
-            b.Update(caller) |> add
+            b.Update(caller, token)
 
         match x.IndexBuffer with
-            | Some (_,ib) -> ib.Update(caller) |> add
+            | Some (_,ib) -> ib.Update(caller, token)
             | _ -> ()
 
         match x.IndirectBuffer with
-            | Some ib -> ib.Update(caller) |> add
-            | _ -> x.DrawCallInfos.Update(caller) |> add
+            | Some ib -> ib.Update(caller, token)
+            | _ -> x.DrawCallInfos.Update(caller, token)
 
-        x.VertexInputBinding.Update(caller) |> add
+        x.VertexInputBinding.Update(caller, token)
 
 
-        x.IsActive.Update(caller) |> add
-        x.BeginMode.Update(caller) |> add
-        x.DepthTestMode.Update(caller) |> add
-        x.CullMode.Update(caller) |> add
-        x.PolygonMode.Update(caller) |> add
-        x.BlendMode.Update(caller) |> add
-        x.StencilMode.Update(caller) |> add
+        x.IsActive.Update(caller, token)
+        x.BeginMode.Update(caller, token)
+        x.DepthTestMode.Update(caller, token)
+        x.CullMode.Update(caller, token)
+        x.PolygonMode.Update(caller, token)
+        x.BlendMode.Update(caller, token)
+        x.StencilMode.Update(caller, token)
 
-        stats
 
     member x.Dispose() =
         lock x (fun () -> 
@@ -306,8 +302,8 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     member x.Dispose() =
         children |> List.iter (fun c -> c.Dispose())
 
-    member x.Update(caller : IAdaptiveObject) =
-        children |> List.sumBy (fun c -> c.Update(caller))
+    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+        children |> List.iter (fun c -> c.Update(caller, token))
         
 
     member x.RenderPass = first.RenderPass
@@ -323,7 +319,7 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
 
     interface IPreparedRenderObject with
         member x.Original = Some first.Original
-        member x.Update caller = x.Update caller |> ignore
+        member x.Update(caller, token) = x.Update(caller, token)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

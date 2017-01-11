@@ -95,7 +95,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
 
-        renderTask.Run(fbo) |> ignore
+        renderTask.Run(RenderToken.Empty, fbo)
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())

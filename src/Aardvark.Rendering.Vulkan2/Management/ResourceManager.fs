@@ -16,16 +16,14 @@ open Aardvark.Base.Incremental
 type private DrawCallResource(device : Device, indexed : bool, calls : IMod<list<DrawCallInfo>>) =
     inherit Rendering.Resource<nativeint>(ResourceKind.Unknown)
 
-    static let updated = { FrameStatistics.Zero with ResourceDeltas = ResourceDeltas(ResourceKind.Unknown, ResourceDelta(0.0, 0.0, 0.0, 1.0, Mem.Zero)) }
-
-    override x.Create(old : Option<nativeint>) =
+    override x.Create(token : RenderToken, old : Option<nativeint>) =
         match old with
             | Some o ->
                 device.UpdateDrawCall(NativePtr.ofNativeInt o, indexed, calls.GetValue x)
-                o, updated
+                o
             | None -> 
                 let ptr = device.CreateDrawCall(indexed, calls.GetValue x)
-                NativePtr.toNativeInt ptr, FrameStatistics.Zero
+                NativePtr.toNativeInt ptr
 
     override x.Destroy(old : nativeint) =
         device.Delete(NativePtr.ofNativeInt<DrawCall> old)
@@ -213,14 +211,14 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                     member x.GetInfo b = 
                         b.Size |> Mem |> ResourceInfo
 
-                    member x.Create old =
+                    member x.Create(token, old) =
                         let buffer = 
                             match old with
                                 | None -> device.CreateUniformBuffer(layout)
                                 | Some o -> o
                         for (m,w) in writers do w.Write(x, m, buffer.Storage.Pointer)
                         device.Upload(buffer)
-                        buffer, FrameStatistics.Zero
+                        buffer
 
                     member x.Destroy h =
                         device.Delete h
@@ -282,8 +280,8 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                     member x.GetInfo b = 
                         ResourceInfo.Zero
 
-                    member x.Create old =
-                        let stats = program.Update(x)
+                    member x.Create(token, old) =
+                        let stats = program.Update(x, token)
                         
                         let desc =
                             {
@@ -302,12 +300,12 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                         match old with
                             | Some o -> 
                                 if o.Description = desc then 
-                                    o, FrameStatistics.Zero
+                                    o
                                 else
                                     device.Delete o
-                                    device.CreateGraphicsPipeline desc, FrameStatistics.Zero
+                                    device.CreateGraphicsPipeline desc
                             | None ->
-                                device.CreateGraphicsPipeline desc, FrameStatistics.Zero
+                                device.CreateGraphicsPipeline desc
 
 
 
@@ -324,15 +322,13 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             [layout :> obj; desc :> obj],
             fun () ->
                 { new Aardvark.Base.Rendering.Resource<DescriptorSet>(ResourceKind.UniformLocation) with
-                    member x.Create old =
+                    member x.Create(token, old) =
                         let desc =
                             match old with
                                 | Some o -> o
                                 | None -> descriptorPool.Alloc(layout)
                         
-
-                        let mutable stats = FrameStatistics.Zero
-                        
+                        let innerToken = RenderToken(token)
                         let descriptors =
                             descriptors |> Array.map (fun d ->
                                 match d with
@@ -344,8 +340,8 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                                         for i in 0 .. viewSam.Length - 1 do
                                             match viewSam.[i] with
                                                 | Some(v,s) ->
-                                                    stats <- stats + v.Update(x)
-                                                    stats <- stats + s.Update(x)
+                                                    v.Update(x, innerToken)
+                                                    s.Update(x, innerToken)
                                                     vs.[i] <- Some (v.Handle.GetValue(), s.Handle.GetValue())
                                                 | _ ->
                                                     vs.[i] <- None
@@ -353,12 +349,11 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                                         Descriptor.CombinedImageSampler(i, vs)
                             )   
 
-                        let changes = stats.ResourceDeltas.Total
                         // update if any of the handles changed or there was no old
-                        if Option.isNone old || changes.Replaced <> 0.0 then
+                        if Option.isNone old || innerToken.ReplacedResources <> 0 then
                             descriptorPool.Update(desc, descriptors)
 
-                        desc, stats
+                        desc
 
 
                     member x.Destroy h =
@@ -407,7 +402,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             (fun () ->
                 let inputs = buffers |> List.map (fun (r,_) -> r :> IResource)
 
-                let create (old : Option<nativeptr<VertexBufferBinding>>) =
+                let create (token : RenderToken) (old : Option<nativeptr<VertexBufferBinding>>) =
                     let buffersAndOffsets = buffers |> List.map (fun (b,o) -> (Mod.force b.Handle, o)) |> List.toArray
                     match old with
                         | None ->
@@ -430,7 +425,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             (fun () ->
                 let inputs = bindings |> Array.map (fun r -> r :> IResource)
 
-                let create (old : Option<nativeptr<DescriptorSetBinding>>) =
+                let create (token : RenderToken) (old : Option<nativeptr<DescriptorSetBinding>>) =
                     let handles = bindings |> Array.map (fun b -> Mod.force b.Handle)
                     match old with
                         | None ->
@@ -450,7 +445,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
         indexBufferBindingCache.GetOrCreate(
             [binding :> obj; t :> obj],
             (fun () ->
-                let create (old : Option<nativeptr<IndexBufferBinding>>) =
+                let create (token : RenderToken) (old : Option<nativeptr<IndexBufferBinding>>) =
                     match old with
                         | None ->
                             device.CreateIndexBufferBinding(binding.Handle.GetValue(), t)

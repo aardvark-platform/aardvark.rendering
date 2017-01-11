@@ -33,7 +33,6 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
 
     let ctx = runtime.Context
     let mutable loaded = false
-    let statistics = EventSource<FrameStatistics>(FrameStatistics.Zero)
 
     let mutable task : Option<IRenderTask> = None
     let mutable taskSubscription : IDisposable = null
@@ -184,11 +183,9 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                         GL.ClearDepth(1.0)
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
-                        let res = EvaluationUtilities.evaluateTopLevel(fun () ->
-                            t.Run(null, defaultOutput)
+                        EvaluationUtilities.evaluateTopLevel(fun () ->
+                            t.Run(null, RenderToken.Empty, defaultOutput)
                         )
-                        
-                        statistics.Emit res
                         
 //                        let sw = System.Diagnostics.Stopwatch()
 //                        sw.Start()
