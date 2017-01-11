@@ -90,41 +90,39 @@ typedef struct {
 	int Clamp;
 } DepthTestMode;
 
-struct VertexAttribPointer
-{
-	GLenum		Type;
-	int			Normalized;
-	int			Stride;
-	int			Offset;
-	int			Buffer;
-};
-
 struct VertexAttribValue
 {
 	float 		X;
 	float 		Y;
 	float 		Z;
 	float 		W;
-	int			Dummy;
-};
-
-union VertexAttrib {
-	struct VertexAttribValue Value;
-	struct VertexAttribPointer Pointer;
 };
 
 typedef struct {
 	uint32_t 			Index;
 	int					Size;
 	int					Divisor;
-	union VertexAttrib	Attribute;
-} VertexAttribBinding;
+	GLenum				Type;
+	int					Normalized;
+	int					Stride;
+	int					Offset;
+	int					Buffer;
+} VertexBufferBinding;
+
+typedef struct {
+	uint32_t			Index;
+	float 				X;
+	float 				Y;
+	float 				Z;
+	float 				W;
+} VertexValueBinding;
 
 typedef struct {
 	int						IndexBuffer;
-	int						Count;
-	VertexAttribBinding*	Bindings;
-
+	int						BufferBindingCount;
+	VertexBufferBinding*	BufferBindings;
+	int						ValueBindingCount;
+	VertexValueBinding*		ValueBindings;
 	int						VAO;
 	void*					VAOContext;
 } VertexInputBinding;

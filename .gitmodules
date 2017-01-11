@@ -1,4 +1,0 @@
-[submodule "src/Aardvark.Base"]
-	path = src/Aardvark.Base
-	url = git@burrow.ra1.vrvis.lan:vrvis/aardvark-base.git
-	branch = master
