@@ -384,20 +384,22 @@ module Elmish3DADaptive =
 
     type Unpersist<'immut,'mut> =
         {
-            unpersist : 'immut -> 'mut
-            apply     : 'immut -> unit
+            unpersist : 'immut -> ReuseCache -> 'mut
+            apply     : 'immut -> 'mut -> ReuseCache -> unit
         }
 
 
     let createAppAdaptive (ctrl : IRenderControl) (camera : IMod<Camera>) (unpersist : Unpersist<'model,'mmodel>) (app : App<'model,'mmodel,'msg, ISg<'msg>>) =
 
         let model = Mod.init app.initial
-        let mmodel = unpersist.unpersist model.Value
+
+        let reuseCache = ReuseCache()
+        let mmodel = unpersist.unpersist model.Value reuseCache
 
         let updateModel (m : 'model) =
             transact (fun () -> 
                 model.Value <- m
-                unpersist.apply m
+                unpersist.apply m mmodel reuseCache
             )
         let view = app.view mmodel
         let pickObjects = view.PickObjects()
