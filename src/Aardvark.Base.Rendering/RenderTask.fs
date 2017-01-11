@@ -174,8 +174,6 @@ module private RefCountedResources =
     type ChangeableFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =
         inherit AbstractOutputMod<IFramebuffer>()
 
-        let mutable refCount = 0
-
         let mutable colors = Map.empty
         let mutable depth = None
         let mutable stencil = None
@@ -272,9 +270,6 @@ module private RefCountedResources =
         override x.Destroy() = destroy()
 
         override x.Compute(t : RenderToken) =
-            if refCount = 0 then
-                failwith "pull on ChangeableFramebuffer without reference!!"
-
             match handle with
                 | Some h ->
                     h.GetValue x

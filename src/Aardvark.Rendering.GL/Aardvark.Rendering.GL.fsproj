@@ -53,6 +53,7 @@
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Validation.fs" />
     <Compile Include="Core\Config.fs" />
+    <Compile Include="Core\GLVM.fs" />
     <Compile Include="Core\ContextHandles.fs" />
     <Compile Include="Core\Context.fs" />
     <Compile Include="Core\Interfaces.fs" />
@@ -81,7 +82,6 @@
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\Statistics.fs" />
-    <Compile Include="Runtime\GLVM.fs" />
     <Compile Include="Runtime\Compiled.fs" />
     <Compile Include="Runtime\HighLevelInstructions.fs" />
     <Compile Include="Runtime\DeltaCompiler.fs" />

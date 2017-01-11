@@ -1031,9 +1031,42 @@ DllExport(void) hglBindVertexArray(int* vao)
 	glBindVertexArray(*vao);
 }
 
+static std::unordered_map<void*, std::vector<GLuint>> deadVAOs;
+static std::mutex mtx;
+
+DllExport(void) hglCleanup(void* ctx)
+{
+	mtx.lock();
+	auto it = deadVAOs.find(ctx);
+	if (it != deadVAOs.end())
+	{
+		glDeleteVertexArrays((GLsizei)it->second.size(), it->second.data());
+		deadVAOs.erase(ctx);
+	}
+	mtx.unlock();
+}
+
+static void vaoDied(void* ctx, GLuint vao)
+{
+	mtx.lock();
+	auto it = deadVAOs.find(ctx);
+	if (it != deadVAOs.end())
+	{
+		it->second.push_back(vao);
+	}
+	else
+	{
+		std::vector<GLuint> res;
+		res.push_back(vao);
+		deadVAOs.insert_or_assign(ctx, res);
+	}
+	mtx.unlock();
+}
+
+
+
 DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding* binding)
 {
-	auto currentContext = *contextHandle;
 	if (binding == nullptr || contextHandle == nullptr)
 	{
 		glBindVertexArray(0);
@@ -1041,12 +1074,13 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 
 	else
 	{
+		auto currentContext = *contextHandle;
 		if (currentContext != binding->VAOContext)
 		{
 			if (binding->VAO >= 0)
 			{
 				uint32_t vao = binding->VAO;
-				glDeleteVertexArrays(1, &vao);
+				vaoDied(binding->VAOContext, vao);
 			}
 
 			uint32_t vao = 0u;

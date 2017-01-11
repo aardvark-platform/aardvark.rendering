@@ -16,6 +16,7 @@
 #endif
 
 #include <vector>
+#include <mutex>
 
 #ifndef __APPLE__
 #ifndef __GNUC__
@@ -199,6 +200,8 @@ DllExport(void) vmAppend6(Fragment* frag, int block, InstructionCode code, intpt
 DllExport(void) vmClear(Fragment* frag);
 DllExport(void) vmRunSingle(Fragment* frag);
 DllExport(void) vmRun(Fragment* frag, VMMode mode, Statistics& stats);
+
+DllExport(void) hglCleanup(void* ctx);
 
 DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos);
 DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos);

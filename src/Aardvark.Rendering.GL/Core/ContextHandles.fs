@@ -51,6 +51,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         handle.MakeCurrent(window)
         ContextHandle.Current <- Some x
 
+        GLVM.hglCleanup((unbox<IGraphicsContextInternal> handle).Context.Handle)
         let actions = Interlocked.Exchange(&onMakeCurrent, null)
         if actions <> null then
             for a in actions do

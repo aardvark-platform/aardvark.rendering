@@ -236,12 +236,12 @@ module RenderProgram =
             let appendToBlock (frag : FragmentPtr) (id : int) (instructions : seq<Instruction>) =
                 for i in instructions do
                     match getArgs i with
-                        | [| a |] -> GLVM.vmAppend1(frag, id, i.Operation, a)
-                        | [| a; b |] -> GLVM.vmAppend2(frag, id, i.Operation, a, b)
-                        | [| a; b; c |] -> GLVM.vmAppend3(frag, id, i.Operation, a, b, c)
-                        | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, i.Operation, a, b, c, d)
-                        | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, i.Operation, a, b, c, d, e)
-                        | [| a; b; c; d; e; f |] -> GLVM.vmAppend6(frag, id, i.Operation, a, b, c, d, e, f)
+                        | [| a |] -> GLVM.vmAppend1(frag, id, int i.Operation, a)
+                        | [| a; b |] -> GLVM.vmAppend2(frag, id, int i.Operation, a, b)
+                        | [| a; b; c |] -> GLVM.vmAppend3(frag, id, int i.Operation, a, b, c)
+                        | [| a; b; c; d |] -> GLVM.vmAppend4(frag, id, int i.Operation, a, b, c, d)
+                        | [| a; b; c; d; e |] -> GLVM.vmAppend5(frag, id, int i.Operation, a, b, c, d, e)
+                        | [| a; b; c; d; e; f |] -> GLVM.vmAppend6(frag, id, int i.Operation, a, b, c, d, e, f)
                         | _ -> failwithf "invalid instruction: %A" i
 
             let handler() =

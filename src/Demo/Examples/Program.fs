@@ -7,12 +7,12 @@ open Rendering.Examples
 [<STAThread>]
 let main args =
     //Examples.Tutorial.run()
-    Examples.Instancing.run()
+    //Examples.Instancing.run()
     //Examples.Render2TexturePrimitive.run()
     //Examples.Render2TextureComposable.run()
     //Examples.Render2TexturePrimiviteChangeableSize.run()
     //Examples.Render2TexturePrimitiveFloat.run()
-    //Examples.PostProcessing.run()
+    Examples.PostProcessing.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 
     //Examples.LoD.run()
