@@ -104,11 +104,6 @@
       <Project>{054df582-d549-4da0-b74b-762ab2585d3f}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
-      <Name>Aardvark.Rendering.Vulkan</Name>
-      <Project>{67c2dd0d-8892-4953-b916-ced3aed034b1}</Project>
-      <Private>True</Private>
-    </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj">
       <Name>Aardvark.SceneGraph.IO</Name>
       <Project>{d7b02e89-dc77-462d-a3d4-a28daa403aaf}</Project>
@@ -122,11 +117,6 @@
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj">
       <Name>Aardvark.Application.WinForms.GL</Name>
       <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj">
-      <Name>Aardvark.Application.WinForms.Vulkan</Name>
-      <Project>{be9c26c3-b846-4356-923d-12e7d88ab309}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">

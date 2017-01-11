@@ -144,9 +144,9 @@ module RenderTasks =
             GL.Viewport(old.[0], old.[1], old.[2], old.[3])
             GL.Check "could not set viewport"
 
-        abstract member ProcessDeltas : unit -> unit
-        abstract member UpdateResources : unit -> FrameStatistics
-        abstract member Perform : Framebuffer -> FrameStatistics
+        abstract member ProcessDeltas : RenderToken -> unit
+        abstract member UpdateResources : RenderToken -> unit
+        abstract member Perform : RenderToken * Framebuffer -> unit
         abstract member Release : unit -> unit
 
 
@@ -157,10 +157,10 @@ module RenderTasks =
         member x.RenderTaskLock = renderTaskLock
         member x.ResourceManager = manager
 
-        override x.Update() =
-            use t = ctx.ResourceLock
-            x.ProcessDeltas()
-            x.UpdateResources()
+        override x.Update(t) =
+            use ct = ctx.ResourceLock
+            x.ProcessDeltas(t)
+            x.UpdateResources(t)
 
         override x.Dispose() =
             if not isDisposed then
@@ -170,7 +170,7 @@ module RenderTasks =
                 x.Release()
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some ctx.Runtime
-        override x.Run(desc : OutputDescription) =
+        override x.Run(t : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| fboSignature.IsAssignableFrom fbo.Signature then
                 failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
@@ -178,10 +178,6 @@ module RenderTasks =
             use token = ctx.ResourceLock 
             if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
                 let intCtx = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
-//
-//                let rand = Random()
-//                let ctxHandle = rand.Next() |> nativeint
-
                 NativePtr.write contextHandle intCtx.Context.Handle
                 transact (fun () -> Mod.change currentContext ctx.CurrentContextHandle.Value)
 
@@ -194,19 +190,18 @@ module RenderTasks =
             let debugState = x.pushDebugOutput()
             let fboState = x.pushFbo desc
 
-            x.ProcessDeltas()
-            let stats = x.UpdateResources()
+            x.ProcessDeltas(t)
+            x.UpdateResources(t)
 
-            let innerStats = 
-                renderTaskLock.Run (fun () ->
-                    beforeRender.OnNext()
-                    NativePtr.write runtimeStats V2i.Zero
-                    let stats = x.Perform fbo
+            renderTaskLock.Run (fun () ->
+                beforeRender.OnNext()
+                NativePtr.write runtimeStats V2i.Zero
+                let stats = x.Perform(t, fbo)
 
-                    afterRender.OnNext()
-                    let rt = NativePtr.read runtimeStats
-                    { stats with DrawCallCount = float rt.X; EffectiveDrawCallCount = float rt.Y }
-                )
+                afterRender.OnNext()
+                let rt = NativePtr.read runtimeStats
+                t.AddDrawCalls(rt.X, rt.Y)
+            )
 
             x.popFbo (desc, fboState)
             x.popDebugOutput debugState
@@ -216,55 +211,65 @@ module RenderTasks =
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
             
 
-            stats + innerStats
-
             
 
     [<AbstractClass>]
     type AbstractSubTask(parent : AbstractRenderTask) =
+        static let nop = System.Lazy<unit>(id)
 
         let programUpdateWatch  = Stopwatch()
         let sortWatch           = Stopwatch()
         let runWatch            = OpenGlStopwatch()
 
-        member x.ProgramUpdate (f : unit -> 'a) =
-            programUpdateWatch.Restart()
-            let res = f()
-            programUpdateWatch.Stop()
-            res
+        member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                programUpdateWatch.Restart()
+                let res = f()
+                programUpdateWatch.Stop()
+                res
 
-        member x.Sorting (f : unit -> 'a) =
-            sortWatch.Restart()
-            let res = f()
-            sortWatch.Stop()
-            res
+        member x.Sorting (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                sortWatch.Restart()
+                let res = f()
+                sortWatch.Stop()
+                res
 
-        member x.Execution (f : unit -> 'a) =
-            runWatch.Restart()
-            let res = f()
-            runWatch.Stop()
-            res
+        member x.Execution (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                runWatch.Restart()
+                let res = f()
+                runWatch.Stop()
+                res
 
         member x.Parent = parent
 
-        abstract member Update : unit -> FrameStatistics
-        abstract member Perform : unit -> FrameStatistics
+        abstract member Update : RenderToken -> unit
+        abstract member Perform : RenderToken -> unit
         abstract member Dispose : unit -> unit
         abstract member Add : PreparedMultiRenderObject -> unit
         abstract member Remove : PreparedMultiRenderObject -> unit
 
 
-        member x.Run() =
-            let plain = x.Perform()
-            lazy (
-                { plain with
-                    RenderPassCount = 1.0
-                    SortingTime = MicroTime sortWatch.Elapsed
-                    ProgramUpdateTime = MicroTime programUpdateWatch.Elapsed
-                    ExecutionTime = runWatch.ElapsedGPU
-                    SubmissionTime = runWatch.ElapsedCPU
-                }
-            )
+        member x.Run(t) =
+            x.Perform(t)
+            if RenderToken.isEmpty t then
+                nop
+            else
+                lazy (
+                    t.AddSubTask(
+                        MicroTime sortWatch.Elapsed,
+                        MicroTime programUpdateWatch.Elapsed,
+                        runWatch.ElapsedGPU,
+                        runWatch.ElapsedCPU
+                    )
+                )
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -415,19 +420,17 @@ module RenderTasks =
                 hasProgram <- true
                 currentConfig <- config
 
-        override x.Update() =
+        override x.Update(t) =
             let config = parent.Config.GetValue parent
             reinit x config
 
             //TODO
-            let programStats = x.ProgramUpdate (fun () -> program.Update null)
-            FrameStatistics.Zero
+            let programStats = x.ProgramUpdate (t, fun () -> program.Update null)
+            ()
+        override x.Perform(t) =
+            x.Update(t) |> ignore
 
-        override x.Perform() =
-            x.Update() |> ignore
-
-            let stats = 
-                x.Execution (fun () -> program.Run())
+            let stats = x.Execution (t, fun () -> program.Run(t))
 
             stats
                
@@ -521,7 +524,7 @@ module RenderTasks =
 
         member x.BoundingBox = currentBox
 
-        member x.Update(caller : IAdaptiveObject) =
+        member x.Update(caller : IAdaptiveObject, token : RenderToken) =
             x.EvaluateIfNeeded caller () (fun () ->
                 let blocks = 
                     lock dirtyBlocks (fun () ->
@@ -597,16 +600,16 @@ module RenderTasks =
             let cmp = comparer.GetValue x
             f |> Seq.sortWith (fun a b -> cmp.Compare(a.Object, b.Object)) |> Seq.toList
 
-        override x.Update(dirty : HashSet<_>) =
+        override x.Update(token : RenderToken, dirty : HashSet<_>) =
             let deltas = fragmentReader.GetDelta()
             for d in deltas do
                 match d with
                     | Add f -> dirty.Add f |> ignore
                     | Rem f -> dirty.Remove f |> ignore
 
-            for d in dirty do d.Update x
+            for d in dirty do d.Update(x, token)
 
-            parent.Sorting (fun () ->
+            parent.Sorting (token, fun () ->
                 let ordered = x.sort fragmentReader.Content
 
                 let mutable current = null
@@ -620,7 +623,7 @@ module RenderTasks =
                 else first <- last
             )
 
-        override x.Run() =
+        override x.Run(t) =
             
             if disposeCnt > 0 then
                 failwithf "Running disposed glvmprogram"
@@ -631,10 +634,7 @@ module RenderTasks =
                 last.Next <- null
                 GLVM.vmRun(first.Handle, VMMode.RuntimeRedundancyChecks, &vmStats)
 
-            { FrameStatistics.Zero with
-                InstructionCount = float vmStats.TotalInstructions
-                ActiveInstructionCount = float (vmStats.TotalInstructions-vmStats.RemovedInstructions)
-            }
+            t.AddInstructions(vmStats.TotalInstructions, vmStats.TotalInstructions - vmStats.RemovedInstructions)
 
         override x.Dispose() =
             if Interlocked.Increment &disposeCnt = 1 then
@@ -666,23 +666,20 @@ module RenderTasks =
                         c
 
 
-        override x.Update() =
+        override x.Update(t : RenderToken) =
             reader.Update(x)
 
-            parent.Sorting (fun () ->
+            parent.Sorting (t, fun () ->
                 let comparer = getComparer reader.Content
                 let cmp = comparer.GetValue x
                 arr <- reader.Content |> Seq.sortWith (fun a b -> cmp.Compare(a,b)) |> Seq.toArray
             )
 
-        override x.Run() =
+        override x.Run(t) =
             Interpreter.run parent.Scope.contextHandle (fun gl ->
                 for a in arr do gl.render a
 
-                { FrameStatistics.Zero with
-                    ActiveInstructionCount = float gl.EffectiveInstructions
-                    InstructionCount = float gl.TotalInstructions
-                }
+                t.AddInstructions(gl.TotalInstructions, gl.EffectiveInstructions)
             )
 
         override x.Dispose() =
@@ -741,22 +738,17 @@ module RenderTasks =
 
         member x.Scope = scope
 
-        override x.Update() = 
+        override x.Update(t) = 
             let cfg = parent.Config.GetValue parent
             reinit x cfg
 
-            let updateStats = 
-                x.ProgramUpdate (fun () -> program.Update null)
-            FrameStatistics.Zero
+            let updateStats = x.ProgramUpdate (t, fun () -> program.Update(null, t))
+            ()
 
+        override x.Perform(t) =
+            x.Update(t) |> ignore
 
-        override x.Perform() =
-            x.Update() |> ignore
-
-            let stats = 
-                x.Execution (fun () -> program.Run())
-
-            stats
+            x.Execution (t, fun () -> program.Run(t))
 
 
 
@@ -813,7 +805,7 @@ module RenderTasks =
 
         let add (ro : PreparedRenderObject) = 
             let all = ro.Resources |> Seq.toList
-            for r in all do resources.Add r
+            for r in all do resources.Add(r)
 
             
             let old = ro.Activation
@@ -866,65 +858,64 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-        let processDeltas (x : AbstractOpenGlRenderTask) =
+        let processDeltas (x : AbstractOpenGlRenderTask) (t : RenderToken) =
             let deltas = preparedObjectReader.GetDelta x
 
             match deltas with
                 | [] -> ()
                 | _ -> x.StructureChanged()
 
+            let mutable added = 0
+            let mutable removed = 0
             for d in deltas do 
                 match d with
                     | Add v ->
                         let task = getSubTask v.RenderPass
+                        added <- added + 1
                         task.Add v
                     | Rem v ->
                         let task = getSubTask v.RenderPass
+                        removed <- removed + 1
                         task.Remove v            
 
-        let updateResources ( x : AbstractOpenGlRenderTask ) =
-            resourceUpdateWatch.Restart()
-            let stats = resources.Update(x)
-            resourceUpdateWatch.Stop()
+            t.RenderObjectDeltas(added, removed)
 
-            { stats with
-                ResourceUpdateSubmissionTime = resourceUpdateWatch.ElapsedCPU
-                ResourceUpdateTime = resourceUpdateWatch.ElapsedGPU
-            } 
+        let updateResources (x : AbstractOpenGlRenderTask) (t : RenderToken) =
+            if RenderToken.isEmpty t then
+                resources.Update(x, t)
+            else
+                resourceUpdateWatch.Restart()
+                resources.Update(x, t)
+                resourceUpdateWatch.Stop()
+
+                t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
 
 
-        override x.ProcessDeltas() =
-            processDeltas x
+        override x.ProcessDeltas(t) =
+            processDeltas x t
 
-        override x.UpdateResources() =
-            updateResources x
+        override x.UpdateResources(t) =
+            updateResources x t
 
-        override x.Perform(fbo : Framebuffer) =
+        override x.Perform(token : RenderToken, fbo : Framebuffer) =
             x.ResourceManager.DrawBufferManager.Write(fbo)
 
-            if not RuntimeConfig.SupressGLTimers then
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid token then
                 primitivesGenerated.Restart()
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
-                let s = t.Run()
+                let s = t.Run(token)
                 runStats <- s::runStats
-
-            if not RuntimeConfig.SupressGLTimers then
-                primitivesGenerated.Stop()
 
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
             
-            let primitiveCnt = 
-                if RuntimeConfig.SupressGLTimers then { FrameStatistics.Zero with PrimitiveCount = 0.0 }
-                else { FrameStatistics.Zero with PrimitiveCount = float primitivesGenerated.Value }
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid token then 
+                primitivesGenerated.Stop()
+                runStats |> List.iter (fun l -> l.Value)
+                token.AddPrimitiveCount(primitivesGenerated.Value)
 
-            let runStats =
-                if RuntimeConfig.SupressRuntimeStats then FrameStatistics.Zero
-                else runStats |> List.sumBy (fun l -> l.Value)
-
-            runStats + primitiveCnt
 
 
         override x.Release() =
@@ -948,8 +939,8 @@ module RenderTasks =
     type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
         inherit AbstractRenderTask()
 
-        override x.Update() = FrameStatistics.Zero
-        override x.Run(desc : OutputDescription) =
+        override x.Update(t) = ()
+        override x.Run(t : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer
             using ctx.ResourceLock (fun _ ->
 
@@ -968,6 +959,8 @@ module RenderTasks =
 
                 GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                 GL.Check "could not bind framebuffer"
+
+                
 
                 let depthValue = depth.GetValue x
                 let colorValues = color.GetValue x
@@ -1017,7 +1010,6 @@ module RenderTasks =
 
                 GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                 GL.Check "could not bind framebuffer"
-                FrameStatistics.Zero
             )
 
         override x.Dispose() =

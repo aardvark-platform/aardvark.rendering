@@ -1,6 +1,9 @@
 ﻿namespace Aardvark.Base
 
 open System
+open System.Collections.Generic
+open System.Runtime.CompilerServices
+open Aardvark.Base
 
 type ResourceKind =
     | Unknown = 0
@@ -18,391 +21,253 @@ type ResourceKind =
     | IndexBuffer = 12
 
 
-module private Map =
-    let unionWith (f : Map<'k,'v0>) (g : Map<'k,'v1>) (fuse : 'v0 -> 'v1 -> 'v0) (zero : 'v0) =
-        let mutable result = f
-        for (k,right) in g |> Map.toSeq do
-            let newValue = 
-                match Map.tryFind k result with
-                    | Some v -> fuse v right
-                    | None -> fuse zero right
+[<AutoOpen>]
+module private IntHelpers =
+    let inline add (cell : byref<'a>) (value : 'a) =
+        cell <- cell + value
 
-            result <- result |> Map.add k newValue
-        result
+    let inline notNull (v : 'a) = not (isNull v)
 
-    let alter (key : 'k) (f : Option<'a> -> Option<'a>) (m : Map<'k, 'a>) =
-        let input = Map.tryFind key m
-        let result = f input
-        match result with
-            | Some r -> Map.add key r m
-            | None ->
-                match input with
-                    | Some _ -> Map.remove key m
-                    | None -> m
+    let inline dictadd (l : Dict<'k, int>) (r : Dict<'k, int>) =
+        let res = Dict.empty
+        for (KeyValue(k,lv)) in l do
+            match r.TryGetValue(k) with
+                | (true, rv) -> res.[k] <- lv + rv
+                | _ -> res.[k] <- lv
 
-    let inline increment (key : 'k) (value : 'x) (m : Map<'k, 'v>) : Map<'k, 'v> =
-        let newValue = 
-            match Map.tryFind key m with
-                | Some i -> i + value
-                | None -> LanguagePrimitives.GenericZero<'v> + value
-        if newValue = LanguagePrimitives.GenericZero<'v> then
-            Map.remove key m
-        else
-            Map.add key newValue m
+        for (KeyValue(k,rv)) in r do
+            if not (l.ContainsKey k) then
+                res.[k] <- rv
 
-    let inline decrement (key : 'k) (value : 'x) (m : Map<'k, 'v>) =
-        let newValue = 
-            match Map.tryFind key m with
-                | Some i -> i - value
-                | None -> LanguagePrimitives.GenericZero<'v> - value
-        if newValue = LanguagePrimitives.GenericZero<'v> then
-            Map.remove key m
-        else
-            Map.add key newValue m
+        res
+
+    let inline dictsub (l : Dict<'k, int>) (r : Dict<'k, int>) =
+        let res = Dict.empty
+        for (KeyValue(k,lv)) in l do
+            match r.TryGetValue(k) with
+                | (true, rv) -> res.[k] <- lv - rv
+                | _ -> res.[k] <- lv
+
+        for (KeyValue(k,rv)) in r do
+            if not (l.ContainsKey k) then
+                res.[k] <- -rv
+
+        res
+
+    let inline dictneg (l : Dict<'k, int>)  =
+        let res = Dict.empty
+        for (KeyValue(k,lv)) in l do
+            res.[k] <- -lv
+        res
 
 
-type ResourceDelta =
-    struct
-        val mutable public Created          : float
-        val mutable public Deleted          : float
-        val mutable public InPlace          : float
-        val mutable public Replaced         : float
-        val mutable public MemoryDelta      : Mem
+[<AllowNullLiteral>]
+type RenderToken =
+    class
+        val mutable public Parent : RenderToken
+        val mutable public InPlaceUpdates : int
+        val mutable public ReplacedResources : int
+        val mutable public CreatedResources : int
+        val mutable public UpdateSubmissionTime : MicroTime
+        val mutable public UpdateExecutionTime : MicroTime
+        val mutable public UpdateCounts : Dict<ResourceKind, int>
 
-        static member Zero = ResourceDelta(0.0,0.0,0.0,0.0,Mem.Zero)
+        val mutable public RenderPasses : int
+        val mutable public TotalInstructions : int
+        val mutable public ActiveInstructions : int
+        val mutable public DrawCallCount : int
+        val mutable public EffectiveDrawCallCount : int
+        val mutable public SortingTime : MicroTime
+        val mutable public DrawUpdateTime : MicroTime
+        val mutable public DrawSubmissionTime : MicroTime
+        val mutable public DrawExecutionTime : MicroTime
+        val mutable public PrimitiveCount : int64
 
-        static member (~-) (v : ResourceDelta) =
-            ResourceDelta(
-                -v.Created,
-                -v.Deleted,
-                -v.InPlace,
-                -v.Replaced,
-                -v.MemoryDelta
-            )
+        val mutable public AddedRenderObjects : int
+        val mutable public RemovedRenderObjects : int
 
-        static member (+) (l : ResourceDelta, r : ResourceDelta) =
-            ResourceDelta(
-                l.Created + r.Created,
-                l.Deleted + r.Deleted,
-                l.InPlace + r.InPlace,
-                l.Replaced + r.Replaced,
-                l.MemoryDelta + r.MemoryDelta
-            )
-                
-        static member (-) (l : ResourceDelta, r : ResourceDelta) =
-            ResourceDelta(
-                l.Created - r.Created,
-                l.Deleted - r.Deleted,
-                l.InPlace - r.InPlace,
-                l.Replaced - r.Replaced,
-                l.MemoryDelta - r.MemoryDelta
-            )   
-                 
-        static member (*) (l : ResourceDelta, r : float) =
-            ResourceDelta(
-                l.Created * r,
-                l.Deleted * r,
-                l.InPlace * r,
-                l.Replaced * r,
-                l.MemoryDelta * r
-            )
+        static member inline Empty : RenderToken = null
 
-        static member (*) (l : float, r : ResourceDelta) =
-            ResourceDelta(
-                l * r.Created,
-                l * r.Deleted,
-                l * r.InPlace,
-                l * r.Replaced,
-                l * r.MemoryDelta
-            )                      
- 
-        static member (/) (l : ResourceDelta, r : float) =
-            ResourceDelta(
-                l.Created / r,
-                l.Deleted / r,
-                l.InPlace / r,
-                l.Replaced / r,
-                l.MemoryDelta / r
-            )
-                        
-        new(created, deleted, inPlace, replaced, memDelta) =
-            { Created = created; Deleted = deleted; InPlace = inPlace; Replaced = replaced; MemoryDelta = memDelta }
+        static member inline Zero = RenderToken()
 
+        static member (~-) (x : RenderToken) =
+            if isNull x then null
+            else
+                RenderToken(
+                    InPlaceUpdates = -x.InPlaceUpdates,
+                    ReplacedResources = -x.ReplacedResources,
+                    CreatedResources = -x.CreatedResources,
+                    UpdateSubmissionTime = -x.UpdateSubmissionTime,
+                    UpdateExecutionTime = -x.UpdateExecutionTime,
+                    UpdateCounts = dictneg x.UpdateCounts,
+                    RenderPasses = -x.RenderPasses,
+                    TotalInstructions = -x.TotalInstructions,
+                    ActiveInstructions = -x.ActiveInstructions,
+                    DrawCallCount = -x.DrawCallCount,
+                    EffectiveDrawCallCount = -x.EffectiveDrawCallCount,
+                    SortingTime = -x.SortingTime,
+                    DrawUpdateTime = -x.DrawUpdateTime,
+                    DrawSubmissionTime = -x.DrawSubmissionTime,
+                    DrawExecutionTime = -x.DrawExecutionTime,
+                    PrimitiveCount = -x.PrimitiveCount,
+                    AddedRenderObjects = -x.AddedRenderObjects,
+                    RemovedRenderObjects = -x.RemovedRenderObjects
+                )
+
+        static member (+) (l : RenderToken, r : RenderToken) =
+            if isNull l then r
+            elif isNull r then l
+            else
+                RenderToken(
+                    InPlaceUpdates = l.InPlaceUpdates + r.InPlaceUpdates,
+                    ReplacedResources = l.ReplacedResources + r.ReplacedResources,
+                    CreatedResources = l.CreatedResources + r.CreatedResources,
+                    UpdateSubmissionTime = l.UpdateSubmissionTime + r.UpdateSubmissionTime,
+                    UpdateExecutionTime = l.UpdateExecutionTime + r.UpdateExecutionTime,
+                    UpdateCounts = dictadd l.UpdateCounts r.UpdateCounts,
+                    RenderPasses = l.RenderPasses + r.RenderPasses,
+                    TotalInstructions = l.TotalInstructions + r.TotalInstructions,
+                    ActiveInstructions = l.ActiveInstructions + r.ActiveInstructions,
+                    DrawCallCount = l.DrawCallCount + r.DrawCallCount,
+                    EffectiveDrawCallCount = l.EffectiveDrawCallCount + r.EffectiveDrawCallCount,
+                    SortingTime = l.SortingTime + r.SortingTime,
+                    DrawUpdateTime = l.DrawUpdateTime + r.DrawUpdateTime,
+                    DrawSubmissionTime = l.DrawSubmissionTime + r.DrawSubmissionTime,
+                    DrawExecutionTime = l.DrawExecutionTime + r.DrawExecutionTime,
+                    PrimitiveCount = l.PrimitiveCount + r.PrimitiveCount,
+                    AddedRenderObjects = l.AddedRenderObjects + r.AddedRenderObjects,
+                    RemovedRenderObjects = l.RemovedRenderObjects + r.RemovedRenderObjects
+                )
+
+        static member (-) (l : RenderToken, r : RenderToken) =
+            if isNull r then l
+            elif isNull l then -r
+            else
+                RenderToken(
+                    InPlaceUpdates = l.InPlaceUpdates - r.InPlaceUpdates,
+                    ReplacedResources = l.ReplacedResources - r.ReplacedResources,
+                    CreatedResources = l.CreatedResources - r.CreatedResources,
+                    UpdateSubmissionTime = l.UpdateSubmissionTime - r.UpdateSubmissionTime,
+                    UpdateExecutionTime = l.UpdateExecutionTime - r.UpdateExecutionTime,
+                    UpdateCounts = dictsub l.UpdateCounts r.UpdateCounts,
+                    RenderPasses = l.RenderPasses - r.RenderPasses,
+                    TotalInstructions = l.TotalInstructions - r.TotalInstructions,
+                    ActiveInstructions = l.ActiveInstructions - r.ActiveInstructions,
+                    DrawCallCount = l.DrawCallCount - r.DrawCallCount,
+                    EffectiveDrawCallCount = l.EffectiveDrawCallCount - r.EffectiveDrawCallCount,
+                    SortingTime = l.SortingTime - r.SortingTime,
+                    DrawUpdateTime = l.DrawUpdateTime - r.DrawUpdateTime,
+                    DrawSubmissionTime = l.DrawSubmissionTime - r.DrawSubmissionTime,
+                    DrawExecutionTime = l.DrawExecutionTime - r.DrawExecutionTime,
+                    PrimitiveCount = l.PrimitiveCount - r.PrimitiveCount,
+                    AddedRenderObjects = l.AddedRenderObjects - r.AddedRenderObjects,
+                    RemovedRenderObjects = l.RemovedRenderObjects - r.RemovedRenderObjects
+                )
+
+        new(p) =
+            {
+                Parent = p
+                InPlaceUpdates = 0
+                ReplacedResources = 0
+                CreatedResources = 0
+                UpdateSubmissionTime = MicroTime.Zero
+                UpdateExecutionTime = MicroTime.Zero
+                UpdateCounts = Dict()
+                RenderPasses = 0
+                TotalInstructions = 0
+                ActiveInstructions = 0
+                DrawCallCount = 0
+                EffectiveDrawCallCount = 0
+                SortingTime = MicroTime.Zero
+                DrawUpdateTime = MicroTime.Zero
+                DrawSubmissionTime = MicroTime.Zero
+                DrawExecutionTime = MicroTime.Zero
+                PrimitiveCount = 0L
+                AddedRenderObjects = 0
+                RemovedRenderObjects = 0
+            }
+
+        new() = RenderToken(null)
+            
     end
 
-type ResourceCount =
-    struct
-        val mutable public Count            : float
-        val mutable public Memory           : Mem
 
-        static member Zero = ResourceCount(0.0, Mem.Zero)
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module RenderToken =
 
-        static member (+) (l : ResourceCount, r : ResourceCount) =
-            ResourceCount(
-                l.Count +  r.Count,
-                l.Memory + r.Memory
-            )
+    let inline forall (f : RenderToken -> unit) (t : RenderToken) =
+        let mutable current = t
+        while notNull current do
+            f current
+            current <- current.Parent
 
-        static member (-) (l : ResourceCount, r : ResourceCount) =
-            ResourceCount(
-                l.Count - r.Count,
-                l.Memory - r.Memory
-            )
+    let inline isEmpty (t : RenderToken) = isNull t
+    let inline isValid (t : RenderToken) = not (isNull t)
 
-        static member (+) (l : ResourceCount, r : ResourceDelta) =
-            ResourceCount(
-                l.Count + r.Created - r.Deleted,
-                l.Memory + r.MemoryDelta
-            )
+[<AbstractClass; Sealed; Extension>]
+type RenderTokenExtensions private() =
+    [<Extension>]
+    static member InPlaceResourceUpdate(this : RenderToken, kind : ResourceKind) =
+        this |> RenderToken.forall (fun x -> 
+            inc &x.InPlaceUpdates
+            x.UpdateCounts.[kind] <- 1 + x.UpdateCounts.GetOrDefault(kind)
+        )
 
-        static member (-) (l : ResourceCount, r : ResourceDelta) =
-            ResourceCount(
-                l.Count - r.Created + r.Deleted,
-                l.Memory - r.MemoryDelta
-            )
+    [<Extension>]
+    static member ReplacedResource(this : RenderToken, kind : ResourceKind) =
+        this |> RenderToken.forall (fun x -> 
+            inc &x.ReplacedResources
+            x.UpdateCounts.[kind] <- 1 + x.UpdateCounts.GetOrDefault(kind)
+        )
 
-        static member (*) (l : ResourceCount, r : float) =
-            ResourceCount(
-                l.Count * r,
-                l.Memory * r
-            )
+    [<Extension>]
+    static member CreatedResource(this : RenderToken, kind : ResourceKind) =
+        this |> RenderToken.forall (fun x -> 
+            inc &x.CreatedResources
+            x.UpdateCounts.[kind] <- 1 + x.UpdateCounts.GetOrDefault(kind)
+        )
 
-        static member (*) (l : float, r : ResourceCount) =
-            ResourceCount(
-                l * r.Count,
-                l * r.Memory
-            )
+    [<Extension>]
+    static member AddInstructions(this : RenderToken, total : int, active : int) =
+        this |> RenderToken.forall (fun x -> 
+            add &x.TotalInstructions total
+            add &x.ActiveInstructions active
+        )
 
-        static member (/) (l : ResourceCount, r : float) =
-            ResourceCount(
-                l.Count / r,
-                l.Memory / r
-            )
-        new(cnt, mem) = { Count = cnt; Memory = mem }
+    [<Extension>]
+    static member AddDrawCalls(this : RenderToken, count : int, effective : int) =
+        this |> RenderToken.forall (fun x -> 
+            add &x.DrawCallCount count
+            add &x.EffectiveDrawCallCount effective
+        )
 
+    [<Extension>]
+    static member AddSubTask(this : RenderToken, sorting : MicroTime, update : MicroTime, execution : MicroTime, submission : MicroTime) =
+        this |> RenderToken.forall (fun x -> 
+            inc &x.RenderPasses
+            add &x.SortingTime sorting
+            add &x.DrawUpdateTime update
+            add &x.DrawSubmissionTime submission
+            add &x.DrawExecutionTime execution
+        )
 
+    [<Extension>]
+    static member AddResourceUpdate(this : RenderToken, submission : MicroTime, execution : MicroTime) =
+        this |> RenderToken.forall (fun x -> 
+            add &x.UpdateSubmissionTime submission
+            add &x.UpdateExecutionTime execution
+        )
 
-    end
-
-type ResourceDeltas (total : ResourceDelta, store : Map<ResourceKind, ResourceDelta>) =
-    static let zero = ResourceDeltas(ResourceDelta.Zero, Map.empty)
-
-    member x.Total = total
-    member x.Map = store
-
-    static member Zero = zero
-
-    static member (+) (l : ResourceDeltas, r : ResourceKind * ResourceDelta) =
-        let k, d = r
-        ResourceDeltas(l.Total + d, Map.increment k d l.Map)
-
-    static member (-) (l : ResourceDeltas, r : ResourceKind * ResourceDelta) =
-        let k, d = r
-        ResourceDeltas(l.Total - d, Map.decrement k d l.Map)
- 
-    static member (+) (l : ResourceDeltas, r : ResourceDeltas) =
-        ResourceDeltas(l.Total + r.Total, Map.unionWith l.Map r.Map (+) ResourceDelta.Zero)
-
-    static member (-) (l : ResourceDeltas, r : ResourceDeltas) =
-        ResourceDeltas(l.Total - r.Total, Map.unionWith l.Map r.Map (-) ResourceDelta.Zero)
-          
-    static member (*) (l : ResourceDeltas, r : float) =
-         ResourceDeltas(l.Total * r, l.Map |> Map.map (fun _ v -> v * r))
-
-    static member (/) (l : ResourceDeltas, r : float) =
-         ResourceDeltas(l.Total / r, l.Map |> Map.map (fun _ v -> v / r))
-                   
-    new (kind : ResourceKind, delta : ResourceDelta) =
-        ResourceDeltas(delta, Map.ofList [kind, delta])
-               
-type ResourceCounts (total : ResourceCount, store : Map<ResourceKind, ResourceCount>) =
-    static let zero = ResourceCounts(ResourceCount.Zero, Map.empty)
-        
-    member x.Total = total
-    member x.Map = store
-
-    static member Zero = zero
-
-    static member (+) (l : ResourceCounts, r : ResourceCounts) =
-        ResourceCounts(l.Total + r.Total, Map.unionWith l.Map r.Map (+) ResourceCount.Zero)
-
-    static member (-) (l : ResourceCounts, r : ResourceCounts) =
-        ResourceCounts(l.Total + r.Total, Map.unionWith l.Map r.Map (-) ResourceCount.Zero)
-
-    static member (+) (l : ResourceCounts, r : ResourceDeltas) =
-        ResourceCounts(l.Total + r.Total, Map.unionWith l.Map r.Map (+) ResourceCount.Zero)
+    [<Extension>]
+    static member AddPrimitiveCount(this : RenderToken, cnt : int64) =
+        this |> RenderToken.forall (fun x -> 
+            add &x.PrimitiveCount cnt
+        )
 
 
-    static member (+) (l : ResourceCounts, r : ResourceKind * ResourceDelta) =
-        let k, d = r
-        ResourceCounts(l.Total + d, Map.increment k d l.Map)
-
-    static member (-) (l : ResourceCounts, r : ResourceKind * ResourceDelta) =
-        let k, d = r
-        ResourceCounts(l.Total - d, Map.decrement k d l.Map)
-
-    static member (*) (l : ResourceCounts, r : float) =
-         ResourceCounts(l.Total * r, l.Map |> Map.map (fun _ v -> v * r))
-
-    static member (/) (l : ResourceCounts, r : float) =
-         ResourceCounts(l.Total / r, l.Map |> Map.map (fun _ v -> v / r))
-
-type FrameStatistics =
-    {
-        /// the number of render passes executed
-        RenderPassCount : float
-
-        /// the number of instructions contained
-        InstructionCount : float
-
-        /// the number of issued driver instructions
-        ActiveInstructionCount : float
-
-        /// the number of calls to draw-instructions
-        DrawCallCount : float
-
-        /// the effective number of draw-calls (including indirect calls)
-        EffectiveDrawCallCount : float
-
-        /// the number of updated resources
-        ResourceDeltas : ResourceDeltas
-
-        /// the number of primitives rendered
-        PrimitiveCount : float
-
-        /// the time spent in sorting RenderObjects (view-depenent, etc.)
-        SortingTime : MicroTime
-
-        /// the time spent in program updates (compiling instructions)
-        /// NOTE: includes the SortingTime
-        ProgramUpdateTime : MicroTime
-
-        /// the time spent in the submission of resource-update commands (CPU)
-        ResourceUpdateSubmissionTime : MicroTime
-
-        /// the time spent in resource-updates (GPU)
-        ResourceUpdateTime : MicroTime
-
-        /// the time spent in the submission of rendering-commands (CPU)
-        SubmissionTime : MicroTime
-
-        /// the time spent in rendering (GPU)
-        ExecutionTime : MicroTime
-
-        /// the total number of physical resources (IResource)
-        PhysicalResourceCount : float
-
-        /// the total number of resource-references
-        VirtualResourceCount : float
-        
-        /// used resources by their kind
-        ResourceCounts : ResourceCounts
-
-        /// the total number of added/removed renderobjects in one frame
-        AddedRenderObjects : float
-        RemovedRenderObjects : float
-
-        // historical
-        JumpDistance : float
-        ProgramSize : uint64
-    } with
-
-    static member Zero =
-        {
-            RenderPassCount = 0.0
-            InstructionCount = 0.0
-            ActiveInstructionCount = 0.0
-            DrawCallCount = 0.0
-            EffectiveDrawCallCount = 0.0
-            ResourceDeltas = ResourceDeltas.Zero
-            PrimitiveCount = 0.0
-            JumpDistance = 0.0
-            VirtualResourceCount = 0.0
-            PhysicalResourceCount = 0.0
-            AddedRenderObjects = 0.0
-            RemovedRenderObjects = 0.0
-            SortingTime = MicroTime.Zero
-            ProgramUpdateTime = MicroTime.Zero
-            ResourceUpdateSubmissionTime = MicroTime.Zero
-            ResourceUpdateTime = MicroTime.Zero
-            SubmissionTime = MicroTime.Zero
-            ExecutionTime = MicroTime.Zero
-            ProgramSize = 0UL
-            ResourceCounts = ResourceCounts.Zero
-        }
-
-    static member DivideByInt(l : FrameStatistics, r : int) =
-        l / float r
-
-    static member (+) (l : FrameStatistics, r : FrameStatistics) =
-        {
-            RenderPassCount = l.RenderPassCount + r.RenderPassCount
-            InstructionCount = l.InstructionCount + r.InstructionCount
-            ActiveInstructionCount = l.ActiveInstructionCount + r.ActiveInstructionCount
-            DrawCallCount = l.DrawCallCount + r.DrawCallCount
-            EffectiveDrawCallCount = l.EffectiveDrawCallCount + r.EffectiveDrawCallCount
-            ResourceDeltas = l.ResourceDeltas + r.ResourceDeltas
-            PrimitiveCount = l.PrimitiveCount + r.PrimitiveCount
-            JumpDistance = l.JumpDistance + r.JumpDistance
-            VirtualResourceCount = l.VirtualResourceCount + r.VirtualResourceCount
-            PhysicalResourceCount = l.PhysicalResourceCount + r.PhysicalResourceCount
-            ResourceCounts = l.ResourceCounts + r.ResourceCounts
-            AddedRenderObjects = l.AddedRenderObjects + r.AddedRenderObjects
-            RemovedRenderObjects = l.RemovedRenderObjects + r.RemovedRenderObjects
-            SortingTime = l.SortingTime + r.SortingTime
-            ProgramUpdateTime = l.ProgramUpdateTime + r.ProgramUpdateTime
-            ResourceUpdateSubmissionTime = l.ResourceUpdateSubmissionTime + r.ResourceUpdateSubmissionTime
-            ResourceUpdateTime = l.ResourceUpdateTime + r.ResourceUpdateTime
-            SubmissionTime = l.SubmissionTime + r.SubmissionTime
-            ExecutionTime = l.ExecutionTime + r.ExecutionTime
-            ProgramSize = l.ProgramSize + r.ProgramSize
-        }
-
-    static member (-) (l : FrameStatistics, r : FrameStatistics) =
-        {
-            RenderPassCount = l.RenderPassCount - r.RenderPassCount
-            InstructionCount = l.InstructionCount - r.InstructionCount
-            ActiveInstructionCount = l.ActiveInstructionCount - r.ActiveInstructionCount
-            DrawCallCount = l.DrawCallCount - r.DrawCallCount
-            EffectiveDrawCallCount = l.EffectiveDrawCallCount - r.EffectiveDrawCallCount
-            ResourceDeltas = l.ResourceDeltas - r.ResourceDeltas
-            PrimitiveCount = l.PrimitiveCount - r.PrimitiveCount
-            JumpDistance = l.JumpDistance - r.JumpDistance
-            VirtualResourceCount = l.VirtualResourceCount - r.VirtualResourceCount
-            PhysicalResourceCount = l.PhysicalResourceCount - r.PhysicalResourceCount
-            ResourceCounts = l.ResourceCounts - r.ResourceCounts
-            AddedRenderObjects = l.AddedRenderObjects - r.AddedRenderObjects
-            RemovedRenderObjects = l.RemovedRenderObjects - r.RemovedRenderObjects
-            SortingTime = l.SortingTime - r.SortingTime
-            ProgramUpdateTime = l.ProgramUpdateTime - r.ProgramUpdateTime
-            ResourceUpdateSubmissionTime = l.ResourceUpdateSubmissionTime - r.ResourceUpdateSubmissionTime
-            ResourceUpdateTime = l.ResourceUpdateTime - r.ResourceUpdateTime
-            SubmissionTime = l.SubmissionTime - r.SubmissionTime
-            ExecutionTime = l.ExecutionTime - r.ExecutionTime
-            ProgramSize = l.ProgramSize - r.ProgramSize
-        }
-
-    static member (/) (l : FrameStatistics, r : float) =
-        {
-            RenderPassCount = l.RenderPassCount / r
-            InstructionCount = l.InstructionCount / r
-            ActiveInstructionCount = l.ActiveInstructionCount / r
-            DrawCallCount = l.DrawCallCount / r
-            EffectiveDrawCallCount = l.EffectiveDrawCallCount / r
-            ResourceDeltas = l.ResourceDeltas / r
-            PrimitiveCount = l.PrimitiveCount / r
-            JumpDistance = l.JumpDistance / r
-            VirtualResourceCount = l.VirtualResourceCount / r
-            PhysicalResourceCount = l.PhysicalResourceCount / r
-            ResourceCounts = l.ResourceCounts / r
-            AddedRenderObjects = l.AddedRenderObjects / r
-            RemovedRenderObjects = l.RemovedRenderObjects / r
-            SortingTime = l.SortingTime / r
-            ProgramUpdateTime = l.ProgramUpdateTime / r
-            ResourceUpdateSubmissionTime = l.ResourceUpdateSubmissionTime / r
-            ResourceUpdateTime = l.ResourceUpdateTime / r
-            SubmissionTime = l.SubmissionTime / r
-            ExecutionTime = l.ExecutionTime / r
-            ProgramSize = uint64 (float l.ProgramSize / r)
-        }
-
+    [<Extension>]
+    static member RenderObjectDeltas(this : RenderToken, added : int, removed : int) =
+        this |> RenderToken.forall (fun x -> 
+            add &x.AddedRenderObjects added
+            add &x.RemovedRenderObjects removed
+        )

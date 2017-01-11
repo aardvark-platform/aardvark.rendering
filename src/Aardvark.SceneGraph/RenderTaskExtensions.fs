@@ -137,11 +137,10 @@ module RenderTask =
 
 
                 RenderTask.ofList [
-                    RenderTask.custom (fun (self, target) ->
+                    RenderTask.custom (fun (self, token, target) ->
                         if target.framebuffer.Size <> size.Value then
                             transact (fun () -> Mod.change size target.framebuffer.Size)
 
-                        FrameStatistics.Zero
                     )
                     composeTask
                 ]
@@ -170,11 +169,10 @@ module RenderTask =
 
 
                 RenderTask.ofList [
-                    RenderTask.custom (fun (self, target) ->
+                    RenderTask.custom (fun (self, token, target) ->
                         if target.framebuffer.Size <> size.Value then
                             transact (fun () -> Mod.change size target.framebuffer.Size)
 
-                        FrameStatistics.Zero
                     )
                     composeTask
                 ]

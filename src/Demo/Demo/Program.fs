@@ -654,13 +654,13 @@ let testGpuThroughput () =
     use token = runtime.Context.ResourceLock
     let sw = System.Diagnostics.Stopwatch()
 
-    task.Run(fbo) |> ignore
+    task.Run(RenderToken.Empty, fbo)
 
     sw.Start()
     let mutable cnt = 0
     while true do
-        clear.Run fbo |> ignore
-        let r = task.Run(fbo)
+        clear.Run(RenderToken.Empty, fbo)
+        task.Run(RenderToken.Empty, fbo)
 
         cnt <- cnt + 1
         if cnt = 1000

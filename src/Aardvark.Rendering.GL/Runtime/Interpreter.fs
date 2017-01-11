@@ -704,16 +704,12 @@ module ``Interpreter Extensions`` =
     type private InterpreterProgram(scope : Aardvark.Rendering.GL.Compiler.CompilerInfo, content : seq<PreparedMultiRenderObject>) =
         inherit AbstractRenderProgram()
 
-        override x.Update() = ()
+        override x.Update(t) = ()
         override x.Dispose() = ()
-        override x.Run() = 
+        override x.Run(t) = 
             Interpreter.run scope.contextHandle (fun gl -> 
                 for o in content do gl.render o
-
-                { FrameStatistics.Zero with
-                    InstructionCount = gl.TotalInstructions |> float
-                    ActiveInstructionCount = gl.EffectiveInstructions |> float
-                }
+                t.AddInstructions(gl.TotalInstructions, gl.EffectiveInstructions)
             )
  
     module RenderProgram =

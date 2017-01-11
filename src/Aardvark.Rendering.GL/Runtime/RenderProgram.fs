@@ -13,7 +13,8 @@ open Aardvark.Rendering.GL.Compiler
 
 type IRenderProgram =
     inherit IAdaptiveProgram<unit>
-    abstract member Run : unit -> FrameStatistics
+    abstract member Update : IAdaptiveObject * RenderToken -> AdaptiveProgramStatistics
+    abstract member Run : RenderToken -> unit
 
 
 [<AbstractClass>]
@@ -21,20 +22,23 @@ type AbstractRenderProgram<'input when 'input :> IAdaptiveObject>() =
     inherit DirtyTrackingAdaptiveObject<'input>()
     
     abstract member Dispose : unit -> unit
-    abstract member Update : HashSet<'input> -> unit
-    abstract member Run : unit -> FrameStatistics
+    abstract member Update : RenderToken * HashSet<'input> -> unit
+    abstract member Run : RenderToken -> unit
+
+    member x.Update(caller, token) =
+        x.EvaluateIfNeeded' caller AdaptiveProgramStatistics.Zero (fun dirty ->
+            x.Update(token, dirty)
+            AdaptiveProgramStatistics.Zero
+        )
 
     interface IRenderProgram with
-        member x.Run() = x.Run()
-
+        member x.Run(t) = x.Run(t)
+        member x.Update(caller, token) = x.Update(caller, token)
+            
     interface IAdaptiveProgram<unit> with
-        member x.Update caller =
-            x.EvaluateIfNeeded' caller AdaptiveProgramStatistics.Zero (fun dirty ->
-                x.Update dirty
-                AdaptiveProgramStatistics.Zero
-            )
+        member x.Update caller = x.Update(caller, RenderToken.Empty)
 
-        member x.Run s = x.Run() |> ignore
+        member x.Run s = x.Run(RenderToken.Empty)
         member x.Disassemble() = null
         member x.AutoDefragmentation 
             with get() = false
@@ -52,20 +56,21 @@ type AbstractRenderProgram() =
     inherit AdaptiveObject()
     
     abstract member Dispose : unit -> unit
-    abstract member Update : unit -> unit
-    abstract member Run : unit -> FrameStatistics
-
+    abstract member Update : RenderToken -> unit
+    abstract member Run : RenderToken -> unit
+    
+    member x.Update(caller, t) =
+        x.EvaluateIfNeeded caller () (fun () ->
+            x.Update t
+        )
     interface IRenderProgram with
-        member x.Run() = x.Run()
+        member x.Update(caller, t) = x.Update(caller, t); AdaptiveProgramStatistics.Zero
+        member x.Run(t) = x.Run(t)
 
     interface IAdaptiveProgram<unit> with
-        member x.Update caller =
-            x.EvaluateIfNeeded caller AdaptiveProgramStatistics.Zero (fun () ->
-                x.Update ()
-                AdaptiveProgramStatistics.Zero
-            )
+        member x.Update caller = x.Update(caller, RenderToken.Empty); AdaptiveProgramStatistics.Zero
 
-        member x.Run s = x.Run() |> ignore
+        member x.Run s = x.Run(RenderToken.Empty) |> ignore
         member x.Disassemble() = null
         member x.AutoDefragmentation 
             with get() = false
@@ -84,22 +89,25 @@ module RenderProgram =
     type private WrappedRenderProgram(inner : IAdaptiveProgram<unit>) =
         inherit AdaptiveObject()
 
-        abstract member Run : unit -> FrameStatistics
-        default x.Run() = inner.Run(); FrameStatistics.Zero
+        abstract member Run : RenderToken -> unit
+        default x.Run(t) = inner.Run()
 
         member x.RunInner() = inner.Run()
 
+        
+        member x.Update (caller, token) =
+            x.EvaluateIfNeeded caller AdaptiveProgramStatistics.Zero (fun () ->
+                inner.Update(x)
+            )
 
         interface IRenderProgram with
-            member x.Run() = x.Run()
+            member x.Run(t) = x.Run(t)
+            member x.Update (caller, token) = x.Update(caller, token)
 
         interface IAdaptiveProgram<unit> with
-            member x.Update caller =
-                x.EvaluateIfNeeded caller AdaptiveProgramStatistics.Zero (fun () ->
-                    inner.Update(x)
-                )
+            member x.Update caller = x.Update(caller, RenderToken.Empty)
 
-            member x.Run s = x.Run() |> ignore
+            member x.Run s = x.Run(RenderToken.Empty) |> ignore
             member x.Disassemble() = inner.Disassemble()
             member x.AutoDefragmentation 
                 with get() = inner.AutoDefragmentation
@@ -184,12 +192,10 @@ module RenderProgram =
 //                h
             let inner = AdaptiveProgram.custom comparer handler input
             { new WrappedRenderProgram(inner) with
-                override x.Run() =
+                override x.Run(t) =
                     x.RunInner()
-                    { FrameStatistics.Zero with 
-                        ActiveInstructionCount = float inner.NativeCallCount 
-                        InstructionCount = float inner.NativeCallCount 
-                    }
+                    t.AddInstructions(inner.NativeCallCount, inner.NativeCallCount)
+
             } :> IRenderProgram
 
         let unoptimized scope comparer input =
@@ -199,12 +205,9 @@ module RenderProgram =
 
             let inner = AdaptiveProgram.custom comparer handler input
             { new WrappedRenderProgram(inner) with
-                override x.Run() =
+                override x.Run(t) =
                     x.RunInner()
-                    { FrameStatistics.Zero with 
-                        ActiveInstructionCount = float inner.NativeCallCount 
-                        InstructionCount = float inner.NativeCallCount 
-                    }
+                    t.AddInstructions(inner.NativeCallCount, inner.NativeCallCount)
             } :> IRenderProgram
 
     module GLVM =
@@ -272,15 +275,12 @@ module RenderProgram =
                 }
 
             { new WrappedRenderProgram(AdaptiveProgram.custom comparer handler input) with
-                override x.Run() =
+                override x.Run(t) =
                     x.RunInner()
 
                     let vmStats = !vmStats
+                    t.AddInstructions(vmStats.TotalInstructions, vmStats.TotalInstructions - vmStats.RemovedInstructions)
 
-                    { FrameStatistics.Zero with
-                        InstructionCount = float vmStats.TotalInstructions
-                        ActiveInstructionCount = float vmStats.TotalInstructions - float vmStats.RemovedInstructions
-                    }
             } :> IRenderProgram
 
         let optimized scope comparer input =
@@ -344,12 +344,10 @@ module RenderProgram =
 
             let inner = AdaptiveProgram.custom comparer handler input
             { new WrappedRenderProgram(inner) with
-                override x.Run() =
+                override x.Run(t) =
                     x.RunInner()
-                    { FrameStatistics.Zero with 
-                        ActiveInstructionCount = float inner.NativeCallCount 
-                        InstructionCount = float inner.NativeCallCount 
-                    }
+                    t.AddInstructions(inner.NativeCallCount, inner.NativeCallCount)
+
             } :> IRenderProgram
 
         let unoptimized scope comparer input =
@@ -377,12 +375,10 @@ module RenderProgram =
 
             let inner = AdaptiveProgram.custom comparer handler input
             { new WrappedRenderProgram(inner) with
-                override x.Run() =
+                override x.Run(t) =
                     x.RunInner()
-                    { FrameStatistics.Zero with 
-                        ActiveInstructionCount = float inner.NativeCallCount 
-                        InstructionCount = float inner.NativeCallCount 
-                    }
+                    t.AddInstructions(inner.NativeCallCount, inner.NativeCallCount)
+
             } :> IRenderProgram
 
     module Debug =
@@ -425,12 +421,10 @@ module RenderProgram =
 
             let inner = AdaptiveProgram.custom comparer handler input
             { new WrappedRenderProgram(inner) with
-                override x.Run() =
+                override x.Run(t) =
                     x.RunInner()
-                    { FrameStatistics.Zero with 
-                        ActiveInstructionCount = float inner.NativeCallCount 
-                        InstructionCount = float inner.NativeCallCount 
-                    }
+                    t.AddInstructions(inner.NativeCallCount, inner.NativeCallCount)
+
             } :> IRenderProgram
 
         let unoptimized scope comparer input =
@@ -458,10 +452,8 @@ module RenderProgram =
 
             let inner = AdaptiveProgram.custom comparer handler input
             { new WrappedRenderProgram(inner) with
-                override x.Run() =
+                override x.Run(t) =
                     x.RunInner()
-                    { FrameStatistics.Zero with 
-                        ActiveInstructionCount = float inner.NativeCallCount 
-                        InstructionCount = float inner.NativeCallCount 
-                    }
+                    t.AddInstructions(inner.NativeCallCount, inner.NativeCallCount)
+
             } :> IRenderProgram

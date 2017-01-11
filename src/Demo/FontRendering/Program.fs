@@ -286,8 +286,10 @@ let main argv =
 
 
     let f = Font "Consolas"
+
+    let message = Mod.init message
     let label2 =
-        Sg.text f C4b.Green (Mod.constant message)
+        Sg.text f C4b.Green message
         //Sg.markdown MarkdownConfig.light (Mod.constant message)
             |> Sg.scale 0.1
             |> Sg.billboard
@@ -332,6 +334,10 @@ let main argv =
 
     let main = app.Runtime.CompileRender(win.FramebufferSignature, config, sg) |> DefaultOverlays.withStatistics
     let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
+
+    win.Keyboard.Press.Values.Add (fun c ->
+        transact (fun () -> message.Value <- message.Value + string c)
+    )
 
     win.RenderTask <- RenderTask.ofList [clear; main]
     win.Run()

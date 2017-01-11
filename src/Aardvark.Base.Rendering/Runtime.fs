@@ -29,7 +29,7 @@ type IPreparedRenderObject =
     inherit IRenderObject
     inherit IDisposable
 
-    abstract member Update : IAdaptiveObject -> unit
+    abstract member Update : IAdaptiveObject * RenderToken -> unit
     abstract member Original : Option<RenderObject>
 
 [<AllowNullLiteral>]
@@ -85,8 +85,8 @@ and IRenderTask =
     inherit IAdaptiveObject
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
-    abstract member Update : IAdaptiveObject -> FrameStatistics
-    abstract member Run : IAdaptiveObject * OutputDescription -> FrameStatistics
+    abstract member Update : IAdaptiveObject * RenderToken -> unit
+    abstract member Run : IAdaptiveObject * RenderToken * OutputDescription -> unit
     abstract member FrameId : uint64
     abstract member Use : (unit -> 'a) -> 'a
 
@@ -146,12 +146,12 @@ module OutputDescription =
 [<Extension>]
 type RenderTaskRunExtensions() =
     [<Extension>]
-    static member Run(t : IRenderTask, fbo : IFramebuffer) =
-        t.Run(null, OutputDescription.ofFramebuffer fbo)
+    static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer) =
+        t.Run(null, token, OutputDescription.ofFramebuffer fbo)
 
     [<Extension>]
-    static member Run(t : IRenderTask, fbo : OutputDescription) =
-        t.Run(null, fbo)
+    static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
+        t.Run(null, token, fbo)
 
 type ShaderStage =
     | Vertex = 1
@@ -197,55 +197,55 @@ type BinarySurface(shaders : Map<ShaderStage, BinaryShader>) =
     new() = BinarySurface(Map.empty)
 
 
-type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<OutputDescription>) =
-    inherit Mod.AbstractMod<OutputDescription * FrameStatistics>()
-
-    member x.Task = task
-    member x.Framebuffer = fbo
-
-    override x.Inputs =
-        seq {
-            yield task :> _
-            yield fbo :> _
-        }
-
-    override x.Compute() =
-        let handle = fbo.GetValue x
-        let stats = task.Run(x, handle)
-        handle, stats
-
-type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
-    inherit Mod.AbstractMod<ITexture>()
-    let mutable lastStats = FrameStatistics.Zero
-
-    member x.LastStatistics = lastStats
-    member x.Task = res.Task
-    member x.Framebuffer = res.Framebuffer
-    member x.Semantic = semantic
-    member x.Inner = res
-
-    override x.Inputs = Seq.singleton (res :> _)
-
-    override x.Compute() =
-        lock res (fun () ->
-            let wasOutDated = res.OutOfDate
-            let (output, stats) = res.GetValue x
-            if wasOutDated then
-                lastStats <- stats
-            else
-                lastStats <- FrameStatistics.Zero
-                    
-            match Map.tryFind semantic output.framebuffer.Attachments with
-                | Some o ->
-                    match o with
-                        | :? BackendTextureOutputView as o ->
-                            o.texture :> ITexture
-                        | _ ->
-                            failwithf "unexpected output: %A" o
-                | None ->
-                    failwithf "could not get output: %A" semantic
-        )
-
+//type RenderToFramebufferMod(task : IRenderTask, fbo : IMod<OutputDescription>) =
+//    inherit Mod.AbstractMod<OutputDescription * FrameStatistics>()
+//
+//    member x.Task = task
+//    member x.Framebuffer = fbo
+//
+//    override x.Inputs =
+//        seq {
+//            yield task :> _
+//            yield fbo :> _
+//        }
+//
+//    override x.Compute() =
+//        let handle = fbo.GetValue x
+//        let stats = task.Run(x, handle)
+//        handle, stats
+//
+//type RenderingResultMod(res : RenderToFramebufferMod, semantic : Symbol) =
+//    inherit Mod.AbstractMod<ITexture>()
+//    let mutable lastStats = FrameStatistics.Zero
+//
+//    member x.LastStatistics = lastStats
+//    member x.Task = res.Task
+//    member x.Framebuffer = res.Framebuffer
+//    member x.Semantic = semantic
+//    member x.Inner = res
+//
+//    override x.Inputs = Seq.singleton (res :> _)
+//
+//    override x.Compute() =
+//        lock res (fun () ->
+//            let wasOutDated = res.OutOfDate
+//            let (output, stats) = res.GetValue x
+//            if wasOutDated then
+//                lastStats <- stats
+//            else
+//                lastStats <- FrameStatistics.Zero
+//                    
+//            match Map.tryFind semantic output.framebuffer.Attachments with
+//                | Some o ->
+//                    match o with
+//                        | :? BackendTextureOutputView as o ->
+//                            o.texture :> ITexture
+//                        | _ ->
+//                            failwithf "unexpected output: %A" o
+//                | None ->
+//                    failwithf "could not get output: %A" semantic
+//        )
+//
 
 
 [<AutoOpen>]

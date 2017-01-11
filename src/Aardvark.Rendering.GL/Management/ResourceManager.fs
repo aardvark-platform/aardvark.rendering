@@ -287,7 +287,7 @@ type PersistentlyMappedUniformManager(ctx : Context, size : int, fields : list<U
                     member x.GetInfo b = 
                         b.Size |> Mem |> ResourceInfo
 
-                    member x.Create old =
+                    member x.Create(token, old) =
                         let handle = 
                             match old with
                                 | Some old -> old
@@ -298,7 +298,7 @@ type PersistentlyMappedUniformManager(ctx : Context, size : int, fields : list<U
                                     UniformBufferView(handle, block.Offset, nativeint block.Size)
 
                         for (_,w) in writers do w.Write(x, pointer + handle.Offset)
-                        handle, FrameStatistics.Zero
+                        handle
 
                     member x.Destroy h =
                         manager.Free block
@@ -358,7 +358,7 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>
                     member x.GetInfo b = 
                         b.Size |> Mem |> ResourceInfo
 
-                    member x.Create old =
+                    member x.Create(token, old) =
                         let handle = 
                             match old with
                                 | Some old -> old
@@ -371,7 +371,7 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>
                         buffer.UseWriteUnsafe(handle.Offset, handle.Size, fun ptr ->
                             for (_,w) in writers do w.Write(x, ptr)
                         )
-                        handle, FrameStatistics.Zero
+                        handle
 
                     member x.Destroy h =
                         manager.Free block
@@ -462,7 +462,7 @@ type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource
         member x.Dispose() = inner.Dispose()
         member x.AddRef() = inner.AddRef()
         member x.RemoveRef() = inner.RemoveRef()
-        member x.Update(caller) = inner.Update(caller)
+        member x.Update(caller, token) = inner.Update(caller, token)
         member x.Info = inner.Info
         member x.IsDisposed = inner.IsDisposed
         member x.Kind = inner.Kind
@@ -569,18 +569,18 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                             member x.GetInfo b = 
                                 b.SizeInBytes |> Mem |> ResourceInfo
 
-                            member x.Create (old : Option<Buffer>) =
+                            member x.Create (token : RenderToken, old : Option<Buffer>) =
                                 match old with
                                     | None ->
                                         r <- data.GetReader()
                                         let (nb, _) = r.GetDirtyRanges(x)
-                                        ctx.CreateBuffer(nb), FrameStatistics.Zero
+                                        ctx.CreateBuffer(nb)
                                     | Some old ->
                                         let (nb, ranges) = r.GetDirtyRanges(x)
                                         nb.Use (fun ptr ->
                                             ctx.UploadRanges(old, ptr, ranges)
                                         )
-                                        old, FrameStatistics.Zero
+                                        old
 
                             member x.Destroy(b : Buffer) =
                                 ctx.Delete b
@@ -679,17 +679,17 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (old : Option<VertexInputBindingHandle>) =
+                    member x.Create (token : RenderToken, old : Option<VertexInputBindingHandle>) =
                         let attributes = bindings |> List.map (createView x)
                         let index = match index with | Some (_,i) -> i.Handle.GetValue x |> Some | _ -> None
                         match old with
                             | Some old ->
                                 ctx.Update(old, index, attributes)
-                                old, FrameStatistics.Zero
+                                old
 
                             | None ->
                                 let h = ctx.CreateVertexInputBinding(index, attributes)
-                                h, FrameStatistics.Zero
+                                h
                         
                     member x.Destroy vao =
                         ctx.Delete vao
@@ -710,14 +710,14 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                             member x.GetInfo h =
                                 h.Size |> Mem |> ResourceInfo
 
-                            member x.Create old =
+                            member x.Create(token, old) =
                                 let handle =
                                     match old with 
                                         | Some o -> o
                                         | None -> ctx.CreateUniformLocation(uniform.uniformType.SizeInBytes, uniform.uniformType)
                                 
                                 writer.Write(x, handle.Data)
-                                handle, FrameStatistics.Zero
+                                handle
 
                             member x.Destroy h =
                                 ctx.Delete h
