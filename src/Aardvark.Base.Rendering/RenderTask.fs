@@ -524,6 +524,48 @@ type AbstractRenderTask() =
 
     let mutable frameId = 0UL
 
+    let hooks =
+        Dictionary.ofList [
+            "ViewTrafo", DefaultingModTable<Trafo3d>() :> DefaultingModTable
+            "ProjTrafo", DefaultingModTable<Trafo3d>() :> DefaultingModTable
+        ]
+
+    let useValues (d : Map<string, obj>) (f : unit -> 'a) =
+        let toReset = List()
+        for (name, value) in Map.toSeq d do
+            match hooks.TryGetValue(name) with
+                | (true, table) ->
+                    table.Set(value)
+                    toReset.Add table
+                | _ ->
+                    ()
+        try
+            f()
+        finally
+            for r in toReset do r.Reset()
+
+    let hookProvider (provider : IUniformProvider) =
+        { new IUniformProvider with
+            member x.TryGetUniform(scope, name) =
+                let res = provider.TryGetUniform(scope, name)
+                match res with
+                    | Some res ->
+                        match hooks.TryGetValue(string name) with
+                            | (true, h) -> h.Hook res |> Some
+                            | _ -> Some res
+                    | None ->
+                        None
+
+            member x.Dispose() = 
+                provider.Dispose()
+        }
+
+    member x.HookRenderObject (ro : RenderObject) =
+        { ro with Uniforms = hookProvider ro.Uniforms }
+                
+
+
+
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
     abstract member Update : RenderToken -> unit
@@ -535,8 +577,11 @@ type AbstractRenderTask() =
     member x.FrameId = frameId
     member x.Run(caller : IAdaptiveObject, t : RenderToken, out : OutputDescription) =
         x.EvaluateAlways caller (fun () ->
-            x.Run(t, out)
-            frameId <- frameId + 1UL
+            x.OutOfDate <- true
+            useValues out.overrides (fun () ->
+                x.Run(t, out)
+                frameId <- frameId + 1UL
+            )
         )
 
     member x.Update(caller : IAdaptiveObject, t : RenderToken) =

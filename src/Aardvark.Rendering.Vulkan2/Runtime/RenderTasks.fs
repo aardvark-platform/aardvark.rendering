@@ -299,8 +299,7 @@ module RenderTasks =
         inherit AbstractVulkanRenderTask(man, renderPass, config, shareTextures, shareBuffers)
 
         let prepare (o : IRenderObject) =
-            
-            this.ResourceManager.PrepareRenderObject(renderPass, o)
+            this.ResourceManager.PrepareRenderObject(renderPass, o, this.HookRenderObject)
 
         let device = man.Device
         let preparedObjects = objects |> ASet.mapUse prepare

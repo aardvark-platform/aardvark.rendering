@@ -93,24 +93,11 @@ module RenderTasks =
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
         
-
-
                 GL.DepthMask(true)
                 GL.StencilMask(0xFFFFFFFFu)
-                //GL.Enable(EnableCap.DepthClamp)
                 
                 for (index,(sem,_)) in fbo.Signature.ColorAttachments |> Map.toSeq do
-                    match Map.tryFind sem desc.colorWrite with
-                        | Some v -> 
-                            GL.ColorMask(
-                                index, 
-                                (v &&& ColorWriteMask.Red)   <> ColorWriteMask.None, 
-                                (v &&& ColorWriteMask.Green) <> ColorWriteMask.None,
-                                (v &&& ColorWriteMask.Blue)  <> ColorWriteMask.None, 
-                                (v &&& ColorWriteMask.Alpha) <> ColorWriteMask.None
-                            )
-                        | None -> 
-                            GL.ColorMask(index, true, true, true, true)
+                    GL.ColorMask(index, true, true, true, true)
 
                 for (index, sem) in fbo.Signature.Images |> Map.toSeq do
                     match Map.tryFind sem desc.images with
@@ -789,6 +776,7 @@ module RenderTasks =
                 structuralChange.MarkOutdated()
                 objects.Remove o |> ignore
             )
+
                 
     type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
@@ -823,7 +811,8 @@ module RenderTasks =
         let rec prepareRenderObject (ro : IRenderObject) =
             match ro with
                 | :? RenderObject as r ->
-                    new PreparedMultiRenderObject([this.ResourceManager.Prepare(fboSignature, r) |> add])
+                    let hooked = this.HookRenderObject r 
+                    new PreparedMultiRenderObject([this.ResourceManager.Prepare(fboSignature, hooked) |> add])
 
                 | :? PreparedRenderObject as prep ->
                     new PreparedMultiRenderObject([prep |> PreparedRenderObject.clone |> add])

@@ -188,12 +188,15 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             layout.fields 
             |> List.map (fun (f) ->
                 let sem = Symbol.Create f.name
-                match u.TryGetUniform(scope, sem) with
-                    | Some v -> f, v
+                match Uniforms.tryGetDerivedUniform f.name u with
+                    | Some r -> f, r
                     | None -> 
-                        match additional.TryGetValue sem with
-                            | (true, m) -> f, m
-                            | _ -> failwithf "[Vulkan] could not get uniform: %A" f
+                        match u.TryGetUniform(scope, sem) with
+                            | Some v -> f, v
+                            | None -> 
+                                match additional.TryGetValue sem with
+                                    | (true, m) -> f, m
+                                    | _ -> failwithf "[Vulkan] could not get uniform: %A" f
             )
 
         let writers = 

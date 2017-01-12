@@ -8,7 +8,7 @@ open Aardvark.Base.Ag
 open System.Collections.Generic
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
-
+open TrafoOperators
 open Aardvark.Base.Incremental
 
 type AirState =
@@ -200,8 +200,7 @@ type private AirUniformProvider(local : Map<Symbol, IMod>, trafos : list<IMod<Tr
             | Some (:? IMod<Trafo3d> as v) -> v
             | _ -> failwith ""
 
-    let (<*>) = Aardvark.SceneGraph.Semantics.TrafoSemantics.(<*>)
-    let inv = Aardvark.SceneGraph.Semantics.TrafoSemantics.inverse
+    
     let model = lazy (Aardvark.SceneGraph.Semantics.TrafoSemantics.flattenStack trafos)
     let view = lazy (getTrafo vt)
     let proj = lazy (getTrafo pt)
@@ -209,17 +208,9 @@ type private AirUniformProvider(local : Map<Symbol, IMod>, trafos : list<IMod<Tr
 
     interface IUniformProvider with
         member x.TryGetUniform(scope, sem) =
-            if sem = mt then model.Value :> IMod |> Some
-            elif sem = mvt then model.Value <*> view.Value :> IMod |> Some
-            elif sem = mvpt then model.Value <*> view.Value <*> proj.Value :> IMod |> Some
-            elif sem = mti then model.Value |> inv :> IMod |> Some
-            elif sem = mvti then model.Value <*> view.Value |> inv :> IMod |> Some
-            elif sem = mvpti then model.Value <*> view.Value <*> proj.Value |> inv :> IMod |> Some
-            elif sem = normalMatrix then Mod.map (fun (t : Trafo3d) -> t.Backward.Transposed.UpperLeftM33()) model.Value :> IMod |> Some
-            else
-                match Map.tryFind sem local with
-                    | Some u -> Some u
-                    | None -> inh.TryGetUniform(scope, sem)
+            match Map.tryFind sem local with
+                | Some u -> Some u
+                | None -> inh.TryGetUniform(scope, sem)
 
         member x.Dispose() = ()
 
