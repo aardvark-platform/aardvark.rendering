@@ -31,6 +31,9 @@ module GLVM =
     extern void hglCleanup(void* ctx)
 
     [<DllImport(lib, CallingConvention = CallingConvention.Cdecl); SuppressUnmanagedCodeSecurity>]
+    extern void hglDeleteVAO(void* ctx, int vao)
+
+    [<DllImport(lib, CallingConvention = CallingConvention.Cdecl); SuppressUnmanagedCodeSecurity>]
     extern void vmInit()
 
     [<DllImport(lib, CallingConvention = CallingConvention.Cdecl); SuppressUnmanagedCodeSecurity>]

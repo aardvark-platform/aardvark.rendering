@@ -338,8 +338,7 @@ module PointerContextExtensions =
         member x.Delete(b : VertexInputBindingHandle) =
             let v = NativePtr.read b.Pointer
             if v.VAO > 0 then
-                use t = x.ResourceLock
-                GL.DeleteVertexArray(v.VAO)
+                GLVM.hglDeleteVAO(v.VAOContext, v.VAO)
             NativePtr.free v.BufferBindings
             NativePtr.free v.ValueBindings
             NativePtr.free b.Pointer

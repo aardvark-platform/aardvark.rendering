@@ -201,6 +201,7 @@ DllExport(void) vmClear(Fragment* frag);
 DllExport(void) vmRunSingle(Fragment* frag);
 DllExport(void) vmRun(Fragment* frag, VMMode mode, Statistics& stats);
 
+DllExport(void) hglDeleteVAO(void* ctx, GLuint vao);
 DllExport(void) hglCleanup(void* ctx);
 
 DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos);

@@ -1046,7 +1046,7 @@ DllExport(void) hglCleanup(void* ctx)
 	mtx.unlock();
 }
 
-static void vaoDied(void* ctx, GLuint vao)
+DllExport(void) hglDeleteVAO(void* ctx, GLuint vao)
 {
 	mtx.lock();
 	auto it = deadVAOs.find(ctx);
@@ -1058,7 +1058,7 @@ static void vaoDied(void* ctx, GLuint vao)
 	{
 		std::vector<GLuint> res;
 		res.push_back(vao);
-		deadVAOs.insert_or_assign(ctx, res);
+		deadVAOs[ctx] = res;
 	}
 	mtx.unlock();
 }
@@ -1080,7 +1080,7 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 			if (binding->VAO >= 0)
 			{
 				uint32_t vao = binding->VAO;
-				vaoDied(binding->VAOContext, vao);
+				hglDeleteVAO(binding->VAOContext, vao);
 			}
 
 			uint32_t vao = 0u;
