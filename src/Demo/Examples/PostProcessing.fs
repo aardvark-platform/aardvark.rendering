@@ -119,9 +119,13 @@ module PostProcessing =
     // is quite simple using the RenderTask utilities provided in Base.Rendering.
     // from the rendering we get an IMod<ITexture> which will be outOfDate whenever
     // something changes in pointScene and updated whenever subsequent passes need it.
-    let mainResult =
+    let mainTask =
         pointSg
             |> Sg.compile win.Runtime win.FramebufferSignature 
+         
+   
+    let mainResult =
+        mainTask
             |> RenderTask.renderToColor win.Sizes
  
 
@@ -192,6 +196,28 @@ module PostProcessing =
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+               
+        let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, Mod.constant (V2i(1024, 768)))
+        fbo.Acquire()
+        let fbo = fbo.GetValue()
+        let color = unbox<BackendTextureOutputView> fbo.Attachments.[DefaultSemantic.Colors]
+        let output = OutputDescription.ofFramebuffer fbo
+        let clear = win.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
+        let view1 = CameraView.lookAt V3d.III V3d.Zero V3d.OOI |> CameraView.viewTrafo
+        let view2 = CameraView.lookAt (10.0 * V3d.III) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+
+        clear.Run(null, fbo)
+        mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view1 :> obj] })
+        win.Runtime.Download(color.texture).SaveAsImage @"C:\Users\schorsch\Desktop\view1.png"
+        
+        clear.Run(null, fbo)
+        mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view2 :> obj] })
+        win.Runtime.Download(color.texture).SaveAsImage @"C:\Users\schorsch\Desktop\view2.png"
+        Environment.Exit 0
+
+
+
+
         Interactive.SceneGraph <- final
         Interactive.RunMainLoop()
 
