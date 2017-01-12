@@ -438,7 +438,7 @@ module OpenGl =
             match Environment.OSVersion with
                 | Windows -> "glvm"
                 | Linux -> Path.Combine(Environment.CurrentDirectory, "libglvm.so") |> Path.GetFullPath
-                | Mac -> failwithf "cannot load GLVM on Mac"
+                | Mac -> Path.Combine(Environment.CurrentDirectory, "glvm.dylib") |> Path.GetFullPath
 
         let lib = DynamicLinker.loadLibrary path
         fun (name : string) ->

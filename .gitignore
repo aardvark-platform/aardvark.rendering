@@ -17,6 +17,7 @@ bin/Debug
 *.o
 *~
 src/GLVM/*.so
+src/GLVM/*.dylib
 /sources.lock
 /bin/Aardvark.Fake.dll
 ~$*
