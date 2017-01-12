@@ -166,140 +166,283 @@ module ChangeableResources =
 module private RefCountedResources = 
 
     type IMod<'a> with
-        member x.GetValue(t : RenderToken, c : IAdaptiveObject) =
+        member x.GetValue(c : IAdaptiveObject, t : RenderToken) =
             match x with
-                | :? IOutputMod<'a> as x -> x.GetValue(t, c)
+                | :? IOutputMod<'a> as x -> x.GetValue(c, t)
                 | _ -> x.GetValue(c)
 
-    type ChangeableFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =
-        inherit AbstractOutputMod<IFramebuffer>()
+    type AdaptiveTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : IMod<V2i>) =
+        inherit AbstractOutputMod<ITexture>()
 
-        let mutable colors = Map.empty
-        let mutable depth = None
-        let mutable stencil = None
-        let mutable handle = None
-
-        // TODO: create renderbuffers where textures are not needed (specified by textures-set)
-
-        let createTexture (token : RenderToken) (size : IMod<V2i>) (att : AttachmentSignature) =
-            let mutable old = None
-            Mod.custom (fun self ->
-                let s = size.GetValue(token, self)
-                let tex = runtime.CreateTexture(s, unbox (int att.format), 1, att.samples, 1)
-
-                match old with
-                    | Some o -> 
-                        runtime.DeleteTexture(o)
-                        token.ReplacedResource(ResourceKind.Texture)
-                    | None ->
-                        token.CreatedResource(ResourceKind.Texture)
-
-                old <- Some tex
-
-                tex
-            )
-
-        let create(t : RenderToken) =
-            Log.line "framebuffer created"
-            let colorTextures = 
-                signature.ColorAttachments 
-                    |> Map.toSeq
-                    |> Seq.map (fun (idx, (sem,att)) -> sem, createTexture t size att)
-                    |> Map.ofSeq
-
-            let depthTexture =
-                match signature.DepthAttachment with
-                    | Some att -> createTexture t size att |> Some
-                    | None -> None
-
-            let stencilTexture =
-                match signature.StencilAttachment with
-                    | Some att -> createTexture t size att |> Some
-                    | None -> None
-       
-            let mutable current = None
-            let fbo = 
-                Mod.custom (fun self ->
-                    let attachments = colorTextures |> Map.map (fun _ v -> { texture = v.GetValue(t, self); slice = 0; level = 0 } :> IFramebufferOutput)
-
-                    let attachments =
-                        match depthTexture with
-                            | Some v -> Map.add DefaultSemantic.Depth ({ texture = v.GetValue(t,self); slice = 0; level = 0 } :> IFramebufferOutput) attachments
-                            | None -> attachments
-
-                    let attachments =
-                        match stencilTexture with
-                            | Some v -> Map.add DefaultSemantic.Stencil ({ texture = v.GetValue(t,self); slice = 0; level = 0 } :> IFramebufferOutput) attachments
-                            | None -> attachments
-
-                    match current with
-                        | Some old -> 
-                            runtime.DeleteFramebuffer(old)
-                            t.ReplacedResource(ResourceKind.Framebuffer)
-                        | None ->
-                            t.CreatedResource(ResourceKind.Framebuffer)
-
-
-                    let v = runtime.CreateFramebuffer(signature, attachments)
-                    current <- Some v
-                    v
-                )
-
-            colors <- colorTextures
-            depth <- depthTexture
-            stencil <- stencilTexture
-            handle <- Some fbo
-
-            fbo
-
-        let destroy() =
-            Log.line "framebuffer deleted"
-
-            handle |> Option.iter (fun v -> runtime.DeleteFramebuffer (v |> unbox<Mod.AbstractMod<IFramebuffer>>).cache)
-            colors |> Map.iter (fun _ v -> runtime.DeleteTexture (v |> unbox<Mod.AbstractMod<IBackendTexture>>).cache)
-            depth |> Option.iter (fun v -> runtime.DeleteTexture (v |> unbox<Mod.AbstractMod<IBackendTexture>>).cache)
-            stencil |> Option.iter (fun v -> runtime.DeleteTexture (v |> unbox<Mod.AbstractMod<IBackendTexture>>).cache)
-       
-            handle <- None
-            colors <- Map.empty
-            depth <- None
-            stencil <- None
-
+        let mutable handle : Option<IBackendTexture> = None
 
         override x.Create() = ()
-        override x.Destroy() = destroy()
-
-        override x.Compute(t : RenderToken) =
+        override x.Destroy() =
             match handle with
                 | Some h ->
-                    h.GetValue x
-
+                    runtime.DeleteTexture(h)
+                    handle <- None
                 | None ->
-                    let h = create(t)
-                    h.GetValue x
-
-        override x.Inputs =
-            seq {
-                yield! colors |> Map.toSeq |> Seq.map snd |> Seq.cast
-                match depth with
-                    | Some d -> yield d :> _
-                    | None -> ()
-
-                match stencil with
-                    | Some s -> yield s :> _
-                    | None -> ()
-            }
-
-    type AdaptiveRenderingResult(task : IRenderTask, target : IMod<IFramebuffer>) =
-        inherit AbstractOutputMod<IFramebuffer>()
-
-        let targetRef = 
-            match target with
-                | :? IOutputMod<IFramebuffer> as t -> Some t
-                | _ -> None
+                    ()
 
         override x.Compute(t : RenderToken) =
-            let fbo = target.GetValue x
+            let size = size.GetValue(x)
+
+            match handle with
+                | Some h when h.Size.XY = size -> 
+                    h :> ITexture
+
+                | Some h -> 
+                    t.ReplacedResource(ResourceKind.Texture)
+                    runtime.DeleteTexture(h)
+                    let tex = runtime.CreateTexture(size, format, 1, samples, 1)
+                    handle <- Some tex
+                    tex :> ITexture
+
+                | None ->
+                    t.CreatedResource(ResourceKind.Texture)
+                    let tex = runtime.CreateTexture(size, format, 1, samples, 1)
+                    handle <- Some tex
+                    tex :> ITexture
+         
+    type AdapiveCubeTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : IMod<V2i>) =
+        inherit AbstractOutputMod<ITexture>()
+
+        let mutable handle : Option<IBackendTexture> = None
+
+        override x.Create() = ()
+        override x.Destroy() =
+            match handle with
+                | Some h ->
+                    runtime.DeleteTexture(h)
+                    handle <- None
+                | None ->
+                    ()
+
+        override x.Compute(t : RenderToken) =
+            let size = size.GetValue(x)
+
+            match handle with
+                | Some h when h.Size.XY = size -> 
+                    h :> ITexture
+
+                | Some h -> 
+                    t.ReplacedResource(ResourceKind.Texture)
+                    runtime.DeleteTexture(h)
+                    let tex = runtime.CreateTextureCube(size, format, 1, samples)
+                    handle <- Some tex
+                    tex :> ITexture
+
+                | None ->
+                    t.CreatedResource(ResourceKind.Texture)
+                    let tex = runtime.CreateTextureCube(size, format, 1, samples)
+                    handle <- Some tex
+                    tex :> ITexture
+
+    type AdaptiveRenderbuffer(runtime : IRuntime, format : RenderbufferFormat, samples : int, size : IMod<V2i>) =  
+        inherit AbstractOutputMod<IRenderbuffer>()
+
+        let mutable handle : Option<IRenderbuffer> = None
+
+        override x.Create() = ()
+        override x.Destroy() =
+            match handle with
+                | Some h ->
+                    runtime.DeleteRenderbuffer(h)
+                    handle <- None
+                | None ->
+                    ()
+
+        override x.Compute(t : RenderToken) =
+            let size = size.GetValue(x)
+
+            match handle with
+                | Some h when h.Size = size -> 
+                    h
+
+                | Some h -> 
+                    t.ReplacedResource(ResourceKind.Renderbuffer)
+                    runtime.DeleteRenderbuffer(h)
+                    let tex = runtime.CreateRenderbuffer(size, format, samples)
+                    handle <- Some tex
+                    tex
+
+                | None ->
+                    t.CreatedResource(ResourceKind.Renderbuffer)
+                    let tex = runtime.CreateRenderbuffer(size, format, samples)
+                    handle <- Some tex
+                    tex
+    
+    [<AbstractClass>]
+    type AbstractAdaptiveFramebufferOutput(resource : IOutputMod) =
+        inherit AbstractOutputMod<IFramebufferOutput>()
+
+        override x.Create() = resource.Acquire()
+        override x.Destroy() = resource.Release()
+    
+    type AdaptiveTextureAttachment(texture : IOutputMod<ITexture>, slice : int) =
+        inherit AbstractAdaptiveFramebufferOutput(texture)
+        override x.Compute(t : RenderToken) =
+            let tex = texture.GetValue(x, t)
+            { texture = unbox tex; slice = slice; level = 0 } :> IFramebufferOutput
+
+    type AdaptiveRenderbufferAttachment(renderbuffer : IOutputMod<IRenderbuffer>) =
+        inherit AbstractAdaptiveFramebufferOutput(renderbuffer)
+        override x.Compute(t : RenderToken) =
+            let rb = renderbuffer.GetValue(x, t)
+            rb :> IFramebufferOutput
+
+    type IRuntime with
+        member x.CreateTexture(format : TextureFormat, samples : int, size : IMod<V2i>) =
+            AdaptiveTexture(x, format, samples, size) :> IOutputMod<ITexture>
+
+        member x.CreateTextureCube(format : TextureFormat, samples : int, size : IMod<V2i>) =
+            AdapiveCubeTexture(x, format, samples, size) :> IOutputMod<ITexture>
+
+        member x.CreateRenderbuffer(format : RenderbufferFormat, samples : int, size : IMod<V2i>) =
+            AdaptiveRenderbuffer(x, format, samples, size) :> IOutputMod<IRenderbuffer>
+
+        member x.CreateTextureAttachment(texture : IOutputMod<ITexture>, slice : int) =
+            AdaptiveTextureAttachment(texture, slice) :> IOutputMod<_>
+
+        member x.CreateRenderbufferAttachment(renderbuffer : IOutputMod<IRenderbuffer>) =
+            AdaptiveRenderbufferAttachment(renderbuffer) :> IOutputMod<_>
+
+
+
+    type AdaptiveFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =
+        inherit AbstractOutputMod<IFramebuffer>()
+
+        let createAttachment (sem : Symbol) (att : AttachmentSignature) =
+            let isTexture = Set.contains sem textures
+            if isTexture then
+                let tex = runtime.CreateTexture(unbox (int att.format), att.samples, size)
+                runtime.CreateTextureAttachment(tex, 0)
+            else
+                let rb = runtime.CreateRenderbuffer(att.format, att.samples, size)
+                runtime.CreateRenderbufferAttachment(rb)
+
+        let attachments = SymDict.empty
+        let mutable handle : Option<IFramebuffer> = None
+
+        do 
+            match signature.DepthAttachment with
+                | Some d -> 
+                    attachments.[DefaultSemantic.Depth] <- createAttachment DefaultSemantic.Depth d
+                | None -> 
+                    ()
+
+            for (index, (sem, att)) in Map.toSeq signature.ColorAttachments do
+                let a = createAttachment sem att
+                attachments.[sem] <- a
+
+        override x.Create() =
+            for att in attachments.Values do att.Acquire()
+
+        override x.Destroy() =
+            for att in attachments.Values do att.Release()
+            match handle with
+                | Some h -> 
+                    runtime.DeleteFramebuffer(h)
+                    handle <- None
+                | None -> ()
+        override x.Compute(t : RenderToken) =
+            let att = 
+                attachments
+                    |> SymDict.toMap 
+                    |> Map.map (fun sem att -> att.GetValue(x, t))
+
+            match handle with
+                | Some h -> 
+                    runtime.DeleteFramebuffer(h)
+                    t.ReplacedResource(ResourceKind.Framebuffer)
+                | None ->
+                    t.CreatedResource(ResourceKind.Framebuffer)
+
+            let fbo = runtime.CreateFramebuffer(signature, att)
+            handle <- Some fbo
+            fbo
+
+    type AdaptiveFramebufferCube(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) =
+        inherit AbstractOutputMod<IFramebuffer[]>()
+
+        let store = SymDict.empty
+
+        let createAttachment (sem : Symbol) (face : CubeSide) (att : AttachmentSignature) =
+            let isTexture = Set.contains sem textures
+            if isTexture then
+                
+                let tex = 
+                    store.GetOrCreate(sem, fun sem ->
+                        runtime.CreateTextureCube(unbox (int att.format), att.samples, size) :> IOutputMod
+                    ) |> unbox<IOutputMod<ITexture>>
+
+                runtime.CreateTextureAttachment(tex, int face)
+            else
+                let rb = 
+                    store.GetOrCreate(sem, fun sem ->
+                        runtime.CreateRenderbuffer(att.format, att.samples, size) :> IOutputMod
+                    ) |> unbox<IOutputMod<IRenderbuffer>>
+
+                runtime.CreateRenderbufferAttachment(rb)
+
+        let mutable handle : Option<IFramebuffer>[] = Array.zeroCreate 6
+
+        let attachments =
+            Array.init 6 (fun face ->
+                let face = unbox<CubeSide> face
+                let attachments = SymDict.empty
+                match signature.DepthAttachment with
+                    | Some d -> 
+                        attachments.[DefaultSemantic.Depth] <- createAttachment DefaultSemantic.Depth face d
+                    | None -> 
+                        ()
+
+                for (index, (sem, att)) in Map.toSeq signature.ColorAttachments do
+                    let a = createAttachment sem face att
+                    attachments.[sem] <- a
+
+                attachments
+            )
+
+        override x.Create() =
+            for face in 0 .. 5 do
+                for att in attachments.[face].Values do att.Acquire()
+
+        override x.Destroy() =
+            for face in 0 .. 5 do
+                for att in attachments.[face].Values do att.Release()
+                match handle.[face] with
+                    | Some h -> 
+                        runtime.DeleteFramebuffer(h)
+                        handle.[face] <- None
+                    | None -> ()
+
+        override x.Compute(t : RenderToken) =
+            attachments |> Array.mapi (fun i attachments ->
+                let att = 
+                    attachments
+                        |> SymDict.toMap 
+                        |> Map.map (fun sem att -> att.GetValue(x, t))
+
+
+                match handle.[i] with
+                    | Some h -> 
+                        runtime.DeleteFramebuffer(h)
+                        t.ReplacedResource(ResourceKind.Framebuffer)
+                    | None ->
+                        t.CreatedResource(ResourceKind.Framebuffer)
+
+                let fbo = runtime.CreateFramebuffer(signature, att)
+                handle.[i] <- Some fbo
+                fbo
+            )
+
+    type AdaptiveRenderingResult(task : IRenderTask, target : IOutputMod<IFramebuffer>) =
+        inherit AbstractOutputMod<IFramebuffer>()
+
+        override x.Compute(t : RenderToken) =
+            let fbo = target.GetValue(x, t)
             task.Run(x, t, OutputDescription.ofFramebuffer fbo)
             fbo
 
@@ -311,29 +454,17 @@ module private RefCountedResources =
 
         override x.Create() =
             Log.line "result created"
-            match targetRef with
-                | Some t -> t.Acquire()
-                | None -> ()
+            target.Acquire()
 
         override x.Destroy() =
             Log.line "result deleted"
-            match targetRef with
-                | Some t -> t.Release()
-                | None -> ()
+            target.Release()
 
-    type AdaptiveOutputTexture(semantic : Symbol, res : IMod<IFramebuffer>) =
+    type AdaptiveOutputTexture(semantic : Symbol, res : IOutputMod<IFramebuffer>) =
         inherit AbstractOutputMod<ITexture>()
 
-        let resultRef =
-            match res with
-                | :? IOutputMod<IFramebuffer> as r -> Some r
-                | _ -> None
-
         override x.Compute(t : RenderToken) =
-            let res = 
-                match resultRef with
-                    | Some res -> res.GetValue(t, x)
-                    | None -> res.GetValue(x)
+            let res = res.GetValue(x, t)
 
             match Map.tryFind semantic res.Attachments with
                 | Some (:? BackendTextureOutputView as t) ->
@@ -346,15 +477,11 @@ module private RefCountedResources =
 
         override x.Create() =
             Log.line "texture created"
-            match resultRef with
-                | Some r -> r.Acquire()
-                | None -> ()
+            res.Acquire()
 
         override x.Destroy() =
             Log.line "texture deleted"
-            match resultRef with
-                | Some r -> r.Release()
-                | None -> ()
+            res.Release()
  
 
     
@@ -365,11 +492,15 @@ module private RefCountedResources =
 type RuntimeFramebufferExtensions private() =
 
     [<Extension>]
-    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) : IMod<IFramebuffer> =
-        ChangeableFramebuffer(this, signature, textures, size) :> IMod<IFramebuffer>
+    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) : IOutputMod<IFramebuffer> =
+        AdaptiveFramebuffer(this, signature, textures, size) :> IOutputMod<IFramebuffer>
+    
+    [<Extension>]
+    static member CreateFramebufferCube (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : IMod<V2i>) : IOutputMod<IFramebuffer[]> =
+        AdaptiveFramebufferCube(this, signature, textures, size) :> IOutputMod<IFramebuffer[]>
 
     [<Extension>]
-    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, size : IMod<V2i>) : IMod<IFramebuffer> =
+    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, size : IMod<V2i>) : IOutputMod<IFramebuffer> =
         let sems =
             Set.ofList [
                 yield! signature.ColorAttachments |> Map.toSeq |> Seq.map snd |> Seq.map fst
@@ -377,15 +508,15 @@ type RuntimeFramebufferExtensions private() =
                 if Option.isSome signature.StencilAttachment then yield DefaultSemantic.Stencil
             ]
         
-        ChangeableFramebuffer(this, signature, sems, size) :> IMod<IFramebuffer>
+        AdaptiveFramebuffer(this, signature, sems, size) :> IOutputMod<IFramebuffer>
 
     [<Extension>]
-    static member RenderTo(this : IRenderTask, output : IMod<IFramebuffer>) =
-        AdaptiveRenderingResult(this, output) :> IMod<_>
+    static member RenderTo(this : IRenderTask, output : IOutputMod<IFramebuffer>) =
+        AdaptiveRenderingResult(this, output) :> IOutputMod<_>
 
     [<Extension>]
-    static member GetOutputTexture (this : IMod<IFramebuffer>, semantic : Symbol) =
-        AdaptiveOutputTexture(semantic, this) :> IMod<_>
+    static member GetOutputTexture (this : IOutputMod<IFramebuffer>, semantic : Symbol) =
+        AdaptiveOutputTexture(semantic, this) :> IOutputMod<_>
 
 [<AbstractClass>]
 type AbstractRenderTask() =
@@ -495,7 +626,7 @@ module RenderTask =
         let mutable inner : Option<IRenderTask> = None
 
         let updateInner t x =
-            let ni = input.GetValue(t, x)
+            let ni = input.GetValue(x, t)
 
             match inner with
                 | Some oi when oi = ni -> ()
@@ -745,10 +876,10 @@ module RenderTask =
             | _ -> new FinalizerRenderTask(t) :> IRenderTask
 
 
-    let renderTo (target : IMod<IFramebuffer>) (task : IRenderTask) : IMod<IFramebuffer> =
+    let renderTo (target : IOutputMod<IFramebuffer>) (task : IRenderTask) : IOutputMod<IFramebuffer> =
         task.RenderTo target
 
-    let getResult (sem : Symbol) (t : IMod<IFramebuffer>) =
+    let getResult (sem : Symbol) (t : IOutputMod<IFramebuffer>) =
         t.GetOutputTexture sem
 
     let renderSemantics (sem : Set<Symbol>) (size : IMod<V2i>) (task : IRenderTask) =
@@ -758,12 +889,8 @@ module RenderTask =
         let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
         let fbo = runtime.CreateFramebuffer(signature, sem, size)
 
-        let res = 
-            new SequentialRenderTask([|clear; task|]) |> renderTo fbo
-        
-
+        let res = new SequentialRenderTask([|clear; task|]) |> renderTo fbo
         sem |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
-
 
     let renderToColor (size : IMod<V2i>) (task : IRenderTask) =
         task |> renderSemantics (Set.singleton DefaultSemantic.Colors) size |> Map.find DefaultSemantic.Colors
@@ -776,7 +903,7 @@ module RenderTask =
         (Map.find DefaultSemantic.Depth map, Map.find DefaultSemantic.Stencil map)
 
     let renderToColorAndDepth (size : IMod<V2i>) (task : IRenderTask) =
-        let map = task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size
+        let map = task |> renderSemantics (Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Colors]) size
         (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.Depth map)
 
     let log fmt =

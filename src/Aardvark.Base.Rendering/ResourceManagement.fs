@@ -8,12 +8,16 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 
 
+type IOutputMod =
+    inherit IMod
+    abstract member Acquire : unit -> unit
+    abstract member Release : unit -> unit
+    abstract member GetValue : IAdaptiveObject * RenderToken -> obj
 
 type IOutputMod<'a> =
     inherit IMod<'a>
-    abstract member Acquire : unit -> unit
-    abstract member Release : unit -> unit
-    abstract member GetValue : RenderToken * IAdaptiveObject -> 'a
+    inherit IOutputMod
+    abstract member GetValue : IAdaptiveObject * RenderToken -> 'a
 
 [<AbstractClass>]
 type AbstractOutputMod<'a>() =
@@ -34,7 +38,7 @@ type AbstractOutputMod<'a>() =
         if Interlocked.Decrement(&refCount) = 0 then
             x.Destroy()
 
-    member x.GetValue(token : RenderToken, caller : IAdaptiveObject) =
+    member x.GetValue(caller : IAdaptiveObject, token : RenderToken) =
         x.EvaluateAlways caller (fun () ->
             if x.OutOfDate then
                 cache <- x.Compute token
@@ -42,7 +46,7 @@ type AbstractOutputMod<'a>() =
         )
 
     member x.GetValue(caller : IAdaptiveObject) =
-        x.GetValue(RenderToken.Empty, caller)
+        x.GetValue(caller, RenderToken.Empty)
 
     interface IMod with
         member x.IsConstant = false
@@ -51,10 +55,13 @@ type AbstractOutputMod<'a>() =
     interface IMod<'a> with
         member x.GetValue(c) = x.GetValue(c)
 
-    interface IOutputMod<'a> with
+    interface IOutputMod with
         member x.Acquire() = x.Acquire()
         member x.Release() = x.Release() 
-        member x.GetValue(t,c) = x.GetValue(t,c)
+        member x.GetValue(c,t) = x.GetValue(c,t) :> obj
+
+    interface IOutputMod<'a> with
+        member x.GetValue(c,t) = x.GetValue(c,t)
 
 type ResourceInfo = 
     struct
@@ -280,7 +287,7 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
 
     let eval (m : IMod<'a>) (t : RenderToken) (caller : IAdaptiveObject) =
         match m with
-            | :? IOutputMod<'a> as om -> om.GetValue(t, caller) 
+            | :? IOutputMod<'a> as om -> om.GetValue(caller, t) 
             | _ -> m.GetValue(caller)
 
     let tryGetParent (key : list<obj>) =

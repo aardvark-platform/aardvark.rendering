@@ -63,9 +63,7 @@ module RandomCubesPerformanceTest =
             ]
 
         let fbo = app.Runtime.CreateFramebuffer(signature, Mod.constant (V2i(1024, 1024)))
-        match fbo with
-            | :? IOutputMod<IFramebuffer> as m -> m.Acquire()
-            | _ -> ()
+        fbo.Acquire()
 
         let fbo = fbo.GetValue()
 
