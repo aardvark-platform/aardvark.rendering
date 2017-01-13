@@ -82,11 +82,12 @@
     <Compile Include="Experiments\Vulkan.fs" />
     <Compile Include="Experiments\ChangeBufferHandle.fs" />
     <Compile Include="Experiments\SamplerArray.fs" />
-    <Compile Include="Experiments\InteractionModels.fs" >
-	      <DomainTypes>True</DomainTypes>
+    <Compile Include="Experiments\InteractionModels.fs">
+      <DomainTypes>True</DomainTypes>
     </Compile>
-    <Compile Include="Experiments\InteractionExperiments.fs"/>
+    <Compile Include="Experiments\InteractionExperiments.fs" />
     <Compile Include="Experiments\FablishInterop.fs" />
+    <Compile Include="Experiments\RecordUniforms.fs" />
     <Compile Include="PGM.fs" />
     <Compile Include="ImageFormat.fs" />
     <Compile Include="Program.fs" />

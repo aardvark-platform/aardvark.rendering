@@ -207,12 +207,26 @@ module UniformPaths =
     // Values[1].A[1].b
     // Test
 
+    let rec tryGetFunctionType (t : System.Type) =
+        if t.Name.StartsWith "FSharpFunc" then // since FSharpType.IsFunction is slow ;)
+            Some t
+        elif t.BaseType <> null then
+            tryGetFunctionType t.BaseType
+        else
+            None
+            
 
     let private createLeafTransformation (transpose : bool) (outputType : Type) (input : Expr) =
         if input.Type <> outputType then
             let converter = PrimitiveValueConverter.getUniformConverter transpose input.Type outputType
-            let f = Expr.Value(converter, converter.GetType())
-            Expr.Application(f, input)
+
+            let fType = converter.GetType()
+            match tryGetFunctionType fType with
+                | Some fType ->
+                    let f = Expr.Value(converter, fType)
+                    Expr.Application(f, input)
+                | None -> 
+                    failwithf "[GL] Your primitive converter is not a function: %A" fType
         else
             input
 
@@ -251,7 +265,6 @@ module UniformPaths =
 
                     let getArrayMethod = getArrayMethod.MakeGenericMethod [|elementType|]
                     let element = Expr.Call(getArrayMethod, [input; Expr.Value(index)])
-                    printfn "element type: %A" element.Type.Name
 
                     element
                 else
