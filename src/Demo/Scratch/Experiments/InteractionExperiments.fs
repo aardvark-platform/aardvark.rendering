@@ -38,6 +38,34 @@ module PickStuff =
     type MouseEvent = Down of MouseButtons | Move | Click of MouseButtons | Up of MouseButtons
     type NoPick = NoPick of MouseEvent * Ray3d
 
+    module Primitives =
+
+        type Primitive = 
+            | Sphere      of Sphere3d
+            | Cone        of center : V3d * dir : V3d * height : float * radius : float
+            | Cylinder    of center : V3d * dir : V3d * height : float * radius : float
+            | Quad        of Quad3d 
+
+        let hitPrimitive (p : Primitive) (trafo : Trafo3d) (ray : Ray3d) action =
+            let mutable ha = RayHit3d.MaxRange
+            match p with
+                | Sphere s -> 
+                    let transformed = trafo.Forward.TransformPos(s.Center)
+                    let mutable ha = RayHit3d.MaxRange
+                    if ray.HitsSphere(transformed,s.Radius,0.0,Double.PositiveInfinity, &ha) then
+                        [ha.T, action]
+                    else []
+                | Cone(center,dir,height,radius) | Cylinder(center,dir,height,radius) -> 
+                    let cylinder = Cylinder3d(trafo.Forward.TransformPos center,trafo.Forward.TransformPos (center+dir*height),radius)
+                    let mutable ha = RayHit3d.MaxRange
+                    if ray.Hits(cylinder,0.0,Double.MaxValue,&ha) then
+                        [ha.T, action]
+                    else []
+                | Quad q -> 
+                    let transformed = Quad3d(q.Points |> Seq.map trafo.Forward.TransformPos)
+                    if ray.HitsPlane(Plane3d.ZPlane,0.0,Double.MaxValue,&ha) then [ha.T, action]
+                    else []
+
     module List =
         let updateAt i f xs =
             let rec work current xs =
@@ -50,12 +78,7 @@ module PickStuff =
 
 module ImmutableSceneGraph = 
 
-
-    type Primitive = 
-        | Sphere      of Sphere3d
-        | Cone        of center : V3d * dir : V3d * height : float * radius : float
-        | Cylinder    of center : V3d * dir : V3d * height : float * radius : float
-        | Quad        of Quad3d 
+    open Primitives
 
     type Scene<'msg> = 
             | Transform of Trafo3d * seq<Scene<'msg>>
@@ -122,29 +145,15 @@ module ImmutableSceneGraph =
 
         toSg { trafo = Trafo3d.Identity; color = C4b.White } scene
 
+
     let pick (r : Ray3d) (s : Scene<'msg>)  =
         let rec go (state : State) s = 
             match s with    
                 | Group xs -> xs |> Seq.toList |>  List.collect (go state)
                 | Transform(t,xs) -> xs |> Seq.toList |> List.collect (go { state with trafo = state.trafo * t })
                 | Colored(_,xs) -> xs |> Seq.toList |> List.collect (go state)
-                | Render(action,Sphere s) ->    
-                    let s2 = state.trafo.Forward.TransformPos(s.Center)
-                    let mutable ha = RayHit3d.MaxRange
-                    if r.HitsSphere(s2,s.Radius,0.0,Double.PositiveInfinity, &ha) then
-                        [ha.T, action]
-                    else []
-                | Render(action,Cone(center,dir,height,radius)) | Render(action,Cylinder(center,dir,height,radius)) -> 
-                    let cylinder = Cylinder3d(state.trafo.Forward.TransformPos center,state.trafo.Forward.TransformPos (center+dir*height),radius)
-                    let mutable ha = RayHit3d.MaxRange
-                    if r.Hits(cylinder,0.0,Double.MaxValue,&ha) then
-                        [ha.T, action]
-                    else []
-                | Render(action,Quad(q)) -> 
-                    let transformed = Quad3d(q.Points |> Seq.map state.trafo.Forward.TransformPos)
-                    let mutable ha = RayHit3d.MaxRange
-                    if r.HitsPlane(Plane3d.ZPlane,0.0,Double.MaxValue,&ha) then [ha.T, action]
-                    else []
+                | Render(action,p) -> 
+                    Primitives.hitPrimitive p state.trafo r action
         match s |> go { trafo = Trafo3d.Identity; color = C4b.White } with
             | [] -> []
             | xs -> 
@@ -153,16 +162,11 @@ module ImmutableSceneGraph =
 module AnotherSceneGraph =
 
     open ImmutableSceneGraph
+    open Primitives
 
     type ISg<'msg> = inherit ISg
 
     let on (p : Kind -> bool) (r : V3d -> 'msg) (k : Kind) = if p k then Some (r (Event.position k)) else None
-
-    type Primitive = 
-        | Sphere      of Sphere3d
-        | Cone        of center : V3d * dir : V3d * height : float * radius : float
-        | Cylinder    of center : V3d * dir : V3d * height : float * radius : float
-        | Quad        of Quad3d 
 
     let cylinder c d h r = Cylinder(c,d,h,r)
 
@@ -389,7 +393,7 @@ module Elmish3DADaptive =
         }
 
 
-    let createAppAdaptive (ctrl : IRenderControl) (camera : IMod<Camera>) (unpersist : Unpersist<'model,'mmodel>) (app : App<'model,'mmodel,'msg, ISg<'msg>>) =
+    let createAppAdaptive (keyboard : IKeyboard) (mouse : IMouse) (camera : IMod<Camera>) (unpersist : Unpersist<'model,'mmodel>) (app : App<'model,'mmodel,'msg, ISg<'msg>>) =
 
         let model = Mod.init app.initial
 
@@ -407,15 +411,20 @@ module Elmish3DADaptive =
 
         let pick (r : Ray3d) : list<float * list<PickOperation<'msg>>> =
             pickReader.GetDelta() |> ignore
-            pickReader.Content |> ignore
-            failwith ""
+            let picks =
+                pickReader.Content 
+                 |> Seq.toList 
+                 |> List.collect (fun p -> 
+                        Primitives.hitPrimitive p.primitive (Mod.force p.trafo) r p.actions
+                    )
+            picks
 
         let updatePickMsg (m : NoPick) (model : 'model) =
             app.ofPickMsg model m |> List.fold app.update model
 
         let mutable down = false
 
-        ctrl.Mouse.Move.Values.Subscribe(fun (oldP,newP) -> 
+        mouse.Move.Values.Subscribe(fun (oldP,newP) -> 
             let ray = newP |> Camera.pickRay (camera |> Mod.force) 
             let mutable model = updatePickMsg (NoPick(MouseEvent.Move,ray)) model.Value // wrong
             match pick ray with
@@ -428,9 +437,9 @@ module Elmish3DADaptive =
             updateModel model 
         ) |> ignore
 
-        ctrl.Mouse.Down.Values.Subscribe(fun p ->  
+        mouse.Down.Values.Subscribe(fun p ->  
             down <- true
-            let ray = ctrl.Mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
+            let ray = mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
             let mutable model = model.Value
             match pick ray with
                 | ((d,f)::_) -> 
@@ -444,23 +453,21 @@ module Elmish3DADaptive =
             updateModel model 
         ) |> ignore
  
-        ctrl.Mouse.Up.Values.Subscribe(fun p ->     
+        mouse.Up.Values.Subscribe(fun p ->     
             down <- false
-            let ray = ctrl.Mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
+            let ray = mouse.Position |> Mod.force |> Camera.pickRay (camera |> Mod.force)
             let model = updatePickMsg (NoPick(MouseEvent.Up p, ray)) model.Value
             updateModel model 
         ) |> ignore
 
-        view
-
-    
-    let inline createAppAdaptive2< ^model, ^mmodel, ^msg when ^model: (member ToMod : ^model -> ^mmodel) and  ^model: (member Apply : ^model -> unit)> (ctrl : IRenderControl) (camera : IMod<Camera>) (app : App< ^model, ^mmodel,^ msg, ISg< ^msg>>) =
-        failwith ""
+        Sg.adapter view
 
 
 module TranslateController =
 
     open ImmutableSceneGraph
+    open Primitives
+
     open Elmish3D
     open TranslateController
 
@@ -561,8 +568,9 @@ module TranslateController =
 module TranslateController2 =
 
     open AnotherSceneGraph
-    open Elmish3D
+    open Elmish3DADaptive
     open TranslateController
+    open Primitives
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Axis =
@@ -606,7 +614,6 @@ module TranslateController2 =
                 else m
             | MoveRay r, None -> m
 
-
     let view (m : MModel) =
         let arrow dir = Cone(V3d.OOO,dir,0.3,0.1)
 
@@ -641,7 +648,6 @@ module TranslateController2 =
                 ]
         ]
 
-
     let ofPickMsg model (NoPick(kind,ray)) =
         match kind with   
             | MouseEvent.Click _ | MouseEvent.Down _  -> [NoHit]
@@ -650,11 +656,19 @@ module TranslateController2 =
             | MouseEvent.Move ->  [MoveRay ray]
             | MouseEvent.Up _   -> [EndTranslation]
 
+    let app = {
+        initial = initial
+        update = update
+        view = view 
+        ofPickMsg = ofPickMsg
+    }
+
 module SimpleDrawingApp =
 
     open ImmutableSceneGraph
     open Elmish3D
     open SimpleDrawingApp
+    open Primitives
 
 
     type Action =
@@ -724,6 +738,7 @@ module PlaceTransformObjects =
 
     open ImmutableSceneGraph
     open Elmish3D
+    open Primitives
 
     open TranslateController
     open PlaceTransformObjects
@@ -816,82 +831,43 @@ module PlaceTransformObjects =
 
 module InteractionExperiments = 
 
-    //FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; ".."; "bin";"Release";"Examples.exe"])
     open AnotherSceneGraph
+    open Elmish3DADaptive
 
-    let win = Interactive.Window
+    [<Demo>]
+    let demo () =
 
-    let cameraView = 
-        CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
-            |> Mod.constant
-            //|> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+        let cameraView = 
+            CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
+                |> Mod.constant
+                //|> DefaultCameraController.control win.Mouse win.Keyboard win.Time
 
-    let frustum = 
-        win.Sizes 
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+        let frustum = 
+            App.Size
+                |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
 
-    let camera = Mod.map2 Camera.create cameraView frustum
+        let camera = Mod.map2 Camera.create cameraView frustum
 
-    let scope = ReuseCache()
+        let unpersist : Elmish3DADaptive.Unpersist<TranslateController.Model,_> = { unpersist = (fun immut scope -> immut.ToMod(scope)); apply = (fun immut mut scope -> mut.Apply(immut,scope))}
+        let adaptiveResult = Elmish3DADaptive.createAppAdaptive App.Keyboard App.Mouse camera unpersist TranslateController2.app
 
-    let model   = Mod.init TranslateController2.initial
-    let mmodel  = model.Value.ToMod(scope)
+        let sg = 
+            //Elmish3D.createApp win camera TranslateController.app
+            //Elmish3D.createApp win camera SimpleDrawingApp.app
+            //Elmish3D.createApp win camera PlaceTransformObjects.app
+            adaptiveResult
+            //view :> ISg
 
-    let updateModel (m : TranslateController.Model) =
-        transact (fun () -> 
-            model.Value <- m
-            mmodel.Apply(m, scope)
-        )
+        let fullScene =
+              sg 
+                |> Sg.andAlso (Sg.box' C4b.White Box3d.Unit |> Sg.translate 10000.0 10000.0 1000.0)
+                |> Sg.effect [
+                    DefaultSurfaces.trafo |> toEffect       
+                    DefaultSurfaces.vertexColor |> toEffect
+                    DefaultSurfaces.simpleLighting |> toEffect 
+                   ] 
+                |> Sg.viewTrafo (Mod.map CameraView.viewTrafo cameraView)
+                |> Sg.projTrafo (Mod.map Frustum.projTrafo frustum)
 
-    let view = mmodel |> TranslateController2.view
-    let objects = view.PickObjects() |> ASet.toMod
 
-    
-    objects |> Mod.force |> printfn "%A"
-
-
-//    let models = List.replicate 10000 TranslateController.app.initial
-//    let sw = System.Diagnostics.Stopwatch()
-//    let mutable blubber = Unchecked.defaultof<_>
-//    for i in 0 .. 100 do
-//        sw.Restart()
-//        let r = models |> List.map TranslateController.view
-//        blubber <- r
-//        sw.Stop()
-//        GC.Collect()
-//        GC.Collect()
-//        GC.Collect()
-//        GC.WaitForFullGCComplete()
-//        printfn "took: %A" sw.MicroTime
-
-    let sg = 
-        //Elmish3D.createApp win camera TranslateController.app
-        //Elmish3D.createApp win camera SimpleDrawingApp.app
-        //Elmish3D.createApp win camera PlaceTransformObjects.app
-        view :> ISg
-
-    let fullScene =
-          sg 
-            |> Sg.andAlso (Sg.box' C4b.White Box3d.Unit |> Sg.translate 10000.0 10000.0 1000.0)
-            |> Sg.effect [
-                DefaultSurfaces.trafo |> toEffect       
-                DefaultSurfaces.vertexColor |> toEffect
-                DefaultSurfaces.simpleLighting |> toEffect 
-               ] 
-            |> Sg.viewTrafo (Mod.map CameraView.viewTrafo cameraView)
-            |> Sg.projTrafo (Mod.map Frustum.projTrafo frustum)
-
-    let run () =
-        Aardvark.Base.Ag.initialize()
-        Aardvark.Init()
-        //FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; ".."; "bin";"Release";"Examples.exe"])
-        Interactive.SceneGraph <- fullScene
-        Interactive.RunMainLoop()
-
-open InteractionExperiments
-
-#if INTERACTIVE
-Interactive.SceneGraph <- fullScene
-printfn "Done. Modify sg and set Interactive.SceneGraph again in order to see the modified rendering results."
-#else
-#endif
+        App.Runtime.CompileRender(App.FramebufferSignature, fullScene)
