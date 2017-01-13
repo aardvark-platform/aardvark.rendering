@@ -40,7 +40,6 @@ type App private() =
                 Sg.dynamic sg
                     |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
                     |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
-                    |> Sg.uniform "ViewportSize" win.Sizes
 
             clear <- app.Runtime.CompileClear(win.FramebufferSignature, ~~C4f.Gray30, ~~1.0)
             render <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
@@ -494,7 +493,6 @@ module Lod =
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
             |> Sg.uniform "PointSize" (Mod.constant 4.0)
-            |> Sg.uniform "ViewportSize" win.Sizes
     
     let run() =
         app.SceneGraph <- final

@@ -665,7 +665,6 @@ module PGM =
                ]
             |> Sg.fillMode mode
             |> Sg.uniform "HeightFieldTexture" tex
-            |> Sg.uniform "ViewportSize" App.Size
             |> Sg.diffuseTexture color
 
 

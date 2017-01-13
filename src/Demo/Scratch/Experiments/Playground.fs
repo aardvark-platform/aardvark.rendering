@@ -505,7 +505,6 @@ module Playground =
             Sg.draw IndexedGeometryMode.TriangleStrip
                 |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant [|V3f(-1.0,-1.0,1.0); V3f(1.0,-1.0,1.0); V3f(-1.0,1.0,1.0);V3f(1.0,1.0,1.0) |])
                 |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
-                |> Sg.uniform "ViewportSize" win.Sizes
 
         let envSg =
             fullscreenQuad
@@ -519,7 +518,6 @@ module Playground =
                 |> Sg.vertexAttribute DefaultSemantic.Colors (Mod.constant [|C4b.White; C4b.Red; C4b.Green; C4b.Blue|])
                 |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.pointSprite |> toEffect; DefaultSurfaces.vertexColor |> toEffect; DefaultSurfaces.pointSpriteFragment |> toEffect]
                 |> Sg.uniform "PointSize" (Mod.constant 20.0)
-                |> Sg.uniform "ViewportSize" (win.Sizes)
         let sg = 
             Sg.group' [ cross; envSg ]
                 |> Sg.viewTrafo (viewTrafo |> Mod.map CameraView.viewTrafo)
