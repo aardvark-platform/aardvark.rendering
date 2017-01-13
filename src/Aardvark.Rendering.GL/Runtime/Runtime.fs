@@ -293,12 +293,6 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
                 | _ ->
                     failwithf "[GL] cannot resolve %A" ms
-
- 
-            let size = ms.Size
-            let readFbo = OpenGL.GL.GenFramebuffer()
-            let drawFbo = OpenGL.GL.GenFramebuffer()
-
               
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
             GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, tex.Handle, 0)
