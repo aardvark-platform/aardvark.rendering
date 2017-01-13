@@ -522,45 +522,68 @@ type RuntimeFramebufferExtensions private() =
 type AbstractRenderTask() =
     inherit AdaptiveObject()
 
+    static let dynamicUniforms = 
+        Set.ofList [
+            "ViewTrafo"
+            "ProjTrafo"
+        ]
+
+    static let runtimeUniforms =
+        Map.ofList [
+            "ViewportSize", fun (o : OutputDescription) -> o.viewport.Size
+        ]
+
+
     let mutable frameId = 0UL
 
-    let hooks =
-        Dictionary.ofList [
-            "ViewTrafo", DefaultingModTable<Trafo3d>() :> DefaultingModTable
-            "ProjTrafo", DefaultingModTable<Trafo3d>() :> DefaultingModTable
-        ]
+ 
+    let runtimeValueCache = Dict.empty
+    let currentOutput = lazy (Mod.init { framebuffer = Unchecked.defaultof<_>; images = Map.empty; overrides = Map.empty; viewport = Box2i(V2i.OO, V2i.II) })
+    let tryGetRuntimeValue (name : string) =
+        runtimeValueCache.GetOrCreate(name, fun name ->
+            // TODO: different runtime-types
+            match Map.tryFind name runtimeUniforms with
+                | Some f -> 
+                    currentOutput.Value |> Mod.map f :> IMod |> Some
+                | None -> 
+                    None
+        )
 
-    let viewportSize = Mod.init V2i.II
-    let runtimeValues =
-        Dictionary.ofList [
-            "ViewportSize", viewportSize :> IMod
-        ]
         
+    let hooks : Dictionary<string, DefaultingModTable> = Dictionary.empty
+    let hook (name : string) (m : IMod) : IMod =
+        match hooks.TryGetValue(name) with
+            | (true, table) -> 
+                table.Hook m
+
+            | _ ->
+                let tValue = m.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
+                let tTable = typedefof<DefaultingModTable<_>>.MakeGenericType [| tValue |]
+                let table = Activator.CreateInstance(tTable) |> unbox<DefaultingModTable>
+                hooks.[name] <- table 
+                table.Hook m
 
     let hookProvider (provider : IUniformProvider) =
         { new IUniformProvider with
             member x.TryGetUniform(scope, name) =
-                match runtimeValues.TryGetValue (string name) with
-                    | (true, v) -> v |> Some
+                match tryGetRuntimeValue (string name)  with
+                    | Some v -> Some v
                     | _ -> 
                         let res = provider.TryGetUniform(scope, name)
                         match res with
-                            | Some res ->
-                                match hooks.TryGetValue(string name) with
-                                    | (true, h) -> h.Hook res |> Some
-                                    | _ -> Some res
-                            | None ->
-                                None
+                            | Some res -> hook (string name) res |> Some
+                            | None -> None
 
             member x.Dispose() = 
                 provider.Dispose()
         }
 
-
     member private x.UseValues (output : OutputDescription, f : unit -> 'a) =
         let toReset = List()
         transact (fun () -> 
-            viewportSize.Value <- output.viewport.Size
+            if currentOutput.IsValueCreated then
+                currentOutput.Value.Value <- output
+
             for (name, value) in Map.toSeq output.overrides do
                 match hooks.TryGetValue(name) with
                     | (true, table) ->

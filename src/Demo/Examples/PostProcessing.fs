@@ -206,6 +206,7 @@ module PostProcessing =
 
         let desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
 
+
         clear.Run(null, fboHandle)
         mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.empty })
         win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view0.png"])
