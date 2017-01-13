@@ -202,9 +202,13 @@ module PostProcessing =
         let fbo = fbo.GetValue()
         let color = unbox<BackendTextureOutputView> fbo.Attachments.[DefaultSemantic.Colors]
         let output = OutputDescription.ofFramebuffer fbo
-        let clear = win.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
+        let clear = win.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
         let view1 = CameraView.lookAt V3d.III V3d.Zero V3d.OOI |> CameraView.viewTrafo
         let view2 = CameraView.lookAt (10.0 * V3d.III) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+
+        clear.Run(null, fbo)
+        mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.empty })
+        win.Runtime.Download(color.texture).SaveAsImage @"C:\Users\schorsch\Desktop\view3.png"
 
         clear.Run(null, fbo)
         mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view1 :> obj] })
@@ -213,6 +217,7 @@ module PostProcessing =
         clear.Run(null, fbo)
         mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view2 :> obj] })
         win.Runtime.Download(color.texture).SaveAsImage @"C:\Users\schorsch\Desktop\view2.png"
+
         Environment.Exit 0
 
 

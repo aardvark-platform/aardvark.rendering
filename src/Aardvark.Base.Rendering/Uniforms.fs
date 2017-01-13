@@ -127,6 +127,7 @@ module Uniforms =
                 | _ -> raise <| NotFoundException name
 
     let private table : Dictionary<string, IUniformProvider -> IMod> =
+        let emptyViewport = Mod.init V2i.II
         Dictionary.ofList [
             "ModelTrafoInv",            fun u -> u?ModelTrafo |> Trafo3d.inverse :> IMod
             "ViewTrafoInv",             fun u -> u?ViewTrafo |> Trafo3d.inverse :> IMod
@@ -141,6 +142,7 @@ module Uniforms =
             "ModelViewProjTrafoInv",    fun u -> u?ModelTrafo <*> u?ViewTrafo <*> u?ProjTrafo |> Trafo3d.inverse :> IMod
 
             "NormalMatrix",             fun u -> u?ModelTrafo |> Trafo3d.normalMatrix :> IMod
+
         
         ]
 
@@ -152,4 +154,5 @@ module Uniforms =
             | _ ->
                 None
 
+  
 

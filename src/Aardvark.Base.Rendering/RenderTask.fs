@@ -530,9 +530,17 @@ type AbstractRenderTask() =
             "ProjTrafo", DefaultingModTable<Trafo3d>() :> DefaultingModTable
         ]
 
-    let useValues (d : Map<string, obj>) (f : unit -> 'a) =
+    let viewportSize = Mod.init V2i.II
+    let runtimeValues =
+        Dictionary.ofList [
+            "ViewportSize", viewportSize :> IMod
+        ]
+        
+
+    let useValues (output : OutputDescription) (f : unit -> 'a) =
+        transact (fun () -> viewportSize.Value <- output.viewport.Size)
         let toReset = List()
-        for (name, value) in Map.toSeq d do
+        for (name, value) in Map.toSeq output.overrides do
             match hooks.TryGetValue(name) with
                 | (true, table) ->
                     table.Set(value)
@@ -547,14 +555,17 @@ type AbstractRenderTask() =
     let hookProvider (provider : IUniformProvider) =
         { new IUniformProvider with
             member x.TryGetUniform(scope, name) =
-                let res = provider.TryGetUniform(scope, name)
-                match res with
-                    | Some res ->
-                        match hooks.TryGetValue(string name) with
-                            | (true, h) -> h.Hook res |> Some
-                            | _ -> Some res
-                    | None ->
-                        None
+                match runtimeValues.TryGetValue (string name) with
+                    | (true, v) -> v |> Some
+                    | _ -> 
+                        let res = provider.TryGetUniform(scope, name)
+                        match res with
+                            | Some res ->
+                                match hooks.TryGetValue(string name) with
+                                    | (true, h) -> h.Hook res |> Some
+                                    | _ -> Some res
+                            | None ->
+                                None
 
             member x.Dispose() = 
                 provider.Dispose()
@@ -578,7 +589,7 @@ type AbstractRenderTask() =
     member x.Run(caller : IAdaptiveObject, t : RenderToken, out : OutputDescription) =
         x.EvaluateAlways caller (fun () ->
             x.OutOfDate <- true
-            useValues out.overrides (fun () ->
+            useValues out (fun () ->
                 x.Run(t, out)
                 frameId <- frameId + 1UL
             )
