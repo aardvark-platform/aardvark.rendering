@@ -537,26 +537,6 @@ type AbstractRenderTask() =
         ]
         
 
-    let useValues (output : OutputDescription) (f : unit -> 'a) =
-        let toReset = List()
-        transact (fun () -> 
-            viewportSize.Value <- output.viewport.Size
-            for (name, value) in Map.toSeq output.overrides do
-                match hooks.TryGetValue(name) with
-                    | (true, table) ->
-                        table.Set(value)
-                        toReset.Add table
-                    | _ ->
-                        ()
-        )
-        try
-            f()
-        finally
-            if toReset.Count > 0 then
-                transact (fun () ->
-                    for r in toReset do r.Reset()
-                )
-
     let hookProvider (provider : IUniformProvider) =
         { new IUniformProvider with
             member x.TryGetUniform(scope, name) =
@@ -576,6 +556,28 @@ type AbstractRenderTask() =
                 provider.Dispose()
         }
 
+
+    member private x.UseValues (output : OutputDescription, f : unit -> 'a) =
+        let toReset = List()
+        transact (fun () -> 
+            viewportSize.Value <- output.viewport.Size
+            for (name, value) in Map.toSeq output.overrides do
+                match hooks.TryGetValue(name) with
+                    | (true, table) ->
+                        table.Set(value)
+                        toReset.Add table
+                    | _ ->
+                        ()
+        )
+        try
+            f()
+        finally
+            if toReset.Count > 0 then
+                transact (fun () ->
+                    for r in toReset do r.Reset()
+                )
+                x.Update(null, RenderToken.Empty)
+
     member x.HookRenderObject (ro : RenderObject) =
         { ro with Uniforms = hookProvider ro.Uniforms }
                 
@@ -594,7 +596,7 @@ type AbstractRenderTask() =
     member x.Run(caller : IAdaptiveObject, t : RenderToken, out : OutputDescription) =
         x.EvaluateAlways caller (fun () ->
             x.OutOfDate <- true
-            useValues out (fun () ->
+            x.UseValues(out, fun () ->
                 x.Run(t, out)
                 frameId <- frameId + 1UL
             )
