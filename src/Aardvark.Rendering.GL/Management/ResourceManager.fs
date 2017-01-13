@@ -337,12 +337,15 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>
             fields 
             |> List.map (fun f ->
                 let sem = Symbol.Create f.semantic
-                match u.TryGetUniform(scope, sem) with
+                match Uniforms.tryGetDerivedUniform f.semantic u with
                     | Some v -> sem, v
                     | None -> 
-                        match additional.TryGetValue sem with
-                            | (true, m) -> sem, m
-                            | _ -> failwithf "[GL] could not get uniform: %A" f
+                        match u.TryGetUniform(scope, sem) with
+                            | Some v -> sem, v
+                            | None -> 
+                                match additional.TryGetValue sem with
+                                    | (true, m) -> sem, m
+                                    | _ -> failwithf "[GL] could not get uniform: %A" f
             )
 
         let key = values |> List.map (fun (_,v) -> v :> obj)

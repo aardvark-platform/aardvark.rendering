@@ -118,12 +118,9 @@ and [<Flags>]ColorWriteMask =
 and OutputDescription =
     {
         framebuffer : IFramebuffer
-        images : Map<Symbol, BackendTextureOutputView>
+        images      : Map<Symbol, BackendTextureOutputView>
         viewport    : Box2i
-        colorWrite : Map<Symbol,ColorWriteMask>
-        depthWrite : bool
-        stencilMaskFront : uint32
-        stencilMaskBack : uint32
+        overrides   : Map<string, obj>
     }
 
 
@@ -136,10 +133,7 @@ module OutputDescription =
             framebuffer = framebuffer
             images = Map.empty
             viewport = Box2i.FromMinAndSize(V2i.OO, framebuffer.Size)
-            colorWrite = Map.empty 
-            depthWrite = true
-            stencilMaskFront = UInt32.MaxValue
-            stencilMaskBack  = UInt32.MaxValue
+            overrides = Map.empty
         }
    
 

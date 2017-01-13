@@ -522,7 +522,90 @@ type RuntimeFramebufferExtensions private() =
 type AbstractRenderTask() =
     inherit AdaptiveObject()
 
+    static let dynamicUniforms = 
+        Set.ofList [
+            "ViewTrafo"
+            "ProjTrafo"
+        ]
+
+    static let runtimeUniforms =
+        Map.ofList [
+            "ViewportSize", fun (o : OutputDescription) -> o.viewport.Size
+        ]
+
+
     let mutable frameId = 0UL
+
+ 
+    let runtimeValueCache = Dict.empty
+    let currentOutput = lazy (Mod.init { framebuffer = Unchecked.defaultof<_>; images = Map.empty; overrides = Map.empty; viewport = Box2i(V2i.OO, V2i.II) })
+    let tryGetRuntimeValue (name : string) =
+        runtimeValueCache.GetOrCreate(name, fun name ->
+            // TODO: different runtime-types
+            match Map.tryFind name runtimeUniforms with
+                | Some f -> 
+                    currentOutput.Value |> Mod.map f :> IMod |> Some
+                | None -> 
+                    None
+        )
+
+        
+    let hooks : Dictionary<string, DefaultingModTable> = Dictionary.empty
+    let hook (name : string) (m : IMod) : IMod =
+        match hooks.TryGetValue(name) with
+            | (true, table) -> 
+                table.Hook m
+
+            | _ ->
+                let tValue = m.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
+                let tTable = typedefof<DefaultingModTable<_>>.MakeGenericType [| tValue |]
+                let table = Activator.CreateInstance(tTable) |> unbox<DefaultingModTable>
+                hooks.[name] <- table 
+                table.Hook m
+
+    let hookProvider (provider : IUniformProvider) =
+        { new IUniformProvider with
+            member x.TryGetUniform(scope, name) =
+                match tryGetRuntimeValue (string name)  with
+                    | Some v -> Some v
+                    | _ -> 
+                        let res = provider.TryGetUniform(scope, name)
+                        match res with
+                            | Some res -> hook (string name) res |> Some
+                            | None -> None
+
+            member x.Dispose() = 
+                provider.Dispose()
+        }
+
+    member private x.UseValues (output : OutputDescription, f : unit -> 'a) =
+        let toReset = List()
+        transact (fun () -> 
+            if currentOutput.IsValueCreated then
+                currentOutput.Value.Value <- output
+
+            for (name, value) in Map.toSeq output.overrides do
+                match hooks.TryGetValue(name) with
+                    | (true, table) ->
+                        table.Set(value)
+                        toReset.Add table
+                    | _ ->
+                        ()
+        )
+        try
+            f()
+        finally
+            if toReset.Count > 0 then
+                transact (fun () ->
+                    for r in toReset do r.Reset()
+                )
+                x.Update(null, RenderToken.Empty)
+
+    member x.HookRenderObject (ro : RenderObject) =
+        { ro with Uniforms = hookProvider ro.Uniforms }
+                
+
+
 
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
@@ -535,8 +618,11 @@ type AbstractRenderTask() =
     member x.FrameId = frameId
     member x.Run(caller : IAdaptiveObject, t : RenderToken, out : OutputDescription) =
         x.EvaluateAlways caller (fun () ->
-            x.Run(t, out)
-            frameId <- frameId + 1UL
+            x.OutOfDate <- true
+            x.UseValues(out, fun () ->
+                x.Run(t, out)
+                frameId <- frameId + 1UL
+            )
         )
 
     member x.Update(caller : IAdaptiveObject, t : RenderToken) =

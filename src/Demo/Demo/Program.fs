@@ -2209,7 +2209,6 @@ let main args =
             |> Sg.andAlso floor
             |> Sg.andAlso shadows
             |> Sg.uniform "LightLocation" viewPos
-            |> Sg.uniform "ViewportSize" ctrl.Sizes
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
 

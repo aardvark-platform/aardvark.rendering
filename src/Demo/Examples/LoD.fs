@@ -295,7 +295,6 @@ module LoD =
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo    )
             |> Sg.uniform "PointSize" (Mod.constant 4.0)
-            |> Sg.uniform "ViewportSize" win.Sizes
     
     let run() =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])

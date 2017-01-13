@@ -279,7 +279,6 @@ namespace Examples
 //                |> Sg.andAlso ( 
 //                    scene  
 //                        |> Sg.uniform "LineWidth" (Mod.constant 5.0)
-//                        |> Sg.uniform "ViewportSize" (Mod.constant (V2i(800,600)))
 //                        |> Sg.effect [ 
 //                            DefaultSurfaces.trafo |> toEffect; 
 //                            DefaultSurfaces.constantColor C4f.Red |> toEffect

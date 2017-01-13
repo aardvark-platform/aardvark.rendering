@@ -297,14 +297,14 @@ type DevicePreparedRenderObjectExtensions private() =
         prepareObject this renderPass ro
 
     [<Extension>]
-    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject) =
+    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
         match ro with
             | :? RenderObject as ro ->
-                let res = prepareObject this renderPass ro
+                let res = prepareObject this renderPass (hook ro)
                 new PreparedMultiRenderObject([res])
 
             | :? MultiRenderObject as mo ->
-                let all = mo.Children |> List.collect (fun c -> DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, c).Children)
+                let all = mo.Children |> List.collect (fun c -> DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, c, hook).Children)
                 new PreparedMultiRenderObject(all)
 
             | :? PreparedRenderObject as o ->
@@ -317,3 +317,7 @@ type DevicePreparedRenderObjectExtensions private() =
 
             | _ ->
                 failf "unsupported RenderObject-type: %A" ro
+
+    [<Extension>]
+    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject) =
+        DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, ro, id)

@@ -268,7 +268,6 @@ module Shadows =
  
     let shadowDepth =
         sceneSg [ DefaultSurfaces.vertexColor |> toEffect ]
-            |> Sg.uniform "ViewportSize" (Mod.constant (V2i(1024,1024)))
             |> Sg.viewTrafo lightSpaceView
             |> Sg.projTrafo (shadowProj |> Frustum.projTrafo |> Mod.constant)
             |> Sg.compile win.Runtime signature   
@@ -277,7 +276,6 @@ module Shadows =
     let sg =
         sceneSg [ Shader.shadowShader |> toEffect; Shader.lighting |> toEffect ]
             |> Sg.uniform "lightLocation" lightPos
-            |> Sg.uniform "ViewportSize" win.Sizes
             |> Sg.texture DefaultSemantic.DiffuseColorTexture shadowDepth
 
             |> Sg.andAlso (

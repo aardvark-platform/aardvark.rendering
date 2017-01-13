@@ -79,6 +79,7 @@
     <Compile Include="ResourceManagement.fs" />
     <Compile Include="Runtime.fs" />
     <Compile Include="RuntimeExtensions.fs" />
+    <Compile Include="Uniforms.fs" />
     <Compile Include="RenderTask.fs" />
     <Compile Include="Camera.fs" />
     <Compile Include="ChangeableBuffer.fs" />

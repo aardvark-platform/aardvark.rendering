@@ -16,104 +16,17 @@ module TrafoExtensions =
         member x.ModelTrafo             = x?ModelTrafo()            |> trafo
         member x.ViewTrafo              = x?ViewTrafo               |> trafo
         member x.ProjTrafo              = x?ProjTrafo               |> trafo
-        member x.ModelTrafoInv          = x?ModelTrafoInv()         |> trafo
-        member x.ViewTrafoInv           = x?ViewTrafoInv()          |> trafo
-        member x.ProjTrafoInv           = x?ProjTrafoInv()          |> trafo
-        member x.ModelViewTrafo         = x?ModelViewTrafo()        |> trafo
-        member x.ViewProjTrafo          = x?ViewProjTrafo()         |> trafo
-        member x.ModelViewProjTrafo     = x?ModelViewProjTrafo()    |> trafo
-        member x.ModelViewTrafoInv      = x?ModelViewTrafoInv()     |> trafo
-        member x.ViewProjTrafoInv       = x?ViewProjTrafoInv()      |> trafo
-        member x.ModelViewProjTrafoInv  = x?ModelViewProjTrafoInv() |> trafo
              
     module Semantic =
         let modelTrafo            (s : ISg) : IMod<Trafo3d> = s?ModelTrafo()
         let viewTrafo             (s : ISg) : IMod<Trafo3d> = s?ViewTrafo
         let projTrafo             (s : ISg) : IMod<Trafo3d> = s?ProjTrafo
-        let modelTrafoInv         (s : ISg) : IMod<Trafo3d> = s?ModelTrafoInv()
-        let viewTrafoInv          (s : ISg) : IMod<Trafo3d> = s?ViewTrafoInv()
-        let projTrafoInv          (s : ISg) : IMod<Trafo3d> = s?ProjTrafoInv()
-        let modelViewTrafo        (s : ISg) : IMod<Trafo3d> = s?ModelViewTrafo()
-        let viewProjTrafo         (s : ISg) : IMod<Trafo3d> = s?ViewProjTrafo()
-        let modelViewProjTrafo    (s : ISg) : IMod<Trafo3d> = s?ModelViewProjTrafo()
-        let modelViewTrafoInv     (s : ISg) : IMod<Trafo3d> = s?ModelViewTrafoInv()
-        let viewProjTrafoInv      (s : ISg) : IMod<Trafo3d> = s?ViewProjTrafoInv()
-        let modelViewProjTrafoInv (s : ISg) : IMod<Trafo3d> = s?ModelViewProjTrafoInv()
-
 
 module TrafoSemantics =
+    open TrafoOperators
 
-    type TrafoMultiplyMod(l : IMod<Trafo3d>, r : IMod<Trafo3d>) =
-        inherit Mod.AbstractMod<Trafo3d>()
-
-        override x.Compute() =
-            l.GetValue x * r.GetValue x
-
-
-    /// the root trafo for the entire Sg (used when no trafos are applied)
     let rootTrafo = Mod.constant Trafo3d.Identity
     let inline private (~%) (l : list<IMod<Trafo3d>>) = l
-
-    open System
-    open System.Collections.Generic
-    type BinaryWeakCache<'a, 'b, 'c when 'a :> IAdaptiveObject and 'b :> IAdaptiveObject and 'c :> IAdaptiveObject>(f : 'a -> 'b -> 'c) =
-        let cache = Dictionary<WeakReference<IAdaptiveObject> * WeakReference<IAdaptiveObject>, WeakReference<IAdaptiveObject>>()
-
-        member x.Invoke (a : 'a) (b : 'b) : 'c =
-            let key = (a.Weak, b.Weak)
-            match cache.TryGetValue(key) with
-                | (true, w) ->
-                    match w.TryGetTarget() with
-                        | (true, strong) -> unbox<'c> strong
-                        | _ ->
-                            let strong = f a b
-                            cache.[key] <- strong.Weak
-                            strong
-                | _ ->
-                    let strong = f a b
-                    cache.[key] <- strong.Weak
-                    strong
-
-    type UnaryWeakCache<'a, 'b when 'a :> IAdaptiveObject and 'b :> IAdaptiveObject>(f : 'a -> 'b) =
-        let cache = Dictionary<WeakReference<IAdaptiveObject>, WeakReference<IAdaptiveObject>>()
-
-        member x.Invoke (a : 'a)  : 'b =
-            let key = a.Weak
-            match cache.TryGetValue(key) with
-                | (true, w) ->
-                    match w.TryGetTarget() with
-                        | (true, strong) -> unbox<'b> strong
-                        | _ ->
-                            let strong = f a
-                            cache.[key] <- strong.Weak
-                            strong
-                | _ ->
-                    let strong = f a
-                    cache.[key] <- strong.Weak
-                    strong
-
-    let private normalMatrix (model : Trafo3d) =
-        model.Backward.Transposed.UpperLeftM33()
-
-    let mulCache = BinaryWeakCache (fun a b -> TrafoMultiplyMod(a, b) :> IMod<Trafo3d>)
-    let invCache = UnaryWeakCache (Mod.map (fun (t : Trafo3d) -> t.Inverse))
-    let btCache = UnaryWeakCache (Mod.map normalMatrix)
-
-    let (<*>) a b = 
-        if a = rootTrafo then b
-        elif b = rootTrafo then a
-        else
-            if System.Object.ReferenceEquals(a,null) then 
-                Log.warn "mul null"
-                System.Diagnostics.Debugger.Break()
-            if System.Object.ReferenceEquals(b,null) then 
-                Log.warn "mul null"
-                System.Diagnostics.Debugger.Break()  
-            mulCache.Invoke a b
-
-    let inverse t = invCache.Invoke t
-
-        
 
 
     let flattenStack (stack : list<IMod<Trafo3d>>) =
@@ -164,51 +77,4 @@ module TrafoSemantics =
             r.Child?ProjTrafo <- rootTrafo
 
 
-        member x.ModelTrafoInv(s : obj) =
-            s.ModelTrafo |> inverse
-
-        member x.ViewTrafoInv(s : obj) =
-            s.ViewTrafo |> inverse
-
-        member x.ProjTrafoInv(s : obj) =
-            s.ProjTrafo |> inverse
-
-
-        member x.ModelViewTrafo(s : obj) =
-            s.ModelTrafo <*> s.ViewTrafo
-
-        member x.ViewProjTrafo(s : obj) =
-            s.ViewTrafo <*> s.ProjTrafo
-
-        member x.ModelViewProjTrafo(s : obj) =
-            s.ModelTrafo <*> s.ViewProjTrafo
-
-
-        member x.ModelViewTrafoInv(s : obj) =
-            s.ModelViewTrafo |> inverse
-        
-        member x.ViewProjTrafoInv(s : obj) =
-            s.ViewProjTrafo |> inverse
-
-        member x.ModelViewProjTrafoInv(s : obj) =
-            s.ModelViewProjTrafo |> inverse
-
-        member x.NormalMatrix(s : obj) : IMod<M33d> = 
-            let t : IMod<Trafo3d> = s?ModelTrafo()
-            btCache.Invoke t
-
-
-
-module UniformRules =
-    open Microsoft.FSharp.Quotations
-    open TrafoSemantics
-    let private uniform<'a> (name : string) : Expr<IMod<'a>> =
-        Expr.Var(Var(name, typeof<IMod<'a>>)) |> Expr.Cast
-
-    let ModelTrafo = uniform<Trafo3d> "ModelTrafo"
-    let ViewTrafo = uniform<Trafo3d> "ViewTrafo"
-    let ProjTrafo = uniform<Trafo3d> "ProjTrafo"
-
-    let ViewProjTrafo = <@ %ViewTrafo <*> %ProjTrafo @>
-    let ModelViewTrafo = <@ %ModelTrafo <*> %ViewTrafo @>
 
