@@ -538,19 +538,24 @@ type AbstractRenderTask() =
         
 
     let useValues (output : OutputDescription) (f : unit -> 'a) =
-        transact (fun () -> viewportSize.Value <- output.viewport.Size)
         let toReset = List()
-        for (name, value) in Map.toSeq output.overrides do
-            match hooks.TryGetValue(name) with
-                | (true, table) ->
-                    table.Set(value)
-                    toReset.Add table
-                | _ ->
-                    ()
+        transact (fun () -> 
+            viewportSize.Value <- output.viewport.Size
+            for (name, value) in Map.toSeq output.overrides do
+                match hooks.TryGetValue(name) with
+                    | (true, table) ->
+                        table.Set(value)
+                        toReset.Add table
+                    | _ ->
+                        ()
+        )
         try
             f()
         finally
-            for r in toReset do r.Reset()
+            if toReset.Count > 0 then
+                transact (fun () ->
+                    for r in toReset do r.Reset()
+                )
 
     let hookProvider (provider : IUniformProvider) =
         { new IUniformProvider with

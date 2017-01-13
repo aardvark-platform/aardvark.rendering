@@ -99,17 +99,13 @@ type DefaultingModTable<'a>() =
         )
 
     member x.Set(v : 'a) =
-        transact (fun () ->
-            lock store (fun () ->
-                for r in all do r.Value <- v
-            )
+        lock store (fun () ->
+            for r in all do r.Value <- v
         )
 
     override x.Reset() = 
-        transact (fun () ->
-            lock store (fun () ->
-                for r in all do r.Reset()
-            )
+        lock store (fun () ->
+            for r in all do r.Reset()
         )
 
         
