@@ -552,16 +552,19 @@ type AbstractRenderTask() =
         
     let hooks : Dictionary<string, DefaultingModTable> = Dictionary.empty
     let hook (name : string) (m : IMod) : IMod =
-        match hooks.TryGetValue(name) with
-            | (true, table) -> 
-                table.Hook m
+        if Set.contains name dynamicUniforms then
+            match hooks.TryGetValue(name) with
+                | (true, table) -> 
+                    table.Hook m
 
-            | _ ->
-                let tValue = m.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
-                let tTable = typedefof<DefaultingModTable<_>>.MakeGenericType [| tValue |]
-                let table = Activator.CreateInstance(tTable) |> unbox<DefaultingModTable>
-                hooks.[name] <- table 
-                table.Hook m
+                | _ ->
+                    let tValue = m.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
+                    let tTable = typedefof<DefaultingModTable<_>>.MakeGenericType [| tValue |]
+                    let table = Activator.CreateInstance(tTable) |> unbox<DefaultingModTable>
+                    hooks.[name] <- table 
+                    table.Hook m
+        else 
+            m
 
     let hookProvider (provider : IUniformProvider) =
         { new IUniformProvider with
