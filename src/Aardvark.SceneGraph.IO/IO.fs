@@ -203,6 +203,10 @@ module Loader =
             member x.GlobalBoundingBox(s : Scene) =
                 s.ModelTrafo |> Mod.map (fun t -> s.bounds.Transformed t)
 
+
+    type Assimp = class end
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Assimp =
         open System.Runtime.CompilerServices
         open System.Collections.Generic
@@ -530,24 +534,22 @@ module Loader =
             if r then Log.line "Assimp native dependencies successfully unpacked."
             else Log.line "Failed to unpack native assimp dependencies. Did you forget Aardvark.Init()? Make sure Aardvark.SceneGraph.IO.dll is in your output directory."
 
+        let defaultFlags = 
+            Assimp.PostProcessSteps.CalculateTangentSpace |||
+            Assimp.PostProcessSteps.GenerateSmoothNormals |||
+            //Assimp.PostProcessSteps.FixInFacingNormals ||| 
+            //Assimp.PostProcessSteps.JoinIdenticalVertices |||
+            Assimp.PostProcessSteps.FindDegenerates |||
+            //Assimp.PostProcessSteps.FlipUVs |||
+            //Assimp.PostProcessSteps.FlipWindingOrder |||
+            Assimp.PostProcessSteps.MakeLeftHanded ||| 
+            Assimp.PostProcessSteps.Triangulate |||
+            Assimp.PostProcessSteps.CalculateTangentSpace
 
-        let load (file : string) =
+        let loadFrom (file : string) (postProcessingFlags : Assimp.PostProcessSteps) = 
             use ctx = new Assimp.AssimpContext()
             let dir = Path.GetDirectoryName(file)
-
-            let flags = 
-                Assimp.PostProcessSteps.CalculateTangentSpace |||
-                Assimp.PostProcessSteps.GenerateSmoothNormals |||
-                //Assimp.PostProcessSteps.FixInFacingNormals ||| 
-                //Assimp.PostProcessSteps.JoinIdenticalVertices |||
-                Assimp.PostProcessSteps.FindDegenerates |||
-                //Assimp.PostProcessSteps.FlipUVs |||
-                //Assimp.PostProcessSteps.FlipWindingOrder |||
-                Assimp.PostProcessSteps.MakeLeftHanded ||| 
-                Assimp.PostProcessSteps.Triangulate |||
-                Assimp.PostProcessSteps.CalculateTangentSpace
-
-            let scene = ctx.ImportFile(file, flags)
+            let scene = ctx.ImportFile(file, postProcessingFlags)
 
             let textureTable = getTextureTable dir
             printfn "%A" textureTable
@@ -568,3 +570,11 @@ module Loader =
                 bounds = !state.bounds
                 meshes = state.meshes
             }
+
+        let load (file : string) =
+            loadFrom file defaultFlags
+
+    type Assimp with
+        static member Load(fileName : string, ?flags : Assimp.PostProcessSteps) =
+            let flags = defaultArg flags Assimp.defaultFlags
+            Assimp.loadFrom fileName flags
