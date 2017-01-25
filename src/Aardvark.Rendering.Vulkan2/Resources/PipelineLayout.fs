@@ -20,7 +20,7 @@ module VkShaderStageFlags =
             ShaderStage.TessControl, VkShaderStageFlags.TessellationControlBit
             ShaderStage.TessEval, VkShaderStageFlags.TessellationEvaluationBit
             ShaderStage.Geometry, VkShaderStageFlags.GeometryBit
-            ShaderStage.Pixel, VkShaderStageFlags.FragmentBit
+            ShaderStage.Fragment, VkShaderStageFlags.FragmentBit
         ]
 
 

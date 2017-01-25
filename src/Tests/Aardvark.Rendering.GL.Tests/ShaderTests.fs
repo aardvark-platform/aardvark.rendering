@@ -37,10 +37,10 @@ module ShaderTests =
     #endif
 
 
-    #ifdef Pixel
+    #ifdef Fragment
 
     out vec4 color;
-    void PS()
+    void FS()
     {
         color = texture(sam, vec2(0,0));
     }
@@ -50,7 +50,7 @@ module ShaderTests =
     """
 
     let testSurface =
-        BackendSurface(code, Dictionary.ofList [ShaderStage.Vertex, "VS"; ShaderStage.Pixel, "PS"]) :> ISurface
+        BackendSurface(code, Dictionary.ofList [ShaderStage.Vertex, "VS"; ShaderStage.Fragment, "FS"]) :> ISurface
 
     [<Test>]
     let ``[Shader] prepare signature``() =

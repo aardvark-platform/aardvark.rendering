@@ -97,7 +97,6 @@
     <Compile Include="DefaultSurfaces\PointSprite.fs" />
     <Compile Include="DefaultSurfaces\ViewSizedPointSprites.fs" />
     <Compile Include="DefaultSurfaces\PointSpriteFragment.fs" />
-    <Compile Include="DefaultSurfaces\UniformColor.fs" />
     <Compile Include="DefaultSurfaces\ConstantColor.fs" />
     <Compile Include="DefaultSurfaces\SgColor.fs" />
     <Compile Include="DefaultSurfaces\VertexColor.fs" />

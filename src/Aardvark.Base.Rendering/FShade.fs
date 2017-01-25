@@ -2,7 +2,6 @@
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open FShade.Compiler
 open FShade
 open System.Collections.Concurrent
 open System.Runtime.CompilerServices
@@ -11,7 +10,6 @@ open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Quotations.Patterns
 open Aardvark.Base.Incremental
 open System
-open FShade.GLSL
 
 
 
@@ -24,12 +22,12 @@ type TangentAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColor
 type ColorAttribute() = inherit SemanticAttribute(DefaultSemantic.Colors.ToString())
 type InstanceTrafoAttribute() = inherit SemanticAttribute(DefaultSemantic.InstanceTrafo.ToString())
 
-type FShadeEffect = Compiled<Effect, ShaderState>
+type FShadeEffect = Effect
 
 [<AutoOpen>]
 module FShadeInterop =
 
-    type FShade.Parameters.Uniforms.UniformScope with
+    type UniformScope with
         member x.ModelTrafo : M44d = x?PerModel?ModelTrafo
         member x.ViewTrafo : M44d = x?PerView?ViewTrafo
         member x.ProjTrafo : M44d = x?PerView?ProjTrafo
@@ -84,53 +82,20 @@ module FShadeInterop =
 
     let private backendSurfaceCache = ConcurrentDictionary<string, BackendSurface>()
 
+    type private AStage = Aardvark.Base.ShaderStage
+
     let private getOrCreateSurface (code : string) =
         backendSurfaceCache.GetOrAdd(code, fun (code : string) ->
             let entries = Dictionary()
 
-            if code.Contains "VS(" then entries.Add(ShaderStage.Vertex, "VS")
-            if code.Contains "GS(" then entries.Add(ShaderStage.Geometry, "GS")
-            if code.Contains "PS(" then entries.Add(ShaderStage.Pixel, "PS")
-            if code.Contains "TCS(" then entries.Add(ShaderStage.TessControl, "TCS")
-            if code.Contains "TEV(" then entries.Add(ShaderStage.TessEval, "TEV")
+            if code.Contains "#ifdef Vertex" then entries.Add(AStage.Vertex, "main")
+            if code.Contains "#ifdef Geometry" then entries.Add(AStage.Geometry, "main")
+            if code.Contains "#ifdef Fragment" then entries.Add(AStage.Fragment, "main")
+            if code.Contains "#ifdef TessControl" then entries.Add(AStage.TessControl, "main")
+            if code.Contains "#ifdef TessEval" then entries.Add(AStage.TessEval, "main")
 
             BackendSurface(code, entries, null)
         ) 
-
-
-    let private (|SplicedMod|_|) (e : Expr) =
-        match e with
-//            | Call(None, mi, [Value(target,ModOf(_))]) when mi.Name = "op_BangBang" ->
-//                let t = mi.ReturnType
-//                SplicedMod(t, target |> unbox<IMod>) |> Some 
-//
-//            | Call(None, mi, [PropertyGet(None, prop, [])]) when mi.Name = "op_BangBang" ->
-//                let t = mi.ReturnType
-//                SplicedMod(t, prop.GetValue null |> unbox<IMod>) |> Some 
-//
-//            | Call(None, mi, [FieldGet(None, field)]) when mi.Name = "op_BangBang" ->
-//                let t = mi.ReturnType
-//                SplicedMod(t, field.GetValue null |> unbox<IMod>) |> Some 
-
-            | Call(None, mi, [e]) when mi.Name = "op_BangBang" ->
-                match e.Type with
-                    | ModOf(_) ->
-                        try
-                            let v = Microsoft.FSharp.Linq.RuntimeHelpers.LeafExpressionConverter.EvaluateQuotation e
-                            let t = mi.ReturnType
-                            SplicedMod(t, v |> unbox<IMod>) |> Some 
-                        with _ ->
-                            None
-                    | _ ->
-                        None
-
-            | _ -> None
-
-    do FShade.Parameters.Uniforms.uniformDetectors <- [fun e ->
-            match e with
-                | SplicedMod(t, m) -> UserUniform(t, m :> obj) |> Some
-                | _ -> None
-       ]
 
     let private toWrapMode (mode : WrapMode) =
         match mode with
@@ -186,6 +151,101 @@ module FShadeInterop =
         state.Comparison |> Option.iter (fun b -> r.ComparisonFunction <- toCompareFunction b)
         r
 
+    let private builtInTypes =
+        Dictionary.ofList [
+            DefaultSemantic.Colors, typeof<V4d>
+            DefaultSemantic.Normals, typeof<V3d>
+            DefaultSemantic.Positions, typeof<V4d>
+        ]
+
+    let private formatToType =
+        LookupTable.lookupTable [
+            RenderbufferFormat.DepthComponent, typeof<float>
+            RenderbufferFormat.R3G3B2, typeof<V3d>
+            RenderbufferFormat.Rgb4, typeof<V3d>
+            RenderbufferFormat.Rgb5, typeof<V3d>
+            RenderbufferFormat.Rgb8, typeof<V3d>
+            RenderbufferFormat.Rgb10, typeof<V3d>
+            RenderbufferFormat.Rgb12, typeof<V3d>
+            RenderbufferFormat.Rgb16, typeof<V3d>
+            RenderbufferFormat.Rgba2, typeof<V4d>
+            RenderbufferFormat.Rgba4, typeof<V4d>
+            RenderbufferFormat.Rgba8, typeof<V4d>
+            RenderbufferFormat.Rgb10A2, typeof<V4d>
+            RenderbufferFormat.Rgba12, typeof<V4d>
+            RenderbufferFormat.Rgba16, typeof<V4d>
+            RenderbufferFormat.DepthComponent16, typeof<float>
+            RenderbufferFormat.DepthComponent24, typeof<float>
+            RenderbufferFormat.DepthComponent32, typeof<float>
+            RenderbufferFormat.R8, typeof<float>
+            RenderbufferFormat.R16, typeof<float>
+            RenderbufferFormat.Rg8, typeof<V2d>
+            RenderbufferFormat.Rg16, typeof<V2d>
+            RenderbufferFormat.R16f, typeof<float>
+            RenderbufferFormat.R32f, typeof<float>
+            RenderbufferFormat.Rg16f, typeof<V2d>
+            RenderbufferFormat.Rg32f, typeof<V2d>
+            RenderbufferFormat.R8i, typeof<float>
+            RenderbufferFormat.R8ui, typeof<float>
+            RenderbufferFormat.R16i, typeof<float>
+            RenderbufferFormat.R16ui, typeof<float>
+            RenderbufferFormat.R32i, typeof<float>
+            RenderbufferFormat.R32ui, typeof<float>
+            RenderbufferFormat.Rg8i, typeof<V2d>
+            RenderbufferFormat.Rg8ui, typeof<V2d>
+            RenderbufferFormat.Rg16i, typeof<V2d>
+            RenderbufferFormat.Rg16ui, typeof<V2d>
+            RenderbufferFormat.Rg32i, typeof<V2d>
+            RenderbufferFormat.Rg32ui, typeof<V2d>
+            RenderbufferFormat.DepthStencil, typeof<float>
+            RenderbufferFormat.Rgba32f, typeof<V4d>
+            RenderbufferFormat.Rgb32f, typeof<V3d>
+            RenderbufferFormat.Rgba16f, typeof<V4d>
+            RenderbufferFormat.Rgb16f, typeof<V3d>
+            RenderbufferFormat.Depth24Stencil8, typeof<float>
+            RenderbufferFormat.R11fG11fB10f, typeof<V3d>
+            RenderbufferFormat.Rgb9E5, typeof<V3d>
+            RenderbufferFormat.Srgb8, typeof<V3d>
+            RenderbufferFormat.Srgb8Alpha8, typeof<V4d>
+            RenderbufferFormat.DepthComponent32f, typeof<float>
+            RenderbufferFormat.Depth32fStencil8, typeof<float>
+            RenderbufferFormat.StencilIndex1Ext, typeof<int>
+            RenderbufferFormat.StencilIndex1, typeof<int>
+            RenderbufferFormat.StencilIndex4Ext, typeof<int>
+            RenderbufferFormat.StencilIndex4, typeof<int>
+            RenderbufferFormat.StencilIndex8, typeof<int>
+            RenderbufferFormat.StencilIndex8Ext, typeof<int>
+            RenderbufferFormat.StencilIndex16Ext, typeof<int>
+            RenderbufferFormat.StencilIndex16, typeof<int>
+            RenderbufferFormat.Rgba32ui, typeof<V4d>
+            RenderbufferFormat.Rgb32ui, typeof<V3d>
+            RenderbufferFormat.Rgba16ui, typeof<V4d>
+            RenderbufferFormat.Rgb16ui, typeof<V3d>
+            RenderbufferFormat.Rgba8ui, typeof<V4d>
+            RenderbufferFormat.Rgb8ui, typeof<V3d>
+            RenderbufferFormat.Rgba32i, typeof<V4d>
+            RenderbufferFormat.Rgb32i, typeof<V3d>
+            RenderbufferFormat.Rgba16i, typeof<V4d>
+            RenderbufferFormat.Rgb16i, typeof<V3d>
+            RenderbufferFormat.Rgba8i, typeof<V4d>
+            RenderbufferFormat.Rgb8i, typeof<V3d>
+            RenderbufferFormat.Rgb10A2ui, typeof<V4d>
+        ]
+
+    type IFramebufferSignature with
+        member x.Link(effect : Effect) =
+            let outputs = 
+                x.ColorAttachments 
+                    |> Map.toSeq 
+                    |> Seq.map (fun (_, (name, att)) ->
+                        match builtInTypes.TryGetValue name with
+                            | (true, t) -> (string name, t)
+                            | _ -> (string name, formatToType att.format)
+                        
+                       )
+                    |> Map.ofSeq
+            effect
+                |> Effect.link ShaderStage.Fragment outputs
 
 
     type FShadeSurface(effect : FShadeEffect) =
@@ -193,94 +253,6 @@ module FShadeInterop =
         let uniforms = SymDict.empty
         let samplerStates = SymDict.empty
 
-        static let glslConfigCache = ConcurrentDict<_,_>(Dict())
-
-
-        static let glsl410 = 
-            {
-                languageVersion = Version(4,1)
-                enabledExtensions = Set.empty
-                createUniformBuffers = true
-                createGlobalUniforms = false
-                createBindings = false
-                createDescriptorSets = false
-                createInputLocations = true
-                expectRowMajorMatrices = true
-                createPerStageUniforms = false
-                flipHandedness = false
-                depthRange = Range1d(-1.0,1.0)
-                treatUniformsAsInputs = false
-            }
-
-        static let mac410 = 
-            {
-                languageVersion = Version(4,1)
-                enabledExtensions = Set.empty
-                createUniformBuffers = true
-                createGlobalUniforms = false
-                createBindings = false
-                createDescriptorSets = false
-                createInputLocations = false
-                expectRowMajorMatrices = true
-                createPerStageUniforms = false
-                flipHandedness = false
-                depthRange = Range1d(-1.0,1.0)
-                treatUniformsAsInputs = false
-            }
-
-
-        static let glsl120 = 
-            {
-                languageVersion = Version(1,2)
-                enabledExtensions = Set.empty
-                createUniformBuffers = false
-                createGlobalUniforms = true
-                createBindings = false
-                createDescriptorSets = false
-                createInputLocations = false
-                expectRowMajorMatrices = true
-                createPerStageUniforms = false
-                flipHandedness = false
-                depthRange = Range1d(-1.0,1.0)
-                treatUniformsAsInputs = false
-            }
-
-        static let vulkan =
-            {
-                languageVersion = Version(1,4)
-                enabledExtensions = Set.ofList [ "GL_ARB_tessellation_shader"; "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack" ]
-                createUniformBuffers = true
-                createGlobalUniforms = false
-                createBindings = true
-                createDescriptorSets = true
-                createInputLocations = true
-                expectRowMajorMatrices = true
-                createPerStageUniforms = true
-                flipHandedness = true
-                depthRange = Range1d(0.0,1.0)
-                treatUniformsAsInputs = false
-            }
-
-        static let tryGetGlslConfig (r : IRuntime) =
-            glslConfigCache.GetOrCreate(r, Func<_,_>(fun r ->
-                let t = r.GetType()
-                let n = t.FullName.ToLower()
-
-                if n.Contains ".gl" then 
-                    let supportsUniformBuffers = t.GetProperty("SupportsUniformBuffers").GetValue(r) |> unbox<bool>
-                    match System.Environment.OSVersion with
-                        | Mac ->
-                            Some mac410
-                        | _ ->
-                            if supportsUniformBuffers then Some glsl410
-                            else Some glsl120
-
-                elif n.Contains "vulkan" then
-                    Some vulkan
-
-                else
-                    None
-            ))
 
         static let formatToExpectedType (format : RenderbufferFormat) : Type =
             let cf = RenderbufferFormat.toColFormat format
@@ -307,60 +279,27 @@ module FShadeInterop =
 
         interface IGeneratedSurface with
             member x.Generate (r : IRuntime, signature : IFramebufferSignature) =
-                lock cache (fun () ->
-                    match cache.TryGetValue(signature) with
-                        | (true,c) -> c
+                let effect = signature.Link effect
+                let bs = r.AssembleEffect(effect) 
+
+                let samplers = Dictionary.empty
+
+                for KeyValue(k,v) in effect.Uniforms do
+                    match v.uniformValue with
+                        | UniformValue.Sampler(texName,sam) ->
+                            samplers.[(k, 0)] <- { textureName = Symbol.Create texName; samplerState = toSamplerStateDescription sam }
+                        | UniformValue.SamplerArray semSams ->
+                            for i in 0 .. semSams.Length - 1 do
+                                let (sem, sam) = semSams.[i]
+                                samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
                         | _ ->
-                            match tryGetGlslConfig r with
-                                | Some glslConfig ->
-
-                                    let compileEffect =
-                                        GLSL.compileEffect glslConfig
-
-                                    let needed =
-                                        signature.ColorAttachments 
-                                            |> Map.toList
-                                            |> List.map (fun (_,(s,f)) ->
-                                                match defaultSemanticTypes.TryGetValue s with
-                                                    | (true, t) -> s.ToString(), t
-                                                    | _ -> s.ToString(), formatToExpectedType f.format
-                                               )
-                                            |> Map.ofList
-                                    match effect |> compileEffect needed with
-                                        | Success(map, code) ->
-                                            let samplers = Dictionary.empty
-
-                                            for KeyValue(k,v) in map do
-                                                if v.IsSamplerUniform then
-                                                    let sem, sam = v.Value |> unbox<string * SamplerState>
-                                                    samplers.[(k, 0)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
-                                                elif v.IsSamplerArrayUniform then
-                                                    let semSams = v.Value |> unbox<list<string * SamplerState>> |> List.toArray
-                                                    for i in 0 .. semSams.Length - 1 do
-                                                        let (sem, sam) = semSams.[i]
-                                                        samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
-                                                else
-                                                    if not (isNull v.Value) then
-                                                        uniforms.[Symbol.Create(k)] <- (v.Value |> unbox<IMod>)
-
-                                            let bs = getOrCreateSurface code 
-                                            let result = BackendSurface(bs.Code, bs.EntryPoints, uniforms, samplers, glslConfig.expectRowMajorMatrices) 
-                                            cache.[signature] <- result
-                                            result
-    
-                                        | Error e -> 
-                                            failwithf "could not compile shader for GLSL: %A" e
-                                | None ->
-                                    failwithf "unsupported runtime type: %A" r     
-                )
-                    
-    let (!!) (m : IMod<'a>) : 'a =
-        failwith "mod-splicing can only be used inside shaders"
+                            ()
+                BackendSurface(bs.Code, bs.EntryPoints, bs.Uniforms, samplers, bs.ExpectsRowMajorMatrices)
 
     let toFShadeSurface (e : FShadeEffect) =
         FShadeSurface(e) :> ISurface
 
-    let inline toEffect a = toEffect a
+    let inline toEffect a = Effect.ofFunction a
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -369,7 +308,7 @@ type FShadeRuntimeExtensions private() =
     static let toSurface (l : list<FShadeEffect>) =
         match l with
             | [s] -> FShadeSurface s
-            | l -> FShadeSurface (FShade.SequentialComposition.compose l)
+            | l -> FShadeSurface (FShade.Effect.compose l)
 
     [<Extension>]
     static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : list<FShadeEffect>) =

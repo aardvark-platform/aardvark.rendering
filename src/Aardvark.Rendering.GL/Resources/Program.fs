@@ -174,7 +174,7 @@ module ProgramReflector =
             if tcs = 1 then yield ShaderStage.TessControl
             if tev = 1 then yield ShaderStage.TessEval
             if gs = 1 then yield ShaderStage.Geometry
-            if fs = 1 then yield ShaderStage.Pixel
+            if fs = 1 then yield ShaderStage.Fragment
         ]
 
     let samplerHackRegex = System.Text.RegularExpressions.Regex("_samplerState[0-9]+(\[[0-9]+\])?$")
@@ -417,7 +417,7 @@ module ProgramExtensions =
             | ShaderStage.TessControl -> ShaderType.TessControlShader
             | ShaderStage.TessEval -> ShaderType.TessEvaluationShader
             | ShaderStage.Geometry -> ShaderType.GeometryShader
-            | ShaderStage.Pixel -> ShaderType.FragmentShader
+            | ShaderStage.Fragment -> ShaderType.FragmentShader
             | _ -> failwithf "unknown shader-stage: %A" stage
 
     let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
@@ -507,19 +507,19 @@ module ProgramExtensions =
             )
 
         let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
-            let vs = code.Contains "void VS("
-            let tcs = code.Contains "void TCS("
-            let tev = code.Contains "void TEV"
-            let gs = code.Contains "void GS("
-            let fs = withFragment && code.Contains "void PS("
+            let vs = code.Contains "#ifdef Vertex"
+            let tcs = code.Contains "#ifdef TessControl"
+            let tev = code.Contains "#ifdef TessEval"
+            let gs = code.Contains "#ifdef Geometry"
+            let fs = withFragment && code.Contains "#ifdef Fragment"
 
             let stages =
                 [
-                    if vs then yield "Vertex", "VS", ShaderStage.Vertex
-                    if tcs then yield "TessControl", "TCS", ShaderStage.TessControl
-                    if tev then yield "TessEval", "TEV", ShaderStage.TessEval
-                    if gs then yield "Geometry", "GS", ShaderStage.Geometry
-                    if fs then yield "Pixel", "PS", ShaderStage.Pixel
+                    if vs then yield "Vertex", "main", ShaderStage.Vertex
+                    if tcs then yield "TessControl", "main", ShaderStage.TessControl
+                    if tev then yield "TessEval", "main", ShaderStage.TessEval
+                    if gs then yield "Geometry", "main", ShaderStage.Geometry
+                    if fs then yield "Fragment", "main", ShaderStage.Fragment
                 ]
 
             let code = if (code.Contains("layout(location = 0) out vec4 Colors2Out")) then 
@@ -758,7 +758,7 @@ module ProgramExtensions =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders false code with
                     | Success shaders ->
-                        let shaders = shaders |> List.filter (fun s -> s.Stage <> ShaderStage.Pixel)
+                        let shaders = shaders |> List.filter (fun s -> s.Stage <> ShaderStage.Fragment)
 
                         addProgram x
                         let handle = GL.CreateProgram()

@@ -1,13 +1,27 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open Aardvark.Base
-open SpirV
 open FShade.SpirV
 open Aardvark.Base.Monads.Option
 
 
 type Width = int
-type ShaderType = FShade.SpirV.Type
+
+[<StructuralComparison; StructuralEquality>]
+type ShaderType =
+    | Void
+    | Bool
+    | Sampler
+    | Function of args : list<ShaderType> * retType : ShaderType
+    | Int of width : int * signed : bool
+    | Float of width : int
+    | Vector of compType : ShaderType * dim : int
+    | Matrix of colType : ShaderType * dim : int
+    | Array of elementType : ShaderType * length : int
+    | Struct of name : string * fields : list<ShaderType * string * list<Decoration * uint32[]>>
+    | Image of sampledType : ShaderType * dim : Dim * depth : int * arrayed : bool * ms : int * sampled : bool * format : int
+    | SampledImage of ShaderType
+    | Ptr of StorageClass * ShaderType
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderType =
@@ -108,7 +122,7 @@ module ShaderType =
     let Double = ShaderType.Float(64)
     let Half = ShaderType.Float(16)
     let Int32 = ShaderType.Int(32, true)
-    let Float =ShaderType. Float(32)
+    let Float32 =ShaderType. Float(32)
 
     let IntVec2 = ShaderType.Vector(Int32, 2)
     let IntVec3 = ShaderType.Vector(Int32, 3)
@@ -122,9 +136,9 @@ module ShaderType =
     let BoolVec3 = ShaderType.Vector(Bool, 3)
     let BoolVec4 = ShaderType.Vector(Bool, 4)
 
-    let FloatVec2 = ShaderType.Vector(Float, 2)
-    let FloatVec3 = ShaderType.Vector(Float, 3)
-    let FloatVec4 = ShaderType.Vector(Float, 4)
+    let FloatVec2 = ShaderType.Vector(Float32, 2)
+    let FloatVec3 = ShaderType.Vector(Float32, 3)
+    let FloatVec4 = ShaderType.Vector(Float32, 4)
     let FloatMat2 = ShaderType.Matrix(FloatVec2, 2)
     let FloatMat3 = ShaderType.Matrix(FloatVec3, 3)
     let FloatMat4 = ShaderType.Matrix(FloatVec4, 4)
@@ -163,7 +177,7 @@ module ShaderType =
             Int32,              typeof<int32>
             UnsignedInt,        typeof<uint32>
             //Half,               typeof<float16>
-            Float,              typeof<float32>
+            Float32,            typeof<float32>
             Double,             typeof<float>
             IntVec2,            typeof<V2i>
             IntVec3,            typeof<V3i>
@@ -389,16 +403,16 @@ module UniformBufferLayoutStd140 =
                 
                 UniformType.Primitive(PrimitiveType.Int(w, signed), size, size)
 
-            | Float(w) -> 
+            | ShaderType.Float(w) -> 
                 // both the size and alignment are the size of the scalar
                 // in basic machine types (e.g. sizeof<int>)
                 let size = w / 8
                 UniformType.Primitive(PrimitiveType.Float(w), size, size)
 
-            | Bool -> 
+            | ShaderType.Bool -> 
                 UniformType.Primitive(PrimitiveType.Bool, 4, 4)
 
-            | Vector(bt,3) -> 
+            | ShaderType.Vector(bt,3) -> 
                 // both the size and alignment are 4 times the size
                 // of the underlying scalar type.
                 match toUniformType bt with
@@ -407,7 +421,7 @@ module UniformBufferLayoutStd140 =
                     | o ->
                         UniformType.Struct(structLayout [bt, "X", []; bt, "Y", []; bt, "Z", []])
 
-            | Vector(bt,d) ->  
+            | ShaderType.Vector(bt,d) ->  
                 // both the size and alignment are <d> times the size
                 // of the underlying scalar type.
                 match toUniformType bt with
@@ -418,7 +432,7 @@ module UniformBufferLayoutStd140 =
                         UniformType.Struct(structLayout fields)
 
 
-            | Array(bt, len) -> 
+            | ShaderType.Array(bt, len) -> 
                 // the size of each element in the array will be the size
                 // of the element type rounded up to a multiple of the size
                 // of a vec4. This is also the array's alignment.
@@ -434,7 +448,7 @@ module UniformBufferLayoutStd140 =
                 UniformType.Array(et, len, size * len, size)
 
 
-            | Matrix(colType, cols) ->
+            | ShaderType.Matrix(colType, cols) ->
                 // same layout as an array of N vectors each with 
                 // R components, where N is the total number of columns
                 // present.
@@ -449,30 +463,30 @@ module UniformBufferLayoutStd140 =
                         let fields = [colType, "C0", []; colType, "C1", []; colType, "C2", []; colType, "C3", []] |> List.take cols
                         UniformType.Struct(structLayout fields)
 
-            | Struct(name,fields) -> 
+            | ShaderType.Struct(name,fields) -> 
                 let layout = structLayout fields
                 UniformType.Struct(structLayout fields)
 
-            | Ptr(_,t) -> 
+            | ShaderType.Ptr(_,t) -> 
                 toUniformType t
 
-            | Image(sampledType, dim,depth,arr, ms, sam, fmt) -> 
+            | ShaderType.Image(sampledType, dim,depth,arr, ms, sam, fmt) -> 
                 failf "cannot determine size for image type"
 
-            | Sampler -> 
+            | ShaderType.Sampler -> 
                 failf "cannot determine size for sampler type"
 
 
-            | Void -> 
+            | ShaderType.Void -> 
                 failf "cannot determine size for void type"
 
-            | Function _ ->
+            | ShaderType.Function _ ->
                 failf "cannot use function in UniformBuffer"
 
-            | SampledImage _ ->
+            | ShaderType.SampledImage _ ->
                 failf "cannot use SampledImage in UniformBuffer"
 
-    and structLayout (fields : list<ShaderType * string * list<SpirV.Decoration * uint32[]>>) : UniformBufferLayout =
+    and structLayout (fields : list<ShaderType * string * list<Decoration * uint32[]>>) : UniformBufferLayout =
         let mutable currentOffset = 0
         let mutable offsets : Map<string, int> = Map.empty
         let mutable types : Map<string, ShaderType> = Map.empty
@@ -859,7 +873,6 @@ type ShaderInfo =
 module private ShaderInfo =
     open System.Collections.Generic
     open System.Runtime.InteropServices
-    open SpirV
     open FShade.SpirV
     open Aardvark.Base.Monads.Option
 
@@ -904,7 +917,7 @@ module private ShaderInfo =
                 usedVariables = HashSet.empty
             }
 
-    let private structType      = Struct("", []).GetType()
+    let private structType      = ShaderType.Struct("", []).GetType()
     let private structName      = structType.GetField("_name", System.Reflection.BindingFlags.NonPublic ||| System.Reflection.BindingFlags.Instance)
     let private structFields    = structType.GetField("_fields", System.Reflection.BindingFlags.NonPublic ||| System.Reflection.BindingFlags.Instance)
 
@@ -932,22 +945,22 @@ module private ShaderInfo =
 
                 | OpConstant(t,r,v) ->
                     match types.[t] with
-                        | Int(32,_) ->  constants.[r] <- int v.[0]
+                        | ShaderType.Int(32,_) -> constants.[r] <- int v.[0]
                         | _ -> ()
 
-                | OpTypeVoid r              -> types.[r] <- Void
-                | OpTypeBool r              -> types.[r] <- Bool
-                | OpTypeInt (r, w, s)       -> types.[r] <- Int(int w, s = 1u)
-                | OpTypeFloat (r, w)        -> types.[r] <- Float(int w)
-                | OpTypeVector (r, c, d)    -> types.[r] <- Vector(types.[c], int d)
-                | OpTypeMatrix (r, c, d)    -> types.[r] <- Matrix(types.[c], int d)
-                | OpTypeArray (r, e, l)     -> types.[r] <- Array(types.[e], constants.[l])
-                | OpTypeSampler r           -> types.[r] <- Sampler
-                | OpTypeSampledImage (r,t)  -> types.[r] <- SampledImage(types.[t])
-                | OpTypePointer (r, c, t)   -> types.[r] <- Ptr(c, types.[t])
+                | OpTypeVoid r              -> types.[r] <- ShaderType.Void
+                | OpTypeBool r              -> types.[r] <- ShaderType.Bool
+                | OpTypeInt (r, w, s)       -> types.[r] <- ShaderType.Int(int w, s = 1u)
+                | OpTypeFloat (r, w)        -> types.[r] <- ShaderType.Float(int w)
+                | OpTypeVector (r, c, d)    -> types.[r] <- ShaderType.Vector(types.[c], int d)
+                | OpTypeMatrix (r, c, d)    -> types.[r] <- ShaderType.Matrix(types.[c], int d)
+                | OpTypeArray (r, e, l)     -> types.[r] <- ShaderType.Array(types.[e], constants.[l])
+                | OpTypeSampler r           -> types.[r] <- ShaderType.Sampler
+                | OpTypeSampledImage (r,t)  -> types.[r] <- ShaderType.SampledImage(types.[t])
+                | OpTypePointer (r, c, t)   -> types.[r] <- ShaderType.Ptr(c, types.[t])
                 
                 | OpTypeImage(r,sampledType,dim,depth, arrayed, ms, sampled,format,access) ->
-                    types.[r] <- Image(types.[sampledType], unbox<Dim> dim, int depth, (arrayed = 1u), int ms, (sampled = 1u), format)
+                    types.[r] <- ShaderType.Image(types.[sampledType], unbox<Dim> dim, int depth, (arrayed = 1u), int ms, (sampled = 1u), format)
 
                 | OpTypeStruct (r, fts) -> 
                     let fieldTypes = fts |> Array.toList |> List.map (fun ft -> types.[ft])
@@ -1089,7 +1102,7 @@ module private ShaderInfo =
         for id in structs do
             let t = types.[id]
             match t with
-                | Struct(_, fields) ->
+                | ShaderType.Struct(_, fields) ->
                     let name =
                         match names.TryGetValue id with
                             | (true, name) -> name
@@ -1133,7 +1146,7 @@ module private ShaderInfo =
                         | ExecutionModel.TessellationControl -> ShaderStage.TessControl, TessControl { flags = m.tessFlags; outputVertices = m.outputVertices }
                         | ExecutionModel.TessellationEvaluation -> ShaderStage.TessEval, TessEval m.tessFlags
                         | ExecutionModel.Geometry -> ShaderStage.Geometry, Geometry { flags = m.geometryFlags; outputVertices = m.outputVertices; invocations = m.invocations }
-                        | ExecutionModel.Fragment -> ShaderStage.Pixel, Fragment { flags = m.fragFlags; discard = m.discards }
+                        | ExecutionModel.Fragment -> ShaderStage.Fragment, Fragment { flags = m.fragFlags; discard = m.discards }
                         | m -> failf "unsupported ExecutionModel %A" m
 
                 let inputs          = CSharpList.empty
@@ -1148,7 +1161,7 @@ module private ShaderInfo =
                     match vPar.paramType with
                         | Ptr(StorageClass.Input,t) -> 
                             match t with
-                                | Struct(name,fields) when name.StartsWith "gl_" -> ()
+                                | ShaderType.Struct(name,fields) when name.StartsWith "gl_" -> ()
                                 | _ -> 
                                     match ShaderParameter.tryGetBuiltInSemantic vPar with
                                         | Some sem -> builtInInputs.[sem] <- t
@@ -1156,7 +1169,7 @@ module private ShaderInfo =
 
                         | Ptr(StorageClass.Output,t) ->
                             match t with
-                                | Struct(name,fields) when name.StartsWith "gl_" -> ()
+                                | ShaderType.Struct(name,fields) when name.StartsWith "gl_" -> ()
                                 | _ -> 
                                     match ShaderParameter.tryGetBuiltInSemantic vPar with
                                         | Some sem -> builtInOutputs.[sem] <- t
