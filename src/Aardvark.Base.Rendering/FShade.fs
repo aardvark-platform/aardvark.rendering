@@ -209,13 +209,9 @@ module FShadeInterop =
             RenderbufferFormat.Srgb8Alpha8, typeof<V4d>
             RenderbufferFormat.DepthComponent32f, typeof<float>
             RenderbufferFormat.Depth32fStencil8, typeof<float>
-            RenderbufferFormat.StencilIndex1Ext, typeof<int>
             RenderbufferFormat.StencilIndex1, typeof<int>
-            RenderbufferFormat.StencilIndex4Ext, typeof<int>
             RenderbufferFormat.StencilIndex4, typeof<int>
             RenderbufferFormat.StencilIndex8, typeof<int>
-            RenderbufferFormat.StencilIndex8Ext, typeof<int>
-            RenderbufferFormat.StencilIndex16Ext, typeof<int>
             RenderbufferFormat.StencilIndex16, typeof<int>
             RenderbufferFormat.Rgba32ui, typeof<V4d>
             RenderbufferFormat.Rgb32ui, typeof<V3d>
@@ -294,7 +290,7 @@ module FShadeInterop =
                                 samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
                         | _ ->
                             ()
-                BackendSurface(bs.Code, bs.EntryPoints, bs.Uniforms, samplers, bs.ExpectsRowMajorMatrices)
+                BackendSurface(bs.Code, bs.EntryPoints, bs.Uniforms, samplers, true)
 
     let toFShadeSurface (e : FShadeEffect) =
         FShadeSurface(e) :> ISurface
