@@ -64,7 +64,7 @@ and IRuntime =
     abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * Set<Symbol> -> IFramebufferSignature
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
-    abstract member AssembleEffect : FShade.Effect -> BackendSurface
+    abstract member AssembleEffect : FShade.Effect * IFramebufferSignature -> BackendSurface
 
     abstract member PrepareBuffer : IBuffer -> IBackendBuffer
     abstract member PrepareTexture : ITexture -> IBackendTexture

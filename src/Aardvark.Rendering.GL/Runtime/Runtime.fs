@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
@@ -94,10 +95,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
-        member x.AssembleEffect (effect : Effect) =
+        member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
             let code = 
-                effect
-                    |> Effect.toModule
+                signature.Link(effect, Range1d(-1.0, 1.0), false)
                     |> ModuleCompiler.compileGLSL410
 
             let entries =

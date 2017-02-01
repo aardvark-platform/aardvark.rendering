@@ -229,19 +229,24 @@ module FShadeInterop =
         ]
 
     type IFramebufferSignature with
-        member x.Link(effect : Effect) =
+        member x.Link(effect : Effect, depthRange : Range1d, flip : bool) =
             let outputs = 
                 x.ColorAttachments 
-                    |> Map.toSeq 
-                    |> Seq.map (fun (_, (name, att)) ->
+                    |> Map.toList 
+                    |> List.map (fun (slot, (name, att)) ->
                         match builtInTypes.TryGetValue name with
-                            | (true, t) -> (string name, t)
-                            | _ -> (string name, formatToType att.format)
+                            | (true, t) -> (string name, t, slot)
+                            | _ -> (string name, formatToType att.format, slot)
                         
                        )
-                    |> Map.ofSeq
-            effect
-                |> Effect.link ShaderStage.Fragment outputs
+
+            let config = 
+                { EffectConfig.ofList outputs with
+                    depthRange = depthRange
+                    flipHandedness = flip
+                }
+
+            effect |> Effect.toModule config
 
 
     type FShadeSurface(effect : FShadeEffect) =
@@ -275,8 +280,7 @@ module FShadeInterop =
 
         interface IGeneratedSurface with
             member x.Generate (r : IRuntime, signature : IFramebufferSignature) =
-                let effect = signature.Link effect
-                let bs = r.AssembleEffect(effect) 
+                let bs = r.AssembleEffect(effect, signature) 
 
                 let samplers = Dictionary.empty
 

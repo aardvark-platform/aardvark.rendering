@@ -183,34 +183,19 @@ type private AirAttributeProvider(local : Map<Symbol, BufferView>, inh : IAttrib
         member x.Dispose() = ()
 
 type private AirUniformProvider(local : Map<Symbol, IMod>, trafos : list<IMod<Trafo3d>>, inh : IUniformProvider) =
-
     static let mt = Symbol.Create "ModelTrafo"
-    static let mvt = Symbol.Create "ModelViewTrafo"
-    static let mvpt = Symbol.Create "ModelViewProjTrafo"
-    static let mti = Symbol.Create "ModelTrafoInv"
-    static let mvti = Symbol.Create "ModelViewTrafoInv"
-    static let mvpti = Symbol.Create "ModelViewProjTrafoInv"
-    static let normalMatrix = Symbol.Create "NormalMatrix"
-
-    static let vt = Symbol.Create "ViewTrafo"
-    static let pt = Symbol.Create "ProjTrafo"
-
-    let getTrafo (s : Symbol) =
-        match inh.TryGetUniform(Ag.emptyScope, s) with
-            | Some (:? IMod<Trafo3d> as v) -> v
-            | _ -> failwith ""
-
-    
     let model = lazy (Aardvark.SceneGraph.Semantics.TrafoSemantics.flattenStack trafos)
-    let view = lazy (getTrafo vt)
-    let proj = lazy (getTrafo pt)
+
 
 
     interface IUniformProvider with
         member x.TryGetUniform(scope, sem) =
-            match Map.tryFind sem local with
-                | Some u -> Some u
-                | None -> inh.TryGetUniform(scope, sem)
+            if sem = mt then 
+                model.Value :> IMod |> Some
+            else
+                match Map.tryFind sem local with
+                    | Some u -> Some u
+                    | None -> inh.TryGetUniform(scope, sem)
 
         member x.Dispose() = ()
 
