@@ -80,9 +80,6 @@ module RuntimeConfig =
     /// If true, no OpenGL queries take place, i.e. no primitive counting etc.
     let mutable SupressGLTimers = false
 
-    /// If true, no frame statistics is accumulated for render tasks 
-    let mutable SupressRuntimeStats = false
-
     let mutable SupressSparseBuffers = false
 
 [<AutoOpen>]

@@ -460,9 +460,14 @@ type MappedIndirectBuffer(ctx : Context, indexed : bool) =
     static let sd = sizeof<DrawCallInfo> |> nativeint
     let buffer = ctx.CreateMappedBuffer()
 
-    let mutable capacity = 0
-    let count : nativeptr<int> = NativePtr.alloc 1
+    let createCount() =
+        let ptr = NativePtr.alloc 1
+        NativePtr.write ptr 0
+        ptr
 
+    let mutable capacity = 0
+    let count : nativeptr<int> = createCount()
+    
     let convert =
         if indexed then
             fun (info : DrawCallInfo) ->

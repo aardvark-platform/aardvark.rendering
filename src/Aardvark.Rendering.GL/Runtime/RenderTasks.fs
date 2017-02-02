@@ -184,7 +184,7 @@ module RenderTasks =
                 beforeRender.OnNext()
                 NativePtr.write runtimeStats V2i.Zero
                 let stats = x.Perform(t, fbo)
-
+                GL.Check "RenderTask.Run"
                 afterRender.OnNext()
                 let rt = NativePtr.read runtimeStats
                 t.AddDrawCalls(rt.X, rt.Y)
