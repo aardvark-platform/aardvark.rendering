@@ -266,10 +266,20 @@ module PostProcessing =
                 )
                     
 
+
+
+
+
             match ctx.TryCompileCompute(true, code) with
                 | Success prog ->
+                    GL.ShaderStorageBlockBinding(prog.Handle, 0, 0)
                     let buffers = getParameters ProgramInterface.BufferVariable prog
                     let images = getParameters ProgramInterface.Uniform prog
+
+//
+//                    GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, 0, 1213, )
+//                    GL.DispatchCompute(10, 1, 1)
+
                     //let buffers = getParameters ProgramInterface.UniformBlock prog
                     for t in images do
                         printfn "%A" t

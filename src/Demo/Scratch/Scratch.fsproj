@@ -102,6 +102,7 @@
     <Compile Include="Experiments\InteractionExperiments.fs" />
     <Compile Include="Experiments\FablishInterop.fs" />
     <Compile Include="Experiments\RecordUniforms.fs" />
+    <Compile Include="Experiments\Volume.fs" />
     <Compile Include="PGM.fs" />
     <Compile Include="ImageFormat.fs" />
     <Compile Include="Program.fs" />
