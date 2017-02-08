@@ -38,6 +38,7 @@ type ShaderStage =
     | TessEval = 3
     | Geometry = 4
     | Fragment = 5
+    | Compute = 6
 
 type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, uniforms : SymbolDict<IMod>, samplers : Dictionary<string * int, SamplerDescription>, expectsRowMajorMatrices : bool) =
     interface ISurface

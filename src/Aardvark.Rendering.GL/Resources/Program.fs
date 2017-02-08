@@ -295,7 +295,7 @@ module ProgramReflector =
                         if not (u.name.StartsWith "_main_") then
                             yield u
         ]
-    
+
     let getActiveInputs (p : int) =
         let active = GL.GetProgram(p, GetProgramParameterName.ActiveAttributes)
         GL.Check "could not get active attribute count"
@@ -418,6 +418,7 @@ module ProgramExtensions =
             | ShaderStage.TessEval -> ShaderType.TessEvaluationShader
             | ShaderStage.Geometry -> ShaderType.GeometryShader
             | ShaderStage.Fragment -> ShaderType.FragmentShader
+            | ShaderStage.Compute -> ShaderType.ComputeShader
             | _ -> failwithf "unknown shader-stage: %A" stage
 
     let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
@@ -506,6 +507,14 @@ module ProgramExtensions =
 
             )
 
+        let tryCompileCompute (code : string) (x : Context) =
+            use t = x.ResourceLock
+            match tryCompileShader ShaderStage.Compute code "main" x with
+                | Success shader ->
+                    Success [shader]
+                | Error err ->
+                    Error err
+
         let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
             let vs = code.Contains "#ifdef Vertex"
             let tcs = code.Contains "#ifdef TessControl"
@@ -528,10 +537,8 @@ module ProgramExtensions =
                                 .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
                        else code
 
-#if DEBUG
             let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-            Report.Line("CODE: {0}", codeWithDefine)
-#endif
+            Report.Line(4, "CODE: {0}", codeWithDefine)
 
             using x.ResourceLock (fun _ ->
                 let results =
@@ -722,6 +729,28 @@ module ProgramExtensions =
             x |> ShaderCompiler.tryCompileShader stage code entryPoint
 
 
+        member x.TryCompileCompute(expectsRowMajorMatrices : bool, code : string) =
+            use t = x.ResourceLock
+
+            match x |> ShaderCompiler.tryCompileCompute code with
+                | Success shaders ->
+                    addProgram x
+                    let handle = GL.CreateProgram()
+                    GL.Check "could not create program"
+
+                    for s in shaders do
+                        GL.AttachShader(handle, s.Handle)
+                        GL.Check "could not attach shader to program"
+
+                    match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders 0 Map.empty (fun _ _ -> []) with
+                        | Success program ->
+                            Success program
+                        | Error err ->
+                            Error err
+
+                | Error err ->
+                    Error err
+                    
         member x.TryCompileProgram(fboSignature : IFramebufferSignature, expectsRowMajorMatrices : bool, code : string) =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders true code with

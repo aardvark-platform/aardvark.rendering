@@ -190,11 +190,103 @@ module PostProcessing =
                 |> Sg.texture DefaultSemantic.DiffuseColorTexture t
                 |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
 
+    module ComputeTest =
+        open Aardvark.Rendering.GL
+        open OpenTK.Graphics
+        open OpenTK.Graphics.OpenGL4
+        open Microsoft.FSharp.NativeInterop
+
+        type GetProgramResourceName = delegate of int * ProgramInterface * int * int * byref<int> * byte[] -> unit
+        type GetProgramResource = delegate of int * ProgramInterface * int * int * byref<ProgramProperty> * int * byref<int> * byref<int> -> unit
+
+        let run() =
+            let runtime = unbox<Runtime> Interactive.Window.Runtime
+            let ctx = runtime.Context
+            use t = ctx.ResourceLock
+
+            let code = 
+                String.concat "\r\n" [
+                    "#version 430"
+                    "layout( std430, binding=0 ) buffer inputs"
+                    "{"
+                    "    float data[];"
+                    "};"
+
+                    "layout(rgba32f, binding = 0) uniform image2D img_output;"
+
+                    "layout( local_size_x = 1 ) in;" 
+                    "void main() {" 
+                    "    uint gid = gl_GlobalInvocationID.x;" 
+                    "    data[gid] = float(gid);" 
+                    "    imageStore(img_output, ivec2(gid, 0), vec4(1,0,1,0));"
+                    "}"
+                ]
+
+            let ctxHandle = unbox<IGraphicsContextInternal> ctx.CurrentContextHandle.Value.Handle
+            let ptr = ctxHandle.GetAddress "glGetProgramResourceName"
+            let glGetProgramResourceName = System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer(ptr, typeof<GetProgramResourceName>) |> unbox<GetProgramResourceName>
+            
+            let ptr = ctxHandle.GetAddress "glGetProgramResourceiv"
+            let glGetProgramResource = System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer(ptr, typeof<GetProgramResource>) |> unbox<GetProgramResource>
+
+            let arrayRx = System.Text.RegularExpressions.Regex @"^(?<name>[^\.\[\]]*)\[[0]\]$"
+
+            let getProgramResource (iface : ProgramInterface) (prop : ProgramProperty) (index : int) (p : int) =
+                let mutable prop = prop
+                let mutable res = 0
+                let mutable len = 0
+                glGetProgramResource.Invoke(p, iface, index, 1, &prop, 1, &len, &res)
+                res
+
+            let getProgramResourceName (iface : ProgramInterface) (index : int) (p : int) =
+                let nameLength = p |> getProgramResource iface ProgramProperty.NameLength index
+                let data : byte[] = Array.zeroCreate nameLength
+                let mutable len = 0
+                glGetProgramResourceName.Invoke(p, iface, 0, data.Length, &len, data)
+                System.Text.Encoding.UTF8.GetString(data, 0, len)
+                    
+
+            let getParameters (iface : ProgramInterface) (p : Program) =
+                let handle = p.Handle
+                let mutable cnt = 0
+                GL.GetProgramInterface(handle, iface, ProgramInterfaceParameter.ActiveResources, &cnt)
+
+                List.init cnt (fun i ->
+
+                    let rName       = handle |> getProgramResourceName iface i
+                    let rType       = handle |> getProgramResource iface ProgramProperty.Type i |> unbox<ActiveUniformType>
+                    let rLocation   = handle |> getProgramResource iface ProgramProperty.Location i
+
+                    let rName, rArray = 
+                        let m = arrayRx.Match rName 
+                        if m.Success then m.Groups.["name"].Value, true
+                        else rName, false
+                    
+                    rName, rType, rArray, rLocation
+                )
+                    
+
+            match ctx.TryCompileCompute(true, code) with
+                | Success prog ->
+                    let buffers = getParameters ProgramInterface.BufferVariable prog
+                    let images = getParameters ProgramInterface.Uniform prog
+                    //let buffers = getParameters ProgramInterface.UniformBlock prog
+                    for t in images do
+                        printfn "%A" t
+                    printfn "%A" prog
+                | Error err ->
+                    Log.error "%s" err
+
+
+            ()
 
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
                
+
+        ComputeTest.run()
+
         let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, Mod.constant (V2i(1024, 768)))
         fbo.Acquire()
         let fboHandle = fbo.GetValue()
