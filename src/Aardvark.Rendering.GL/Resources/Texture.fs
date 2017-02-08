@@ -1226,6 +1226,62 @@ module TextureUploadExtensions =
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
             GL.DeleteBuffer(pbo)
 
+    module NativeTensor4 =
+
+        let private pixelFormat =
+            LookupTable.lookupTable [
+                1L, PixelFormat.Red
+                2L, PixelFormat.Rg
+                3L, PixelFormat.Rgb
+                4L, PixelFormat.Rgba
+            ]
+
+        let withPBO (x : NativeTensor4<'a>) (align : int) (f : V3i -> PixelType -> PixelFormat -> nativeint -> unit) =
+            let size = x.Info.Size
+            let pt = PixelType.ofType typeof<'a>
+            let pf = pixelFormat size.W
+            
+            let align = align |> nativeint
+            let alignMask = align - 1n |> nativeint
+            let channelSize = typeof<'a>.GLSize |> nativeint
+            let channels = size.W |> nativeint
+
+            let pixelSize = channelSize * channels
+
+            let rowSize = pixelSize * nativeint size.X
+            let alignedRowSize = (rowSize + (alignMask - 1n)) &&& ~~~alignMask
+            let sizeInBytes = alignedRowSize * nativeint size.Y * nativeint size.Z
+
+            if alignedRowSize % channelSize <> 0n then
+                failwith "[GL] unexpected row alignment (not implemented atm.)"
+
+            let dstInfo =
+                let rowPixels = alignedRowSize / channelSize
+                let viSize = V4l(int64 size.X, int64 size.Y, int64 size.Z, int64 channels)
+                Tensor4Info(
+                    0L,
+                    viSize,
+                    V4l(
+                        int64 channels, 
+                        int64 rowPixels, 
+                        int64 rowPixels * viSize.Y, 
+                        1L
+                    )
+                )
+
+            let pbo = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+            GL.BufferData(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferUsageHint.DynamicDraw)
+            let pDst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
+
+            let dst = NativeTensor4<'a>(NativePtr.ofNativeInt pDst, dstInfo)
+            x.CopyTo(dst)
+
+            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+            f (V3i size.XYZ) pt pf sizeInBytes
+
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.DeleteBuffer(pbo)
 
     type Context with
         

@@ -204,6 +204,14 @@ module PostProcessing =
             let ctx = runtime.Context
             use t = ctx.ResourceLock
 
+            let texture = ctx.CreateSparseTexture(V3i(1234, 4321, 2345), TextureFormat.R8, 1)
+
+            ctx.Commit(texture, 0, Box3i(V3i.Zero, V3i(13, 15, 33) - V3i.III))
+
+
+
+
+
             let code = 
                 String.concat "\r\n" [
                     "#version 430"
