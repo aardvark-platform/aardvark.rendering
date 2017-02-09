@@ -12,6 +12,7 @@ open Aardvark.Rendering
 open Aardvark.Base.Runtime
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
+open Aardvark.Base.ShaderReflection
 
 [<AutoOpen>]
 module private Values =
@@ -523,38 +524,20 @@ module OpenGLObjectInterpreter =
 
         member gl.bindUniformLocation (l : int) (loc : UniformLocation)=
             match loc.Type with
-                | FloatVectorType 1 ->
-                    gl.uniform1fv l 1 loc.Data
-                | IntVectorType 1 ->
-                    gl.uniform1iv l 1 loc.Data
-
-                | FloatVectorType 2 ->
-                    gl.uniform2fv l 1 loc.Data
-                | IntVectorType 2 ->
-                    gl.uniform2iv l 1 loc.Data
-
-                | FloatVectorType 3 ->
-                    gl.uniform3fv l 1 loc.Data
-                | IntVectorType 3 ->
-                    gl.uniform3iv l 1 loc.Data
-
-                | FloatVectorType 4 ->
-                    gl.uniform4fv l 1 loc.Data
-                | IntVectorType 4 ->
-                    gl.uniform4iv l 1 loc.Data
+                | Vector(Float, 1) | Float  -> gl.uniform1fv l 1 loc.Data
+                | Vector(Int, 1) | Int      -> gl.uniform1iv l 1 loc.Data
+                | Vector(Float, 2)          -> gl.uniform2fv l 1 loc.Data
+                | Vector(Int, 2)            -> gl.uniform2iv l 1 loc.Data
+                | Vector(Float, 3)          -> gl.uniform3fv l 1 loc.Data
+                | Vector(Int, 3)            -> gl.uniform3iv l 1 loc.Data
+                | Vector(Float, 4)          -> gl.uniform4fv l 1 loc.Data
+                | Vector(Int, 4)            -> gl.uniform4iv l 1 loc.Data
+                | Matrix(Float, 2, 2, true) -> gl.uniformMatrix2fv l 1 1 loc.Data
+                | Matrix(Float, 3, 3, true) -> gl.uniformMatrix3fv l 1 1 loc.Data
+                | Matrix(Float, 4, 4, true) -> gl.uniformMatrix4fv l 1 1 loc.Data
+                | _                         -> failwithf "no uniform-setter for: %A" loc
 
 
-                | FloatMatrixType(2,2) ->
-                    gl.uniformMatrix2fv l 1 1 loc.Data
-
-                | FloatMatrixType(3,3) ->
-                    gl.uniformMatrix3fv l 1 1 loc.Data
-
-                | FloatMatrixType(4,4) ->
-                    gl.uniformMatrix4fv l 1 1 loc.Data
-
-                | _ ->
-                    failwithf "no uniform-setter for: %A" loc
 
         member gl.render (o : PreparedRenderObject) =
             if (not <| isNull o.Original.IsActive) && Mod.force o.Original.IsActive then // empty objects make null here. Further investigate

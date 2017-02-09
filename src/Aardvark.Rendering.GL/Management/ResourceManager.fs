@@ -11,6 +11,8 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
+open OpenTK.Graphics.OpenGL4
+open Aardvark.Base.ShaderReflection
 
 module Sharing =
     
@@ -212,7 +214,6 @@ module Sharing =
                 else
                     ctx.Delete b
 
-open OpenTK.Graphics.OpenGL4
 
 type PersistentlyMappedUniformManager(ctx : Context, size : int, fields : list<UniformField>) =
 
@@ -322,8 +323,8 @@ type PersistentlyMappedUniformManager(ctx : Context, size : int, fields : list<U
         
 
 
-type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>) =
-
+type UniformBufferManager(ctx : Context, block : ShaderBlock) =
+    let size = block.DataSize
     let alignedSize = (size + 255) &&& ~~~255
 
     let buffer = ctx.CreateResizeBuffer()
@@ -334,10 +335,11 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>
 
     member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView> =
         let values =
-            fields 
+            block.Fields 
             |> List.map (fun f ->
-                let sem = Symbol.Create f.semantic
-                match Uniforms.tryGetDerivedUniform f.semantic u with
+                let name = ShaderPath.name f.Path
+                let sem = Symbol.Create name
+                match Uniforms.tryGetDerivedUniform name u with
                     | Some v -> sem, v
                     | None -> 
                         match u.TryGetUniform(scope, sem) with
@@ -353,9 +355,8 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>
         viewCache.GetOrCreate(
             key,
             fun () ->
-                let values = values |> List.map (fun (s,v) -> s, v :> IAdaptiveObject) |> Map.ofList
-                let writers = UnmanagedUniformWriters.writers true fields values
-     
+                let writers = List.map2 (fun f (_,v) -> nativeint f.Offset, ShaderParameterWriter.adaptive v f.Type) block.Fields values
+
                 let mutable block = Unchecked.defaultof<_>
                 { new Resource<UniformBufferView>(ResourceKind.UniformBuffer) with
                     member x.GetInfo b = 
@@ -372,7 +373,7 @@ type UniformBufferManager(ctx : Context, size : int, fields : list<UniformField>
                                     UniformBufferView(buffer, block.Offset, nativeint block.Size)
 
                         buffer.UseWriteUnsafe(handle.Offset, handle.Size, fun ptr ->
-                            for (_,w) in writers do w.Write(x, ptr)
+                            for (offset,w) in writers do w.Write(x, ptr + offset)
                         )
                         handle
 
@@ -507,7 +508,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
 
-    let uniformBufferManagers = ConcurrentDictionary<int * list<ActiveUniform>, UniformBufferManager>()
+    let uniformBufferManagers = ConcurrentDictionary<ShaderBlock, UniformBufferManager>()
 
     member private x.ArrayBufferCache       : ResourceCache<Buffer>                 = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer>                 = bufferCache
@@ -699,15 +700,17 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    member x.CreateUniformLocation(scope : Ag.Scope, u : IUniformProvider, uniform : ActiveUniform) =
-        match u.TryGetUniform (scope, Sym.ofString uniform.semantic) with
+    member x.CreateUniformLocation(scope : Ag.Scope, u : IUniformProvider, uniform : ShaderParameter) =
+        let name = ShaderPath.name uniform.Path
+        let sem = Symbol.Create name
+        match u.TryGetUniform (scope, sem) with
             | Some v ->
                 uniformLocationCache.GetOrCreate(
                     [v :> obj],
                     fun () ->
-                        let inputs = Map.ofList [Symbol.Create uniform.semantic, v :> IAdaptiveObject]
-                        let _,writer = UnmanagedUniformWriters.writers false [uniform.UniformField] inputs |> List.head
-     
+                        let inputs = Map.ofList [sem, v :> IAdaptiveObject]
+                        let writer = ShaderParameterWriter.adaptive v uniform.Type
+
                         { new Resource<UniformLocation>(ResourceKind.UniformLocation) with
                             
                             member x.GetInfo h =
@@ -717,7 +720,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                 let handle =
                                     match old with 
                                         | Some o -> o
-                                        | None -> ctx.CreateUniformLocation(uniform.uniformType.SizeInBytes, uniform.uniformType)
+                                        | None -> ctx.CreateUniformLocation(ShaderParameterType.sizeof uniform.Type, uniform.Type)
                                 
                                 writer.Write(x, handle.Data)
                                 handle
@@ -731,13 +734,12 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             | None ->
                 failwithf "[GL] could not get uniform: %A" uniform
      
-    member x.CreateUniformBuffer(scope : Ag.Scope, layout : UniformBlock, program : Program, u : IUniformProvider) =
+    member x.CreateUniformBuffer(scope : Ag.Scope, layout : ShaderBlock, program : Program, u : IUniformProvider) =
         let manager = 
             uniformBufferManagers.GetOrAdd(
-                (layout.size, layout.fields), 
-                fun (s,f) -> 
-                    let uniformFields = layout.fields |> List.map (fun f -> f.UniformField)
-                    new UniformBufferManager(ctx,s,uniformFields)
+                (layout), 
+                fun block -> 
+                    new UniformBufferManager(ctx,block)
                     //new PersistentlyMappedUniformManager(ctx, s, uniformFields)
             )
 

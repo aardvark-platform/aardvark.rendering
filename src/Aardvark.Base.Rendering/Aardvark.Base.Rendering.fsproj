@@ -112,6 +112,7 @@
     <Compile Include="NativeTensorGenerated.fs" />
     <Compile Include="ImageTrafo.fs" />
     <Compile Include="PixImageCube.fs" />
+    <Compile Include="ShaderInterface.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

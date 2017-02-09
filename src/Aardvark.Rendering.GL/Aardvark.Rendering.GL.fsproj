@@ -72,6 +72,7 @@
     <Compile Include="Resources\UniformBuffer.fs" />
     <Compile Include="Resources\UniformLocation.fs" />
     <Compile Include="Resources\SamplerState.fs" />
+    <Compile Include="Resources\ShaderReflector.fs" />
     <Compile Include="Resources\Program.fs" />
     <Compile Include="Resources\Renderbuffer.fs" />
     <Compile Include="Resources\Framebuffer.fs" />

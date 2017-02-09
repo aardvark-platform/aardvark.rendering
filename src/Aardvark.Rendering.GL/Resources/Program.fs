@@ -10,6 +10,7 @@ open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
+open Aardvark.Base.ShaderReflection
 open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
@@ -58,12 +59,10 @@ type Program =
        Code : string
        Handle : int
        Shaders : list<Shader>
-       UniformBlocks : list<UniformBlock>
-       Uniforms : list<ActiveUniform>
        UniformGetters : SymbolDict<IMod>
-       Inputs : list<ActiveAttribute>
-       Outputs : list<ActiveAttribute>
        SupportedModes : Option<Set<IndexedGeometryMode>>
+       Interface : ShaderReflection.ShaderInterface
+       TextureInfo : Map<string * int, SamplerDescription>
 
        [<DefaultValue>]
        mutable _inputs : Option<list<string * Type>>
@@ -76,17 +75,12 @@ type Program =
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
         member x.UniformGetters = x.UniformGetters
-        member x.Samplers = 
-            x.Uniforms |> List.choose (fun u ->
-                match u.uniformType, u.samplerState with
-                    | SamplerType, Some samplerState -> Some (u.name, u.index, { textureName = Symbol.Create u.semantic; samplerState = samplerState})
-                    | _ -> None
-            )
+        member x.Samplers = []
 
         member x.Inputs = 
             match x._inputs with
                 | None -> 
-                    let r = x.Inputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+                    let r = x.Interface.Inputs |> List.map (fun a -> ShaderPath.name a.Path, ShaderParameterType.getExpectedType a.Type)
                     x._inputs <- Some r
                     r
                 | Some r ->
@@ -95,7 +89,7 @@ type Program =
         member x.Outputs = 
             match x._outputs with
                 | None ->
-                    let r = x.Outputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+                    let r = x.Interface.Outputs |> List.map (fun a -> ShaderPath.name a.Path, ShaderParameterType.getExpectedType a.Type)
                     x._outputs <- Some r
                     r
                 | Some r ->
@@ -104,52 +98,28 @@ type Program =
         member x.Uniforms =
             match x._uniforms with
                 | None ->
-                    let bu = x.UniformBlocks |> List.collect (fun b -> b.fields |> List.map (fun f -> ConversionTarget.ConvertForBuffer, f))
-                    let uu = x.Uniforms |> List.map (fun f -> ConversionTarget.ConvertForLocation, f)
-                    
-                    let res = 
-                        bu @ uu |> List.choose (fun (target, u) -> 
-                            match u.uniformType with
-                                | SamplerType ->
-                                    Some (u.semantic, typeof<ITexture>)
-
-                                | ImageType ->
-                                    None
-
-                                | _ ->
-                                    let t = UniformConverter.getExpectedType target u.uniformType
-                                    Some (u.semantic, t)
+                    let bu = 
+                        x.Interface.UniformBlocks |> List.collect (fun b -> 
+                            b.Fields |> List.map (fun f -> 
+                                ShaderPath.name f.Path, ShaderParameterType.getExpectedType f.Type
+                            )
                         )
+
+                    let uu = 
+                        x.Interface.Uniforms |> List.map (fun f -> 
+                            match f.Type with
+                                | Sampler _ -> 
+                                    ShaderPath.name f.Path, typeof<ITexture>
+                                | t ->
+                                    ShaderPath.name f.Path, ShaderParameterType.getExpectedType t
+                        )
+                    
+                    let res = bu @ uu 
                     x._uniforms <- Some res
                     res
                 | Some r ->
                     r
 
-    member x.InterfaceBlock =
-        let uniformBlocks = 
-            x.UniformBlocks |> List.map (fun b -> 
-                let fields = b.fields |> List.map (fun f -> f.Interface)
-                let fields = fields |> String.concat "\r\n" |> String.indent 1
-                sprintf "uniform %s {\r\n%s\r\n};" b.name fields)
-            |> String.concat "\r\n"
-
-        let uniforms =
-            x.Uniforms |> List.map (fun u -> sprintf "uniform %s" u.Interface) |> String.concat "\r\n"
-
-        let inputs =
-            x.Inputs |> List.map (fun i ->
-                sprintf "%A %s;" i.attributeType i.name
-            ) |> String.concat "\r\n" |> String.indent 1 |> sprintf "input\r\n{\r\n%s\r\n};"
-
-        let outputs =
-            x.Outputs |> List.map (fun i ->
-                sprintf "%A %s;" i.attributeType i.name
-            ) |> String.concat "\r\n" |> String.indent 1 |> sprintf "output\r\n{\r\n%s\r\n};"
-
-
-        let body = sprintf "%s\r\n%s\r\n\r\n%s\r\n\r\n%s" uniforms uniformBlocks inputs outputs
-
-        sprintf "interface {\r\n%s\r\n}" (String.indent 1 body)
 
 
 module ProgramReflector =
@@ -687,18 +657,20 @@ module ProgramExtensions =
                     let supported = 
                         shaders |> List.tryPick (fun s -> s.SupportedModes)
 
+                    let iface = ShaderInterface.ofProgram x handle
+                    let iface = 
+                        if expectsRowMajorMatrices then ShaderInterface.flipMatrixMajority iface
+                        else iface
 
                     let result = {
                         Context = x
                         Code = code
                         Handle = handle
                         Shaders = shaders
-                        UniformBlocks = ProgramReflector.getActiveUniformBlocks expectsRowMajorMatrices handle
-                        Uniforms = ProgramReflector.getActiveUniforms expectsRowMajorMatrices handle firstTexture imageSlots
                         UniformGetters = SymDict.empty
-                        Inputs = ProgramReflector.getActiveInputs handle
-                        Outputs = outputs
                         SupportedModes = supported
+                        Interface = iface
+                        TextureInfo = Map.empty
                     }
 
                     GL.UseProgram(0)

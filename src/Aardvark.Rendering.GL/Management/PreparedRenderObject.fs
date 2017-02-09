@@ -6,6 +6,7 @@ open System
 open Aardvark.Base.Incremental
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
@@ -348,9 +349,9 @@ type ResourceManagerExtensions private() =
 
         // create all UniformBuffers requested by the program
         let uniformBuffers =
-            prog.UniformBlocks 
+            prog.Interface.UniformBlocks 
                 |> List.map (fun block ->
-                    block.index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms)
+                    block.Index, x.CreateUniformBuffer(rj.AttributeScope, block, prog, rj.Uniforms)
                    )
                 |> Map.ofList
 
@@ -358,7 +359,7 @@ type ResourceManagerExtensions private() =
 
         // partition all requested (top-level) uniforms into Textures and other
         let textureUniforms, otherUniforms = 
-            prog.Uniforms |> List.partition (fun uniform -> match uniform.uniformType with | SamplerType -> true | _ -> false)
+            prog.Interface.Uniforms |> List.partition (fun uniform -> match uniform.Type with | Sampler _ -> true | _ -> false)
 
         // create all requested Textures
         let lastTextureSlot = ref -1
@@ -373,17 +374,24 @@ type ResourceManagerExtensions private() =
         let textures =
             textureUniforms
                 |> List.choose (fun uniform ->
-                    let sem = Sym.ofString uniform.semantic
+                    let name, index =
+                        match uniform.Path with 
+                            | ShaderPath.Value name -> name, 0
+                            | ShaderPath.Item (ShaderPath.Value name, index) -> name, index
+                            | p -> failwithf "[GL] unexpected texture uniform path %A" p
+
+                    let samplerInfo =
+                        match Map.tryFind (name, index) prog.TextureInfo with
+                            | Some info -> info
+                            | _ ->
+                                Log.warn "could not get samplerstate for uniform %A" uniform 
+                                { textureName = Symbol.Create name; samplerState = SamplerStateDescription() }
+
+                    let sem = samplerInfo.textureName
+                    let samplerState = samplerInfo.samplerState
 
                     match rj.Uniforms.TryGetUniform(rj.AttributeScope, sem) with
                         | Some tex ->
-                            let samplerState = 
-                                match uniform.samplerState with
-                                    | Some samplerState -> 
-                                        samplerState
-                                    | None -> 
-                                        Log.warn "could not get samplerstate for uniform %A" uniform
-                                        SamplerStateDescription()
         
                             let sampler =
                                 match samplerModifier with
@@ -397,19 +405,19 @@ type ResourceManagerExtensions private() =
                             match tex with
                                 | :? IMod<ITexture> as value ->
                                     let t = x.CreateTexture(value)
-                                    lastTextureSlot := uniform.slot
-                                    Some (uniform.slot, (t, s))
+                                    lastTextureSlot := uniform.Location
+                                    Some (uniform.Location, (t, s))
 
                                 | :? IMod<ITexture[]> as values ->
-                                    let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[uniform.index]))
-                                    lastTextureSlot := uniform.slot
-                                    Some (uniform.slot, (t, s))
+                                    let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[index]))
+                                    lastTextureSlot := uniform.Location
+                                    Some (uniform.Location, (t, s))
 
                                 | _ ->
-                                    Log.warn "unexpected texture type %s: %A" uniform.semantic tex
+                                    Log.warn "unexpected texture type %A: %A" sem tex
                                     None
                         | _ ->
-                            Log.warn "texture %s not found" uniform.semantic
+                            Log.warn "texture %A not found" sem
                             None
                     )
                 |> Map.ofList
@@ -422,7 +430,7 @@ type ResourceManagerExtensions private() =
                 |> List.choose (fun uniform ->
                     try
                         let r = x.CreateUniformLocation(rj.AttributeScope, rj.Uniforms, uniform)
-                        Some (uniform.location, r)
+                        Some (uniform.Location, r)
                     with _ ->
                         None
                    )
@@ -432,24 +440,24 @@ type ResourceManagerExtensions private() =
 
         // create all requested vertex-/instance-inputs
         let buffers =
-            prog.Inputs 
+            prog.Interface.Inputs 
                 |> List.map (fun v ->
-                    let expected = AttributeType.getExpectedType v.attributeType
-
-                    match rj.VertexAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
+                    let expected = ShaderParameterType.getExpectedType v.Type
+                    let sem = v.Path |> ShaderPath.name |> Symbol.Create
+                    match rj.VertexAttributes.TryGetAttribute sem with
                         | Some value ->
                             let dep = x.CreateBuffer(value.Buffer)
-                            v.attributeIndex, value, AttributeFrequency.PerVertex, dep
+                            v.Location, value, AttributeFrequency.PerVertex, dep
                         | _  -> 
                             match rj.InstanceAttributes with
-                                | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" v.semantic rj
+                                | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" sem rj
                                 | _ -> 
-                                    match rj.InstanceAttributes.TryGetAttribute (v.semantic |> Symbol.Create) with
+                                    match rj.InstanceAttributes.TryGetAttribute sem with
                                         | Some value ->
                                             let dep = x.CreateBuffer(value.Buffer)
-                                            v.attributeIndex, value, (AttributeFrequency.PerInstances 1), dep
+                                            v.Location, value, (AttributeFrequency.PerInstances 1), dep
                                         | _ -> 
-                                            failwithf "could not get attribute %A" v.semantic
+                                            failwithf "could not get attribute %A" sem
                    )
 
         GL.Check "[Prepare] Buffers"
