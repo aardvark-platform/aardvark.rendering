@@ -283,10 +283,11 @@ module ShaderInterface =
                                         {
                                             Name            = rn
                                             Type            = r.Type
-                                            Offset          = r.Offset - size - l.Offset
+                                            Offset          = r.Offset - l.Offset
                                         }
 
-                                    let newType = Struct(rightField.Offset + ShaderParameterType.sizeof r.Type, fields @ [rightField])
+                                    let newSize = rightField.Offset + ShaderParameterType.sizeof r.Type
+                                    let newType = Struct(newSize, fields @ [rightField])
                                     changed <- true
                                     collapseFields &changed ({ l with Type = newType } :: rest)
                                 | _ ->
@@ -407,32 +408,76 @@ module ShaderInterface =
                 }
             )
 
-        let parameters (iface : ProgramInterface) (p : int) =
+        let parameters (textureSlots : ref<int>) (iface : ProgramInterface) (p : int) =
             let mutable cnt = 0
             GL.GetProgramInterface(p, iface, ProgramInterfaceParameter.ActiveResources, &cnt)
-            List.init cnt id |> List.choose (fun pi ->
+            List.init cnt id |> List.collect (fun pi ->
                 if (iface <> ProgramInterface.Uniform && iface <> ProgramInterface.BufferVariable) || GL.GetProgramResource(p, iface, pi, ProgramProperty.BlockIndex) = -1 then
                     let name = GL.GetProgramResourceName(p, iface, pi)
                     let _type = GL.GetProgramResourceType(p, iface, pi) |> ShaderParameterType.ofActiveUniformType
                     let location = GL.GetProgramResourceLocation(p, iface, pi)
+                    let size = GL.GetProgramResource(p, iface, pi, ProgramProperty.ArraySize)
+
+                    let _type =
+                        if size > 1 then FixedArray(_type, -1, size)
+                        else _type
+
+                    let path = parsePath name
+
+                    if iface = ProgramInterface.Uniform then
+                        match _type with
+                            | Sampler _ | Image _ -> 
+                                let slot = !textureSlots
+                                textureSlots := slot + 1
+                                GL.Uniform1(location, slot)
+                                List.singleton {
+                                    Location        = slot
+                                    Path            = path
+                                    Type            = _type
+                                }
+
+                            | FixedArray((Sampler _ | Image _) as t, _, length) ->
+                                let slots = 
+                                    Array.init length (fun i ->
+                                        let slot = !textureSlots
+                                        textureSlots := slot + 1
+                                        slot
+                                    )
+                                GL.Uniform1(location, slots.Length, slots)
+
+                                slots |> Array.toList |> List.mapi (fun i s ->
+                                    {
+                                        Location        = s
+                                        Path            = ShaderPath.Item(path, i)
+                                        Type            = t
+                                    }
+                                )
 
 
+                            | _ ->
+                                List.singleton {
+                                    Location        = location
+                                    Path            = path
+                                    Type            = _type
+                                }
+                    else
+                        List.singleton {
+                            Location        = location
+                            Path            = path
+                            Type            = _type
+                        }
 
-                    Some {
-                        Location        = location
-                        Path            = parsePath name
-                        Type            = _type
-                    }
                 else 
-                    None
+                    []
 
             )
 
-        let shaderInterface (p : int) =
+        let shaderInterface (baseSlot : int) (p : int) =
+            let slot = ref baseSlot
             {
-                Inputs          = p |> parameters ProgramInterface.ProgramInput
-                Outputs         = p |> parameters ProgramInterface.ProgramOutput
-                Uniforms        = p |> parameters ProgramInterface.Uniform
+                Inputs          = p |> parameters slot ProgramInterface.ProgramInput
+                Outputs         = p |> parameters slot ProgramInterface.ProgramOutput
+                Uniforms        = p |> parameters slot ProgramInterface.Uniform
                 UniformBlocks   = p |> blocks ProgramInterface.UniformBlock
                 StorageBlocks   = p |> blocks ProgramInterface.ShaderStorageBlock
             }
@@ -508,27 +553,56 @@ module ShaderInterface =
             GL.GetActiveUniformBlockName(p, ui, 1024, &l, builder)
             builder.ToString()
 
-        let getUniforms (p : int) =
+        let getUniforms (textureSlot : ref<int>) (p : int) =
             let mutable cnt = 0
             GL.GetProgram(p, GetProgramParameterName.ActiveUniforms, &cnt)
 
-            List.init cnt id |> List.choose (fun i ->
+            List.init cnt id |> List.collect (fun i ->
                 let mutable i = i
                 let field = getUniformField Set.empty i p
                 match field.Path with
                     | ShaderPath.Value name -> 
                         let location = GL.GetUniformLocation(p, name)
                         if location >= 0 then
+                            let path = parsePath name
 
-                            Some {
-                                Location        = location
-                                Path            = parsePath name
-                                Type            = field.Type
-                            }
+                            match field.Type with
+                                | (Sampler _ | Image _) ->
+                                    let slot = !textureSlot
+                                    textureSlot := slot + 1
+                                    GL.Uniform1(location, slot)
+                                    List.singleton {
+                                        Location        = slot
+                                        Path            = path
+                                        Type            = field.Type
+                                    }
+                                | FixedArray((Sampler _ | Image _) as t, _, length) ->
+                                    let slots = 
+                                        Array.init length (fun i ->
+                                            let slot = !textureSlot
+                                            textureSlot := slot + 1
+                                            slot
+                                        )
+                                    GL.Uniform1(location, slots.Length, slots)
+
+                                    slots |> Array.toList |> List.mapi (fun i s ->
+                                        {
+                                            Location        = s
+                                            Path            = ShaderPath.Item(path, i)
+                                            Type            = t
+                                        }
+                                    )
+                                | _ -> 
+
+                                    List.singleton {
+                                        Location        = location
+                                        Path            = path
+                                        Type            = field.Type
+                                    }
                         else
-                            None
+                            []
                     | _ ->
-                        None
+                        []
             )
 
             
@@ -576,9 +650,10 @@ module ShaderInterface =
                 }
             )
 
-        let shaderInterface (p : int) : ShaderInterface =
+        let shaderInterface (baseSlot : int) (p : int) : ShaderInterface =
+            let slot = ref baseSlot
             let outputs =
-                try p |> GL4.parameters ProgramInterface.ProgramOutput
+                try p |> GL4.parameters slot ProgramInterface.ProgramOutput
                 with _ -> []
 
             let storage =
@@ -588,16 +663,16 @@ module ShaderInterface =
             {
                 Inputs          = p |> getInputs
                 Outputs         = outputs
-                Uniforms        = p |> getUniforms
+                Uniforms        = p |> getUniforms slot
                 UniformBlocks   = p |> blocksUB
                 StorageBlocks   = storage
             }
 
-    let ofProgram (ctx : Context) (p : int) =
+    let ofProgram (baseSlot : int) (ctx : Context) (p : int) =
         use __ = ctx.ResourceLock
         let info = ctx.Driver
 
         if false && info.version > Version(4,0,0) && info.device <> GPUVendor.Intel then
-            GL4.shaderInterface p
+            GL4.shaderInterface baseSlot p
         else
-            GL.shaderInterface p
+            GL.shaderInterface baseSlot p

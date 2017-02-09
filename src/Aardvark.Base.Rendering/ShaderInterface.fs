@@ -174,7 +174,7 @@ module ShaderParameterType =
 
             M22f,       typeof<M22f>
             M23f,       typeof<M23f>
-            M33f,       typeof<M33f>
+            M33f,       typeof<M34f>
             M34f,       typeof<M34f>
             M44f,       typeof<M44f>
             M22d,       typeof<M22d>

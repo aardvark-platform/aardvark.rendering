@@ -359,7 +359,11 @@ type ResourceManagerExtensions private() =
 
         // partition all requested (top-level) uniforms into Textures and other
         let textureUniforms, otherUniforms = 
-            prog.Interface.Uniforms |> List.partition (fun uniform -> match uniform.Type with | Sampler _ -> true | _ -> false)
+            prog.Interface.Uniforms |> List.partition (fun uniform -> 
+                match uniform.Type with 
+                    | Sampler _ | FixedArray(Sampler _, _, _) | DynamicArray(Sampler _, _) -> true 
+                    | _ -> false
+            )
 
         // create all requested Textures
         let lastTextureSlot = ref -1
@@ -373,6 +377,13 @@ type ResourceManagerExtensions private() =
 
         let textures =
             textureUniforms
+                |> List.collect (fun u ->
+                    match u.Type with
+                        | FixedArray(t, _, cnt) ->
+                            List.init cnt (fun i -> { u with Type = t; Path = ShaderPath.Item(u.Path, i); Location = u.Location + i })
+                        | _ -> 
+                            [u]
+                   )
                 |> List.choose (fun uniform ->
                     let name, index =
                         match uniform.Path with 
