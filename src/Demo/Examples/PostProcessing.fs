@@ -192,6 +192,7 @@ module PostProcessing =
                 |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
 
     module ComputeTest =
+        open OpenTK.Graphics.OpenGL4
         open Aardvark.Rendering.GL
         open Microsoft.FSharp.NativeInterop
 
@@ -200,70 +201,56 @@ module PostProcessing =
             let ctx = runtime.Context
             use t = ctx.ResourceLock
 
-            let target =
-                Struct(8, 
-                    [
-                        { 
-                            Name = "X"
-                            Type = ShaderParameterType.int
-                            Offset = 0
-                        }
-                        { 
-                            Name = "Y"
-                            Type = ShaderParameterType.int
-                            Offset = 4
-                        }
-                    ]
-                )
-
-//            let converter = ShaderConverter.writer<V3i> target
-//            let mutable target = V2i.Zero
-//            converter.Write(NativePtr.toNativeInt &&target, V3i(3,4,5))
-
-            printfn "%A" target
-            Environment.Exit 0
-
             let code = 
                 String.concat "\r\n" [
                     "#version 440"
                     "layout( std430 ) buffer inputs"
                     "{"
-                    "    int dataCount;"
-                    "    float data[];"
+                    "    float a[];"
                     "};"
                     "layout( std430 ) buffer outputs"
                     "{"
-                    "    float x[];"
+                    "    float b[];"
                     "};"
 
-                    "struct Seppy {"
-                    "    vec3 a;"
-                    "    vec3 b;"
-                    "};"
-                    "uniform bla"
-                    "{"
-                    "    Seppy heinz[10];"
-                    "    vec4 blubb;"
-                    "};"
-
-                    "layout(rgba32f, binding = 0) uniform image2D img_output;"
-
-                    "layout( local_size_x = 1 ) in;" 
+                    "layout( local_size_x = 32 ) in;" 
                     "void main() {" 
-                    "    uint gid = gl_GlobalInvocationID.x;" 
-                    "    if(gid < dataCount) {"
-                    "        x[gid] = data[gid];" 
-                    "        imageStore(img_output, ivec2(gid, 0), blubb + float(gid)*heinz[0].a.x);"
-                    "    }"
+                    "    int gid = int(gl_GlobalInvocationID.x);" 
+                    "    b[gid] = 3.0 * float(gid);" 
                     "}"
                 ]
 
 
             match ctx.TryCompileCompute(true, code) with
                 | Success prog ->
-                    let iface = ShaderInterface.ofProgram prog.Context prog.Handle
+                    let iface = prog.Interface
+                    let str = ShaderInterface.toString prog.Interface
 
-                    printfn "%A" iface
+                    let a : ShaderBlock = iface.StorageBlocks |> List.find (fun b -> b.Name = "inputs")
+                    let b : ShaderBlock = iface.StorageBlocks |> List.find (fun b -> b.Name = "outputs")
+
+                    let f a =
+                        float32 a + 1.0f
+
+                    let ba = ctx.CreateBuffer(Array.init 1024 f, BufferUsage.Dynamic)
+                    let bb = ctx.CreateBuffer(Array.init 1024 f, BufferUsage.Dynamic)
+
+                    GL.UseProgram(prog.Handle)
+                    GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, a.Index, ba.Handle, 0n, 4096n)
+                    GL.Check "bla"
+                    GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, b.Index, bb.Handle, 0n, 4096n)
+                    GL.Check "blubb"
+
+                    GL.DispatchCompute(1024, 1, 1)
+                    GL.Check "sepp"
+
+
+                    let ra : float32[] = ctx.Download(ba)
+                    let rb : float32[] = ctx.Download(bb)
+
+
+
+                    printfn "%A %A" ra rb
 
                 | Error err ->
                     Log.error "%s" err
@@ -276,8 +263,8 @@ module PostProcessing =
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
                
 
-//        ComputeTest.run()
-//        Environment.Exit 0
+        ComputeTest.run()
+        Environment.Exit 0
 
         let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, Mod.constant (V2i(1024, 768)))
         fbo.Acquire()

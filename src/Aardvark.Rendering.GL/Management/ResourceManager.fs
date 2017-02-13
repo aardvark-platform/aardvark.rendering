@@ -215,7 +215,7 @@ module Sharing =
                     ctx.Delete b
 
 
-type PersistentlyMappedUniformManager(ctx : Context, size : int, fields : list<UniformField>) =
+type PersistentlyMappedUniformManager(ctx : Context, size : int, block : ShaderBlock) =
 
     static let flags =
         BufferStorageFlags.MapPersistentBit ||| 
@@ -262,52 +262,52 @@ type PersistentlyMappedUniformManager(ctx : Context, size : int, fields : list<U
             ()
 
 
-    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<obj>) : IResource<UniformBufferView> =
-        let values =
-            fields 
-            |> List.map (fun f ->
-                let sem = Symbol.Create f.semantic
-                match u.TryGetUniform(scope, sem) with
-                    | Some v -> sem, v
-                    | None -> 
-                        match additional.TryGetValue sem with
-                            | (true, (:? IMod as m)) -> sem, m
-                            | _ -> failwithf "[GL] could not get uniform: %A" f
-            )
-
-        let key = values |> List.map (fun (_,v) -> v :> obj)
-
-        viewCache.GetOrCreate(
-            key,
-            fun () ->
-                let values = values |> List.map (fun (s,v) -> s, v :> IAdaptiveObject) |> Map.ofList
-                let writers = UnmanagedUniformWriters.writers true fields values
-     
-                let mutable block = Unchecked.defaultof<_>
-                { new Resource<UniformBufferView>(ResourceKind.UniformBuffer) with
-                    member x.GetInfo b = 
-                        b.Size |> Mem |> ResourceInfo
-
-                    member x.Create(token, old) =
-                        let handle = 
-                            match old with
-                                | Some old -> old
-                                | None ->
-                                    block <- manager.Alloc (nativeint alignedSize)
-                                    let mcap = nativeint manager.Capacity
-                                    realloc mcap
-                                    UniformBufferView(handle, block.Offset, nativeint block.Size)
-
-                        for (_,w) in writers do w.Write(x, pointer + handle.Offset)
-                        handle
-
-                    member x.Destroy h =
-                        manager.Free block
-                        if manager.AllocatedBytes = 0n then
-                            realloc 0n
-
-                }
-        )
+//    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<obj>) : IResource<UniformBufferView> =
+//        let values =
+//            block.Fields 
+//            |> List.map (fun f ->
+//                let sem = Symbol.Create (ShaderPath.name f.Path)
+//                match u.TryGetUniform(scope, sem) with
+//                    | Some v -> sem, v
+//                    | None -> 
+//                        match additional.TryGetValue sem with
+//                            | (true, (:? IMod as m)) -> sem, m
+//                            | _ -> failwithf "[GL] could not get uniform: %A" f
+//            )
+//
+//        let key = values |> List.map (fun (_,v) -> v :> obj)
+//
+//        viewCache.GetOrCreate(
+//            key,
+//            fun () ->
+//                let values = values |> List.map (fun (s,v) -> s, v :> IAdaptiveObject) |> Map.ofList
+//                let writers = UnmanagedUniformWriters.writers true fields values
+//     
+//                let mutable block = Unchecked.defaultof<_>
+//                { new Resource<UniformBufferView>(ResourceKind.UniformBuffer) with
+//                    member x.GetInfo b = 
+//                        b.Size |> Mem |> ResourceInfo
+//
+//                    member x.Create(token, old) =
+//                        let handle = 
+//                            match old with
+//                                | Some old -> old
+//                                | None ->
+//                                    block <- manager.Alloc (nativeint alignedSize)
+//                                    let mcap = nativeint manager.Capacity
+//                                    realloc mcap
+//                                    UniformBufferView(handle, block.Offset, nativeint block.Size)
+//
+//                        for (_,w) in writers do w.Write(x, pointer + handle.Offset)
+//                        handle
+//
+//                    member x.Destroy h =
+//                        manager.Free block
+//                        if manager.AllocatedBytes = 0n then
+//                            realloc 0n
+//
+//                }
+//        )
 
     member x.Dispose() =
         use t = ctx.ResourceLock

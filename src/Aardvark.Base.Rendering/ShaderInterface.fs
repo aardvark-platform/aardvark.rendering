@@ -27,6 +27,29 @@ and ShaderStructField =
         Offset          : int
     }
 
+[<RequireQualifiedAccess>]
+type ShaderPath =
+    | Value of string
+    | Item of ShaderPath * int
+    | Field of ShaderPath * string
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ShaderPath =
+    open System.Reflection
+    open System.Reflection.Emit
+    
+    let rec name (p : ShaderPath) =
+        match p with
+            | ShaderPath.Value str -> str
+            | ShaderPath.Item(p,_) -> name p
+            | ShaderPath.Field(p,_) -> name p
+
+    let rec toString (p : ShaderPath) =
+        match p with
+            | ShaderPath.Value str -> str
+            | ShaderPath.Field(p, name) -> toString p + "." + name
+            | ShaderPath.Item(p, index) -> toString p + "[" + string index + "]"
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderParameterType =
 
@@ -224,22 +247,41 @@ module ShaderParameterType =
             | _ ->
                 t
 
-[<RequireQualifiedAccess>]
-type ShaderPath =
-    | Value of string
-    | Item of ShaderPath * int
-    | Field of ShaderPath * string
+    let private prefix (t : ShaderParameterType) =
+        match t with
+            | Bool -> "b"
+            | Float -> ""
+            | Double -> "d"
+            | Int -> "i"
+            | UnsignedInt -> "u"
+            | _ -> ""
+        
+    let private dimstr (d : TextureDimension) =
+        match d with
+            | TextureDimension.Texture1D -> "1D"
+            | TextureDimension.Texture2D -> "2D"
+            | TextureDimension.Texture3D -> "3D"
+            | TextureDimension.TextureCube -> "Cube"
+            | _ -> ""
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ShaderPath =
-    open System.Reflection
-    open System.Reflection.Emit
-    
-    let rec name (p : ShaderPath) =
-        match p with
-            | ShaderPath.Value str -> str
-            | ShaderPath.Item(p,_) -> name p
-            | ShaderPath.Field(p,_) -> name p
+    let rec toString (t : ShaderParameterType) =
+        match t with
+            | Bool -> "bool"
+            | Float -> "float"
+            | Double -> "double"
+            | Int -> "int"
+            | UnsignedInt -> "uint"
+            | Vector(t,d) -> prefix t + "vec" + string d
+            | Matrix(t, r, c, _) when r = c -> prefix t + "mat" + string r
+            | Matrix(t, r, c, _) -> prefix t + "mat" + string r + "x" + string c
+            | AtomicCounter t -> toString t
+            | FixedArray(e, _, l) -> toString e + "[" + string l + "]"
+            | DynamicArray(e,_) -> toString e + "[]"
+            | Sampler(t, dim, ms, array, shadow) -> prefix t + "sampler" + dimstr dim + (if ms then "MS" else "") + (if array then "Array" else "") + (if shadow then "Shadow" else "")
+            | Image(t, dim, ms, array) -> prefix t + "image" + dimstr dim + (if ms then "MS" else "") + (if array then "Array" else "")
+            | Struct(s, fields) ->
+                fields |> List.map (fun f -> f.Name + " : " + toString f.Type) |> String.concat ";" |> sprintf "{ %s }"
+
 
 type ShaderBlockField =
     {
@@ -248,10 +290,14 @@ type ShaderBlockField =
         Offset          : int
         Referenced      : Set<ShaderStage>
     }
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderBlockField =
     let rec flipMatrixMajority (t : ShaderBlockField) =
         { t with Type = ShaderParameterType.flipMatrixMajority t.Type }
+
+    let toString (f : ShaderBlockField) =
+        sprintf "%s : %s" (ShaderPath.toString f.Path) (ShaderParameterType.toString f.Type)
 
 type ShaderBlock =
     {
@@ -267,6 +313,9 @@ module ShaderBlock =
     let rec flipMatrixMajority (t : ShaderBlock) =
         { t with Fields = t.Fields |> List.map ShaderBlockField.flipMatrixMajority }
 
+    let toString (b : ShaderBlock) =
+        b.Fields |> List.map ShaderBlockField.toString |> String.concat "; " |> sprintf "%s { %s }" b.Name
+
 type ShaderParameter =
     {
         Location        : int
@@ -278,6 +327,9 @@ type ShaderParameter =
 module ShaderParameter =
     let rec flipMatrixMajority (t : ShaderParameter) =
         { t with Type = ShaderParameterType.flipMatrixMajority t.Type }
+
+    let toString (p : ShaderParameter) =
+        sprintf "%s : %s" (ShaderPath.toString p.Path) (ShaderParameterType.toString p.Type)
 
 type ShaderInterface =
     {
@@ -299,6 +351,15 @@ module ShaderInterface =
             StorageBlocks   = iface.StorageBlocks |> List.map ShaderBlock.flipMatrixMajority
         }
     
+    let toString (iface : ShaderInterface) =
+        let input   = iface.Inputs |> List.map ShaderParameter.toString |> String.concat "\r\n" |> String.indent 1 |> sprintf "in {\r\n%s\r\n}"
+        let output  = iface.Outputs |> List.map ShaderParameter.toString |> String.concat "\r\n" |> String.indent 1 |> sprintf "out {\r\n%s\r\n}"
+        let uniform = iface.Uniforms |> List.map ShaderParameter.toString |> String.concat "\r\n" |> String.indent 1 |> sprintf "uniform {\r\n%s\r\n}"
+        let ubs = iface.UniformBlocks |> List.map ShaderBlock.toString |> String.concat "\r\n" |> String.indent 1 |> sprintf "uniform {\r\n%s\r\n}"
+        let sbs = iface.StorageBlocks |> List.map ShaderBlock.toString |> String.concat "\r\n" |> String.indent 1 |> sprintf "buffer {\r\n%s\r\n}"
+
+        String.concat "\r\n" [input; output; uniform; ubs; sbs]
+
 
 type IAdaptiveWriter =
     inherit IAdaptiveObject

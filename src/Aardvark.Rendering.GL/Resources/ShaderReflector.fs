@@ -356,8 +356,9 @@ module ShaderInterface =
                 
             List.init cnt (fun bi ->
                 let name = GL.GetProgramResourceName(p, iface, bi)
-                let index = GL.GetProgramResource(p, iface, bi, ProgramProperty.BlockIndex)
                 let size = GL.GetProgramResource(p, iface, bi, ProgramProperty.BufferDataSize)
+                
+                //let location = GL.GetProgramResource(p, iface, bi, ProgramProperty.BlockIndex)
 
                 let vCount = GL.GetProgramResource(p, iface, bi, ProgramProperty.NumActiveVariables)
                 let vIndices = GL.GetProgramResource(p, iface, bi, ProgramProperty.ActiveVariables, vCount)
@@ -395,12 +396,12 @@ module ShaderInterface =
                     )
                     
                 match iface with
-                    | ProgramInterface.UniformBlock -> GL.UniformBlockBinding(p, index, index)
-                    | ProgramInterface.ShaderStorageBlock -> GL.ShaderStorageBlockBinding(p, index, index)
+                    | ProgramInterface.UniformBlock -> GL.UniformBlockBinding(p, bi, bi)
+                    | ProgramInterface.ShaderStorageBlock -> GL.ShaderStorageBlockBinding(p, bi, bi)
                     | _ -> ()
 
                 {
-                    Index = index
+                    Index = bi
                     Name = name
                     Fields = variables |> List.sortBy (fun v -> v.Offset) |> collapse
                     Referenced = getReferencingStages p iface bi

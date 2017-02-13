@@ -43,7 +43,7 @@ module Config =
     /// defines whether the GL context should log errors
     /// </summary>
     [<Literal>]
-    let CheckErrors = true
+    let CheckErrors = false
 
     /// <summary>
     /// The number of bits used for color values in default contexts
