@@ -230,6 +230,35 @@ module ProgramExtensions =
                 | Error err ->
                     Error err
 
+        let withLineNumbers (code : string) : string =
+            let lineCount = String.lineCount code
+            let lineColumns = 1 + int (Fun.Log10 lineCount)
+            let lineFormatLen = lineColumns + 3
+            let sb = new System.Text.StringBuilder(code.Length + lineFormatLen * lineCount + 10)
+            
+            let fmtStr = "{0:" + lineColumns.ToString() + "} : "
+            let mutable lineEnd = code.IndexOf('\n')
+            let mutable lineStart = 0
+            let mutable lineCnt = 1
+            while (lineEnd >= 0) do
+                let line = code.Substring(lineStart, lineEnd - lineStart + 1)
+                let lineCntLen = 1 + int (Fun.Log10 lineCnt)
+                sb.Append(lineCnt.ToString().PadLeft(lineCntLen)) |> ignore
+                sb.Append(": ")  |> ignore
+                sb.Append(line) |> ignore
+                lineStart <- lineEnd + 1
+                lineCnt <- lineCnt + 1
+                lineEnd <- code.IndexOf('\n', lineStart)
+                ()
+
+            let lastLine = code.Substring(lineStart)
+            if lastLine.Length > 0 then
+                sb.Append(lineCnt.ToString()) |> ignore
+                sb.Append(": ")  |> ignore
+                sb.Append(lastLine) |> ignore
+
+            sb.ToString()
+
         let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
             let vs = code.Contains "#ifdef Vertex"
             let tcs = code.Contains "#ifdef TessControl"
@@ -252,8 +281,10 @@ module ProgramExtensions =
                                 .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
                        else code
 
-            let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-            Report.Line("CODE: {0}", codeWithDefine)
+            if RuntimeConfig.PrintShadeCode then
+                let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
+                let numberdLines = withLineNumbers codeWithDefine
+                Report.Line("CODE: \n{0}", numberdLines)
 
             using x.ResourceLock (fun _ ->
                 let results =
