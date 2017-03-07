@@ -242,8 +242,7 @@ module ProgramExtensions =
             let mutable lineCnt = 1
             while (lineEnd >= 0) do
                 let line = code.Substring(lineStart, lineEnd - lineStart + 1)
-                let lineCntLen = 1 + int (Fun.Log10 lineCnt)
-                sb.Append(lineCnt.ToString().PadLeft(lineCntLen)) |> ignore
+                sb.Append(lineCnt.ToString().PadLeft(lineColumns)) |> ignore
                 sb.Append(": ")  |> ignore
                 sb.Append(line) |> ignore
                 lineStart <- lineEnd + 1
@@ -284,7 +283,7 @@ module ProgramExtensions =
             if RuntimeConfig.PrintShaderCode then
                 let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
                 let numberdLines = withLineNumbers codeWithDefine
-                Report.Line("CODE: \n{0}", numberdLines)
+                Report.Line("Compiling shader:\n{0}", numberdLines)
 
             using x.ResourceLock (fun _ ->
                 let results =
@@ -299,7 +298,8 @@ module ProgramExtensions =
                     Success shaders
                 else
                     let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-                    Report.Line("Failed to compile shader:\n{0}", codeWithDefine)
+                    let numberdLines = withLineNumbers codeWithDefine
+                    Report.Line("Failed to compile shader:\n{0}", numberdLines)
                     let err = errors |> List.map (fun (stage, e) -> sprintf "%A:\r\n%s" stage (String.indent 1 e)) |> String.concat "\r\n\r\n" 
                     Error err
             
