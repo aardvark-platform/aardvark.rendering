@@ -82,7 +82,7 @@ module RuntimeConfig =
 
     let mutable SupressSparseBuffers = false
 
-    let mutable PrintShadeCode = true
+    let mutable PrintShaderCode = true
 
 [<AutoOpen>]
 module Error =
