@@ -452,23 +452,26 @@ type ResourceManagerExtensions private() =
         // create all requested vertex-/instance-inputs
         let buffers =
             prog.Interface.Inputs 
-                |> List.map (fun v ->
-                    let expected = ShaderParameterType.getExpectedType v.Type
-                    let sem = v.Path |> ShaderPath.name |> Symbol.Create
-                    match rj.VertexAttributes.TryGetAttribute sem with
-                        | Some value ->
-                            let dep = x.CreateBuffer(value.Buffer)
-                            v.Location, value, AttributeFrequency.PerVertex, dep
-                        | _  -> 
-                            match rj.InstanceAttributes with
-                                | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" sem rj
-                                | _ -> 
-                                    match rj.InstanceAttributes.TryGetAttribute sem with
-                                        | Some value ->
-                                            let dep = x.CreateBuffer(value.Buffer)
-                                            v.Location, value, (AttributeFrequency.PerInstances 1), dep
-                                        | _ -> 
-                                            failwithf "could not get attribute %A" sem
+                |> List.choose (fun v ->
+                     if v.Location >= 0 then
+                        let expected = ShaderParameterType.getExpectedType v.Type
+                        let sem = v.Path |> ShaderPath.name |> Symbol.Create
+                        match rj.VertexAttributes.TryGetAttribute sem with
+                            | Some value ->
+                                let dep = x.CreateBuffer(value.Buffer)
+                                Some (v.Location, value, AttributeFrequency.PerVertex, dep)
+                            | _  -> 
+                                match rj.InstanceAttributes with
+                                    | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" sem rj
+                                    | _ -> 
+                                        match rj.InstanceAttributes.TryGetAttribute sem with
+                                            | Some value ->
+                                                let dep = x.CreateBuffer(value.Buffer)
+                                                Some(v.Location, value, (AttributeFrequency.PerInstances 1), dep)
+                                            | _ -> 
+                                                failwithf "could not get attribute %A" sem
+                        else
+                            None
                    )
 
         GL.Check "[Prepare] Buffers"
