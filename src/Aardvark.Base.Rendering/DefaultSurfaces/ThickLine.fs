@@ -13,6 +13,7 @@ module ThickLine =
         [<Semantic("Width")>]       w       : float
     }
 
+    [<GLSLIntrinsic("mix({0}, {1}, {2})")>]
     let Lerp (a : V4d) (b : V4d) (s : float) : V4d = failwith ""
 
     let internal thickLine (line : Line<ThickLineVertex>) =

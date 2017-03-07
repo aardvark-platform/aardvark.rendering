@@ -3,10 +3,12 @@
 open System
 open System.Collections.Generic
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.Incremental
+open FShade
 
 type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>) =
    
@@ -93,7 +95,19 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
-        
+        member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
+            let code = 
+                signature.Link(effect, Range1d(-1.0, 1.0), false)
+                    |> ModuleCompiler.compileGLSL410
+
+            let entries =
+                effect.Shaders 
+                    |> Map.toSeq
+                    |> Seq.map (fun (stage,_) -> unbox<Aardvark.Base.ShaderStage> (int stage), "main") 
+                    |> Dictionary.ofSeq
+
+            BackendSurface(code, entries)
+
         member x.ResourceManager = manager :> IResourceManager
 
         member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =

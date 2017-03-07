@@ -28,6 +28,7 @@ open Aardvark.Application
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.NanoVg
+open Aardvark.Base.ShaderReflection
 
 module PostProcessing = 
 
@@ -190,11 +191,81 @@ module PostProcessing =
                 |> Sg.texture DefaultSemantic.DiffuseColorTexture t
                 |> Sg.effect [DefaultSurfaces.diffuseTexture |> toEffect]
 
+    module ComputeTest =
+        open OpenTK.Graphics.OpenGL4
+        open Aardvark.Rendering.GL
+        open Microsoft.FSharp.NativeInterop
+
+        let run() =
+            let runtime = unbox<Runtime> Interactive.Window.Runtime
+            let ctx = runtime.Context
+            use t = ctx.ResourceLock
+
+            let code = 
+                String.concat "\r\n" [
+                    "#version 440"
+                    "layout( std430 ) buffer inputs"
+                    "{"
+                    "    float a[];"
+                    "};"
+                    "layout( std430 ) buffer outputs"
+                    "{"
+                    "    float b[];"
+                    "};"
+
+                    "layout( local_size_x = 32 ) in;" 
+                    "void main() {" 
+                    "    int gid = int(gl_GlobalInvocationID.x);" 
+                    "    b[gid] = 3.0 * float(gid);" 
+                    "}"
+                ]
+
+
+            match ctx.TryCompileCompute(true, code) with
+                | Success prog ->
+                    let iface = prog.Interface
+                    let str = ShaderInterface.toString prog.Interface
+
+                    let a : ShaderBlock = iface.StorageBlocks |> List.find (fun b -> b.Name = "inputs")
+                    let b : ShaderBlock = iface.StorageBlocks |> List.find (fun b -> b.Name = "outputs")
+
+                    let f a =
+                        float32 a + 1.0f
+
+                    let ba = ctx.CreateBuffer(Array.init 1024 f, BufferUsage.Dynamic)
+                    let bb = ctx.CreateBuffer(Array.init 1024 f, BufferUsage.Dynamic)
+
+                    GL.UseProgram(prog.Handle)
+                    GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, a.Index, ba.Handle, 0n, 4096n)
+                    GL.Check "bla"
+                    GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, b.Index, bb.Handle, 0n, 4096n)
+                    GL.Check "blubb"
+
+                    GL.DispatchCompute(1024, 1, 1)
+                    GL.Check "sepp"
+
+
+                    let ra : float32[] = ctx.Download(ba)
+                    let rb : float32[] = ctx.Download(bb)
+
+
+
+                    printfn "%A %A" ra rb
+
+                | Error err ->
+                    Log.error "%s" err
+
+        
+            ()
 
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
                
+
+        ComputeTest.run()
+        Environment.Exit 0
+
         let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, Mod.constant (V2i(1024, 768)))
         fbo.Acquire()
         let fboHandle = fbo.GetValue()

@@ -15,6 +15,7 @@ module ThickLineWithCulling =
         [<Semantic("Width")>]       w       : float
     }
         
+    [<GLSLIntrinsic("mix({0}, {1}, {2})")>]
     let Lerp (a : V4d) (b : V4d) (s : float) : V4d = failwith ""
 
     let internal thickLineWithCulling (line : Line<ThickLineVertexWithClipDistance>) =

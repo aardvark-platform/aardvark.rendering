@@ -62,7 +62,7 @@ module ShaderModule =
             ShaderStage.TessControl, GLSLang.ShaderStage.TessControl
             ShaderStage.TessEval, GLSLang.ShaderStage.TessEvaluation
             ShaderStage.Geometry, GLSLang.ShaderStage.Geometry
-            ShaderStage.Pixel, GLSLang.ShaderStage.Fragment
+            ShaderStage.Fragment, GLSLang.ShaderStage.Fragment
         ]
 
     let private createRaw (binary : byte[]) (device : Device) =

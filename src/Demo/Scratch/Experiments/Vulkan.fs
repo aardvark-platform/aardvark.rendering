@@ -441,7 +441,7 @@ module Lod =
             DefaultSurfaces.trafo |> toEffect                  
             DefaultSurfaces.vertexColor  |> toEffect         
         ]
-        let e = FShade.SequentialComposition.compose effects
+        let e = FShade.Effect.compose effects
         FShadeSurface(e) :> ISurface 
 
     let surf = 

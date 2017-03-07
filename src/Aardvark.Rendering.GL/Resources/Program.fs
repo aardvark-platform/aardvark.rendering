@@ -10,6 +10,7 @@ open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
+open Aardvark.Base.ShaderReflection
 open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
@@ -58,12 +59,10 @@ type Program =
        Code : string
        Handle : int
        Shaders : list<Shader>
-       UniformBlocks : list<UniformBlock>
-       Uniforms : list<ActiveUniform>
        UniformGetters : SymbolDict<IMod>
-       Inputs : list<ActiveAttribute>
-       Outputs : list<ActiveAttribute>
        SupportedModes : Option<Set<IndexedGeometryMode>>
+       Interface : ShaderReflection.ShaderInterface
+       TextureInfo : Map<string * int, SamplerDescription>
 
        [<DefaultValue>]
        mutable _inputs : Option<list<string * Type>>
@@ -76,17 +75,12 @@ type Program =
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
         member x.UniformGetters = x.UniformGetters
-        member x.Samplers = 
-            x.Uniforms |> List.choose (fun u ->
-                match u.uniformType, u.samplerState with
-                    | SamplerType, Some samplerState -> Some (u.name, u.index, { textureName = Symbol.Create u.semantic; samplerState = samplerState})
-                    | _ -> None
-            )
+        member x.Samplers = []
 
         member x.Inputs = 
             match x._inputs with
                 | None -> 
-                    let r = x.Inputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+                    let r = x.Interface.Inputs |> List.map (fun a -> ShaderPath.name a.Path, ShaderParameterType.getExpectedType a.Type)
                     x._inputs <- Some r
                     r
                 | Some r ->
@@ -95,7 +89,7 @@ type Program =
         member x.Outputs = 
             match x._outputs with
                 | None ->
-                    let r = x.Outputs |> List.map (fun a -> a.semantic, AttributeType.getExpectedType a.attributeType)
+                    let r = x.Interface.Outputs |> List.map (fun a -> ShaderPath.name a.Path, ShaderParameterType.getExpectedType a.Type)
                     x._outputs <- Some r
                     r
                 | Some r ->
@@ -104,249 +98,27 @@ type Program =
         member x.Uniforms =
             match x._uniforms with
                 | None ->
-                    let bu = x.UniformBlocks |> List.collect (fun b -> b.fields |> List.map (fun f -> ConversionTarget.ConvertForBuffer, f))
-                    let uu = x.Uniforms |> List.map (fun f -> ConversionTarget.ConvertForLocation, f)
-                    
-                    let res = 
-                        bu @ uu |> List.choose (fun (target, u) -> 
-                            match u.uniformType with
-                                | SamplerType ->
-                                    Some (u.semantic, typeof<ITexture>)
-
-                                | ImageType ->
-                                    None
-
-                                | _ ->
-                                    let t = UniformConverter.getExpectedType target u.uniformType
-                                    Some (u.semantic, t)
+                    let bu = 
+                        x.Interface.UniformBlocks |> List.collect (fun b -> 
+                            b.Fields |> List.map (fun f -> 
+                                ShaderPath.name f.Path, ShaderParameterType.getExpectedType f.Type
+                            )
                         )
+
+                    let uu = 
+                        x.Interface.Uniforms |> List.map (fun f -> 
+                            match f.Type with
+                                | Sampler _ -> 
+                                    ShaderPath.name f.Path, typeof<ITexture>
+                                | t ->
+                                    ShaderPath.name f.Path, ShaderParameterType.getExpectedType t
+                        )
+                    
+                    let res = bu @ uu 
                     x._uniforms <- Some res
                     res
                 | Some r ->
                     r
-
-    member x.InterfaceBlock =
-        let uniformBlocks = 
-            x.UniformBlocks |> List.map (fun b -> 
-                let fields = b.fields |> List.map (fun f -> f.Interface)
-                let fields = fields |> String.concat "\r\n" |> String.indent 1
-                sprintf "uniform %s {\r\n%s\r\n};" b.name fields)
-            |> String.concat "\r\n"
-
-        let uniforms =
-            x.Uniforms |> List.map (fun u -> sprintf "uniform %s" u.Interface) |> String.concat "\r\n"
-
-        let inputs =
-            x.Inputs |> List.map (fun i ->
-                sprintf "%A %s;" i.attributeType i.name
-            ) |> String.concat "\r\n" |> String.indent 1 |> sprintf "input\r\n{\r\n%s\r\n};"
-
-        let outputs =
-            x.Outputs |> List.map (fun i ->
-                sprintf "%A %s;" i.attributeType i.name
-            ) |> String.concat "\r\n" |> String.indent 1 |> sprintf "output\r\n{\r\n%s\r\n};"
-
-
-        let body = sprintf "%s\r\n%s\r\n\r\n%s\r\n\r\n%s" uniforms uniformBlocks inputs outputs
-
-        sprintf "interface {\r\n%s\r\n}" (String.indent 1 body)
-
-
-module ProgramReflector =
-
-
-    let getActiveUniformBlockName (p : int) (i : int) =
-        let builder = System.Text.StringBuilder(1024)
-        let mutable l = 0
-        GL.GetActiveUniformBlockName(p, i, 1024, &l, builder)
-        GL.Check "could not get uniform block name"
-        builder.ToString()
-
-    let getActiveUniformBlockReferences (p : int) (i : int) =
-        let vs = GL.GetActiveUniformBlock(p, i, ActiveUniformBlockParameter.UniformBlockReferencedByVertexShader)
-        let tcs = GL.GetActiveUniformBlock(p, i, ActiveUniformBlockParameter.UniformBlockReferencedByTessControlShader)
-        let tev = GL.GetActiveUniformBlock(p, i, ActiveUniformBlockParameter.UniformBlockReferencedByTessEvaluationShader)
-        let gs = GL.GetActiveUniformBlock(p, i, ActiveUniformBlockParameter.UniformBlockReferencedByGeometryShader)
-        let fs = GL.GetActiveUniformBlock(p, i, ActiveUniformBlockParameter.UniformBlockReferencedByFragmentShader)
-
-        Set.ofList [
-            if vs = 1 then yield ShaderStage.Vertex
-            if tcs = 1 then yield ShaderStage.TessControl
-            if tev = 1 then yield ShaderStage.TessEval
-            if gs = 1 then yield ShaderStage.Geometry
-            if fs = 1 then yield ShaderStage.Pixel
-        ]
-
-    let samplerHackRegex = System.Text.RegularExpressions.Regex("_samplerState[0-9]+(\[[0-9]+\])?$")
-    let arrayRx = System.Text.RegularExpressions.Regex @"^(?<name>[^\.\[\]]*)\[[0]\]$"
-    let getActiveUniform (expectsRowMajorMatrices : bool) (p : int) (slot : int) =
-        let mutable length = 0
-        let mutable size = 0
-        let mutable uniformType = ActiveUniformType.Float
-        let builder = System.Text.StringBuilder(1024)
-        GL.GetActiveUniform(p, slot, 1024, &length, &size, &uniformType, builder)
-        let name = builder.ToString()
-
-        let mutable slot = slot
-        let mutable stride = 0
-        GL.GetActiveUniforms(p, 1, &slot, ActiveUniformParameter.UniformArrayStride, &stride)
-        GL.Check "could not get active uniform"
-
-        let mutable isRowMajor = 0
-        GL.GetActiveUniforms(p, 1, &slot, ActiveUniformParameter.UniformIsRowMajor, &isRowMajor)
-        let isRowMajor = if expectsRowMajorMatrices then isRowMajor = 0 else isRowMajor <> 0
-        GL.Check "could not get active uniform"
-
-        let location = GL.GetUniformLocation(p, name)
-
-        let newName = samplerHackRegex.Replace(name,"")
-        if newName <> name then 
-            Log.warn "replaced uniform semantic value (%s -> %s), this might be an error or due to usage of lins." name newName
-
-        let newName = 
-            let m = arrayRx.Match newName
-            if m.Success then m.Groups.["name"].Value
-            else newName
-
-        { slot = slot; index = 0; location = location; name = newName; semantic = newName; samplerState = None; size = size; uniformType = uniformType; offset = -1; arrayStride = stride; isRowMajor = isRowMajor }
-
-    let getActiveUniformBlocks (expectsRowMajorMatrices : bool) (p : int) =
-        [
-            let blockCount = GL.GetProgram(p, GetProgramParameterName.ActiveUniformBlocks)
-            GL.Check "could not get active uniforms"
-
-            for b in 0..blockCount-1 do
-                let name = getActiveUniformBlockName p b
-
-                let size = GL.GetActiveUniformBlock(p, b, ActiveUniformBlockParameter.UniformBlockDataSize)
-                GL.Check "coult not get uniform block size"
-
-                let fieldCount = GL.GetActiveUniformBlock(p, b, ActiveUniformBlockParameter.UniformBlockActiveUniforms)
-                GL.Check "coult not get uniform block field-count"
-
-                let uniformIndices = Array.create fieldCount -1
-                GL.GetActiveUniformBlock(p, b, ActiveUniformBlockParameter.UniformBlockActiveUniformIndices, uniformIndices)
-                GL.Check "coult not get uniform block field-indices"
-
-                let binding = GL.GetActiveUniformBlock(p, b, ActiveUniformBlockParameter.UniformBlockBinding)
-                GL.Check "coult not get uniform block binding"
-
-                let referencedBy = getActiveUniformBlockReferences p b
-
-
-                let fields = uniformIndices |> Array.map (getActiveUniform expectsRowMajorMatrices p)
-
-                let offsets = Array.create fieldCount -1
-                GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformOffset, offsets);
-                GL.Check "could not get field offsets for uniform block"
-                
-                let strides = Array.create fieldCount 0
-                GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformArrayStride, strides)
-                GL.Check "could not get field array-strides for uniform block"
-
-                let sizes = Array.create fieldCount -1
-                GL.GetActiveUniforms(p, fieldCount, uniformIndices, ActiveUniformParameter.UniformSize, sizes);
-                GL.Check "could not get field offsets for uniform block"
-
-                for i in 0..fields.Length-1 do
-                    fields.[i] <- { fields.[i] with offset = offsets.[i]; arrayStride = strides.[i]; size = sizes.[i] }
-
-                GL.UniformBlockBinding(p, b, b)
-                GL.Check "could not set uniform buffer binding"
-
-                yield { name = name; index = b; binding = binding; fields = fields |> Array.toList; size = size; referencedBy = referencedBy }
-
-        ]
-
-    let getActiveUniforms (expectsRowMajorMatrices : bool) (p : int) (firstTexture : int) (imageSlots : Map<Symbol, int>) =
-        let count = GL.GetProgram(p, GetProgramParameterName.ActiveUniforms)
-        GL.Check "could not get active uniform count"
-        let binding = ref firstTexture
-
-        [ for i in 0..count-1 do
-            let u = getActiveUniform expectsRowMajorMatrices p i
-            
-            if u.location >= 0 then
-                match u.uniformType with
-                    | SamplerType  ->
-                        let size = max 1 u.size
-                        let baseBinding = !binding
-                        binding := baseBinding + size
-
-                        if size = 1 then
-                            GL.Uniform1(u.location, baseBinding)
-                            GL.Check "could not set texture-location"
-                        else
-                            GL.Uniform1(u.location, size, Array.init size (fun i -> baseBinding + i))
-                            GL.Check "could not set texture-array-locations"
-
-                        for i in 0..size-1 do
-                            yield { u with slot = baseBinding + i; index = i }
-
-                    | ImageType ->
-                        match Map.tryFind (Symbol.Create u.semantic) imageSlots with
-                            | Some slot ->
-                                GL.Uniform1(u.location, slot)
-                                GL.Check "could not set texture-location"
-                            | None ->
-                                ()
-
-                    | _ ->
-                        if not (u.name.StartsWith "_main_") then
-                            yield u
-        ]
-    
-    let getActiveInputs (p : int) =
-        let active = GL.GetProgram(p, GetProgramParameterName.ActiveAttributes)
-        GL.Check "could not get active attribute count"
-
-        [ for a in 0..active-1 do
-
-            let mutable length = 0
-            let mutable t = ActiveAttribType.None
-            let mutable size = 1
-            let builder = System.Text.StringBuilder(1024)
-            GL.GetActiveAttrib(p, a, 1024, &length, &size, &t, builder)
-            let name = builder.ToString()
-            
-
-            let location = GL.GetAttribLocation(p, name)
-            if location >= 0 then
-                yield { attributeIndex = location; size = size; name = name; semantic = name; attributeType = t }
-        ]
-
-    let getActiveOutputs (p : int) =
-        try
-            let outputCount = GL.GetProgramInterface(p, ProgramInterface.ProgramOutput, ProgramInterfaceParameter.ActiveResources)
-            GL.Check "could not get active-output count"
-
-            let r = [ for i in 0..outputCount-1 do
-                            let mutable l = 0
-                            let builder = System.Text.StringBuilder(1024)
-                            GL.GetProgramResourceName(p, ProgramInterface.ProgramOutput, i, 1024, &l, builder)
-                            GL.Check "could not get program resource name"
-                            let name = builder.ToString()
-
-                            let mutable prop = ProgramProperty.Type
-                            let _,p = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
-                            GL.Check "could not get program resource"
-                            let outputType = p |> unbox<ActiveAttribType>
-
-                            let mutable prop = ProgramProperty.ArraySize
-                            let _,size = GL.GetProgramResource(p, ProgramInterface.ProgramOutput, i, 1, &prop, 1)
-                            GL.Check "could not get program resource"
-
-                            let location = GL.GetFragDataLocation(p, name)
-                            GL.GetError() |> ignore
-                            //GL.Check "could not get frag data location"
-
-                            yield { attributeIndex = i; size = 1; name = name; semantic = name; attributeType = outputType }
-
-            ]
-            GL.Check "could not get active outputs"
-            r
-        with e ->
-            []
 
 [<AutoOpen>]
 module ProgramExtensions =
@@ -354,70 +126,14 @@ module ProgramExtensions =
     open System.Text.RegularExpressions
     open System
 
-    let private rx = Regex @"^(?<name>[a-zA-Z_0-9]+)((\[(?<index>[0-9]+)\])|(\.)|)(?<rest>.*)$"
-
-    let private parsePath uniformIndex path =
-        let rec parsePath (parent : Option<UniformPath>) (path : string) =
-            if path.Length = 0 then
-                match parent with
-                    | Some path -> path
-                    | _ -> ValuePath ""
-            else
-                let m = rx.Match path
-                if m.Success then
-                    let name = m.Groups.["name"].Value
-                    let rest = m.Groups.["rest"].Value
-                    let rest = if rest.StartsWith "." then rest.Substring(1) else rest
-
-                    let path =
-                        match parent with
-                            | Some p -> FieldPath(p, name)
-                            | None -> ValuePath name
-
-                    let index = m.Groups.["index"]
-                    if index.Success then
-                        let index = index.Value |> Int32.Parse
-
-                        let index =
-                            match parent with
-                                | None -> uniformIndex + index
-                                | _ -> index
-
-                        parsePath (Some (IndexPath(path, index))) rest
-                    else
-                        parsePath (Some path) rest
-                
-                else
-                    failwithf "[GL] bad path: %A" path
-
-        parsePath None path
-
-    let private activeUniformToField (u : ActiveUniform) =
-        let m = rx.Match u.semantic
-        let sem =
-            if m.Success then m.Groups.["name"].Value
-            else u.semantic
-
-        { 
-            UniformField.semantic = sem
-            UniformField.path = parsePath u.index u.name
-            UniformField.offset = u.offset
-            arrayStride = u.arrayStride
-            UniformField.uniformType = u.uniformType
-            UniformField.isRowMajor = u.isRowMajor
-            UniformField.count = u.size 
-        }
-
-    type ActiveUniform with
-        member x.UniformField = activeUniformToField x
-
     let private getShaderType (stage : ShaderStage) =
         match stage with
             | ShaderStage.Vertex -> ShaderType.VertexShader
             | ShaderStage.TessControl -> ShaderType.TessControlShader
             | ShaderStage.TessEval -> ShaderType.TessEvaluationShader
             | ShaderStage.Geometry -> ShaderType.GeometryShader
-            | ShaderStage.Pixel -> ShaderType.FragmentShader
+            | ShaderStage.Fragment -> ShaderType.FragmentShader
+            | ShaderStage.Compute -> ShaderType.ComputeShader
             | _ -> failwithf "unknown shader-stage: %A" stage
 
     let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
@@ -506,20 +222,57 @@ module ProgramExtensions =
 
             )
 
+        let tryCompileCompute (code : string) (x : Context) =
+            use t = x.ResourceLock
+            match tryCompileShader ShaderStage.Compute code "main" x with
+                | Success shader ->
+                    Success [shader]
+                | Error err ->
+                    Error err
+
+        let withLineNumbers (code : string) : string =
+            let lineCount = String.lineCount code
+            let lineColumns = 1 + int (Fun.Log10 lineCount)
+            let lineFormatLen = lineColumns + 3
+            let sb = new System.Text.StringBuilder(code.Length + lineFormatLen * lineCount + 10)
+            
+            let fmtStr = "{0:" + lineColumns.ToString() + "} : "
+            let mutable lineEnd = code.IndexOf('\n')
+            let mutable lineStart = 0
+            let mutable lineCnt = 1
+            while (lineEnd >= 0) do
+                let line = code.Substring(lineStart, lineEnd - lineStart + 1)
+                let lineCntLen = 1 + int (Fun.Log10 lineCnt)
+                sb.Append(lineCnt.ToString().PadLeft(lineCntLen)) |> ignore
+                sb.Append(": ")  |> ignore
+                sb.Append(line) |> ignore
+                lineStart <- lineEnd + 1
+                lineCnt <- lineCnt + 1
+                lineEnd <- code.IndexOf('\n', lineStart)
+                ()
+
+            let lastLine = code.Substring(lineStart)
+            if lastLine.Length > 0 then
+                sb.Append(lineCnt.ToString()) |> ignore
+                sb.Append(": ")  |> ignore
+                sb.Append(lastLine) |> ignore
+
+            sb.ToString()
+
         let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
-            let vs = code.Contains "void VS("
-            let tcs = code.Contains "void TCS("
-            let tev = code.Contains "void TEV"
-            let gs = code.Contains "void GS("
-            let fs = withFragment && code.Contains "void PS("
+            let vs = code.Contains "#ifdef Vertex"
+            let tcs = code.Contains "#ifdef TessControl"
+            let tev = code.Contains "#ifdef TessEval"
+            let gs = code.Contains "#ifdef Geometry"
+            let fs = withFragment && code.Contains "#ifdef Fragment"
 
             let stages =
                 [
-                    if vs then yield "Vertex", "VS", ShaderStage.Vertex
-                    if tcs then yield "TessControl", "TCS", ShaderStage.TessControl
-                    if tev then yield "TessEval", "TEV", ShaderStage.TessEval
-                    if gs then yield "Geometry", "GS", ShaderStage.Geometry
-                    if fs then yield "Pixel", "PS", ShaderStage.Pixel
+                    if vs then yield "Vertex", "main", ShaderStage.Vertex
+                    if tcs then yield "TessControl", "main", ShaderStage.TessControl
+                    if tev then yield "TessEval", "main", ShaderStage.TessEval
+                    if gs then yield "Geometry", "main", ShaderStage.Geometry
+                    if fs then yield "Fragment", "main", ShaderStage.Fragment
                 ]
 
             let code = if (code.Contains("layout(location = 0) out vec4 Colors2Out")) then 
@@ -528,10 +281,10 @@ module ProgramExtensions =
                                 .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
                        else code
 
-#if DEBUG
-            let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-            Report.Line("CODE: {0}", codeWithDefine)
-#endif
+            if RuntimeConfig.PrintShaderCode then
+                let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
+                let numberdLines = withLineNumbers codeWithDefine
+                Report.Line("CODE: \n{0}", numberdLines)
 
             using x.ResourceLock (fun _ ->
                 let results =
@@ -663,11 +416,6 @@ module ProgramExtensions =
                 GL.LinkProgram(handle)
                 GL.Check "could not link program"
 
-//                for s in shaders do
-//                    GL.DeleteShader(s.Handle)
-//                    s.Handle <- -1
-//                    GL.Check "could not delete shader"
-
                 let status = GL.GetProgram(handle, GetProgramParameterName.LinkStatus)
                 let log = GL.GetProgramInfoLog(handle)
                 GL.Check "could not get program log"
@@ -680,24 +428,25 @@ module ProgramExtensions =
                     let supported = 
                         shaders |> List.tryPick (fun s -> s.SupportedModes)
 
-
-                    let result = {
-                        Context = x
-                        Code = code
-                        Handle = handle
-                        Shaders = shaders
-                        UniformBlocks = ProgramReflector.getActiveUniformBlocks expectsRowMajorMatrices handle
-                        Uniforms = ProgramReflector.getActiveUniforms expectsRowMajorMatrices handle firstTexture imageSlots
-                        UniformGetters = SymDict.empty
-                        Inputs = ProgramReflector.getActiveInputs handle
-                        Outputs = outputs
-                        SupportedModes = supported
-                    }
+                    let iface = ShaderInterface.ofProgram firstTexture x handle
+                    let iface = 
+                        if expectsRowMajorMatrices then ShaderInterface.flipMatrixMajority iface
+                        else iface
 
                     GL.UseProgram(0)
                     GL.Check "could not unbind program"
 
-                    Success result
+
+                    Success {
+                        Context = x
+                        Code = code
+                        Handle = handle
+                        Shaders = shaders
+                        UniformGetters = SymDict.empty
+                        SupportedModes = supported
+                        Interface = iface
+                        TextureInfo = Map.empty
+                    }
                 else
                     let log =
                         if String.IsNullOrEmpty log then "ERROR: program could not be linked but log was empty"
@@ -714,14 +463,33 @@ module ProgramExtensions =
 
     type Aardvark.Rendering.GL.Context with
 
-        member x.CreateUniformBuffer(block : UniformBlock) =
-            let fields = block.fields |> List.map activeUniformToField
-            x.CreateUniformBuffer(block.size, fields)
 
         member x.TryCompileShader(stage : ShaderStage, code : string, entryPoint : string) =
             x |> ShaderCompiler.tryCompileShader stage code entryPoint
 
 
+        member x.TryCompileCompute(expectsRowMajorMatrices : bool, code : string) =
+            use t = x.ResourceLock
+
+            match x |> ShaderCompiler.tryCompileCompute code with
+                | Success shaders ->
+                    addProgram x
+                    let handle = GL.CreateProgram()
+                    GL.Check "could not create program"
+
+                    for s in shaders do
+                        GL.AttachShader(handle, s.Handle)
+                        GL.Check "could not attach shader to program"
+
+                    match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders 0 Map.empty (fun _ _ -> []) with
+                        | Success program ->
+                            Success program
+                        | Error err ->
+                            Error err
+
+                | Error err ->
+                    Error err
+                    
         member x.TryCompileProgram(fboSignature : IFramebufferSignature, expectsRowMajorMatrices : bool, code : string) =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders true code with
@@ -758,7 +526,7 @@ module ProgramExtensions =
             using x.ResourceLock (fun _ ->
                 match x |> ShaderCompiler.tryCompileShaders false code with
                     | Success shaders ->
-                        let shaders = shaders |> List.filter (fun s -> s.Stage <> ShaderStage.Pixel)
+                        let shaders = shaders |> List.filter (fun s -> s.Stage <> ShaderStage.Fragment)
 
                         addProgram x
                         let handle = GL.CreateProgram()

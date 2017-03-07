@@ -25,9 +25,10 @@ open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq
 open Aardvark.Base.Incremental
+open Aardvark.Base.ShaderReflection
 
 
-type UniformLocation(ctx : Context, size : int, uniformType : ActiveUniformType) =
+type UniformLocation(ctx : Context, size : int, uniformType : ShaderParameterType) =
     let data = Marshal.AllocHGlobal(size)
 
     member x.Free() =
@@ -40,9 +41,8 @@ type UniformLocation(ctx : Context, size : int, uniformType : ActiveUniformType)
 
 [<AutoOpen>]
 module UniformLocationExtensions =
-
     type Context with
-        member x.CreateUniformLocation(size : int, uniformType : ActiveUniformType) =
+        member x.CreateUniformLocation(size : int, uniformType : ShaderParameterType) =
             UniformLocation(x, size, uniformType)
 
         member x.Delete(loc : UniformLocation) =
@@ -52,36 +52,16 @@ module UniformLocationExtensions =
         let bindUniformLocation (l : int) (loc : UniformLocation) =
             [
                 match loc.Type with
-                    | FloatVectorType 1 ->
-                        yield Instruction.Uniform1fv l 1 loc.Data
-                    | IntVectorType 1 ->
-                        yield Instruction.Uniform1iv l 1 loc.Data
-
-                    | FloatVectorType 2 ->
-                        yield Instruction.Uniform2fv l 1 loc.Data
-                    | IntVectorType 2 ->
-                        yield Instruction.Uniform2iv l 1 loc.Data
-
-                    | FloatVectorType 3 ->
-                        yield Instruction.Uniform3fv l 1 loc.Data
-                    | IntVectorType 3 ->
-                        yield Instruction.Uniform3iv l 1 loc.Data
-
-                    | FloatVectorType 4 ->
-                        yield Instruction.Uniform4fv l 1 loc.Data
-                    | IntVectorType 4 ->
-                        yield Instruction.Uniform4iv l 1 loc.Data
-
-
-                    | FloatMatrixType(2,2) ->
-                        yield Instruction.UniformMatrix2fv l 1 1 loc.Data
-
-                    | FloatMatrixType(3,3) ->
-                        yield Instruction.UniformMatrix3fv l 1 1 loc.Data
-
-                    | FloatMatrixType(4,4) ->
-                        yield Instruction.UniformMatrix4fv l 1 1 loc.Data
-
-                    | _ ->
-                        failwithf "no uniform-setter for: %A" loc
+                    | Vector(Float, 1) | Float  -> yield Instruction.Uniform1fv l 1 loc.Data
+                    | Vector(Int, 1) | Int      -> yield Instruction.Uniform1iv l 1 loc.Data
+                    | Vector(Float, 2)          -> yield Instruction.Uniform2fv l 1 loc.Data
+                    | Vector(Int, 2)            -> yield Instruction.Uniform2iv l 1 loc.Data
+                    | Vector(Float, 3)          -> yield Instruction.Uniform3fv l 1 loc.Data
+                    | Vector(Int, 3)            -> yield Instruction.Uniform3iv l 1 loc.Data
+                    | Vector(Float, 4)          -> yield Instruction.Uniform4fv l 1 loc.Data
+                    | Vector(Int, 4)            -> yield Instruction.Uniform4iv l 1 loc.Data
+                    | Matrix(Float, 2, 2, true) -> yield Instruction.UniformMatrix2fv l 1 1 loc.Data
+                    | Matrix(Float, 3, 3, true) -> yield Instruction.UniformMatrix3fv l 1 1 loc.Data
+                    | Matrix(Float, 4, 4, true) -> yield Instruction.UniformMatrix4fv l 1 1 loc.Data
+                    | _                         -> failwithf "no uniform-setter for: %A" loc
             ]

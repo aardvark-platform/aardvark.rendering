@@ -12,7 +12,7 @@ open Aardvark.Base.Incremental
 open System.Diagnostics
 open System.Collections.Generic
 open Aardvark.Base.Runtime
-
+open FShade
 #nowarn "9"
 #nowarn "51"
 
@@ -337,6 +337,18 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
+            let code = 
+                signature.Link(effect, Range1d(0.0, 1.0), true)
+                    |> ModuleCompiler.compileGLSLVulkan
+            
+            let entries =
+                effect.Shaders 
+                    |> Map.toSeq
+                    |> Seq.map (fun (stage,_) -> unbox<Aardvark.Base.ShaderStage> (int stage), "main") 
+                    |> Dictionary.ofSeq
+
+            BackendSurface(code, entries)
         member x.ResourceManager = failf "not implemented"
 
         member x.CreateFramebufferSignature(a,b) = x.CreateFramebufferSignature(a,b)
