@@ -161,7 +161,7 @@ module RenderTask =
                 let compose =
                     ASet.ofList [
                         { RenderObjects.create color depth with
-                            Surface = effect |> SequentialComposition.compose |> toFShadeSurface |> Mod.constant
+                            Surface = effect |> FShade.Effect.compose |> toFShadeSurface |> Mod.constant
                         }:> IRenderObject
                     ]
 

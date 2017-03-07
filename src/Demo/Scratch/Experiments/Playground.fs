@@ -67,7 +67,7 @@ module Shaders =
         }
 
 
-    let envMap = SamplerCube(ShaderTextureHandle("EnvironmentMap", uniform), { SamplerState.Empty with Filter = Some Filter.MinMagLinear; AddressU = Some WrapMode.Clamp; AddressV = Some WrapMode.Clamp; AddressW = Some WrapMode.Clamp })
+    let envMap = SamplerCube(ShaderTextureHandle("EnvironmentMap", uniform), { SamplerState.empty with Filter = Some Filter.MinMagLinear; AddressU = Some WrapMode.Clamp; AddressV = Some WrapMode.Clamp; AddressW = Some WrapMode.Clamp })
 
 
  

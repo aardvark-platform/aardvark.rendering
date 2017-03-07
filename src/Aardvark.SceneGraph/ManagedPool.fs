@@ -393,7 +393,7 @@ type ManagedDrawCall(call : DrawCallInfo, release : IDisposable) =
         member x.Dispose() = release.Dispose()
 
 type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
-    static let zero : byte[] = Array.zeroCreate 128
+    static let zero : byte[] = Array.zeroCreate 1280000
     let mutable count = 0
     let indexManager = LayoutManager<Option<BufferView> * int>()
     let vertexManager = LayoutManager<Map<Symbol, BufferView>>()

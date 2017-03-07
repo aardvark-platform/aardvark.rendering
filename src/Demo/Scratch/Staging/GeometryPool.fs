@@ -630,18 +630,22 @@ module ``Pool Tests`` =
     open FShade
     module Sem =
         let Hugo = Symbol.Create "Hugo"
+        let HugoN = Symbol.Create "HugoN"
 
     type HugoVertex = 
         {
-            [<Semantic("Hugo")>] m : M44d
+            [<Semantic("Hugo")>] mt : M44d
+            [<Semantic("HugoN")>] nt : M33d
             [<Position>] p : V4d
+            [<Normal>] n : V3d
         }
 
     let hugoShade (v : HugoVertex) =
         vertex {
             return { v 
                 with 
-                    p = v.m * v.p 
+                    p = v.mt * v.p 
+                    n = v.nt * v.n
             }
         }
 
@@ -760,10 +764,12 @@ module ``Pool Tests`` =
                     Map.ofList [ 
                         DefaultSemantic.Positions, typeof<V3f>
                         DefaultSemantic.Normals, typeof<V3f> 
+                        DefaultSemantic.DiffuseColorCoordinates, typeof<V3f> 
                     ]
                 uniformTypes = 
                     Map.ofList [ 
                         Sem.Hugo, typeof<M44f> 
+                        Sem.HugoN, typeof<M33f> 
                     ]
             }
 
@@ -777,7 +783,7 @@ module ``Pool Tests`` =
                         rnd.NextDouble() * 10.0 - 5.0,
                         rnd.NextDouble() * 10.0 - 5.0 )
             let trafo = Trafo3d.Scale 0.1 * Trafo3d.Translation pos
-            let ig = Primitives.unitCone (rnd.Next(10, 2000))
+            let ig = Primitives.unitCone (rnd.Next(1000, 50000))
             geometries.Add (ig, trafo) |> ignore
 
         for i in 0 .. 10 do
@@ -797,7 +803,7 @@ module ``Pool Tests`` =
                     
                     Report.Line("adding new random stuff: Seed={0}", rnd.Next())
              
-                    for i in 0 .. 1 do
+                    for i in 0 .. 10 do
                         addRandom()
                 )
 
@@ -805,10 +811,18 @@ module ``Pool Tests`` =
                 
         )
 
+        let addToPool(ag : AdaptiveGeometry) = 
+            
+            Report.BeginTimed("add to pool: vc={0}", ag.vertexCount)
+            Report.Line("ManagedBuffer.Set takes super long to fill up missing DiffuseColorCoordinates with 0")
+            let mdc = pool.Add ag
+            Report.End() |> ignore
+            mdc
+
         let geometriesLazy = 
             geometries |> ASet.map (fun (ig, trafo) -> ig
-                                                        |> AdaptiveGeometry.ofIndexedGeometry [Sem.Hugo, Mod.constant trafo :> IMod ]
-                                                        |> pool.Add)
+                                                        |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.Hugo, (Mod.constant trafo :> IMod)); (Sem.HugoN, Mod.constant (trafo.Backward.Transposed) :> IMod) ]
+                                                        |> addToPool)
 
         // initial evaluation
         ASet.toArray geometriesLazy |> ignore

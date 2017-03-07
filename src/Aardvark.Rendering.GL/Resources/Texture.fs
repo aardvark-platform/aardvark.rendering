@@ -1151,6 +1151,8 @@ module TextureUploadExtensions =
                     | _ -> 
                         failwithf "[GL] only supports ImageTrafo.[Rot0|MirrorY|MirrorX|Rot180] atm. but got %A" trafo
 
+           
+
             TextureCopyUtils.Copy(image, dst, dstInfo)
 
             GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
@@ -1163,6 +1165,123 @@ module TextureUploadExtensions =
 
 
             ()
+
+    type PixVolume with
+        member x.PinPBO(align : int, f : V3i -> PixelType -> PixelFormat -> nativeint -> unit) =
+            let size = x.Size
+            let pt = PixelType.ofType x.PixFormat.Type
+            let pf = PixelFormat.ofColFormat x.Format
+            
+            let align = align |> nativeint
+            let alignMask = align - 1n |> nativeint
+            let channelSize = x.PixFormat.Type.GLSize |> nativeint
+            let channels = toChannelCount x.Format |> nativeint
+
+            let pixelSize = channelSize * channels
+
+            let rowSize = pixelSize * nativeint size.X
+            let alignedRowSize = (rowSize + (alignMask - 1n)) &&& ~~~alignMask
+            let sizeInBytes = alignedRowSize * nativeint size.Y * nativeint size.Z
+
+
+            let pbo = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+            GL.BufferData(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferUsageHint.DynamicDraw)
+            let pDst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
+
+
+            if alignedRowSize % channelSize <> 0n then
+                failwith "[GL] unexpected row alignment (not implemented atm.)"
+
+            let dstInfo =
+                let rowPixels = alignedRowSize / channelSize
+                let viSize = V4l(int64 size.X, int64 size.Y, int64 size.Z, int64 channels)
+                Tensor4Info(
+                    0L,
+                    viSize,
+                    V4l(
+                        int64 channels, 
+                        int64 rowPixels, 
+                        int64 rowPixels * viSize.Y, 
+                        1L
+                    )
+                )
+
+            let elementType = x.PixFormat.Type
+
+           
+            elementType |> ExistentialHack.run {
+                new IUnmanagedAction with
+                    member __.Run(def : Option<'a>) =
+                        let x = unbox<PixVolume<'a>> x
+                        let dst = NativeTensor4<'a>(NativePtr.ofNativeInt pDst, dstInfo)
+                        NativeTensor4.using x.Tensor4 (fun src ->
+                            src.CopyTo(dst)
+                        )
+            }
+
+            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+            f size pt pf sizeInBytes
+
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.DeleteBuffer(pbo)
+
+    module NativeTensor4 =
+
+        let private pixelFormat =
+            LookupTable.lookupTable [
+                1L, PixelFormat.Red
+                2L, PixelFormat.Rg
+                3L, PixelFormat.Rgb
+                4L, PixelFormat.Rgba
+            ]
+
+        let withPBO (x : NativeTensor4<'a>) (align : int) (f : V3i -> PixelType -> PixelFormat -> nativeint -> unit) =
+            let size = x.Info.Size
+            let pt = PixelType.ofType typeof<'a>
+            let pf = pixelFormat size.W
+            
+            let align = align |> nativeint
+            let alignMask = align - 1n |> nativeint
+            let channelSize = typeof<'a>.GLSize |> nativeint
+            let channels = size.W |> nativeint
+
+            let pixelSize = channelSize * channels
+
+            let rowSize = pixelSize * nativeint size.X
+            let alignedRowSize = (rowSize + (alignMask - 1n)) &&& ~~~alignMask
+            let sizeInBytes = alignedRowSize * nativeint size.Y * nativeint size.Z
+
+            if alignedRowSize % channelSize <> 0n then
+                failwith "[GL] unexpected row alignment (not implemented atm.)"
+
+            let dstInfo =
+                let rowPixels = alignedRowSize / channelSize
+                let viSize = V4l(int64 size.X, int64 size.Y, int64 size.Z, int64 channels)
+                Tensor4Info(
+                    0L,
+                    viSize,
+                    V4l(
+                        int64 channels, 
+                        int64 rowPixels, 
+                        int64 rowPixels * viSize.Y, 
+                        1L
+                    )
+                )
+
+            let pbo = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+            GL.BufferData(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferUsageHint.DynamicDraw)
+            let pDst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
+
+            let dst = NativeTensor4<'a>(NativePtr.ofNativeInt pDst, dstInfo)
+            x.CopyTo(dst)
+
+            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+            f (V3i size.XYZ) pt pf sizeInBytes
+
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.DeleteBuffer(pbo)
 
     type Context with
         
@@ -1943,39 +2062,18 @@ module TextureExtensions =
             let newFormat = TextureFormat.ofPixFormat data.PixFormat textureParams
             let formatChanged = t.Format <> newFormat
             let sizeChanged = size <> t.Size3D
+            let internalFormat = TextureFormat.ofPixFormat data.PixFormat textureParams |> int |> unbox<PixelInternalFormat>
 
             GL.BindTexture(TextureTarget.Texture3D, t.Handle)
             GL.Check "could not bind texture"
 
-            // determine the input format and covert the image
-            // to a supported format if necessary.
-            let pixelType, pixelFormat, image =
-                match toPixelType data.PixFormat.Type, toPixelFormat data.Format with
-                    | Some t, Some f -> (t,f, data)
-                    | _ ->
-                        failwith "conversion not implemented"
-
-            // since OpenGL cannot upload image-regions we
-            // need to ensure that the image has a canonical layout. 
-            // TODO: Check id this is no "real" copy when already canonical
-            let image = image.CopyToPixVolumeWithCanonicalDenseLayout()
-
-
-            let gc = GCHandle.Alloc(image.Array, GCHandleType.Pinned)
-
-            // if the size did not change it is more efficient
-            // to use glTexSubImage
-            if sizeChanged || formatChanged then
-                let sizeInBytes = int64 <| ((InternalFormat.getSizeInBits (unbox (int newFormat))) * size.X * size.Y) / 8
-                updateTexture t.Context t.SizeInBytes sizeInBytes
-                t.SizeInBytes <- sizeInBytes
-
-                GL.TexImage3D(TextureTarget.Texture3D, 0, unbox (int newFormat), size.X, size.Y, size.Z, 0, pixelFormat, pixelType, gc.AddrOfPinnedObject())
-            else
-                GL.TexSubImage3D(TextureTarget.Texture3D, 0, 0, 0, 0, size.X, size.Y, size.Z, pixelFormat, pixelType, gc.AddrOfPinnedObject())
-            GL.Check "could not upload texture data"
-
-            gc.Free()
+            data.PinPBO (t.Context.PackAlignment, fun size pt pf sizeInBytes ->
+                if sizeChanged || formatChanged then
+                    GL.TexImage3D(TextureTarget.Texture3D, 0, internalFormat, size.X, size.Y, size.Z, 0, pf, pt, 0n)
+                else
+                    GL.TexSubImage3D(TextureTarget.Texture3D, 0, 0, 0, 0, size.X, size.Y, size.Z, pf, pt, 0n)
+                GL.Check "could not upload texture data"
+            )
 
             // if the image did not contain a sufficient
             // number of MipMaps and the user demanded 

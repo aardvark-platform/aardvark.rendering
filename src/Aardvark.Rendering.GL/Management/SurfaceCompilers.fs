@@ -27,17 +27,7 @@ module SurfaceCompilers =
                         | (true, desc) -> Some desc
                         | _ -> None
 
-                let ub = s.UniformBlocks // |> List.map (fun b -> { b with fields = b.fields |> List.map (fun f -> { f with semantic = remapSemantic f.semantic }) })
-                let topLevelUniforms = 
-                    s.Uniforms |> List.map (fun f -> 
-                        match tryGetSamplerDescription f.name f.index with
-                            | Some sampler -> 
-                                { f with semantic = string sampler.textureName; samplerState = Some sampler.samplerState }
-                            | None -> 
-                                f
-                    )
-
-                Success { s with UniformBlocks = ub; Uniforms = topLevelUniforms; UniformGetters = b.Uniforms }
+                Success { s with TextureInfo = b.Samplers |> Dictionary.toMap  }
 
             | Error e -> Error e
 
