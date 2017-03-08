@@ -162,11 +162,11 @@ module OutputDescription =
 type RenderTaskRunExtensions() =
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer) =
-        t.Run(AdaptiveToken(), token, OutputDescription.ofFramebuffer fbo)
+        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo)
 
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
-        t.Run(AdaptiveToken(), token, fbo)
+        t.Run(AdaptiveToken.Top, token, fbo)
 
 type IGeneratedSurface =
     inherit ISurface

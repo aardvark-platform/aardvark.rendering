@@ -61,7 +61,7 @@ module internal Interpreter =
 
     let internal emptyState =
         {
-            caller = AdaptiveToken()
+            caller = AdaptiveToken.Top
             ctx = null
             transform = M33d(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
             scissor = Box2d.Invalid

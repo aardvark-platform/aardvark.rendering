@@ -134,7 +134,6 @@ let quadTexture() =
 [<Demo("Super naive LoD")>]
 let naiveLoD() =
 
-
     let highest = Sg.sphere' 5 C4b.Red 1.0      
     let middle  = Sg.sphere' 3 C4b.Blue 1.0     
     let low     = Sg.box' C4b.Green Box3d.Unit  
@@ -148,11 +147,12 @@ let naiveLoD() =
             (NaiveLod.Sg.loD middle highest (dist 5.0)) 
             (dist 8.0)
 
+    let size = 10.0
     let many =
         [
-            for x in -10.0 .. 2.0 .. 10.0 do 
-                for y in -10.0 .. 2.0 .. 10.0 do
-                    for z in -10.0 .. 2.0 .. 10.0 do 
+            for x in -size .. 2.0 .. size do 
+                for y in -size .. 2.0 .. size do
+                    for z in -size .. 2.0 .. size do 
                         yield scene |> Sg.translate x y z 
                         //yield scene |> Sg.uniform "Urdar" (Mod.constant (M44d.Translation(x,y,z)))
         ] |> Sg.ofSeq

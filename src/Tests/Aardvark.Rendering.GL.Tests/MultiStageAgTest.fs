@@ -203,7 +203,7 @@ module MultipleStageAgMemoryLeakTest =
                     transact (fun () ->
                         Mod.change activeEngine  { p = Mod.init <| None}
                     )
-                    reader.GetDelta() |> ignore
+                    reader.GetOperations() |> ignore
 
                 foo ()
                 GC.Collect()

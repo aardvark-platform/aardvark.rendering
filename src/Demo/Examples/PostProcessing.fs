@@ -279,15 +279,15 @@ module PostProcessing =
 
 
         clear.Run(RenderToken.Empty, fboHandle)
-        mainTask.Run(AdaptiveToken(), RenderToken.Empty, { output with overrides = Map.empty })
+        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.empty })
         win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view0.png"])
 
         clear.Run(RenderToken.Empty, fboHandle)
-        mainTask.Run(AdaptiveToken(), RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view1 :> obj] })
+        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view1 :> obj] })
         win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view1.png"])
         
         clear.Run(RenderToken.Empty, fboHandle)
-        mainTask.Run(AdaptiveToken(), RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view2 :> obj] })
+        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view2 :> obj] })
         win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view2.png"])
 
         fbo.Release()

@@ -599,7 +599,7 @@ type AbstractRenderTask() =
         if toReset.Count = 0 then
             f(token)
         else
-            let innerToken = AdaptiveToken(token.Caller)
+            let innerToken = token.Isolated //AdaptiveToken(token.Depth, token.Caller, System.Collections.Generic.HashSet())
             try
                 f(innerToken)
             finally
@@ -744,7 +744,7 @@ module RenderTask =
             )
 
         override x.FramebufferSignature = 
-            let v = input.GetValue (AdaptiveToken(x))
+            let v = input.GetValue (AdaptiveToken.Top.WithCaller x)
             v.FramebufferSignature
 
         override x.PerformUpdate(token, t) =
@@ -763,7 +763,7 @@ module RenderTask =
                     inner <- None
                 | _ -> ()
 
-        override x.Runtime = input.GetValue(AdaptiveToken(x)).Runtime
+        override x.Runtime = input.GetValue(AdaptiveToken.Top.WithCaller x).Runtime
             
     type private AListRenderTask(tasks : alist<IRenderTask>) as this =
         inherit AbstractRenderTask()
@@ -824,7 +824,7 @@ module RenderTask =
 
         override x.Use (f : unit -> 'a) =
             lock x (fun () ->
-                processDeltas(AdaptiveToken())
+                processDeltas(AdaptiveToken.Top)
                 let l = reader.State |> Seq.toList
                 
                 let rec run (l : list<IRenderTask>) =
@@ -835,7 +835,7 @@ module RenderTask =
                 run l
             )
         override x.FramebufferSignature =
-            lock this (fun () -> processDeltas(AdaptiveToken()))
+            lock this (fun () -> processDeltas(AdaptiveToken.Top))
             signature
 
         override x.PerformUpdate(token, rt) =
@@ -861,7 +861,7 @@ module RenderTask =
             tasks.Clear()
                 
         override x.Runtime =
-            lock this (fun () -> processDeltas(AdaptiveToken()))
+            lock this (fun () -> processDeltas(AdaptiveToken.Top))
             runtime
 
     type private CustomRenderTask(f : afun<IRenderTask * RenderToken * OutputDescription, unit>) as this =

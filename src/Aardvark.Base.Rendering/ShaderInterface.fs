@@ -369,7 +369,7 @@ type IAdaptiveWriter =
 type IAdptiveWriterExtensions private() =
     [<Extension>]
     static member Write(this : IAdaptiveWriter, target : nativeint) =
-        this.Write(AdaptiveToken(), target)
+        this.Write(AdaptiveToken.Top, target)
 
 module ShaderParameterWriter =
     open System.Reflection

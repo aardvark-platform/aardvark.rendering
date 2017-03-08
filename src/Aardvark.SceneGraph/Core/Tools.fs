@@ -134,7 +134,7 @@ module ConcurrentDeltaQueue =
             async {
                 do! Async.SwitchToThreadPool()
                 let! _ = Async.AwaitIAsyncResult(sem.WaitAsync())
-                let d = EvaluationUtilities.evaluateTopLevel (fun () -> x.GetOperations(AdaptiveToken()))
+                let d = EvaluationUtilities.evaluateTopLevel (fun () -> x.GetOperations())
                 return d
             }
 

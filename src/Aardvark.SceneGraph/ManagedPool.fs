@@ -119,7 +119,7 @@ module private ManagedBufferImplementation =
        
                     lock writer (fun () -> 
                         if not writer.OutOfDate then
-                            writer.Write(AdaptiveToken(), range)
+                            writer.Write(AdaptiveToken.Top, range)
                     )
 
                 { new IDisposable with
@@ -154,7 +154,7 @@ module private ManagedBufferImplementation =
                             
                     lock writer (fun () -> 
                         if not writer.OutOfDate then
-                            writer.Write(AdaptiveToken(), range)
+                            writer.Write(AdaptiveToken.Top, range)
                     )
 
 

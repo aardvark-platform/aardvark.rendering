@@ -385,7 +385,7 @@ module DefaultOverlays =
                     if not isUseless then
                         realStats.Emit (innerToken,1)
 
-                    overlay.Run(AdaptiveToken(caller.Depth, null, System.Collections.Generic.HashSet()),t, f) |> ignore
+                    overlay.Run(AdaptiveToken.Top,t, f) |> ignore
 
 
                     if isUseless then

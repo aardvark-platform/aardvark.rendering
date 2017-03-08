@@ -214,7 +214,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
     member x.AddRef() =
         lock lockObj (fun () -> 
             if Interlocked.Increment(&refCount) = 1 then
-                x.ForceUpdate(AdaptiveToken(), RenderToken.Empty) |> ignore
+                x.ForceUpdate(AdaptiveToken.Top, RenderToken.Empty) |> ignore
         )
 
     member x.RemoveRef() =
@@ -599,7 +599,7 @@ type ResourceInputSet() =
 
         if needsUpdate then
             Log.warn "adding outdated resource: %A" r.Kind
-            x.EvaluateAlways (AdaptiveToken()) (fun token -> 
+            x.EvaluateAlways AdaptiveToken.Top (fun token -> 
                 updateDirty x token RenderToken.Empty
             )
 

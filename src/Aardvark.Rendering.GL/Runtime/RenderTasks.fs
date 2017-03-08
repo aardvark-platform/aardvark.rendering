@@ -412,7 +412,7 @@ module RenderTasks =
             reinit x config
 
             //TODO
-            let programStats = x.ProgramUpdate (t, fun () -> program.Update (AdaptiveToken(token.Depth, null, HashSet())))
+            let programStats = x.ProgramUpdate (t, fun () -> program.Update AdaptiveToken.Top)
             ()
         override x.Perform(token, t) =
             x.Update(token, t) |> ignore
@@ -426,6 +426,10 @@ module RenderTasks =
             if hasProgram then
                 hasProgram <- false
                 program.Dispose()
+
+                let mutable foo = 0
+                (objects :> aset<_>).Content.Outputs.Consume(&foo) |> ignore
+
                 objects.Clear()
         
         override x.Add(o) = 
@@ -589,7 +593,7 @@ module RenderTasks =
             f |> Seq.sortWith (fun a b -> cmp.Compare(a.Object, b.Object)) |> Seq.toList
 
         override x.Update(token : AdaptiveToken, rt : RenderToken, dirty : HashSet<_>) =
-            let deltas = fragmentReader.GetOperations(AdaptiveToken())
+            let deltas = fragmentReader.GetOperations(AdaptiveToken.Top)
             for d in deltas do
                 match d with
                     | Add(_,f) -> dirty.Add f |> ignore
@@ -685,7 +689,7 @@ module RenderTasks =
         
         let objects = CSet.empty
         let boundingBoxes = Dictionary<PreparedMultiRenderObject, IMod<Box3d>>()
-        let mutable compareToken = AdaptiveToken()
+        let mutable compareToken = AdaptiveToken.Top
         let bb (o : PreparedMultiRenderObject) =
             boundingBoxes.[o].GetValue(compareToken)
 
@@ -731,7 +735,7 @@ module RenderTasks =
             let cfg = parent.Config.GetValue token
             reinit x cfg
 
-            let updateStats = x.ProgramUpdate (t, fun () -> program.Update(AdaptiveToken(), t))
+            let updateStats = x.ProgramUpdate (t, fun () -> program.Update(AdaptiveToken.Top, t))
             ()
 
         override x.Perform(token, t) =
