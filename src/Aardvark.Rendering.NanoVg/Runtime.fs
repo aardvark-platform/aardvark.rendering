@@ -397,7 +397,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
     member x.Run(caller : AdaptiveToken, t : RenderToken, fbo : OutputDescription) =
         let fbo = fbo.framebuffer
         x.EvaluateAlways caller (fun caller ->
-            r.Update()
+            r.GetOperations(caller) |> ignore
 //            for d in r.GetDelta(x) do
 //                match d with
 //                    | Add(_,rj) -> add rj

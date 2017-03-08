@@ -412,7 +412,7 @@ module RenderTasks =
             reinit x config
 
             //TODO
-            let programStats = x.ProgramUpdate (t, fun () -> program.Update (AdaptiveToken()))
+            let programStats = x.ProgramUpdate (t, fun () -> program.Update (AdaptiveToken(token.Depth, null, HashSet())))
             ()
         override x.Perform(token, t) =
             x.Update(token, t) |> ignore
@@ -589,7 +589,7 @@ module RenderTasks =
             f |> Seq.sortWith (fun a b -> cmp.Compare(a.Object, b.Object)) |> Seq.toList
 
         override x.Update(token : AdaptiveToken, rt : RenderToken, dirty : HashSet<_>) =
-            let deltas = fragmentReader.GetOperations token
+            let deltas = fragmentReader.GetOperations(AdaptiveToken())
             for d in deltas do
                 match d with
                     | Add(_,f) -> dirty.Add f |> ignore
@@ -685,9 +685,9 @@ module RenderTasks =
         
         let objects = CSet.empty
         let boundingBoxes = Dictionary<PreparedMultiRenderObject, IMod<Box3d>>()
-
-        let bb (token : AdaptiveToken) (o : PreparedMultiRenderObject) =
-            boundingBoxes.[o].GetValue(token)
+        let mutable compareToken = AdaptiveToken()
+        let bb (o : PreparedMultiRenderObject) =
+            boundingBoxes.[o].GetValue(compareToken)
 
         let mutable program = Unchecked.defaultof<IRenderProgram>
         let mutable hasProgram = false
@@ -701,11 +701,11 @@ module RenderTasks =
                 match order with
                     | RenderPassOrder.BackToFront ->
                         { new IComparer<PreparedMultiRenderObject> with
-                            member x.Compare(l,r) = compare ((bb self r).GetMinimalDistanceTo pos) ((bb self l).GetMinimalDistanceTo pos)
+                            member x.Compare(l,r) = compare ((bb r).GetMinimalDistanceTo pos) ((bb l).GetMinimalDistanceTo pos)
                         }
                     | _ ->
                         { new IComparer<PreparedMultiRenderObject> with
-                            member x.Compare(l,r) = compare ((bb self l).GetMinimalDistanceTo pos) ((bb self r).GetMinimalDistanceTo pos)
+                            member x.Compare(l,r) = compare ((bb l).GetMinimalDistanceTo pos) ((bb r).GetMinimalDistanceTo pos)
                         }
             )
 
@@ -727,6 +727,7 @@ module RenderTasks =
         member x.Scope = scope
 
         override x.Update(token, t) = 
+            compareToken <- token
             let cfg = parent.Config.GetValue token
             reinit x cfg
 
@@ -734,6 +735,7 @@ module RenderTasks =
             ()
 
         override x.Perform(token, t) =
+            compareToken <- token
             x.Update(token, t) |> ignore
             x.Execution (t, fun () -> program.Run(t))
 

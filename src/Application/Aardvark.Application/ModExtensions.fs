@@ -81,23 +81,43 @@ module Mod =
     let integrate (initial : 'a) (time : IMod<DateTime>) (controllers : list<IMod<AdaptiveFunc<'a>>>) =
         let currentValue = ref initial
         let current = Mod.custom (fun _ -> !currentValue)
-        let isSubscribed = ref false
+        //let isSubscribed = ref false
         //time.AddOutput current
         //time |> Mod.registerCallback (fun _ -> current.MarkOutdated()) |> ignore
         
         let result = int current controllers
         //time.AddOutput current
 
-        result |> Mod.map (fun v ->
+
+        Mod.custom (fun token ->
+            let v = result.GetValue token
             if !currentValue <> v then
                 currentValue := v
-                if not !isSubscribed then
-                    isSubscribed := true
-                    time.AddVolatileMarkingCallback (fun () ->
-                        isSubscribed := false
-                        transact (fun () -> current.MarkOutdated())
-                    ) |> ignore
-                    time.GetValue() |> ignore
+                let time = AdaptiveObject.Time
+                lock time (fun () ->
+                    time.Outputs.Add current |> ignore
+                )
+//                if not !isSubscribed then
+//                    isSubscribed := true
+//                    time.AddVolatileMarkingCallback (fun () ->
+//                        isSubscribed := false
+//                        transact (fun () -> current.MarkOutdated())
+//                    ) |> ignore
+//                    time.GetValue(AdaptiveToken(token.Depth, null, System.Collections.Generic.HashSet())) |> ignore
 
             v
         )
+
+//        result |> Mod.map (fun v ->
+//            if !currentValue <> v then
+//                currentValue := v
+//                if not !isSubscribed then
+//                    isSubscribed := true
+//                    time.AddVolatileMarkingCallback (fun () ->
+//                        isSubscribed := false
+//                        transact (fun () -> current.MarkOutdated())
+//                    ) |> ignore
+//                    time.GetValue(AdaptiveTOken()) |> ignore
+//
+//            v
+//        )

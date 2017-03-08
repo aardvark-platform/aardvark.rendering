@@ -581,7 +581,7 @@ type AbstractRenderTask() =
                 provider.Dispose()
         }
 
-    member private x.UseValues (output : OutputDescription, f : unit -> 'a) =
+    member private x.UseValues (token : AdaptiveToken, output : OutputDescription, f : AdaptiveToken -> 'a) =
         let toReset = List()
         transact (fun () -> 
             if currentOutput.IsValueCreated then
@@ -595,14 +595,19 @@ type AbstractRenderTask() =
                     | _ ->
                         ()
         )
-        try
-            f()
-        finally
-            if toReset.Count > 0 then
+
+        if toReset.Count = 0 then
+            f(token)
+        else
+            let innerToken = AdaptiveToken(token.Caller)
+            try
+                f(innerToken)
+            finally
+                innerToken.Release()
                 transact (fun () ->
                     for r in toReset do r.Reset()
                 )
-                x.PerformUpdate(AdaptiveToken(), RenderToken.Empty)
+                x.PerformUpdate(token, RenderToken.Empty)
 
     member x.HookRenderObject (ro : RenderObject) =
         { ro with Uniforms = hookProvider ro.Uniforms }
@@ -622,7 +627,7 @@ type AbstractRenderTask() =
     member x.Run(token : AdaptiveToken, t : RenderToken, out : OutputDescription) =
         x.EvaluateAlways token (fun token ->
             x.OutOfDate <- true
-            x.UseValues(out, fun () ->
+            x.UseValues(token, out, fun token ->
                 x.Perform(token, t, out)
                 frameId <- frameId + 1UL
             )
