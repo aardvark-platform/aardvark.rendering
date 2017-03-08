@@ -151,7 +151,6 @@ module StepwiseProgress =
         printfn "%A" r
         ()
 
-
 module StepwiseQueueExection =
     open StepwiseProgress
 
@@ -167,7 +166,7 @@ module StepwiseQueueExection =
                     
 
                     match d with
-                        | Add v -> 
+                        | Add(_,v) -> 
                             let stepwise,cts = cache.GetOrAdd(v, fun v -> 
                                 let cts = new CancellationTokenSource()
                                 //cts.Token.Register (fun () -> undo v) |> ignore
@@ -180,7 +179,7 @@ module StepwiseQueueExection =
                                     Log.line "cancelled something"
                                 | undoThings -> 
                                     cts.Token.Register(fun () -> List.iter (fun i -> i ()) undoThings) |> ignore
-                        | Rem v ->
+                        | Rem(_,v) ->
                             undo v
                             match cache.TryRemove(v) with
                                 | (true,(stepwise,cts)) ->

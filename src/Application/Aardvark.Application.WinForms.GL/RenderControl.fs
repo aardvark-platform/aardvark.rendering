@@ -184,7 +184,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
                         EvaluationUtilities.evaluateTopLevel(fun () ->
-                            t.Run(null, RenderToken.Empty, defaultOutput)
+                            t.Run(AdaptiveToken(), RenderToken.Empty, defaultOutput)
                         )
                         
 //                        let sw = System.Diagnostics.Stopwatch()

@@ -43,7 +43,7 @@ module Compiler =
     type CompilerState =
         {
             variables : Map<Var, Local>
-            closure : HashMap<obj, Local>
+            closure : hmap<obj, Local>
             instructions : ConcList<Instruction>
         }
     
@@ -67,11 +67,11 @@ module Compiler =
         let spill (o : obj) (t : Type) =
             state {
                 let! s = State.get
-                match HashMap.tryFind o s.closure with
+                match HMap.tryFind o s.closure with
                     | Some l -> return l
                     | None ->
                         let l = Local(t)
-                        do! State.put { s with closure = HashMap.add o l s.closure }
+                        do! State.put { s with closure = HMap.add o l s.closure }
                         return l
             }
 
@@ -236,7 +236,7 @@ module Compiler =
         let mutable state =
             {
                 variables = Map.empty
-                closure = HashMap.empty
+                closure = HMap.empty
                 instructions = Empty
             }
         res.RunUnit(&state)
@@ -248,7 +248,7 @@ module Compiler =
             if hasClosure then
                 let dType = dMod.DefineType(Guid.NewGuid() |> string)
 
-                let closure = state.closure |> HashMap.toList
+                let closure = state.closure |> HMap.toList
 
                 let closureTypes = closure |> List.map (fun (_,l) -> l.Type) |> List.toArray
 

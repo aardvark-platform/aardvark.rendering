@@ -41,7 +41,7 @@ type DrawCallSet(collapseAdjacent : bool) =
         if result then transact (fun () -> x.MarkOutdated())
         result
 
-    override x.Compute() =
+    override x.Compute(token) =
         let drawRanges = 
             if collapseAdjacent then ranges :> seq<_>
             else all :> seq<_>

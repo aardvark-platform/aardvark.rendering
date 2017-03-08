@@ -29,7 +29,7 @@ type IPreparedRenderObject =
     inherit IRenderObject
     inherit IDisposable
 
-    abstract member Update : IAdaptiveObject * RenderToken -> unit
+    abstract member Update : AdaptiveToken * RenderToken -> unit
     abstract member Original : Option<RenderObject>
 
 type ShaderStage =
@@ -106,8 +106,8 @@ and IRenderTask =
     inherit IAdaptiveObject
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
-    abstract member Update : IAdaptiveObject * RenderToken -> unit
-    abstract member Run : IAdaptiveObject * RenderToken * OutputDescription -> unit
+    abstract member Update : AdaptiveToken * RenderToken -> unit
+    abstract member Run : AdaptiveToken * RenderToken * OutputDescription -> unit
     abstract member FrameId : uint64
     abstract member Use : (unit -> 'a) -> 'a
 
@@ -162,11 +162,11 @@ module OutputDescription =
 type RenderTaskRunExtensions() =
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer) =
-        t.Run(null, token, OutputDescription.ofFramebuffer fbo)
+        t.Run(AdaptiveToken(), token, OutputDescription.ofFramebuffer fbo)
 
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
-        t.Run(null, token, fbo)
+        t.Run(AdaptiveToken(), token, fbo)
 
 type IGeneratedSurface =
     inherit ISurface

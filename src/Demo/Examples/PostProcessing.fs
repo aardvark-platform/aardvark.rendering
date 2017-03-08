@@ -262,9 +262,9 @@ module PostProcessing =
         Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false
         Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
                
-
-        ComputeTest.run()
-        Environment.Exit 0
+//
+//        ComputeTest.run()
+//        Environment.Exit 0
 
         let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, Mod.constant (V2i(1024, 768)))
         fbo.Acquire()
@@ -278,16 +278,16 @@ module PostProcessing =
         let desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
 
 
-        clear.Run(null, fboHandle)
-        mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.empty })
+        clear.Run(RenderToken.Empty, fboHandle)
+        mainTask.Run(AdaptiveToken(), RenderToken.Empty, { output with overrides = Map.empty })
         win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view0.png"])
 
-        clear.Run(null, fboHandle)
-        mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view1 :> obj] })
+        clear.Run(RenderToken.Empty, fboHandle)
+        mainTask.Run(AdaptiveToken(), RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view1 :> obj] })
         win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view1.png"])
         
-        clear.Run(null, fboHandle)
-        mainTask.Run(null, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view2 :> obj] })
+        clear.Run(RenderToken.Empty, fboHandle)
+        mainTask.Run(AdaptiveToken(), RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view2 :> obj] })
         win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view2.png"])
 
         fbo.Release()

@@ -537,7 +537,7 @@ type Geometry =
                             failwith "[Geometry] texture save not implemented"
 
                 | _ ->
-                    let v = value.GetValue(null)
+                    let v = value.GetValue(AdaptiveToken())
                     let t = v.GetType()
                     let typeName = t.AssemblyQualifiedName
 

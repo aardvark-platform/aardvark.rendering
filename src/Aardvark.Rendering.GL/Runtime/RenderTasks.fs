@@ -63,9 +63,9 @@ module RenderTasks =
         member x.StructureChanged() =
             transact (fun () -> structureChanged.MarkOutdated())
 
-        member private x.pushDebugOutput() =
+        member private x.pushDebugOutput(token : AdaptiveToken) =
             let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
-            let c = config.GetValue x
+            let c = config.GetValue token
             if c.useDebugOutput then
                 match ContextHandle.Current with
                     | Some v -> v.AttachDebugOutputIfNeeded()
@@ -74,8 +74,8 @@ module RenderTasks =
 
             wasEnabled
 
-        member private x.popDebugOutput(wasEnabled : bool) =
-            let c = config.GetValue x
+        member private x.popDebugOutput(token : AdaptiveToken, wasEnabled : bool) =
+            let c = config.GetValue token
             if wasEnabled <> c.useDebugOutput then
                 if wasEnabled then GL.Enable EnableCap.DebugOutput
                 else GL.Disable EnableCap.DebugOutput
@@ -131,9 +131,9 @@ module RenderTasks =
             GL.Viewport(old.[0], old.[1], old.[2], old.[3])
             GL.Check "could not set viewport"
 
-        abstract member ProcessDeltas : RenderToken -> unit
-        abstract member UpdateResources : RenderToken -> unit
-        abstract member Perform : RenderToken * Framebuffer -> unit
+        abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
+        abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
+        abstract member Perform : AdaptiveToken * RenderToken * Framebuffer -> unit
         abstract member Release : unit -> unit
 
 
@@ -144,10 +144,10 @@ module RenderTasks =
         member x.RenderTaskLock = renderTaskLock
         member x.ResourceManager = manager
 
-        override x.Update(t) =
+        override x.PerformUpdate(token, t) =
             use ct = ctx.ResourceLock
-            x.ProcessDeltas(t)
-            x.UpdateResources(t)
+            x.ProcessDeltas(token, t)
+            x.UpdateResources(token, t)
 
         override x.Dispose() =
             if not isDisposed then
@@ -157,12 +157,12 @@ module RenderTasks =
                 x.Release()
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some ctx.Runtime
-        override x.Run(t : RenderToken, desc : OutputDescription) =
+        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| fboSignature.IsAssignableFrom fbo.Signature then
                 failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
 
-            use token = ctx.ResourceLock 
+            use __ = ctx.ResourceLock 
             if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
                 let intCtx = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
                 NativePtr.write contextHandle intCtx.Context.Handle
@@ -174,16 +174,16 @@ module RenderTasks =
                     | _ -> failwithf "unsupported framebuffer: %A" fbo
 
 
-            let debugState = x.pushDebugOutput()
+            let debugState = x.pushDebugOutput(token)
             let fboState = x.pushFbo desc
 
-            x.ProcessDeltas(t)
-            x.UpdateResources(t)
+            x.ProcessDeltas(token, t)
+            x.UpdateResources(token, t)
 
             renderTaskLock.Run (fun () ->
                 beforeRender.OnNext()
                 NativePtr.write runtimeStats V2i.Zero
-                let stats = x.Perform(t, fbo)
+                let stats = x.Perform(token, t, fbo)
                 GL.Check "RenderTask.Run"
                 afterRender.OnNext()
                 let rt = NativePtr.read runtimeStats
@@ -191,7 +191,7 @@ module RenderTasks =
             )
 
             x.popFbo (desc, fboState)
-            x.popDebugOutput debugState
+            x.popDebugOutput(token, debugState)
 
                 
             GL.BindVertexArray 0
@@ -237,15 +237,15 @@ module RenderTasks =
 
         member x.Parent = parent
 
-        abstract member Update : RenderToken -> unit
-        abstract member Perform : RenderToken -> unit
+        abstract member Update : AdaptiveToken * RenderToken -> unit
+        abstract member Perform : AdaptiveToken * RenderToken -> unit
         abstract member Dispose : unit -> unit
         abstract member Add : PreparedMultiRenderObject -> unit
         abstract member Remove : PreparedMultiRenderObject -> unit
 
 
-        member x.Run(t) =
-            x.Perform(t)
+        member x.Run(token : AdaptiveToken, t : RenderToken) =
+            x.Perform(token, t)
             if RenderToken.isEmpty t then
                 nop
             else
@@ -407,15 +407,15 @@ module RenderTasks =
                 hasProgram <- true
                 currentConfig <- config
 
-        override x.Update(t) =
-            let config = parent.Config.GetValue parent
+        override x.Update(token, t) =
+            let config = parent.Config.GetValue token
             reinit x config
 
             //TODO
-            let programStats = x.ProgramUpdate (t, fun () -> program.Update null)
+            let programStats = x.ProgramUpdate (t, fun () -> program.Update (AdaptiveToken()))
             ()
-        override x.Perform(t) =
-            x.Update(t) |> ignore
+        override x.Perform(token, t) =
+            x.Update(token, t) |> ignore
 
             let stats = x.Execution (t, fun () -> program.Run(t))
 
@@ -511,20 +511,21 @@ module RenderTasks =
 
         member x.BoundingBox = currentBox
 
-        member x.Update(caller : IAdaptiveObject, token : RenderToken) =
-            x.EvaluateIfNeeded caller () (fun () ->
-                let blocks = 
-                    lock dirtyBlocks (fun () ->
-                        let all = Seq.toList dirtyBlocks
-                        dirtyBlocks.Clear()
-                        all
-                    )
+        member x.Update(token : AdaptiveToken, rt : RenderToken) =
+            x.EvaluateAlways token (fun token ->
+                if x.OutOfDate then
+                    let blocks = 
+                        lock dirtyBlocks (fun () ->
+                            let all = Seq.toList dirtyBlocks
+                            dirtyBlocks.Clear()
+                            all
+                        )
 
-                for (block, content) in blocks do
-                    let c = content.GetValue x
-                    writeBlock block c
+                    for (block, content) in blocks do
+                        let c = content.GetValue token
+                        writeBlock block c
 
-                currentBox <- boundingBox.GetValue x
+                    currentBox <- boundingBox.GetValue token
 
             )
 
@@ -582,22 +583,22 @@ module RenderTasks =
                         c
 
 
-        member private x.sort (f : seq<AdaptiveGLVMFragment>) : list<AdaptiveGLVMFragment> =
+        member private x.sort (token : AdaptiveToken, f : seq<AdaptiveGLVMFragment>) : list<AdaptiveGLVMFragment> =
             let comparer = getComparer f
-            let cmp = comparer.GetValue x
+            let cmp = comparer.GetValue token
             f |> Seq.sortWith (fun a b -> cmp.Compare(a.Object, b.Object)) |> Seq.toList
 
-        override x.Update(token : RenderToken, dirty : HashSet<_>) =
-            let deltas = fragmentReader.GetDelta()
+        override x.Update(token : AdaptiveToken, rt : RenderToken, dirty : HashSet<_>) =
+            let deltas = fragmentReader.GetOperations token
             for d in deltas do
                 match d with
-                    | Add f -> dirty.Add f |> ignore
-                    | Rem f -> dirty.Remove f |> ignore
+                    | Add(_,f) -> dirty.Add f |> ignore
+                    | Rem(_,f) -> dirty.Remove f |> ignore
 
-            for d in dirty do d.Update(x, token)
+            for d in dirty do d.Update(token, rt)
 
-            parent.Sorting (token, fun () ->
-                let ordered = x.sort fragmentReader.Content
+            parent.Sorting (rt, fun () ->
+                let ordered = x.sort(token, fragmentReader.State)
 
                 let mutable current = null
                 for f in ordered do
@@ -653,13 +654,13 @@ module RenderTasks =
                         c
 
 
-        override x.Update(t : RenderToken) =
-            reader.Update(x)
+        override x.PerformUpdate(token : AdaptiveToken, t : RenderToken) =
+            reader.GetOperations(token) |> ignore
 
             parent.Sorting (t, fun () ->
-                let comparer = getComparer reader.Content
-                let cmp = comparer.GetValue x
-                arr <- reader.Content |> Seq.sortWith (fun a b -> cmp.Compare(a,b)) |> Seq.toArray
+                let comparer = getComparer reader.State
+                let cmp = comparer.GetValue token
+                arr <- reader.State |> Seq.sortWith (fun a b -> cmp.Compare(a,b)) |> Seq.toArray
             )
 
         override x.Run(t) =
@@ -685,8 +686,8 @@ module RenderTasks =
         let objects = CSet.empty
         let boundingBoxes = Dictionary<PreparedMultiRenderObject, IMod<Box3d>>()
 
-        let bb (o : PreparedMultiRenderObject) =
-            boundingBoxes.[o].GetValue(parent)
+        let bb (token : AdaptiveToken) (o : PreparedMultiRenderObject) =
+            boundingBoxes.[o].GetValue(token)
 
         let mutable program = Unchecked.defaultof<IRenderProgram>
         let mutable hasProgram = false
@@ -700,11 +701,11 @@ module RenderTasks =
                 match order with
                     | RenderPassOrder.BackToFront ->
                         { new IComparer<PreparedMultiRenderObject> with
-                            member x.Compare(l,r) = compare ((bb r).GetMinimalDistanceTo pos) ((bb l).GetMinimalDistanceTo pos)
+                            member x.Compare(l,r) = compare ((bb self r).GetMinimalDistanceTo pos) ((bb self l).GetMinimalDistanceTo pos)
                         }
                     | _ ->
                         { new IComparer<PreparedMultiRenderObject> with
-                            member x.Compare(l,r) = compare ((bb l).GetMinimalDistanceTo pos) ((bb r).GetMinimalDistanceTo pos)
+                            member x.Compare(l,r) = compare ((bb self l).GetMinimalDistanceTo pos) ((bb self r).GetMinimalDistanceTo pos)
                         }
             )
 
@@ -725,16 +726,15 @@ module RenderTasks =
 
         member x.Scope = scope
 
-        override x.Update(t) = 
-            let cfg = parent.Config.GetValue parent
+        override x.Update(token, t) = 
+            let cfg = parent.Config.GetValue token
             reinit x cfg
 
-            let updateStats = x.ProgramUpdate (t, fun () -> program.Update(null, t))
+            let updateStats = x.ProgramUpdate (t, fun () -> program.Update(AdaptiveToken(), t))
             ()
 
-        override x.Perform(t) =
-            x.Update(t) |> ignore
-
+        override x.Perform(token, t) =
+            x.Update(token, t) |> ignore
             x.Execution (t, fun () -> program.Run(t))
 
 
@@ -847,29 +847,28 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-        let processDeltas (x : AbstractOpenGlRenderTask) (t : RenderToken) =
-            let deltas = preparedObjectReader.GetDelta x
+        let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
+            let deltas = preparedObjectReader.GetOperations x
 
-            match deltas with
-                | [] -> ()
-                | _ -> x.StructureChanged()
+            if not (HDeltaSet.isEmpty deltas) then
+                parent.StructureChanged()
 
             let mutable added = 0
             let mutable removed = 0
             for d in deltas do 
                 match d with
-                    | Add v ->
+                    | Add(_,v) ->
                         let task = getSubTask v.RenderPass
                         added <- added + 1
                         task.Add v
-                    | Rem v ->
+                    | Rem(_,v) ->
                         let task = getSubTask v.RenderPass
                         removed <- removed + 1
                         task.Remove v            
 
             t.RenderObjectDeltas(added, removed)
 
-        let updateResources (x : AbstractOpenGlRenderTask) (t : RenderToken) =
+        let updateResources (x : AdaptiveToken) (t : RenderToken) =
             if RenderToken.isEmpty t then
                 resources.Update(x, t)
             else
@@ -880,30 +879,30 @@ module RenderTasks =
                 t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
 
 
-        override x.ProcessDeltas(t) =
-            processDeltas x t
+        override x.ProcessDeltas(token, t) =
+            processDeltas token x t
 
-        override x.UpdateResources(t) =
-            updateResources x t
+        override x.UpdateResources(token,t) =
+            updateResources token t
 
-        override x.Perform(token : RenderToken, fbo : Framebuffer) =
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer) =
             x.ResourceManager.DrawBufferManager.Write(fbo)
 
-            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid token then
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
                 primitivesGenerated.Restart()
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
-                let s = t.Run(token)
+                let s = t.Run(token,rt)
                 runStats <- s::runStats
 
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
             
-            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid token then 
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
                 primitivesGenerated.Stop()
                 runStats |> List.iter (fun l -> l.Value)
-                token.AddPrimitiveCount(primitivesGenerated.Value)
+                rt.AddPrimitiveCount(primitivesGenerated.Value)
 
 
 
@@ -928,8 +927,8 @@ module RenderTasks =
     type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
         inherit AbstractRenderTask()
 
-        override x.Update(t) = ()
-        override x.Run(t : RenderToken, desc : OutputDescription) =
+        override x.PerformUpdate(token, t) = ()
+        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer
             using ctx.ResourceLock (fun _ ->
 
@@ -951,8 +950,8 @@ module RenderTasks =
 
                 
 
-                let depthValue = depth.GetValue x
-                let colorValues = color.GetValue x
+                let depthValue = depth.GetValue token
+                let colorValues = color.GetValue token
                     
                 colorValues |> List.iteri (fun i _ ->
                     GL.ColorMask(i, true, true, true, true)

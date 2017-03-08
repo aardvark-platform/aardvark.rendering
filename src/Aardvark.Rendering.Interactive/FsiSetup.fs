@@ -37,7 +37,7 @@ module FsiSetup =
             Ag.initialize()
             Aardvark.Base.Ag.unpack <- fun o ->
                     match o with
-                        | :? IMod as o -> o.GetValue(null)
+                        | :? IMod as o -> o.GetValue()
                         | _ -> o
 
             Aardvark.Init()
@@ -55,7 +55,7 @@ module FsiSetup =
             Ag.initialize()
             Aardvark.Base.Ag.unpack <- fun o ->
                     match o with
-                        | :? IMod as o -> o.GetValue(null)
+                        | :? IMod as o -> o.GetValue()
                         | _ -> o
 
             Aardvark.Init()

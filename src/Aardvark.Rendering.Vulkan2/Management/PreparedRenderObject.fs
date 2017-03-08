@@ -46,7 +46,7 @@ type PreparedRenderObject =
             | Some ib -> ib.Dispose()
             | None -> ()
 
-    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+    member x.Update(caller : AdaptiveToken, token : RenderToken) =
         use devToken = x.device.Token
         for b in x.uniformBuffers do
             b.Update(caller, token)
@@ -94,7 +94,7 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     member x.Dispose() =
         children |> List.iter (fun c -> c.Dispose())
 
-    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+    member x.Update(caller : AdaptiveToken, token : RenderToken) =
         children |> List.iter (fun c -> c.Update(caller, token))
         
 
@@ -258,13 +258,13 @@ type DevicePreparedRenderObjectExtensions private() =
 
         let isActive =
             { new Rendering.Resource<nativeint>(ResourceKind.Unknown) with
-                member x.Create (token : RenderToken, old : Option<nativeint>) =
+                member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<nativeint>) =
                     let ptr =
                         match old with
                             | Some ptr -> ptr
                             | None -> Marshal.AllocHGlobal 4
 
-                    let v = ro.IsActive.GetValue(x)
+                    let v = ro.IsActive.GetValue(token)
                     NativeInt.write ptr (if v then 1 else 0)
                     ptr
 

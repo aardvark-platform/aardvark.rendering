@@ -166,7 +166,7 @@ module ChangeableResources =
 module private RefCountedResources = 
 
     type IMod<'a> with
-        member x.GetValue(c : IAdaptiveObject, t : RenderToken) =
+        member x.GetValue(c : AdaptiveToken, t : RenderToken) =
             match x with
                 | :? IOutputMod<'a> as x -> x.GetValue(c, t)
                 | _ -> x.GetValue(c)
@@ -185,8 +185,8 @@ module private RefCountedResources =
                 | None ->
                     ()
 
-        override x.Compute(t : RenderToken) =
-            let size = size.GetValue(x)
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
+            let size = size.GetValue(token)
 
             match handle with
                 | Some h when h.Size.XY = size -> 
@@ -219,8 +219,8 @@ module private RefCountedResources =
                 | None ->
                     ()
 
-        override x.Compute(t : RenderToken) =
-            let size = size.GetValue(x)
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
+            let size = size.GetValue(token)
 
             match handle with
                 | Some h when h.Size.XY = size -> 
@@ -253,8 +253,8 @@ module private RefCountedResources =
                 | None ->
                     ()
 
-        override x.Compute(t : RenderToken) =
-            let size = size.GetValue(x)
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
+            let size = size.GetValue(token)
 
             match handle with
                 | Some h when h.Size = size -> 
@@ -282,14 +282,14 @@ module private RefCountedResources =
     
     type AdaptiveTextureAttachment(texture : IOutputMod<ITexture>, slice : int) =
         inherit AbstractAdaptiveFramebufferOutput(texture)
-        override x.Compute(t : RenderToken) =
-            let tex = texture.GetValue(x, t)
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
+            let tex = texture.GetValue(token, t)
             { texture = unbox tex; slice = slice; level = 0 } :> IFramebufferOutput
 
     type AdaptiveRenderbufferAttachment(renderbuffer : IOutputMod<IRenderbuffer>) =
         inherit AbstractAdaptiveFramebufferOutput(renderbuffer)
-        override x.Compute(t : RenderToken) =
-            let rb = renderbuffer.GetValue(x, t)
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
+            let rb = renderbuffer.GetValue(token, t)
             rb :> IFramebufferOutput
 
     type IRuntime with
@@ -346,11 +346,11 @@ module private RefCountedResources =
                     runtime.DeleteFramebuffer(h)
                     handle <- None
                 | None -> ()
-        override x.Compute(t : RenderToken) =
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
             let att = 
                 attachments
                     |> SymDict.toMap 
-                    |> Map.map (fun sem att -> att.GetValue(x, t))
+                    |> Map.map (fun sem att -> att.GetValue(token, t))
 
             match handle with
                 | Some h -> 
@@ -418,12 +418,12 @@ module private RefCountedResources =
                         handle.[face] <- None
                     | None -> ()
 
-        override x.Compute(t : RenderToken) =
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
             attachments |> Array.mapi (fun i attachments ->
                 let att = 
                     attachments
                         |> SymDict.toMap 
-                        |> Map.map (fun sem att -> att.GetValue(x, t))
+                        |> Map.map (fun sem att -> att.GetValue(token, t))
 
 
                 match handle.[i] with
@@ -441,9 +441,9 @@ module private RefCountedResources =
     type AdaptiveRenderingResult(task : IRenderTask, target : IOutputMod<IFramebuffer>) =
         inherit AbstractOutputMod<IFramebuffer>()
 
-        override x.Compute(t : RenderToken) =
-            let fbo = target.GetValue(x, t)
-            task.Run(x, t, OutputDescription.ofFramebuffer fbo)
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
+            let fbo = target.GetValue(token, t)
+            task.Run(token, t, OutputDescription.ofFramebuffer fbo)
             fbo
 
         override x.Inputs =
@@ -463,8 +463,8 @@ module private RefCountedResources =
     type AdaptiveOutputTexture(semantic : Symbol, res : IOutputMod<IFramebuffer>) =
         inherit AbstractOutputMod<ITexture>()
 
-        override x.Compute(t : RenderToken) =
-            let res = res.GetValue(x, t)
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
+            let res = res.GetValue(token, t)
 
             match Map.tryFind semantic res.Attachments with
                 | Some (:? BackendTextureOutputView as t) ->
@@ -602,7 +602,7 @@ type AbstractRenderTask() =
                 transact (fun () ->
                     for r in toReset do r.Reset()
                 )
-                x.Update(null, RenderToken.Empty)
+                x.PerformUpdate(AdaptiveToken(), RenderToken.Empty)
 
     member x.HookRenderObject (ro : RenderObject) =
         { ro with Uniforms = hookProvider ro.Uniforms }
@@ -612,25 +612,26 @@ type AbstractRenderTask() =
 
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
-    abstract member Update : RenderToken -> unit
-    abstract member Run : RenderToken * OutputDescription -> unit
+    abstract member PerformUpdate : AdaptiveToken * RenderToken -> unit
+    abstract member Perform : AdaptiveToken * RenderToken * OutputDescription -> unit
     abstract member Dispose : unit -> unit
     abstract member Use : (unit -> 'a) -> 'a
     
 
     member x.FrameId = frameId
-    member x.Run(caller : IAdaptiveObject, t : RenderToken, out : OutputDescription) =
-        x.EvaluateAlways caller (fun () ->
+    member x.Run(token : AdaptiveToken, t : RenderToken, out : OutputDescription) =
+        x.EvaluateAlways token (fun token ->
             x.OutOfDate <- true
             x.UseValues(out, fun () ->
-                x.Run(t, out)
+                x.Perform(token, t, out)
                 frameId <- frameId + 1UL
             )
         )
 
-    member x.Update(caller : IAdaptiveObject, t : RenderToken) =
-        x.EvaluateIfNeeded caller () (fun () -> 
-            x.Update(t)
+    member x.Update(token : AdaptiveToken, t : RenderToken) =
+        x.EvaluateAlways token (fun token ->
+            if x.OutOfDate then
+                x.PerformUpdate(token, t)
         )
 
     interface IDisposable with
@@ -640,8 +641,8 @@ type AbstractRenderTask() =
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Runtime = x.Runtime
         member x.FrameId = frameId
-        member x.Update(caller,t) = x.Update(caller,t)
-        member x.Run(caller, t,out) = x.Run(caller, t,out)
+        member x.Update(token,t) = x.Update(token,t)
+        member x.Run(token, t,out) = x.Run(token, t,out)
         member x.Use f = x.Use f
 
 
@@ -695,14 +696,14 @@ module RenderTask =
         override x.Dispose() =
             for t in tasks do t.Dispose()
 
-        override x.Update(token : RenderToken) =
+        override x.PerformUpdate(token : AdaptiveToken, rt : RenderToken) =
             for t in tasks do
-                t.Update(x,token)
+                t.Update(token, rt)
 
 
-        override x.Run(token : RenderToken, output : OutputDescription) =
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, output : OutputDescription) =
             for t in tasks do
-                t.Run(x, token, output)
+                t.Run(token, rt, output)
 
 
         override x.FramebufferSignature = signature.Value
@@ -714,7 +715,7 @@ module RenderTask =
         inherit AbstractRenderTask()
         let mutable inner : Option<IRenderTask> = None
 
-        let updateInner t x =
+        let updateInner t (x : AdaptiveToken) =
             let ni = input.GetValue(x, t)
 
             match inner with
@@ -724,7 +725,8 @@ module RenderTask =
                         | Some oi -> oi.Dispose()
                         | _ -> ()
 
-                    ni.AddOutput x
+                    if not (isNull x.Caller) then
+                        ni.AddOutput x.Caller
 
             inner <- Some ni
             ni
@@ -737,16 +739,16 @@ module RenderTask =
             )
 
         override x.FramebufferSignature = 
-            let v = input.GetValue x
+            let v = input.GetValue (AdaptiveToken(x))
             v.FramebufferSignature
 
-        override x.Update(t) =
-            let ni = updateInner t x
-            ni.Update(x, t)
+        override x.PerformUpdate(token, t) =
+            let ni = updateInner t token
+            ni.Update(token, t)
 
-        override x.Run(t, fbo) =
-            let ni = updateInner t x
-            ni.Run(x, t, fbo)
+        override x.Perform(token, t, fbo) =
+            let ni = updateInner t token
+            ni.Run(token, t, fbo)
 
         override x.Dispose() =
             input.RemoveOutput x
@@ -756,18 +758,26 @@ module RenderTask =
                     inner <- None
                 | _ -> ()
 
-        override x.Runtime = input.GetValue(x).Runtime
+        override x.Runtime = input.GetValue(AdaptiveToken(x)).Runtime
             
     type private AListRenderTask(tasks : alist<IRenderTask>) as this =
         inherit AbstractRenderTask()
-        let reader = tasks.GetReader()
-        do reader.AddOutput this
+        let content = SortedDictionary<Index, IRenderTask>()
 
+        let reader = tasks.GetReader()
         let mutable signature : Option<IFramebufferSignature> = None
         let mutable runtime = None
         let tasks = ReferenceCountingSet()
 
-        let add (t : IRenderTask) =
+        let set (i : Index) (t : IRenderTask) =
+            match content.TryGetValue i with
+                | (true, old) ->
+                    if tasks.Remove old then
+                        old.Dispose()
+                | _ ->
+                    ()
+
+            content.[i] <- t
             if tasks.Add t then
                 match t.Runtime with
                     | Some r -> runtime <- Some r
@@ -782,52 +792,59 @@ module RenderTask =
                     | _-> signature <- innerSig
 
 
-        let remove (t : IRenderTask) =
-            if tasks.Remove t then
-                t.Dispose()
+        let remove (i : Index) =
+            match content.TryGetValue i with
+                | (true, old) ->
+                    
+                    if tasks.Remove old then
+                        old.Dispose()
 
-        let processDeltas() =
+                    content.Remove i |> ignore
+                | _ -> 
+                    ()
+
+        let processDeltas(token : AdaptiveToken) =
             // TODO: EvaluateAlways should ensure that self is OutOfDate since
             //       when its not we need a transaction to add outputs
             let wasOutOfDate = this.OutOfDate
             this.OutOfDate <- true
 
             // adjust the dependencies
-            for d in reader.GetDelta(this) do
-                match d with
-                    | Add(_,t) -> add t
-                    | Rem(_,t) -> remove t
+            for (i,op) in reader.GetOperations(token) |> PDeltaList.toSeq do
+                match op with
+                    | Set(t) -> set i t
+                    | Remove -> remove i
 
             this.OutOfDate <- wasOutOfDate
 
         override x.Use (f : unit -> 'a) =
             lock x (fun () ->
-                processDeltas()
-                let l = reader.Content.All |> Seq.toList
+                processDeltas(AdaptiveToken())
+                let l = reader.State |> Seq.toList
                 
-                let rec run (l : list<ISortKey * IRenderTask>) =
+                let rec run (l : list<IRenderTask>) =
                     match l with
                         | [] -> f()
-                        | (_,h) :: rest -> h.Use (fun () -> run rest)
+                        | h :: rest -> h.Use (fun () -> run rest)
 
                 run l
             )
         override x.FramebufferSignature =
-            lock this (fun () -> processDeltas())
+            lock this (fun () -> processDeltas(AdaptiveToken()))
             signature
 
-        override x.Update(token) =
-            processDeltas ()
-            for (_,t) in reader.Content.All do
-                t.Update(x, token)
+        override x.PerformUpdate(token, rt) =
+            processDeltas token
+            for t in reader.State do
+                t.Update(token, rt)
 
 
-        override x.Run(token, fbo) =
-            processDeltas()
+        override x.Perform(token, rt, fbo) =
+            processDeltas(token)
 
             // TODO: order may be invalid
-            for (_,t) in reader.Content.All do
-                t.Run(x, token, fbo)
+            for t in reader.State do
+                t.Run(token, rt, fbo)
 
 
         override x.Dispose() =
@@ -839,16 +856,16 @@ module RenderTask =
             tasks.Clear()
                 
         override x.Runtime =
-            lock this (fun () -> processDeltas())
+            lock this (fun () -> processDeltas(AdaptiveToken()))
             runtime
 
     type private CustomRenderTask(f : afun<IRenderTask * RenderToken * OutputDescription, unit>) as this =
         inherit AbstractRenderTask()
 
         override x.FramebufferSignature = None
-        override x.Run(t, fbo) = f.Evaluate (x,(x :> IRenderTask,t,fbo))
+        override x.Perform(token, t, fbo) = f.Evaluate (token,(x :> IRenderTask,t,fbo))
         override x.Dispose() = f.RemoveOutput this 
-        override x.Update(t) = ()
+        override x.PerformUpdate(token, t) = ()
         override x.Runtime = None
         override x.Use f = lock x f
 
@@ -872,8 +889,8 @@ module RenderTask =
             )
 
         override x.Dispose() = x.Dispose true
-        override x.Run(t, fbo) = inner.Run(x, t, fbo)
-        override x.Update(t) = inner.Update(x, t)
+        override x.Perform(token, t, fbo) = inner.Run(token, t, fbo)
+        override x.PerformUpdate(token, t) = inner.Update(token, t)
         override x.FramebufferSignature = inner.FramebufferSignature
         override x.Runtime = inner.Runtime
 
@@ -890,13 +907,13 @@ module RenderTask =
             )
 
         override x.FramebufferSignature = inner.FramebufferSignature
-        override x.Update(t) = inner.Update(x,t)
-        override x.Run(t, fbo) =
+        override x.PerformUpdate(token, t) = inner.Update(token,t)
+        override x.Perform(token, t, fbo) =
             match before with
                 | Some before -> before()
                 | None -> ()
 
-            let res = inner.Run(x, t, fbo)
+            let res = inner.Run(token, t, fbo)
 
             match after with
                 | Some after -> after()
@@ -1011,10 +1028,10 @@ module ``RenderTask Builder`` =
 
     type RenderTaskBuilder() =
         member x.Bind(m : IMod<'a>, f : 'a -> Result) : Result =
-            [alist.Bind(m, f >> AList.concat')]
+            [alist.Bind(m, f >> AList.ofList >> AList.concat)]
 
         member x.For(s : alist<'a>, f : 'a -> Result): Result =
-            [alist.For(s,f >> AList.concat')]
+            [alist.For(s,f >> AList.ofList >> AList.concat)]
 
         member x.Bind(f : unit -> unit, c : unit -> Result) : Result =
             let task = 
@@ -1049,7 +1066,7 @@ module ``RenderTask Builder`` =
             []
 
         member x.Run(l : Result) =
-            let l = AList.concat' l
+            let l = AList.concat (AList.ofList l)
             RenderTask.ofAList l
 
 

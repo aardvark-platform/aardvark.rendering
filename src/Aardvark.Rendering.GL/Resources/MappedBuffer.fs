@@ -118,24 +118,32 @@ module ResizeBufferImplementation =
 
         let resourceLock = new ResourceLock()
 
-        let mutable pendingWrites : HashMap<ContextHandle, Fence> = HashMap.empty
+        let mutable pendingWrites : hmap<ContextHandle, Fence> = HMap.empty
 
         let afterWrite() =
             lock resourceLock (fun () ->
                 let f = Fence.Create()
-                match HashMap.tryFind f.Context pendingWrites with
-                    | Some old -> old.Dispose()
-                    | None -> ()
-                pendingWrites <- HashMap.add f.Context f pendingWrites
+
+                pendingWrites <- 
+                    pendingWrites |> HMap.update f.Context (fun old ->
+                        match old with 
+                            | Some o -> o.Dispose()
+                            | None -> ()
+                        f
+                    )
+//                match HMap.tryFind f.Context pendingWrites with
+//                    | Some old -> old.Dispose()
+//                    | None -> ()
+//                pendingWrites <- HMap.add f.Context f pendingWrites
             )
 
         let beforeResize() =
-            if not (HashMap.isEmpty pendingWrites) then
-                for (_,f) in pendingWrites |> HashMap.toSeq do 
+            if not (HMap.isEmpty pendingWrites) then
+                for (_,f) in pendingWrites |> HMap.toSeq do 
                     f.WaitCPU()
                     f.Dispose()
 
-                pendingWrites <- HashMap.empty
+                pendingWrites <- HMap.empty
 
         let afterResize() =
             use f = Fence.Create()
@@ -143,9 +151,9 @@ module ResizeBufferImplementation =
 
         let beforeRead() =
             lock resourceLock (fun () ->
-                if not (HashMap.isEmpty pendingWrites) then
+                if not (HMap.isEmpty pendingWrites) then
                     let handle = ctx.CurrentContextHandle |> Option.get
-                    pendingWrites <- pendingWrites |> HashMap.filter (fun _ f -> f.WaitGPU(handle))
+                    pendingWrites <- pendingWrites |> HMap.filter (fun _ f -> f.WaitGPU(handle))
             )
             
 
@@ -420,7 +428,7 @@ module MappedBufferImplementations =
             buffer.UseRead(offset, size, f)
 
 
-        override x.Compute() =
+        override x.Compute(token) =
             buffer :> IBuffer
 
         member x.Dispose() =
@@ -509,8 +517,8 @@ type MappedIndirectBuffer(ctx : Context, indexed : bool) =
                 buffer.Write(gc.AddrOfPinnedObject(), nativeint i * sd, sd)
             finally
                 gc.Free()
-    override x.Compute() =
-        let inner = buffer.GetValue(x) |> unbox<Buffer>
+    override x.Compute(token) =
+        let inner = buffer.GetValue(token) |> unbox<Buffer>
         IndirectBuffer(inner, count, 20, indexed) :> IIndirectBuffer
 
     interface ILockedResource with

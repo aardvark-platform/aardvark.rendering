@@ -60,7 +60,7 @@ module AdaptiveGeometry =
 
 type IManagedBufferWriter =
     inherit IAdaptiveObject
-    abstract member Write : IAdaptiveObject -> unit
+    abstract member Write : AdaptiveToken -> unit
 
 type IManagedBuffer =
     inherit IDisposable
@@ -119,7 +119,7 @@ module private ManagedBufferImplementation =
        
                     lock writer (fun () -> 
                         if not writer.OutOfDate then
-                            writer.Write(range)
+                            writer.Write(AdaptiveToken(), range)
                     )
 
                 { new IDisposable with
@@ -154,7 +154,7 @@ module private ManagedBufferImplementation =
                             
                     lock writer (fun () -> 
                         if not writer.OutOfDate then
-                            writer.Write(range)
+                            writer.Write(AdaptiveToken(), range)
                     )
 
 
@@ -215,11 +215,11 @@ module private ManagedBufferImplementation =
             try store.Write(gc.AddrOfPinnedObject(), nativeint range.Min * asize, nativeint(range.Size + 1L) * asize)
             finally gc.Free()
 
-        member x.GetValue(caller : IAdaptiveObject) =
-            x.EvaluateAlways' caller (fun dirty ->
+        member x.GetValue(token : AdaptiveToken) =
+            x.EvaluateAlways' token (fun token dirty ->
                 for d in dirty do
-                    d.Write(x)
-                store.GetValue(x)
+                    d.Write(token)
+                store.GetValue(token)
             )
 
         member x.Capacity = store.Capacity
@@ -263,7 +263,7 @@ module private ManagedBufferImplementation =
         let mutable refCount = 0
         let targetRegions = ReferenceCountingSet<Range1l>()
 
-        abstract member Write : Range1l -> unit
+        abstract member Write : AdaptiveToken * Range1l -> unit
         abstract member Release : unit -> unit
 
         member x.AddRef(range : Range1l) : bool =
@@ -284,10 +284,11 @@ module private ManagedBufferImplementation =
                     false
             )
 
-        member x.Write(caller : IAdaptiveObject) =
-            x.EvaluateIfNeeded caller () (fun () ->
-                for r in targetRegions do
-                    x.Write(r)
+        member x.Write(token : AdaptiveToken) =
+            x.EvaluateAlways token (fun token ->
+                if x.OutOfDate then
+                    for r in targetRegions do
+                        x.Write(token, r)
             )
 
         interface IManagedBufferWriter with
@@ -299,8 +300,8 @@ module private ManagedBufferImplementation =
 
         override x.Release() = ()
 
-        override x.Write(target) =
-            let v = data.GetValue(x)
+        override x.Write(token, target) =
+            let v = data.GetValue(token)
             let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
             try 
                 store.Write(gc.AddrOfPinnedObject(), nativeint target.Min * asize, nativeint v.Length * asize)
@@ -313,8 +314,8 @@ module private ManagedBufferImplementation =
             
         override x.Release() = ()
 
-        override x.Write(target) =
-            let v = data.GetValue(x)
+        override x.Write(token, target) =
+            let v = data.GetValue(token)
             let gc = GCHandle.Alloc(v, GCHandleType.Pinned)
             try store.Write(gc.AddrOfPinnedObject(), nativeint target.Min * asize, asize)
             finally gc.Free()
@@ -561,7 +562,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
         member x.OnLock u = ()
         member x.OnUnlock u = ()
 
-    override x.Compute() =
+    override x.Compute(token) =
         store.GetValue()
 
 [<AbstractClass; Sealed; Extension>]
@@ -610,11 +611,11 @@ module ``Pool Semantics`` =
                 let calls =
                     let buffer = DrawCallBuffer(pool.Runtime, true)
                     Mod.custom (fun self ->
-                        let deltas = r.GetDelta self
+                        let deltas = r.GetOperations self
                         for d in deltas do
                             match d with
-                                | Add v -> buffer.Add v |> ignore
-                                | Rem v -> buffer.Remove v |> ignore
+                                | Add(_,v) -> buffer.Add v |> ignore
+                                | Rem(_,v) -> buffer.Remove v |> ignore
 
                         buffer.GetValue()
                     )

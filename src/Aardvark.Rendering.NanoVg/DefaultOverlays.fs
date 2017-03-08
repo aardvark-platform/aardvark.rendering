@@ -367,8 +367,9 @@ module DefaultOverlays =
             member x.Runtime = inner.Runtime
 
             member x.Update(caller, t) =
-                x.EvaluateIfNeeded caller () (fun () -> 
-                    inner.Update(x, t)
+                x.EvaluateAlways caller (fun caller -> 
+                    if x.OutOfDate then
+                        inner.Update(caller, t)
                 )
 
             member x.Run(caller, t, f) =
@@ -376,10 +377,10 @@ module DefaultOverlays =
                 installTick x
                 let isUseless = Interlocked.Exchange(&render0, 0) > 0
                 
-                x.EvaluateAlways caller (fun () ->
+                x.EvaluateAlways caller (fun caller ->
 
                     let innerToken = RenderToken(t)
-                    inner.Run(x, innerToken, f)
+                    inner.Run(caller, innerToken, f)
 
                     if not isUseless then
                         realStats.Emit (innerToken,1)

@@ -37,8 +37,8 @@ module Screenshot =
             ) 
         let desc = OutputDescription.ofFramebuffer fbo
 
-        clear.Run(null, RenderToken.Empty, desc) |> ignore
-        task.Run(null, RenderToken.Empty, desc) |> ignore
+        clear.Run(AdaptiveToken(), RenderToken.Empty, desc) |> ignore
+        task.Run(AdaptiveToken(), RenderToken.Empty, desc) |> ignore
 
 
         let colorTexture = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)

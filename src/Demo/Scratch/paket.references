@@ -3,5 +3,3 @@ Aardvark.Base.Runtime
 AssimpNet
 FShade.Core
 FSharp.Quotations.Evaluator
-
-Aardvark.Compiler.DomainTypes

@@ -110,7 +110,7 @@ type cbuffer(sizeInBytes : nativeint, release : cbuffer -> unit) =
             capacity <- 0n
             ptrLock.Dispose()
 
-    override x.Compute() =
+    override x.Compute(token) =
         x.NativeBuffer :> IBuffer
 
     interface IDisposable with
@@ -135,8 +135,8 @@ and internal CBufferReader(buffer : cbuffer) =
         dirty <- RangeSet.empty
         lastCapacity <- -1n
 
-    member x.GetDirtyRanges (caller : IAdaptiveObject) : INativeBuffer * RangeSet =
-        x.EvaluateAlways caller (fun () ->
+    member x.GetDirtyRanges (token : AdaptiveToken) : INativeBuffer * RangeSet =
+        x.EvaluateAlways token (fun token ->
             let ranges = Interlocked.Exchange(&dirty, RangeSet.empty)
 
             let nb = buffer.NativeBuffer

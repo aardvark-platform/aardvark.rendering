@@ -52,6 +52,14 @@ module BoundingBoxes =
         let globalBoundingBox (sg : ISg) : IMod<Box3d> = sg?GlobalBoundingBox()
         let localBoundingBox  (sg : ISg) : IMod<Box3d> = sg?LocalBoundingBox()
 
+
+    let private trySub (b : Box3d) (d : Box3d) =
+        if d.Min.AllGreater b.Min && d.Max.AllSmaller b.Max then
+            Some b
+        else
+            None
+
+
     [<Semantic>]
     type GlobalBoundingBoxSem() =
 
@@ -70,7 +78,7 @@ module BoundingBoxes =
         member x.LocalBoundingBox(r : Sg.GeometrySet) : IMod<Box3d> =
             r.Geometries 
                 |> ASet.map computeBoundingBox
-                |> ASet.foldMonoid (curry Box3d.Union) Box3d.Invalid
+                |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
 
         member x.GlobalBoundingBox(r : Sg.GeometrySet) : IMod<Box3d> =
             let l = r.LocalBoundingBox()
@@ -121,8 +129,8 @@ module BoundingBoxes =
 
         member x.GlobalBoundingBox(app : IGroup) : IMod<Box3d> =
             app.Children 
-                |> ASet.map (fun sg -> sg.GlobalBoundingBox() ) 
-                |> ASet.foldMonoidM (curry Box3d.Union) Box3d.Invalid
+                |> ASet.mapM (fun sg -> sg.GlobalBoundingBox() ) 
+                |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
             
         member x.GlobalBoundingBox(n : IApplicator) : IMod<Box3d> = 
             adaptive {
@@ -172,8 +180,8 @@ module BoundingBoxes =
             
         member x.LocalBoundingBox(app : IGroup) : IMod<Box3d> =
             app.Children 
-                |> ASet.map (fun sg -> sg.LocalBoundingBox()) 
-                |> ASet.foldMonoidM (curry Box3d.Union) Box3d.Invalid
+                |> ASet.mapM (fun sg -> sg.LocalBoundingBox()) 
+                |> ASet.foldHalfGroup (curry Box3d.Union) trySub Box3d.Invalid
 
         member x.LocalBoundingBox(app : Sg.TrafoApplicator) : IMod<Box3d> =  
             adaptive {

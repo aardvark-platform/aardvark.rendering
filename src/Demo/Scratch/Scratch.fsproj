@@ -64,13 +64,6 @@
       </PropertyGroup>
     </When>
   </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
-      <PropertyGroup>
-        <__paket__Aardvark_Compiler_DomainTypes_targets>Aardvark.Compiler.DomainTypes</__paket__Aardvark_Compiler_DomainTypes_targets>
-      </PropertyGroup>
-    </When>
-  </Choose>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
@@ -89,18 +82,12 @@
     <Compile Include="Staging\Ag.fs" />
     <Compile Include="Staging\Heap.fs" />
     <Compile Include="Staging\Geometry.fs" />
-    <Compile Include="Experiments\ASP.fs" />
     <Compile Include="Experiments\Fonts.fs" />
     <Compile Include="Experiments\NullBufferTest.fs" />
     <Compile Include="Experiments\Playground.fs" />
     <Compile Include="Experiments\Vulkan.fs" />
     <Compile Include="Experiments\ChangeBufferHandle.fs" />
     <Compile Include="Experiments\SamplerArray.fs" />
-    <Compile Include="Experiments\InteractionModels.fs">
-      <DomainTypes>True</DomainTypes>
-    </Compile>
-    <Compile Include="Experiments\InteractionExperiments.fs" />
-    <Compile Include="Experiments\FablishInterop.fs" />
     <Compile Include="Experiments\RecordUniforms.fs" />
     <Compile Include="Experiments\Volume.fs" />
     <Compile Include="PGM.fs" />
@@ -198,12 +185,12 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
-        <Reference Include="System.Drawing">
-          <Paket>True</Paket>
-        </Reference>
         <Reference Include="Aardvark.Base">
           <HintPath>..\..\..\packages\Aardvark.Base\lib\net45\Aardvark.Base.dll</HintPath>
           <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+        <Reference Include="System.Drawing">
           <Paket>True</Paket>
         </Reference>
       </ItemGroup>
@@ -357,6 +344,14 @@
       </ItemGroup>
     </When>
   </Choose>
-  <Import Project="..\..\..\packages\Aardvark.Compiler.DomainTypes\build\$(__paket__Aardvark_Compiler_DomainTypes_targets).targets" Condition="Exists('..\..\..\packages\Aardvark.Compiler.DomainTypes\build\$(__paket__Aardvark_Compiler_DomainTypes_targets).targets')" Label="Paket" />
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
+        <Reference Include="System.ComponentModel.Composition">
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
   <Import Project="..\..\..\packages\AssimpNet\build\$(__paket__AssimpNet_targets).targets" Condition="Exists('..\..\..\packages\AssimpNet\build\$(__paket__AssimpNet_targets).targets')" Label="Paket" />
 </Project>

@@ -104,7 +104,7 @@ type PreparedRenderObject =
             yield x.StencilMode :> _
         }
 
-    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+    member x.Update(caller : AdaptiveToken, token : RenderToken) =
         use ctxToken = x.Context.ResourceLock
 
         x.Program.Update(caller, token)
@@ -303,7 +303,7 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     member x.Dispose() =
         children |> List.iter (fun c -> c.Dispose())
 
-    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+    member x.Update(caller : AdaptiveToken, token : RenderToken) =
         children |> List.iter (fun c -> c.Update(caller, token))
         
 

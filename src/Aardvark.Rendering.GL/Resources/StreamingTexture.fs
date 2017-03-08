@@ -234,7 +234,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
 
 
 
-    override x.Compute() =
+    override x.Compute(token) =
         lock swapLock (fun () -> 
             Fun.Swap(&texB, &texC)
             Fun.Swap(&fenceAB, &fenceC)
@@ -479,7 +479,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         bufferSize <- 0n
  
 
-    override x.Compute() =
+    override x.Compute(token) =
         use t = ctx.ResourceLock
 
         if iter = 60 then

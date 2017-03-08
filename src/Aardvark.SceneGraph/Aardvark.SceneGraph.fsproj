@@ -49,6 +49,7 @@
   <ItemGroup>
     <Compile Include="Core\Core.fs" />
     <Compile Include="Core\Sg.fs" />
+    <Compile Include="Core\Tools.fs" />
     <Compile Include="Semantics\Cache.fs" />
     <Compile Include="Semantics\Trafo.fs" />
     <Compile Include="Semantics\Attributes.fs" />
@@ -215,6 +216,15 @@
         <Reference Include="System.Reactive.Linq">
           <HintPath>..\..\packages\System.Reactive.Linq\lib\net45\System.Reactive.Linq.dll</HintPath>
           <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
+        <Reference Include="System.ComponentModel.Composition">
           <Paket>True</Paket>
         </Reference>
       </ItemGroup>

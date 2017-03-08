@@ -13,7 +13,7 @@ open Aardvark.Rendering.GL.Compiler
 
 type IRenderProgram =
     inherit IAdaptiveProgram<unit>
-    abstract member Update : IAdaptiveObject * RenderToken -> AdaptiveProgramStatistics
+    abstract member Update : AdaptiveToken * RenderToken -> AdaptiveProgramStatistics
     abstract member Run : RenderToken -> unit
 
 
@@ -22,12 +22,14 @@ type AbstractRenderProgram<'input when 'input :> IAdaptiveObject>() =
     inherit DirtyTrackingAdaptiveObject<'input>()
     
     abstract member Dispose : unit -> unit
-    abstract member Update : RenderToken * HashSet<'input> -> unit
+    abstract member Update : AdaptiveToken * RenderToken * HashSet<'input> -> unit
     abstract member Run : RenderToken -> unit
 
-    member x.Update(caller, token) =
-        x.EvaluateIfNeeded' caller AdaptiveProgramStatistics.Zero (fun dirty ->
-            x.Update(token, dirty)
+    member x.Update(token, rt) =
+        x.EvaluateAlways' token (fun token dirty ->
+            if x.OutOfDate then
+                x.Update(token, rt, dirty)
+
             AdaptiveProgramStatistics.Zero
         )
 
@@ -56,12 +58,13 @@ type AbstractRenderProgram() =
     inherit AdaptiveObject()
     
     abstract member Dispose : unit -> unit
-    abstract member Update : RenderToken -> unit
+    abstract member PerformUpdate : AdaptiveToken * RenderToken -> unit
     abstract member Run : RenderToken -> unit
     
     member x.Update(caller, t) =
-        x.EvaluateIfNeeded caller () (fun () ->
-            x.Update t
+        x.EvaluateAlways caller (fun token ->
+            if x.OutOfDate then
+                x.PerformUpdate(token, t)
         )
     interface IRenderProgram with
         member x.Update(caller, t) = x.Update(caller, t); AdaptiveProgramStatistics.Zero
@@ -95,9 +98,12 @@ module RenderProgram =
         member x.RunInner() = inner.Run()
 
         
-        member x.Update (caller, token) =
-            x.EvaluateIfNeeded caller AdaptiveProgramStatistics.Zero (fun () ->
-                inner.Update(x)
+        member x.Update (token, rt) =
+            x.EvaluateAlways token (fun token ->
+                if x.OutOfDate then
+                    inner.Update(token)
+                else
+                    AdaptiveProgramStatistics.Zero
             )
 
         interface IRenderProgram with
