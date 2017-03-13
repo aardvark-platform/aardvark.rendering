@@ -281,7 +281,7 @@ module ProgramExtensions =
                                 .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
                        else code
 
-            if RuntimeConfig.PrintShadeCode then
+            if RuntimeConfig.PrintShaderCode then
                 let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
                 let numberdLines = withLineNumbers codeWithDefine
                 Report.Line("CODE: \n{0}", numberdLines)
