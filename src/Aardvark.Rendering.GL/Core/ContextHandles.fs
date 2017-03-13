@@ -95,6 +95,9 @@ module ContextHandle =
             context.MakeCurrent(window.WindowInfo)
             let ctx = context |> unbox<IGraphicsContextInternal>
             ctx.LoadAll()
+
+            GL.Enable(EnableCap.TextureCubeMapSeamless)
+
             context.MakeCurrent(null)
             window, context
     

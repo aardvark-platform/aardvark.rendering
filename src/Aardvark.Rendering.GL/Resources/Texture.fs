@@ -77,8 +77,8 @@ module private ResourceCounts =
             CubeSide.PositiveX, TextureTarget.TextureCubeMapPositiveX
             CubeSide.NegativeX, TextureTarget.TextureCubeMapNegativeX
 
-            CubeSide.PositiveY, TextureTarget.TextureCubeMapNegativeY
-            CubeSide.NegativeY, TextureTarget.TextureCubeMapPositiveY
+            CubeSide.PositiveY, TextureTarget.TextureCubeMapPositiveY
+            CubeSide.NegativeY, TextureTarget.TextureCubeMapNegativeY
                 
             CubeSide.PositiveZ, TextureTarget.TextureCubeMapPositiveZ
             CubeSide.NegativeZ, TextureTarget.TextureCubeMapNegativeZ
@@ -1335,8 +1335,8 @@ module TextureExtensions =
             CubeSide.PositiveX, TextureTarget.TextureCubeMapPositiveX
             CubeSide.NegativeX, TextureTarget.TextureCubeMapNegativeX
 
-            CubeSide.PositiveY, TextureTarget.TextureCubeMapNegativeY
-            CubeSide.NegativeY, TextureTarget.TextureCubeMapPositiveY
+            CubeSide.PositiveY, TextureTarget.TextureCubeMapPositiveY
+            CubeSide.NegativeY, TextureTarget.TextureCubeMapNegativeY
                 
             CubeSide.PositiveZ, TextureTarget.TextureCubeMapPositiveZ
             CubeSide.NegativeZ, TextureTarget.TextureCubeMapNegativeZ

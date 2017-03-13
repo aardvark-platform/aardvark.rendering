@@ -398,6 +398,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
     member x.AverageFrameTime = MicroTime(TimeSpan.FromSeconds avgFrameTime.Average)
 
     override x.OnLoad(e) =
+        GL.Enable(EnableCap.TextureCubeMapSeamless)
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
         if c <> null then
             c.MakeCurrent(null)
