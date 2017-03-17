@@ -87,6 +87,7 @@ let blubber() =
             DefaultSurfaces.constantColor C4f.Red |> toEffect
             DefaultSurfaces.simpleLighting |> toEffect
         ]
+        
 
 [<Demo("Quad Demo")>]
 let quad() =
@@ -170,6 +171,60 @@ let naiveLoD() =
     let objs = 
         sg 
         |> Aardvark.SceneGraph.Semantics.RenderObjectSemantics.Semantic.renderObjects 
+        //|> Aardvark.Rendering.Optimizer.optimize App.Runtime App.FramebufferSignature
+       
+
+    App.Runtime.CompileRender(App.FramebufferSignature, objs)
+
+
+[<Demo("Picking")>]
+let picking() =
+    let box = Box3d(-V3d.III*0.5, V3d.III*0.5)
+    let box = 
+        Sg.box' C4b.Green box
+            |> Sg.pickBoundingBox
+            //|> Sg.pickable (Box box)
+
+    let size = 10.0
+    let many =
+        [
+            for x in -size .. 2.0 .. size do 
+                for y in -size .. 2.0 .. size do
+                    for z in -size .. 2.0 .. size do 
+                        yield box |> Sg.translate x y z 
+        ] |> Sg.ofSeq
+
+    let win = App.Window
+    let cam = CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
+    let view = cam |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
+    let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+
+    let sg = 
+        many
+            |> Sg.effect [
+               // Shader.trafo |> toEffect
+                DefaultSurfaces.trafo  |> toEffect
+                DefaultSurfaces.vertexColor    |> toEffect
+                DefaultSurfaces.simpleLighting |> toEffect
+               ]
+            |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
+            |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+
+    let tree = PickTree.ofSg sg
+
+    App.Mouse.Click.Values.Add (fun _ ->
+        let pp = App.Mouse.Position |> Mod.force
+        let cam = { cameraView = Mod.force view; frustum = Mod.force proj }
+        let ray = Camera.pickRay cam pp 
+
+        let res = tree.Intersect ray |> Mod.force
+        match res with
+            | Some hit -> printfn "%A" hit.T
+            | _ -> printfn "no hit"
+    )
+
+    let objs = 
+        sg |> Aardvark.SceneGraph.Semantics.RenderObjectSemantics.Semantic.renderObjects 
         //|> Aardvark.Rendering.Optimizer.optimize App.Runtime App.FramebufferSignature
        
 

@@ -95,6 +95,7 @@ type App private () =
     static member Time = getWin().Time
     static member Size = getWin().Sizes
     static member WithCam sg = withCam sg
+    static member Window = getWin()
 
     static member run (task : IRenderTask) =
         realTask.Inner <- task

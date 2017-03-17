@@ -532,7 +532,7 @@ let timeTest() =
 
     rendering.Start()
     
-    let d = move.AddMarkingCallback(fun () -> renderSem.Release() |> ignore)
+    let d : IDisposable = move.AddMarkingCallback(fun () -> renderSem.Release() |> ignore)
 
     
     while true do
