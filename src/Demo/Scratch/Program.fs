@@ -180,25 +180,39 @@ let naiveLoD() =
 
 [<Demo("Picking")>]
 let picking() =
-    let box = Box3d(-V3d.III*0.5, V3d.III*0.5)
-    let box = 
-        Sg.cylinder' 16 C4b.Green 0.5 1.0
+    let bounds = Box3d(-V3d.III*0.5, V3d.III*0.5)
+
+    let cylinder = 
+        Sg.cylinder' 16 C4b.Blue 0.5 1.0
             |> Sg.pickable (PickShape.Cylinder(Cylinder3d(V3d.Zero, V3d.OOI, 0.5)))
             |> Sg.requirePicking
 
+    let sphere =
+        Sg.unitSphere' 5 C4b.Yellow
+            |> Sg.pickable (PickShape.Sphere(Sphere3d(V3d.Zero, 1.0)))
+            |> Sg.requirePicking
+            |> Sg.scale 0.5
+
     let box =
-        Sg.unitSphere' 5 C4b.Green
-            //|> Sg.pickable (PickShape.Sphere(Sphere3d(V3d.Zero, 1.0)))
+        Sg.box' C4b.Green bounds
+            |> Sg.pickable (PickShape.Box bounds)
             |> Sg.requirePicking
 
+    let rand = System.Random()
     let size = 10.0
     let many =
-        [
+        Sg.ofList [
             for x in -size .. 2.0 .. size do 
                 for y in -size .. 2.0 .. size do
                     for z in -size .. 2.0 .. size do 
-                        yield box |> Sg.translate x y z 
-        ] |> Sg.ofSeq
+                        match rand.Next(3) with
+                            | 0 -> 
+                                yield box |> Sg.translate x y z 
+                            | 1 ->
+                                yield cylinder |> Sg.translate x y z 
+                            | _ ->
+                                yield sphere |> Sg.translate x y z 
+        ]
 
     let win = App.Window
     let cam = CameraView.lookAt (V3d(6,6,6)) V3d.Zero V3d.OOI
