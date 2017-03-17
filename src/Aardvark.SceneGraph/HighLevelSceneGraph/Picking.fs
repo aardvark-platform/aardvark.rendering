@@ -15,6 +15,7 @@ module ``Sg Picking Extensions`` =
         | Box of Box3d
         | Sphere of Sphere3d
         | Cylinder of Cylinder3d
+        | Triangles of Bvh<Triangle3d>
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module PickShape =
@@ -23,6 +24,7 @@ module ``Sg Picking Extensions`` =
                 | Box b -> b
                 | Sphere s -> s.BoundingBox3d
                 | Cylinder c -> c.BoundingBox3d
+                | Triangles b -> b.Bounds
 
     type Pickable = { trafo : Trafo3d; shape : PickShape }
     
@@ -38,6 +40,13 @@ module ``Sg Picking Extensions`` =
         let bounds (p : Pickable) =
             PickShape.bounds(p.shape).Transformed(p.trafo)
 
+        let private intersectTriangle (part : RayPart) (tri : Triangle3d) =
+            let mutable t = 0.0
+            if tri.Intersects(part.Ray.Ray, part.TMin, part.TMax, &t) then
+                Some (RayHit(t, ()))
+            else
+                None
+
         let intersect (part : RayPart) (p : Pickable) =
             let ray = part.Ray.Ray.Transformed(p.trafo.Backward)
             let mutable tmin = part.TMin
@@ -50,6 +59,7 @@ module ``Sg Picking Extensions`` =
                         Some tmin
                     else
                         None
+
                 | Sphere s ->
                     //  | (o + t * d - c) |^2 = r^2
                     // let x = o - c
@@ -78,9 +88,13 @@ module ``Sg Picking Extensions`` =
                         else
                             None
 
-
                 | Cylinder c ->
                     failwith "not implemented"
+
+                | Triangles bvh ->
+                    match bvh.Intersect(FastRay3d ray, part.TMin, part.TMax, intersectTriangle) with
+                        | Some hit -> Some hit.T
+                        | None -> None
 
     type PickObject(scope : Ag.Scope, pickable : IMod<Pickable>) =
         member x.Scope = scope
@@ -136,12 +150,21 @@ module ``Sg Picking Extensions`` =
 
             member x.Pickable = pickable
             
+        type RenderObjectPickableApplicator(child : IMod<ISg>) =
+            inherit Sg.AbstractApplicator(child)
+
+
         let pickable (shape : PickShape) (sg : ISg) =
             PickableApplicator(Mod.constant (Pickable.ofShape shape), Mod.constant sg) :> ISg
             
         let pickBoundingBox (sg : ISg) =
             let pickable = sg.LocalBoundingBox() |> Mod.map (PickShape.Box >> Pickable.ofShape)
             PickableApplicator(pickable, Mod.constant sg) :> ISg
+
+        let pickRenderObjects (sg : ISg) =
+            RenderObjectPickableApplicator(Mod.constant sg) :> ISg
+
+
 
 namespace Aardvark.SceneGraph.Semantics
 
@@ -155,9 +178,157 @@ module PickingSemantics =
 
     type ISg with
         member x.PickObjects() : aset<PickObject> = x?PickObjects()
+        member x.IsRenderObjectPickable : bool = x?IsRenderObjectPickable
+
+    type private PickingKey =
+        {
+            index : Option<BufferView>
+            positions : Option<BufferView>
+            call : IMod<DrawCallInfo>
+            mode : IMod<IndexedGeometryMode>
+        }
 
     [<Semantic>]
     type PickObjectSem() =
+
+        static let cache = Dict<PickingKey, Option<IMod<Pickable>>>()
+
+        static let bb (t : Triangle3d) =
+            let mutable b = t.BoundingBox3d
+            let size = b.Size
+            let d = 1.0E-5 * size.NormMax
+
+            if size.X <= 0.0 then
+                b.Min.X <- b.Min.X - d
+                b.Max.X <- b.Max.X + d
+
+            if size.Y <= 0.0 then
+                b.Min.Y <- b.Min.Y - d
+                b.Max.Y <- b.Max.Y + d
+
+            if size.Z <= 0.0 then
+                b.Min.Z <- b.Min.Z - d
+                b.Max.Z <- b.Max.Z + d
+
+            b
+
+        static let getTriangles (mode : IndexedGeometryMode) (index : int[]) (pos : V3d[]) : array<Triangle3d * Box3d> =
+            if isNull index then
+                let res = Array.zeroCreate (pos.Length / 3)
+                for ti in 0 .. res.Length - 1 do
+                    let i0 = 3 * ti
+                    let i1 = i0 + 1
+                    let i2 = i1 + 1
+
+                    let tri = Triangle3d(pos.[i0], pos.[i1], pos.[i2])
+                    let bb = bb tri
+                    res.[ti] <- (tri, bb)
+                res
+            else
+                let res = Array.zeroCreate (index.Length / 3)
+                for ti in 0 .. res.Length - 1 do
+                    let i0 = index.[3 * ti + 0]
+                    let i1 = index.[3 * ti + 1]
+                    let i2 = index.[3 * ti + 2]
+
+                    let tri = Triangle3d(pos.[i0], pos.[i1], pos.[i2])
+                    let bb = bb tri
+                    res.[ti] <- (tri, bb)
+                res
+
+        // TODO: memory leak
+        static let createLeafPickable (key : PickingKey) =
+            lock cache (fun () ->
+                cache.GetOrCreate(key, fun key ->
+                    let mode = Mod.force key.mode
+                    if mode = IndexedGeometryMode.TriangleList then
+                        let call = key.call
+
+                        let index =
+                            match key.index with
+                                | Some view ->
+                                    let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<int>
+                                    key.call 
+                                        |> Mod.bind (fun call -> BufferView.download call.FirstIndex call.FaceVertexCount view)
+                                        |> Mod.map (converter >> unbox<int[]>)
+                                        |> Some
+                                | None ->
+                                    None
+
+                        let positions =
+                            match key.positions with
+                                | Some view ->
+                                    let range =
+                                        match index with
+                                            | Some idx -> 
+                                                idx |> Mod.map (fun idx ->
+                                                    let mutable l = System.Int32.MaxValue
+                                                    let mutable h = System.Int32.MinValue
+
+                                                    for i in idx do
+                                                        l <- min l i
+                                                        h <- max l h
+
+                                                    (l, 1 + h - l)
+                                                )
+                                            | None -> 
+                                                call |> Mod.map (fun call -> 
+                                                    call.FirstIndex, call.FaceVertexCount
+                                                )
+                                    let converter = PrimitiveValueConverter.getArrayConverter view.ElementType typeof<V3d>
+
+                                    range 
+                                        |> Mod.bind (fun (min,cnt) -> BufferView.download min cnt view)
+                                        |> Mod.map (converter >> unbox<V3d[]>)
+                                        |> Some
+
+                                | None ->
+                                    None
+
+                        match positions with
+                            | Some pos ->   
+                                let triangles = 
+                                    match index with
+                                        | Some idx -> Mod.map2 (getTriangles mode) idx pos
+                                        | None -> Mod.map (getTriangles mode null) pos
+
+                                let pickable = triangles |> Mod.map (fun t -> t |> Bvh.ofArray |> PickShape.Triangles |> Pickable.ofShape)
+                                Some pickable
+                            | None ->
+                                None
+                    else
+                        None
+                )
+            )
+
+        member x.IsRenderObjectPickable(r : Root<ISg>) =
+            r.Child?IsRenderObjectPickable <- false
+
+        member x.IsRenderObjectPickable(a : Sg.RenderObjectPickableApplicator) =
+            a.Child?IsRenderObjectPickable <- true
+
+        member x.PickObjects(render : Sg.RenderNode) : aset<PickObject> =
+            if render.IsRenderObjectPickable then
+                let key =
+                    {
+                        positions = render.VertexAttributes |> Map.tryFind DefaultSemantic.Positions
+                        index = render.VertexIndexBuffer
+                        call = render.DrawCallInfo
+                        mode = render.Mode
+                    }
+
+                match createLeafPickable key with
+                    | Some pickable ->
+                        let ctx = Ag.getContext()
+                        let pickable = Mod.map2 Pickable.transform x.ModelTrafo pickable
+                        let o = PickObject(ctx, pickable)
+                        ASet.single o
+                    | None ->
+                        ASet.empty
+                        
+            else
+                ASet.empty
+
         member x.PickObjects(app : IApplicator) : aset<PickObject> =
             aset {
                 let! c = app.Child
