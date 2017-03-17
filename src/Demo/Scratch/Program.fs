@@ -132,6 +132,7 @@ let quadTexture() =
 
 
 
+
 [<Demo("Super naive LoD")>]
 let naiveLoD() =
 
@@ -181,9 +182,14 @@ let naiveLoD() =
 let picking() =
     let box = Box3d(-V3d.III*0.5, V3d.III*0.5)
     let box = 
+        Sg.cylinder' 16 C4b.Green 0.5 1.0
+            |> Sg.pickable (PickShape.Cylinder(Cylinder3d(V3d.Zero, V3d.OOI, 0.5)))
+            |> Sg.requirePicking
+
+    let box =
         Sg.unitSphere' 5 C4b.Green
-            |> Sg.pickRenderObjects
-            //|> Sg.pickable (Box box)
+            //|> Sg.pickable (PickShape.Sphere(Sphere3d(V3d.Zero, 1.0)))
+            |> Sg.requirePicking
 
     let size = 10.0
     let many =
@@ -199,8 +205,70 @@ let picking() =
     let view = cam |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
     let proj = win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
 
-    let sg = 
-        many
+    let tree = PickTree.ofSg many
+
+    let mutable last = None
+
+    let cam = Mod.map2 (fun view proj -> { cameraView = view; frustum = proj }) view proj
+    let ray = Mod.map2 Camera.pickRay cam App.Mouse.Position
+    let hit = Mod.bind tree.Intersect ray
+
+//    let scopeString (scope : Ag.Scope) =
+//        match Ag.tryGetAttributeValue scope "ModelTrafo" with
+//            | Success (trafo : IMod<Trafo3d>) ->
+//                let t = Mod.force trafo
+//                sprintf "%A" t.Forward.C3.XYZ
+//            | Error e ->
+//                "no trafo!!!"
+//            
+//    App.Mouse.Click.Values.Add (fun b ->
+//        match last with
+//            | Some scope ->
+//                printfn "click(%A, %s)" b (scopeString scope)
+//            | None ->
+//                ()
+//    )
+//
+//
+//    hit |> Mod.unsafeRegisterCallbackKeepDisposable (fun hit ->
+//        match hit with
+//            | Some hit ->
+//                let (part, point) = hit.Value
+//                let scope = part.Scope
+//                match last with
+//                    | Some l when l = scope ->
+//                        printfn "move: %A" point
+//                    | _ ->
+//                        match last with
+//                            | Some last ->
+//                                printfn "exit: %s" (scopeString last)
+//                            | None ->
+//                                ()
+//
+//                        printfn "enter: %s (%A)" (scopeString scope) point
+//
+//                        last <- Some scope
+//
+//            | _ ->
+//                match last with
+//                    | Some l ->
+//                        printfn "exit: %s" (scopeString l)
+//                        last <- None
+//                    | None ->
+//                        ()
+//    ) |> ignore
+
+
+    let trafo = 
+        hit |> Mod.map (fun hit ->
+            match hit with
+                | Some hit -> hit.Value |> snd |> Trafo3d.Translation
+                | None -> V3d(nan, nan, nan) |> Trafo3d.Translation
+        )
+
+    let sg =
+        many 
+            |> Sg.andAlso (Sg.sphere' 5 C4b.Red 0.1 |> Sg.trafo trafo)
             |> Sg.effect [
                // Shader.trafo |> toEffect
                 DefaultSurfaces.trafo  |> toEffect
@@ -210,18 +278,46 @@ let picking() =
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
 
-    let tree = PickTree.ofSg sg
 
-    App.Mouse.Click.Values.Add (fun _ ->
-        let pp = App.Mouse.Position |> Mod.force
-        let cam = { cameraView = Mod.force view; frustum = Mod.force proj }
-        let ray = Camera.pickRay cam pp 
-
-        let res = tree.Intersect ray |> Mod.force
-        match res with
-            | Some hit -> printfn "%A" hit.T
-            | _ -> printfn "no hit"
-    )
+//    App.Mouse.Move.Values.Add (fun (_,pp) ->
+//        let cam = { cameraView = Mod.force view; frustum = Mod.force proj }
+//        let ray = Camera.pickRay cam pp 
+//
+//        let scopeString (scope : Ag.Scope) =
+//            match Ag.tryGetAttributeValue scope "ModelTrafo" with
+//                | Success (trafo : IMod<Trafo3d>) ->
+//                    let t = Mod.force trafo
+//                    sprintf "%A" t.Forward.C3.XYZ
+//                | Error e ->
+//                    "no trafo!!!"
+//            
+//
+//        let res = hit |> Mod.force
+//        match res with
+//            | Some hit -> 
+//                let scope = hit.Value.Scope
+//                match last with
+//                    | Some l when l = scope ->
+//                        ()
+//                    | _ ->
+//                        match last with
+//                            | Some last ->
+//                                printfn "exit: %s" (scopeString last)
+//                            | None ->
+//                                ()
+//
+//                        printfn "enter: %s" (scopeString scope)
+//
+//                        last <- Some scope
+//
+//            | _ ->
+//                match last with
+//                    | Some l ->
+//                        printfn "exit: %s" (scopeString l)
+//                        last <- None
+//                    | None ->
+//                        ()
+//    )
 
     let objs = 
         sg |> Aardvark.SceneGraph.Semantics.RenderObjectSemantics.Semantic.renderObjects 
