@@ -76,6 +76,7 @@
     <Compile Include="LiveDemo.fs" />
     <Compile Include="Instancing.fs" />
     <None Include="LiveDemo.fsx" />
+    <Compile Include="Compute.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />
@@ -250,6 +251,17 @@
       <ItemGroup>
         <Reference Include="FShade.Core">
           <HintPath>..\..\..\packages\FShade.Core\lib\net45\FShade.Core.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
+        <Reference Include="FShade.GLSL">
+          <HintPath>..\..\..\packages\FShade.GLSL\lib\net45\FShade.GLSL.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>

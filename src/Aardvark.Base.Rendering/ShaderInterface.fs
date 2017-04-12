@@ -319,6 +319,7 @@ module ShaderBlock =
 type ShaderParameter =
     {
         Location        : int
+        Binding         : int
         Path            : ShaderPath
         Type            : ShaderParameterType 
     }
@@ -398,6 +399,8 @@ module ShaderParameterWriter =
         inherit Writer()
         abstract member Write : target : nativeint * value : 'a -> unit
 
+        override x.WriteUnsafe(target, value) = x.Write(target, unbox<'a> value)
+
         override this.Bind(m : IMod) =
             match m with
                 | :? IMod<'a> as m ->
@@ -413,6 +416,9 @@ module ShaderParameterWriter =
     and Writer() =
         abstract member Bind : IMod -> IAdaptiveWriter
         default x.Bind m = failwith "not possible"
+        
+        abstract member WriteUnsafe : target : nativeint * value : obj -> unit
+        default x.WriteUnsafe(t,v) = failwith "not possible"
         
 
     [<AutoOpen>]

@@ -380,7 +380,7 @@ type ResourceManagerExtensions private() =
                 |> List.collect (fun u ->
                     match u.Type with
                         | FixedArray(t, _, cnt) ->
-                            List.init cnt (fun i -> { u with Type = t; Path = ShaderPath.Item(u.Path, i); Location = u.Location + i })
+                            List.init cnt (fun i -> { u with Type = t; Path = ShaderPath.Item(u.Path, i); Binding = u.Binding + i })
                         | _ -> 
                             [u]
                    )
@@ -416,13 +416,13 @@ type ResourceManagerExtensions private() =
                             match tex with
                                 | :? IMod<ITexture> as value ->
                                     let t = x.CreateTexture(value)
-                                    lastTextureSlot := uniform.Location
-                                    Some (uniform.Location, (t, s))
+                                    lastTextureSlot := uniform.Binding
+                                    Some (uniform.Binding, (t, s))
 
                                 | :? IMod<ITexture[]> as values ->
                                     let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[index]))
-                                    lastTextureSlot := uniform.Location
-                                    Some (uniform.Location, (t, s))
+                                    lastTextureSlot := uniform.Binding
+                                    Some (uniform.Binding, (t, s))
 
                                 | _ ->
                                     Log.warn "unexpected texture type %A: %A" sem tex

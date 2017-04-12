@@ -12,7 +12,7 @@ let main args =
     //Examples.Render2TextureComposable.run()
     //Examples.Render2TexturePrimiviteChangeableSize.run()
     //Examples.Render2TexturePrimitiveFloat.run()
-    Examples.PostProcessing.run()
+    Examples.ComputeTest.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 
     //Examples.LoD.run()

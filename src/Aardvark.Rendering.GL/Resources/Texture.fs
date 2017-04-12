@@ -244,6 +244,14 @@ module TextureCreationExtensions =
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
+                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+                GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
+                GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
+                GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
+                GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
+
+
                 if samples = 1 then
                     GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int t), size.X, size.Y)
                 else
@@ -251,11 +259,6 @@ module TextureCreationExtensions =
                     GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
 
                 GL.Check "could not allocate texture"
-
-                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
-                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
-
-
                 GL.BindTexture(target, 0)
                 GL.Check "could not unbind texture"
 
@@ -1113,9 +1116,13 @@ module TextureUploadExtensions =
 
             let pbo = GL.GenBuffer()
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+            GL.Check "could not bind PBO"
+
             GL.BufferData(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferUsageHint.DynamicDraw)
+            GL.Check "could not initialize PBO"
 
             let dst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
+            GL.Check "could not map PBO"
 
             let dstInfo =
                 let viSize = V3l(int64 size.X, int64 size.Y, int64 channels)
@@ -1155,11 +1162,16 @@ module TextureUploadExtensions =
 
             TextureCopyUtils.Copy(image, dst, dstInfo)
 
-            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+            let worked = GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer)
+            if not worked then Log.warn "[GL] could not unmap buffer"
+            GL.Check "could not unmap PBO"
             f size pt pf sizeInBytes
 
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.Check "could not unbind PBO"
+
             GL.DeleteBuffer(pbo)
+            GL.Check "could not delete PBO"
 
 
 
@@ -1892,7 +1904,8 @@ module TextureExtensions =
             GL.Check "could not bind texture"
 
             if not generateMipMap then
-                GL.TexParameterI(bindTarget, TextureParameterName.TextureMaxLevel, [|uploadLevels|])
+                GL.TexParameterI(bindTarget, TextureParameterName.TextureMaxLevel, [|uploadLevels - 1|])
+                GL.TexParameterI(bindTarget, TextureParameterName.TextureBaseLevel, [| 0 |])
 
             for l in 0..uploadLevels-1 do
                 let image = data.[l]
@@ -1983,6 +1996,11 @@ module TextureExtensions =
             let sizeChanged = size <> t.Size2D
             GL.BindTexture(TextureTarget.Texture2D, t.Handle)
             GL.Check "could not bind texture"
+
+            if not generateMipMap then
+                GL.TexParameterI(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, [|0|])
+                GL.TexParameterI(TextureTarget.Texture2D, TextureParameterName.TextureBaseLevel, [|0|])
+
 
             // determine the input format and covert the image
             // to a supported format if necessary.

@@ -8,6 +8,8 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Base.ShaderReflection
 
+#nowarn "9"
+
 [<AutoOpen>]
 module ProgramResourceExtensions = 
 
@@ -430,9 +432,10 @@ module ShaderInterface =
                             | Sampler _ | Image _ -> 
                                 let slot = !textureSlots
                                 textureSlots := slot + 1
-                                GL.Uniform1(location, slot)
+                                GL.ProgramUniform1(p, location, slot)
                                 List.singleton {
-                                    Location        = slot
+                                    Binding         = slot
+                                    Location        = location
                                     Path            = path
                                     Type            = _type
                                 }
@@ -444,11 +447,16 @@ module ShaderInterface =
                                         textureSlots := slot + 1
                                         slot
                                     )
-                                GL.Uniform1(location, slots.Length, slots)
+
+                                let gc = System.Runtime.InteropServices.GCHandle.Alloc(slots, System.Runtime.InteropServices.GCHandleType.Pinned)
+
+                                GL.ProgramUniform1(uint32 p, location, slots.Length, NativePtr.ofNativeInt<int> (gc.AddrOfPinnedObject()))
+                                gc.Free()
 
                                 slots |> Array.toList |> List.mapi (fun i s ->
                                     {
-                                        Location        = s
+                                        Binding         = s
+                                        Location        = location
                                         Path            = ShaderPath.Item(path, i)
                                         Type            = t
                                     }
@@ -458,12 +466,14 @@ module ShaderInterface =
                             | _ ->
                                 List.singleton {
                                     Location        = location
+                                    Binding         = -1
                                     Path            = path
                                     Type            = _type
                                 }
                     else
                         List.singleton {
                             Location        = location
+                            Binding         = -1
                             Path            = path
                             Type            = _type
                         }
@@ -506,6 +516,7 @@ module ShaderInterface =
 
                 {
                     Location        = location
+                    Binding         = -1
                     Path            = parsePath name
                     Type            = _type
                 }
@@ -573,7 +584,8 @@ module ShaderInterface =
                                     textureSlot := slot + 1
                                     GL.Uniform1(location, slot)
                                     List.singleton {
-                                        Location        = slot
+                                        Binding         = slot
+                                        Location        = location
                                         Path            = path
                                         Type            = field.Type
                                     }
@@ -588,7 +600,8 @@ module ShaderInterface =
 
                                     slots |> Array.toList |> List.mapi (fun i s ->
                                         {
-                                            Location        = s
+                                            Binding         = s
+                                            Location        = location
                                             Path            = ShaderPath.Item(path, i)
                                             Type            = t
                                         }
@@ -596,6 +609,7 @@ module ShaderInterface =
                                 | _ -> 
 
                                     List.singleton {
+                                        Binding         = -1
                                         Location        = location
                                         Path            = path
                                         Type            = field.Type
@@ -673,7 +687,7 @@ module ShaderInterface =
         use __ = ctx.ResourceLock
         let info = ctx.Driver
 
-        if false && info.version > Version(4,0,0) && info.device <> GPUVendor.Intel then
+        if info.version > Version(4,0,0) && info.device <> GPUVendor.Intel then
             GL4.shaderInterface baseSlot p
         else
             GL.shaderInterface baseSlot p
