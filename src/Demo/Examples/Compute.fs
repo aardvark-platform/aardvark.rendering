@@ -214,6 +214,7 @@ module ComputeTest =
 
             x.TryCompileComputeFunction glsl
 
+    
     let computer (a : float[]) (b : float[]) (c : Image2d<Formats.r32f>) =
         compute {
             let id = getGlobalId()
@@ -251,17 +252,20 @@ module ComputeTest =
             layout( local_size_variable ) in;
             layout(std430) buffer a_ssb  { float a[]; };
             layout(std430) buffer b_ssb  { float b[]; };
+
+            shared float myShared[32];
             void main()
             {
                 int i = ivec3(gl_GlobalInvocationID).x;
+                myShared[i % 32] = imageLoad(cs_c, ivec2(i, 0)).x;
                 if((i < cs_a_length))
                 {
-                    b[i] = ((cs_f * a[i]) + imageLoad(cs_c, ivec2(i, 0)).x);
+                    b[i] = ((cs_f * a[i]) + myShared[i % 32]);
                 }
             }
             """
 
-        match ctx.TryCompileComputeFunction computer with
+        match ctx.TryCompileComputeFunction code with
             | Success invoke ->
                 let f a = float32 a + 1.0f
                 let ba = ctx.CreateBuffer(Array.init 1024 f, BufferUsage.Dynamic)
