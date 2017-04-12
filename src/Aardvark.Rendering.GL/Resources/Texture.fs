@@ -1979,6 +1979,9 @@ module TextureExtensions =
                     GL.GetTexParameterI(TextureTarget.TextureCubeMap, GetTextureParameter.TextureMaxLevel, &minLevels)
                     minLevels + 1
                 else
+                    GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureMaxLevel, minLevels - 1)
+                    GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureBaseLevel, 0)
+
                     minLevels
                 
             t.MipMapLevels <- levels
@@ -2087,6 +2090,10 @@ module TextureExtensions =
 
             data.PinPBO (t.Context.PackAlignment, fun size pt pf sizeInBytes ->
                 if sizeChanged || formatChanged then
+                    if not generateMipMap then
+                        GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureMaxLod, 0)
+                        GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureBaseLevel, 0)
+
                     GL.TexImage3D(TextureTarget.Texture3D, 0, internalFormat, size.X, size.Y, size.Z, 0, pf, pt, 0n)
                 else
                     GL.TexSubImage3D(TextureTarget.Texture3D, 0, 0, 0, 0, size.X, size.Y, size.Z, pf, pt, 0n)
@@ -2108,6 +2115,7 @@ module TextureExtensions =
             t.Size <- size
             t.Multisamples <- 1
             t.Count <- 1
+            t.MipMapLevels <- (if generateMipMap then expectedLevels else 1)
             t.Dimension <- TextureDimension.Texture3D
             t.Format <- newFormat
 
