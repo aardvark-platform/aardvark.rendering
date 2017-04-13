@@ -53,10 +53,14 @@ module ComputeTest =
 
     let private computeInstanceCache = System.Collections.Concurrent.ConcurrentDictionary<Context, GLCompute>()
 
+    let private getGLCompute (ctx : Context) =
+        computeInstanceCache.GetOrAdd(ctx, fun ctx -> GLCompute(ctx))
 
     type Kernel(prog : Program, localSize : Option<V3i>) =   
-        let GLCompute = computeInstanceCache.GetOrAdd(prog.Context, fun ctx -> GLCompute(ctx))
+        let GLCompute = getGLCompute prog.Context
         
+        
+
         let mutable isDisposed = 0
 
         let ctx = prog.Context
@@ -294,7 +298,8 @@ module ComputeTest =
             )
 
         member x.TryCompileKernel (f : 'a -> 'b) =
-            let shader = FShade.ComputeShader.ofFunction f
+            let gl = getGLCompute x
+            let shader = FShade.ComputeShader.ofFunction gl.WorkGroupSize f
             let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL410
             let localSize = 
                 if shader.csLocalSize.AllGreater 0 then Some shader.csLocalSize
@@ -324,10 +329,14 @@ module ComputeTest =
             b.[i] <- a.[i] * 3.0 + c.[V2i(i,0)].X
         }
 
+    type Local<'a>(size : int) =
+        member x.Size = size
+
     [<LocalSize(X = 256)>]
     let scan (add : Expr<'a -> 'a -> 'a>) (zero : Expr<'a>) (input : 'a[]) (ret : 'a[]) =
         compute {
-            let temp = allocateShared<'a> 256
+            let elements = 2 * LocalSize.X
+            let temp = allocateShared<'a> elements
 
             let gid = getGlobalId().X
             let lid = getLocalId().X
@@ -341,7 +350,7 @@ module ComputeTest =
 
             let mutable d = 2
             let mutable s = 1
-            while s < 256 do
+            while s < elements do
                 if lid % d = 0 && lid >= s then
                     temp.[lid] <- (%add) temp.[lid] temp.[lid - s]
 
@@ -353,7 +362,7 @@ module ComputeTest =
             s <- s / 2
             d <- d / 2
             while s >= 1 do
-                if lid % d = 0 && lid + s < 256 then
+                if lid % d = 0 && lid + s < elements then
                     temp.[lid + s] <- (%add) temp.[lid + s] temp.[lid]
 
                 barrier()
@@ -415,7 +424,7 @@ module ComputeTest =
 
         let size = 123
 
-        let kernel = ctx.CompileKernel (scan <@ (+) @> <@ 0.0 @>)
+        let kernel = ctx.CompileKernel (scan <@ (*) @> <@ 1.0 @>)
         let f a = 1.0f
         let ba = ctx.CreateBuffer(Array.init size f, BufferUsage.Dynamic)
         let bb = ctx.CreateBuffer(Array.zeroCreate<float32> size, BufferUsage.Dynamic)
@@ -441,9 +450,9 @@ module ComputeTest =
         let rb : float32[] = ctx.Download(bb)
 
         let validator = Array.zeroCreate ra.Length
-        let mutable sum = 0.0f
+        let mutable sum = 1.0f
         for i in 0 .. ra.Length - 1 do
-            sum <- sum + ra.[i]
+            sum <- sum * ra.[i]
             validator.[i] <- sum
 
         let isValid = Array.forall2 (=) rb validator
