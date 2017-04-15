@@ -5,11 +5,15 @@ open System.Collections.Concurrent
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+open Microsoft.FSharp.NativeInterop
 
-type SparseTexture(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : int, format : TextureFormat, pageSize : V3i) = 
+#nowarn "9"
+
+type SparseTexture(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : int, format : TextureFormat, pageSize : V3i, sparseLevels : int) = 
     inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L, true)
 
     member x.PageSize = pageSize
+    member x.SparseLevels = sparseLevels
 
     member x.GetSize(level : int) =
         if level < 0 || level >= x.MipMapLevels then
@@ -95,15 +99,22 @@ module ``Sparse Texture Extensions`` =
             GL.Check "could not bind sparse texture"
             GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureSparse, 1)
             GL.Check "could not set texture to sparse"
+            GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureBaseLevel, 0)
+            GL.Check "could not set sparse texture base level"
             GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureMaxLevel, levels - 1)
             GL.Check "could not set sparse texture max level"
+
             GL.TexStorage3D(TextureTarget3d.Texture3D, levels, ifmt, size.X, size.Y, size.Z)
             GL.Check "could not set sparse texture storage"
+
+            let mutable sparseLevels = -1
+            GL.GetTexParameter(TextureTarget.Texture3D, unbox 0x91AA, &sparseLevels)
+
             GL.BindTexture(TextureTarget.Texture3D, 0)
             GL.Check "could not unbind sparse texture"
 
 
-            SparseTexture(x, handle, TextureDimension.Texture3D, levels, 1, size, 1, format, pageSize)
+            SparseTexture(x, handle, TextureDimension.Texture3D, levels, 1, size, 1, format, pageSize, sparseLevels)
 
         member x.Commitment(t : SparseTexture, level : int, region : Box3i, commit : bool) =
             use __ = x.ResourceLock
@@ -166,8 +177,11 @@ module ``Sparse Texture Extensions`` =
             if size.AllGreater 0 then
                 NativeTensor4.withPBO data x.PackAlignment (fun size pt pf _ ->
                     GL.BindTexture(TextureTarget.Texture3D, t.Handle)
+                    GL.Check "could not unbind sparse texture"
                     GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, 0n)
+                    GL.Check "could not upload sparse region"
                     GL.BindTexture(TextureTarget.Texture3D, 0)
+                    GL.Check "could not unbind sparse texture"
                 )
 
     type SparseTexture with

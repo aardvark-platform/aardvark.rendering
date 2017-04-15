@@ -1283,17 +1283,26 @@ module TextureUploadExtensions =
 
             let pbo = GL.GenBuffer()
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
+            GL.Check "could not bind PBO"
             GL.BufferData(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferUsageHint.DynamicDraw)
+            GL.Check "could not allocate PBO"
             let pDst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
+            GL.Check "could not map PBO"
+            if pDst = 0n then failwith "[GL] could not map PBO"
 
             let dst = NativeTensor4<'a>(NativePtr.ofNativeInt pDst, dstInfo)
             x.CopyTo(dst)
 
-            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+            let worked = GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer)
+            if not worked then failwith "[GL] could not unmap PBO"
+
             f (V3i size.XYZ) pt pf sizeInBytes
 
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.Check "could not unbind PBO"
+
             GL.DeleteBuffer(pbo)
+            GL.Check "could not delete PBO"
 
     type Context with
         

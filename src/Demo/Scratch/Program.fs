@@ -486,10 +486,10 @@ type DependentHandle =
 
 [<EntryPoint>]
 let main argv = 
-
+    Scratch.VolumeTest.run()
     //Scratch.InteractionExperiments.run() |> ignore
     //Scratch.FablishInterop.run argv |> ignore
-    //System.Environment.Exit 0
+    System.Environment.Exit 0
 
     Ag.initialize()
     Aardvark.Init()
