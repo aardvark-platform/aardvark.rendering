@@ -1238,6 +1238,14 @@ module TextureUploadExtensions =
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
             GL.DeleteBuffer(pbo)
 
+    type PBOInfo =
+        {
+            size        : V3i
+            flags       : BufferStorageFlags
+            pixelFormat : PixelFormat
+            pixelType   : PixelType
+        }
+
     module NativeTensor4 =
 
         let private pixelFormat =
@@ -1284,7 +1292,7 @@ module TextureUploadExtensions =
             let pbo = GL.GenBuffer()
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
             GL.Check "could not bind PBO"
-            GL.BufferData(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferUsageHint.DynamicDraw)
+            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
             GL.Check "could not allocate PBO"
             let pDst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
             GL.Check "could not map PBO"
@@ -1303,6 +1311,55 @@ module TextureUploadExtensions =
 
             GL.DeleteBuffer(pbo)
             GL.Check "could not delete PBO"
+
+        let usePBO (info : PBOInfo) (align : int) (mapping : int -> nativeint -> Tensor4Info -> 'r) =
+            let size = info.size
+            let pt = info.pixelType
+            let pf = info.pixelFormat
+            
+            let align = align |> nativeint
+            let alignMask = align - 1n |> nativeint
+            let channelSize = PixelType.size pt |> nativeint
+            let channels = PixelFormat.channels pf |> nativeint
+
+            let pixelSize = channelSize * channels
+
+            let rowSize = pixelSize * nativeint size.X
+            let alignedRowSize = (rowSize + (alignMask - 1n)) &&& ~~~alignMask
+            let sizeInBytes = alignedRowSize * nativeint size.Y * nativeint size.Z
+            
+            if alignedRowSize % channelSize <> 0n then
+                failwith "[GL] unexpected row alignment (not implemented atm.)"
+
+            let srcInfo =
+                let rowPixels = alignedRowSize / channelSize
+                let viSize = V4l(int64 size.X, int64 size.Y, int64 size.Z, int64 channels)
+                Tensor4Info(
+                    0L,
+                    viSize,
+                    V4l(
+                        int64 channels, 
+                        int64 rowPixels, 
+                        int64 rowPixels * viSize.Y, 
+                        1L
+                    )
+                )
+                
+            let pbo = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, pbo)
+            GL.Check "could not bind PBO"
+            GL.BufferStorage(BufferTarget.CopyWriteBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
+            GL.Check "could not allocate PBO"
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+
+            try 
+                mapping pbo sizeInBytes srcInfo
+
+            finally
+                GL.DeleteBuffer(pbo)
+                GL.Check "could not delete PBO"
+                
+
 
     type Context with
         

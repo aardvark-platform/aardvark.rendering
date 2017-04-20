@@ -3,3 +3,4 @@ Aardvark.Base.Runtime
 AssimpNet
 FShade.Core
 FSharp.Quotations.Evaluator
+FShade.GLSL

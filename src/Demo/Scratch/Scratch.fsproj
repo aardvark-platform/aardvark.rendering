@@ -82,6 +82,7 @@
     <Compile Include="Staging\Ag.fs" />
     <Compile Include="Staging\Heap.fs" />
     <Compile Include="Staging\Geometry.fs" />
+    <Compile Include="Staging\ComputeShader.fs" />
     <Compile Include="Experiments\Fonts.fs" />
     <Compile Include="Experiments\NullBufferTest.fs" />
     <Compile Include="Experiments\Playground.fs" />
@@ -273,6 +274,17 @@
       <ItemGroup>
         <Reference Include="FShade.Core">
           <HintPath>..\..\..\packages\FShade.Core\lib\net45\FShade.Core.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
+        <Reference Include="FShade.GLSL">
+          <HintPath>..\..\..\packages\FShade.GLSL\lib\net45\FShade.GLSL.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>
