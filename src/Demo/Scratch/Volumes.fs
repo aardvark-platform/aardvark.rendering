@@ -191,6 +191,14 @@ module NewestImpl =
             NativeTensor4.using t (fun dst -> x.CopyTo dst)
             t
 
+    module NativeVolume =
+        let toManaged (x : NativeVolume<'a>) =
+            let arr = Array.zeroCreate (int (x.SX * x.SY * x.SZ))
+            let t = Volume<'a>(arr, VolumeInfo(0L, x.Size, V3l(x.SZ, x.SZ * x.SX, 1L)))
+
+            NativeVolume.using t (fun dst -> x.CopyTo dst)
+            t
+
     type VolumeStore<'a when 'a : unmanaged> private(file : MemoryMappedFile, view : MemoryMappedViewAccessor, header : pstoreheader<'a>, histogram : phistogram<'a>, pData : nativeint) =
         static let currentVersion = 1
         static let brickSize = V3i(128,128,128)
@@ -419,6 +427,62 @@ module NewestImpl =
                 let dst = NativeVolume<'a>(NativePtr.ofNativeInt pSlice, info)
                 NativeVolume.using data (fun src -> src.CopyTo dst)
 
+        member x.GetSlice(level : int, z : int) =
+            if level < 0 || level >= mipMapLevels then
+                failwithf "[Volume] level %d out of range [0,%d]" level (mipMapLevels - 1)
+            
+            let ptr, size = ptrAndSize level
+                
+            if z < 0 || z >= size.Z then
+                failwithf "[Volume] invalid slice-index %A [0,%d]" z (size.Z - 1)
+                
+            if isBricked size then
+                let bricks = size / brickSize
+                let bz = z / brickSize.Z
+                let z = z % brickSize.Z
+                let brickDelta = brickDelta bricks
+                let brickSliceSize = nativeint brickSize.X * nativeint brickSize.Y * nativeint channels * sa
+                
+                let arr : 'a[] = Array.zeroCreate (size.X * size.Y * channels)
+                let data = Volume<'a>(arr, VolumeInfo(0L, V3l(size.X, size.Y, channels), V3l(int64 channels, int64 channels * int64 size.X, 1L)))
+
+                let info = 
+                    VolumeInfo(
+                        0L,
+                        V3l(brickSize.X, brickSize.Y, channels),
+                        V3l(int64 channels, int64 brickSize.X * int64 channels, 1L)
+                    )
+
+                for by in 0 .. bricks.Y - 1 do
+                    for bx in 0 .. bricks.X - 1 do
+                        let i = V3l(bx,by,bz)
+                        let offset = Vec.dot brickDelta i |> nativeint
+                        let pBrickSlice = ptr + offset + nativeint z * brickSliceSize
+
+                        let src = NativeVolume<'a>(NativePtr.ofNativeInt pBrickSlice, info)
+                        let dst = 
+                            data.SubVolume(
+                                V3l(i.X * int64 brickSize.X, i.Y * int64 brickSize.Y, 0L),
+                                V3l(brickSize.X, brickSize.Y, channels)
+                            )
+
+                        NativeVolume.using dst (fun dst -> src.CopyTo dst)
+
+                data
+            else
+                let sliceSize = nativeint size.X * nativeint size.Y * nativeint channels * sa
+                let pSlice = ptr + nativeint z * sliceSize
+
+                let info = 
+                    VolumeInfo(
+                        0L,
+                        V3l(size.X, size.Y, channels),
+                        V3l(int64 channels, int64 size.X * int64 channels, 1L)
+                    )
+
+                let dst = NativeVolume<'a>(NativePtr.ofNativeInt pSlice, info)
+                dst |> NativeVolume.toManaged
+
         member x.Set(input : RawVolume<'a>) =
             let l = (size - input.Size) / 2
             let h = size - input.Size - l
@@ -481,6 +545,8 @@ module NewestImpl =
             x.Flush()
 
             Log.stop()
+
+
 
         member x.GenerateMipMaps(aggregate : 'a[] -> 'a) =
             let mutable srcSize = size
@@ -673,17 +739,19 @@ module NewestImpl =
 
         static member CreateNew(file : string, size : V3i, mipMaps : bool) =
             let levels =
-                if mipMaps then 1 + int(floor(Fun.Log2 (min size.X (min size.Y size.Z))))
+                if mipMaps then 1 + int(floor(Fun.Log2 (max size.X (max size.Y size.Z))))
                 else 1
 
             VolumeStore<'a>.CreateNew(file, size, levels)
 
-        static member Open(file : string) =
+        static member Open(file : string, write : bool) =
             if File.Exists file then
                 let info = FileInfo(file)
 
-                let handle = MemoryMappedFile.CreateFromFile(file, FileMode.Open, null, info.Length, MemoryMappedFileAccess.ReadWrite)
-                let view = handle.CreateViewAccessor()
+                let access = if write then MemoryMappedFileAccess.ReadWrite else MemoryMappedFileAccess.Read
+
+                let handle = MemoryMappedFile.CreateFromFile(file, FileMode.Open, null, info.Length, access)
+                let view = handle.CreateViewAccessor(0L, info.Length, access)
                 let filePtr = view.SafeMemoryMappedViewHandle.DangerousGetHandle()
 
                 let header = pstoreheader<'a>(NativePtr.ofNativeInt filePtr)
@@ -707,8 +775,9 @@ module NewestImpl =
         static member CreateNew<'a when 'a : unmanaged> (file : string, size : V3i, mipMaps : bool) =
             VolumeStore<'a>.CreateNew(file, size, mipMaps)
 
-        static member Open<'a when 'a : unmanaged> (file : string) = 
-            VolumeStore<'a>.Open file
+        static member Open<'a when 'a : unmanaged> (file : string, ?write : bool) =
+            let write = defaultArg write true
+            VolumeStore<'a>.Open(file, write)
 
 
     [<AutoOpen>]
@@ -806,6 +875,9 @@ module NewestImpl =
 
     let test() =
         // create
+
+        
+
         use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\Testdatensatz_600x600x1000px.raw", V3i(600, 600, 1000))
         use store =  input |> preprocess @"E:\blubber2.store"
 
@@ -847,6 +919,7 @@ module VolumeTest =
                 addressU WrapMode.Clamp
                 addressV WrapMode.Clamp
                 addressW WrapMode.Clamp
+                comparison ComparisonFunction.Greater
             }
 
         let pickRay (p : V2d) =
@@ -870,6 +943,11 @@ module VolumeTest =
 
             }
 
+        let clamp min max v =
+            if v < min then min
+            elif v > max then max
+            else v
+
         let hsv2rgb (h : float) (s : float) (v : float) =
             let s = clamp 0.0 1.0 s
             let v = clamp 0.0 1.0 v
@@ -877,7 +955,7 @@ module VolumeTest =
             let h = h % 1.0
             let h = if h < 0.0 then h + 1.0 else h
             let hi = floor ( h * 6.0 ) |> int
-            let f = h / 6.0 - float hi
+            let f = h * 6.0 - float hi
             let p = v * (1.0 - s)
             let q = v * (1.0 - s * f)
             let t = v * (1.0 - s * ( 1.0 - f ))
@@ -911,6 +989,51 @@ module VolumeTest =
         let project (m : M44d) (v : V3d) =
             let r = m * V4d(v, 1.0)
             r.XYZ / r.W
+
+        let tex =
+            sampler2d {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+            }
+
+
+        let bla (v : Effects.Vertex) =
+            fragment {
+                let showLevels : bool = uniform?ShowLevels
+                let l0 = uniform?BaseLevel
+                let magick : float  = uniform?Magick
+                if showLevels then
+                    let levels : float = 12.0 //uniform?MipMapLevels
+                    let mutable maxValue = -1.0
+                    let mutable maxLevel = 1000.0
+
+                    
+                    let l1 = levels - 5.0
+                    let steps = 100
+
+                    let step = (l1 - l0) / float steps
+
+                    let mutable l = l0
+                    for _ in 0 .. steps do
+                        let vi = tex.SampleLevel(v.tc, l).X
+                        if vi > 1.05 * maxValue then
+                            maxValue <- vi
+                            maxLevel <- l
+
+                        l <- l + step
+
+//                    let avg = 0.2156 //tex.SampleLevel(v.tc, 12.0).X
+//                    let value = tex.SampleLevel(v.tc, l0).X - avg
+//
+
+                    let c = (float maxLevel - l0) / (l1 - l0) |> clamp 0.0 1.0//hsv2rgb (float maxLevel / 11.0) 1.0 1.0
+                    return V4d(c, c, c, 1.0)
+                else
+                    let v = tex.SampleLevel(v.tc, l0).X
+                    return V4d(hsv2rgb (-(2.0 * v + 1.0) / 3.0) 1.0 1.0,1.0)
+            }
 
         let fragment (v : Vertex) =
             fragment {
@@ -964,7 +1087,9 @@ module VolumeTest =
                     let mutable res = V3d.Zero
                     for i in far .. near do
                         let v = volumeTexture.SampleLevel(c, 1.0).X
-                        res <- V3d.III * v + res
+                        let v4 = volumeTexture.SampleLevel(c, 4.0).X
+                        if v < 0.25 && v4 > 0.25 then
+                            res <- 100.0 * V3d.III + res
 
 //                        let v2 = volumeTexture.SampleLevel(c, 2.0).X
 //                        let v = volumeTexture.SampleLevel(c, 1.0).X
@@ -1098,6 +1223,7 @@ module VolumeTest =
             }
 
 
+
     let openOrCreate (file : string) (input : RawVolume<uint16>) =
         if not (File.Exists file) then
             let store = VolumeStore.CreateNew<uint16>(file, input.Size, true)
@@ -1117,9 +1243,144 @@ module VolumeTest =
             finally
                 store.Dispose()
 
-        VolumeStore.Open<uint16>(file)
+        VolumeStore.Open<uint16>(file, false)
+
+    let test() =
+        Ag.initialize()
+        Aardvark.Init()
+        
+
+        //LUNKAZ
+
+        use app = new OpenGlApplication()
+        use win = app.CreateSimpleRenderWindow()
+        //use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px.raw", V3i(1850, 1850, 1000))
+
+        use store =  VolumeStore.Open @"C:\Users\Schorsch\Desktop\blubber.store"
+
+        win.Width <- 1024
+        win.Height <- 1024
+
+        let baseLevel = Mod.init 0.0
+        let slice = Mod.init 150
+        let filter = Mod.init 0
+        let showLevels = Mod.init true
+        let magick = Mod.init 1.05
+        let setLevel (l : float) =
+            let l = clamp 0.0 10.0 l
+            Log.line "level: %f" l
+            transact (fun () -> baseLevel.Value <- l)
+
+        let setSlice (step : int) =
+            let newValue = 
+                match step with
+                    | 1 -> slice.Value + 1
+                    | -1 -> slice.Value - 1
+                    | _ -> slice.Value
+
+            let newValue = clamp 0 (store.Size.Z - 1) newValue
+            Log.line "slice: %d" newValue
+            transact (fun () -> slice.Value <- newValue)
+
+        win.Keyboard.DownWithRepeats.Values.Add(fun k -> 
+            match k with
+                | Keys.OemPlus -> setSlice 1
+                | Keys.OemMinus -> setSlice -1
+                | Keys.F -> transact (fun () -> filter.Value <- filter.Value + 1)
+                | Keys.X -> transact (fun () -> showLevels.Value <- not showLevels.Value)
+                | Keys.M -> transact (fun () -> magick.Value <- 1.005 * magick.Value)
+                | Keys.L -> transact (fun () -> magick.Value <- magick.Value / 1.005)
+                | _ -> ()
+        )
+
+        win.Mouse.Scroll.Values.Add(fun e ->
+            let d = sign e
+            setLevel (baseLevel.Value + 0.125 * float d)
+        )
+
+        let interpolate (t : float) (a : uint16) (b : uint16) =
+            uint16 ((1.0 - t) * float a + t * float b)
+
+        let texture =
+            Mod.map2 (fun slice filter ->
+                let img = PixImage<uint16>(Col.Format.Gray, store.GetSlice(0,slice))
+                
+                let levels = int(floor(Fun.Log2(max img.Size.X img.Size.Y))) + 1
+                
+                let imgs = Array.zeroCreate levels
+                imgs.[0] <- img
+                for dstLevel in 1 .. levels - 1 do
+                    let srcLevel = dstLevel - 1
+
+                    let src = imgs.[srcLevel]
+
+                    let dstSize = V2i(max 1 (src.Size.X / 2), max 1 (src.Size.Y / 2))
+                    let dst = PixImage<uint16>(Col.Format.Gray, dstSize)
+
+                    if src.Size.AllGreater 16 then
+                        match filter % 6 with
+                            | 0 -> Log.line "Cubic"; dst.GetChannel(Col.Channel.Gray).SetScaledCubic(src.GetChannel(Col.Channel.Gray))
+                            | 1 -> Log.line "Lanczos"; dst.GetChannel(Col.Channel.Gray).SetScaledLanczos(src.GetChannel(Col.Channel.Gray))
+                            | 2 -> Log.line "BSpline3"; dst.GetChannel(Col.Channel.Gray).SetScaledBSpline3(src.GetChannel(Col.Channel.Gray))
+                            | 3 -> Log.line "BSpline5"; dst.GetChannel(Col.Channel.Gray).SetScaledBSpline5(src.GetChannel(Col.Channel.Gray))
+                            | 4 -> Log.line "Nearest"; dst.GetChannel(Col.Channel.Gray).SetScaledNearest(src.GetChannel(Col.Channel.Gray))
+                            | 5 -> Log.line "Linear"; dst.GetChannel(Col.Channel.Gray).SetScaledLinear(src.GetChannel(Col.Channel.Gray), interpolate, interpolate)
+                            | _ -> ()
+                    else
+                        dst.GetChannel(Col.Channel.Gray).SetScaledCubic(src.GetChannel(Col.Channel.Gray))
+                        
+                    imgs.[dstLevel] <- dst
+                    ()
+
+
+//                let imgs =
+//                    Array.init store.MipMapLevels (fun l ->
+//                        PixImage<uint16>(Col.Format.Gray, store.GetSlice(l,slice / (1 <<< l)))
+//                    )
+
+
+                
+                let tex = PixTexture2d(PixImageMipMap(imgs |> Array.map (fun i -> i :> PixImage)), { wantMipMaps = true; wantSrgb = false; wantCompressed = false })
+                
+                
+                
+                tex :> ITexture
+            ) slice filter
+
+        let sg = 
+            Sg.fullScreenQuad
+                |> Sg.uniform "Magick" magick
+                |> Sg.uniform "ShowLevels" showLevels
+                |> Sg.uniform "BaseLevel" baseLevel
+                |> Sg.uniform "MipMapLevels" (Mod.constant (float store.MipMapLevels))
+                |> Sg.diffuseTexture texture
+                |> Sg.shader {
+                    do! Shader.bla
+                }
+
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
+
+
+        let color = task |> RenderTask.renderToColor (Mod.constant store.Size.XY) 
+        color.Acquire()
+
+        let colorImage = app.Runtime.Download(color.GetValue() |> unbox<IBackendTexture>)
+
+        color.Release()
+        colorImage.SaveAsImage @"C:\Users\Schorsch\Desktop\output.jpg"
+
+
+
+
+
+        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
+
+        win.Run()
+        Environment.Exit 0
 
     let run() =
+        test()
+
         Ag.initialize()
         Aardvark.Init()
 
@@ -1130,7 +1391,28 @@ module VolumeTest =
         
         // create
         use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\Testdatensatz_600x600x1000px.raw", V3i(600, 600, 1000))
-        use store =  input |> openOrCreate @"E:\blubber2.store"
+        use store =  input |> openOrCreate @"C:\Users\Schorsch\Desktop\blubber2.store"
+//
+//        for i in 0 .. input.Size.Z - 1 do
+//            let slice = input.[i]
+//            let img = PixImage<uint16>(Col.Format.Gray, slice).ToImageLayout()
+//            img.SaveAsImage (sprintf @"C:\Users\Schorsch\Desktop\slices\%d.jpg" i)
+//
+//        Environment.Exit 0
+
+//        // store one brick as slices
+//        let bi = store.BrickCount 0 / 2
+//        let t = store.Brick(0, bi) |> NativeTensor4.toManaged
+//        
+//        for z in 0 .. int t.SZ - 1 do
+//            let v = t.SubXYWVolume(int64 z)
+//            let img = PixImage<uint16>(Col.Format.Gray, v).ToImageLayout()
+//            img.SaveAsImage (sprintf @"C:\Users\Schorsch\Desktop\bricks\%d.jpg" z)
+
+            
+//        let csv = store.Histogram |> Seq.mapi (fun v c -> sprintf "%d;%d" v c) |> String.concat "\r\n"
+//        File.WriteAllText(@"C:\Users\Schorsch\Desktop\hist.csv", csv)
+
 
         let texture = app.Runtime.Context.CreateSparseVolume(store)
 
