@@ -2789,6 +2789,7 @@ module TextureExtensions =
                         | TextureDimension.TextureCube -> snd cubeSides.[dstSlice]
                         | _ -> bindTarget
 
+
                 GL.CopyTexSubImage2D(
                     copyTarget,
                     dstLevel,
@@ -2834,7 +2835,10 @@ module TextureExtensions =
                         GL.Check "could not bind texture"
 
                         source.PinPBO(t.Context.PackAlignment, ImageTrafo.MirrorY, fun dim pixelType pixelFormat size ->
-                            GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
+                            if target = TextureTarget.Texture2DArray then
+                                GL.TexSubImage3D(target, level, 0, 0, slice, dim.X, dim.Y, 1, pixelFormat, pixelType, 0n)
+                            else
+                                GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
                             GL.Check (sprintf "could not upload texture data for level %d" level)
                         )
 

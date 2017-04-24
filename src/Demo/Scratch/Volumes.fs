@@ -997,42 +997,66 @@ module VolumeTest =
                 addressU WrapMode.Clamp
                 addressV WrapMode.Clamp
             }
+            
+        let texArr =
+            sampler2dArray {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagLinear
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+            }
+
+        let blubb (v : Effects.Vertex) =
+            fragment {
+                let mutable maxValue = -1.0
+                let mutable maxLevel = 10000
+                for i in 0 .. 11 do
+                    let vi = texArr.SampleLevel(v.tc, i, 0.0).X
+                    if vi > 1.05 * maxValue then
+                        maxValue <- vi
+                        maxLevel <- i
 
 
+                let c = (float maxLevel) / 11.0 |> clamp 0.0 1.0//hsv2rgb (float maxLevel / 11.0) 1.0 1.0
+                
+
+                
+                let v = texArr.SampleLevel(v.tc, 0, 0.0).X
+
+
+                let c = (if maxLevel >= 2 then 1.0 else 0.0)
+                //let value = texArr.SampleLevel(v.tc, 1, 0.0).X * V4d.IIII
+                return V4d(c, 0.0, 0.0, 1.0) //V4d(hsv2rgb (-(1.0+ 2.0*c)/3.0) 1.0 (0.5 + 0.5*v), 1.0)
+            }
         let bla (v : Effects.Vertex) =
             fragment {
-                let showLevels : bool = uniform?ShowLevels
                 let l0 = uniform?BaseLevel
                 let magick : float  = uniform?Magick
-                if showLevels then
-                    let levels : float = 12.0 //uniform?MipMapLevels
-                    let mutable maxValue = -1.0
-                    let mutable maxLevel = 1000.0
+                let levels : float = 12.0 //uniform?MipMapLevels
+                let mutable maxValue = -1.0
+                let mutable maxLevel = 1000.0
 
                     
-                    let l1 = levels - 5.0
-                    let steps = 100
+                let l1 = levels - 1.0
+                let steps = 100
 
-                    let step = (l1 - l0) / float steps
+                let step = (l1 - l0) / float steps
 
-                    let mutable l = l0
-                    for _ in 0 .. steps do
-                        let vi = tex.SampleLevel(v.tc, l).X
-                        if vi > 1.05 * maxValue then
-                            maxValue <- vi
-                            maxLevel <- l
+                let mutable l = l0
+                for _ in 0 .. steps do
+                    let vi = tex.SampleLevel(v.tc, l).X
+                    if vi > 1.05 * maxValue then
+                        maxValue <- vi
+                        maxLevel <- l
 
-                        l <- l + step
+                    l <- l + step
 
 //                    let avg = 0.2156 //tex.SampleLevel(v.tc, 12.0).X
 //                    let value = tex.SampleLevel(v.tc, l0).X - avg
 //
 
-                    let c = (float maxLevel - l0) / (l1 - l0) |> clamp 0.0 1.0//hsv2rgb (float maxLevel / 11.0) 1.0 1.0
-                    return V4d(c, c, c, 1.0)
-                else
-                    let v = tex.SampleLevel(v.tc, l0).X
-                    return V4d(hsv2rgb (-(2.0 * v + 1.0) / 3.0) 1.0 1.0,1.0)
+                let c = (float maxLevel - l0) / (l1 - l0) |> clamp 0.0 1.0//hsv2rgb (float maxLevel / 11.0) 1.0 1.0
+                return V4d(hsv2rgb -(1.0/3.0 + 2.0*c/3.0) 1.0 1.0, 1.0)
             }
 
 
@@ -1060,9 +1084,9 @@ module VolumeTest =
                 let vo = V4d(V3d.III * inputTex.Sample(v.tc).X, 1.0)
 
                 if vm.W < 0.01 then
-                    return vo
+                    return V4d.Zero
                 else
-                    return 0.7 * vm + 0.3 * vo
+                    return V4d.OIOI
             }
 
         let fragment (v : Vertex) =
@@ -1313,7 +1337,7 @@ module VolumeTest =
                 let id = getGlobalId().XY
 
                 let sv = 0.02
-                let ss = 8.0
+                let ss = 9.0
 
                 if id.X < img.Size.X && id.Y < img.Size.Y then
                     let mutable sum = 0.0
@@ -1426,7 +1450,7 @@ module VolumeTest =
                 ]
             )
 
-        let computeLaplace (ctx : Context) (t : IBackendTexture) (dd : IBackendTexture) =
+        let computeLaplace (ctx : Context) (t : BackendTextureOutputView) (dd : BackendTextureOutputView) =
             let kernel = 
                 match laplaceK with
                     | Some k -> k
@@ -1436,10 +1460,10 @@ module VolumeTest =
                         k
 
             kernel.Invoke(
-                t.Size.XY,
+                t.texture.Size.XY,
                 [
-                    "img", { texture = t; slice = 0; level = 0 } :> obj
-                    "dd", { texture = dd; slice = 0; level = 0 } :> obj
+                    "img", t :> obj
+                    "dd", dd :> obj
                 ]
             )
 
@@ -1474,7 +1498,7 @@ module VolumeTest =
         use win = app.CreateSimpleRenderWindow()
         //use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px.raw", V3i(1850, 1850, 1000))
 
-        use store =  VolumeStore.Open @"E:\blubber.store"
+        use store =  VolumeStore.Open @"C:\Users\Schorsch\Desktop\blubber.store"
 
         win.Width <- 1024
         win.Height <- 1024
@@ -1577,12 +1601,51 @@ module VolumeTest =
             let maskChannel = mask.GetChannel(Col.Channel.Gray)
             result.GetMatrix<C4b>().SetMap(maskChannel, fun v ->
                 match colors.TryGetValue v with
-                    | (true, c) -> c
-                    | _ -> C4b(0uy, 0uy, 0uy, 0uy)
+                    | (true, c) -> C4b.Red
+                    | _ -> 
+                        if v < 0 then C4b(255uy, 0uy, 0uy, 255uy)
+                        else C4b(0uy, 0uy, 0uy, 0uy)
             ) |> ignore
 
 
             result
+
+        let localMinima (img : PixImage<uint16>) =
+            let c = img.GetChannel(Col.Channel.Gray).SubMatrix(V2i.II, img.Size - V2i.II * 2)
+
+            let res = PixImage<byte>(Col.Format.Gray, img.Size)
+
+            let mutable cRes = res.GetChannel(Col.Channel.Gray).SubMatrix(V2i.II, img.Size - V2i.II * 2)
+            let dx = c.DX
+            let dy = c.DY
+
+
+            cRes.ForeachIndex(c.Info, fun (ri : int64) (ci : int64) ->
+
+                let n = [ ci - dx - dy; ci - dy; ci - dx + dy; ci - dy; ci + dy; ci + dx - dy; ci + dx; ci + dy + dy]
+
+                let v = c.[ci]
+                let isMin = n |> List.forall (fun ni -> c.[ni] > v)
+
+
+                cRes.[ri] <- (if isMin then 255uy else 0uy)
+            ) |> ignore
+
+            res
+
+
+        let applyThreshold (img : PixImage<uint16>) =
+            let res = PixImage<byte>(Col.Format.RGBA, img.Size)
+
+            res.GetMatrix<C4b>().SetMap(img.GetChannel(Col.Channel.Gray), fun v ->
+                if v > 13287us && v < 15583us then C4b.Red
+                elif v <= 13287us then C4b.Green
+                else C4b.Blue
+            ) |> ignore
+
+            res
+
+
 
 
         let input =
@@ -1598,7 +1661,7 @@ module VolumeTest =
 
         let resultTexture =
             input |> Mod.map (fun img ->
-                let res = assignRegions 0.025 5 1000 img
+                let res = assignRegions 0.025 10 1000 img
                 PixTexture2d(PixImageMipMap [| res :> PixImage |], TextureParams.mipmapped) :> ITexture
 
 
@@ -1703,7 +1766,7 @@ module VolumeTest =
         use win = app.CreateSimpleRenderWindow()
         //use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px.raw", V3i(1850, 1850, 1000))
 
-        use store =  VolumeStore.Open @"E:\blubber.store"
+        use store =  VolumeStore.Open @"C:\Users\Schorsch\Desktop\blubber.store"
 
         win.Width <- 1024
         win.Height <- 1024
@@ -1884,8 +1947,127 @@ module VolumeTest =
         win.Run()
         Environment.Exit 0
 
+    
+    let runTest (effect : list<FShade.Effect>) (img : PixImage<uint16> -> ITexture) =
+        Ag.initialize()
+        Aardvark.Init()
+        
+
+        //LUNKAZ
+
+        use app = new OpenGlApplication()
+        use win = app.CreateSimpleRenderWindow()
+        //use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px.raw", V3i(1850, 1850, 1000))
+
+        use store =  VolumeStore.Open @"C:\Users\Schorsch\Desktop\blubber.store"
+
+        win.Width <- 1024
+        win.Height <- 1024
+
+        let baseLevel = Mod.init 0.0
+        let slice = Mod.init 500
+        let filter = Mod.init 0
+        let showLevels = Mod.init false
+        let magick = Mod.init 1.05
+        let setLevel (l : float) =
+            let l = clamp 0.0 10.0 l
+            Log.line "level: %f" l
+            transact (fun () -> baseLevel.Value <- l)
+
+        let setSlice (step : int) =
+            let newValue = 
+                match step with
+                    | 1 -> slice.Value + 1
+                    | -1 -> slice.Value - 1
+                    | _ -> slice.Value
+
+            let newValue = clamp 0 (store.Size.Z - 1) newValue
+            Log.line "slice: %d" newValue
+            transact (fun () -> slice.Value <- newValue)
+
+
+        win.Keyboard.DownWithRepeats.Values.Add(fun k -> 
+            match k with
+                | Keys.OemPlus -> setSlice 1
+                | Keys.OemMinus -> setSlice -1
+                | Keys.F -> transact (fun () -> filter.Value <- filter.Value + 1)
+                | Keys.X -> transact (fun () -> showLevels.Value <- not showLevels.Value)
+                | Keys.M -> transact (fun () -> magick.Value <- 1.005 * magick.Value)
+                | Keys.L -> transact (fun () -> magick.Value <- magick.Value / 1.005)
+                | _ -> ()
+        )
+
+        win.Mouse.Scroll.Values.Add(fun e ->
+            let d = sign e
+            setLevel (baseLevel.Value + 0.125 * float d)
+        )        
+
+
+
+        let input =
+            slice |> Mod.map (fun slice ->
+                let img = PixImage<uint16>(Col.Format.Gray, store.GetSlice(0,slice))
+                img
+            )
+
+        let dst = app.Context.CreateTexture2DArray(store.Size.XY, 12, 1, TextureFormat.R16, 1)
+
+        let test (img : PixImage<uint16>) =
+            app.Context.Upload(dst, 0, 0, V2i.Zero, img)
+
+
+            let mutable src = { texture = dst; slice = 0; level = 0 }
+
+            for i in 1 .. 11 do
+                let dst = { texture = dst; slice = i; level = 0 }
+                Compute.computeLaplace app.Context src dst
+                src <- dst
+
+
+            dst :> ITexture
+
+        let texture = input |> Mod.map test
+
+        let sg = 
+            Sg.fullScreenQuad
+                |> Sg.uniform "Magick" magick
+                |> Sg.uniform "ShowLevels" showLevels
+                |> Sg.uniform "BaseLevel" baseLevel
+                |> Sg.uniform "MipMapLevels" (Mod.constant (float store.MipMapLevels))
+                |> Sg.diffuseTexture texture
+                |> Sg.effect effect
+
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
+
+
+        let color = task |> RenderTask.renderToColor (Mod.constant store.Size.XY) 
+        color.Acquire()
+
+        let colorImage = app.Runtime.Download(color.GetValue() |> unbox<IBackendTexture>)
+
+        color.Release()
+        colorImage.SaveAsImage @"C:\Users\Schorsch\Desktop\output.jpg"
+
+
+
+
+
+        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
+
+        win.Run()
+        Environment.Exit 0
+
     let run() =
-        testSegments()
+        //testSegments()
+
+        let simple (img : PixImage<uint16>) =
+            PixTexture2d(PixImageMipMap [| img :> PixImage |], TextureParams.mipmapped) :> ITexture
+
+        runTest [Shader.blubb |> toEffect] simple
+
+
+
+        test()
 
         Ag.initialize()
         Aardvark.Init()
