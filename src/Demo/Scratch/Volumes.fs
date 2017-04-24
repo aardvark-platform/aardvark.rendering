@@ -1035,6 +1035,36 @@ module VolumeTest =
                     return V4d(hsv2rgb (-(2.0 * v + 1.0) / 3.0) 1.0 1.0,1.0)
             }
 
+
+
+        let inputTex =
+            sampler2d {
+                texture uniform?InputTexture
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+            }
+
+        let maskTex =
+            sampler2d {
+                texture uniform?MaskTexture
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+            }
+
+
+        let simple (v : Effects.Vertex) =
+            fragment {
+                let vm = maskTex.Sample(v.tc)
+                let vo = V4d(V3d.III * inputTex.Sample(v.tc).X, 1.0)
+
+                if vm.W < 0.01 then
+                    return vo
+                else
+                    return 0.7 * vm + 0.3 * vo
+            }
+
         let fragment (v : Vertex) =
             fragment {
                 let size = volumeTexture.Size / 2
@@ -1245,6 +1275,423 @@ module VolumeTest =
 
         VolumeStore.Open<uint16>(file, false)
 
+    module Compute =
+        open FShade
+
+        [<LocalSize(X = 33, Y = 33)>]
+        let computeGradientKernel (img : Image2d<Formats.r16>) (dx : Image2d<Formats.r32f>) (dy : Image2d<Formats.r32f>) =
+            compute {
+                let store : float[] = allocateShared 1089
+                let lid = getLocalId().XY
+                let gid = getWorkGroupId().XY
+                let id = gid * 32 + lid
+
+                let localIndex = lid.X + 33 * lid.Y
+                if id.X < img.Size.X && id.Y < img.Size.Y then
+                    store.[localIndex] <- img.[id].X
+                else
+                    store.[localIndex] <- 0.0
+
+                barrier()
+
+                if id.X < img.Size.X - 1 && id.Y < img.Size.Y && lid.X < 32 && lid.Y < 32 then
+                    dx.[id] <- V4d.IIII * (0.5 + 0.5 * (store.[localIndex + 1] - store.[localIndex]))
+
+                if id.X < img.Size.X && id.Y < img.Size.Y - 1 && lid.X < 32 && lid.Y < 32 then
+                    dy.[id] <- V4d.IIII * (0.5 + 0.5 * (store.[localIndex + 33] - store.[localIndex]))
+
+            }
+            
+        [<LocalSize(X = 32, Y = 32)>]
+        let computeLaplaceKernel (img : Image2d<Formats.r16>) (dd : Image2d<Formats.r16>) =
+            compute {
+                //let store : float[] = allocateShared 1156
+//                let lid = getLocalId().XY - V2i.II
+//                let gid = getWorkGroupId().XY
+//                let id = gid * 32 + lid
+
+                let id = getGlobalId().XY
+
+                let sv = 0.02
+                let ss = 8.0
+
+                if id.X < img.Size.X && id.Y < img.Size.Y then
+                    let mutable sum = 0.0
+                    let mutable weightSum = 0.0
+                    
+                    let v0 = img.[id].X
+                    do
+                        for x in -4 .. 4 do
+                            for y in -4 .. 4 do
+                                let d = V2i(x,y)
+                                let l2 = Vec.dot d d |> float
+                                let i = id + d
+                                if i.X >= 0 && i.Y >= 0 && i.X < img.Size.X && i.Y < img.Size.Y then
+                                    let v = img.[i].X
+                                    let d = v - v0
+                                    let d2 = d * d
+                                    let w = exp (-0.5 * (l2 / (ss * ss) + d2 / (sv * sv)))
+
+                                    sum <- sum + w * v
+                                    weightSum <- weightSum + w
+
+                    dd.[id] <- V4d.IIII * sum / weightSum
+//
+//                    if id.X > 0 && id.X < img.Size.X - 1 && id.Y > 0 && id.Y < img.Size.Y - 1 then
+//                        let v = img.[id].X
+//                        let vp0 = img.[id + V2i.IO].X
+//                        let vn0 = img.[id - V2i.IO].X
+//                        let v0p = img.[id + V2i.OI].X
+//                        let v0n = img.[id - V2i.OI].X
+//
+//                        let vpp = img.[id + V2i(1,1)].X
+//                        let vnp = img.[id + V2i(-1,1)].X
+//                        let vpn = img.[id + V2i(1,-1)].X
+//                        let vnn = img.[id + V2i(-1,-1)].X
+//
+//                        let ddv = vp0 + vn0 + v0p + v0n + vpp + vnp + vpn + vnn - 8.0 * v
+//                        dd.[id] <- V4d.IIII * (0.5 + 2.0 * ddv)
+//
+//                    else
+//                        dd.[id] <- V4d.Zero
+
+//
+//
+//                let localIndex = lid.X + 1 + 34 * (lid.Y + 1)
+//                if id.X >= 0 && id.Y >= 0 && id.X < img.Size.X && id.Y < img.Size.Y then
+//                    store.[localIndex] <- img.[id].X
+//                else
+//                    store.[localIndex] <- 0.0
+//
+//                barrier()
+//
+//                let mutable ddx = 0.0
+//                let mutable ddy = 0.0
+//
+//                if lid.X >= 0 && lid.X < 32 then
+//                    ddx <- (store.[localIndex + 1] - store.[localIndex]) - (store.[localIndex] - store.[localIndex - 1])
+//
+//                if lid.Y >= 0 && lid.Y < 32 then
+//                    ddy <- (store.[localIndex + 34] - store.[localIndex]) - (store.[localIndex] - store.[localIndex - 34])
+//                    
+//                let l = ddx + ddy
+//
+//                if lid.X >= 0 && lid.Y >= 0 && lid.X < 32 && lid.Y < 32 then
+//                    dd.[id] <- V4d.IIII * (0.5 + 10.0 * l)
+
+            }
+
+
+        [<LocalSize(X = 32, Y = 32)>]
+        let propagateKernel (img : Image2d<Formats.r16>) (dx : Image2d<Formats.r32f>) (dy : Image2d<Formats.r32f>) (dt : float) =
+            compute {
+                let id = getGlobalId().XY
+
+                let mutable ddx = 0.0
+                if id.X > 0 && id.X < dx.Size.X then 
+                    ddx <- dx.[id].X - dx.[id - V2i.IO].X
+
+                let mutable ddy = 0.0
+                if id.Y > 0 && id.Y < dx.Size.Y then 
+                    ddy <- dy.[id].X - dy.[id - V2i.OI].X
+                
+                let l = ddx + ddy
+
+                img.[id] <- img.[id] + V4d.IIII * l * dt
+
+
+            }
+
+        let mutable private gradientK = None
+        let mutable private laplaceK = None
+        let mutable private propagateK = None
+
+        let computeGradient (ctx : Context) (t : IBackendTexture) (dx : IBackendTexture) (dy : IBackendTexture) =
+            let kernel = 
+                match gradientK with
+                    | Some k -> k
+                    | None ->
+                        let k = ctx.CompileKernel computeGradientKernel
+                        gradientK <- Some k
+                        k
+
+            let localSize = V2i(33,33)
+            let groups = t.Size.XY / 32
+            kernel.Invoke(
+                groups * localSize,
+                [
+                    "img", { texture = t; slice = 0; level = 0 } :> obj
+                    "dx", { texture = dx; slice = 0; level = 0 } :> obj
+                    "dy", { texture = dy; slice = 0; level = 0 } :> obj
+                ]
+            )
+
+        let computeLaplace (ctx : Context) (t : IBackendTexture) (dd : IBackendTexture) =
+            let kernel = 
+                match laplaceK with
+                    | Some k -> k
+                    | None ->
+                        let k = ctx.CompileKernel computeLaplaceKernel
+                        laplaceK <- Some k
+                        k
+
+            kernel.Invoke(
+                t.Size.XY,
+                [
+                    "img", { texture = t; slice = 0; level = 0 } :> obj
+                    "dd", { texture = dd; slice = 0; level = 0 } :> obj
+                ]
+            )
+
+        let propagate (ctx : Context) (t : IBackendTexture) (dx : IBackendTexture) (dy : IBackendTexture) (dt : float) =
+            let kernel = 
+                match propagateK with
+                    | Some k -> k
+                    | None ->
+                        let k = ctx.CompileKernel propagateKernel
+                        propagateK <- Some k
+                        k
+            let localSize = V2i(32,32)
+            let groups = t.Size.XY / 32
+            kernel.Invoke(
+                groups * localSize,
+                [
+                    "img", { texture = t; slice = 0; level = 0 } :> obj
+                    "dx", { texture = dx; slice = 0; level = 0 } :> obj
+                    "dy", { texture = dy; slice = 0; level = 0 } :> obj
+                    "dt", dt :> obj
+                ]
+            )
+
+    let testSegments() =
+        Ag.initialize()
+        Aardvark.Init()
+        
+
+        //LUNKAZ
+
+        use app = new OpenGlApplication()
+        use win = app.CreateSimpleRenderWindow()
+        //use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px.raw", V3i(1850, 1850, 1000))
+
+        use store =  VolumeStore.Open @"E:\blubber.store"
+
+        win.Width <- 1024
+        win.Height <- 1024
+        let slice = Mod.init 500
+
+        let stepSlice (step : int) =
+            let newValue = 
+                match step with
+                    | 1 -> slice.Value + 1
+                    | -1 -> slice.Value - 1
+                    | _ -> slice.Value
+
+            let newValue = clamp 0 (store.Size.Z - 1) newValue
+            Log.line "slice: %d" newValue
+            transact (fun () -> slice.Value <- newValue)
+
+        win.Keyboard.DownWithRepeats.Values.Add(fun k -> 
+            match k with
+                | Keys.OemPlus -> stepSlice 1
+                | Keys.OemMinus -> stepSlice -1
+                | _ -> ()
+        )
+
+
+        let assignRegions (threshold : float) (minSize : int) (maxSize : int) (img : PixImage<uint16>) : PixImage<byte> =
+            let m = img.GetChannel(Col.Channel.Gray)
+            let mask = PixImage<int>(Col.Format.Gray, m.Size)
+
+            let inputData = m.Data
+            let maskData = mask.Volume.Data
+            maskData.SetByIndex(fun _ -> -1) |> ignore
+
+
+            let dx = 1
+            let dy = img.Size.X
+
+            let nonAssignedNeighbours (c : V2i) (index : int) =
+                let candidates = 
+                    [
+                        (c + V2i(-1,-1),    index - dx - dy)
+                        (c + V2i(0,-1),     index - dy)
+                        (c + V2i(1,-1),     index + dx - dy)
+                        (c + V2i(-1,0),     index - dx)
+                        (c + V2i(1,0),      index + dx)
+                        (c + V2i(1,1),      index + dx + dy)
+                        (c + V2i(0,1),      index + dy)
+                        (c + V2i(1,1),      index + dx + dy)
+                    ]
+
+                candidates |> List.filter (fun (c,i) -> 
+                    c.AllGreaterOrEqual 0 && c.AllSmaller(img.Size) && maskData.[i] < 0
+                )
+                    
+            
+            let mutable regionId = 0
+
+            let growRegion (t : float) (c : V2i) (index : int) =
+                let id = regionId
+                inc &regionId    
+                
+                let mutable count = 1
+                let mutable avg = float inputData.[index] / 65536.0
+
+                maskData.[index] <- regionId
+                let queue = System.Collections.Generic.Queue<_>(nonAssignedNeighbours c index)
+
+                while queue.Count > 0 do
+                    let (c,i) = queue.Dequeue()
+
+                    if maskData.[i] < 0 then
+
+                        let value = float inputData.[i] / 65536.0
+                        if abs (value - avg) < t then
+                            maskData.[i] <- regionId
+                            avg <- (avg * float count + value) / float (count + 1)
+                            count <- count + 1
+
+                            for n in nonAssignedNeighbours c i do
+                                queue.Enqueue n
+
+                (regionId, avg, count)
+
+            let result = System.Collections.Generic.Dictionary<_,_>()
+            let mutable index = 0
+            for y in 0 .. img.Size.Y - 1 do
+                for x in 0 .. img.Size.X - 1 do
+                    if maskData.[index] < 0 then
+                        let (id, avg, count) = growRegion threshold (V2i(x,y)) index
+                        if count >= minSize && count <= maxSize then
+                            result.[id] <- (avg, count)
+
+
+                    index <- index + 1
+
+            let rand = RandomSystem()
+            let colors = result |> Dictionary.map (fun id _ -> rand.UniformC3f().ToC4b())
+
+            let result = PixImage<byte>(Col.Format.RGBA, img.Size)
+
+            let maskChannel = mask.GetChannel(Col.Channel.Gray)
+            result.GetMatrix<C4b>().SetMap(maskChannel, fun v ->
+                match colors.TryGetValue v with
+                    | (true, c) -> c
+                    | _ -> C4b(0uy, 0uy, 0uy, 0uy)
+            ) |> ignore
+
+
+            result
+
+
+        let input =
+            slice |> Mod.map (fun slice ->
+                let img = PixImage<uint16>(Col.Format.Gray, store.GetSlice(0,slice))
+                img
+            )
+
+        let inputTexture =
+            input |> Mod.map (fun pi ->
+                PixTexture2d(PixImageMipMap [| pi :> PixImage |], TextureParams.mipmapped) :> ITexture
+            )
+
+        let resultTexture =
+            input |> Mod.map (fun img ->
+                let res = assignRegions 0.025 5 1000 img
+                PixTexture2d(PixImageMipMap [| res :> PixImage |], TextureParams.mipmapped) :> ITexture
+
+
+// 
+//                let m = img.Data |> unbox<uint16[]>
+//                let r = Array.init m.Length id
+//                let w = img.Size.X
+//
+//                let rec find (i : int) =
+//                    let p = r.[i]
+//                    if p = i then 
+//                        i
+//                    else 
+//                        let res = find p
+//                        r.[p] <- res
+//                        res
+//
+//                let union (i : int) (j : int) =
+//                    let ri = find i
+//                    let rj = find j
+//                    if ri < rj then
+//                        r.[rj] <- ri
+//                    elif rj < ri then
+//                        r.[ri] <- rj
+//                    
+//
+//                let eq (l : uint16) (r : uint16) =
+//                    abs (int l - int r) < 600
+//
+//
+//                let testUnion (i : int) (j : int) =
+//                    if i >= 0 && i < m.Length && j >= 0 && j < m.Length then
+//                        if eq m.[i] m.[j] then
+//                            union i j
+//
+//                for i in 0 .. m.Length-1 do
+//                    testUnion i (i - w)
+//                    testUnion i (i + w)
+//                    testUnion i (i - 1)
+//                    testUnion i (i + 1)
+//
+//
+//                let values = Array.create m.Length -1
+//                let mutable currentValue = 0
+//
+//                let data = PixImage<uint16>(Col.Format.RGBA, img.Size)
+//
+//                let cnt = 1 <<< 20
+//                let arr = Array.init cnt (fun i -> Shader.hsv2rgb (float i / float cnt) 1.0 1.0) |> Array.map (fun v -> C4b(v.X, v.Y, v.Z, 1.0))
+//                
+//                let arr = arr.RandomOrder() |> Seq.toArray
+//
+//
+//                let mutable labels = data.GetMatrix<C4b>()
+//                for i in 0 .. m.Length-1 do
+//                    let l = find i
+//                    let v = arr.[l]
+//                    labels.[int64 i] <- v
+//
+//
+//                let tex = PixTexture2d(PixImageMipMap [| img :> PixImage |], { wantMipMaps = true; wantSrgb = false; wantCompressed = false })
+//                
+//                tex :> ITexture
+            )
+
+        let sg = 
+            Sg.fullScreenQuad
+                |> Sg.uniform "InputTexture" inputTexture
+                |> Sg.uniform "MaskTexture" resultTexture
+                |> Sg.shader {
+                    do! Shader.simple
+                }
+
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
+
+
+        let color = task |> RenderTask.renderToColor (Mod.constant store.Size.XY) 
+        color.Acquire()
+
+        let colorImage = app.Runtime.Download(color.GetValue() |> unbox<IBackendTexture>)
+
+        color.Release()
+        colorImage.SaveAsImage @"C:\Users\Schorsch\Desktop\output.jpg"
+
+
+
+
+
+        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
+
+        win.Run()
+        Environment.Exit 0
+
     let test() =
         Ag.initialize()
         Aardvark.Init()
@@ -1256,15 +1703,15 @@ module VolumeTest =
         use win = app.CreateSimpleRenderWindow()
         //use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px.raw", V3i(1850, 1850, 1000))
 
-        use store =  VolumeStore.Open @"C:\Users\Schorsch\Desktop\blubber.store"
+        use store =  VolumeStore.Open @"E:\blubber.store"
 
         win.Width <- 1024
         win.Height <- 1024
 
         let baseLevel = Mod.init 0.0
-        let slice = Mod.init 150
+        let slice = Mod.init 500
         let filter = Mod.init 0
-        let showLevels = Mod.init true
+        let showLevels = Mod.init false
         let magick = Mod.init 1.05
         let setLevel (l : float) =
             let l = clamp 0.0 10.0 l
@@ -1333,16 +1780,75 @@ module VolumeTest =
                     ()
 
 
-//                let imgs =
-//                    Array.init store.MipMapLevels (fun l ->
-//                        PixImage<uint16>(Col.Format.Gray, store.GetSlice(l,slice / (1 <<< l)))
-//                    )
+                let m = imgs.[0].Data |> unbox<uint16[]>
+                let r = Array.init m.Length id
+                let w = imgs.[0].Size.X
+
+                let rec find (i : int) =
+                    let p = r.[i]
+                    if p = i then 
+                        i
+                    else 
+                        let res = find p
+                        r.[p] <- res
+                        res
+
+                let union (i : int) (j : int) =
+                    let ri = find i
+                    let rj = find j
+                    if ri < rj then
+                        r.[rj] <- ri
+                    elif rj < ri then
+                        r.[ri] <- rj
+                    
+
+                let eq (l : uint16) (r : uint16) =
+                    abs (int l - int r) < 600
 
 
-                
+                let testUnion (i : int) (j : int) =
+                    if i >= 0 && i < m.Length && j >= 0 && j < m.Length then
+                        if eq m.[i] m.[j] then
+                            union i j
+
+                for i in 0 .. m.Length-1 do
+                    testUnion i (i - w)
+                    testUnion i (i + w)
+                    testUnion i (i - 1)
+                    testUnion i (i + 1)
+
+
+                let values = Array.create m.Length -1
+                let mutable currentValue = 0
+
+                let data = PixImage<uint16>(Col.Format.Gray, imgs.[0].Size)
+                let labels = data.Volume.Data
+
+                for i in 0 .. m.Length-1 do
+                    let l = find i
+                    let v = values.[l]
+
+                    let v = 
+                        if v < 0 then 
+                            let v = currentValue
+                            values.[l] <- v
+                            currentValue <- v + 1
+                            v
+                        else
+                            v
+                    labels.[i] <- uint16 v
+
+                Log.line "found %d groups" currentValue
+                for i in 0 .. m.Length-1 do
+                    labels.[i] <- 65535.0 * float labels.[i] / float currentValue |> uint16
+
+                imgs.[0] <- data
+
+
                 let tex = PixTexture2d(PixImageMipMap(imgs |> Array.map (fun i -> i :> PixImage)), { wantMipMaps = true; wantSrgb = false; wantCompressed = false })
                 
-                
+
+
                 
                 tex :> ITexture
             ) slice filter
@@ -1379,7 +1885,7 @@ module VolumeTest =
         Environment.Exit 0
 
     let run() =
-        test()
+        testSegments()
 
         Ag.initialize()
         Aardvark.Init()
