@@ -16,12 +16,12 @@ module Config =
     /// <summary>
     /// The major GL Version for default contexts
     /// </summary>
-    let MajorVersion = 3
+    let mutable MajorVersion = 3
 
     /// <summary>
     /// The minor GL Version for default contexts
     /// </summary>
-    let MinorVersion = 0
+    let mutable MinorVersion = 0
 
     /// <summary>
     /// The number of subsamples for default windows
@@ -31,19 +31,19 @@ module Config =
     /// <summary>
     /// The GraphicsContextFlags for default contexts
     /// </summary>
-    let ContextFlags = GraphicsContextFlags.Default
+    let mutable ContextFlags = GraphicsContextFlags.Default
 
     /// <summary>
     /// The number of resource context to be created for a default
     /// rendering context instance.
     /// </summary>
-    let NumberOfResourceContexts = 4
+    let mutable NumberOfResourceContexts = 4
 
     /// <summary>
     /// defines whether the GL context should log errors
     /// </summary>
     [<Literal>]
-    let CheckErrors = true
+    let mutableCheckErrors = true
 
     /// <summary>
     /// The number of bits used for color values in default contexts
