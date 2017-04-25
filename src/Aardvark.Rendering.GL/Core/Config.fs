@@ -65,6 +65,8 @@ module Config =
     /// </summary>
     let Buffers = 2
 
+    [<Literal>]
+    let CheckErrors = true
 
     let enableVertexArrayObjectsIfPossible = true
     let enableSamplersIfPossible = true
