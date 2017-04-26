@@ -7,12 +7,11 @@ open FShade
  
 module PointSurface =
 
-    let internal pointSurface (size : IMod<V2d>) (p : Point<Vertex>) =
+    let internal pointSurface (s : V2d) (p : Point<Vertex>) =
             triangle {
                 let pos = p.Value.pos
                 let pxyz = pos.XYZ / pos.W
-                let s = !!size
-                //let v = p.Value
+                let s = s
 
                 let p00 = V3d(pxyz + V3d( -s.X, -s.Y, 0.0 ))
                 let p01 = V3d(pxyz + V3d( -s.X,  s.Y, 0.0 ))
@@ -25,5 +24,5 @@ module PointSurface =
                 yield { p.Value with pos = V4d(p11 * pos.W, pos.W); tc = V2d.II }
             }
 
-    let Effect (size:IMod<V2d>) = 
+    let Effect size = 
         toEffect (pointSurface size)

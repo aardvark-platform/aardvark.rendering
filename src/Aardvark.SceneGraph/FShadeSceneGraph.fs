@@ -13,7 +13,7 @@ module FShadeSceneGraph =
             let surface = 
                 f() |> Mod.map (fun effects ->
                     effects
-                        |> FShade.SequentialComposition.compose
+                        |> FShade.Effect.compose
                         |> FShadeSurface
                         :> ISurface
                 )
@@ -22,7 +22,7 @@ module FShadeSceneGraph =
 
     module Sg =
         let effect (s : #seq<FShadeEffect>) (sg : ISg) =
-            let e = FShade.SequentialComposition.compose s
+            let e = FShade.Effect.compose s
             let s = Mod.constant (FShadeSurface(e) :> ISurface)
             Sg.SurfaceApplicator(s, sg) :> ISg
 

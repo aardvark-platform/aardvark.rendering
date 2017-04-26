@@ -136,7 +136,7 @@ module ShaderProgram =
                     let define =
                         match stage with
                             | ShaderStage.Vertex -> "Vertex"
-                            | ShaderStage.Pixel -> "Pixel"
+                            | ShaderStage.Fragment -> "Fragment"
                             | ShaderStage.Geometry -> "Geometry"
                             | ShaderStage.TessControl -> "TessControl"
                             | ShaderStage.TessEval -> "TessEval"

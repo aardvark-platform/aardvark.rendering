@@ -143,6 +143,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
 
     override x.OnHandleCreated(e) =
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
+        GL.Enable(EnableCap.TextureCubeMapSeamless)
         if c <> null then
             c.MakeCurrent(null)
 

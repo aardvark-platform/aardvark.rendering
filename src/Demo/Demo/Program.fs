@@ -431,7 +431,7 @@ module Shader =
         }
 
 
-    let effect = compose [toEffect vs; toEffect ps]
+    let effect = Effect.compose [toEffect vs; toEffect ps]
 
 [<AutoOpen>]
 module Main =

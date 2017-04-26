@@ -24,8 +24,6 @@ module DefaultSurfaces =
 
     let pointSpriteFragment = PointSpriteFragment.pointSpriteFragment
 
-    let uniformColor = UniformColor.uniformColor
-
     let constantColor = ConstantColor.constantColor
 
     let sgColor = SgColor.sgColor

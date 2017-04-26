@@ -32,6 +32,26 @@ type IPreparedRenderObject =
     abstract member Update : IAdaptiveObject * RenderToken -> unit
     abstract member Original : Option<RenderObject>
 
+type ShaderStage =
+    | Vertex = 1
+    | TessControl = 2
+    | TessEval = 3
+    | Geometry = 4
+    | Fragment = 5
+    | Compute = 6
+
+type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, uniforms : SymbolDict<IMod>, samplers : Dictionary<string * int, SamplerDescription>, expectsRowMajorMatrices : bool) =
+    interface ISurface
+    member x.Code = code
+    member x.EntryPoints = entryPoints
+    member x.Uniforms = uniforms
+    member x.Samplers = samplers
+    member x.ExpectsRowMajorMatrices = expectsRowMajorMatrices
+    new(code, entryPoints) = BackendSurface(code, entryPoints, SymDict.empty, Dictionary.empty, false)
+    new(code, entryPoints, uniforms) = BackendSurface(code, entryPoints, uniforms, Dictionary.empty, false)
+    new(code, entryPoints, uniforms, samplers) = BackendSurface(code, entryPoints, uniforms, samplers, false)
+
+
 [<AllowNullLiteral>]
 type IResourceManager =
     abstract member CreateSurface : signature : IFramebufferSignature * surface : IMod<ISurface> -> IResource<IBackendSurface>
@@ -45,6 +65,7 @@ and IRuntime =
     abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * Set<Symbol> -> IFramebufferSignature
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
+    abstract member AssembleEffect : FShade.Effect * IFramebufferSignature -> BackendSurface
 
     abstract member PrepareBuffer : IBuffer -> IBackendBuffer
     abstract member PrepareTexture : ITexture -> IBackendTexture
@@ -146,26 +167,6 @@ type RenderTaskRunExtensions() =
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
         t.Run(null, token, fbo)
-
-type ShaderStage =
-    | Vertex = 1
-    | TessControl = 2
-    | TessEval = 3
-    | Geometry = 4
-    | Pixel = 5
-
-
-
-type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>, uniforms : SymbolDict<IMod>, samplers : Dictionary<string * int, SamplerDescription>, expectsRowMajorMatrices : bool) =
-    interface ISurface
-    member x.Code = code
-    member x.EntryPoints = entryPoints
-    member x.Uniforms = uniforms
-    member x.Samplers = samplers
-    member x.ExpectsRowMajorMatrices = expectsRowMajorMatrices
-    new(code, entryPoints) = BackendSurface(code, entryPoints, SymDict.empty, Dictionary.empty, false)
-    new(code, entryPoints, uniforms) = BackendSurface(code, entryPoints, uniforms, Dictionary.empty, false)
-    new(code, entryPoints, uniforms, samplers) = BackendSurface(code, entryPoints, uniforms, samplers, false)
 
 type IGeneratedSurface =
     inherit ISurface
