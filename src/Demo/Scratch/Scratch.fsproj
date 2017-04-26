@@ -75,6 +75,7 @@
     <Compile Include="Staging\Ag.fs" />
     <Compile Include="Staging\Heap.fs" />
     <Compile Include="Staging\Geometry.fs" />
+    <Compile Include="Staging\ShaderSwitch.fs" />
     <Compile Include="Experiments\ASP.fs" />
     <Compile Include="Experiments\Fonts.fs" />
     <Compile Include="Experiments\NullBufferTest.fs" />
