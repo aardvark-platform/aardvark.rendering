@@ -48,17 +48,19 @@ module ``Shader Switch`` =
         let geometries =
             CSet.ofList all
 
-        let shaderRed = App.Runtime.PrepareEffect([ DefaultSurfaces.trafo |> toEffect
-                                                    DefaultSurfaces.constantColor C4f.Red |> toEffect
-                                                    DefaultSurfaces.simpleLighting |> toEffect ]) :> ISurface
+        let fboSig = App.FramebufferSignature
 
-        let shaderGreen = App.Runtime.PrepareEffect([ DefaultSurfaces.trafo |> toEffect
-                                                      DefaultSurfaces.constantColor C4f.Green |> toEffect
-                                                      DefaultSurfaces.simpleLighting |> toEffect ]) :> ISurface
+        let shaderRed = App.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect
+                                                            DefaultSurfaces.constantColor C4f.Red |> toEffect
+                                                          ]) :> ISurface
 
-        let shaderBlue  = App.Runtime.PrepareEffect([ DefaultSurfaces.trafo |> toEffect
-                                                      DefaultSurfaces.constantColor C4f.Blue |> toEffect
-                                                      DefaultSurfaces.simpleLighting |> toEffect ]) :> ISurface
+        let shaderGreen = App.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect
+                                                              DefaultSurfaces.constantColor C4f.Green |> toEffect
+                                                              DefaultSurfaces.simpleLighting |> toEffect ]) :> ISurface
+
+        let shaderBlue  = App.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect
+                                                              DefaultSurfaces.constantColor C4f.Blue |> toEffect
+                                                              DefaultSurfaces.simpleLighting |> toEffect ]) :> ISurface
 
         let shaderMod = Mod.init shaderRed
 
