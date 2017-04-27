@@ -160,7 +160,7 @@ type RenderTaskLock() =
 
     member x.Run f = 
         let res = lock lockedResources (fun () -> Seq.toArray lockedResources)
-        for l in res do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
+        for l in res do l.Lock.Enter(l.OnLock)
         try f()
         finally for l in res do l.Lock.Exit(l.OnUnlock)
 
