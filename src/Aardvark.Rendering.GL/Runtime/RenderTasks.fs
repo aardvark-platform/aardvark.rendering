@@ -133,7 +133,7 @@ module RenderTasks =
 
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
         abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
-        abstract member Perform : AdaptiveToken * RenderToken * Framebuffer -> unit
+        abstract member Perform : AdaptiveToken * RenderToken * Framebuffer * OutputDescription -> unit
         abstract member Release : unit -> unit
 
 
@@ -183,7 +183,7 @@ module RenderTasks =
             renderTaskLock.Run (fun () ->
                 beforeRender.OnNext()
                 NativePtr.write runtimeStats V2i.Zero
-                let stats = x.Perform(token, t, fbo)
+                let stats = x.Perform(token, t, fbo, desc)
                 GL.Check "RenderTask.Run"
                 afterRender.OnNext()
                 let rt = NativePtr.read runtimeStats
@@ -201,12 +201,14 @@ module RenderTasks =
             
 
     [<AbstractClass>]
-    type AbstractSubTask(parent : AbstractRenderTask) =
+    type AbstractSubTask() =
         static let nop = System.Lazy<unit>(id)
 
         let programUpdateWatch  = Stopwatch()
         let sortWatch           = Stopwatch()
         let runWatch            = OpenGlStopwatch()
+
+        let fragments = HashSet<RenderFragment>()
 
         member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
             if RenderToken.isEmpty t then
@@ -235,7 +237,7 @@ module RenderTasks =
                 runWatch.Stop()
                 res
 
-        member x.Parent = parent
+        //member x.Parent = parent
 
         abstract member Update : AdaptiveToken * RenderToken -> unit
         abstract member Perform : AdaptiveToken * RenderToken -> unit
@@ -243,8 +245,18 @@ module RenderTasks =
         abstract member Add : PreparedMultiRenderObject -> unit
         abstract member Remove : PreparedMultiRenderObject -> unit
 
+        member x.Add(t : RenderFragment) = 
+            fragments.Add t |> ignore
 
-        member x.Run(token : AdaptiveToken, t : RenderToken) =
+        member x.Remove(t : RenderFragment) = 
+            fragments.Remove t |> ignore
+
+
+        member x.Run(token : AdaptiveToken, t : RenderToken, output : OutputDescription) =
+
+            for task in fragments do
+                task.Run(token, t, output)
+
             x.Perform(token, t)
             if RenderToken.isEmpty t then
                 nop
@@ -271,6 +283,7 @@ module RenderTasks =
                 | :? MultiRenderObject as ro -> ro.Children |> List.head |> getRenderObject
                 | :? PreparedRenderObject as ro -> ro.Original
                 | :? PreparedMultiRenderObject as ro -> ro.First.Original
+                | :? RenderTaskObject as t -> failwith "needs some info"
                 | _ -> failwithf "[ProjectionComparer] unknown RenderObject: %A" ro
 
         let ids = ConditionalWeakTable<IMod, ref<int>>()
@@ -306,8 +319,8 @@ module RenderTasks =
                 let right = project r
                 compare left right
 
-    type StaticOrderSubTask(parent : AbstractOpenGlRenderTask) =
-        inherit AbstractSubTask(parent)
+    type StaticOrderSubTask(scope : CompilerInfo, config : IMod<BackendConfiguration>) =
+        inherit AbstractSubTask()
         static let empty = new PreparedMultiRenderObject([PreparedRenderObject.empty])
         let objects = CSet.ofList [empty]
 
@@ -315,7 +328,7 @@ module RenderTasks =
         let mutable currentConfig = BackendConfiguration.Default
         let mutable program : IRenderProgram = Unchecked.defaultof<_>
         let structuralChange = Mod.custom ignore
-        let scope = { parent.Scope with structuralChange = structuralChange }
+        let scope = { scope with structuralChange = structuralChange }
 
         // TODO: add AdaptiveProgram creator not taking a separate key but simply comparing the values
         let objectsWithKeys = objects |> ASet.map (fun o -> (o :> IRenderObject, o))
@@ -408,7 +421,7 @@ module RenderTasks =
                 currentConfig <- config
 
         override x.Update(token, t) =
-            let config = parent.Config.GetValue token
+            let config = config.GetValue token
             reinit x config
 
             //TODO
@@ -678,7 +691,7 @@ module RenderTasks =
             reader.Dispose()
 
     and CameraSortedSubTask(order : RenderPassOrder, parent : AbstractOpenGlRenderTask) =
-        inherit AbstractSubTask(parent)
+        inherit AbstractSubTask()
         do GLVM.vmInit()
 
         let structuralChange = Mod.custom ignore
@@ -783,7 +796,16 @@ module RenderTasks =
                 objects.Remove o |> ignore
             )
 
-                
+    type ObjectOrTask =
+        | Object of PreparedMultiRenderObject
+        | Task of RenderPass * RenderFragment
+
+        interface IDisposable with
+            member x.Dispose() =
+                match x with
+                    | Object o -> o.Dispose()
+                    | Task(_,t) -> t.RemoveRef()
+
     type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
         
@@ -818,17 +840,26 @@ module RenderTasks =
             match ro with
                 | :? RenderObject as r ->
                     let hooked = this.HookRenderObject r 
-                    new PreparedMultiRenderObject([this.ResourceManager.Prepare(fboSignature, hooked) |> add])
+                    new PreparedMultiRenderObject([this.ResourceManager.Prepare(fboSignature, hooked) |> add]) |> Object
 
                 | :? PreparedRenderObject as prep ->
-                    new PreparedMultiRenderObject([prep |> PreparedRenderObject.clone |> add])
+                    new PreparedMultiRenderObject([prep |> PreparedRenderObject.clone |> add]) |> Object
 
                 | :? MultiRenderObject as seq ->
-                    let all = seq.Children |> List.collect(fun o -> (prepareRenderObject o).Children)
-                    new PreparedMultiRenderObject(all)
+                    let all = 
+                        seq.Children |> List.collect(fun o -> 
+                            match prepareRenderObject o with
+                                | Object a -> a.Children
+                                | _ -> failwith "no work"
+                        )
+                    new PreparedMultiRenderObject(all) |> Object
 
                 | :? PreparedMultiRenderObject as seq ->
-                    new PreparedMultiRenderObject (seq.Children |> List.map (PreparedRenderObject.clone >> add))
+                    new PreparedMultiRenderObject (seq.Children |> List.map (PreparedRenderObject.clone >> add)) |> Object
+
+                | :? RenderTaskObject as t ->
+                    t.Fragment.AddRef()
+                    Task(t.Pass, t.Fragment)
 
                 | _ ->
                     failwithf "[RenderTask] unsupported IRenderObject: %A" ro
@@ -845,7 +876,7 @@ module RenderTasks =
                     let task = 
                         match pass.Order with
                             | RenderPassOrder.Arbitrary ->
-                                new StaticOrderSubTask(this) :> AbstractSubTask
+                                new StaticOrderSubTask(this.Scope, this.Config) :> AbstractSubTask
 
                             | order ->
                                 new CameraSortedSubTask(order, this) :> AbstractSubTask
@@ -863,14 +894,26 @@ module RenderTasks =
             let mutable removed = 0
             for d in deltas do 
                 match d with
-                    | Add(_,v) ->
+                    | Add(_,Object v) ->
                         let task = getSubTask v.RenderPass
                         added <- added + 1
                         task.Add v
-                    | Rem(_,v) ->
+                    | Rem(_,Object v) ->
                         let task = getSubTask v.RenderPass
                         removed <- removed + 1
-                        task.Remove v            
+                        task.Remove v      
+                              
+                    | Add(_, Task(p, t)) ->
+                        let task = getSubTask p
+                        task.Add t
+
+                    | Rem(_, Task(p, t)) ->
+                        let task = getSubTask p
+                        task.Add t
+
+
+                        
+
 
             t.RenderObjectDeltas(added, removed)
 
@@ -891,7 +934,7 @@ module RenderTasks =
         override x.UpdateResources(token,t) =
             updateResources token t
 
-        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer) =
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
             x.ResourceManager.DrawBufferManager.Write(fbo)
 
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
@@ -899,7 +942,7 @@ module RenderTasks =
 
             let mutable runStats = []
             for (_,t) in Map.toSeq subtasks do
-                let s = t.Run(token,rt)
+                let s = t.Run(token,rt, output)
                 runStats <- s::runStats
 
             if RuntimeConfig.SyncUploadsAndFrames then
