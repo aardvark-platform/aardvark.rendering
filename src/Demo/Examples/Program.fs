@@ -13,9 +13,10 @@ let main args =
     //Examples.Render2TexturePrimiviteChangeableSize.run()
     //Examples.Render2TexturePrimitiveFloat.run()
     //Examples.ComputeTest.run()
+    Examples.LoD.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 
-    Examples.ShaderSignatureTest.run()
+    //Examples.ShaderSignatureTest.run()
     //Examples.Polygons.run()           attention: this one is currently broken due to package refactoring
     //Examples.TicTacToe.run()          attention: this one is currently broken due to package refactoring
     0
