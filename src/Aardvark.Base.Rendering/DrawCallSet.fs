@@ -14,6 +14,24 @@ type DrawCallSet(collapseAdjacent : bool) =
     let all = HashSet<Range1i>()
     let mutable ranges = RangeSet.empty
 
+    member x.AddUnsafe(r : Range1i) =
+        lock x (fun () ->
+            if all.Add r then
+                ranges <- RangeSet.insert r ranges
+                true
+            else
+                false
+        )
+
+    member x.RemoveUnsafe(r : Range1i) =
+        lock x (fun () ->
+            if all.Remove r then
+                ranges <- RangeSet.remove r ranges
+                true
+            else
+                false
+        )
+
     member x.Add(r : Range1i) =
         let result = 
             lock x (fun () ->

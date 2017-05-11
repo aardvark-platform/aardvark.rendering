@@ -7,6 +7,7 @@ open Aardvark.Base.Incremental
 
 open System.Threading
 open System.Collections.Concurrent
+open System.Collections.Generic
 
 module StepwiseProgress =
     
@@ -155,23 +156,41 @@ module StepwiseQueueExection =
     open StepwiseProgress
 
 
-    let runEffects (c : ConcurrentDeltaQueue<'a>) (f : CancellationToken -> 'a -> Stepwise<unit>) (undo : 'a -> unit)  =
+    let runEffects (set : IAdaptiveObject) (c : ConcurrentDeltaQueue<'a>) (f : CancellationToken -> 'a -> Stepwise<unit>) (undo : 'a -> unit)  =
         let cache = ConcurrentDictionary<'a, Stepwise<unit> * CancellationTokenSource>(1,0)
         //let working = ConcurrentHashSet<'a>()
-        let a =
+
+        let markThings = MVar.empty()
+
+        let marker =
             async {
                 while true do
-                    let! d = c.DequeueAsync()
+                    do! MVar.takeAsync markThings
+                    do! Async.Sleep 50
+                    transact (fun () -> set.MarkOutdated())
+            }
+
+        Async.Start marker
+
+        let a =
+            async {
+                do! Async.SwitchToNewThread()
+
+                while true do
+                    let d = c.Dequeue()
                     let value = d.Value
                     
+                    MVar.put markThings ()
 
                     match d with
                         | Add(_,v) -> 
-                            let stepwise,cts = cache.GetOrAdd(v, fun v -> 
-                                let cts = new CancellationTokenSource()
-                                //cts.Token.Register (fun () -> undo v) |> ignore
-                                let s = f cts.Token v
-                                s,cts)
+                            let stepwise,cts = 
+                                cache.GetOrAdd(v, fun v -> 
+                                    let cts = new CancellationTokenSource()
+                                    //cts.Token.Register (fun () -> undo v) |> ignore
+                                    let s = f cts.Token v
+                                    s,cts
+                                )
                             //if cts.Token.IsCancellationRequested then undo v
                             match Stepwise.run cts.Token stepwise with
                                 | [] -> 
@@ -185,7 +204,8 @@ module StepwiseQueueExection =
                                 | (true,(stepwise,cts)) ->
                                     cts.Cancel()
                                 | _ -> 
-                                    Log.error "the impossible happened"
+                                    
+                                    Log.error "the impossible happened: %A" (c.TryGetRefCount v)
                                     System.Diagnostics.Debugger.Break()
 
             }
@@ -305,6 +325,7 @@ module CancellationUtilities =
                 
 
 namespace Aardvark.SceneGraph.Semantics
+open System.Collections.Generic
 
 module Helper =
 
@@ -404,7 +425,7 @@ module PointCloudRenderObjectSemantics =
                     Interlocked.Add(&inactiveSize, int64 -size) |> ignore
 
             if n.range.Size >= 0 then
-                if calls.Add n.range then
+                if calls.AddUnsafe n.range then
                     Interlocked.Add(&activeSize, int64 size) |> ignore
                     Interlocked.Increment(progress.activeNodeCount) |> ignore
                 else
@@ -418,7 +439,7 @@ module PointCloudRenderObjectSemantics =
                     Interlocked.Add(&inactiveSize, size) |> ignore
 
             if n.range.Size >= 0 then
-                if calls.Remove n.range then
+                if calls.RemoveUnsafe n.range then
                     Interlocked.Add(&activeSize, -size) |> ignore
                     Interlocked.Decrement(progress.activeNodeCount) |> ignore
                 else 
@@ -450,20 +471,24 @@ module PointCloudRenderObjectSemantics =
 
             let run =
                 let mutable currentId = 0
-                let content = Dict<_,_>()
+                let idCache = Dict<_,_>()
 
                 let getId v =
-                    content.GetOrCreate(v, fun _ -> 
+                    idCache.GetOrCreate(v, fun _ -> 
                         Interlocked.Increment(&currentId)
                     )
 
-                let removeId v =
-                    match content.TryRemove v with
-                        | (true, id) -> id
-                        | _ -> failwith "removal of unknown object"
+//                let removeId v =
+//                    match idCache.TryRemove v with
+//                        | (true, id) -> id
+//                        | _ -> 
+//                            Log.error "removal of unknown object"
+//                            failwith "removal of unknown object"
 
                 async {
                     do! Async.SwitchToNewThread()
+
+                    let mutable lastContent = HashSet<LodDataNode>() :> ISet<_>
 
                     while true do
 
@@ -479,29 +504,40 @@ module PointCloudRenderObjectSemantics =
                             node.Data.Rasterize(v, p, wantedNearPlaneDistance)
                         ) 
 
-                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (content.ContainsKey >> not) )
-                        let rem = System.Collections.Generic.HashSet<_>( content.Keys |> Seq.filter (set.Contains >> not)     )
+                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (lastContent.Contains >> not) )     |> Seq.toList
+                        let rem = System.Collections.Generic.HashSet<_>( lastContent |> Seq.filter (set.Contains >> not)     )   |> Seq.toList
+                        lastContent <- set
 
-                        for v in add do
-                            let id = getId v
-                            if deltas.[id % queueCount].Add v then
-                                if node.Config.boundingBoxSurface.IsSome  then
-                                    lock l (fun () ->  
-                                        if not <| workingSet.Contains v then
-                                            transact (fun () -> CSet.add v workingSet |> ignore)
-                                    )
-                            else
-                                ()
+                        // x = y => x%8 = y%8
+                        let ops = 
+                            List.append 
+                                (List.map (fun v -> getId v, Add v) add) 
+                                (List.map (fun v -> getId v, Rem v) rem) 
+                            |> List.groupBy (fun (id,v) -> id % queueCount)
+                            
+                        for (qid, ops) in ops do
+                            deltas.[qid].EnqueueMany(List.map snd ops) 
 
-                        for v in rem do
-                            let id = removeId v
-                            if deltas.[id % queueCount].Remove v then 
-                                ()
-                            else
-                                lock l (fun () ->  
-                                    if workingSet.Contains v then
-                                        transact (fun () -> CSet.remove v workingSet |> ignore)
-                                )
+                        //for v in add do
+                        //    let id = getId v
+                        //    if deltas.[id % queueCount].Add v then
+                        //        if node.Config.boundingBoxSurface.IsSome  then
+                        //            lock l (fun () ->  
+                        //                if not <| workingSet.Contains v then
+                        //                    transact (fun () -> CSet.add v workingSet |> ignore)
+                        //            )
+                        //    else
+                        //        ()
+
+                        //for v in rem do
+                        //    let id = removeId v
+                        //    if deltas.[id % queueCount].Remove v then 
+                        //        ()
+                        //    else
+                        //        lock l (fun () ->  
+                        //            if workingSet.Contains v then
+                        //                transact (fun () -> CSet.remove v workingSet |> ignore)
+                        //        )
 
                 }
 
@@ -518,7 +554,7 @@ module PointCloudRenderObjectSemantics =
                     let data =  
                         try 
                             Async.RunSynchronously(node.Data.GetData(n), cancellationToken = ct) |> Some
-                        with | e -> 
+                        with e -> 
                             removeFromWorkingSet n
                             Log.warn "data got cancelled"; 
                             None
@@ -578,7 +614,7 @@ module PointCloudRenderObjectSemantics =
 
 
             for i in 0..queueCount-1 do
-                let deltaProcessing,info =  StepwiseQueueExection.runEffects deltas.[i] effect removeFromWorkingSet
+                let deltaProcessing,info =  StepwiseQueueExection.runEffects calls deltas.[i] effect removeFromWorkingSet
                 let safeDeltas =
                     async {
                         deltaProcessors <- deltaProcessors + 1
