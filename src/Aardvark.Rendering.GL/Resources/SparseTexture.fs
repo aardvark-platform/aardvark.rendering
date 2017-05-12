@@ -6,7 +6,7 @@ open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 
-type SparseTexture(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : int, format : TextureFormat, pageSize : V3i) = 
+type SparseTexture(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : Option<int>, format : TextureFormat, pageSize : V3i) = 
     inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L, true)
 
     member x.PageSize = pageSize
@@ -103,7 +103,7 @@ module ``Sparse Texture Extensions`` =
             GL.Check "could not unbind sparse texture"
 
 
-            SparseTexture(x, handle, TextureDimension.Texture3D, levels, 1, size, 1, format, pageSize)
+            SparseTexture(x, handle, TextureDimension.Texture3D, levels, 1, size, None, format, pageSize)
 
         member x.Commitment(t : SparseTexture, level : int, region : Box3i, commit : bool) =
             use __ = x.ResourceLock

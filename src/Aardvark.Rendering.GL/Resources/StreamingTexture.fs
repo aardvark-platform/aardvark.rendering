@@ -26,17 +26,17 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
     let mutable texA = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, 1, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
 
     let mutable texB = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, 1, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
 
     let mutable texC = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, 1, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
 
     let mutable fenceAB = 0n
     let mutable fenceC = 0n
