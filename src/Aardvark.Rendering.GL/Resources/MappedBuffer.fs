@@ -76,6 +76,7 @@ module ResizeBufferImplementation =
         static member Create() =
             let ctx = Option.get ContextHandle.Current
             let f = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
+            GL.Flush()
             new Fence(ctx, f)
 //
 //        static member WaitAllGPU(fences : list<Fence>, current : ContextHandle) =
@@ -87,7 +88,7 @@ module ResizeBufferImplementation =
         member x.WaitGPU(current : ContextHandle) =
             let handle = handle
             if handle <> 0n then
-                let status = GL.ClientWaitSync(handle, ClientWaitSyncFlags.SyncFlushCommandsBit, 0UL)
+                let status = GL.ClientWaitSync(handle, ClientWaitSyncFlags.None, 0UL)
                 if status = WaitSyncStatus.AlreadySignaled then
                     x.Dispose()
                     false
@@ -99,7 +100,7 @@ module ResizeBufferImplementation =
 
         member x.WaitCPU() =
             if handle <> 0n then
-                match GL.ClientWaitSync(handle, ClientWaitSyncFlags.SyncFlushCommandsBit, GL_TIMEOUT_IGNORED) with
+                match GL.ClientWaitSync(handle, ClientWaitSyncFlags.None, GL_TIMEOUT_IGNORED) with
                     | WaitSyncStatus.WaitFailed -> failwith "[GL] failed to wait for fence"
                     | WaitSyncStatus.TimeoutExpired -> failwith "[GL] fance timeout"
                     | _ -> ()
@@ -131,10 +132,6 @@ module ResizeBufferImplementation =
                             | None -> ()
                         f
                     )
-//                match HMap.tryFind f.Context pendingWrites with
-//                    | Some old -> old.Dispose()
-//                    | None -> ()
-//                pendingWrites <- HMap.add f.Context f pendingWrites
             )
 
         let beforeResize() =
