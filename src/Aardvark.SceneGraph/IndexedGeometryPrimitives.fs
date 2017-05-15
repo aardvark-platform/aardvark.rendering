@@ -106,6 +106,16 @@ module IndexedGeometryPrimitives =
     let line (l:Line3d) (color:C4b) =
         lines [l,color]
 
+    let quad (v0 : V3d * C4b) (v1 : V3d * C4b) (v2 : V3d * C4b) (v3 : V3d * C4b) =
+        let ((p0,c0),(p1,c1),(p2,c2),(p3,c3)) = v0,v1,v2,v3
+        let pos = [| p0; p1; p2; p3 |]
+        let col = [| c0; c1; c2; c3 |]
+        let idx = Some [|0;1;2; 0;2;3|]
+        IndexedGeometry.fromPosCol pos col idx IndexedGeometryMode.TriangleList
+
+    let quad' (v0 : V3d) (v1 : V3d) (v2 : V3d) (v3 : V3d) (col : C4b) =
+        quad (v0, col) (v1, col) (v2, col) (v3, col)
+        
     let triangles (tris:seq<Triangle3d * C4b>) =
         let pos = tris |> Seq.map fst |> Seq.collect(fun t -> [|t.P0.ToV3f().ToV3d(); t.P1.ToV3f().ToV3d(); t.P2.ToV3f().ToV3d()|]) |> Seq.toArray
         let col = tris |> Seq.map snd |> Seq.collect(fun c -> [|c;c;c|]) |> Seq.toArray

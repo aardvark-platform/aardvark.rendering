@@ -363,7 +363,7 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
                     member x.GetInfo b = 
                         b.Size |> Mem |> ResourceInfo
 
-                    member x.Create(token, old) =
+                    member x.Create(token, rt, old) =
                         let handle = 
                             match old with
                                 | Some old -> old
@@ -374,7 +374,7 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
                                     UniformBufferView(buffer, block.Offset, nativeint block.Size)
 
                         buffer.UseWriteUnsafe(handle.Offset, handle.Size, fun ptr ->
-                            for (offset,w) in writers do w.Write(x, ptr + offset)
+                            for (offset,w) in writers do w.Write(token, ptr + offset)
                         )
                         handle
 
@@ -574,14 +574,14 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                             member x.GetInfo b = 
                                 b.SizeInBytes |> Mem |> ResourceInfo
 
-                            member x.Create (token : RenderToken, old : Option<Buffer>) =
+                            member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<Buffer>) =
                                 match old with
                                     | None ->
                                         r <- data.GetReader()
-                                        let (nb, _) = r.GetDirtyRanges(x)
+                                        let (nb, _) = r.GetDirtyRanges(token)
                                         ctx.CreateBuffer(nb)
                                     | Some old ->
-                                        let (nb, ranges) = r.GetDirtyRanges(x)
+                                        let (nb, ranges) = r.GetDirtyRanges(token)
                                         nb.Use (fun ptr ->
                                             ctx.UploadRanges(old, ptr, ranges)
                                         )
@@ -655,7 +655,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer>>) =
-        let createView (self : IAdaptiveObject) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =
+        let createView (self : AdaptiveToken) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =
             match view.SingleValue with
                 | Some value ->
                     index, {
@@ -684,9 +684,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (token : RenderToken, old : Option<VertexInputBindingHandle>) =
-                        let attributes = bindings |> List.map (createView x)
-                        let index = match index with | Some (_,i) -> i.Handle.GetValue x |> Some | _ -> None
+                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
+                        let attributes = bindings |> List.map (createView token)
+                        let index = match index with | Some (_,i) -> i.Handle.GetValue token |> Some | _ -> None
                         match old with
                             | Some old ->
                                 ctx.Update(old, index, attributes)
@@ -717,13 +717,13 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                             member x.GetInfo h =
                                 h.Size |> Mem |> ResourceInfo
 
-                            member x.Create(token, old) =
+                            member x.Create(token, rt, old) =
                                 let handle =
                                     match old with 
                                         | Some o -> o
                                         | None -> ctx.CreateUniformLocation(ShaderParameterType.sizeof uniform.Type, uniform.Type)
                                 
-                                writer.Write(x, handle.Data)
+                                writer.Write(token, handle.Data)
                                 handle
 
                             member x.Destroy h =

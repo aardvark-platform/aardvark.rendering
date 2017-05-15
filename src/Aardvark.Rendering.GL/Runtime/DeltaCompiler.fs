@@ -28,6 +28,12 @@ module DeltaCompiler =
 
             | [] -> true
 
+    /// <summary>
+    /// compileDelta compiles all instructions needed to render [rj] 
+    /// assuming [prev] was rendered immediately before.
+    /// This function is the core-ingredient making our rendering-system
+    /// fast as hell \o/.
+    /// </summary>
     let compileDelta (prev : PreparedRenderObject) (me : PreparedRenderObject) =
         compiled {
             let! s = compilerState
@@ -145,7 +151,11 @@ module DeltaCompiler =
                             yield Instruction.HDrawArrays stats isActive beginMode calls
 
         }   
-
+        
+    /// <summary>
+    /// compileFull compiles all instructions needed to render [rj] 
+    /// making no assumpltions about the previous GL state.
+    /// </summary>
     let compileFull (me : PreparedRenderObject) =
         compileDelta PreparedRenderObject.empty me
 
@@ -209,17 +219,7 @@ module DeltaCompiler =
         }
 
 
-    /// <summary>
-    /// compileDelta compiles all instructions needed to render [rj] 
-    /// assuming [prev] was rendered immediately before.
-    /// This function is the core-ingredient making our rendering-system
-    /// fast as hell \o/.
-    /// </summary>
 
-    /// <summary>
-    /// compileFull compiles all instructions needed to render [rj] 
-    /// making no assumpltions about the previous GL state.
-    /// </summary>
 
 
 

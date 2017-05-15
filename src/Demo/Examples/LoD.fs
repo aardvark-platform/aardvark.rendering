@@ -256,7 +256,7 @@ module LoD =
 
     let cloud =
         Sg.pointCloud data {
-            targetPointDistance     = Mod.constant 40.0
+            targetPointDistance     = Mod.constant 10.0
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500

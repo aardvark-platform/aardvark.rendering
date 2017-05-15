@@ -319,6 +319,7 @@ module ShaderBlock =
 type ShaderParameter =
     {
         Location        : int
+        Binding         : int
         Path            : ShaderPath
         Type            : ShaderParameterType 
     }
@@ -363,13 +364,13 @@ module ShaderInterface =
 
 type IAdaptiveWriter =
     inherit IAdaptiveObject
-    abstract member Write : caller : IAdaptiveObject * target : nativeint -> unit
+    abstract member Write : token : AdaptiveToken * target : nativeint -> unit
 
 [<AbstractClass; Sealed; Extension>]
 type IAdptiveWriterExtensions private() =
     [<Extension>]
     static member Write(this : IAdaptiveWriter, target : nativeint) =
-        this.Write(null, target)
+        this.Write(AdaptiveToken.Top, target)
 
 module ShaderParameterWriter =
     open System.Reflection
@@ -382,15 +383,15 @@ module ShaderParameterWriter =
     type AdaptiveWriter() =
         inherit AdaptiveObject()
 
-        abstract member Write : target : nativeint -> unit
+        abstract member PerformWrite : token : AdaptiveToken * target : nativeint -> unit
 
-        member x.Write(caller : IAdaptiveObject, target : nativeint) =
-            x.EvaluateAlways caller (fun () ->
-                x.Write(target)
+        member x.Write(token : AdaptiveToken, target : nativeint) =
+            x.EvaluateAlways token (fun token ->
+                x.PerformWrite(token, target)
             )
 
         interface IAdaptiveWriter with
-            member x.Write(caller, target) = x.Write(caller, target)
+            member x.Write(token, target) = x.Write(token, target)
 
 
     [<AbstractClass>]
@@ -398,12 +399,14 @@ module ShaderParameterWriter =
         inherit Writer()
         abstract member Write : target : nativeint * value : 'a -> unit
 
+        override x.WriteUnsafe(target, value) = x.Write(target, unbox<'a> value)
+
         override this.Bind(m : IMod) =
             match m with
                 | :? IMod<'a> as m ->
                     { new AdaptiveWriter() with
-                        member x.Write (target : nativeint) =
-                            let value = m.GetValue x
+                        member x.PerformWrite (token : AdaptiveToken, target : nativeint) =
+                            let value = m.GetValue token
                             this.Write(target, value)
                     } :> IAdaptiveWriter
 
@@ -413,6 +416,9 @@ module ShaderParameterWriter =
     and Writer() =
         abstract member Bind : IMod -> IAdaptiveWriter
         default x.Bind m = failwith "not possible"
+        
+        abstract member WriteUnsafe : target : nativeint * value : obj -> unit
+        default x.WriteUnsafe(t,v) = failwith "not possible"
         
 
     [<AutoOpen>]

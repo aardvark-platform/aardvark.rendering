@@ -99,13 +99,13 @@ type MessageLoop() as this =
             let newValue = update oldValue
             ex <- Interlocked.CompareExchange(&location, newValue, oldValue)
 
-    let mutable q : PersistentHashSet<IControl> = PersistentHashSet.empty
+    let mutable q : hset<IControl> = HSet.empty
     let mutable timer : MyTimer = null
     let periodic = ConcurrentHashSet<Periodic>()
 
     let rec processAll() =
-        let mine = Interlocked.Exchange(&q, PersistentHashSet.empty)
-        let mine = mine |> PersistentHashSet.toList
+        let mine = Interlocked.Exchange(&q, HSet.empty)
+        let mine = mine |> HSet.toList
         for ctrl in mine do
             try 
                 if not ctrl.IsInvalid then
@@ -127,7 +127,7 @@ type MessageLoop() as this =
         timer <- new MyTimer((fun _ -> this.Process()), 0L, 2L)
 
     member x.Draw(c : IControl) =
-        interlockedChange &q (fun q -> PersistentHashSet.add c q)
+        interlockedChange &q (fun q -> HSet.add c q)
 
     member x.EnqueuePeriodic (f : float -> unit, intervalInMilliseconds : int) =
         let p = Periodic(intervalInMilliseconds, f)

@@ -3,37 +3,39 @@
 open System
 open Aardvark.Base.Incremental
 
-type AdaptiveFunc<'a>(func : 'a -> 'a) =
+type AdaptiveFunc<'a>(func : AdaptiveToken -> 'a -> 'a) =
     inherit AdaptiveObject()
         
-    static let identity = AdaptiveFunc<'a>(id)
+    static let identity = AdaptiveFunc<'a>(fun _ v -> v)
     static member Identity = identity
 
-    member x.Run(caller : IAdaptiveObject, v : 'a) =
-        x.EvaluateIfNeeded caller v (fun () ->
-            func v
+    member x.Run(caller : AdaptiveToken, v : 'a) =
+        x.EvaluateAlways caller (fun caller ->
+            if x.OutOfDate then
+                func caller v
+            else 
+                v
         )
 
 [<CompiledName("ApplicationModModule")>]
 module Mod =
     let withLast (f : 's -> 's -> 'a -> 'a) (state : IMod<'s>)  : AdaptiveFunc<'a> =
 
-        let res = ref Unchecked.defaultof<_>
         let oldState = ref Unchecked.defaultof<_> 
-        res :=
-            AdaptiveFunc<'a>(fun value ->
-                let s = state.GetValue !res
+        let res =
+            AdaptiveFunc<'a>(fun res value ->
+                let s = state.GetValue res
                 let newA = f !oldState s value
                 oldState := s 
                 newA
             )
-        oldState := state.GetValue(null)
+        oldState := state.GetValue()
         lock state (fun () ->
-            state.Outputs.Add !res |> ignore
-            state.AddOutput !res
+            state.Outputs.Add res |> ignore
+            state.AddOutput res
         )
 
-        !res
+        res
 
     let inline step (f : 's -> 'sd -> 'a -> 'a) (state : IMod<'s>) : AdaptiveFunc<'a> =
         withLast (fun o n a -> f o (n - o) a) state
@@ -42,20 +44,19 @@ module Mod =
 
         let oldState = ref <| DateTime.Now
 
-        let res = ref Unchecked.defaultof<_>
-        res :=
-            AdaptiveFunc<'a>(fun value ->
-                let s = state.GetValue !res
+        let res =
+            AdaptiveFunc<'a>(fun res value ->
+                let s = state.GetValue res
                 let newA = f !oldState s value
                 oldState := s 
                 newA
             )
         lock state (fun () ->
-            state.Outputs.Add !res |> ignore
-            state.AddOutput !res
+            state.Outputs.Add res |> ignore
+            state.AddOutput res
         )
 
-        !res       
+        res       
 
     let inline stepTime (f : DateTime -> TimeSpan -> 'a -> 'a) (state : IMod<DateTime>) : AdaptiveFunc<'a> =
         withTime (fun o n a -> f o (n - o) a) state
@@ -80,23 +81,43 @@ module Mod =
     let integrate (initial : 'a) (time : IMod<DateTime>) (controllers : list<IMod<AdaptiveFunc<'a>>>) =
         let currentValue = ref initial
         let current = Mod.custom (fun _ -> !currentValue)
-        let isSubscribed = ref false
+        //let isSubscribed = ref false
         //time.AddOutput current
         //time |> Mod.registerCallback (fun _ -> current.MarkOutdated()) |> ignore
         
         let result = int current controllers
         //time.AddOutput current
 
-        result |> Mod.map (fun v ->
+
+        Mod.custom (fun token ->
+            let v = result.GetValue token
             if !currentValue <> v then
                 currentValue := v
-                if not !isSubscribed then
-                    isSubscribed := true
-                    time.AddVolatileMarkingCallback (fun () ->
-                        isSubscribed := false
-                        transact (fun () -> current.MarkOutdated())
-                    ) |> ignore
-                    time.GetValue() |> ignore
+                let time = AdaptiveObject.Time
+                lock time (fun () ->
+                    time.Outputs.Add current |> ignore
+                )
+//                if not !isSubscribed then
+//                    isSubscribed := true
+//                    time.AddVolatileMarkingCallback (fun () ->
+//                        isSubscribed := false
+//                        transact (fun () -> current.MarkOutdated())
+//                    ) |> ignore
+//                    time.GetValue(AdaptiveToken(token.Depth, null, System.Collections.Generic.HashSet())) |> ignore
 
             v
         )
+
+//        result |> Mod.map (fun v ->
+//            if !currentValue <> v then
+//                currentValue := v
+//                if not !isSubscribed then
+//                    isSubscribed := true
+//                    time.AddVolatileMarkingCallback (fun () ->
+//                        isSubscribed := false
+//                        transact (fun () -> current.MarkOutdated())
+//                    ) |> ignore
+//                    time.GetValue(AdaptiveTOken()) |> ignore
+//
+//            v
+//        )

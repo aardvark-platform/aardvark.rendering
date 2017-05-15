@@ -37,7 +37,7 @@ module RenderTasks =
         member x.Scope = scope
 
 
-        abstract member Perform : RenderToken * Framebuffer -> unit
+        abstract member Perform : AdaptiveToken * RenderToken * Framebuffer -> unit
         abstract member Release : unit -> unit
 
         member x.Config = config
@@ -55,7 +55,7 @@ module RenderTasks =
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some device.Runtime
 
-        override x.Run(token : RenderToken, desc : OutputDescription) =
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| fboSignature.IsAssignableFrom fbo.Signature then
                 failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
@@ -67,9 +67,9 @@ module RenderTasks =
 
             renderTaskLock.Run (fun () -> 
                 NativePtr.write runtimeStats V2i.Zero
-                let r = x.Perform(token, fbo)
-                let rt = NativePtr.read runtimeStats
-                token.AddDrawCalls(rt.X, rt.Y)
+                let r = x.Perform(token, rt, fbo)
+                let rts = NativePtr.read runtimeStats
+                rt.AddDrawCalls(rts.X, rts.Y)
             )
 
 
@@ -85,29 +85,29 @@ module RenderTasks =
         let mutable version = 0
         let mutable commandVersion = -1
 
-        member private x.init() =
+        member private x.init(token : AdaptiveToken) =
             if not initialized then
                 initialized <- true
-                x.Init objects
+                x.Init(token, objects)
 
-        member x.Add (o : PreparedMultiRenderObject) =
-            x.init()
+        member x.Add (token : AdaptiveToken, o : PreparedMultiRenderObject) =
+            x.init(token.WithCaller x)
             version <- version + 1
             transact (fun () ->
-                o.Update(x, RenderToken.Empty) |> ignore
+                o.Update(token.WithCaller x, RenderToken.Empty) |> ignore
                 objects.Add o |> ignore
             )
 
-        member x.Remove(o : PreparedMultiRenderObject) =
-            x.init()
+        member x.Remove(token : AdaptiveToken, o : PreparedMultiRenderObject) =
+            x.init(token.WithCaller x)
             version <- version + 1
             transact (fun () ->
                 objects.Remove o |> ignore
             )
 
-        abstract member Init : aset<PreparedMultiRenderObject> -> unit
-        abstract member UpdateProgram : RenderToken -> unit
-        abstract member Fill : RenderToken * CommandBuffer -> unit
+        abstract member Init : AdaptiveToken * aset<PreparedMultiRenderObject> -> unit
+        abstract member UpdateProgram : AdaptiveToken * RenderToken -> unit
+        abstract member Fill : AdaptiveToken * RenderToken * CommandBuffer -> unit
         abstract member Release : unit -> unit
 
         member x.Dispose() =
@@ -117,17 +117,18 @@ module RenderTasks =
                 transact (fun () -> objects.Clear())
                 cmd.Dispose()
 
-        member x.Update(caller : IAdaptiveObject, token : RenderToken) =
-            x.init()
-            x.EvaluateIfNeeded' caller () (fun dirty ->
-                for d in dirty do
-                    if not d.IsDisposed then
-                        d.Update(x, token)
+        member x.Update(caller : AdaptiveToken, token : RenderToken) =
+            x.EvaluateAlways' caller (fun caller dirty ->
+                x.init(caller)
+                if x.OutOfDate then
+                    for d in dirty do
+                        if not d.IsDisposed then
+                            d.Update(caller, token)
 
-                x.UpdateProgram(token)
+                    x.UpdateProgram(caller, token)
             )
 
-        member x.GetCommandBuffer(caller : IAdaptiveObject, token : RenderToken, viewports : Box2i[]) =
+        member x.GetCommandBuffer(caller : AdaptiveToken, token : RenderToken, viewports : Box2i[]) =
             let inner = RenderToken(token)
             x.Update(caller, inner)
 
@@ -142,7 +143,7 @@ module RenderTasks =
                     do! Command.SetViewports viewports
                     do! Command.SetScissors viewports
                 }
-                this.Fill(token, cmd)
+                this.Fill(caller, token, cmd)
                 cmd.End()
 
                 lastViewports <- viewports
@@ -262,18 +263,18 @@ module RenderTasks =
                 hasProgram <- true
                 currentConfig <- config
 
-        override x.Init(objects : aset<PreparedMultiRenderObject>) =
+        override x.Init(token : AdaptiveToken, objects : aset<PreparedMultiRenderObject>) =
             scope <- { runtimeStats = NativePtr.alloc 1 }
             objectsWithKeys <- objects |> ASet.map (fun o -> (o :> IRenderObject, o))
-            let config = config.GetValue x
+            let config = config.GetValue token
             reinit x config
 
-        override x.UpdateProgram(t) =
-            let config = config.GetValue x
+        override x.UpdateProgram(token : AdaptiveToken, t) =
+            let config = config.GetValue token
             reinit x config
-            program.Update x |> ignore
+            program.Update token |> ignore
 
-        override x.Fill(t : RenderToken, cmd : CommandBuffer) =
+        override x.Fill(token : AdaptiveToken, t : RenderToken, cmd : CommandBuffer) =
             NativePtr.write scope.runtimeStats V2i.Zero
 
             program.Run(cmd.Handle)
@@ -325,17 +326,17 @@ module RenderTasks =
                     commandBuffers <- Map.add pass task commandBuffers
                     task
 
-        let update ( x : AbstractVulkanRenderTask ) =
-            let deltas = preparedObjectReader.GetDelta x
+        let update ( x : AdaptiveToken ) =
+            let deltas = preparedObjectReader.GetOperations x
 
             for d in deltas do 
                 match d with
-                    | Add v ->
+                    | Add(_,v) ->
                         let task = getCommandBuffer v.RenderPass
-                        task.Add v
-                    | Rem v ->
+                        task.Add(x, v)
+                    | Rem(_,v) ->
                         let task = getCommandBuffer v.RenderPass
-                        task.Remove v
+                        task.Remove(x, v)
 
 
 
@@ -348,27 +349,27 @@ module RenderTasks =
                 )
             )
 
-        override x.Update(token) =
-            update x
+        override x.PerformUpdate(caller, token) =
+            update caller
             for (_,t) in Map.toSeq commandBuffers do
-                t.Update(x,token)
+                t.Update(caller,token)
 
 
-        override x.Perform (token : RenderToken, fbo : Framebuffer) =
+        override x.Perform (caller : AdaptiveToken, token : RenderToken, fbo : Framebuffer) =
             use devToken = device.Token
 
 
             let bounds = Box2i(V2i.Zero, fbo.Size - V2i.II)
             let vp = Array.create renderPass.AttachmentCount bounds
 
-            update x
+            update caller
 
             let commandBuffers =
                 commandBuffers 
                     |> Map.toList 
                     |> List.map snd
                     |> List.map (fun dc ->
-                        let cmd = dc.GetCommandBuffer(x, token, vp)
+                        let cmd = dc.GetCommandBuffer(caller, token, vp)
                         cmd
                     )
 
@@ -423,14 +424,14 @@ module RenderTasks =
                 | _ ->
                     ImageAspect.None
 
-        member x.Run(caller : IAdaptiveObject, t : RenderToken, outputs : OutputDescription) =
-            x.EvaluateAlways caller (fun () ->
+        member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription) =
+            x.EvaluateAlways caller (fun caller ->
                 let fbo = unbox<Framebuffer> outputs.framebuffer
                 use token = device.Token
 
-                let colors = clearColors |> Array.map (fun (i,c) -> i, c.GetValue x)
-                let depth = clearDepth.GetValue x
-                let stencil = match clearStencil with | Some c -> c.GetValue(x) |> Some | _ -> None
+                let colors = clearColors |> Array.map (fun (i,c) -> i, c.GetValue caller)
+                let depth = clearDepth.GetValue caller
+                let stencil = match clearStencil with | Some c -> c.GetValue(caller) |> Some | _ -> None
 
 
                 token.enqueue {

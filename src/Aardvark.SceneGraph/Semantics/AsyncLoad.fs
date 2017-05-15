@@ -29,5 +29,5 @@ type AsyncLoadSemantics() =
                     | None -> ()
                     | Some prep -> yield prep
         }
-        |> ASet.using
+        |> ASet.mapUse id
         |> ASet.map (fun prep -> prep :> IRenderObject)

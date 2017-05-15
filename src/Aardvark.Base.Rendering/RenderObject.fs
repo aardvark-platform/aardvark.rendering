@@ -351,7 +351,7 @@ type MultiRenderObject(children : list<IRenderObject>) =
 type IAdaptiveBufferReader =
     inherit IAdaptiveObject
     inherit IDisposable
-    abstract member GetDirtyRanges : IAdaptiveObject -> INativeBuffer * RangeSet
+    abstract member GetDirtyRanges : AdaptiveToken -> INativeBuffer * RangeSet
 
 type IAdaptiveBuffer =
     inherit IMod<IBuffer>
@@ -383,9 +383,9 @@ module AttributePackingV2 =
                 realCapacity <- cap
                 dirtyRanges <- RangeSet.empty
 
-        member x.GetDirtyRanges(caller : IAdaptiveObject) =
-            x.EvaluateAlways caller (fun () ->
-                let buffer = b.GetValue x :?> INativeBuffer
+        member x.GetDirtyRanges(token : AdaptiveToken) =
+            x.EvaluateAlways token (fun token ->
+                let buffer = b.GetValue token :?> INativeBuffer
                 let dirtyCap = Interlocked.Exchange(&dirtyCapacity, buffer.SizeInBytes)
 
                 if dirtyCap <> buffer.SizeInBytes then
@@ -406,7 +406,7 @@ module AttributePackingV2 =
             member x.Dispose() = x.Dispose()
 
         interface IAdaptiveBufferReader with
-            member x.GetDirtyRanges(caller) = x.GetDirtyRanges(caller)
+            member x.GetDirtyRanges(token) = x.GetDirtyRanges(token)
 
     type private IndexFlat<'b when 'b : unmanaged>() =
         static member Copy(index : Array, src : nativeint, dst : nativeint) =
@@ -530,8 +530,8 @@ module AttributePackingV2 =
             if storeCapacity = parentCapacity && storage <> 0n then
                 lock writes (fun () -> writes.Remove ig |> ignore)
 
-        override x.Compute() =
-            let layout = updateLayout.GetValue x
+        override x.Compute(token) =
+            let layout = updateLayout.GetValue token
 
             if parentCapacity <> storeCapacity || storage = 0n then
                 storeCapacity <- parentCapacity
@@ -622,12 +622,12 @@ module AttributePackingV2 =
                                 None
             )
 
-        override x.Compute() =
-            let deltas = reader.GetDelta x
+        override x.Compute(token) =
+            let deltas = reader.GetOperations token
 
             for d in deltas do
                 match d with
-                    | Add g ->
+                    | Add(_, g) ->
                         let ptr = g |> faceVertexCount |> nativeint |> manager.Alloc
                         lock dataRanges (fun () -> dataRanges.[g] <- ptr)
                         write g ptr
@@ -637,7 +637,7 @@ module AttributePackingV2 =
                         drawRanges <- RangeSet.insert r drawRanges
 
 
-                    | Rem g ->
+                    | Rem(_, g) ->
                         match dataRanges.TryGetValue g with
                             | (true, ptr) ->
                                 dataRanges.Remove g |> ignore
@@ -733,9 +733,9 @@ module GeometrySetUtilities =
                 realCapacity <- cap
                 dirtyRanges <- RangeSet.empty
 
-        member x.GetDirtyRanges(caller : IAdaptiveObject) =
-            x.EvaluateAlways caller (fun () ->
-                let buffer = b.GetValue x :?> INativeBuffer
+        member x.GetDirtyRanges(token : AdaptiveToken) =
+            x.EvaluateAlways token (fun token ->
+                let buffer = b.GetValue token :?> INativeBuffer
                 let dirtyCap = Interlocked.Exchange(&dirtyCapacity, buffer.SizeInBytes)
 
                 if dirtyCap <> buffer.SizeInBytes then
@@ -828,7 +828,7 @@ module GeometrySetUtilities =
             rw.Dispose()
             lock readers (fun () -> readers.Clear())
 
-        override x.Compute() =
+        override x.Compute(token) =
             ReaderWriterLock.read rw (fun () ->
                 NativeMemoryBuffer(storage, int capacity) :> IBuffer
             )
@@ -950,7 +950,7 @@ module GeometrySetUtilities =
                 old.Values |> Seq.iter (fun b -> b.Dispose())
                 old.Clear()
 
-        override x.Compute() =
+        override x.Compute(token) =
             //printfn "%A" ranges
             ranges
 

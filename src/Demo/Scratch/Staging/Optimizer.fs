@@ -160,12 +160,12 @@ module Optimizer =
         let disposables = Dict<IRenderObject, IDisposable>()
 
         let reader = objects.GetReader()
-        ASet.custom (fun hugo ->
+        ASet.custom (fun caller state ->
                 
             let output = List<_>()
             let total = System.Diagnostics.Stopwatch()
             total.Start()
-            let deltas = reader.GetDelta hugo
+            let deltas = reader.GetOperations caller
             total.Stop()
             printfn "pull: %A" total.MicroTime
 
@@ -173,7 +173,7 @@ module Optimizer =
             sw.Reset()
             for d in deltas do
                 match d with
-                    | Add ro ->
+                    | Add(_,ro) ->
                         let res = tryDecompose runtime signature ro
                         match res with
                             | Some (signature, o) ->
@@ -233,7 +233,7 @@ module Optimizer =
                             | None ->
                                 output.Add (Add ro)
                                     
-                    | Rem ro ->
+                    | Rem(_,ro) ->
                         match disposables.TryRemove ro with
                             | (true, d) -> d.Dispose()
                             | _ -> output.Add (Rem ro)
@@ -242,5 +242,5 @@ module Optimizer =
             printfn "total:     %A" total.MicroTime
             printfn "grounding: %A" sw.MicroTime
 
-            output |> CSharpList.toList
+            output |> HDeltaSet.ofSeq
         )

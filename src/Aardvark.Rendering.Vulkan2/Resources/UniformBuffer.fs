@@ -137,17 +137,17 @@ module UniformWriters =
     open System.Reflection
 
     type IWriter = 
-        abstract member Write : IAdaptiveObject * IAdaptiveObject * nativeint -> unit
+        abstract member Write : AdaptiveToken * IAdaptiveObject * nativeint -> unit
 
     type IWriter<'a> =
         inherit IWriter
-        abstract member Write : IAdaptiveObject * 'a * nativeint -> unit
+        abstract member Write : AdaptiveToken * 'a * nativeint -> unit
 
 
 
     [<AbstractClass>]
     type AbstractWriter<'a>() =
-        abstract member Write : IAdaptiveObject * 'a * nativeint -> unit
+        abstract member Write : AdaptiveToken * 'a * nativeint -> unit
 
 
         interface IWriter with
@@ -162,14 +162,14 @@ module UniformWriters =
     type SingleValueWriter<'a when 'a : unmanaged>(offset : int) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : IAdaptiveObject, value : 'a, ptr : nativeint) =
+        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
             let ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
             NativePtr.write ptr value
 
     type ConversionWriter<'a, 'b when 'b : unmanaged>(offset : int, convert : 'a -> 'b) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : IAdaptiveObject, value : 'a, ptr : nativeint) =
+        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
             let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
             let res = convert value
             NativePtr.write ptr res
@@ -177,14 +177,14 @@ module UniformWriters =
     type NoConversionWriter<'a when 'a : unmanaged>(offset : int) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : IAdaptiveObject, value : 'a, ptr : nativeint) =
+        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
             let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
             NativePtr.write ptr value
 
     type MultiWriter<'a>(writers : list<IWriter<'a>>) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : IAdaptiveObject, value : 'a, ptr : nativeint) =
+        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
             for w in writers do w.Write(caller, value, ptr)
 
         new (writers : list<IWriter>) = MultiWriter<'a>(writers |> List.map unbox<IWriter<'a>>)
@@ -192,21 +192,21 @@ module UniformWriters =
     type PropertyWriter<'a, 'b>(prop : PropertyInfo, inner : IWriter<'b>) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : IAdaptiveObject, value : 'a, target : nativeint) =
+        override x.Write(caller : AdaptiveToken, value : 'a, target : nativeint) =
             let v = prop.GetValue(value) |> unbox<'b>
             inner.Write(caller, v, target)
 
     type FieldWriter<'a, 'b>(prop : FieldInfo, inner : IWriter<'b>) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : IAdaptiveObject, value : 'a, target : nativeint) =
+        override x.Write(caller : AdaptiveToken, value : 'a, target : nativeint) =
             let v = prop.GetValue(value) |> unbox<'b>
             inner.Write(caller, v, target)
 
     type SequenceWriter<'s, 'a when 's :> seq<'a>>(inner : IWriter<'a>[]) =
         inherit AbstractWriter<'s>()
 
-        let rec run (caller : IAdaptiveObject) (target : nativeint) (index : int) (e : System.Collections.Generic.IEnumerator<'a>) =
+        let rec run (caller : AdaptiveToken) (target : nativeint) (index : int) (e : System.Collections.Generic.IEnumerator<'a>) =
             if index >= inner.Length then 
                 ()
             else
@@ -217,7 +217,7 @@ module UniformWriters =
                 else
                     ()
 
-        override x.Write(caller : IAdaptiveObject, value : 's, target : nativeint) =
+        override x.Write(caller : AdaptiveToken, value : 's, target : nativeint) =
             use e = (value :> seq<'a>).GetEnumerator()
             run caller target 0 e
 

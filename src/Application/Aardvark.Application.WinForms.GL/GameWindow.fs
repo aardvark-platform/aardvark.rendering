@@ -439,7 +439,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
                         GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
                         let desc = OutputDescription.ofFramebuffer defaultFramebuffer
-                        t.Run(null, RenderToken.Empty, defaultOutput)
+                        t.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
                         
 
                         x.SwapBuffers()

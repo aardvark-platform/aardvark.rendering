@@ -21,18 +21,18 @@ open Microsoft.FSharp.NativeInterop
 type IResourceExtensions private() =
 
     [<Extension>]
-    static member UpdateAndGetHandle(this : IResource<'a>, caller : IResource, t : RenderToken) =
+    static member UpdateAndGetHandle(this : IResource<'a>, caller : AdaptiveToken, t : RenderToken) =
         this.Update(caller, t)
         this.Handle.GetValue()
 
 
-type CustomResource<'a when 'a : equality>(owned : list<IResource>, create : RenderToken -> Option<'a> -> 'a, destroy : 'a -> unit) =
+type CustomResource<'a when 'a : equality>(owned : list<IResource>, create : AdaptiveToken -> RenderToken -> Option<'a> -> 'a, destroy : 'a -> unit) =
     inherit Aardvark.Base.Rendering.Resource<'a>(ResourceKind.Unknown)
  
-    override x.Create (token : RenderToken, old : Option<'a>) =
-        let stats = owned |> List.iter (fun o -> o.Update(x,token))
+    override x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<'a>) =
+        let stats = owned |> List.iter (fun o -> o.Update(token, rt))
         
-        let handle = create token old       
+        let handle = create token rt old       
         handle
 
     override x.Destroy (h : 'a) =
@@ -46,14 +46,14 @@ type CustomResource<'a when 'a : equality>(owned : list<IResource>, create : Ren
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Resource =
-    let map (f : RenderToken -> Option<'b> -> 'a -> 'b) (destroy : 'b -> unit) (r : IResource<'a>) =
-        let create (t : RenderToken) (old : Option<'b>) =
+    let map (f : AdaptiveToken -> RenderToken -> Option<'b> -> 'a -> 'b) (destroy : 'b -> unit) (r : IResource<'a>) =
+        let create (token : AdaptiveToken) (t : RenderToken) (old : Option<'b>) =
             let a = r.Handle |> Mod.force
-            f t old a
+            f token t old a
 
         new CustomResource<'b>([r :> IResource],create, destroy) :> IResource<'b>
     
-    let custom (create : RenderToken -> Option<'a> -> 'a) (destroy : 'a -> unit) (inputs : list<IResource>) =
+    let custom (create : AdaptiveToken -> RenderToken -> Option<'a> -> 'a) (destroy : 'a -> unit) (inputs : list<IResource>) =
         new CustomResource<'a>(inputs, create, destroy) :> IResource<'a>
 
 type VulkanResource<'a, 'b when 'a : equality and 'b : unmanaged>(input : IResource<'a>, f : 'a -> 'b) =
@@ -63,13 +63,13 @@ type VulkanResource<'a, 'b when 'a : equality and 'b : unmanaged>(input : IResou
     member x.ManagedHandle = input.Handle
     member x.Pointer = x.Handle.GetValue()
 
-    override x.Create (token : RenderToken, old : Option<nativeptr<'b>>) =
+    override x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<nativeptr<'b>>) =
         let ptr =
             match old with
                 | Some ptr -> ptr
                 | None -> NativePtr.alloc 1
 
-        let handle = input.UpdateAndGetHandle(x, token)
+        let handle = input.UpdateAndGetHandle(token, rt)
         NativePtr.write ptr (f handle)
 
         ptr

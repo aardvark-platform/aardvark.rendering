@@ -157,11 +157,11 @@ module RenderObjectSemantics =
                     async {
                         do! Async.SwitchToNewThread()
                         while true do
-                            let! operation = deltas.DequeueAsync()
+                            let operation = deltas.Dequeue()
 
                             match operation with
-                                | Add g -> packer.Add g |> ignore
-                                | Rem g -> packer.Remove g |> ignore
+                                | Add(_,g) -> packer.Add g |> ignore
+                                | Rem(_,g) -> packer.Remove g |> ignore
 
                             ()
                         

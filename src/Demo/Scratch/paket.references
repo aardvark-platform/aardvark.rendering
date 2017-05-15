@@ -3,6 +3,4 @@ Aardvark.Base.Runtime
 AssimpNet
 FShade.Core
 FSharp.Quotations.Evaluator
-Fablish
-
-Aardvark.Compiler.DomainTypes
+FShade.GLSL

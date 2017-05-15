@@ -134,7 +134,7 @@ module Loader =
                     | Material(_,n) -> 
                         n.RenderObjects()
                     | Group(nodes) ->
-                        nodes |> ASet.collect' (fun n -> n.RenderObjects())
+                        nodes |> ASet.ofList |> ASet.collect (fun n -> n.RenderObjects())
                     | Empty ->
                         ASet.empty
                     | Leaf mesh ->

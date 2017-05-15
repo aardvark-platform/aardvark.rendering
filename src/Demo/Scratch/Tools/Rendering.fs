@@ -23,12 +23,12 @@ type private ChangeableRenderTask() =
             current <- v
             transact (fun () -> x.MarkOutdated())
 
-    override x.Run (t : RenderToken, o : OutputDescription) = 
-        current.Run(x, t, o)
+    override x.Perform (token : AdaptiveToken, t : RenderToken, o : OutputDescription) = 
+        current.Run(token, t, o)
 
     override x.Dispose() = current <- RenderTask.empty
 
-    override x.Update(t) = current.Update(x, t)
+    override x.PerformUpdate(token, t) = current.Update(token, t)
 
     override x.Use(f) = current.Use(f)
 
@@ -95,6 +95,7 @@ type App private () =
     static member Time = getWin().Time
     static member Size = getWin().Sizes
     static member WithCam sg = withCam sg
+    static member Window = getWin()
 
     static member run (task : IRenderTask) =
         realTask.Inner <- task

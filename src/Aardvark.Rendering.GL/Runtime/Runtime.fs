@@ -255,6 +255,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         match rj with
+             | :? RenderTaskObject as t -> t :> IPreparedRenderObject
              | :? RenderObject as rj -> manager.Prepare(fboSignature, rj) :> IPreparedRenderObject
              | :? MultiRenderObject as rj -> 
                 let all = 

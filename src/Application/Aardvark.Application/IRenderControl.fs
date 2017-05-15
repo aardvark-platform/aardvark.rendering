@@ -9,10 +9,10 @@ type TimeMod() =
 
     interface IMod with
         member x.IsConstant = false
-        member x.GetValue(caller) = x.EvaluateAlways caller (fun () -> DateTime.Now :> obj)
+        member x.GetValue(caller) = x.EvaluateAlways caller (fun caller -> DateTime.Now :> obj)
 
     interface IMod<DateTime> with
-        member x.GetValue(caller) = x.EvaluateAlways caller (fun () -> DateTime.Now)
+        member x.GetValue(caller) = x.EvaluateAlways caller (fun caller -> DateTime.Now)
 
 type IRenderTarget =
     abstract member Runtime : IRuntime

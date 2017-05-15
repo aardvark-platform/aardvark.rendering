@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Base
 
 open System
+open System.Threading
 open Aardvark.Base
 open Aardvark.Base.Incremental
 open System.Collections.Generic
@@ -29,7 +30,7 @@ type IPreparedRenderObject =
     inherit IRenderObject
     inherit IDisposable
 
-    abstract member Update : IAdaptiveObject * RenderToken -> unit
+    abstract member Update : AdaptiveToken * RenderToken -> unit
     abstract member Original : Option<RenderObject>
 
 type ShaderStage =
@@ -106,8 +107,8 @@ and IRenderTask =
     inherit IAdaptiveObject
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
-    abstract member Update : IAdaptiveObject * RenderToken -> unit
-    abstract member Run : IAdaptiveObject * RenderToken * OutputDescription -> unit
+    abstract member Update : AdaptiveToken * RenderToken -> unit
+    abstract member Run : AdaptiveToken * RenderToken * OutputDescription -> unit
     abstract member FrameId : uint64
     abstract member Use : (unit -> 'a) -> 'a
 
@@ -144,6 +145,42 @@ and OutputDescription =
         overrides   : Map<string, obj>
     }
 
+type RenderFragment() =
+    
+    let mutable refCount = 0
+
+    abstract member Start : unit -> unit
+    default x.Start() = ()
+
+    abstract member Stop : unit -> unit
+    default x.Stop() = ()
+
+    abstract member Run : AdaptiveToken * RenderToken * OutputDescription -> unit
+    default x.Run(_,_,_) = ()
+
+    member x.AddRef() =
+        if Interlocked.Increment(&refCount) = 1 then
+            x.Start()
+
+    member x.RemoveRef() =
+        if Interlocked.Decrement(&refCount) = 0 then
+            x.Stop()
+
+type RenderTaskObject(scope : Ag.Scope, pass : RenderPass, t : RenderFragment) =
+    let id = newId()
+    interface IRenderObject with
+        member x.AttributeScope = scope
+        member x.Id = id
+        member x.RenderPass = pass
+
+    interface IPreparedRenderObject with
+        member x.Dispose() = ()
+        member x.Update(token, rt) = ()
+        member x.Original = None
+
+    member x.Pass = pass
+
+    member x.Fragment = t
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -162,11 +199,11 @@ module OutputDescription =
 type RenderTaskRunExtensions() =
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer) =
-        t.Run(null, token, OutputDescription.ofFramebuffer fbo)
+        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo)
 
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
-        t.Run(null, token, fbo)
+        t.Run(AdaptiveToken.Top, token, fbo)
 
 type IGeneratedSurface =
     inherit ISurface

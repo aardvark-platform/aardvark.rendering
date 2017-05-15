@@ -546,7 +546,6 @@ module RenderingTests =
 
         let pureRenderTime = sw.Elapsed.TotalSeconds / float iterations
 
-        Telemetry.reset()
         Log.line "starting update test"
         let mutable iterations = 0
         let sw = Stopwatch()
@@ -566,9 +565,6 @@ module RenderingTests =
         Log.line "total:        %.2ffps" (1.0 / updateAndRenderTime)
         Log.line "rendering:    %.2ffps" (1.0 / pureRenderTime)
         Log.line "updates:      %.2ffps" (1.0 / updateTime)
-
-        let rep = Telemetry.resetAndGetReport()
-        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
 
         ()
 
@@ -651,8 +647,6 @@ module RenderingTests =
         //OpenTK.Graphics.OpenGL4.GL.Sync()
 
 
-
-        Telemetry.reset()
         Log.line "starting update test"
         let mutable iterations = 0
         let sw = Stopwatch()
@@ -671,9 +665,6 @@ module RenderingTests =
         let updateAndRenderTime = sw.Elapsed.TotalSeconds / float iterations
             
         Log.line "compile + render: %.2fs" (updateAndRenderTime)
-
-        let rep = Telemetry.resetAndGetReport()
-        Telemetry.print ({ totalTime = rep.totalTime / iterations; probeTimes = rep.probeTimes |> Map.map (fun _ t -> t / iterations) } )
 
         ()
 
@@ -804,7 +795,6 @@ module RenderingTests =
             let pi = runtime.Download(color, PixFormat.ByteRGBA)
             pi.SaveAsImage(@"C:\Aardwork\urdar.png")
             OpenTK.Graphics.OpenGL4.GL.Sync()
-            Telemetry.reset()
             Log.line "starting update test"
             let mutable iterations = 0
             let sw = Stopwatch()

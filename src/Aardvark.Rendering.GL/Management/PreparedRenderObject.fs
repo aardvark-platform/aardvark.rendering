@@ -104,7 +104,7 @@ type PreparedRenderObject =
             yield x.StencilMode :> _
         }
 
-    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+    member x.Update(caller : AdaptiveToken, token : RenderToken) =
         use ctxToken = x.Context.ResourceLock
 
         x.Program.Update(caller, token)
@@ -303,7 +303,7 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     member x.Dispose() =
         children |> List.iter (fun c -> c.Dispose())
 
-    member x.Update(caller : IAdaptiveObject, token : RenderToken) =
+    member x.Update(caller : AdaptiveToken, token : RenderToken) =
         children |> List.iter (fun c -> c.Update(caller, token))
         
 
@@ -341,7 +341,7 @@ type ResourceManagerExtensions private() =
 
         // create a program and get its handle (ISSUE: assumed to be constant here)
         let program = x.CreateSurface(fboSignature, rj.Surface)
-        let prog = program.Handle.GetValue()
+        let prog = program.Handle.GetValue(AdaptiveToken.Top)
 
         GL.Check "[Prepare] Create Surface"
 
@@ -380,7 +380,7 @@ type ResourceManagerExtensions private() =
                 |> List.collect (fun u ->
                     match u.Type with
                         | FixedArray(t, _, cnt) ->
-                            List.init cnt (fun i -> { u with Type = t; Path = ShaderPath.Item(u.Path, i); Location = u.Location + i })
+                            List.init cnt (fun i -> { u with Type = t; Path = ShaderPath.Item(u.Path, i); Binding = u.Binding + i })
                         | _ -> 
                             [u]
                    )
@@ -416,13 +416,13 @@ type ResourceManagerExtensions private() =
                             match tex with
                                 | :? IMod<ITexture> as value ->
                                     let t = x.CreateTexture(value)
-                                    lastTextureSlot := uniform.Location
-                                    Some (uniform.Location, (t, s))
+                                    lastTextureSlot := uniform.Binding
+                                    Some (uniform.Binding, (t, s))
 
                                 | :? IMod<ITexture[]> as values ->
                                     let t = x.CreateTexture(values |> Mod.map (fun arr -> arr.[index]))
-                                    lastTextureSlot := uniform.Location
-                                    Some (uniform.Location, (t, s))
+                                    lastTextureSlot := uniform.Binding
+                                    Some (uniform.Binding, (t, s))
 
                                 | _ ->
                                     Log.warn "unexpected texture type %A: %A" sem tex

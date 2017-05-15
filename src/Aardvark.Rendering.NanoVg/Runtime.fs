@@ -41,7 +41,7 @@ module internal Interpreter =
 
     type internal NvgState =
         {
-            caller : IAdaptiveObject
+            caller : AdaptiveToken
             ctx : Context.NanoVgContextHandle
             transform : M33d
             scissor : Box2d
@@ -61,7 +61,7 @@ module internal Interpreter =
 
     let internal emptyState =
         {
-            caller = null
+            caller = AdaptiveToken.Top
             ctx = null
             transform = M33d(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
             scissor = Box2d.Invalid
@@ -308,7 +308,7 @@ module internal Interpreter =
 
         }
 
-    let run (caller : IAdaptiveObject) (ctx : Context.NanoVgContextHandle) (s : seq<NvgRenderObject>) =
+    let run (caller : AdaptiveToken) (ctx : Context.NanoVgContextHandle) (s : seq<NvgRenderObject>) =
         let mutable state = { emptyState with ctx = ctx; caller = caller }
 
         for rj in s do
@@ -394,10 +394,10 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
         inputs.Clear()
 
 
-    member x.Run(caller : IAdaptiveObject, t : RenderToken, fbo : OutputDescription) =
+    member x.Run(caller : AdaptiveToken, t : RenderToken, fbo : OutputDescription) =
         let fbo = fbo.framebuffer
-        x.EvaluateAlways caller (fun () ->
-            r.Update x
+        x.EvaluateAlways caller (fun caller ->
+            r.GetOperations(caller) |> ignore
 //            for d in r.GetDelta(x) do
 //                match d with
 //                    | Add(_,rj) -> add rj
@@ -425,7 +425,7 @@ type RenderTask(runtime : Runtime, ctx : Context.NanoVgContext, l : alist<NvgRen
 
                 NanoVg.nvgBeginFrame(current.Handle, fbo.Size.X, fbo.Size.Y, 1.0f)
              
-                r.Content.All |> Seq.sortBy fst |> Seq.map snd |> Interpreter.run x current
+                r.State |> Interpreter.run caller current
                 NanoVg.nvgEndFrame(current.Handle)
 
                 frameId <- frameId + 1UL

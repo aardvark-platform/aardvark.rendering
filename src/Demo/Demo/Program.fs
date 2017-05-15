@@ -532,7 +532,7 @@ let timeTest() =
 
     rendering.Start()
     
-    let d = move.AddMarkingCallback(fun () -> renderSem.Release() |> ignore)
+    let d : IDisposable = move.AddMarkingCallback(fun () -> renderSem.Release() |> ignore)
 
     
     while true do
@@ -1053,10 +1053,10 @@ module TriangleSet =
                     let toV3d : Array -> V3d[] = PrimitiveValueConverter.arrayConverter positionType
 
                     let triangles =
-                        ASet.custom(fun self ->
-                            let mode = mode.GetValue self
-                            let modelTrafo = modelTrafo.GetValue self |> unbox<Trafo3d>
-                            let positions = positions.Buffer.GetValue self
+                        ASet.custom(fun token self ->
+                            let mode = mode.GetValue token
+                            let modelTrafo = modelTrafo.GetValue token |> unbox<Trafo3d>
+                            let positions = positions.Buffer.GetValue token
                             let indices =
                                 match indices with
                                     | Some i -> 
@@ -1131,11 +1131,11 @@ module TriangleSet =
                             
 
 
-                            let rem = self.Content |> Seq.filter (newTriangles.Contains >> not) |> Seq.map Rem |> Seq.toList
-                            let add = newTriangles |> Seq.filter (self.Content.Contains >> not) |> Seq.map Add |> Seq.toList
+                            let rem = self |> Seq.filter (newTriangles.Contains >> not) |> Seq.map Rem |> Seq.toList
+                            let add = newTriangles |> Seq.filter (self.Contains >> not) |> Seq.map Add |> Seq.toList
 
 
-                            add @ rem
+                            add @ rem |> HDeltaSet.ofList
                         )
 
 

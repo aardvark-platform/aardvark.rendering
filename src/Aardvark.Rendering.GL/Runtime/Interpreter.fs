@@ -687,7 +687,7 @@ module ``Interpreter Extensions`` =
     type private InterpreterProgram(scope : Aardvark.Rendering.GL.Compiler.CompilerInfo, content : seq<PreparedMultiRenderObject>) =
         inherit AbstractRenderProgram()
 
-        override x.Update(t) = ()
+        override x.PerformUpdate(token,t) = ()
         override x.Dispose() = ()
         override x.Run(t) = 
             Interpreter.run scope.contextHandle (fun gl -> 

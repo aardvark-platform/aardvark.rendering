@@ -21,8 +21,8 @@ type SingleValueBuffer(value : IMod<V4f>) =
 
     member x.Value = value
 
-    override x.Compute() = 
-        let v = value.GetValue x
+    override x.Compute(token) = 
+        let v = value.GetValue token
         failwithf "NullBuffer cannot be evaluated"
 
     override x.GetHashCode() = value.GetHashCode()
