@@ -229,7 +229,7 @@ let main argv =
             // textures can also be bound (using file-texture here)
             do! Air.BindTexture(
                     DefaultSemantic.DiffuseColorTexture, 
-                    @"E:\Development\WorkDirectory\DataSVN\pattern.jpg"
+                    @"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg"
                 )
 
             do! Air.BindVertexBuffers [
@@ -289,8 +289,8 @@ let main argv =
 
     let message = Mod.init message
     let label2 =
-        Sg.text f C4b.Green message
-        //Sg.markdown MarkdownConfig.light (Mod.constant message)
+        //Sg.text f C4b.Green message
+        Sg.markdown MarkdownConfig.light message
             |> Sg.scale 0.1
             |> Sg.billboard
             |> Sg.translate 5.0 0.0 0.0

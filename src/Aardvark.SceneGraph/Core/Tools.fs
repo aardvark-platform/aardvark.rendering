@@ -43,8 +43,6 @@ type ConcurrentDeltaQueue<'a>() =
                 Monitor.Pulse x
                 true
             else
-                if !r = 1 then
-                    Log.warn "revived thing"
                 false
         )
 
@@ -60,8 +58,6 @@ type ConcurrentDeltaQueue<'a>() =
                 Monitor.Pulse x
                 true
             else
-                if !r = -1 then
-                    Log.warn "re-killed thing"
                 false
         )
 

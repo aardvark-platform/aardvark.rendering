@@ -256,7 +256,7 @@ module LoD =
 
     let cloud =
         Sg.pointCloud data {
-            targetPointDistance     = Mod.constant 10.0
+            targetPointDistance     = Mod.constant 8.0
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
@@ -266,7 +266,6 @@ module LoD =
                 Map.ofList [
                     DefaultSemantic.Positions, typeof<V3f>
                     DefaultSemantic.Colors, typeof<C4b>
-                    DefaultSemantic.Normals, typeof<V3f>
                 ]
             boundingBoxSurface      = None //Some surf
         } 

@@ -404,8 +404,7 @@ module PointCloudRenderObjectSemantics =
 //                n.uniqueId <- id
 //                id
 
-
-        let pool = GeometryPool.createAsync runtime
+        let pool = new GeometryPool2(runtime, node.Config.attributeTypes |> SymDict.ofMap)
         let calls = DrawCallSet(true)
         let mutable activeSize = 0L
 
@@ -648,7 +647,7 @@ module PointCloudRenderObjectSemantics =
                     match Map.tryFind sem node.Config.attributeTypes with
                         | Some t ->
                             let b = pool.GetBuffer sem
-                            BufferView(b, t) |> Some
+                            b |> Some
                         | None ->
                             None
 
