@@ -13,6 +13,7 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 
 
+
 type IExistentialArrayProcessor =
     abstract member Process<'a when 'a : unmanaged> : 'a[] -> unit
 
@@ -30,105 +31,40 @@ module IExistentialArrayProcessorExts =
             let t = a.GetType().GetElementType()
             gen.MakeGenericMethod([|t|]).Invoke(x, [|a|]) |> ignore
 
-type GeometryPool2(runtime : IRuntime, attributes : SymbolDict<Type>) =
-    
-    let attributes = attributes |> SymDict.toArray |> Array.sortBy (fst >> string)
+type GeometryPool2(runtime : IRuntime, attributes : Map<Symbol, Type>) =
+    let pool = runtime.CreateGeometryPool(attributes)
 
-    let offsets, vertexSize =
-        let off = Array.zeroCreate attributes.Length
-        let mutable current = 0
-        for i in 0 .. attributes.Length - 1 do
-            let (sem, t) = attributes.[i]
-            let s = Marshal.SizeOf t
-            off.[i] <- (sem, t, current)
-            current <- current + s
-
-        off, current
-
-    let buffer = runtime.CreateMappedBuffer()
-
-    let views = offsets |> Seq.map (fun (sem, t, off) -> sem, BufferView(buffer, t, off, vertexSize)) |> SymDict.ofSeq
-    let manager = MemoryManager.createNop()
     let ranges = Dict<IndexedGeometry, managedptr>()
 
-    let mutable dead = []
-    let pending = MVar.empty()
-
-    let runner =
-        async {
-            do! Async.SwitchToNewThread()
-            while true do
-                MVar.take pending
-                let mine = Interlocked.Exchange(&dead, [])
-                buffer.Lock.Enter(ResourceUsage.Access)
-                for d in mine do manager.Free d
-                buffer.Lock.Exit()
-
-        }
-
-    do Async.Start runner
-
+    let faceVertexCount (g : IndexedGeometry) =
+        if g.IndexedAttributes.Count = 0 then 
+            0
+        else
+            let arr = g.IndexedAttributes.Values |> Seq.head
+            arr.Length
 
     member x.Add(g : IndexedGeometry) =
         assert(isNull g.IndexArray)
 
-        let mutable minLength = Int32.MaxValue
-        let arr =
-            offsets |> Array.map (fun (sem, t, off) ->
-                let data = g.IndexedAttributes.[sem]
-                minLength <- min minLength data.Length
-                off, PrimitiveValueConverter.getArrayConverter (data.GetType().GetElementType()) t data
-            )
-        
-        let ptr = 
-            lock ranges (fun () -> 
-                let ptr = manager.Alloc(nativeint minLength * nativeint vertexSize)
-                ranges.[g] <- ptr
-                ptr
-            )
-        if manager.Capacity <> buffer.Capacity then
-            lock x (fun () ->
-                if manager.Capacity <> buffer.Capacity then
-                    buffer.Resize(manager.Capacity)
-            )
-
-        let data : byte[] = Array.zeroCreate (vertexSize * minLength)
-        let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-        let dst = gc.AddrOfPinnedObject()
-        for (off, arr) in arr do
-            arr |> ExistentialArrayProcessor.run {
-                new IExistentialArrayProcessor with
-                    member x.Process(a : 'a[]) =
-                        let mutable dst = dst + nativeint off
-                        for i in 0 .. minLength - 1 do
-                            NativePtr.write (NativePtr.ofNativeInt dst) a.[i]
-                            dst <- dst +  nativeint vertexSize
-            }
-        gc.Free()
-
-        buffer.UseWrite(ptr.Offset, ptr.Size, fun ptr ->
-            Marshal.Copy(data, 0, ptr, data.Length)
-        )
-
-        let off = int (ptr.Offset / nativeint vertexSize)
-        let cnt = int (ptr.Size / nativeint vertexSize)
-        Range1i.FromMinAndSize(off, cnt - 1)
+        let fvc = faceVertexCount g
+        if fvc > 0 then
+            let ptr = pool.Alloc(fvc, g)
+            ranges.[g] <- ptr
+            Range1i.FromMinAndSize(int ptr.Offset, int ptr.Size - 1)
+        else
+            Range1i(-1, -1)
 
     member x.Remove(g : IndexedGeometry) =
         lock ranges (fun () -> 
             match ranges.TryRemove g with
-                | (true, ptr) ->
-                    manager.Free ptr
-//                    Interlocked.Change(&dead, fun l -> ptr :: l) |> ignore
-//                    MVar.put pending ()
-                | _ ->
-                    ()
+                | (true, ptr) -> pool.Free ptr
+                | _ -> ()
         )
 
     member x.GetBuffer(sem : Symbol) =
-        views.[sem]
+        pool.TryGetBufferView sem |> Option.get
 
-    member x.Dispose() =()
+    member x.Dispose() = pool.Dispose()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

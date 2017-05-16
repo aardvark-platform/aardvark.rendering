@@ -391,6 +391,254 @@ module ResizeBufferImplementation =
                     CopyResizeBuffer(x, buffer) :> AbstractResizeBuffer
             )
 
+module ManagedBufferImplementation =
+    
+    [<AutoOpen>]
+    module private SparseBuffers = 
+        type private BufferPageCommitmentDel = delegate of BufferTarget * nativeint * nativeint * bool -> unit
+        type private NamedBufferPageCommitmentDel = delegate of uint32 * nativeint * nativeint * bool -> unit
+
+        let private lockObj = obj()
+        let mutable private initialized = false
+        let mutable private del : BufferPageCommitmentDel = null
+        let mutable supported = false
+
+        let init() =
+            lock lockObj (fun () ->
+                if not initialized then
+                    initialized <- true
+                    let handle = ContextHandle.Current |> Option.get
+                    let ctx = handle.Handle |> unbox<IGraphicsContextInternal>
+                    let ptr = ctx.GetAddress("glBufferPageCommitmentARB")
+                    if ptr <> 0n then
+                        supported <- true
+                        del <- Marshal.GetDelegateForFunctionPointer(ptr, typeof<BufferPageCommitmentDel>) |> unbox
+                    else
+                        supported <- false
+            )
+
+        type GL with
+            static member BufferPageCommitment(target : BufferTarget, offset : nativeint, size : nativeint, commit : bool) =
+                del.Invoke(target, offset, size, commit)
+
+
+        type BufferStorageFlags with
+            static member inline SparseStorageBit = unbox<BufferStorageFlags> 0x0400
+
+        type GetPName with
+            static member inline BufferPageSize = unbox<GetPName> 0x82F8
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module private Alignment = 
+        let inline prev (align : ^a) (v : ^a) =
+            let r = v % align
+            if r = LanguagePrimitives.GenericZero then v
+            else v - r
+
+        let inline next (align : ^a) (v : ^a) =
+            let r = v % align
+            if r = LanguagePrimitives.GenericZero then v
+            else align + v - r       
+
+    type Fences(ctx : Context) =
+        let mutable store : hmap<ContextHandle, Fence> = HMap.empty
+
+        member x.WaitCPU() =
+            lock x (fun () ->
+                let all = store
+                store <- HMap.empty
+
+                for (_,f) in all do 
+                    f.WaitCPU()
+                    f.Dispose()
+            )
+
+        member x.WaitGPU() =
+            let mine = ctx.CurrentContextHandle.Value
+            lock x (fun () ->
+                for (_,f) in store do f.WaitGPU(mine) |> ignore
+            )
+
+        member x.Enqueue() =
+            let f = Fence.Create()
+            lock x (fun () ->
+                store <-
+                    store |> HMap.alter f.Context (fun o ->
+                        match o with
+                            | Some o -> o.Dispose()
+                            | None -> ()
+                        Some f
+                    )
+            )
+
+
+
+    type SparsePoolOperation =
+        | Write of managedptr * IndexedGeometry
+        | Delete of managedptr
+
+    
+
+    type SparseGeometryPool(ctx : Context, types : Map<Symbol, Type>) as this =
+        let pageSize, handles =
+            use __ = ctx.ResourceLock
+            SparseBuffers.init()
+            let pageSize = GL.GetInteger(GetPName.BufferPageSize) |> int64
+            let pageSize = 16L * pageSize
+
+            let handles = 
+                types |> Map.map (fun sem t ->
+                    let s = t.GLSize
+                    let virtualCapacity = (1L <<< 30) * int64 s |> Alignment.next pageSize
+                
+                    let b = GL.GenBuffer()
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, b)
+                    GL.Check "could not bind buffer"
+                    GL.BufferStorage(BufferTarget.CopyWriteBuffer, nativeint virtualCapacity, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
+                    GL.Check "could not set buffer storage"
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                    GL.Check "could not unbind buffer"
+
+                    SparseGeometryPoolBuffer(ctx, b, nativeint pageSize, this), t, nativeint s
+                )
+            nativeint pageSize, handles
+
+        let manager = MemoryManager.createNop()
+        let fences = Fences(ctx)
+
+        let mutable rendering = 0
+        let notRendering = new ManualResetEventSlim(true)
+        let hasFrees = new AutoResetEvent(false)
+
+        let mutable pendingFrees : list<managedptr> = []
+        
+        let freeThread =
+            new Thread(ThreadStart(fun () ->
+                while true do
+                    WaitHandle.WaitAll([| hasFrees; notRendering.WaitHandle |]) |> ignore
+                    let frees = Interlocked.Exchange(&pendingFrees, [])
+                    let mutable count = 0
+                    use __ = ctx.ResourceLock
+                    for (_,(b,_,s)) in Map.toSeq handles do
+                        GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
+                        GL.Check "[Pool] could not bind buffer"
+                        for f in frees do
+                            b.Commitment(f.Offset * s, f.Size * s, false)
+                        GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                        GL.Check "[Pool] could not unbind buffer"
+                        
+                    for f in frees do
+                        manager.Free f
+                        count <- count + 1
+            ), IsBackground = true)
+
+        do freeThread.Start()
+
+        member internal x.BeforeRender() =
+            if Interlocked.Increment(&rendering) = 1 then
+                notRendering.Reset()
+
+            fences.WaitGPU()
+
+        member internal x.AfterRender() =
+            if Interlocked.Decrement(&rendering) = 0 then
+                notRendering.Set()
+
+        member x.Alloc(fvc : int, g : IndexedGeometry) =
+            let ptr = manager.Alloc(nativeint fvc)
+            use __ = ctx.ResourceLock
+
+            for (sem, (buffer, t, es)) in Map.toSeq handles do
+                let o = es * ptr.Offset
+                let s = es * ptr.Size
+
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
+                GL.Check "[Pool] could not bind buffer"
+
+                buffer.Commitment(o, s, true) 
+                match g.IndexedAttributes.TryGetValue sem with
+                    | (true, data) ->
+                        assert(data.GetType().GetElementType() = t)
+                        assert(data.Length >= int ptr.Size)
+
+                        let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                        GL.BufferSubData(BufferTarget.CopyWriteBuffer, o, s, gc.AddrOfPinnedObject())
+                        GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
+                        gc.Free()
+                    | _ ->
+                        Log.error "%s undefined" (string sem)
+
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                GL.Check "[Pool] could not unbind buffer"
+
+            fences.Enqueue()
+            ptr
+
+        member x.Free(ptr : managedptr) =
+            Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
+            hasFrees.Set() |> ignore
+
+        member x.TryGetBufferView(sem : Symbol) =
+            match Map.tryFind sem handles with
+                | Some (b,t,_) -> BufferView(Mod.constant (b :> IBuffer), t) |> Some
+                | _ -> None
+
+        member x.Dispose() =
+            freeThread.Abort()
+            use __ = ctx.ResourceLock
+            for (_,(b,_,_)) in Map.toSeq handles do
+                ctx.Delete b
+
+        interface IGeometryPool with
+            member x.Dispose() = x.Dispose()
+            member x.Alloc(c,g) = x.Alloc(c,g)
+            member x.Free p = x.Free p
+            member x.TryGetBufferView sem = x.TryGetBufferView sem
+
+
+
+    and SparseGeometryPoolBuffer(ctx : Context, handle : int, pageSize : nativeint, parent : SparseGeometryPool) =
+        inherit Buffer(ctx, 0n, handle)
+        let resourceLock = new ResourceLock()
+        let mutable pageRef : int[] = Array.zeroCreate (1 <<< 20)
+
+        member internal x.Commitment(offset : nativeint, size : nativeint, c : bool) =
+            let ctx = ctx.CurrentContextHandle.Value
+            let lastByte = offset + size - 1n
+            let firstPage = offset / pageSize |> int
+            let lastPage = lastByte / pageSize |> int
+
+            lock x (fun () ->
+                if lastPage >= pageRef.Length then 
+                    Array.Resize(&pageRef, Fun.NextPowerOfTwo lastPage)
+ 
+                let changes =
+                    if c then [ firstPage .. lastPage ] |> List.filter (fun pi -> Interlocked.Increment(&pageRef.[pi]) = 1)
+                    else [ firstPage .. lastPage ] |> List.filter (fun pi -> Interlocked.Decrement(&pageRef.[pi]) = 0)
+
+                match changes with
+                    | [] -> 
+                        ()
+                    | _ ->
+                        for pi in changes do
+                            GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, nativeint pi * pageSize, pageSize, c)
+                            GL.Check "[Pool] could not commit buffer"
+                        GL.Sync()
+            )
+
+
+        interface ILockedResource with
+            member x.Lock = resourceLock
+            member x.OnLock(c) =
+                match c with
+                    | Some ResourceUsage.Render -> parent.BeforeRender()
+                    | _ -> ()
+            member x.OnUnlock(c) =
+                match c with
+                    | Some ResourceUsage.Render -> parent.AfterRender()
+                    | _ -> ()
+
+    
 
 // =========================================================================
 // Historical monsters

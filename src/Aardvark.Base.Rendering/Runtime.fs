@@ -53,6 +53,14 @@ type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>
     new(code, entryPoints, uniforms, samplers) = BackendSurface(code, entryPoints, uniforms, samplers, false)
 
 
+type IGeometryPool =
+    inherit IDisposable
+    abstract member Alloc : int * IndexedGeometry -> managedptr
+    abstract member Free : managedptr -> unit
+    abstract member TryGetBufferView : Symbol -> Option<BufferView>
+    
+
+
 [<AllowNullLiteral>]
 type IResourceManager =
     abstract member CreateSurface : signature : IFramebufferSignature * surface : IMod<ISurface> -> IResource<IBackendSurface>
@@ -87,6 +95,8 @@ and IRuntime =
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
     abstract member CreateMappedBuffer : unit -> IMappedBuffer
     abstract member CreateMappedIndirectBuffer : indexed : bool -> IMappedIndirectBuffer
+
+    abstract member CreateGeometryPool : Map<Symbol, Type> -> IGeometryPool
 
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit

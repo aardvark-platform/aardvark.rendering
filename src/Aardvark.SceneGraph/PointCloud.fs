@@ -404,7 +404,7 @@ module PointCloudRenderObjectSemantics =
 //                n.uniqueId <- id
 //                id
 
-        let pool = new GeometryPool2(runtime, node.Config.attributeTypes |> SymDict.ofMap)
+        let pool = new GeometryPool2(runtime, node.Config.attributeTypes)
         let calls = DrawCallSet(true)
         let mutable activeSize = 0L
 

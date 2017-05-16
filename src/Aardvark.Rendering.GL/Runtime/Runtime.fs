@@ -176,6 +176,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateMappedBuffer()  =
             x.CreateMappedBuffer ()
 
+        member x.CreateGeometryPool(types : Map<Symbol, Type>) =
+            x.CreateGeometryPool(types)
+
         member x.CreateMappedIndirectBuffer(indexed)  =
             x.CreateMappedIndirectBuffer (indexed)
 
@@ -423,7 +426,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CreateMappedBuffer() : IMappedBuffer =
         ctx.CreateMappedBuffer()
-
+        
+    member x.CreateGeometryPool(types : Map<Symbol, Type>) =
+        new ManagedBufferImplementation.SparseGeometryPool(ctx, types) :> IGeometryPool
 
     member x.CreateMappedIndirectBuffer(indexed : bool) : IMappedIndirectBuffer =
         ctx.CreateMappedIndirectBuffer(indexed)

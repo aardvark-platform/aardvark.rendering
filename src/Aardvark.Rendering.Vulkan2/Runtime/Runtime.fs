@@ -379,9 +379,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateStreamingTexture(mipMap) = x.CreateStreamingTexture(mipMap)
         member x.DeleteStreamingTexture(t) = x.DeleteStreamingTexture(t)
 
-         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
-         member x.CreateTexture(size, format, levels, samples, count) = x.CreateTexture(size, format, levels, samples, count)
-         member x.CreateTextureCube(size, format, levels, samples) = x.CreateTextureCube(size, format, levels, samples)
-         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
-         member x.CreateMappedBuffer() = x.CreateMappedBuffer()
-         member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
+        member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
+        member x.CreateTexture(size, format, levels, samples, count) = x.CreateTexture(size, format, levels, samples, count)
+        member x.CreateTextureCube(size, format, levels, samples) = x.CreateTextureCube(size, format, levels, samples)
+        member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
+        member x.CreateMappedBuffer() = x.CreateMappedBuffer()
+        member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
+        member x.CreateGeometryPool(types) = failf "not implemented"
