@@ -25,11 +25,11 @@ module ChangeableResources =
                         c
                     else
                         runtime.DeleteTexture c
-                        let n = runtime.CreateTexture(size, format, 1, samples, 1)
+                        let n = runtime.CreateTexture(size, format, 1, samples)
                         current <- Some (samples, size, format, n)
                         n
                 | None ->
-                    let n = runtime.CreateTexture(size, format, 1, samples, 1)
+                    let n = runtime.CreateTexture(size, format, 1, samples)
                     current <- Some (samples, size, format, n)
                     n
         )
@@ -195,13 +195,13 @@ module private RefCountedResources =
                 | Some h -> 
                     t.ReplacedResource(ResourceKind.Texture)
                     runtime.DeleteTexture(h)
-                    let tex = runtime.CreateTexture(size, format, 1, samples, 1)
+                    let tex = runtime.CreateTexture(size, format, 1, samples)
                     handle <- Some tex
                     tex :> ITexture
 
                 | None ->
                     t.CreatedResource(ResourceKind.Texture)
-                    let tex = runtime.CreateTexture(size, format, 1, samples, 1)
+                    let tex = runtime.CreateTexture(size, format, 1, samples)
                     handle <- Some tex
                     tex :> ITexture
          

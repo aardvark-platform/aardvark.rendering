@@ -13,6 +13,7 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 open Aardvark.Base.NativeTensors
 open Microsoft.FSharp.NativeInterop
+open System.Runtime.CompilerServices
 
 #nowarn "9"
 
@@ -461,7 +462,7 @@ module TextureCreationExtensions =
 
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
                 GL.Check "could not bind framebuffer"
-                if src.Count > 1 then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
+                if src.IsArray then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
                 else GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel)
                 GL.Check "could not attach texture to framebuffer"
 
@@ -472,7 +473,7 @@ module TextureCreationExtensions =
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
                 GL.Check "could not bind framebuffer"
 
-                if src.Count > 1 then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel, dstSlice)
+                if src.IsArray then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel, dstSlice)
                 else GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel)
                 GL.Check "could not attach texture to framebuffer"
 
@@ -514,7 +515,7 @@ module TextureCreationExtensions =
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
                 GL.Check "could not bind framebuffer"
 
-                if src.Count > 1 then
+                if src.IsArray then
                     GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
                 else
                     GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel)
@@ -2636,7 +2637,7 @@ module TextureExtensions =
 
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
                 GL.Check "could not bind framebuffer"
-                if src.Count > 1 then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
+                if src.IsArray then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
                 else GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel)
                 GL.Check "could not attach texture to framebuffer"
 
@@ -2647,7 +2648,7 @@ module TextureExtensions =
                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
                 GL.Check "could not bind framebuffer"
 
-                if src.Count > 1 then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel, dstSlice)
+                if src.IsArray then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel, dstSlice)
                 else GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, dst.Handle, dstLevel)
                 GL.Check "could not attach texture to framebuffer"
 
@@ -2689,7 +2690,7 @@ module TextureExtensions =
                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
                 GL.Check "could not bind framebuffer"
 
-                if src.Count > 1 then
+                if src.IsArray then
                     GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel, srcSlice)
                 else
                     GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, src.Handle, srcLevel)
@@ -2789,15 +2790,16 @@ module TextureExtensions =
         member x.Download(t : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
             using x.ResourceLock (fun _ ->
                 let levelSize = t.Size2D / (1 <<< level)
+                let offset = V2i(offset.X, levelSize.Y - offset.Y - target.Size.Y) // flip y-offset
                 if offset = V2i.Zero && target.Size = levelSize then
                     x.Download(t, level, slice, target)
                 else
                     let temp = x.CreateTexture2D(target.Size, 1, t.Format, 1)
                     
-                    if target.Size = levelSize then
-                        x.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, target.Size)
-                    else
+                    if t.IsMultisampled then // resolve multisamples
                         x.Blit(t, level, slice, Box2i.FromMinAndSize(offset, levelSize), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
+                    else
+                        x.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, target.Size)                        
                     
                     x.Download(temp, 0, 0, target)
                     x.Delete(temp)
@@ -2908,3 +2910,21 @@ module Texture =
         let pi = PixImage.Create(format, int64 size.Y, int64 size.Y)
         tex.Context.Download(tex, level, 0, pi)
         [|pi|]
+
+[<Extension; AbstractClass; Sealed>]
+type TextureExtensionsCSharp =
+    [<Extension>]
+    static member Download(ctx : Context, t : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
+        ctx.Download(t, level, slice, offset, target)
+
+    [<Extension>]
+    static member Upload(ctx : Context, t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
+        ctx.Upload(t, level, slice, offset, source)
+
+    [<Extension>]
+    static member Copy(ctx : Context, src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
+        ctx.Copy(src, srcLevel, srcSlice, srcOffset, dst, dstLevel, dstSlice, dstOffset, size)
+
+    [<Extension>]
+    static member Blit(ctx : Context, src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
+        ctx.Blit(src, srcLevel, srcSlice, srcRegion, dst, dstLevel, dstSlice, dstRegion, linear)
