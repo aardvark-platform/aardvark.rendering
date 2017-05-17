@@ -162,3 +162,140 @@ module ConcurrentDeltaQueue =
 
         queue.Subscription <- disposable
         queue
+
+
+type private DeltaHeapEntry<'a, 'b> =
+    class
+        val mutable public Priority : 'b
+        val mutable public Value : 'a
+        val mutable public Index : int
+        val mutable public RefCount : int
+
+        new(v,p,i,r) = { Value = v; Priority = p; Index = i; RefCount = r }
+    end
+
+type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : SetOperation<'a> -> 'b) =
+    
+    let heap = List<DeltaHeapEntry<'a, 'b>>()
+    let entries = Dict<'a, DeltaHeapEntry<'a, 'b>>()
+
+    let swap (l : DeltaHeapEntry<'a, 'b>) (r : DeltaHeapEntry<'a, 'b>) =
+        let li = l.Index
+        let ri = r.Index
+        heap.[li] <- r
+        heap.[ri] <- l
+        l.Index <- ri
+        r.Index <- li
+
+    let rec pushDown (acc : int) (e : DeltaHeapEntry<'a, 'b>) =
+        let l = 2 * e.Index + 1
+        let r = 2 * e.Index + 2
+
+        let cl = if l < heap.Count then compare e.Priority heap.[l].Priority <= 0 else true
+        let cr = if r < heap.Count then compare e.Priority heap.[l].Priority <= 0 else true
+
+        match cl, cr with
+            | true, true -> 
+                acc
+
+            | false, true ->
+                swap heap.[l] e
+                pushDown (acc + 1) e
+
+            | true, false ->
+                swap heap.[r] e
+                pushDown (acc + 1) e
+
+            | false, false ->
+                let c = compare heap.[l].Priority heap.[r].Priority
+                if c < 0 then
+                    swap heap.[l] e
+                else
+                    swap heap.[r] e
+                        
+                pushDown (acc + 1) e
+
+    let rec bubbleUp (acc : int) (e : DeltaHeapEntry<'a, 'b>) =
+        if e.Index > 0 then
+            let pi = (e.Index - 1) / 2
+            let pe = heap.[pi]
+
+            if compare pe.Priority e.Priority > 0 then
+                swap pe e
+                bubbleUp (acc + 1) e
+            else
+                acc
+        else
+            acc
+
+    let enqueue (e : DeltaHeapEntry<'a, 'b>) =
+        e.Index <- heap.Count
+        heap.Add(e)
+        bubbleUp 0 e
+
+    let changeKey (e : DeltaHeapEntry<'a, 'b>) (newKey : 'b) =
+        if e.Index < 0 then
+            e.Priority <- newKey
+            enqueue e
+        else
+            let c = compare e.Priority newKey
+            e.Priority <- newKey
+
+            if c > 0 then pushDown 0 e
+            elif c < 0 then bubbleUp 0 e
+            else 0
+
+    let dequeue() =
+        if heap.Count <= 1 then
+            let e = heap.[0]
+            entries.Remove e.Value |> ignore
+            heap.Clear()
+            SetOperation(e.Value, e.RefCount)
+        else
+            let e = heap.[0]
+            let l = heap.[heap.Count - 1]
+            heap.RemoveAt (heap.Count - 1)
+            heap.[0] <- l
+            l.Index <- 0
+            pushDown 0 l |> ignore
+            e.Index <- -1
+            entries.Remove e.Value |> ignore
+            SetOperation(e.Value, e.RefCount)
+
+    let rec remove (e : DeltaHeapEntry<'a, 'b>) =
+        if e.Index > 0 then
+            let pi = (e.Index - 1) / 2
+            let pe = heap.[pi]
+            swap pe e
+            remove e
+        else
+            dequeue() |> ignore
+
+    member x.Count = heap.Count
+
+    member x.Enqueue (a : SetOperation<'a>) : unit =
+        if a.Count <> 0 then
+            let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
+            entry.RefCount <- entry.RefCount + a.Count
+
+            if entry.RefCount = 0 then
+                entries.Remove a.Value |> ignore
+                remove entry
+            else
+                changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
+
+    member x.UpdatePriorities() =
+        let mutable maxSteps = 0
+        let hist = Array.zeroCreate 128
+        for e in entries.Values do
+            let steps = changeKey e (getPriority (SetOperation(e.Value, e.RefCount)))
+            inc &hist.[steps]
+            if steps > maxSteps then maxSteps <- steps
+
+
+        Array.take (maxSteps + 1) hist
+
+    member x.Dequeue () : SetOperation<'a> = dequeue()
+
+
+

@@ -1,12 +1,16 @@
 ﻿module Program
 
 open System
+open System.IO
 open Rendering.Examples
 
 open System.Runtime.InteropServices
 open System.Diagnostics
 open System.Threading
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Base
+open Aardvark.Base.Incremental
+open Aardvark.SceneGraph
 
 #nowarn "9"
 #nowarn "51"
@@ -176,6 +180,55 @@ let a (x : int) =
 [<EntryPoint>]
 [<STAThread>]
 let main args =
+    let cam = Mod.init V3d.Zero
+    let priority (op : SetOperation<V3d>) =
+        
+        match op with 
+            | Add(_,v) -> V3d.Distance(cam.Value, v) / 100.0
+            | Rem(_,v) -> V3d.Distance(cam.Value, v)
+
+    let queue = ConcurrentDeltaPriorityQueue<V3d, float>(fun s -> priority s)
+
+
+    queue.Enqueue(Add(V3d.III))
+    queue.Enqueue(Add(V3d(2,3,4)))
+    queue.Enqueue(Add(V3d(4,3,4)))
+    queue.Enqueue(Rem(V3d(0,1,2)))
+
+    while queue.Count > 0 do
+        let e = queue.Dequeue()
+        printfn "%A" e
+        
+
+    let rand = RandomSystem()
+
+    let log = @"C:\Users\Schorsch\Desktop\updateHeap.csv"
+    for s in 1000 .. 1000 .. 50000 do
+        printf "%d: " s
+        let queue = ConcurrentDeltaPriorityQueue<V3d, float>(fun s -> priority s)
+        for i in 1 .. s do
+            queue.Enqueue(Add(rand.UniformV3d()))
+    
+        let sw = System.Diagnostics.Stopwatch()
+        sw.Start()
+        for i in 1 .. 100 do
+            transact (fun () -> cam.Value <- rand.UniformV3d())
+            let hist = queue.UpdatePriorities()
+            ()
+        sw.Stop()
+
+        File.AppendAllLines(log, [sprintf "%d;%f" s (sw.Elapsed.TotalMilliseconds / 100.0)])
+        printfn "%A" (sw.MicroTime / 100.0)
+
+//
+//    while queue.Count > 0 do
+//        let e = queue.Dequeue()
+//        printfn "%A" e
+//
+
+    Environment.Exit 0
+
+
     //TimerTest.mmTimer()
     //
     //TimerTest.timerPrecision()
