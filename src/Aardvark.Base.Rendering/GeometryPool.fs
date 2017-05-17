@@ -52,7 +52,7 @@ type GeometryPool2(runtime : IRuntime, attributes : Map<Symbol, Type>) =
             ranges.[g] <- ptr
             Range1i.FromMinAndSize(int ptr.Offset, int ptr.Size - 1)
         else
-            Range1i(-1, -1)
+            Range1i.Invalid
 
     member x.Remove(g : IndexedGeometry) =
         lock ranges (fun () -> 

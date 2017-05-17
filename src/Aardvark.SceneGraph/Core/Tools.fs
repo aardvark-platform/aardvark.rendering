@@ -238,7 +238,7 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
             e.Priority <- newKey
             enqueue e
         else
-            let c = compare e.Priority newKey
+            let c = compare newKey e.Priority
             e.Priority <- newKey
 
             if c > 0 then pushDown 0 e
@@ -275,14 +275,32 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
 
     member x.Enqueue (a : SetOperation<'a>) : unit =
         if a.Count <> 0 then
-            let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
-            entry.RefCount <- entry.RefCount + a.Count
+            lock x (fun () ->
+                let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
+                entry.RefCount <- entry.RefCount + a.Count
 
-            if entry.RefCount = 0 then
-                entries.Remove a.Value |> ignore
-                remove entry
-            else
-                changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
+                if entry.RefCount = 0 then
+                    entries.Remove a.Value |> ignore
+                    remove entry
+                else
+                    changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
+                    Monitor.Pulse x
+            )
+
+    member x.EnqueueMany (a : seq<SetOperation<'a>>) : unit =
+        lock x (fun () ->
+            for a in a do
+                let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
+                entry.RefCount <- entry.RefCount + a.Count
+
+                if entry.RefCount = 0 then
+                    entries.Remove a.Value |> ignore
+                    remove entry
+                else
+                    changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
+
+            Monitor.Pulse x
+        )
 
     member x.UpdatePriorities() =
         let mutable maxSteps = 0
@@ -292,10 +310,15 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
             inc &hist.[steps]
             if steps > maxSteps then maxSteps <- steps
 
-
         Array.take (maxSteps + 1) hist
 
-    member x.Dequeue () : SetOperation<'a> = dequeue()
+    member x.Dequeue () : SetOperation<'a> = 
+        Monitor.Enter x
+        while heap.Count = 0 do
+            Monitor.Wait x |> ignore
+        let e = dequeue()
+        Monitor.Exit x
+        e
 
 
 
