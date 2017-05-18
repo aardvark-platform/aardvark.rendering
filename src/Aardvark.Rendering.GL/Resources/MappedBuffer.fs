@@ -566,7 +566,8 @@ module ManagedBufferImplementation =
                         GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
                         gc.Free()
                     | _ ->
-                        Log.error "%s undefined" (string sem)
+                        ()
+                        //Log.error "%s undefined" (string sem)
 
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
                 GL.Check "[Pool] could not unbind buffer"
@@ -602,6 +603,9 @@ module ManagedBufferImplementation =
         let resourceLock = new ResourceLock()
         let mutable pageRef : int[] = Array.zeroCreate (1 <<< 20)
 
+        let mutable committedSize = 0L
+
+
         member internal x.Commitment(offset : nativeint, size : nativeint, c : bool) =
             let ctx = ctx.CurrentContextHandle.Value
             let lastByte = offset + size - 1n
@@ -620,7 +624,11 @@ module ManagedBufferImplementation =
                     | [] -> 
                         ()
                     | _ ->
+                        let delta = 
+                            if c then int64 pageSize 
+                            else int64 -pageSize
                         for pi in changes do
+                            Interlocked.Add(&committedSize, delta) |> ignore
                             GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, nativeint pi * pageSize, pageSize, c)
                             GL.Check "[Pool] could not commit buffer"
                         GL.Sync()
