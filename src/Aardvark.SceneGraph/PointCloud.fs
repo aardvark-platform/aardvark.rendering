@@ -233,10 +233,18 @@ module LodProgress =
             rasterizeTime       : ref<int64> // ticks
         }
 
+    type ProgressReport =
+        {
+            activeNodeCount     : int
+            expectedNodeCount   : int
+        }
+    
+
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Progress =
         let empty = { activeNodeCount = ref 0; expectedNodeCount = ref 0; dataAccessTime = ref 0L; rasterizeTime = ref 0L }
 
+        let toReport (prog : Progress) = { ProgressReport.activeNodeCount = !prog.activeNodeCount; ProgressReport.expectedNodeCount = !prog.expectedNodeCount }
 
         let timed (s : ref<_>) f = 
             let sw = System.Diagnostics.Stopwatch()
@@ -248,13 +256,15 @@ module LodProgress =
 
 open LodProgress
 
+open LodProgress
+
 type PointCloudInfo =
     {
         /// the element-types for all available attributes
         attributeTypes : Map<Symbol, Type>
-
-        /// the target point distance in pixels
-        targetPointDistance : IMod<float>
+        
+        /// decider function
+        lodDecider : IMod<LodData.Decider>
 
         /// an optional custom view trafo
         customView : Option<IMod<Trafo3d>>
@@ -275,6 +285,8 @@ type PointCloudInfo =
         /// optional surface for bounding boxes of cells that are load in progress.
         // the surface should properly transform instances by using DefaultSemantic.InstanceTrafo
         boundingBoxSurface : Option<IMod<ISurface>>
+
+        progressCallback : ProgressReport -> unit
     }
 
 [<AutoOpen>]
@@ -454,16 +466,6 @@ module PointCloudRenderObjectSemantics =
             workingSet :> aset<_>
 
         member x.Activate() =
-                
-            let wantedNearPlaneDistance =
-                Mod.custom (fun self ->
-                    let viewportSize = viewportSize.GetValue self
-                    let wantedPixelDistance = node.Config.targetPointDistance.GetValue self
-
-                    let size = max viewportSize.X viewportSize.Y
-                    2.0 * float wantedPixelDistance / float size
-                )
-
 
             let deltas = Array.init queueCount (fun _ -> new ConcurrentDeltaQueue<_>())
             let r = MVar<_>()
@@ -495,12 +497,13 @@ module PointCloudRenderObjectSemantics =
                         
                         let v = view.GetValue ()
                         let p = proj.GetValue ()
-                        let wantedNearPlaneDistance = wantedNearPlaneDistance.GetValue ()
+                        let vps = viewportSize.GetValue()
+                        let decider = node.Config.lodDecider.GetValue ()
                     
                         for a in node.Data.Dependencies do a.GetValue () |> ignore
 
                         let set = Progress.timed progress.rasterizeTime (fun () ->
-                            node.Data.Rasterize(v, p, wantedNearPlaneDistance)
+                            node.Data.Rasterize(v, p, decider v p vps)
                         ) 
 
                         let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (lastContent.Contains >> not) )     |> Seq.toList
@@ -542,7 +545,8 @@ module PointCloudRenderObjectSemantics =
 
             let subV = view.AddMarkingCallback (fun () -> r.Put ()) 
             let subP = proj.AddMarkingCallback (fun () -> r.Put ())
-            let subD = wantedNearPlaneDistance.AddMarkingCallback (fun () -> r.Put ())
+            let subS = viewportSize.AddMarkingCallback (fun () -> r.Put ())
+            let subD = node.Config.lodDecider.AddMarkingCallback (fun () -> r.Put ())
             for a in node.Data.Dependencies do a.AddMarkingCallback (fun () -> r.Put ()) |> ignore
 
             r.Put()
@@ -606,6 +610,7 @@ module PointCloudRenderObjectSemantics =
                 async {
                     while true do
                         do! Async.Sleep(1000)
+                        do progress |> Progress.toReport |> node.Config.progressCallback
                         //printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
                         //printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
                         ()
@@ -637,6 +642,7 @@ module PointCloudRenderObjectSemantics =
                     cancel.Cancel()
                     subV.Dispose()
                     subP.Dispose()
+                    subS.Dispose()
                     subD.Dispose()
             }
 

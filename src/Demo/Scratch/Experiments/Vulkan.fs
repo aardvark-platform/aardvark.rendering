@@ -307,8 +307,7 @@ module Lod =
             member x.Traverse f =
                 let rec traverse (level : int) (b : Box3d) =
                     let box = b
-                    let n = 100.0
-                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n); render = true }
+                    let node = { id = b; level = level; bounds = box; inner = true; pointCountNode = 100L; pointCountTree = 100L; render = true }
 
                     if f node then
                         let center = b.Center
@@ -453,7 +452,7 @@ module Lod =
 
     let cloud =
         Sg.pointCloud data {
-            targetPointDistance     = Mod.constant 40.0
+            lodDecider              = Mod.constant (LodData.defaultLodDecider 40.0)
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
@@ -466,6 +465,7 @@ module Lod =
                     DefaultSemantic.Normals, typeof<V3f>
                 ]
             boundingBoxSurface      = None
+            progressCallback = ignore
         }
 
                                     

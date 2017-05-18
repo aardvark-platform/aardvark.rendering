@@ -94,8 +94,8 @@ module LoD =
             member x.Traverse f =
                 let rec traverse (level : int) (b : Box3d) =
                     let box = b
-                    let n = 100.0
-                    let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n); render = true}
+                    let n = 600
+                    let node = { id = b; level = level; bounds = box; inner = true; pointCountNode = 100L; pointCountTree = 100L; render = true}
 
                     if f node then
                         let center = b.Center
@@ -126,12 +126,23 @@ module LoD =
                 async {
                     //do! Async.SwitchToThreadPool()
                     let box = cell.bounds
-                    let points = 
-                        [| for x in 0 .. 9 do
-                             for y in 0 .. 9 do
-                                for z in 0 .. 9 do
-                                    yield V3d(x,y,z)*0.1*box.Size + box.Min |> V3f.op_Explicit
-                         |]
+
+                    let points =
+                        [|
+                            for x in 0 .. 9 do
+                                for y in 0 .. 9 do
+                                    for z in 0 .. 9 do
+                                        //if x = 0 || x = 9 || y = 0 || y = 9 || z = 0 || z = 9 then
+                                            yield V3d(x,y,z)*0.1*box.Size + box.Min |> V3f.op_Explicit
+                                            
+                        |]
+
+                    //let points = 
+                    //    [| for x in 0 .. 9 do
+                    //         for y in 0 .. 9 do
+                    //            for z in 0 .. 9 do
+                    //                yield V3d(x,y,z)*0.1*box.Size + box.Min |> V3f.op_Explicit
+                    //     |]
                     let colors = Array.create points.Length (Helpers.randomColor())
                     //let points = Helpers.randomPoints cell.bounds 1000
                     //let b = Helpers.box (Helpers.randomColor()) cell.bounds
@@ -256,7 +267,7 @@ module LoD =
 
     let cloud =
         Sg.pointCloud data {
-            targetPointDistance     = Mod.constant 8.0
+            lodDecider              = Mod.constant (LodData.defaultLodDecider 8.0)
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
@@ -268,6 +279,7 @@ module LoD =
                     DefaultSemantic.Colors, typeof<C4b>
                 ]
             boundingBoxSurface      = None //Some surf
+            progressCallback        = ignore
         } 
                      
     let sg = 

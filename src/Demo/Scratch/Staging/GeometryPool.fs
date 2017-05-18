@@ -1068,7 +1068,7 @@ module Pooling =
                                     let depthRange = Range1d(clamp frustum.near frustum.far depthRange.Min, clamp frustum.near frustum.far depthRange.Max)
 
                                     let projAvgDistance =
-                                        abs (n.granularity / depthRange.Min)
+                                        abs (Fun.Cbrt(n.bounds.Volume / float n.pointCountNode) / depthRange.Min)
 
 
                                     if projAvgDistance < 0.3 then
@@ -1149,7 +1149,7 @@ module Pooling =
 
         type DummyDataProvider(root : Box3d) =
             static let toNode (level : int) (b : Box3d) =
-                { id = b; level = level; bounds = b; inner = true; granularity = Fun.Cbrt(b.Volume / 100.0); render = true}
+                { id = b; level = level; bounds = b; inner = true; pointCountNode = 100L; pointCountTree = 100L; render = true}
 
             let children (b : Box3d) =
                 let l = b.Min
@@ -1172,8 +1172,7 @@ module Pooling =
                 member x.Traverse f =
                     let rec traverse (level : int) (b : Box3d) =
                         let box = b
-                        let n = 100.0
-                        let node = { id = b; level = level; bounds = box; inner = true; granularity = Fun.Cbrt(box.Volume / n); render = true}
+                        let node = { id = b; level = level; bounds = box; inner = true; pointCountNode = 100L; pointCountTree = 100L; render = true}
 
                         if level > 10 then
                             f node (fun _ -> [])
