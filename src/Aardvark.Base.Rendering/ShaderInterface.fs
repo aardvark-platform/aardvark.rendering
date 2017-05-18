@@ -334,22 +334,26 @@ module ShaderParameter =
 
 type ShaderInterface =
     {
-        Inputs          : list<ShaderParameter>
-        Outputs         : list<ShaderParameter>
-        Uniforms        : list<ShaderParameter>
-        UniformBlocks   : list<ShaderBlock>
-        StorageBlocks   : list<ShaderBlock>
+        Inputs              : list<ShaderParameter>
+        Outputs             : list<ShaderParameter>
+        Uniforms            : list<ShaderParameter>
+        UniformBlocks       : list<ShaderBlock>
+        StorageBlocks       : list<ShaderBlock>
+        UsedBuiltInInputs   : Map<ShaderStage, Set<string>>
+        UsedBuiltInOutputs  : Map<ShaderStage, Set<string>>
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderInterface =
     let flipMatrixMajority (iface : ShaderInterface) : ShaderInterface =
         {
-            Inputs          = iface.Inputs |> List.map ShaderParameter.flipMatrixMajority
-            Outputs         = iface.Outputs |> List.map ShaderParameter.flipMatrixMajority
-            Uniforms        = iface.Uniforms |> List.map ShaderParameter.flipMatrixMajority
-            UniformBlocks   = iface.UniformBlocks |> List.map ShaderBlock.flipMatrixMajority
-            StorageBlocks   = iface.StorageBlocks |> List.map ShaderBlock.flipMatrixMajority
+            Inputs              = iface.Inputs |> List.map ShaderParameter.flipMatrixMajority
+            Outputs             = iface.Outputs |> List.map ShaderParameter.flipMatrixMajority
+            Uniforms            = iface.Uniforms |> List.map ShaderParameter.flipMatrixMajority
+            UniformBlocks       = iface.UniformBlocks |> List.map ShaderBlock.flipMatrixMajority
+            StorageBlocks       = iface.StorageBlocks |> List.map ShaderBlock.flipMatrixMajority
+            UsedBuiltInInputs   = iface.UsedBuiltInInputs
+            UsedBuiltInOutputs  = iface.UsedBuiltInOutputs
         }
     
     let toString (iface : ShaderInterface) =
@@ -358,7 +362,7 @@ module ShaderInterface =
         let uniform = iface.Uniforms |> List.map ShaderParameter.toString |> String.concat "\r\n" |> String.indent 1 |> sprintf "uniform {\r\n%s\r\n}"
         let ubs = iface.UniformBlocks |> List.map ShaderBlock.toString |> String.concat "\r\n" |> String.indent 1 |> sprintf "uniform {\r\n%s\r\n}"
         let sbs = iface.StorageBlocks |> List.map ShaderBlock.toString |> String.concat "\r\n" |> String.indent 1 |> sprintf "buffer {\r\n%s\r\n}"
-
+     
         String.concat "\r\n" [input; output; uniform; ubs; sbs]
 
 

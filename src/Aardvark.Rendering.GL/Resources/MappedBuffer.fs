@@ -485,11 +485,12 @@ module ManagedBufferImplementation =
             SparseBuffers.init()
             let pageSize = GL.GetInteger(GetPName.BufferPageSize) |> int64
             let pageSize = 16L * pageSize
+            
 
             let handles = 
                 types |> Map.map (fun sem t ->
                     let s = t.GLSize
-                    let virtualCapacity = (1L <<< 30) * int64 s |> Alignment.next pageSize
+                    let virtualCapacity = (40L <<< 20) * int64 s |> Alignment.next pageSize
                 
                     let b = GL.GenBuffer()
                     GL.BindBuffer(BufferTarget.CopyWriteBuffer, b)

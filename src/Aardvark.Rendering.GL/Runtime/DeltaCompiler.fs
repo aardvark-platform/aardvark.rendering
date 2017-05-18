@@ -69,9 +69,19 @@ module DeltaCompiler =
             if prev.StencilMode <> me.StencilMode then
                 yield Instructions.setStencilMode me.StencilMode
 
+            
+
             // bind the program (if needed)
             if prev.Program <> me.Program then
+                let myProg = me.Program.Handle.GetValue()
+
                 yield Instructions.bindProgram me.Program
+            
+                if myProg.WritesPointSize then
+                    yield Instruction.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+                else
+                    yield Instruction.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+
 
             // bind all uniform-buffers (if needed)
             for (id,ub) in Map.toSeq me.UniformBuffers do

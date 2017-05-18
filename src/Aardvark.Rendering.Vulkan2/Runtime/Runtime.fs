@@ -338,7 +338,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     interface IRuntime with
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
-            let code = 
+            let glsl = 
                 signature.Link(effect, Range1d(0.0, 1.0), true)
                     |> ModuleCompiler.compileGLSLVulkan
             
@@ -348,7 +348,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                     |> Seq.map (fun (stage,_) -> unbox<Aardvark.Base.ShaderStage> (int stage), "main") 
                     |> Dictionary.ofSeq
 
-            BackendSurface(code, entries)
+            BackendSurface(glsl.code, entries)
         member x.ResourceManager = failf "not implemented"
 
         member x.CreateFramebufferSignature(a,b) = x.CreateFramebufferSignature(a,b)

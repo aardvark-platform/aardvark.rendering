@@ -398,6 +398,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
     member x.AverageFrameTime = MicroTime(TimeSpan.FromSeconds avgFrameTime.Average)
 
     override x.OnLoad(e) =
+        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
         GL.Enable(EnableCap.TextureCubeMapSeamless)
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
         if c <> null then

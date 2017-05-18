@@ -61,6 +61,15 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
         member x.Images = images
 
 type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
+    static let aardStage =
+        LookupTable.lookupTable [
+            FShade.ShaderStage.Vertex, Aardvark.Base.ShaderStage.Vertex
+            FShade.ShaderStage.TessControl, Aardvark.Base.ShaderStage.TessControl
+            FShade.ShaderStage.TessEval, Aardvark.Base.ShaderStage.TessEval
+            FShade.ShaderStage.Geometry, Aardvark.Base.ShaderStage.Geometry
+            FShade.ShaderStage.Fragment, Aardvark.Base.ShaderStage.Fragment
+            FShade.ShaderStage.Compute, Aardvark.Base.ShaderStage.Compute
+        ]
 
     static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
 
@@ -96,17 +105,25 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     interface IRuntime with
         member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
-            let code = 
+            let glsl = 
                 signature.Link(effect, Range1d(-1.0, 1.0), false)
                     |> ModuleCompiler.compileGLSL410
 
             let entries =
                 effect.Shaders 
                     |> Map.toSeq
-                    |> Seq.map (fun (stage,_) -> unbox<Aardvark.Base.ShaderStage> (int stage), "main") 
+                    |> Seq.map (fun (stage,_) -> aardStage stage, "main") 
                     |> Dictionary.ofSeq
 
-            BackendSurface(code, entries)
+            let builtIns =
+                glsl.builtIns
+                    |> Map.toSeq 
+                    |> Seq.map (fun (k,v) -> aardStage k, v)
+                    |> Map.ofSeq
+                
+
+
+            BackendSurface(glsl.code, entries, builtIns)
 
         member x.ResourceManager = manager :> IResourceManager
 

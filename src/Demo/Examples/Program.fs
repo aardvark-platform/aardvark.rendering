@@ -242,6 +242,8 @@ let main args =
     //Examples.Render2TexturePrimiviteChangeableSize.run()
     //Examples.Render2TexturePrimitiveFloat.run()
     //Examples.ComputeTest.run()
+    Ag.initialize()
+    Aardvark.Init()
     Examples.LoD.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 

@@ -94,7 +94,7 @@ module FShadeInterop =
             if code.Contains "#ifdef TessControl" then entries.Add(AStage.TessControl, "main")
             if code.Contains "#ifdef TessEval" then entries.Add(AStage.TessEval, "main")
 
-            BackendSurface(code, entries, null)
+            BackendSurface(code, entries, Map.empty, null)
         ) 
 
     let private toWrapMode (mode : WrapMode) =
@@ -281,7 +281,7 @@ module FShadeInterop =
         interface IGeneratedSurface with
             member x.Generate (r : IRuntime, signature : IFramebufferSignature) =
                 let bs = r.AssembleEffect(effect, signature) 
-
+                
                 let samplers = Dictionary.empty
 
                 for KeyValue(k,v) in effect.Uniforms do
@@ -294,7 +294,7 @@ module FShadeInterop =
                                 samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
                         | _ ->
                             ()
-                BackendSurface(bs.Code, bs.EntryPoints, bs.Uniforms, samplers, true)
+                BackendSurface(bs.Code, bs.EntryPoints, bs.BuiltIns, bs.Uniforms, samplers, true)
 
     let toFShadeSurface (e : FShadeEffect) =
         FShadeSurface(e) :> ISurface

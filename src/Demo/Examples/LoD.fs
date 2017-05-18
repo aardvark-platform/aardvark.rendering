@@ -78,7 +78,7 @@ module Helpers =
 module LoD = 
 
     Interactive.Renderer <- RendererConfiguration.GL
-    FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
+    //FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
     let win = Interactive.Window
 
@@ -239,15 +239,14 @@ module LoD =
         type Vertex = { 
                 [<Position>]      pos   : V4d 
                 [<Color>]         col   : V4d
-                [<InstanceTrafo>] trafo : M44d
+                [<PointSize>] blubb : float
             }
 
         let trafo (v : Vertex) =
             vertex {
                 return { 
-                    pos = uniform.ViewProjTrafo * v.trafo * v.pos
-                    col = v.col
-                    trafo = v.trafo
+                    v with blubb = 10.5
+                           col = V4d(v.col.XYZ,0.5)
                 }
             }
             
@@ -286,7 +285,8 @@ module LoD =
         Sg.group' [
             cloud
                 |> Sg.effect [
-                    DefaultSurfaces.trafo |> toEffect                  
+                    DefaultSurfaces.trafo |> toEffect 
+                    Instanced.trafo |> toEffect                  
                     DefaultSurfaces.vertexColor  |> toEffect         
                     //DefaultSurfaces.pointSprite  |> toEffect     
                     //DefaultSurfaces.pointSpriteFragment  |> toEffect 
@@ -300,7 +300,7 @@ module LoD =
 
     let final =
         sg |> Sg.effect [
-                DefaultSurfaces.trafo |> toEffect                  
+                DefaultSurfaces.trafo |> toEffect                
                 DefaultSurfaces.vertexColor  |> toEffect 
                 ]
             |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo ) 
@@ -309,7 +309,7 @@ module LoD =
             |> Sg.uniform "ViewportSize" win.Sizes
     
     let run() =
-        Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+        //Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         Interactive.SceneGraph <- final
         Interactive.RunMainLoop()
 

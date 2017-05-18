@@ -156,8 +156,8 @@ module StepwiseQueueExection =
     open StepwiseProgress
 
 
-    let cache = ConcurrentDictionary<'a, Stepwise<unit> * CancellationTokenSource>(1,0)
-    let runEffects (set : IAdaptiveObject) (c : ConcurrentDeltaPriorityQueue<'a, _>) (f : CancellationToken -> 'a -> Stepwise<unit>) (undo : 'a -> unit)  =
+    let cache = ConcurrentDictionary<LodDataNode, Stepwise<unit> * CancellationTokenSource>(1,0)
+    let runEffects (set : IAdaptiveObject) (c : ConcurrentDeltaPriorityQueue<LodDataNode, _>) (f : CancellationToken -> LodDataNode -> Stepwise<unit>) (undo : LodDataNode -> unit)  =
         //let working = ConcurrentHashSet<'a>()
 
         let markThings = MVar.empty()
@@ -180,7 +180,7 @@ module StepwiseQueueExection =
                     let d = 
                         
                         let res = c.Dequeue()
-                        lock res.Value (fun () ->
+                        lock c (fun () ->
                             match res with
                                 | Add(_,v) ->
                                     let stepwise,cts = 

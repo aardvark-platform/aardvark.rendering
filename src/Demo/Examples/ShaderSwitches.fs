@@ -158,6 +158,6 @@ module ShaderSignatureTest =
         let glslA = am' |> ModuleCompiler.compileGLSL410
         let glslB = bm' |> ModuleCompiler.compileGLSL410
 
-        printfn "%s" glslA
+        printfn "%s" glslA.code
         printfn ""
-        printfn "%s" glslB
+        printfn "%s" glslB.code

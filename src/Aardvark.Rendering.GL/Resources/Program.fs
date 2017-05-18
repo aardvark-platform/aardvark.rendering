@@ -72,6 +72,9 @@ type Program =
        mutable _uniforms : Option<list<string * Type>>
     } with
 
+    member x.WritesPointSize =
+        x.Interface.UsedBuiltInOutputs |> Map.exists (fun _ s -> s |> Set.contains "gl_PointSize")
+
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
         member x.UniformGetters = x.UniformGetters
@@ -179,7 +182,7 @@ module ProgramExtensions =
                 GL.Check "could not get shader status"
 
                 let log = GL.GetShaderInfoLog handle
-
+                
                 let topologies =
                     match stage with
                         | ShaderStage.Geometry ->

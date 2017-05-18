@@ -96,8 +96,8 @@ module ContextHandle =
             let ctx = context |> unbox<IGraphicsContextInternal>
             ctx.LoadAll()
 
+            GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
             GL.Enable(EnableCap.TextureCubeMapSeamless)
-
             context.MakeCurrent(null)
             window, context
     

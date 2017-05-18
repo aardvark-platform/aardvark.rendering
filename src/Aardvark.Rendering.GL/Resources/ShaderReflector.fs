@@ -420,6 +420,7 @@ module ShaderInterface =
                     let _type = GL.GetProgramResourceType(p, iface, pi) |> ShaderParameterType.ofActiveUniformType
                     let location = GL.GetProgramResourceLocation(p, iface, pi)
                     let size = GL.GetProgramResource(p, iface, pi, ProgramProperty.ArraySize)
+                    
 
                     let _type =
                         if size > 1 then FixedArray(_type, -1, size)
@@ -485,12 +486,15 @@ module ShaderInterface =
 
         let shaderInterface (baseSlot : int) (p : int) =
             let slot = ref baseSlot
+            
             {
-                Inputs          = p |> parameters slot ProgramInterface.ProgramInput
-                Outputs         = p |> parameters slot ProgramInterface.ProgramOutput
-                Uniforms        = p |> parameters slot ProgramInterface.Uniform
-                UniformBlocks   = p |> blocks ProgramInterface.UniformBlock
-                StorageBlocks   = p |> blocks ProgramInterface.ShaderStorageBlock
+                Inputs              = p |> parameters slot ProgramInterface.ProgramInput
+                Outputs             = p |> parameters slot ProgramInterface.ProgramOutput
+                Uniforms            = p |> parameters slot ProgramInterface.Uniform
+                UniformBlocks       = p |> blocks ProgramInterface.UniformBlock
+                StorageBlocks       = p |> blocks ProgramInterface.ShaderStorageBlock
+                UsedBuiltInOutputs  = Map.empty
+                UsedBuiltInInputs   = Map.empty
             }
 
     module private GL =
@@ -681,6 +685,8 @@ module ShaderInterface =
                 Uniforms        = p |> getUniforms slot
                 UniformBlocks   = p |> blocksUB
                 StorageBlocks   = storage
+                UsedBuiltInOutputs  = Map.empty
+                UsedBuiltInInputs   = Map.empty
             }
 
     let ofProgram (baseSlot : int) (ctx : Context) (p : int) =

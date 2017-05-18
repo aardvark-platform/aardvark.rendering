@@ -305,9 +305,9 @@ module ComputeTest =
                 if shader.csLocalSize.AllGreater 0 then Some shader.csLocalSize
                 else None
 
-            printfn "%s" glsl
+            printfn "%s" glsl.code
 
-            x.TryCompileKernel(glsl, localSize)
+            x.TryCompileKernel(glsl.code, localSize)
 
         member x.CompileKernel (f : 'a -> 'b) =
             match x.TryCompileKernel f with

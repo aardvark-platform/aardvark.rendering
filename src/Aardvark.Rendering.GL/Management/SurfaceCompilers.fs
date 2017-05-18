@@ -27,9 +27,28 @@ module SurfaceCompilers =
                         | (true, desc) -> Some desc
                         | _ -> None
 
-                Success { s with TextureInfo = b.Samplers |> Dictionary.toMap  }
+                let builtIns (kind : FShade.Imperative.ParameterKind) =
+                    b.BuiltIns 
+                        |> Map.toSeq 
+                        |> Seq.choose (fun (stage, vs) -> 
+                            match Map.tryFind kind vs with
+                                | Some vs -> Some(stage, vs)
+                                | None -> None
+                        )
+                        |> Map.ofSeq
 
-            | Error e -> Error e
+                Success { 
+                    s with 
+                        TextureInfo = b.Samplers |> Dictionary.toMap  
+                        Interface = 
+                            { s.Interface with 
+                                UsedBuiltInInputs = builtIns FShade.Imperative.ParameterKind.Input
+                                UsedBuiltInOutputs = builtIns FShade.Imperative.ParameterKind.Output
+                            }
+                }
+
+            | Error e -> 
+                Error e
 
     do registerShaderCompiler compileBackendSurface
 
