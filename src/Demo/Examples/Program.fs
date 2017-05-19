@@ -177,6 +177,132 @@ let a (x : int) =
     let ptr = sepp &&x
     5
 
+
+module Proc =
+    open Aardvark.Base.Monads.State
+
+    [<RequireQualifiedAccess>]
+    type ProcResult<'a> =
+        | Cancelled
+        | Faulted of exn
+        | Done of 'a
+
+    type ProcState<'s> =
+        {
+            ct : CancellationToken
+            state : 's
+        }
+
+    type proc<'s, 'a> = 
+        abstract member ContinueWith : ProcState<'s> * (ProcState<'s> -> ProcResult<'a> -> unit) -> unit
+
+    module Proc =
+        [<AbstractClass>]
+        type private Proc<'s, 'a>() =
+            
+            abstract member ContinueWith : ProcState<'s> * (ProcState<'s> -> ProcResult<'a> -> unit) -> unit
+            
+            interface proc<'s, 'a> with
+                member x.ContinueWith(s, cont) =
+                    if s.ct.IsCancellationRequested then
+                        cont s ProcResult.Cancelled
+                    else
+                        x.ContinueWith(s, cont)
+            
+        let inline private create<'s, 'a> (f : ProcState<'s> -> (ProcState<'s> -> ProcResult<'a> -> unit) -> unit) =
+            { new Proc<'s, 'a>() with
+                override x.ContinueWith(s,cont) = f s cont
+            } :> proc<_,_>
+                        
+        let map (f : 'a -> 'b) (p : proc<'s, 'a>) =
+            create<'s, 'b> <| fun s cont ->
+                p.ContinueWith(s, fun s v ->
+                    match v with
+                        | ProcResult.Cancelled -> cont s ProcResult.Cancelled
+                        | ProcResult.Faulted e -> cont s (ProcResult.Faulted e)
+                        | ProcResult.Done v -> 
+                            if s.ct.IsCancellationRequested then 
+                                cont s ProcResult.Cancelled
+                            else    
+                                try 
+                                    cont s (ProcResult.Done (f v))
+                                with 
+                                    | :? OperationCanceledException -> cont s ProcResult.Cancelled
+                                    | e -> cont s (ProcResult.Faulted e)
+                )
+
+        let mapS (f : 'a -> State<'s, 'b>) (p : proc<'s, 'a>) =
+            create<'s, 'b> <| fun s cont ->
+                p.ContinueWith(s, fun s v ->
+                    match v with
+                        | ProcResult.Cancelled -> cont s ProcResult.Cancelled
+                        | ProcResult.Faulted e -> cont s (ProcResult.Faulted e)
+                        | ProcResult.Done v -> 
+                            if s.ct.IsCancellationRequested then 
+                                cont s ProcResult.Cancelled
+                            else 
+                                let mutable state = s.state
+                                try
+                                    let res = f(v).Run(&state)
+                                    cont { s with state = state } (ProcResult.Done res)
+                                with 
+                                    | :? OperationCanceledException -> cont { s with state = state } ProcResult.Cancelled
+                                    | e -> cont { s with state = state } (ProcResult.Faulted e)
+                )
+
+        let bind (f : 'a -> proc<'s, 'b>) (p : proc<'s, 'a>) =
+            create<'s, 'b> <| fun s cont -> 
+                p.ContinueWith(s, fun s r ->
+                    match r with
+                        | ProcResult.Cancelled -> cont s ProcResult.Cancelled
+                        | ProcResult.Faulted e -> cont s (ProcResult.Faulted e)
+                        | ProcResult.Done(v) ->
+                            try
+                                let res = f(v)
+                                res.ContinueWith(s, cont)
+                            with 
+                                | :? OperationCanceledException -> cont s ProcResult.Cancelled
+                                | e -> cont s (ProcResult.Faulted e)
+                )  
+
+        let value (v : 'a) =
+            create<'s, 'a> <| fun s cont ->
+                cont s (ProcResult.Done v)
+
+        let delay (f : unit -> proc<'s, 'a>) =
+            create<'s, 'a> <| fun s cont ->
+                try f().ContinueWith(s, cont)
+                with
+                    | :? OperationCanceledException -> cont s ProcResult.Cancelled
+                    | e -> cont s (ProcResult.Faulted e)
+
+        let combine (l : proc<'s, unit>) (r : proc<'s, 'a>) =
+            create<'s, 'a> <| fun s cont ->
+                l.ContinueWith(s, fun s res ->
+                    match res with
+                        | ProcResult.Cancelled -> cont s ProcResult.Cancelled 
+                        | ProcResult.Faulted e -> cont s (ProcResult.Faulted e)
+                        | ProcResult.Done () -> r.ContinueWith(s, cont)
+                )
+
+    type ProcBuilder() =
+        member x.Bind(m : proc<'s, 'a>, f : 'a -> proc<'s, 'b>) =
+            Proc.bind f m
+
+        member x.Return(v : 'a) =
+            Proc.value v
+
+        member x.Zero() =
+            Proc.value ()
+
+        member x.Delay (f : unit -> proc<'s, 'a>) =
+            Proc.delay f
+
+        member x.Combine(l : proc<'s, unit>, r : proc<'s, 'a>) =
+            Proc.combine l r
+
+
+
 [<EntryPoint>]
 [<STAThread>]
 let main args =
