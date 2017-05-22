@@ -611,6 +611,9 @@ module NewLoDImpl =
                 Interlocked.Increment(&refCount) |> ignore
                 { new IDisposable with member x.Dispose() = release() }
 
+            let progress (p : LoaderProgress) =
+                Log.line "memory: %A" pool.UsedMemory
+
             let vertexAttributes =
                 config.attributeTypes 
                 |> Map.toSeq
@@ -648,8 +651,8 @@ module NewLoDImpl =
                     priority            = fun op -> if op.Count < 0 then -op.Value.level else op.Value.level
                     numThreads          = 4
                     submitDelay         = TimeSpan.FromMilliseconds 50.0
-                    progressInterval    = TimeSpan.MaxValue
-                    progress            = fun p -> Log.line "progress: %A" p
+                    progressInterval    = TimeSpan.FromSeconds 1.0
+                    progress            = progress
                 }
 
             let drawCallBuffer = 

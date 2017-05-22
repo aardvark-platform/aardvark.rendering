@@ -511,6 +511,8 @@ module ManagedBufferImplementation =
         let notRendering = new ManualResetEventSlim(true)
         let hasFrees = new AutoResetEvent(false)
 
+        let mutable count = 0
+
         let mutable pendingFrees : list<managedptr> = []
         
         let freeThread =
@@ -548,6 +550,7 @@ module ManagedBufferImplementation =
         member x.Alloc(fvc : int, g : IndexedGeometry) =
             let ptr = manager.Alloc(nativeint fvc)
             use __ = ctx.ResourceLock
+            Interlocked.Increment(&count) |> ignore
 
             for (sem, (buffer, t, es)) in Map.toSeq handles do
                 let o = es * ptr.Offset
@@ -577,6 +580,7 @@ module ManagedBufferImplementation =
             ptr
 
         member x.Free(ptr : managedptr) =
+            Interlocked.Decrement(&count) |> ignore
             Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
             hasFrees.Set() |> ignore
 
@@ -592,6 +596,8 @@ module ManagedBufferImplementation =
                 ctx.Delete b
 
         interface IGeometryPool with
+            member x.Count = count
+            member x.UsedMemory = handles |> Map.toSeq |> Seq.sumBy (fun (_,(b,_,_)) -> b.UsedMemory)
             member x.Dispose() = x.Dispose()
             member x.Alloc(c,g) = x.Alloc(c,g)
             member x.Free p = x.Free p
@@ -635,6 +641,7 @@ module ManagedBufferImplementation =
                         GL.Sync()
             )
 
+        member x.UsedMemory = Mem committedSize
 
         interface ILockedResource with
             member x.Lock = resourceLock
