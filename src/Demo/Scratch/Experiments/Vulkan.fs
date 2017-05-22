@@ -462,10 +462,9 @@ module Lod =
                 Map.ofList [
                     DefaultSemantic.Positions, typeof<V3f>
                     DefaultSemantic.Colors, typeof<C4b>
-                    DefaultSemantic.Normals, typeof<V3f>
                 ]
             boundingBoxSurface      = None
-            progressCallback = ignore
+            progressCallback = Action<_>(ignore)
         }
 
                                     

@@ -277,7 +277,7 @@ module LodProgress =
     type ProgressReport =
         {
             activeNodeCount     : int
-            expectedNodeCount   : int
+            pendingOperations   : int
         }
     
 
@@ -285,7 +285,7 @@ module LodProgress =
     module Progress =
         let empty = { activeNodeCount = ref 0; expectedNodeCount = ref 0; dataAccessTime = ref 0L; rasterizeTime = ref 0L }
 
-        let toReport (prog : Progress) = { ProgressReport.activeNodeCount = !prog.activeNodeCount; ProgressReport.expectedNodeCount = !prog.expectedNodeCount }
+        let toReport (prog : Progress) = { ProgressReport.activeNodeCount = !prog.activeNodeCount; ProgressReport.pendingOperations = !prog.expectedNodeCount }
 
         let timed (s : ref<_>) f = 
             let sw = System.Diagnostics.Stopwatch()
@@ -327,7 +327,7 @@ type PointCloudInfo =
         // the surface should properly transform instances by using DefaultSemantic.InstanceTrafo
         boundingBoxSurface : Option<IMod<ISurface>>
 
-        progressCallback : ProgressReport -> unit
+        progressCallback : Action<ProgressReport>
     }
 
 [<AutoOpen>]
@@ -575,7 +575,7 @@ module PointCloudRenderObjectSemantics =
 //                        for q in deltas do
 //                            total <- total + q.Count
 
-                        Log.warn "queue: %d" deltas.Count
+                        //Log.warn "queue: %d" deltas.Count
 
                         //for v in add do
                         //    let id = getId v
@@ -669,8 +669,8 @@ module PointCloudRenderObjectSemantics =
             let printer =
                 async {
                     while true do
-                        do! Async.Sleep(1000)
-                        do progress |> Progress.toReport |> node.Config.progressCallback
+                        do! Async.Sleep(100)
+                        do { (progress |> Progress.toReport) with ProgressReport.pendingOperations = deltas.Count } |> node.Config.progressCallback.Invoke
                         //printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
                         //printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
                         ()
