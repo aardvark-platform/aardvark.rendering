@@ -205,11 +205,18 @@ module NewLoDImpl =
         type AsyncLoadASet<'a, 'x, 'b>(config : LoadConfig<'a, 'b>, input : IMod<'x>, mapping : 'x -> ISet<'a>) =
             static let noDisposable = { new IDisposable with member x.Dispose() = () }
 
+            let resultDeltaLock = obj()
+            let mutable dead = HSet.empty
+
             let finalize (ops : hdeltaset<'b>) =
-                for op in ops do
-                    match op with
-                        | Rem(_,v) -> config.unload v
-                        | _ -> ()
+                if ops.Count > 0 then
+                    lock resultDeltaLock (fun () ->
+                        let old = dead.Count
+                        for op in ops do
+                            match op with
+                                | Rem(_,v) -> dead <- HSet.add v dead
+                                | _ -> ()
+                    )
 
             let history = new History<hrefset<'b>, hdeltaset<'b>>(HRefSet.traceNoRefCount, finalize)
 
@@ -220,6 +227,8 @@ module NewLoDImpl =
                 if ops.Count > 0 then
                     history.Perform ops |> ignore
 
+
+
             let mutable targetCount = 0
             let mutable currentCount = 0
             let mutable queueCount = 0
@@ -229,6 +238,8 @@ module NewLoDImpl =
             let mutable loadTicks = 0L
             let mutable remCount = 0
             let mutable remTicks = 0L
+
+            
 
             let progressReport() =
                 let loadTime = 
@@ -261,6 +272,7 @@ module NewLoDImpl =
 
             let start() = 
 
+
                 let queue = ConcurrentDeltaPriorityQueue<'a, int>(config.priority)
                 let cancel = new CancellationTokenSource()
                 let tasks = ConcurrentDictionary<'a, Task<'b> * CancellationTokenSource>()
@@ -272,7 +284,6 @@ module NewLoDImpl =
                         null
 
                 let resultDeltaReady = MVar.empty()
-                let resultDeltaLock = obj()
                 let mutable resultDeltas = HDeltaSet.empty
 
                 let getDeltaThread () =
@@ -317,11 +328,12 @@ module NewLoDImpl =
                                     sw.Restart()
                                     let cts = new CancellationTokenSource()
                                     let tcs = TaskCompletionSource<'b>()
+                                    if tasks.ContainsKey v then Log.warn "duplicate add"
+
                                     tasks.[v] <- (tcs.Task, cts)
 
                                     try
                                         let loaded = config.load cts.Token v
-
                                         lock resultDeltaLock (fun () -> 
                                             resultDeltas <- HDeltaSet.add (Add loaded) resultDeltas
                                         )
@@ -330,6 +342,7 @@ module NewLoDImpl =
                                     with
                                         | CancelExn -> tcs.SetCanceled()
                                         | e -> tcs.SetException e
+
 
                                     sw.Stop()
                                     Interlocked.Increment(&loadCount) |> ignore
@@ -347,13 +360,28 @@ module NewLoDImpl =
                                     try
                                         let res = task.Result
                                         lock resultDeltaLock (fun () -> 
-                                            resultDeltas <- HDeltaSet.add (Rem res) resultDeltas
+                                            let m = resultDeltas |> HDeltaSet.toHMap
+
+                                            let newMap = 
+                                                m |> HMap.alter res (fun o ->
+                                                    match o with
+                                                        | Some 1 -> 
+                                                            dead <- HSet.add res dead
+                                                            None
+                                                        | Some o ->
+                                                            Some (o - 1)
+                                                        | None ->
+                                                            Some (-1)
+                                                )
+
+                                            resultDeltas <- HDeltaSet.ofHMap newMap
                                         )
                                         MVar.put resultDeltaReady ()
                                     with
                                         | CancelExn -> ()
                                         | e -> Log.error "[LoD] load of %A faulted: %A" v e
                                 
+                                    cts.Dispose()
                                     sw.Stop()
                                     Interlocked.Increment(&remCount) |> ignore
                                     Interlocked.Add(&remTicks, sw.Elapsed.Ticks) |> ignore
@@ -367,11 +395,13 @@ module NewLoDImpl =
 
                 let submitThread () =
                     try
+                        let sw = System.Diagnostics.Stopwatch()
+                        
                         while true do
                             resultDeltaReady.Take(cancel.Token)
-
-                            if config.submitDelay > TimeSpan.Zero then
-                                Thread.Sleep(config.submitDelay)
+                            sw.Stop()
+                            if sw.Elapsed < config.submitDelay && config.submitDelay > TimeSpan.Zero then
+                                Thread.Sleep(config.submitDelay - sw.Elapsed)
 
                             let ops = 
                                 lock resultDeltaLock (fun () ->
@@ -383,6 +413,7 @@ module NewLoDImpl =
                             transact (fun () ->
                                 emit ops
                             )
+                            sw.Restart()
 
                             currentCount <- history.State.Count
                             queueCount <- queue.Count
@@ -390,15 +421,32 @@ module NewLoDImpl =
                         | CancelExn -> ()
                         | e -> Log.error "submit faulted: %A" e
 
+                let cleanupTick(o : obj) =
+                    let sw = System.Diagnostics.Stopwatch.StartNew()
+                    let rem = 
+                        lock resultDeltaLock (fun () ->
+                            let res = dead
+                            dead <- HSet.empty
+                            res
+                        )
+
+                    for v in rem do config.unload v
+                    sw.Stop()
+                    if rem.Count > 0 then
+                        Log.line "unloaded %A elements (%A)" rem.Count sw.MicroTime
+
                 let getDeltaThread = startThread getDeltaThread "GetDeltaThread"
                 let loadThreads = List.init config.numThreads (startThread loadThread "LoadThread%d")
                 let submitThread = startThread submitThread "SubmitThread" 
+                let cleanupTimer = new Timer(TimerCallback(cleanupTick), null, 1000, 1000)
 
                 let witness = 
                     { new IDisposable with
                         member x.Dispose() =
                             if not (isNull reportTimer) then 
                                 reportTimer.Dispose()
+
+                            cleanupTimer.Dispose()
 
                             cancel.Cancel()
 
@@ -461,7 +509,9 @@ module NewLoDImpl =
                 x.Dispose false
 
             interface ISetReader<'b> with
-                member x.GetOperations t = r.GetOperations t
+                member x.GetOperations t = 
+                    r.GetOperations t
+
                 member x.Dispose() = x.Dispose true
                 member x.State = r.State
 
@@ -510,7 +560,6 @@ module NewLoDImpl =
             let runtime : IRuntime = 
                 scope?Runtime
 
-                
             let ro = RenderObject.ofScope scope
 
 
@@ -596,8 +645,8 @@ module NewLoDImpl =
                 dependencies |> Loader.load rasterize {
                     load                = load
                     unload              = unload
-                    priority            = fun op -> if op.Count < 0 then 10000 - op.Value.level else op.Value.level
-                    numThreads          = 2
+                    priority            = fun op -> if op.Count < 0 then -op.Value.level else op.Value.level
+                    numThreads          = 4
                     submitDelay         = TimeSpan.FromMilliseconds 50.0
                     progressInterval    = TimeSpan.MaxValue
                     progress            = fun p -> Log.line "progress: %A" p
@@ -850,7 +899,7 @@ module LoD =
 
     let cloud =
         pointCloud data {
-            lodDecider              = Mod.constant (LodData.defaultLodDecider 8.0)
+            lodDecider              = Mod.constant (LodData.defaultLodDecider 20.0)
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
