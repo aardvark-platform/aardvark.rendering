@@ -39,6 +39,13 @@ type AttributeProvider private() =
 
     static member Empty = empty
 
+    static member onDispose (callback : unit -> unit) (a : IAttributeProvider) =
+        { new IAttributeProvider with
+            member x.Dispose() = callback(); a.Dispose()
+            member x.All = a.All
+            member x.TryGetAttribute(name : Symbol) = a.TryGetAttribute name
+        }
+
     // Symbol / BufferView
     static member ofDict (values : SymbolDict<BufferView>) =
         { new IAttributeProvider with

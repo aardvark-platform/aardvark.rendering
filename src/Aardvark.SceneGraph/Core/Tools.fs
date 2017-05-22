@@ -312,13 +312,165 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
 
         Array.take (maxSteps + 1) hist
 
+    member x.Pulse() =
+        Monitor.Enter x
+        Monitor.PulseAll x
+        Monitor.Exit x
+
+
+    member x.Dequeue (ct : CancellationToken) : SetOperation<'a> = 
+        Monitor.Enter x
+        while heap.Count = 0 do
+            if ct.IsCancellationRequested then
+                Monitor.Exit x
+                raise <| OperationCanceledException()
+
+            Monitor.Wait(x, 100) |> ignore
+
+        let e = dequeue()
+        Monitor.Exit x
+        e
+
     member x.Dequeue () : SetOperation<'a> = 
         Monitor.Enter x
         while heap.Count = 0 do
-            Monitor.Wait x |> ignore
+            Monitor.Wait(x) |> ignore
         let e = dequeue()
         Monitor.Exit x
         e
 
 
+[<AllowNullLiteral>]
+type private DeltaQueueEntry<'a> =
+    class
+        val mutable public Value : 'a
+        val mutable public Prev : DeltaQueueEntry<'a>
+        val mutable public Next : DeltaQueueEntry<'a>
+        val mutable public RefCount : int
+
+        new(v,r,p,n) = { Value = v; RefCount = r; Prev = p; Next = n }
+    end
+
+type ConcurrentDeltaQueue2<'a>() =
+    
+    let mutable first : DeltaQueueEntry<'a> = null
+    let mutable last : DeltaQueueEntry<'a> = null
+    let entries = Dict<'a, DeltaQueueEntry<'a>>()
+
+    let splice (e : DeltaQueueEntry<'a>) =
+        if entries.Remove e.Value then
+            if isNull e.Prev then first <- e.Next
+            else e.Prev.Next <- e.Next
+
+            if isNull e.Next then last <- e.Prev
+            else e.Next.Prev <- e.Prev
+
+            e.Prev <- null
+            e.Next <- null
+
+
+    let enqueue (v : SetOperation<'a>) =
+        match entries.TryGetValue v.Value with
+            | (true, e) ->
+                e.RefCount <- e.RefCount + v.Count
+                if e.RefCount = 0 then
+                    splice e
+                    true
+                else
+                    false
+            | _ ->
+                let e = DeltaQueueEntry<'a>(v.Value, v.Count, last, null)
+                if isNull last then first <- e
+                else last.Next <- e
+                last <- e
+                true
+    
+    let dequeue () =
+        let e = first
+        let v = e.Value
+        if entries.Remove v then
+            if isNull e.Next then last <- null
+            else e.Next.Prev <- null
+            first <- e.Next
+            e.Prev <- null
+            e.Next <- null
+        SetOperation(v, e.RefCount)
+
+
+    member x.Enqueue(v : SetOperation<'a>) =
+        Monitor.Enter x
+        if enqueue v then
+            Monitor.Pulse x
+        Monitor.Exit x
+
+    member x.EnqueueMany(s : seq<SetOperation<'a>>) =
+        Monitor.Enter x
+        let mutable changed = false
+        for v in s do 
+            let res = enqueue v
+            changed <- changed || res
+
+        if changed then Monitor.Pulse x
+        Monitor.Exit x
+
+    member x.DequeueMany() =
+        Monitor.Enter x
+        while isNull first do
+            Monitor.Wait x |> ignore
+        
+        let all = System.Collections.Generic.List<SetOperation<'a>>()
+        let mutable current = first
+        while not (isNull current) do
+            all.Add(SetOperation(current.Value, current.RefCount))
+            current <- current.Next
+
+        first <- null
+        last <- null
+        entries.Clear()
+
+        Monitor.Exit x
+        all
+
+    member x.DequeueMany(ct : CancellationToken) =
+        Monitor.Enter x
+        while isNull first do
+            Monitor.Wait(x, 100) |> ignore
+            if ct.IsCancellationRequested then
+                Monitor.Exit x
+                raise <| OperationCanceledException()
+        
+        let all = System.Collections.Generic.List<SetOperation<'a>>()
+        let mutable current = first
+        while not (isNull current) do
+            all.Add(SetOperation(current.Value, current.RefCount))
+            current <- current.Next
+
+        first <- null
+        last <- null
+        entries.Clear()
+
+        Monitor.Exit x
+        all
+
+    member x.Dequeue() =
+        Monitor.Enter x
+        while isNull first do
+            Monitor.Wait x |> ignore
+
+        let res = dequeue()
+        Monitor.Exit x
+        res
+
+    member x.Dequeue(ct : CancellationToken) =
+        Monitor.Enter x
+        while isNull first do
+            if ct.IsCancellationRequested then
+                Monitor.Exit x
+                raise <| OperationCanceledException()
+
+            Monitor.Wait(x, 100) |> ignore
+
+        let res = dequeue()
+        Monitor.Exit x
+        res
 
