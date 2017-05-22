@@ -108,20 +108,27 @@ module FramebufferExtensions =
                     let { texture = o; level = level; slice = slice } = r
                     let o = unbox<Texture> o
 
-                    match o.Dimension with
-                        | TextureDimension.TextureCube ->
-                            let (_,target) = TextureExtensions.cubeSides.[slice]
-                            if o.Count > 1 then
-                                failwith "cubemaparray currently not implemented"
-                            else
-                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
-                            GL.Check "could not attach texture"
-                        | _ ->
-                            if o.Count > 1 then
-                                GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, slice)
-                            else
-                                GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, TextureTarget.Texture2D, o.Handle, level)
-                            GL.Check "could not attach texture"
+                    if slice < 0 then
+
+                        GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
+                        GL.Check "could not attach texture"
+
+                    else
+
+                        match o.Dimension with
+                            | TextureDimension.TextureCube ->
+                                let (_,target) = TextureExtensions.cubeSides.[slice]
+                                if o.Count > 1 then
+                                    failwith "cubemaparray currently not implemented"
+                                else
+                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
+                                GL.Check "could not attach texture"
+                            | _ ->
+                                if o.Count > 1 then
+                                    GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, slice)
+                                else
+                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, TextureTarget.Texture2D, o.Handle, level)
+                                GL.Check "could not attach texture"
 
         
                 | _ ->
