@@ -316,6 +316,7 @@ module TextureCreationExtensions =
                     GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int t), size.X, size.Y)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
+                    Log.warn "[GL] cubemap MS not working atm."
                     // TODO: verify that this works!!
                     for f in 0..5 do
                         let target = int TextureTarget.TextureCubeMapPositiveX + f
