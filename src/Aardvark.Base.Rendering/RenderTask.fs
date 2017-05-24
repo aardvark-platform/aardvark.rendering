@@ -205,7 +205,7 @@ module private RefCountedResources =
                     handle <- Some tex
                     tex :> ITexture
          
-    type AdapiveCubeTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : IMod<V2i>) =
+    type AdaptiveCubeTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : IMod<V2i>) =
         inherit AbstractOutputMod<ITexture>()
 
         let mutable handle : Option<IBackendTexture> = None
@@ -297,7 +297,7 @@ module private RefCountedResources =
             AdaptiveTexture(x, format, samples, size) :> IOutputMod<ITexture>
 
         member x.CreateTextureCube(format : TextureFormat, samples : int, size : IMod<V2i>) =
-            AdapiveCubeTexture(x, format, samples, size) :> IOutputMod<ITexture>
+            AdaptiveCubeTexture(x, format, samples, size) :> IOutputMod<ITexture>
 
         member x.CreateRenderbuffer(format : RenderbufferFormat, samples : int, size : IMod<V2i>) =
             AdaptiveRenderbuffer(x, format, samples, size) :> IOutputMod<IRenderbuffer>
