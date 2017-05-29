@@ -16,6 +16,8 @@ open Aardvark.Rendering.GL
 #nowarn "9"
 #nowarn "51"
 
+open Aardvark.Base.Native.NewImpl
+
 [<AutoOpen>]
 module ResizeBufferImplementation =
     
@@ -478,11 +480,50 @@ module ManagedBufferImplementation =
         | Delete of managedptr
 
     
+    [<AutoOpen>]
+    module private Allocator = 
+        let rec alloc (cap : byref<int64>) =
+            let b = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, b)
+            GL.Check "could not bind buffer"
+
+            GL.BufferStorage(BufferTarget.CopyWriteBuffer, nativeint cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
+            let err = GL.GetError()
+            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+            if err = ErrorCode.OutOfMemory then
+                GL.DeleteBuffer(b)
+                cap <- cap / 2L
+                alloc(&cap)
+            else
+                if err <> ErrorCode.NoError then
+                    Log.warn "%A: could not allocate sparse buffer" err
+                Log.line "buffer-size: %A" (Mem cap)
+                b
+
+
+    module private Memory=
+        let total (ctx : Context) =
+            use __ = ctx.ResourceLock
+            let size = 
+                match ctx.Driver.device with
+                    | GPUVendor.nVidia ->
+                        GL.GetInteger64(unbox 0x9047) * 1024L |> Mem
+                    | GPUVendor.AMD ->
+                        let pars : int[] = Array.zeroCreate 4
+                        GL.GetInteger(unbox 0x87FB, pars)
+                        int64 pars.[0] * 1024L |> Mem
+                    | _ ->
+                        8L <<< 30 |> Mem
+
+            match GL.GetError() with
+                | ErrorCode.NoError -> size
+                | _ -> Mem (8L <<< 30)
 
     type SparseGeometryPool(ctx : Context, types : Map<Symbol, Type>) as this =
         let pageSize, handles =
             use __ = ctx.ResourceLock
             SparseBuffers.init()
+            let total = Memory.total ctx
             let pageSize = GL.GetInteger(GetPName.BufferPageSize) |> int64
             let pageSize = 16L * pageSize
             
@@ -490,62 +531,49 @@ module ManagedBufferImplementation =
             let handles = 
                 types |> Map.map (fun sem t ->
                     let s = t.GLSize
-                    let virtualCapacity = (40L <<< 20) * int64 s |> Alignment.next pageSize
+                    let mutable virtualCapacity = total.Bytes |> Alignment.next pageSize
                 
-                    let b = GL.GenBuffer()
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, b)
-                    GL.Check "could not bind buffer"
-                    GL.BufferStorage(BufferTarget.CopyWriteBuffer, nativeint virtualCapacity, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
-                    GL.Check "could not set buffer storage"
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                    GL.Check "could not unbind buffer"
-
+                    let d = GL.IsEnabled(EnableCap.DebugOutput)
+                    if d then GL.Disable(EnableCap.DebugOutput)
+                    let b = alloc(&virtualCapacity)
+                    if d then GL.Enable(EnableCap.DebugOutput)
                     SparseGeometryPoolBuffer(ctx, b, nativeint pageSize, this), t, nativeint s
                 )
+
             nativeint pageSize, handles
 
         let manager = MemoryManager.createNop()
         let fences = Fences(ctx)
 
         let mutable rendering = 0
-        let notRendering = new ManualResetEventSlim(true)
-        let hasFrees = new AutoResetEvent(false)
 
         let mutable count = 0
 
         let mutable pendingFrees : list<managedptr> = []
         
-        let freeThread =
-            new Thread(ThreadStart(fun () ->
-                while true do
-                    WaitHandle.WaitAll([| hasFrees; notRendering.WaitHandle |]) |> ignore
-                    let frees = Interlocked.Exchange(&pendingFrees, [])
-                    let mutable count = 0
-                    use __ = ctx.ResourceLock
-                    for (_,(b,_,s)) in Map.toSeq handles do
-                        GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
-                        GL.Check "[Pool] could not bind buffer"
-                        for f in frees do
-                            b.Commitment(f.Offset * s, f.Size * s, false)
-                        GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                        GL.Check "[Pool] could not unbind buffer"
+        let free ( ptrs : list<managedptr>) =
+            use __ = ctx.ResourceLock
+            for (_,(b,_,s)) in Map.toSeq handles do
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
+                GL.Check "[Pool] could not bind buffer"
+                for f in ptrs do
+                    b.Commitment(f.Offset * s, f.Size * s, false)
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                GL.Check "[Pool] could not unbind buffer"
                         
-                    for f in frees do
-                        manager.Free f
-                        count <- count + 1
-            ), IsBackground = true)
-
-        do freeThread.Start()
-
+            for f in ptrs do
+                manager.Free f
+                count <- count + 1
+                
         member internal x.BeforeRender() =
-            if Interlocked.Increment(&rendering) = 1 then
-                notRendering.Reset()
+            Interlocked.Increment(&rendering) |> ignore
 
             fences.WaitGPU()
 
         member internal x.AfterRender() =
             if Interlocked.Decrement(&rendering) = 0 then
-                notRendering.Set()
+                let frees = Interlocked.Exchange(&pendingFrees, [])
+                free frees
 
         member x.Alloc(fvc : int, g : IndexedGeometry) =
             let ptr = manager.Alloc(nativeint fvc)
@@ -581,8 +609,10 @@ module ManagedBufferImplementation =
 
         member x.Free(ptr : managedptr) =
             Interlocked.Decrement(&count) |> ignore
-            Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
-            hasFrees.Set() |> ignore
+            if rendering = 0 then
+                free [ptr]
+            else
+                Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
 
         member x.TryGetBufferView(sem : Symbol) =
             match Map.tryFind sem handles with
@@ -590,7 +620,6 @@ module ManagedBufferImplementation =
                 | _ -> None
 
         member x.Dispose() =
-            freeThread.Abort()
             use __ = ctx.ResourceLock
             for (_,(b,_,_)) in Map.toSeq handles do
                 ctx.Delete b

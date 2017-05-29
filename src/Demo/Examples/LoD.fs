@@ -699,7 +699,7 @@ module NewLoDImpl =
 
 module LoD = 
 
-    Interactive.Renderer <- RendererConfiguration.GL
+    //Interactive.Renderer <- RendererConfiguration.GL
     //FsiSetup.initFsi (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug";"Examples.exe"])
 
     let win = Interactive.Window
@@ -902,7 +902,7 @@ module LoD =
 
     let cloud =
         pointCloud data {
-            lodDecider              = Mod.constant (LodData.defaultLodDecider 20.0)
+            lodDecider              = Mod.constant (LodData.defaultLodDecider 5.0)
             maxReuseRatio           = 0.5
             minReuseCount           = 1L <<< 20
             pruneInterval           = 500
@@ -946,6 +946,7 @@ module LoD =
     
     let run() =
         //Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
+        Interactive.Renderer <- RendererConfiguration.GL
         Interactive.SceneGraph <- final
         Interactive.RunMainLoop()
 
