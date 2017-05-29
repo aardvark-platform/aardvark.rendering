@@ -69,7 +69,7 @@ module ResizeBufferImplementation =
     [<Literal>]
     let private GL_TIMEOUT_IGNORED = 0xFFFFFFFFFFFFFFFFUL
 
-
+    [<AllowNullLiteral>]
     type Fence private(ctx : ContextHandle, handle : nativeint) =
         let mutable handle = handle
 
@@ -537,7 +537,7 @@ module ManagedBufferImplementation =
                     if d then GL.Disable(EnableCap.DebugOutput)
                     let b = alloc(&virtualCapacity)
                     if d then GL.Enable(EnableCap.DebugOutput)
-                    SparseGeometryPoolBuffer(ctx, b, nativeint pageSize, this), t, nativeint s
+                    SparseGeometryPoolBuffer(ctx, b, nativeint virtualCapacity, nativeint pageSize, this), t, nativeint s
                 )
 
             nativeint pageSize, handles
@@ -556,25 +556,37 @@ module ManagedBufferImplementation =
             for (_,(b,_,s)) in Map.toSeq handles do
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
                 GL.Check "[Pool] could not bind buffer"
-                for f in ptrs do
-                    b.Commitment(f.Offset * s, f.Size * s, false)
+                b.Commitment(ptrs, s, false)
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
                 GL.Check "[Pool] could not unbind buffer"
                         
             for f in ptrs do
                 manager.Free f
-                count <- count + 1
+        
+        let notRendering = new ManualResetEventSlim(true)
+        let hasFrees = new AutoResetEvent(false)
+
+        let freeThread =
+            new Thread(ThreadStart(fun () ->
+                while true do
+                    WaitHandle.WaitAll([| hasFrees; notRendering.WaitHandle |]) |> ignore
+                    let frees = Interlocked.Exchange(&pendingFrees, [])
+                    free frees
+            ), IsBackground = true)
+
+        do freeThread.Start()
+
                 
         member internal x.BeforeRender() =
-            Interlocked.Increment(&rendering) |> ignore
+            if Interlocked.Increment(&rendering) = 1 then
+                notRendering.Reset()
 
             fences.WaitGPU()
 
         member internal x.AfterRender() =
             if Interlocked.Decrement(&rendering) = 0 then
-                let frees = Interlocked.Exchange(&pendingFrees, [])
-                free frees
-
+                notRendering.Set()
+                
         member x.Alloc(fvc : int, g : IndexedGeometry) =
             let ptr = manager.Alloc(nativeint fvc)
             use __ = ctx.ResourceLock
@@ -609,10 +621,8 @@ module ManagedBufferImplementation =
 
         member x.Free(ptr : managedptr) =
             Interlocked.Decrement(&count) |> ignore
-            if rendering = 0 then
-                free [ptr]
-            else
-                Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
+            Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
+            hasFrees.Set() |> ignore
 
         member x.TryGetBufferView(sem : Symbol) =
             match Map.tryFind sem handles with
@@ -632,14 +642,53 @@ module ManagedBufferImplementation =
             member x.Free p = x.Free p
             member x.TryGetBufferView sem = x.TryGetBufferView sem
 
+    and Page(b : int, offset : nativeint, size : nativeint, totalSize : ref<int64>) =
+        
+        let mutable refCount = 0
+        let mutable fence : Fence = null
+
+        let wait() =
+            match fence with
+                | null -> ()
+                | f -> 
+                    if not (f.WaitGPU(ContextHandle.Current.Value)) then
+                        fence <- null
+
+        member x.IsCommitted = refCount > 0 
+
+        member x.Commit() =
+            lock x (fun () ->
+                refCount <- refCount + 1
+                if refCount = 1 then
+                    Interlocked.Add(totalSize, int64 size) |> ignore
+                    wait()
+                    GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, offset, size, true)
+                    let f = Fence.Create()
+                    fence <- f
+            )
+            
+        member x.Decommit() =
+            lock x (fun () ->
+                refCount <- refCount - 1
+                if refCount = 0 then
+                    Interlocked.Add(totalSize, int64 -size) |> ignore
+                    wait()
+                    GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, offset, size, false)
+                    let f = Fence.Create()
+                    fence <- f
+            )
+
+        member x.Commitment(c : bool) =
+            if c then x.Commit()
+            else x.Decommit()
 
 
-    and SparseGeometryPoolBuffer(ctx : Context, handle : int, pageSize : nativeint, parent : SparseGeometryPool) =
+    and SparseGeometryPoolBuffer(ctx : Context, handle : int, totalSize : nativeint, pageSize : nativeint, parent : SparseGeometryPool) =
         inherit Buffer(ctx, 0n, handle)
         let resourceLock = new ResourceLock()
-        let mutable pageRef : int[] = Array.zeroCreate (1 <<< 20)
+        let committedSize = ref 0L
+        let pageRef : Page[] = Array.init (totalSize / pageSize |> int) (fun pi -> Page(handle, nativeint pi * pageSize, pageSize, committedSize))
 
-        let mutable committedSize = 0L
 
 
         member internal x.Commitment(offset : nativeint, size : nativeint, c : bool) =
@@ -648,29 +697,25 @@ module ManagedBufferImplementation =
             let firstPage = offset / pageSize |> int
             let lastPage = lastByte / pageSize |> int
 
-            lock x (fun () ->
-                if lastPage >= pageRef.Length then 
-                    Array.Resize(&pageRef, Fun.NextPowerOfTwo lastPage)
- 
-                let changes =
-                    if c then [ firstPage .. lastPage ] |> List.filter (fun pi -> Interlocked.Increment(&pageRef.[pi]) = 1)
-                    else [ firstPage .. lastPage ] |> List.filter (fun pi -> Interlocked.Decrement(&pageRef.[pi]) = 0)
+            for pi in firstPage .. lastPage do
+                pageRef.[pi].Commitment(c)
 
-                match changes with
-                    | [] -> 
-                        ()
-                    | _ ->
-                        let delta = 
-                            if c then int64 pageSize 
-                            else int64 -pageSize
-                        for pi in changes do
-                            Interlocked.Add(&committedSize, delta) |> ignore
-                            GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, nativeint pi * pageSize, pageSize, c)
-                            GL.Check "[Pool] could not commit buffer"
-                        GL.Sync()
-            )
 
-        member x.UsedMemory = Mem committedSize
+        member internal x.Commitment(ptrs : list<managedptr>, elementSize : nativeint, c : bool) =
+            let ctx = ctx.CurrentContextHandle.Value
+            
+            for ptr in ptrs do
+                let offset = ptr.Offset * elementSize
+                let size = ptr.Size * elementSize
+                let lastByte = offset + size - 1n
+                let firstPage = offset / pageSize |> int
+                let lastPage = lastByte / pageSize |> int
+
+                    
+                for pi in firstPage .. lastPage do
+                    pageRef.[pi].Commitment(c)
+
+        member x.UsedMemory = Mem !committedSize
 
         interface ILockedResource with
             member x.Lock = resourceLock

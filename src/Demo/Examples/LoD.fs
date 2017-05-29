@@ -432,8 +432,8 @@ module NewLoDImpl =
 
                     for v in rem do config.unload v
                     sw.Stop()
-                    if rem.Count > 0 then
-                        Log.line "unloaded %A elements (%A)" rem.Count sw.MicroTime
+                    //if rem.Count > 0 then
+                    //    Log.line "unloaded %A elements (%A)" rem.Count sw.MicroTime
 
                 let getDeltaThread = startThread getDeltaThread "GetDeltaThread"
                 let loadThreads = List.init config.numThreads (startThread loadThread "LoadThread%d")
