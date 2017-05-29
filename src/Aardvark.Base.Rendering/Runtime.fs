@@ -57,6 +57,8 @@ type BackendSurface(code : string, entryPoints : Dictionary<ShaderStage, string>
 
 type IGeometryPool =
     inherit IDisposable
+    abstract member Count : int
+    abstract member UsedMemory : Mem
     abstract member Alloc : int * IndexedGeometry -> managedptr
     abstract member Free : managedptr -> unit
     abstract member TryGetBufferView : Symbol -> Option<BufferView>
