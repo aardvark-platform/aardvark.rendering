@@ -425,361 +425,180 @@ module Helper =
 
 module PointCloudRenderObjectSemantics = 
 
-    open System
-    open System.Threading
-    open System.Threading.Tasks
-    open Aardvark.Base
-    open Aardvark.Base.Ag
-    open Aardvark.Base.Rendering
-    open Aardvark.Base.Incremental
-    open Aardvark.SceneGraph
-    open LodProgress
-    open StepwiseProgress
+    module PointCloudRenderer = 
+        open Aardvark.Base.Rendering
+        open System
+        open System.Threading
+        open Aardvark.Base
+        open Aardvark.Base.Incremental
+        open Aardvark.SceneGraph
+        open Aardvark.SceneGraph.Semantics
+        open Aardvark.Base.Ag
+
+        type private LoadedGeometry(pool : IGeometryPool, ptr : managedptr, geometry : Option<IndexedGeometry>) =
+            let range =
+                match geometry with
+                    | Some g -> Range1i(int ptr.Offset, int ptr.Offset + int ptr.Size - 1)
+                    | None -> Range1i.Invalid
+
+            static let empty = LoadedGeometry(Unchecked.defaultof<_>, Unchecked.defaultof<_>, None)
+
+            static member Empty = empty
+
+            member x.Range = range
+
+            member x.Pointer = 
+                match geometry with
+                    | Some _ -> Some ptr
+                    | _ -> None
+
+            member x.Geometry = geometry
+
+        let private faceVertexCount (g : IndexedGeometry) =
+            if g.IndexedAttributes.Count = 0 then 
+                0
+            else
+                let arr = g.IndexedAttributes.Values |> Seq.head
+                arr.Length
 
 
-    type LoadResult = CancellationTokenSource * ref<IndexedGeometry * GeometryRef>
+        let createRenderObject (scope : Ag.Scope) (config : PointCloudInfo) (data : ILodData) =
+            let runtime : IRuntime = 
+                scope?Runtime
 
-    type PointCloudHandler(node : Sg.PointCloud, view : IMod<Trafo3d>, proj : IMod<Trafo3d>, viewportSize : IMod<V2i>, progress : LodProgress.Progress, runtime : IRuntime) =
-        let queueCount = 8
-        let cancel = new System.Threading.CancellationTokenSource()
-        let l = obj()
-        let mutable currentId = 0
-
-        //let d = System.Collections.Concurrent.ConcurrentDictionary<LodDataNode,int>()
-
-//        let getId (n : LodDataNode) =
-////            d.GetOrAdd(n, fun n ->
-////                Interlocked.Increment &currentId
-////            )
-//            if n.uniqueId <> 0 then n.uniqueId
-//            else 
-//                let id = Interlocked.Increment(&currentId)
-//                n.uniqueId <- id
-//                id
-
-        let pool = new GeometryPool2(runtime, node.Config.attributeTypes)
-        let calls = DrawCallSet(true)
-        let mutable activeSize = 0L
+            let ro = RenderObject.ofScope scope
 
 
-        let pruning = false
-        let inactive = ConcurrentHashQueue<GeometryRef>()
-        let mutable inactiveSize = 0L
+            let decider = 
+                config.lodDecider
 
-        let workingSet = CSet.empty
+            let view : IMod<Trafo3d> = 
+                match config.customView with
+                    | Some view -> view
+                    | None -> 
+                        match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ViewTrafo") with
+                            | Some (:? IMod<Trafo3d> as v) -> v
+                            | _ -> scope?ViewTrafo
 
+            let proj : IMod<Trafo3d> = 
+                match config.customProjection with
+                    | Some proj -> proj
+                    | None -> 
+                        match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ProjTrafo") with
+                            | Some (:? IMod<Trafo3d> as v) -> v
+                            | _ -> scope?ProjTrafo
 
-        let activate (n : GeometryRef) =
-            let size = n.range.Size
+            let size : IMod<V2i> = 
+                match ro.Uniforms.TryGetUniform(scope, Symbol.Create "ViewportSize") with
+                    | Some (:? IMod<V2i> as v) -> v
+                    | _ -> scope?ViewportSize
 
-            if pruning then
-                if inactive.Remove n then
-                    Interlocked.Add(&inactiveSize, int64 -size) |> ignore
-
-            if n.range.Size >= 0 then
-                if calls.AddUnsafe n.range then
-                    Interlocked.Add(&activeSize, int64 size) |> ignore
-                    Interlocked.Increment(progress.activeNodeCount) |> ignore
-                else
-                    Log.line "could not add calls"
-
-
-        let deactivate (n : GeometryRef) =
-            let size = int64 n.range.Size
-
-            if pruning then
-                if inactive.Enqueue n then
-                    Interlocked.Add(&inactiveSize, size) |> ignore
-
-            if n.range.Size >= 0 then
-                if calls.RemoveUnsafe n.range then
-                    Interlocked.Add(&activeSize, -size) |> ignore
-                    Interlocked.Decrement(progress.activeNodeCount) |> ignore
-                else 
-                    Log.line "could not remove calls"
-
-        let removeFromWorkingSet n = 
-            if node.Config.boundingBoxSurface.IsSome  then
-                lock l (fun () -> 
-                    transact (fun () -> workingSet.Remove n |> ignore)
+            let dependencies =
+                Mod.custom (fun token ->
+                    let view = view.GetValue(token)
+                    let proj = proj.GetValue(token)
+                    let size = size.GetValue(token)
+                    let decider = decider.GetValue(token)
+                    view, proj, size, decider
                 )
 
-        member x.WorkingSet = 
-            workingSet :> aset<_>
+            let rasterize (view : Trafo3d, proj : Trafo3d, size : V2i, decider : LodData.Decider) =
+                data.Rasterize(view, proj, decider view proj size)
 
-        member x.Activate() =
-
-
-
-
-            let priority (a : SetOperation<LodDataNode>) =
-                match a with
-                    | Add(_,v) -> v.level
-                    | Rem(_,v) -> Int32.MaxValue - v.level
-            let deltas = new ConcurrentDeltaPriorityQueue<LodDataNode,int>(priority)
-            let r = MVar<_>()
-
-            let run =
-                let mutable currentId = 0
-//                let idCache = Dict<_,_>()
-//
-//                let getId v =
-//                    idCache.GetOrCreate(v, fun _ -> 
-//                        Interlocked.Increment(&currentId)
-//                    )
-
-//                let removeId v =
-//                    match idCache.TryRemove v with
-//                        | (true, id) -> id
-//                        | _ -> 
-//                            Log.error "removal of unknown object"
-//                            failwith "removal of unknown object"
-
-                async {
-                    do! Async.SwitchToNewThread()
-
-                    let mutable lastContent = HashSet<LodDataNode>() :> ISet<_>
-
-                    while true do
-
-                        do! r.TakeAsync()
-                        
-                        let v = view.GetValue ()
-                        let p = proj.GetValue ()
-                        let vps = viewportSize.GetValue()
-                        let decider = node.Config.lodDecider.GetValue ()
-                    
-                        for a in node.Data.Dependencies do a.GetValue () |> ignore
-
-                        let set = Progress.timed progress.rasterizeTime (fun () ->
-                            node.Data.Rasterize(v, p, decider v p vps)
-
-                        ) 
-
-                        let add = System.Collections.Generic.HashSet<_>( set     |> Seq.filter (lastContent.Contains >> not) )     |> Seq.toList
-                        let rem = System.Collections.Generic.HashSet<_>( lastContent |> Seq.filter (set.Contains >> not)     )   |> Seq.toList
-                        lastContent <- set
-
-                        // x = y => x%8 = y%8
-//                        let ops = 
-//                            List.append 
-//                                (List.map (fun v -> getId v, Add v) add) 
-//                                (List.map (fun v -> getId v, Rem v) rem) 
-//                            |> List.groupBy (fun (id,v) -> id % queueCount)
-//                            
-//                        for (qid, ops) in ops do
-//                            deltas.[qid].EnqueueMany(List.map snd ops) 
-                        deltas.EnqueueMany(Seq.append (Seq.map Add add) (Seq.map Rem rem)) 
-//
-//                        let mutable total = 0
-//                        for q in deltas do
-//                            total <- total + q.Count
-
-                        //Log.warn "queue: %d" deltas.Count
-
-                        //for v in add do
-                        //    let id = getId v
-                        //    if deltas.[id % queueCount].Add v then
-                        //        if node.Config.boundingBoxSurface.IsSome  then
-                        //            lock l (fun () ->  
-                        //                if not <| workingSet.Contains v then
-                        //                    transact (fun () -> CSet.add v workingSet |> ignore)
-                        //            )
-                        //    else
-                        //        ()
-
-                        //for v in rem do
-                        //    let id = removeId v
-                        //    if deltas.[id % queueCount].Remove v then 
-                        //        ()
-                        //    else
-                        //        lock l (fun () ->  
-                        //            if workingSet.Contains v then
-                        //                transact (fun () -> CSet.remove v workingSet |> ignore)
-                        //        )
-
-                }
-
-            let subV = view.AddMarkingCallback (fun () -> r.Put ()) 
-            let subP = proj.AddMarkingCallback (fun () -> r.Put ())
-            let subS = viewportSize.AddMarkingCallback (fun () -> r.Put ())
-            let subD = node.Config.lodDecider.AddMarkingCallback (fun () -> r.Put ())
-            for a in node.Data.Dependencies do a.AddMarkingCallback (fun () -> r.Put ()) |> ignore
-
-            r.Put()
+            let pool = runtime.CreateGeometryPool(config.attributeTypes)
+            let mutable refCount = 0
 
 
-            let effect (ct : CancellationToken) (n : LodDataNode) =
-                stepwise {
-                    let data =  
-                        try 
-                            Async.RunSynchronously(node.Data.GetData(n), cancellationToken = ct) |> Some
-                        with e -> 
-                            removeFromWorkingSet n
-                            Log.warn "data got cancelled"; 
-                            None
-                    match data with
-                        | Some (Some v) ->
-                            do! Stepwise.register (fun () -> pool.Remove v |> ignore)
-                            let range = pool.Add v
-                            if range.IsValid then
-                                let gref = { geometry = v; range = range; node = n }
-                                let mutable activated = false
-                                do! Stepwise.register (fun () -> if activated then deactivate gref)
-                                let () =
-                                    activate gref
-                                    activated <- true
-                                    removeFromWorkingSet n
-                                return ()
-                            else
-                                return ()
-                        | None -> return! Stepwise.cancel
-                        | Some None -> return ()
-                }
+            let release() =
+                if Interlocked.Decrement(&refCount) = 0 then
+                    pool.Dispose()
 
+            let activate() =
+                Interlocked.Increment(&refCount) |> ignore
+                { new IDisposable with member x.Dispose() = release() }
 
-            
-      
-            let pruningTask =
-                async {
-                    while true do
-                        let mutable cnt = 0
+            let progress (p : LoaderProgress) =
+                Log.line "memory: %A" pool.UsedMemory
 
-                        let shouldContinue () =
-                            if inactiveSize > node.Config.minReuseCount then 
-                                let ratio = float inactiveSize / float (inactiveSize + activeSize)
-                                if ratio > node.Config.maxReuseRatio then true
-                                else false
-                            else
-                                false
+            let vertexAttributes =
+                config.attributeTypes 
+                |> Map.toSeq
+                |> Seq.choose (fun (sem,_) ->
+                    match pool.TryGetBufferView sem with
+                        | Some view -> Some (sem, view)
+                        | None -> None
+                   )
+                |> Map.ofSeq
+                |> AttributeProvider.ofMap
+                |> AttributeProvider.onDispose release
 
-                        while shouldContinue () do
-                            match inactive.TryDequeue() with
-                                | (true, v) ->
-                                    pool.Remove v.geometry |> ignore
-                                    cnt <- cnt + 1
-                                | _ ->
-                                    Log.warn "inactive: %A / count : %A" inactiveSize inactive.Count 
-                                    inactiveSize <- 0L
-                            
-                        do! Async.Sleep node.Config.pruneInterval
-                }
+            let loadedGeometries = 
+                let load (ct : CancellationToken) (node : LodDataNode) =
+                    let geometry = Async.RunSynchronously(data.GetData(node), cancellationToken = ct)
 
-            let mutable deltaProcessors = 0
-            let printer =
-                async {
-                    while true do
-                        do! Async.Sleep(100)
-                        do { (progress |> Progress.toReport) with ProgressReport.pendingOperations = deltas.Count } |> node.Config.progressCallback.Invoke
-                        //printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
-                        //printfn "workers: %d / active = %A / desired = %A / inactiveCnt=%d / inactive=%A / rasterizeTime=%f [seconds] / count: %d / working: %d" deltaProcessors progress.activeNodeCount.Value progress.expectedNodeCount.Value inactive.Count inactiveSize (float progress.rasterizeTime.Value / float TimeSpan.TicksPerSecond) pool.Count workingSet.Count
-                        ()
-                }
+                    use __ = runtime.ContextLock
+                    match geometry with
+                        | Some g ->
+                            let fvc = faceVertexCount g
+                            let ptr = pool.Alloc(fvc, g)
+                            LoadedGeometry(pool, ptr, geometry)
 
-
-            for i in 0..queueCount-1 do
-                let deltaProcessing,info =  StepwiseQueueExection.runEffects calls deltas effect removeFromWorkingSet
-                let safeDeltas =
-                    async {
-                        deltaProcessors <- deltaProcessors + 1
-                        try
-                            try
-                                return! deltaProcessing
-                            with e -> Log.error "delta processor died!!!"
-                        finally 
-                            Log.warn "ending delta processing"
-                            deltaProcessors <- deltaProcessors - 1
-                    }
-                Async.StartAsTask(safeDeltas, cancellationToken = cancel.Token) |> ignore
-            
-            if pruning then Async.StartAsTask(pruningTask, cancellationToken = cancel.Token) |> ignore
-            Async.StartAsTask(printer, cancellationToken = cancel.Token) |> ignore
-            Async.StartAsTask(run, cancellationToken = cancel.Token) |> ignore
-            
-
-            { new IDisposable with 
-                member x.Dispose() =
-                    cancel.Cancel()
-                    subV.Dispose()
-                    subP.Dispose()
-                    subS.Dispose()
-                    subD.Dispose()
-            }
-
-
-        member x.Attributes =
-            { new IAttributeProvider with
-                member x.TryGetAttribute sem =
-                    match Map.tryFind sem node.Config.attributeTypes with
-                        | Some t ->
-                            let b = pool.GetBuffer sem
-                            b |> Some
                         | None ->
-                            None
+                            LoadedGeometry.Empty
 
-                member x.All = Seq.empty
-                member x.Dispose() = ()
-            }
+                let unload (g : LoadedGeometry) =
+                    match g.Pointer with
+                        | Some ptr -> pool.Free ptr
+                        | None -> ()
 
-        member x.DrawCallInfos =
-            calls |> DrawCallSet.toMod
+                dependencies |> Loader.load rasterize {
+                    load                = load
+                    unload              = unload
+                    priority            = fun op -> if op.Count < 0 then -op.Value.level else op.Value.level
+                    numThreads          = 4
+                    submitDelay         = TimeSpan.FromMilliseconds 50.0
+                    progressInterval    = TimeSpan.FromSeconds 1.0
+                    progress            = progress
+                }
 
-        
-    [<Semantic>]
-    type PointCloudSemantics() =
-        member x.RenderObjects(l : Sg.PointCloud) =
-            let obj = RenderObject.create()
+            let drawCallBuffer = 
+                let add (set : RangeSet) (v : LoadedGeometry) =
+                    let range = v.Range
+                    if range.IsValid then RangeSet.insert range set
+                    else set
 
-            let view = 
-                match l.Config.customView with
-                    | Some v -> v
-                    | None -> l.ViewTrafo
+                let sub (set : RangeSet) (v : LoadedGeometry) =
+                    let range = v.Range
+                    if range.IsValid then RangeSet.remove range set
+                    else set
 
-            let proj = 
-                match l.Config.customProjection with
-                    | Some p -> p
-                    | None -> l.ProjTrafo
+                let call (r : Range1i) =
+                    DrawCallInfo(
+                        FaceVertexCount = (r.Max - r.Min + 1),
+                        InstanceCount = 1,
+                        FirstIndex = r.Min,
+                        FirstInstance = 0,
+                        BaseVertex = 0
+                    )
 
-            let viewportSize =
-                match obj.Uniforms.TryGetUniform(obj.AttributeScope, Symbol.Create "ViewportSize") with
-                    | Some (:? IMod<V2i> as vs) -> vs
-                    | _ -> failwith "[PointCloud] could not get viewport size (please apply to scenegraph)"
+                loadedGeometries 
+                    |> ASet.foldGroup add sub RangeSet.empty
+                    |> Mod.map (fun ranges ->
+                        let calls = ranges |> RangeSet.toSeq |> Seq.map call |> Seq.toArray
+                        IndirectBuffer(ArrayBuffer calls, calls.Length) :> IIndirectBuffer
+                    )
 
-            let h = PointCloudHandler(l, view, proj, viewportSize, l.Progress, l.Runtime)
+            ro.IndirectBuffer <- drawCallBuffer
+            ro.Mode <- Mod.constant IndexedGeometryMode.PointList
+            ro.VertexAttributes <- vertexAttributes
+            ro.Activate <- activate
 
-            let calls = h.DrawCallInfos
+            ro :> IRenderObject
 
-            obj.IndirectBuffer <- calls |> Mod.map IndirectBuffer.ofArray
-            obj.Activate <- h.Activate
-            obj.VertexAttributes <- h.Attributes
-            obj.Mode <- Mod.constant IndexedGeometryMode.PointList
-            obj.Surface <- l.Surface
-
-            match l.Config.boundingBoxSurface with
-                | None -> ASet.single (obj :> IRenderObject)
-                | Some surf ->
-                    let trafos = 
-                        h.WorkingSet 
-                            |> ASet.toMod 
-                            |> Mod.map ( fun a -> a |> Seq.toArray |> Array.map ( fun v -> 
-                                let box = v.bounds
-                                let shift = Trafo3d.Translation(box.Center)
-                                let bias = Trafo3d.Translation(-V3d.III * 0.5)
-                                let scale = Trafo3d.Scale( box.SizeX, box.SizeY, box.SizeZ )
-                                bias*scale*shift ))
-                    
-                    let unitbox = (Box3d.Unit |> Helper.ig)
-
-                    let iSg = 
-                        unitbox |> Sg.instancedGeometry trafos 
-                                |> Sg.surface surf
-
-                    let ros = Semantics.RenderObjectSemantics.Semantic.renderObjects iSg
-
-                    aset {
-                        yield obj :> IRenderObject
-                        yield! ros
-                    }
-
-
+        [<Semantic>]
+        type MyPCSem() =
+            member x.RenderObjects(m : Sg.PointCloud) =
+                let scope = Ag.getContext()
+                let obj = createRenderObject scope m.Config m.Data
+                ASet.single obj
 

@@ -728,7 +728,7 @@ module ManagedBufferImplementation =
                     | Some ResourceUsage.Render -> parent.AfterRender()
                     | _ -> ()
 
-    
+
 
 // =========================================================================
 // Historical monsters

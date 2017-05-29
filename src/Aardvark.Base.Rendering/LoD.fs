@@ -101,6 +101,622 @@ module ``Lod Data Extensions`` =
 
             // return the resulting node-set
             result :> ISet<_>
+            
+open System
+open System.Threading
+
+type private DeltaHeapEntry<'a, 'b> =
+    class
+        val mutable public Priority : 'b
+        val mutable public Value : 'a
+        val mutable public Index : int
+        val mutable public RefCount : int
+
+        new(v,p,i,r) = { Value = v; Priority = p; Index = i; RefCount = r }
+    end
+
+type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : SetOperation<'a> -> 'b) =
+    
+    let heap = List<DeltaHeapEntry<'a, 'b>>()
+    let entries = Dict<'a, DeltaHeapEntry<'a, 'b>>()
+
+    let swap (l : DeltaHeapEntry<'a, 'b>) (r : DeltaHeapEntry<'a, 'b>) =
+        let li = l.Index
+        let ri = r.Index
+        heap.[li] <- r
+        heap.[ri] <- l
+        l.Index <- ri
+        r.Index <- li
+
+    let rec pushDown (acc : int) (e : DeltaHeapEntry<'a, 'b>) =
+        let l = 2 * e.Index + 1
+        let r = 2 * e.Index + 2
+
+        let cl = if l < heap.Count then compare e.Priority heap.[l].Priority <= 0 else true
+        let cr = if r < heap.Count then compare e.Priority heap.[l].Priority <= 0 else true
+
+        match cl, cr with
+            | true, true -> 
+                acc
+
+            | false, true ->
+                swap heap.[l] e
+                pushDown (acc + 1) e
+
+            | true, false ->
+                swap heap.[r] e
+                pushDown (acc + 1) e
+
+            | false, false ->
+                let c = compare heap.[l].Priority heap.[r].Priority
+                if c < 0 then
+                    swap heap.[l] e
+                else
+                    swap heap.[r] e
+                        
+                pushDown (acc + 1) e
+
+    let rec bubbleUp (acc : int) (e : DeltaHeapEntry<'a, 'b>) =
+        if e.Index > 0 then
+            let pi = (e.Index - 1) / 2
+            let pe = heap.[pi]
+
+            if compare pe.Priority e.Priority > 0 then
+                swap pe e
+                bubbleUp (acc + 1) e
+            else
+                acc
+        else
+            acc
+
+    let enqueue (e : DeltaHeapEntry<'a, 'b>) =
+        e.Index <- heap.Count
+        heap.Add(e)
+        bubbleUp 0 e
+
+    let changeKey (e : DeltaHeapEntry<'a, 'b>) (newKey : 'b) =
+        if e.Index < 0 then
+            e.Priority <- newKey
+            enqueue e
+        else
+            let c = compare newKey e.Priority
+            e.Priority <- newKey
+
+            if c > 0 then pushDown 0 e
+            elif c < 0 then bubbleUp 0 e
+            else 0
+
+    let dequeue() =
+        if heap.Count <= 1 then
+            let e = heap.[0]
+            entries.Remove e.Value |> ignore
+            heap.Clear()
+            SetOperation(e.Value, e.RefCount)
+        else
+            let e = heap.[0]
+            let l = heap.[heap.Count - 1]
+            heap.RemoveAt (heap.Count - 1)
+            heap.[0] <- l
+            l.Index <- 0
+            pushDown 0 l |> ignore
+            e.Index <- -1
+            entries.Remove e.Value |> ignore
+            SetOperation(e.Value, e.RefCount)
+
+    let rec remove (e : DeltaHeapEntry<'a, 'b>) =
+        if e.Index > 0 then
+            let pi = (e.Index - 1) / 2
+            let pe = heap.[pi]
+            swap pe e
+            remove e
+        else
+            dequeue() |> ignore
+
+    member x.Count = heap.Count
+
+    member x.Enqueue (a : SetOperation<'a>) : unit =
+        if a.Count <> 0 then
+            lock x (fun () ->
+                let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
+                entry.RefCount <- entry.RefCount + a.Count
+
+                if entry.RefCount = 0 then
+                    entries.Remove a.Value |> ignore
+                    remove entry
+                else
+                    changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
+                    Monitor.Pulse x
+            )
+
+    member x.EnqueueMany (a : seq<SetOperation<'a>>) : unit =
+        lock x (fun () ->
+            for a in a do
+                let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
+                entry.RefCount <- entry.RefCount + a.Count
+
+                if entry.RefCount = 0 then
+                    entries.Remove a.Value |> ignore
+                    remove entry
+                else
+                    changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
+
+            Monitor.Pulse x
+        )
+
+    member x.UpdatePriorities() =
+        let mutable maxSteps = 0
+        let hist = Array.zeroCreate 128
+        for e in entries.Values do
+            let steps = changeKey e (getPriority (SetOperation(e.Value, e.RefCount)))
+            inc &hist.[steps]
+            if steps > maxSteps then maxSteps <- steps
+
+        Array.take (maxSteps + 1) hist
+
+    member x.Pulse() =
+        Monitor.Enter x
+        Monitor.PulseAll x
+        Monitor.Exit x
+
+
+    member x.Dequeue (ct : CancellationToken) : SetOperation<'a> = 
+        Monitor.Enter x
+        while heap.Count = 0 do
+            if ct.IsCancellationRequested then
+                Monitor.Exit x
+                raise <| OperationCanceledException()
+
+            Monitor.Wait(x, 100) |> ignore
+
+        let e = dequeue()
+        Monitor.Exit x
+        e
+
+    member x.Dequeue () : SetOperation<'a> = 
+        Monitor.Enter x
+        while heap.Count = 0 do
+            Monitor.Wait(x) |> ignore
+        let e = dequeue()
+        Monitor.Exit x
+        e
+
+type LoaderProgress =
+    {
+        targetCount     : int
+        currentCount    : int
+        queueCount      : int
+        avgLoadTime     : MicroTime
+        avgRemoveTime   : MicroTime
+        avgEvaluateTime : MicroTime
+    }
+
+type LoadConfig<'a, 'b> =
+    {
+        load                : CancellationToken -> 'a -> 'b
+        unload              : 'b -> unit
+        priority            : SetOperation<'a> -> int
+        numThreads          : int
+        submitDelay         : TimeSpan
+        progressInterval    : TimeSpan
+        progress            : LoaderProgress -> unit
+    }
+
+module Loader =
+    open System.Threading.Tasks
+    open System.Collections.Concurrent
+
+    [<AutoOpen>]
+    module private BaseLibExtensions =
+   
+        let rec (|CancelExn|_|) (e : exn) =
+            match e with
+                | :? OperationCanceledException ->
+                    Some()
+                | :? AggregateException as e ->
+                    if e.InnerExceptions.Count = 1 then
+                        (|CancelExn|_|) e.InnerException
+                    else
+                        None
+                | _ -> None
+
+    
+        type MVar<'a>() =
+            let mutable content = Unchecked.defaultof<ref<'a>>
+            // feel free to replace atomic + sem by appropriate .net synchronization data type
+            let sem = new SemaphoreSlim(0)
+            let mutable cnt = 0
+            member x.Put v = 
+                content <- ref v
+                if Interlocked.Exchange(&cnt, 1) = 0 then
+                    sem.Release() |> ignore
+
+            member x.Take (ct : CancellationToken) =
+                sem.Wait(ct)
+                let res = !Interlocked.Exchange(&content,Unchecked.defaultof<_>)
+                cnt <- 0
+                res
+
+            member x.Take () =
+                x.Take (CancellationToken.None)
+
+            member x.TakeAsync () =
+                async {
+                    let! ct = Async.CancellationToken
+                    do! Async.AwaitTask(sem.WaitAsync(ct))
+                    let res = !Interlocked.Exchange(&content,Unchecked.defaultof<_>)
+                    cnt <- 0
+                    return res
+                }
+
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module MVar =
+            let empty () = MVar<'a>()
+            let create a =
+                let v = empty()
+                v.Put a
+                v
+            let put (m : MVar<'a>) v = m.Put v
+            let take (m : MVar<'a>) = m.Take()
+            let takeAsync (m : MVar<'a>) = m.TakeAsync ()
+
+
+        type AsyncSetReader<'a>(set : aset<'a>) =
+            inherit AdaptiveObject()
+
+            let evalTime = System.Diagnostics.Stopwatch()
+
+            let mvar = MVar.create()
+            let r = set.GetReader()
+
+            member x.EvaluationTime = evalTime.MicroTime
+
+            override x.Mark() =
+                MVar.put mvar ()
+                true
+
+            member x.Dispose() =
+                r.Dispose()
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+            member x.GetOperations(ct : CancellationToken) =
+                try
+                    mvar.Take(ct)
+                    x.EvaluateAlways AdaptiveToken.Top (fun token ->
+                        evalTime.Restart()
+                        let ops = r.GetOperations(token)
+                        evalTime.Stop()
+                        Some ops
+                    )
+                with CancelExn -> 
+                    None
+
+        type aset<'a> with
+            member x.GetAsyncReader() =
+                new AsyncSetReader<'a>(x)
+
+
+    let private startThread (f : unit -> unit) fmt =
+        Printf.kprintf (fun str -> 
+            let t = new Thread(ThreadStart(f), IsBackground = true, Name = str)
+            t.Start()
+            t
+        ) fmt
+
+    type AsyncLoadASet<'a, 'x, 'b>(config : LoadConfig<'a, 'b>, input : IMod<'x>, mapping : 'x -> ISet<'a>) =
+        static let noDisposable = { new IDisposable with member x.Dispose() = () }
+
+        let resultDeltaLock = obj()
+        let mutable dead = HSet.empty
+
+        let finalize (ops : hdeltaset<'b>) =
+            if ops.Count > 0 then
+                lock resultDeltaLock (fun () ->
+                    let old = dead.Count
+                    for op in ops do
+                        match op with
+                            | Rem(_,v) -> dead <- HSet.add v dead
+                            | _ -> ()
+                )
+
+        let history = new History<hrefset<'b>, hdeltaset<'b>>(HRefSet.traceNoRefCount, finalize)
+
+        let reset() =
+            history.Perform(HRefSet.computeDelta history.State HRefSet.empty) |> ignore
+
+        let emit (ops : hdeltaset<'b>) =
+            if ops.Count > 0 then
+                history.Perform ops |> ignore
+
+
+
+        let mutable targetCount = 0
+        let mutable currentCount = 0
+        let mutable queueCount = 0
+        let mutable getDeltaTime = MicroTime.Zero
+        let mutable getDeltaCount = 0
+        let mutable loadCount = 0
+        let mutable loadTicks = 0L
+        let mutable remCount = 0
+        let mutable remTicks = 0L
+
+            
+
+        let progressReport() =
+            let loadTime = 
+                if loadCount = 0 then MicroTime.Zero
+                else MicroTime(TimeSpan.FromTicks loadTicks) / float loadCount
+
+            let remTime = 
+                if remCount = 0 then MicroTime.Zero
+                else MicroTime(TimeSpan.FromTicks remTicks) / float remCount
+
+            let pullTime =
+                if getDeltaCount = 0 then MicroTime.Zero
+                else getDeltaTime / float getDeltaCount
+
+            loadCount <- 0
+            loadTicks <- 0L
+            remCount <- 0
+            remTicks <- 0L
+            getDeltaCount <- 0
+            getDeltaTime <- MicroTime.Zero
+
+            config.progress {
+                targetCount = targetCount
+                currentCount = currentCount
+                queueCount = queueCount
+                avgLoadTime = loadTime
+                avgRemoveTime = remTime
+                avgEvaluateTime = pullTime
+            }
+
+        let start() = 
+            let queue = ConcurrentDeltaPriorityQueue<'a, int>(config.priority)
+            let cancel = new CancellationTokenSource()
+            let tasks = ConcurrentDictionary<'a, Task<'b> * CancellationTokenSource>()
+
+            let reportTimer = 
+                if config.progressInterval < TimeSpan.MaxValue then 
+                    new Timer(TimerCallback(fun _ -> progressReport()), null, config.progressInterval, config.progressInterval)
+                else
+                    null
+
+            let resultDeltaReady = MVar.empty()
+            let mutable resultDeltas = HDeltaSet.empty
+
+            let getDeltaThread () =
+                let changed = MVar.create()
+                let cb = input.AddMarkingCallback(fun () -> MVar.put changed ())
+                try
+                    try
+                        let mutable last = HashSet() :> ISet<_>
+                        let sw = System.Diagnostics.Stopwatch()
+                        while true do
+                            changed.Take(cancel.Token)
+
+                            sw.Restart()
+                            let res = input.GetValue()
+                            let set = mapping res
+                            let add = set |> Seq.filter (last.Contains >> not) |> Seq.map Add
+                            let rem = last |> Seq.filter (set.Contains >> not) |> Seq.map Rem
+                            let ops = HDeltaSet.combine (HDeltaSet.ofSeq add) (HDeltaSet.ofSeq rem)
+                            last <- set
+                            targetCount <- set.Count
+                            sw.Stop()
+
+                            getDeltaTime <- getDeltaTime + sw.MicroTime
+                            getDeltaCount <- getDeltaCount + 1
+
+                            queue.EnqueueMany(ops)
+                            queueCount <- queue.Count
+                    with
+                        | CancelExn -> ()
+                        | e -> Log.error "getDelta faulted: %A" e
+                finally
+                    cb.Dispose()
+
+            let loadThread () =
+                try
+                    let sw = System.Diagnostics.Stopwatch()
+
+                    while true do
+                        let op = queue.Dequeue(cancel.Token)
+                        match op with
+                            | Add(_,v) ->
+                                sw.Restart()
+                                let cts = new CancellationTokenSource()
+                                let tcs = TaskCompletionSource<'b>()
+                                if tasks.ContainsKey v then Log.warn "duplicate add"
+
+                                tasks.[v] <- (tcs.Task, cts)
+
+                                try
+                                    let loaded = config.load cts.Token v
+                                    lock resultDeltaLock (fun () -> 
+                                        resultDeltas <- HDeltaSet.add (Add loaded) resultDeltas
+                                    )
+                                    MVar.put resultDeltaReady ()
+                                    tcs.SetResult(loaded)
+                                with
+                                    | CancelExn -> tcs.SetCanceled()
+                                    | e -> tcs.SetException e
+
+
+                                sw.Stop()
+                                Interlocked.Increment(&loadCount) |> ignore
+                                Interlocked.Add(&loadTicks, sw.Elapsed.Ticks) |> ignore
+
+                            | Rem(_,v) ->
+                                sw.Restart()
+                                let mutable tup = Unchecked.defaultof<_>
+                                while not (tasks.TryRemove(v, &tup)) do
+                                    Log.warn "[LoD] the craziest thing just happened"
+                                    Thread.Yield() |> ignore
+
+                                let (task, cts) = tup
+                                cts.Cancel()
+                                try
+                                    let res = task.Result
+                                    lock resultDeltaLock (fun () -> 
+                                        let m = resultDeltas |> HDeltaSet.toHMap
+
+                                        let newMap = 
+                                            m |> HMap.alter res (fun o ->
+                                                match o with
+                                                    | Some 1 -> 
+                                                        dead <- HSet.add res dead
+                                                        None
+                                                    | Some o ->
+                                                        Some (o - 1)
+                                                    | None ->
+                                                        Some (-1)
+                                            )
+
+                                        resultDeltas <- HDeltaSet.ofHMap newMap
+                                    )
+                                    MVar.put resultDeltaReady ()
+                                with
+                                    | CancelExn -> ()
+                                    | e -> Log.error "[LoD] load of %A faulted: %A" v e
+                                
+                                cts.Dispose()
+                                sw.Stop()
+                                Interlocked.Increment(&remCount) |> ignore
+                                Interlocked.Add(&remTicks, sw.Elapsed.Ticks) |> ignore
+
+
+                with
+                    | CancelExn ->
+                        ()
+                    | e ->
+                        Log.error "processing faulted: %A" e
+
+            let submitThread () =
+                try
+                    let sw = System.Diagnostics.Stopwatch()
+                        
+                    while true do
+                        resultDeltaReady.Take(cancel.Token)
+                        sw.Stop()
+                        if sw.Elapsed < config.submitDelay && config.submitDelay > TimeSpan.Zero then
+                            Thread.Sleep(config.submitDelay - sw.Elapsed)
+
+                        let ops = 
+                            lock resultDeltaLock (fun () ->
+                                let res = resultDeltas
+                                resultDeltas <- HDeltaSet.empty
+                                res
+                            )
+
+                        transact (fun () ->
+                            emit ops
+                        )
+                        sw.Restart()
+
+                        currentCount <- history.State.Count
+                        queueCount <- queue.Count
+                with 
+                    | CancelExn -> ()
+                    | e -> Log.error "submit faulted: %A" e
+
+            let cleanupTick(o : obj) =
+                let sw = System.Diagnostics.Stopwatch.StartNew()
+                let rem = 
+                    lock resultDeltaLock (fun () ->
+                        let res = dead
+                        dead <- HSet.empty
+                        res
+                    )
+
+                for v in rem do config.unload v
+                sw.Stop()
+                //if rem.Count > 0 then
+                //    Log.line "unloaded %A elements (%A)" rem.Count sw.MicroTime
+
+            let getDeltaThread = startThread getDeltaThread "GetDeltaThread"
+            let loadThreads = List.init config.numThreads (startThread loadThread "LoadThread%d")
+            let submitThread = startThread submitThread "SubmitThread" 
+            let cleanupTimer = new Timer(TimerCallback(cleanupTick), null, 1000, 1000)
+
+            let witness = 
+                { new IDisposable with
+                    member x.Dispose() =
+                        if not (isNull reportTimer) then 
+                            reportTimer.Dispose()
+
+                        cleanupTimer.Dispose()
+
+                        cancel.Cancel()
+
+                        getDeltaThread.Join()
+                        for p in loadThreads do p.Join()
+                        submitThread.Join()
+
+                        targetCount <- 0
+                        currentCount <- 0
+                        queueCount <- 0
+                        getDeltaTime <- MicroTime.Zero
+                        getDeltaCount <- 0
+                        loadCount <- 0
+                        loadTicks <- 0L
+                        remCount <- 0
+                        remTicks <- 0L
+
+                        transact (fun () -> reset())
+                }
+
+            witness
+
+        let mutable refCount = 0
+        let mutable witness = noDisposable
+
+        member internal x.AddRef() =
+            lock x (fun () ->
+                if Interlocked.Increment(&refCount) = 1 then
+                    Log.line "[Loader] start loading"
+                    witness <- start()
+            )
+
+        member internal x.RemoveRef() =
+            lock x (fun () ->
+                if Interlocked.Decrement(&refCount) = 0 then
+                    Log.start "[Loader] stop loading"
+                    witness.Dispose()
+                    witness <- noDisposable 
+                    Log.stop()
+            )
+
+        member x.GetReader() =
+            x.AddRef()
+            new AsnycLoadSetReader<'a, 'x, 'b>(x, history.NewReader()) :> ISetReader<_>
+
+        interface aset<'b> with
+            member x.IsConstant = false
+            member x.Content = history :> IMod<_>
+            member x.GetReader() = x.GetReader()
+
+    and private AsnycLoadSetReader<'a, 'x, 'b>(parent : AsyncLoadASet<'a, 'x, 'b>, r : ISetReader<'b>) =
+        inherit AdaptiveDecorator(r)
+
+        member private x.Dispose (disposing : bool) =
+            if disposing then GC.SuppressFinalize x
+            r.Dispose()
+            parent.RemoveRef()
+
+        override x.Finalize() =
+            x.Dispose false
+
+        interface ISetReader<'b> with
+            member x.GetOperations t = 
+                r.GetOperations t
+
+            member x.Dispose() = x.Dispose true
+            member x.State = r.State
+
+    let load (mapping : 'x -> ISet<'a>) (config : LoadConfig<'a, 'b>) (input : IMod<'x>) : aset<'b> =
+        AsyncLoadASet<'a, 'x, 'b>(config, input, mapping) :> aset<_>
 
 
 
