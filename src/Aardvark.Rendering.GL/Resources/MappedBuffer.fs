@@ -78,7 +78,9 @@ module ResizeBufferImplementation =
         static member Create() =
             let ctx = Option.get ContextHandle.Current
             let f = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
+            GL.Check "could not enqueue fence"
             GL.Flush()
+            GL.Check "could not flush"
             new Fence(ctx, f)
 //
 //        static member WaitAllGPU(fences : list<Fence>, current : ContextHandle) =
@@ -91,11 +93,14 @@ module ResizeBufferImplementation =
             let handle = handle
             if handle <> 0n then
                 let status = GL.ClientWaitSync(handle, ClientWaitSyncFlags.None, 0UL)
+                GL.Check "could not get fence status"
                 if status = WaitSyncStatus.AlreadySignaled then
                     x.Dispose()
                     false
                 else
-                    if ctx <> current then GL.WaitSync(handle, WaitSyncFlags.None, GL_TIMEOUT_IGNORED) |> ignore
+                    if ctx <> current then 
+                        GL.WaitSync(handle, WaitSyncFlags.None, GL_TIMEOUT_IGNORED) |> ignore
+                        GL.Check "could not enqueue wait"
                     true
             else
                 false
@@ -106,10 +111,13 @@ module ResizeBufferImplementation =
                     | WaitSyncStatus.WaitFailed -> failwith "[GL] failed to wait for fence"
                     | WaitSyncStatus.TimeoutExpired -> failwith "[GL] fance timeout"
                     | _ -> ()
+                GL.Check "could not wait for fence"
 
         member x.Dispose() = 
             let o = Interlocked.Exchange(&handle, 0n)
-            if o <> 0n then GL.DeleteSync(o)
+            if o <> 0n then 
+                GL.DeleteSync(o)
+                GL.Check "could not delete fence"
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -313,13 +321,13 @@ module ResizeBufferImplementation =
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, tmpBuffer)
                 GL.Check "[ResizeableBuffer] could not bind buffer"
 
-                GL.BufferData(BufferTarget.CopyWriteBuffer, copyBytes, 0n, BufferUsageHint.StaticCopy)
+                GL.BufferData(BufferTarget.CopyWriteBuffer, copyBytes, 0n, BufferUsageHint.StaticDraw)
                 GL.Check "[ResizeableBuffer] could not allocate buffer"
 
                 GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copyBytes)
                 GL.Check "[ResizeableBuffer] could not copy buffer"
 
-                GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StreamDraw)
+                GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
                 GL.Check "[ResizeableBuffer] could not allocate buffer"
 
                 GL.CopyBufferSubData(BufferTarget.CopyWriteBuffer, BufferTarget.CopyReadBuffer, 0n, 0n, copyBytes)
@@ -332,7 +340,7 @@ module ResizeBufferImplementation =
                 GL.Check "[ResizeableBuffer] could not delete buffer"
 
             else
-                GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StreamDraw)
+                GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
                 GL.Check "[ResizeableBuffer] could not allocate buffer"
 
             GL.BindBuffer(BufferTarget.CopyReadBuffer,  0)
@@ -396,7 +404,7 @@ module ResizeBufferImplementation =
 module ManagedBufferImplementation =
     
     [<AutoOpen>]
-    module private SparseBuffers = 
+    module private SparseBufferImpl = 
         type private BufferPageCommitmentDel = delegate of BufferTarget * nativeint * nativeint * bool -> unit
         type private NamedBufferPageCommitmentDel = delegate of uint32 * nativeint * nativeint * bool -> unit
 
@@ -429,6 +437,11 @@ module ManagedBufferImplementation =
 
         type GetPName with
             static member inline BufferPageSize = unbox<GetPName> 0x82F8
+
+    module SparseBuffers =
+        let supported() =
+            SparseBufferImpl.init()
+            SparseBufferImpl.supported
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module private Alignment = 
@@ -522,7 +535,7 @@ module ManagedBufferImplementation =
     type SparseGeometryPool(ctx : Context, types : Map<Symbol, Type>) as this =
         let pageSize, handles =
             use __ = ctx.ResourceLock
-            SparseBuffers.init()
+            SparseBufferImpl.init()
             let total = Memory.total ctx
             let pageSize = GL.GetInteger(GetPName.BufferPageSize) |> int64
             let pageSize = 16L * pageSize
@@ -682,7 +695,6 @@ module ManagedBufferImplementation =
             if c then x.Commit()
             else x.Decommit()
 
-
     and SparseGeometryPoolBuffer(ctx : Context, handle : int, totalSize : nativeint, pageSize : nativeint, parent : SparseGeometryPool) =
         inherit Buffer(ctx, 0n, handle)
         let resourceLock = new ResourceLock()
@@ -727,6 +739,204 @@ module ManagedBufferImplementation =
                 match c with
                     | Some ResourceUsage.Render -> parent.AfterRender()
                     | _ -> ()
+
+
+    type ResizeGeometryPool(ctx : Context, types : Map<Symbol, Type>) as this =
+        let initialCapacity = 1n <<< 20
+        let handles =
+            use __ = ctx.ResourceLock
+            let total = Memory.total ctx
+
+            types |> Map.map (fun sem t ->
+                let s = nativeint t.GLSize
+                let b = GL.GenBuffer()
+                GL.Check "could not generate buffer"
+                ResizeGeometryPoolBuffer(ctx, b, 0n), s, t
+            )
+
+        let manager = MemoryManager.createNop()
+        let fences = Fences(ctx)
+        let notRendering = new ManualResetEventSlim(true)
+
+        let mutable pendingFrees = []
+        let hasFrees = new AutoResetEvent(false)
+
+        let freeThread =
+            new Thread(ThreadStart(fun () ->
+                while true do
+                    WaitHandle.WaitAll([| hasFrees; notRendering.WaitHandle |]) |> ignore
+                    let frees = Interlocked.Exchange(&pendingFrees, [])
+                    for f in frees do manager.Free f
+                    match frees with
+                        | [] -> ()
+                        | _ -> this.AdjustSizes()
+
+            ), IsBackground = true)
+
+        do freeThread.Start()
+        let mutable rendering = 0
+        let mutable count = 0
+
+        let cap() =
+            if manager.LastUsedByte < 0n then
+                0n
+            else
+                let res = int64 manager.LastUsedByte + 1L |> Fun.NextPowerOfTwo |> nativeint
+                max res initialCapacity
+
+        member internal x.BeforeRender() =
+            if Interlocked.Increment(&rendering) = 1 then
+                notRendering.Reset()
+
+            fences.WaitGPU()
+
+        member internal x.AfterRender() =
+            if Interlocked.Decrement(&rendering) = 0 then
+
+                notRendering.Set()
+
+        member internal x.AdjustSizes() =
+            use __ = ctx.ResourceLock
+            fences.WaitCPU()
+            let newCapacity = cap()
+
+            for (sem, (buffer, es, t)) in Map.toSeq handles do
+                let c = es * newCapacity
+                buffer.Resize c
+
+            GL.Sync()
+
+        member x.Alloc(fvc : int, g : IndexedGeometry) =
+            let ptr = manager.Alloc(nativeint fvc)
+
+            let newCapacity = cap()
+
+            use __ = ctx.ResourceLock
+            Interlocked.Increment(&count) |> ignore
+            fences.WaitGPU()
+
+            for (sem, (buffer, es, t)) in Map.toSeq handles do
+                let o = es * ptr.Offset
+                let s = es * ptr.Size
+
+                let c = es * newCapacity
+                buffer.Resize c
+
+                match g.IndexedAttributes.TryGetValue sem with
+                    | (true, data) ->
+                        assert(data.GetType().GetElementType() = t)
+                        assert(data.Length >= int ptr.Size)
+
+                        let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                        
+                        buffer.Write(o, s, gc.AddrOfPinnedObject())
+                        GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
+                        gc.Free()
+                    | _ ->
+                        ()
+                        //Log.error "%s undefined" (string sem)
+
+
+            fences.Enqueue()
+            ptr
+
+        member x.Free(ptr : managedptr) =
+            Interlocked.Decrement(&count) |> ignore
+            Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
+            hasFrees.Set() |> ignore
+
+        member x.TryGetBufferView(sem : Symbol) =
+            match Map.tryFind sem handles with
+                | Some (b,s,t) -> BufferView(Mod.constant (b :> IBuffer), t) |> Some
+                | _ -> None
+
+        member x.Dispose() =
+            use __ = ctx.ResourceLock
+            for (_,(b,_,_)) in Map.toSeq handles do
+                ctx.Delete b
+
+        interface IGeometryPool with
+            member x.Count = count
+            member x.UsedMemory = handles |> Map.toSeq |> Seq.sumBy (fun (_,(b,_,_)) -> b.SizeInBytes) |> Mem
+            member x.Dispose() = x.Dispose()
+            member x.Alloc(c,g) = x.Alloc(c,g)
+            member x.Free p = x.Free p
+            member x.TryGetBufferView sem = x.TryGetBufferView sem
+
+    and ResizeGeometryPoolBuffer(ctx : Context, handle : int, initialCap : nativeint) =
+        inherit Buffer(ctx, initialCap, handle)
+
+        //let mutable capacity = capacity
+        let rw = new ReaderWriterLockSlim()
+
+        member internal x.resize(newCapacity : nativeint) =
+            if newCapacity <> x.SizeInBytes then
+                let copySize = min x.SizeInBytes newCapacity
+                x.SizeInBytes <- newCapacity
+
+                if copySize > 0n then
+                    // bind the current buffer to read
+                    GL.BindBuffer(BufferTarget.CopyReadBuffer, handle)
+                    GL.Check "could not bind buffer"
+
+                    // allocate a temp buffer
+                    let temp = GL.GenBuffer()
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, temp)
+                    GL.Check "could not bind temp-buffer"
+                    GL.BufferData(BufferTarget.CopyWriteBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                    GL.Check "could not allocate temp-buffer"
+
+                    // copy data to temp
+                    GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copySize)
+                    GL.Check (sprintf "could not copy buffer (size: %A)" copySize)
+
+                    // resize the original buffer
+                    GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                    GL.Check "could not reallocate buffer"
+
+                    // copy data back
+                    GL.CopyBufferSubData(BufferTarget.CopyWriteBuffer, BufferTarget.CopyReadBuffer, 0n, 0n, copySize)
+                    GL.Check "could not copy buffer"
+
+                    // cleanup
+                    GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
+                    GL.Check "could not unbind buffer"
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                    GL.Check "could not unbind temp-buffer"
+                    GL.DeleteBuffer(temp)
+                    GL.Check "could not delete temp-buffer"
+
+                else
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
+                    GL.Check "could not bind buffer"
+                    GL.BufferData(BufferTarget.CopyWriteBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                    GL.Check "could not resize buffer"
+                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                    GL.Check "could not unbind buffer"
+
+
+        member internal x.Resize(newCapacity : nativeint) =
+            if x.SizeInBytes <> newCapacity then
+                ReaderWriterLock.write rw (fun () ->
+                    if x.SizeInBytes <> newCapacity then
+                        use __ = ctx.ResourceLock
+                        x.resize newCapacity
+                )
+
+        member internal x.Write(offset : nativeint, size : nativeint, data : nativeint) =
+            ReaderWriterLock.read rw (fun () ->
+                use __ = ctx.ResourceLock
+
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
+                GL.Check "could not bind buffer"
+
+                GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
+                GL.Check "could not upload buffer"
+
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                GL.Check "could not unbind buffer"
+            )
+
 
 
 
