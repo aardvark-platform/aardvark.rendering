@@ -277,6 +277,7 @@ type Context(runtime : IRuntime, resourceContextCount : int) =
 
                         // make the obtained handle current
                         handle.MakeCurrent()
+                        GL.GetError() |> ignore
 
                         GL.Check("Error while making current.")
 

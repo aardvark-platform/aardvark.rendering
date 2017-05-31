@@ -766,7 +766,7 @@ module ManagedBufferImplementation =
                 let s = nativeint t.GLSize
                 let b = GL.GenBuffer()
                 GL.Check "could not generate buffer"
-                ResizeGeometryPoolBuffer(ctx, b, rw, 0n), s, t
+                ResizeGeometryPoolBuffer(this, ctx, b, rw, 0n), s, t
             )
 
         let manager = MemoryManager.createNop()
@@ -881,9 +881,10 @@ module ManagedBufferImplementation =
             member x.Free p = x.Free p
             member x.TryGetBufferView sem = x.TryGetBufferView sem
 
-    and private ResizeGeometryPoolBuffer(ctx : Context, handle : int, rw : ReaderWriterLockSlim, initialCap : nativeint) =
+    and private ResizeGeometryPoolBuffer(parent : ResizeGeometryPool, ctx : Context, handle : int, rw : ReaderWriterLockSlim, initialCap : nativeint) =
         inherit Buffer(ctx, initialCap, handle)
 
+        let resourceLock = new ResourceLock()
 
         member internal x.resize(newCapacity : nativeint) =
             if newCapacity <> x.SizeInBytes then
@@ -949,6 +950,17 @@ module ManagedBufferImplementation =
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
             GL.Check "could not unbind buffer"
 
+
+        interface ILockedResource with
+            member x.Lock = resourceLock
+            member x.OnLock(c) =
+                match c with
+                    | Some ResourceUsage.Render -> parent.BeforeRender()
+                    | _ -> ()
+            member x.OnUnlock(c) =
+                match c with
+                    | Some ResourceUsage.Render -> parent.AfterRender()
+                    | _ -> ()
 
 
 

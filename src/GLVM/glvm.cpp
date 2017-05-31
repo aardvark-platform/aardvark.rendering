@@ -859,7 +859,7 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 		GLint size = 0;
 		glBindBuffer(GL_COPY_READ_BUFFER, buffer);
 		glGetBufferParameteriv(GL_COPY_READ_BUFFER, GL_BUFFER_SIZE, &size);
-		auto indirect = (DrawArraysIndirectCommand*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
+		auto indirect = (char*)glMapBufferRange(GL_COPY_READ_BUFFER, 0, size, GL_MAP_READ_BIT);
 		
 		GLsizei n;
 		for (n = 0; n < drawcount; n++)
