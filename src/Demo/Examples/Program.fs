@@ -358,7 +358,7 @@ let main args =
     //Examples.ComputeTest.run()
     Ag.initialize()
     Aardvark.Init()
-    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- true
+    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
     Examples.LoD.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 
