@@ -3,3 +3,4 @@ Aardvark.Base.Runtime
 FSharp.Quotations.Evaluator 
 FShade.Core
 FsUnit
+NUnit

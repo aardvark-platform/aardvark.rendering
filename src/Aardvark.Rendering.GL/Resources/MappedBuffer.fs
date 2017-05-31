@@ -74,6 +74,13 @@ module ResizeBufferImplementation =
         let mutable handle = handle
 
         member x.Context = ctx
+        
+        member x.IsSignaled =
+            if handle = 0n then
+                true
+            else
+                let status = GL.ClientWaitSync(handle, ClientWaitSyncFlags.None, 0L)
+                status = WaitSyncStatus.AlreadySignaled
 
         static member Create() =
             let ctx = Option.get ContextHandle.Current
@@ -82,28 +89,20 @@ module ResizeBufferImplementation =
             GL.Flush()
             GL.Check "could not flush"
             new Fence(ctx, f)
-//
-//        static member WaitAllGPU(fences : list<Fence>, current : ContextHandle) =
-//            for f in fences do f.WaitGPU(current)
-//
-//        static member WaitAllCPU(fences : list<Fence>) =
-//            for f in fences do f.WaitCPU()
 
         member x.WaitGPU(current : ContextHandle) =
             let handle = handle
             if handle <> 0n then
-                let status = GL.ClientWaitSync(handle, ClientWaitSyncFlags.None, 0UL)
-                GL.Check "could not get fence status"
-                if status = WaitSyncStatus.AlreadySignaled then
-                    x.Dispose()
-                    false
-                else
-                    if ctx <> current then 
-                        GL.WaitSync(handle, WaitSyncFlags.None, GL_TIMEOUT_IGNORED) |> ignore
-                        GL.Check "could not enqueue wait"
-                    true
+                if ctx <> current then 
+                    GL.WaitSync(handle, WaitSyncFlags.None, GL_TIMEOUT_IGNORED) |> ignore
+                    GL.Check "could not enqueue wait"
+
             else
-                false
+                Log.warn "waiting on disposed fence"
+
+        member x.WaitGPU() =
+            let ctx = Option.get ContextHandle.Current
+            x.WaitGPU ctx
 
         member x.WaitCPU() =
             if handle <> 0n then
@@ -112,6 +111,8 @@ module ResizeBufferImplementation =
                     | WaitSyncStatus.TimeoutExpired -> failwith "[GL] fance timeout"
                     | _ -> ()
                 GL.Check "could not wait for fence"
+            else
+                Log.warn "waiting on disposed fence"
 
         member x.Dispose() = 
             let o = Interlocked.Exchange(&handle, 0n)
@@ -160,7 +161,7 @@ module ResizeBufferImplementation =
             lock resourceLock (fun () ->
                 if not (HMap.isEmpty pendingWrites) then
                     let handle = ctx.CurrentContextHandle |> Option.get
-                    pendingWrites <- pendingWrites |> HMap.filter (fun _ f -> f.WaitGPU(handle))
+                    pendingWrites |> Seq.iter (fun (_, f) -> f.WaitGPU(handle))
             )
             
 
@@ -458,6 +459,7 @@ module ManagedBufferImplementation =
     type Fences(ctx : Context) =
         let mutable store : hmap<ContextHandle, Fence> = HMap.empty
 
+
         member x.WaitCPU() =
             lock x (fun () ->
                 let all = store
@@ -566,6 +568,8 @@ module ManagedBufferImplementation =
         
         let free ( ptrs : list<managedptr>) =
             use __ = ctx.ResourceLock
+            fences.WaitGPU()
+
             for (_,(b,_,s)) in Map.toSeq handles do
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
                 GL.Check "[Pool] could not bind buffer"
@@ -573,6 +577,8 @@ module ManagedBufferImplementation =
                 GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
                 GL.Check "[Pool] could not unbind buffer"
                         
+            fences.Enqueue()
+
             for f in ptrs do
                 manager.Free f
         
@@ -583,6 +589,7 @@ module ManagedBufferImplementation =
             new Thread(ThreadStart(fun () ->
                 while true do
                     WaitHandle.WaitAll([| hasFrees; notRendering.WaitHandle |]) |> ignore
+                    
                     let frees = Interlocked.Exchange(&pendingFrees, [])
                     free frees
             ), IsBackground = true)
@@ -659,13 +666,17 @@ module ManagedBufferImplementation =
         
         let mutable refCount = 0
         let mutable fence : Fence = null
-
+//        let mutable fence : Fence = null
+//
         let wait() =
             match fence with
                 | null -> ()
                 | f -> 
-                    if not (f.WaitGPU(ContextHandle.Current.Value)) then
+                    if f.IsSignaled then
+                        f.Dispose()
                         fence <- null
+                    else
+                        f.WaitGPU(ContextHandle.Current.Value)
 
         member x.IsCommitted = refCount > 0 
 
@@ -676,8 +687,11 @@ module ManagedBufferImplementation =
                     Interlocked.Add(totalSize, int64 size) |> ignore
                     wait()
                     GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, offset, size, true)
+                    GL.Sync()
                     let f = Fence.Create()
                     fence <- f
+                else
+                    wait()
             )
             
         member x.Decommit() =
@@ -689,6 +703,8 @@ module ManagedBufferImplementation =
                     GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, offset, size, false)
                     let f = Fence.Create()
                     fence <- f
+                else
+                    wait()
             )
 
         member x.Commitment(c : bool) =
@@ -700,8 +716,6 @@ module ManagedBufferImplementation =
         let resourceLock = new ResourceLock()
         let committedSize = ref 0L
         let pageRef : Page[] = Array.init (totalSize / pageSize |> int) (fun pi -> Page(handle, nativeint pi * pageSize, pageSize, committedSize))
-
-
 
         member internal x.Commitment(offset : nativeint, size : nativeint, c : bool) =
             let ctx = ctx.CurrentContextHandle.Value
@@ -723,9 +737,9 @@ module ManagedBufferImplementation =
                 let firstPage = offset / pageSize |> int
                 let lastPage = lastByte / pageSize |> int
 
-                    
                 for pi in firstPage .. lastPage do
                     pageRef.[pi].Commitment(c)
+
 
         member x.UsedMemory = Mem !committedSize
 

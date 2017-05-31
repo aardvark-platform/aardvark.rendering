@@ -119,6 +119,8 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
     
     let heap = List<DeltaHeapEntry<'a, 'b>>()
     let entries = Dict<'a, DeltaHeapEntry<'a, 'b>>()
+    let mutable adds = 0
+    let mutable rems = 0
 
     let swap (l : DeltaHeapEntry<'a, 'b>) (r : DeltaHeapEntry<'a, 'b>) =
         let li = l.Index
@@ -191,6 +193,8 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
             let e = heap.[0]
             entries.Remove e.Value |> ignore
             heap.Clear()
+            adds <- 0
+            rems <- 0
             SetOperation(e.Value, e.RefCount)
         else
             let e = heap.[0]
@@ -201,6 +205,10 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
             pushDown 0 l |> ignore
             e.Index <- -1
             entries.Remove e.Value |> ignore
+
+            if e.RefCount < 0 then rems <- rems - 1
+            elif e.RefCount > 0 then adds <- adds - 1
+
             SetOperation(e.Value, e.RefCount)
 
     let rec remove (e : DeltaHeapEntry<'a, 'b>) =
@@ -212,46 +220,56 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
         else
             dequeue() |> ignore
 
+    member x.AddCount = adds
+    member x.RemoveCount = rems
+
     member x.Count = heap.Count
 
     member x.Enqueue (a : SetOperation<'a>) : unit =
         if a.Count <> 0 then
             lock x (fun () ->
                 let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
+                let oldCount = entry.RefCount
                 entry.RefCount <- entry.RefCount + a.Count
 
                 if entry.RefCount = 0 then
+                    if oldCount > 0 then adds <- adds - 1
+                    elif oldCount < 0 then rems <- rems - 1
+
                     entries.Remove a.Value |> ignore
                     remove entry
                 else
+                    if oldCount <= 0 && entry.RefCount > 0 then adds <- adds + 1
+                    elif oldCount >= 0 && entry.RefCount < 0 then rems <- rems + 1
+
                     changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
                     Monitor.Pulse x
+
+                assert(adds + rems = heap.Count)
             )
 
     member x.EnqueueMany (a : seq<SetOperation<'a>>) : unit =
         lock x (fun () ->
             for a in a do
                 let entry = entries.GetOrCreate(a.Value, fun v -> DeltaHeapEntry<'a, 'b>(a.Value, Unchecked.defaultof<'b>, -1, 0))
+                let oldCount = entry.RefCount
                 entry.RefCount <- entry.RefCount + a.Count
 
                 if entry.RefCount = 0 then
+                    if oldCount > 0 then adds <- adds - 1
+                    elif oldCount < 0 then rems <- rems - 1
+
                     entries.Remove a.Value |> ignore
                     remove entry
                 else
+                    if oldCount <= 0 && entry.RefCount > 0 then adds <- adds + 1
+                    elif oldCount >= 0 && entry.RefCount < 0 then rems <- rems + 1
+
                     changeKey entry (SetOperation(entry.Value, entry.RefCount) |> getPriority) |> ignore
 
             Monitor.Pulse x
+            assert(adds + rems = heap.Count)
         )
-
-    member x.UpdatePriorities() =
-        let mutable maxSteps = 0
-        let hist = Array.zeroCreate 128
-        for e in entries.Values do
-            let steps = changeKey e (getPriority (SetOperation(e.Value, e.RefCount)))
-            inc &hist.[steps]
-            if steps > maxSteps then maxSteps <- steps
-
-        Array.take (maxSteps + 1) hist
 
     member x.Pulse() =
         Monitor.Enter x
@@ -269,6 +287,7 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
             Monitor.Wait(x, 100) |> ignore
 
         let e = dequeue()
+        assert(adds + rems = heap.Count)
         Monitor.Exit x
         e
 
@@ -277,6 +296,7 @@ type ConcurrentDeltaPriorityQueue<'a, 'b when 'b : comparison>(getPriority : Set
         while heap.Count = 0 do
             Monitor.Wait(x) |> ignore
         let e = dequeue()
+        assert(adds + rems = heap.Count)
         Monitor.Exit x
         e
 
@@ -284,7 +304,8 @@ type LoaderProgress =
     {
         targetCount     : int
         currentCount    : int
-        queueCount      : int
+        queueAdds       : int
+        queueRemoves    : int
         avgLoadTime     : MicroTime
         avgRemoveTime   : MicroTime
         avgEvaluateTime : MicroTime
@@ -433,7 +454,8 @@ module Loader =
 
         let mutable targetCount = 0
         let mutable currentCount = 0
-        let mutable queueCount = 0
+        let mutable queueAdds = 0
+        let mutable queueRemoves = 0
         let mutable getDeltaTime = MicroTime.Zero
         let mutable getDeltaCount = 0
         let mutable loadCount = 0
@@ -466,7 +488,8 @@ module Loader =
             config.progress {
                 targetCount = targetCount
                 currentCount = currentCount
-                queueCount = queueCount
+                queueAdds = queueAdds
+                queueRemoves = queueRemoves
                 avgLoadTime = loadTime
                 avgRemoveTime = remTime
                 avgEvaluateTime = pullTime
@@ -503,14 +526,15 @@ module Loader =
                             let rem = last |> Seq.filter (set.Contains >> not) |> Seq.map Rem
                             let ops = HDeltaSet.combine (HDeltaSet.ofSeq add) (HDeltaSet.ofSeq rem)
                             last <- set
-                            targetCount <- set.Count
                             sw.Stop()
 
                             getDeltaTime <- getDeltaTime + sw.MicroTime
                             getDeltaCount <- getDeltaCount + 1
 
                             queue.EnqueueMany(ops)
-                            queueCount <- queue.Count
+                            targetCount <- set.Count
+                            queueAdds <- queue.AddCount
+                            queueRemoves <- queue.RemoveCount
                     with
                         | CancelExn -> ()
                         | e -> Log.error "getDelta faulted: %A" e
@@ -523,12 +547,14 @@ module Loader =
 
                     while true do
                         let op = queue.Dequeue(cancel.Token)
+                        queueAdds <- queue.AddCount
+                        queueRemoves <- queue.RemoveCount
                         match op with
                             | Add(_,v) ->
                                 sw.Restart()
                                 let cts = new CancellationTokenSource()
                                 let tcs = TaskCompletionSource<'b>()
-                                if tasks.ContainsKey v then Log.warn "duplicate add"
+                                if tasks.ContainsKey v then Log.warn "[LoD] duplicate add"
 
                                 tasks.[v] <- (tcs.Task, cts)
 
@@ -616,22 +642,25 @@ module Loader =
                         sw.Restart()
 
                         currentCount <- history.State.Count
-                        queueCount <- queue.Count
                 with 
                     | CancelExn -> ()
                     | e -> Log.error "submit faulted: %A" e
 
+            let cleanWatch = System.Diagnostics.Stopwatch()
             let cleanupTick(o : obj) =
-                let sw = System.Diagnostics.Stopwatch.StartNew()
+                cleanWatch.Restart()
                 let rem = 
                     lock resultDeltaLock (fun () ->
                         let res = dead
                         dead <- HSet.empty
                         res
                     )
-
                 for v in rem do config.unload v
-                sw.Stop()
+                cleanWatch.Stop()
+
+                if rem.Count > 0 then
+                    //Interlocked.Add(&remCount, rem.Count) |> ignore
+                    Interlocked.Add(&remTicks, cleanWatch.Elapsed.Ticks) |> ignore
                 //if rem.Count > 0 then
                 //    Log.line "unloaded %A elements (%A)" rem.Count sw.MicroTime
 
@@ -656,7 +685,8 @@ module Loader =
 
                         targetCount <- 0
                         currentCount <- 0
-                        queueCount <- 0
+                        queueAdds <- 0
+                        queueRemoves <- 0
                         getDeltaTime <- MicroTime.Zero
                         getDeltaCount <- 0
                         loadCount <- 0

@@ -29,9 +29,9 @@ nuget DockPanelSuite.ThemeVS2013Blue     = 2.10.0-beta2
 nuget CommonMark.NET                     ~> 0.12.0
 
 nuget Clipper                            ~> 6.4.0
-nuget FsUnit                             ~> 2.1.0
-nuget NUnit                              ~> 3.2.0
-nuget NUnit.Console                      ~> 3.2.0
+nuget NUnit.Console                      ~> 3.6.0
+nuget NUnit                              ~> 3.6.0
+nuget FsUnit                             ~> 2.4.0-alpha-2
 
 group Build
 framework: net45
