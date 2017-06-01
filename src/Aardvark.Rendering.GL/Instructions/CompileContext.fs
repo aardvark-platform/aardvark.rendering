@@ -366,7 +366,8 @@ module GLExtensionsPossiblyNotWorkingEverywhere =
         static member inline Sync() =
             if ExecutionContext.syncSupported then
                 let fence = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
-                let status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.SyncFlushCommandsBit, ~~~0UL)
+                GL.Flush()
+                let status = GL.ClientWaitSync(fence, ClientWaitSyncFlags.None, ~~~0UL)
                 GL.DeleteSync(fence)
 
                 match status with

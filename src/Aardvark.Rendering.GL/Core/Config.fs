@@ -98,7 +98,7 @@ module Error =
          let message = Marshal.PtrToStringAnsi(message,length)
          match severity with
              | DebugSeverity.DebugSeverityNotification -> 
-                Report.Line(4, "[GL:{0}] {1}", userParam, message)
+                Report.Line(5, "[GL:{0}] {1}", userParam, message)
 
              | DebugSeverity.DebugSeverityMedium ->
                  Report.Warn("[GL:{0}] {1}", userParam, message)
@@ -107,7 +107,7 @@ module Error =
                  Report.Error("[GL:{0}] {1}", userParam, message)
 
              | _ ->
-                Report.Line("[GL:{0}] {1}", userParam, message)
+                Report.Line(4, "[GL:{0}] {1}", userParam, message)
 
     let private debugHandler = DebugProc debug
 

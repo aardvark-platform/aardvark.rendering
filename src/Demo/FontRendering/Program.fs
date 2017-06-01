@@ -49,9 +49,37 @@ type CameraMode =
     | Rotate
 
 
+type BlaNode(calls : alist<DrawCallInfo>, mode : IndexedGeometryMode) =
+    interface ISg
+
+    member x.Mode = mode
+
+    member x.Calls = calls
+
+module Sems =
+    open Aardvark.SceneGraph.Semantics
+    open Aardvark.Base.Ag
+
+    [<Aardvark.Base.Ag.Semantic>]
+    type BlaSems () =
+        
+        member x.RenderObjects(b : BlaNode) =
+            
+            let o = RenderObject.create()
+
+            o.Mode <- Mod.constant b.Mode
+
+            o.IndirectBuffer <- 
+                b.Calls |> AList.toMod 
+                        |> Mod.map PList.toArray
+                        |> Mod.map ( fun arr -> IndirectBuffer(ArrayBuffer(arr), arr.Length ) :> IIndirectBuffer )
+
+            ASet.single (o :> IRenderObject)
+
 
 [<EntryPoint>]
 let main argv = 
+    Ag.initialize()
     Aardvark.Init()
 
 
@@ -332,7 +360,53 @@ let main argv =
 
     let config = { BackendConfiguration.Default with useDebugOutput = true }
 
-    let main = app.Runtime.CompileRender(win.FramebufferSignature, config, sg) |> DefaultOverlays.withStatistics
+    let count = Mod.init 999
+    
+
+    win.Keyboard.DownWithRepeats.Values.Add (function
+        | Keys.Add ->
+            transact (fun () ->
+                
+                count.Value <- (count.Value + 10) % 1000
+                printfn "count = %d" count.Value
+            )
+        | Keys.Subtract ->
+            transact (fun () ->
+                count.Value <- (count.Value + 990) % 1000
+                printfn "count = %d" count.Value
+            )
+        | _ -> ()
+    )
+
+    let calls = 
+        alist {
+            let! c = count
+            for i in 0..c-1 do
+                yield
+                    DrawCallInfo( 
+                        FaceVertexCount = 1,
+                        InstanceCount = 1,
+                        FirstIndex = i,
+                        FirstInstance = 0
+                    )
+        }
+
+    let pos =
+        let rand = RandomSystem()
+        Array.init 1000 (ignore >> rand.UniformV3d >> V3f)
+
+    let blasg = 
+        BlaNode(calls, IndexedGeometryMode.PointList)
+            |> Sg.vertexAttribute' DefaultSemantic.Positions pos
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.White
+            }
+            |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
+            |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
+
+
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, config, blasg) //|> DefaultOverlays.withStatistics
     let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
 
     win.Keyboard.Press.Values.Add (fun c ->

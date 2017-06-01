@@ -63,6 +63,19 @@ type IGeometryPool =
     abstract member Free : managedptr -> unit
     abstract member TryGetBufferView : Symbol -> Option<BufferView>
     
+[<AbstractClass; Sealed; Extension>]
+type IGeometryPoolExtensions private() =
+    [<Extension>]
+    static member Alloc(this : IGeometryPool, g : IndexedGeometry) =
+        let fvc =
+            if isNull g.IndexArray then
+                match g.IndexedAttributes.Values |> Seq.tryHead with
+                    | None -> 0
+                    | Some a -> a.Length
+            else
+                g.IndexArray.Length
+
+        this.Alloc(fvc, g)
 
 
 [<AllowNullLiteral>]

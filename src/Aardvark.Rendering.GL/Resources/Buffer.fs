@@ -194,7 +194,7 @@ module BufferExtensions =
                     if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
 
                 | :? INativeBuffer as n ->
-                    n.Use (fun ptr -> x.Upload(b, ptr, n.SizeInBytes))
+                    n.Use (fun ptr -> x.Upload(b, ptr, nativeint n.SizeInBytes))
                 | _ ->
                     failwithf "unsupported buffer-data-type: %A" data
 
@@ -370,36 +370,39 @@ module BufferExtensions =
         /// note that performing this operation will cause the buffer's
         /// usage-hint to become "DynamicDraw"
         /// </summary>
-        member x.Upload(buffer : Buffer, src : nativeint, size : int) =
-            assert(size >= 0)
+        member x.Upload(buffer : Buffer, src : nativeint, size : nativeint) =
+            assert(size >= 0n)
             assert(src <> 0n)
-
-            let nativeSize = size |> nativeint
 
             using x.ResourceLock (fun _ ->
                 GL.BindBuffer(BufferTarget.ArrayBuffer, buffer.Handle)
                 GL.Check "failed to bind buffer"
 
-                if buffer.SizeInBytes <> nativeSize then
+                if buffer.SizeInBytes <> size then
                     removeBuffer x (int64 buffer.SizeInBytes)
-                    addBuffer x (int64 nativeSize)
-                    buffer.SizeInBytes <- nativeSize
-                    let source = if nativeSize = 0n then 0n else src
-                    GL.BufferData(BufferTarget.ArrayBuffer, nativeSize, source, BufferUsageHint.DynamicDraw)
+                    addBuffer x (int64 size)
+                    buffer.SizeInBytes <- size
+                    let source = if size = 0n then 0n else src
+                    GL.BufferData(BufferTarget.ArrayBuffer, size, source, BufferUsageHint.DynamicDraw)
+                    //GL.BufferData(BufferTarget.CopyWriteBuffer, 0n, 0n, BufferUsageHint.DynamicDraw)
+                    //GL.BufferStorage(BufferTarget.CopyWriteBuffer, size, source, BufferStorageFlags.DynamicStorageBit ||| BufferStorageFlags.MapReadBit ||| BufferStorageFlags.MapWriteBit)
                     GL.Check "failed to set buffer data"
-                elif nativeSize <> 0n then
-                    let target = GL.MapBufferRange(BufferTarget.ArrayBuffer, 0n, nativeSize, BufferAccessMask.MapWriteBit)
-                    GL.Check "failed to map buffer for writing"
-
-                    // TODO: Marshal.Copy should possibly take int64 sizes
-                    Marshal.Copy(src, target, size)
-
-                    GL.UnmapBuffer(BufferTarget.ArrayBuffer) |> ignore
-                    GL.Check "failed to unmap buffer"
+                elif size <> 0n then
+                    GL.BufferSubData(BufferTarget.ArrayBuffer, 0n, size, src)
+                    GL.Check "failed to upload buffer"
+//                    let target = GL.MapBufferRange(BufferTarget.CopyWriteBuffer, 0n, size, BufferAccessMask.MapWriteBit)
+//                    GL.Check "failed to map buffer for writing"
+//
+//                    // TODO: Marshal.Copy should possibly take int64 sizes
+//                    Marshal.Copy(src, target, size)
+//
+//                    GL.UnmapBuffer(BufferTarget.CopyWriteBuffer) |> ignore
+//                    GL.Check "failed to unmap buffer"
 
 
                 GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
                 GL.Check "failed to unbind buffer"
+                GL.Sync()
             )
 
         /// <summary>
@@ -410,14 +413,15 @@ module BufferExtensions =
         member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, count : int) =
             assert(sourceStartIndex >= 0)
             assert(count >= 0)
+            assert(sourceStartIndex + count <= source.Length)
 
             let handle = GCHandle.Alloc(source, GCHandleType.Pinned)
 
             let elementType = source.GetType().GetElementType()
-            let elementSize = Marshal.SizeOf(elementType)
-            let size = count * elementSize
+            let elementSize = Marshal.SizeOf(elementType) |> nativeint
+            let size = nativeint count * elementSize
 
-            let ptr = handle.AddrOfPinnedObject() + nativeint (sourceStartIndex * elementSize)
+            let ptr = handle.AddrOfPinnedObject() + nativeint sourceStartIndex * elementSize
 
             x.Upload(buffer, ptr, size)
 
@@ -546,15 +550,14 @@ module IndirectBufferExtensions =
     /// This function is executed after every write to the buffer (Create / Upload)
     /// and assumes that the buffer is filled with DrawCallInfos
     let private postProcessDrawCallBuffer (indexed : bool) (b : Buffer) =
-        let callCount = int b.SizeInBytes / sizeof<DrawCallInfo>
+        let callCount = b.SizeInBytes / nativeint sizeof<DrawCallInfo> |> int
 
         if indexed && callCount > 0 then
             using b.Context.ResourceLock (fun _ ->
                 GL.BindBuffer(BufferTarget.ArrayBuffer, b.Handle)
                 GL.Check "could not bind buffer"
 
-                
-
+            
                 let ptr = GL.MapBufferRange(BufferTarget.ArrayBuffer, 0n, b.SizeInBytes, BufferAccessMask.MapReadBit ||| BufferAccessMask.MapWriteBit)
                 if ptr = 0n then failwithf "[GL] could not map buffer"
 
@@ -642,7 +645,7 @@ module IndirectBufferExtensions =
                             x.Clear(indirect.Buffer, b.SizeInBytes)
                         x.Copy(b, 0n, indirect.Buffer, 0n, b.SizeInBytes)
 
-                    | b ->
+                    | b -> 
                         x.Upload(indirect.Buffer, b)
 
                 let callCount = postProcessDrawCallBuffer indexed indirect.Buffer
