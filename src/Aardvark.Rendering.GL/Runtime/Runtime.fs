@@ -445,6 +445,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         ctx.CreateMappedBuffer()
         
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
+        use __ = ctx.ResourceLock
         if RuntimeConfig.SupressSparseBuffers || not (ManagedBufferImplementation.SparseBuffers.supported()) then
             new ManagedBufferImplementation.ResizeGeometryPool(ctx, types) :> IGeometryPool
         else

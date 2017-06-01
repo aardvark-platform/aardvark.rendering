@@ -148,8 +148,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         if c <> null then
             c.MakeCurrent(null)
 
-        if ContextHandle.primaryContext <> null then
-            ContextHandle.primaryContext.MakeCurrent()
+        //if ContextHandle.primaryContext <> null then
+        //    ContextHandle.primaryContext.MakeCurrent()
 
         base.OnHandleCreated(e)
         loaded <- true
