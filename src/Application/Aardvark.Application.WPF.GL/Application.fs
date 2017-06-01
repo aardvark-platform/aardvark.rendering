@@ -11,12 +11,12 @@ open Aardvark.Rendering.GL
 open Aardvark.Application
 
 
-type OpenGlApplication(forceNvidia : bool) =
+type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
 
     let runtime = new Runtime()
-    let ctx = new Context(runtime)
+    let ctx = new Context(runtime, enableDebug)
     do runtime.Context <- ctx
 
     let init =
@@ -52,7 +52,8 @@ type OpenGlApplication(forceNvidia : bool) =
                 ctx.CurrentContextHandle <- None
                 ContextHandle.Current <- None
 
-    new() = new OpenGlApplication(true)
+    new(enableDebug) = new OpenGlApplication(true, enableDebug)
+    new() = new OpenGlApplication(true, false)
 
     member x.Context = ctx
     member x.Runtime = runtime
@@ -66,7 +67,7 @@ type OpenGlApplication(forceNvidia : bool) =
         
         match ctrl with
             | :? RenderControl as ctrl ->
-                let impl = new OpenGlRenderControl(runtime, samples)
+                let impl = new OpenGlRenderControl(runtime, enableDebug, samples)
                 ctrl.Implementation <- impl
                 init ctx impl.Context impl.WindowInfo
             | _ ->
@@ -75,7 +76,7 @@ type OpenGlApplication(forceNvidia : bool) =
         ()
 
     member x.CreateGameWindow(samples : int) =
-        let w = new GameWindow(runtime, samples)
+        let w = new GameWindow(runtime, enableDebug, samples)
         init ctx w.Context w.WindowInfo
         w
 

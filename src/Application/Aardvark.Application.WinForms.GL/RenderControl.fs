@@ -12,7 +12,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-type OpenGlRenderControl(runtime : Runtime, samples : int) =
+type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     inherit GLControl(
         Graphics.GraphicsMode(
             OpenTK.Graphics.ColorFormat(Config.BitsPerPixel), 
@@ -160,6 +160,7 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
             needsRedraw <- false
             if isNull contextHandle || contextHandle.Handle.IsDisposed then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
+                contextHandle.AttachDebugOutputIfNeeded(enableDebug)
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
           
@@ -250,5 +251,5 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) =
         member x.Sizes = sizes :> IMod<_>
         member x.Samples = samples
 
-    new(runtime : Runtime) = new OpenGlRenderControl(runtime, 1)
+    new(runtime : Runtime, enableDebug : bool) = new OpenGlRenderControl(runtime, enableDebug, 1)
 

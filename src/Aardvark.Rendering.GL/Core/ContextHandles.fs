@@ -30,6 +30,9 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
         and set v = current.Value <- v
 
+    member x.GetProcAddress(name : string) =
+        (handle |> unbox<IGraphicsContextInternal>).GetAddress(name)
+
     member x.OnMakeCurrent(f : unit -> unit) =
         Interlocked.CompareExchange(&onMakeCurrent, ConcurrentHashSet(), null) |> ignore
         onMakeCurrent.Add f |> ignore
@@ -64,12 +67,46 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
             Log.warn "cannot release context which is not current"
         ContextHandle.Current <- None
 
+    member x.Use (action : unit -> 'a) =
+        match ContextHandle.Current with
+            | Some h ->
+                if h = x then 
+                    action()
+                else
+                    try
+                        h.ReleaseCurrent()
+                        x.MakeCurrent()
+                        action()
+                    finally
+                        x.ReleaseCurrent()
+                        h.MakeCurrent()
+            | None ->
+                try
+                    x.MakeCurrent()
+                    action()
+                finally
+                    x.ReleaseCurrent()
+
+
+
     // Installs debug callback if not yet installed (context is assumed to be current)
-    member x.AttachDebugOutputIfNeeded() =
+    member x.AttachDebugOutputIfNeeded(enable : bool) =
         if debugCallbackInstalled then ()
         else
             debugCallbackInstalled <- true
-            GL.SetupDebugOutput()
+            x.Use (fun () ->
+                GL.SetupDebugOutput()
+                if enable then 
+                    GL.Enable(EnableCap.DebugOutput)
+                    GL.Enable(EnableCap.DebugOutputSynchronous)
+                    
+                    let str = "debug output enabled"
+                    GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, DebugType.DebugTypeOther, 1234, DebugSeverity.DebugSeverityLow, str.Length, str)
+
+            )
+
+    member x.AttachDebugOutputIfNeeded() =
+        x.AttachDebugOutputIfNeeded false
 
 
 /// <summary>
@@ -85,9 +122,10 @@ module ContextHandle =
     /// <summary>
     /// creates a new context using the default configuration
     /// </summary>
-    let create () =
+    let create (enableDebug : bool) =
         let window, context =
-            if primaryContext <> null then primaryContext.MakeCurrent()
+            if not (isNull primaryContext) then 
+                primaryContext.MakeCurrent()
             
             let mode = Graphics.GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
             let window = new NativeWindow(16, 16, "background", GameWindowFlags.Default, mode, DisplayDevice.Default)
@@ -98,12 +136,18 @@ module ContextHandle =
 
             GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
             GL.Enable(EnableCap.TextureCubeMapSeamless)
+
             context.MakeCurrent(null)
             window, context
     
         
         let handle = new ContextHandle(context, window.WindowInfo)
-        
+        if enableDebug then
+            handle.AttachDebugOutputIfNeeded(true)
+
+        if isNull primaryContext then
+            primaryContext <- handle
+
         // add the window to the windows-table to save it from being
         // garbage collected.
         if not <| windows.TryAdd(handle, window) then failwith "failed to add new context to live-set"
@@ -111,9 +155,7 @@ module ContextHandle =
     
         handle
 
-    primaryContext <- create()
-
-    let createContexts resourceContextCount  =
+    let createContexts enableDebug resourceContextCount  =
         // if there is a current context release it before creating
         // the GameWindow since the GameWindow makes itself curret
         GraphicsContext.ShareContexts <- true;
@@ -125,7 +167,7 @@ module ContextHandle =
 
         let contexts =
             [ for i in 1..resourceContextCount do
-                yield create ()
+                yield create (enableDebug)
             ]
 
         // make the old context current again

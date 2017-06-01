@@ -55,7 +55,7 @@ module ShaderTests =
     [<Test>]
     let ``[Shader] prepare signature``() =
         use runtime = new Runtime()
-        use ctx = new Context(runtime)
+        use ctx = new Context(runtime, false)
         runtime.Context <- ctx
 
         let signature =

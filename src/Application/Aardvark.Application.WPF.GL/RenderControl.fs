@@ -15,9 +15,9 @@ open System.Windows.Threading
 
 type private WinFormsControl = Aardvark.Application.WinForms.OpenGlRenderControl
 
-type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
+type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) as this =
     inherit WindowsFormsHost()
-    let ctrl = new WinFormsControl(runtime, samples)
+    let ctrl = new WinFormsControl(runtime, enableDebug, samples)
     
     let yieldApp () = 
         let t = Dispatcher.Yield(DispatcherPriority.ApplicationIdle)
@@ -60,6 +60,6 @@ type OpenGlRenderControl(runtime : Runtime, samples : int) as this =
 
         member x.Sizes = x.Sizes
 
-    new(context) = new OpenGlRenderControl(context, 1)
+    new(context, enableDebug) = new OpenGlRenderControl(context, enableDebug, 1)
 
 #endif

@@ -330,7 +330,7 @@ module RenderingTests =
         printfn "%A" len
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime)
+        use ctx = new Context(runtime, false)
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
@@ -393,7 +393,7 @@ module RenderingTests =
     let ``[GL] simple render to multiple texture``() =
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime)
+        use ctx = new Context(runtime, false)
         runtime.Context <- ctx
 
         let size = V2i(1024,768)
@@ -489,7 +489,7 @@ module RenderingTests =
                 |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime)
+        use ctx = new Context(runtime, false)
         runtime.Context <- ctx
 
         using ctx.ResourceLock (fun _ -> 
@@ -604,7 +604,7 @@ module RenderingTests =
                 |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime)
+        use ctx = new Context(runtime, false)
         runtime.Context <- ctx
 
         using ctx.ResourceLock (fun _ -> 
@@ -703,7 +703,7 @@ module RenderingTests =
                 app.Runtime, Some (app, win)
             else
                 let runtime = new Runtime()
-                let ctx = new Context(runtime)
+                let ctx = new Context(runtime, false)
                 using ctx.ResourceLock (fun _ -> 
                     Log.line "vendor:   %s" runtime.Context.Driver.vendor
                     Log.line "renderer: %s" runtime.Context.Driver.renderer
@@ -886,7 +886,7 @@ module RenderingTests =
             else
                 let app = new Aardvark.Application.WinForms.OpenGlApplication()
                 let runtime = new Runtime()
-                let ctx = new Context(runtime)
+                let ctx = new Context(runtime, false)
                 runtime.Context <- ctx
                 runtime, None
 
@@ -935,7 +935,7 @@ module UseTest =
         Aardvark.Init()
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime)
+        use ctx = new Context(runtime, false)
         runtime.Context <- ctx
 
         let size = V2i(1024,1024)

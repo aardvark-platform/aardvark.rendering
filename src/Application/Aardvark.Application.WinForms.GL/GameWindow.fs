@@ -312,7 +312,7 @@ module GameWindowIO =
 
 
 
-type GameWindow(runtime : Runtime, samples : int) as this =
+type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     inherit OpenTK.GameWindow(
         1024,
         768,
@@ -417,6 +417,7 @@ type GameWindow(runtime : Runtime, samples : int) as this =
 
             if contextHandle = null then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
+                contextHandle.AttachDebugOutputIfNeeded(enableDebug)
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
             

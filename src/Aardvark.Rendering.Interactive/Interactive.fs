@@ -45,7 +45,7 @@ type Interactive private() =
             | None -> 
                 let a = 
                     match renderer with
-                        | GL -> new OpenGlApplication() :> IApplication
+                        | GL -> new OpenGlApplication(true) :> IApplication
                         | Vulkan -> new VulkanApplication() :> IApplication
                 app <- Some a
                 a
@@ -62,7 +62,7 @@ type Interactive private() =
                     | Vulkan -> 
                         app.Runtime.CompileRender(window.FramebufferSignature, config, Sg.dynamic sg) 
                     | GL -> 
-                        app.Runtime.CompileRender(window.FramebufferSignature, config, Sg.dynamic sg) |> DefaultOverlays.withStatistics
+                        app.Runtime.CompileRender(window.FramebufferSignature, config, Sg.dynamic sg) // |> DefaultOverlays.withStatistics
         
             window.RenderTask <- task
             window.Show()

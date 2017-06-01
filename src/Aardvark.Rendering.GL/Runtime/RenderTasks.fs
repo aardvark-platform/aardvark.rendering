@@ -64,21 +64,22 @@ module RenderTasks =
             transact (fun () -> structureChanged.MarkOutdated())
 
         member private x.pushDebugOutput(token : AdaptiveToken) =
-            let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
             let c = config.GetValue token
-            if c.useDebugOutput then
-                match ContextHandle.Current with
-                    | Some v -> v.AttachDebugOutputIfNeeded()
-                    | None -> Report.Warn("No active context handle in RenderTask.Run")
-                GL.Enable EnableCap.DebugOutput
+            let wasEnabled = GL.IsEnabled EnableCap.DebugOutput
+            if not wasEnabled then
+                if c.useDebugOutput then
+                    match ContextHandle.Current with
+                        | Some v -> v.AttachDebugOutputIfNeeded()
+                        | None -> Report.Warn("No active context handle in RenderTask.Run")
+                    GL.Enable EnableCap.DebugOutput
 
             wasEnabled
 
         member private x.popDebugOutput(token : AdaptiveToken, wasEnabled : bool) =
             let c = config.GetValue token
-            if wasEnabled <> c.useDebugOutput then
-                if wasEnabled then GL.Enable EnableCap.DebugOutput
-                else GL.Disable EnableCap.DebugOutput
+            if not wasEnabled then
+                if c.useDebugOutput then
+                    GL.Disable EnableCap.DebugOutput
 
         member private x.pushFbo (desc : OutputDescription) =
             let fbo = desc.framebuffer |> unbox<Framebuffer>

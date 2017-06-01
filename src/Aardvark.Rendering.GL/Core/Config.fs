@@ -16,12 +16,12 @@ module Config =
     /// <summary>
     /// The major GL Version for default contexts
     /// </summary>
-    let mutable MajorVersion = 3
+    let mutable MajorVersion = 4
 
     /// <summary>
     /// The minor GL Version for default contexts
     /// </summary>
-    let mutable MinorVersion = 0
+    let mutable MinorVersion = 3
 
     /// <summary>
     /// The number of subsamples for default windows
@@ -97,13 +97,17 @@ module Error =
     let private debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
          let message = Marshal.PtrToStringAnsi(message,length)
          match severity with
+             | DebugSeverity.DebugSeverityNotification -> 
+                Report.Line(4, "[GL:{0}] {1}", userParam, message)
+
              | DebugSeverity.DebugSeverityMedium ->
-                 Report.Warn("[GL] {0}", message)
-             | DebugSeverity.DebugSeverityNotification -> () 
+                 Report.Warn("[GL:{0}] {1}", userParam, message)
+
              | DebugSeverity.DebugSeverityHigh ->
-                 Report.Error("[GL] {0}", message)
+                 Report.Error("[GL:{0}] {1}", userParam, message)
+
              | _ ->
-                Report.Line("[GL] {0}", message)
+                Report.Line("[GL:{0}] {1}", userParam, message)
 
     let private debugHandler = DebugProc debug
 
@@ -119,11 +123,12 @@ module Error =
                     //raise <| OpenGLException(err, str)
 
         static member SetupDebugOutput() =
-            GL.DebugMessageCallback(debugHandler,nativeint 0)
+            let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
+            GL.DebugMessageCallback(debugHandler,ctx.Context.Handle)
             let arr : uint32[] = null
-            let severity = DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
+            let severity = DebugSeverityControl.DontCare //DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
             GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
-            GL.Check "SetupDebugOutput"
+            GL.Check "DebugMessageControl"
 
     type GLTimer private() =
         let counter = GL.GenQuery()
