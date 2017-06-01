@@ -6,4 +6,3 @@ description
 files
     ..\..\bin\Release\Aardvark.Rendering.Text.dll ==> lib\net45
     ..\..\bin\Release\Aardvark.Rendering.Text.pdb ==> lib\net45
-    ..\..\bin\Release\LibTessDotNet.Double.dll ==> lib\net45
