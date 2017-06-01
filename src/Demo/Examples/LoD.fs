@@ -287,7 +287,7 @@ module LoD =
                     DefaultSemantic.Colors, typeof<C4b>
                 ]
             boundingBoxSurface      = None //Some surf
-            progressCallback        = Action<_>(ignore)
+            progressCallback        = None
         } 
                      
     let sg = 

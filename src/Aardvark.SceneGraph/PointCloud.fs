@@ -327,7 +327,7 @@ type PointCloudInfo =
         // the surface should properly transform instances by using DefaultSemantic.InstanceTrafo
         boundingBoxSurface : Option<IMod<ISurface>>
 
-        progressCallback : Action<ProgressReport>
+        progressCallback : Option<Action<LoaderProgress>>
     }
 
 [<AutoOpen>]
@@ -519,15 +519,18 @@ module PointCloudRenderObjectSemantics =
 
             let progress (p : LoaderProgress) =
                 
-                let add = float p.queueAdds / float p.targetCount
-                let rem = float p.queueRemoves / float p.currentCount
-                Log.start "progress"
-                Log.line "overall: %.2f%%" (100.0 - 100.0 * add)
-                Log.line "memory:  %A" pool.UsedMemory
-                Log.line "load:    %A" p.avgLoadTime
-                Log.line "unload:  %A" p.avgRemoveTime
-                Log.line "raster:  %A" p.avgEvaluateTime
-                Log.stop()
+                match config.progressCallback with
+                | Some f -> f.Invoke p
+                | None ->
+                    let add = float p.queueAdds / float p.targetCount
+                    let rem = float p.queueRemoves / float p.currentCount
+                    Log.start "progress"
+                    Log.line "overall: %.2f%%" (100.0 - 100.0 * add)
+                    Log.line "memory:  %A" pool.UsedMemory
+                    Log.line "load:    %A" p.avgLoadTime
+                    Log.line "unload:  %A" p.avgRemoveTime
+                    Log.line "raster:  %A" p.avgEvaluateTime
+                    Log.stop()
 
             let vertexAttributes =
                 config.attributeTypes 

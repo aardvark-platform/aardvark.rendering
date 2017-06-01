@@ -464,7 +464,7 @@ module Lod =
                     DefaultSemantic.Colors, typeof<C4b>
                 ]
             boundingBoxSurface      = None
-            progressCallback = Action<_>(ignore)
+            progressCallback =  None
         }
 
                                     
