@@ -373,9 +373,11 @@ module BufferExtensions =
         member x.Upload(buffer : Buffer, src : nativeint, size : nativeint) =
             assert(size >= 0n)
             assert(src <> 0n)
+            let target = BufferTarget.DispatchIndirectBuffer
 
             using x.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.ArrayBuffer, buffer.Handle)
+                let old = 0 //GL.GetInteger(unbox (int target))
+                GL.BindBuffer(target, buffer.Handle)
                 GL.Check "failed to bind buffer"
 
                 if buffer.SizeInBytes <> size then
@@ -383,12 +385,19 @@ module BufferExtensions =
                     addBuffer x (int64 size)
                     buffer.SizeInBytes <- size
                     let source = if size = 0n then 0n else src
-                    GL.BufferData(BufferTarget.ArrayBuffer, size, source, BufferUsageHint.DynamicDraw)
+                    GL.InvalidateBufferData(buffer.Handle)
+                    GL.Check "failed to invalidate buffer"
+                    GL.BufferData(target, size, source, BufferUsageHint.StaticDraw)
+                    GL.Check "failed to realloc buffer"
+
+                    Log.warn "resize %A" size
                     //GL.BufferData(BufferTarget.CopyWriteBuffer, 0n, 0n, BufferUsageHint.DynamicDraw)
                     //GL.BufferStorage(BufferTarget.CopyWriteBuffer, size, source, BufferStorageFlags.DynamicStorageBit ||| BufferStorageFlags.MapReadBit ||| BufferStorageFlags.MapWriteBit)
                     GL.Check "failed to set buffer data"
                 elif size <> 0n then
-                    GL.BufferSubData(BufferTarget.ArrayBuffer, 0n, size, src)
+                    Log.warn "upload %A" size
+                    //GL.BufferData(BufferTarget.ArrayBuffer, size, src, BufferUsageHint.StreamCopy)
+                    GL.BufferSubData(target, 0n, size, src)
                     GL.Check "failed to upload buffer"
 //                    let target = GL.MapBufferRange(BufferTarget.CopyWriteBuffer, 0n, size, BufferAccessMask.MapWriteBit)
 //                    GL.Check "failed to map buffer for writing"
@@ -400,7 +409,7 @@ module BufferExtensions =
 //                    GL.Check "failed to unmap buffer"
 
 
-                GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
+                GL.BindBuffer(target, old)
                 GL.Check "failed to unbind buffer"
                 GL.Sync()
             )

@@ -49,7 +49,7 @@ type CameraMode =
     | Rotate
 
 
-type BlaNode(calls : alist<DrawCallInfo>, mode : IndexedGeometryMode) =
+type BlaNode(calls : IMod<DrawCallInfo[]>, mode : IndexedGeometryMode) =
     interface ISg
 
     member x.Mode = mode
@@ -70,9 +70,8 @@ module Sems =
             o.Mode <- Mod.constant b.Mode
 
             o.IndirectBuffer <- 
-                b.Calls |> AList.toMod 
-                        |> Mod.map PList.toArray
-                        |> Mod.map ( fun arr -> IndirectBuffer(ArrayBuffer(arr), arr.Length ) :> IIndirectBuffer )
+                b.Calls 
+                    |> Mod.map ( fun arr -> IndirectBuffer(ArrayBuffer(arr), arr.Length ) :> IIndirectBuffer )
 
             ASet.single (o :> IRenderObject)
 
@@ -358,30 +357,13 @@ let main argv =
         )
     )
 
-    let config = { BackendConfiguration.Default with useDebugOutput = true }
+    let config = { BackendConfiguration.ManagedUnoptimized with useDebugOutput = true }
 
-    let count = Mod.init 999
+    let calls = Mod.init 999
     
-
-    win.Keyboard.DownWithRepeats.Values.Add (function
-        | Keys.Add ->
-            transact (fun () ->
-                
-                count.Value <- (count.Value + 10) % 1000
-                printfn "count = %d" count.Value
-            )
-        | Keys.Subtract ->
-            transact (fun () ->
-                count.Value <- (count.Value + 990) % 1000
-                printfn "count = %d" count.Value
-            )
-        | _ -> ()
-    )
-
-    let calls = 
-        alist {
-            let! c = count
-            for i in 0..c-1 do
+    let randomCalls(cnt : int) =
+        [|
+            for i in 0..cnt-1 do
                 yield
                     DrawCallInfo( 
                         FaceVertexCount = 1,
@@ -389,7 +371,32 @@ let main argv =
                         FirstIndex = i,
                         FirstInstance = 0
                     )
-        }
+        |]
+
+    let calls = Mod.init (randomCalls 10)
+
+    win.Keyboard.DownWithRepeats.Values.Add (function
+        | Keys.Add ->
+            transact (fun () ->
+                let cnt = (calls.Value.Length + 10) % 1000
+                calls.Value <- randomCalls cnt
+                printfn "count = %d" cnt
+            )
+        | Keys.Subtract ->
+            transact (fun () ->
+                let cnt = (calls.Value.Length + 990) % 1000
+                calls.Value <- randomCalls cnt
+                printfn "count = %d" cnt
+            )
+        | Keys.Enter ->
+            transact (fun () ->
+                let cnt = calls.Value.Length % 1000
+                calls.Value <- randomCalls cnt
+                printfn "count = %d" cnt
+            )
+        | _ -> ()
+    )
+
 
     let pos =
         let rand = RandomSystem()

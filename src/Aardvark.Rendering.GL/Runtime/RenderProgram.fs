@@ -323,7 +323,7 @@ module RenderProgram =
             let all = all f
             for part in all do
                 for i in part do
-                    ExecutionContext.run i
+                    ExecutionContext.debug i
 
         let optimized scope comparer input =
             let handler () =
