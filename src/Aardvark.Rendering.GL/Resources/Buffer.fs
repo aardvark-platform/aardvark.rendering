@@ -385,18 +385,11 @@ module BufferExtensions =
                     addBuffer x (int64 size)
                     buffer.SizeInBytes <- size
                     let source = if size = 0n then 0n else src
-                    GL.InvalidateBufferData(buffer.Handle)
-                    GL.Check "failed to invalidate buffer"
-                    GL.BufferData(target, size, source, BufferUsageHint.StaticDraw)
-                    GL.Check "failed to realloc buffer"
 
-                    Log.warn "resize %A" size
-                    //GL.BufferData(BufferTarget.CopyWriteBuffer, 0n, 0n, BufferUsageHint.DynamicDraw)
-                    //GL.BufferStorage(BufferTarget.CopyWriteBuffer, size, source, BufferStorageFlags.DynamicStorageBit ||| BufferStorageFlags.MapReadBit ||| BufferStorageFlags.MapWriteBit)
-                    GL.Check "failed to set buffer data"
+                    GL.BufferData(target, size, source, BufferUsageHint.StaticDraw)
+                    GL.Check "could not resize buffer"
+
                 elif size <> 0n then
-                    Log.warn "upload %A" size
-                    //GL.BufferData(BufferTarget.ArrayBuffer, size, src, BufferUsageHint.StreamCopy)
                     GL.BufferSubData(target, 0n, size, src)
                     GL.Check "failed to upload buffer"
 //                    let target = GL.MapBufferRange(BufferTarget.CopyWriteBuffer, 0n, size, BufferAccessMask.MapWriteBit)
