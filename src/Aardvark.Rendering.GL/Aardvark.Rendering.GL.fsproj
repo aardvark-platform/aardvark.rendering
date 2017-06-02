@@ -61,11 +61,15 @@
     <Compile Include="Core\InternalFormat.fs" />
     <Compile Include="Core\RefSet.fs" />
     <Compile Include="Core\ModeHandles.fs" />
+    <Compile Include="Core\Extensions.fs" />
+    <Compile Include="Core\Extensions\EXT_direct_state_access.fs" />
+    <Compile Include="Core\Extensions\ARB_sparse_buffer.fs" />
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\Instruction.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
     <Compile Include="Instructions\Translations.fs" />
     <Content Include="Resources\Resources.txt" />
+    <Compile Include="Resources\Fence.fs" />
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\Attribute.fs" />
     <Compile Include="Resources\Texture.fs" />
@@ -78,6 +82,7 @@
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\Pointers.fs" />
     <Compile Include="Resources\StreamingTexture.fs" />
+    <Compile Include="Resources\SparseBuffer.fs" />
     <Compile Include="Resources\MappedBuffer.fs" />
     <Compile Include="Resources\SparseTexture.fs" />
     <Compile Include="Management\SurfaceCompilers.fs" />

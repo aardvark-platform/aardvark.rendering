@@ -33,12 +33,10 @@ type Buffer =
             using x.Context.ResourceLock (fun _ ->
                 validate {
                     do! requires (GL.IsBuffer x.Handle) "not a buffer object"
-
-                    GL.BindBuffer(BufferTarget.ArrayBuffer, x.Handle)
+                    
                     let mutable r = 0L
-                    GL.GetBufferParameter(BufferTarget.ArrayBuffer, BufferParameterName.BufferSize, &r)
+                    GL.GetNamedBufferParameter(x.Handle, BufferParameterName.BufferSize, &r)
                     do! eq r (int64 x.SizeInBytes) "invalid buffer size"
-                    GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
 
                 }
             )
@@ -94,16 +92,10 @@ module BufferExtensions =
             let handle = 
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
-
-                    GL.BindBuffer(BufferTarget.ArrayBuffer, handle)
-                    GL.Check "failed to create buffer"
-
-                    GL.BufferData(BufferTarget.ArrayBuffer, (nativeint size), 0n, usageHint usage)
+                    
+                    GL.NamedBufferData(handle, (nativeint size), 0n, usageHint usage)
                     GL.Check "failed to upload buffer"
-
-                    GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
-                    GL.Check "failed to unbind buffer"
-
+                    
                     handle
                 )
 
@@ -136,14 +128,8 @@ module BufferExtensions =
                 using x.ResourceLock (fun _ ->
                     let handle = GL.GenBuffer()
 
-                    GL.BindBuffer(BufferTarget.ArrayBuffer, handle)
-                    GL.Check "failed to create buffer"
-
-                    GL.BufferData(BufferTarget.ArrayBuffer, (nativeint sizeInBytes), data, usageHint usage)
+                    GL.NamedBufferData(handle, (nativeint sizeInBytes), data, usageHint usage)
                     GL.Check "failed to upload buffer"
-
-                    GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
-                    GL.Check "failed to unbind buffer"
 
                     handle
                 )
@@ -208,58 +194,48 @@ module BufferExtensions =
         /// NOTE: Fails when the target-range exceeds the buffer's current size.
         /// </summary>
         member x.UploadRange(buffer : Buffer, src : nativeint, targetOffset : int, size : int) =
+            use __ = x.ResourceLock
             assert (targetOffset >= 0)
             assert (size >= 0)
             assert (src <> 0n)
 
             let nativeSize = size |> nativeint
             let totalSize = targetOffset + size |> nativeint
-
-            using x.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.ArrayBuffer, buffer.Handle)
-                GL.Check "failed to bind buffer"
-
-                if targetOffset < 0 || totalSize > buffer.SizeInBytes then
-                    raise <| IndexOutOfRangeException("range uploads may not exceed the buffer's size")
-                else
-                    let target = GL.MapBufferRange(BufferTarget.ArrayBuffer, nativeint targetOffset, nativeSize, BufferAccessMask.MapWriteBit)
-                    GL.Check "failed to map buffer for writing"
-
+            
+            if targetOffset < 0 || totalSize > buffer.SizeInBytes then
+                raise <| IndexOutOfRangeException("range uploads may not exceed the buffer's size")
+            else
+                let target = GL.MapNamedBufferRange(buffer.Handle, nativeint targetOffset, nativeSize, BufferAccessMask.MapWriteBit)
+                GL.Check "failed to map buffer for writing"
+                if target <> 0n then
                     // TODO: Marshal.Copy should possibly take int64 sizes
                     Marshal.Copy(src, target, size)
+                else
+                    Log.warn "[GL] could not map buffer for writing"
 
-                    GL.UnmapBuffer(BufferTarget.ArrayBuffer) |> ignore
-                    GL.Check "failed to unmap buffer"
-
-
-                GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
-                GL.Check "failed to unbind buffer"
-            )
+                GL.UnmapNamedBuffer(buffer.Handle) |> ignore
+                GL.Check "failed to unmap buffer"
 
 
         member x.UploadRanges(buffer : Buffer, src : nativeint, ranges : seq<Range1i>) =
-            using x.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.ArrayBuffer, buffer.Handle)
-                GL.Check "failed to bind buffer"
-
-                let target = GL.MapBufferRange(BufferTarget.ArrayBuffer, 0n, buffer.SizeInBytes, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
-                GL.Check "failed to map buffer for writing"
-
+            use __ = x.ResourceLock
+            let target = GL.MapNamedBufferRange(buffer.Handle, 0n, buffer.SizeInBytes, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+            GL.Check "failed to map buffer for writing"
+            if target <> 0n then
                 for r in ranges do
                     let offset = nativeint r.Min
                     let size = nativeint (r.Size + 1)
-                    // TODO: Marshal.Copy should possibly take int64 sizes
-                    Marshal.Copy(src + offset, target + offset, int size)
 
-                    GL.FlushMappedBufferRange(BufferTarget.ArrayBuffer, offset, size)
+                    Marshal.Copy(src + offset, target + offset, size)
+
+                    GL.FlushMappedNamedBufferRange(buffer.Handle, offset, size)
                     GL.Check "failed to invalidate buffer-range"
+            else
+                Log.warn "[GL] could not map buffer"
 
-                GL.UnmapBuffer(BufferTarget.ArrayBuffer) |> ignore
-                GL.Check "failed to unmap buffer"
+            GL.UnmapNamedBuffer(buffer.Handle) |> ignore
+            GL.Check "failed to unmap buffer"
 
-                GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
-                GL.Check "failed to unbind buffer"
-            )
         /// <summary>
         /// uploads a subrange of the given array to a (possibly different) range of the buffer. 
         /// source: [sourceStartIndex, sourceStartIndex + count)
@@ -302,33 +278,29 @@ module BufferExtensions =
         /// NOTE: Fails when the source-range exceeds the buffer's current size.
         /// </summary>
         member x.DownloadRange(buffer : Buffer, target : nativeint, sourceOffset : int, size : int) =
+            use __ = x.ResourceLock
             assert (sourceOffset >= 0)
             assert (size >= 0)
             assert (target <> 0n)
    
             let nativeSize = size |> nativeint
             let totalSize = sourceOffset + size |> nativeint
-
-            using x.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.ArrayBuffer, buffer.Handle)
-                GL.Check "failed to bind buffer"
-
-                if sourceOffset < 0 || totalSize > buffer.SizeInBytes then
-                    raise <| IndexOutOfRangeException("downloads may not exceed the buffer's size")
-                else
-                    let src = GL.MapBufferRange(BufferTarget.ArrayBuffer, nativeint sourceOffset, nativeSize, BufferAccessMask.MapReadBit)
-                    GL.Check "failed to map buffer for writing"
-
+            
+            if sourceOffset < 0 || totalSize > buffer.SizeInBytes then
+                raise <| IndexOutOfRangeException("downloads may not exceed the buffer's size")
+            else
+                let src = GL.MapNamedBufferRange(buffer.Handle, nativeint sourceOffset, nativeSize, BufferAccessMask.MapReadBit)
+                GL.Check "failed to map buffer for reading"
+                if src <> 0n then
                     // TODO: Marshal.Copy should possibly take int64 sizes
                     Marshal.Copy(src, target, size)
+                else
+                    Log.warn "[GL] could not map buffer for reading"
 
-                    GL.UnmapBuffer(BufferTarget.ArrayBuffer) |> ignore
-                    GL.Check "failed to unmap buffer"
+                GL.UnmapNamedBuffer(buffer.Handle) |> ignore
+                GL.Check "failed to unmap buffer"
 
-
-                GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
-                GL.Check "failed to unbind buffer"
-            )
+                
 
         /// <summary>
         /// downloads a subrange of the given buffer to a (possibly different) range of the array. 
@@ -371,41 +343,23 @@ module BufferExtensions =
         /// usage-hint to become "DynamicDraw"
         /// </summary>
         member x.Upload(buffer : Buffer, src : nativeint, size : nativeint) =
+            use __ = x.ResourceLock
             assert(size >= 0n)
             assert(src <> 0n)
-            let target = BufferTarget.DispatchIndirectBuffer
+            
+            if buffer.SizeInBytes <> size then
+                removeBuffer x (int64 buffer.SizeInBytes)
+                addBuffer x (int64 size)
+                buffer.SizeInBytes <- size
+                let source = if size = 0n then 0n else src
 
-            using x.ResourceLock (fun _ ->
-                let old = 0 //GL.GetInteger(unbox (int target))
-                GL.BindBuffer(target, buffer.Handle)
-                GL.Check "failed to bind buffer"
+                GL.NamedBufferData(buffer.Handle, size, source, BufferUsageHint.StaticDraw)
+                GL.Check "could not resize buffer"
 
-                if buffer.SizeInBytes <> size then
-                    removeBuffer x (int64 buffer.SizeInBytes)
-                    addBuffer x (int64 size)
-                    buffer.SizeInBytes <- size
-                    let source = if size = 0n then 0n else src
+            elif size <> 0n then
+                GL.NamedBufferSubData(buffer.Handle, 0n, size, src)
+                GL.Check "failed to upload buffer"
 
-                    GL.BufferData(target, size, source, BufferUsageHint.StaticDraw)
-                    GL.Check "could not resize buffer"
-
-                elif size <> 0n then
-                    GL.BufferSubData(target, 0n, size, src)
-                    GL.Check "failed to upload buffer"
-//                    let target = GL.MapBufferRange(BufferTarget.CopyWriteBuffer, 0n, size, BufferAccessMask.MapWriteBit)
-//                    GL.Check "failed to map buffer for writing"
-//
-//                    // TODO: Marshal.Copy should possibly take int64 sizes
-//                    Marshal.Copy(src, target, size)
-//
-//                    GL.UnmapBuffer(BufferTarget.CopyWriteBuffer) |> ignore
-//                    GL.Check "failed to unmap buffer"
-
-
-                GL.BindBuffer(target, old)
-                GL.Check "failed to unbind buffer"
-                GL.Sync()
-            )
 
         /// <summary>
         /// uploads a range from the data array to a buffer while possibly resizing the buffer.
@@ -556,11 +510,7 @@ module IndirectBufferExtensions =
 
         if indexed && callCount > 0 then
             using b.Context.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.ArrayBuffer, b.Handle)
-                GL.Check "could not bind buffer"
-
-            
-                let ptr = GL.MapBufferRange(BufferTarget.ArrayBuffer, 0n, b.SizeInBytes, BufferAccessMask.MapReadBit ||| BufferAccessMask.MapWriteBit)
+                let ptr = GL.MapNamedBufferRange(b.Handle, 0n, b.SizeInBytes, BufferAccessMask.MapReadBit ||| BufferAccessMask.MapWriteBit)
                 if ptr = 0n then failwithf "[GL] could not map buffer"
 
 
@@ -580,11 +530,9 @@ module IndirectBufferExtensions =
                     next <- current + 1
 
 
-                GL.UnmapBuffer(BufferTarget.ArrayBuffer) |> ignore
+                GL.UnmapNamedBuffer(b.Handle) |> ignore
                 GL.Check "could not unmap buffer"
-
-                GL.BindBuffer(BufferTarget.ArrayBuffer, 0)
-                GL.Check "could not unbind buffer"
+                
 
             )
 
@@ -608,24 +556,21 @@ module IndirectBufferExtensions =
 
         member x.Clear(b : Buffer, size : nativeint) =
             using x.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
-                GL.BufferData(BufferTarget.CopyWriteBuffer, size, 0n, BufferUsageHint.DynamicDraw)
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                GL.NamedBufferData(b.Handle, size, 0n, BufferUsageHint.StaticDraw)
+                GL.Check "could not clear buffer"
             )
 
         member x.Copy(source : Buffer, sourceOffset : nativeint, target : Buffer, targetOffset : nativeint, size : nativeint) =
-            using x.ResourceLock (fun _ ->
-                GL.BindBuffer(BufferTarget.CopyReadBuffer, source.Handle)
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, target.Handle)
+            use __ = x.ResourceLock
+            
+            if sourceOffset < 0n || targetOffset < 0n || size < 0n then
+                failwith "[GL] invalid arguments for buffer copy"
 
-                if targetOffset + size > target.SizeInBytes then
-                    failwith "[Gl] insufficient buffer size"
-
-                GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, sourceOffset, targetOffset, size)
+            if targetOffset + size > target.SizeInBytes || sourceOffset + size > source.SizeInBytes then
+                failwith "[GL] insufficient buffer size"
                 
-                GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            )
+            GL.NamedCopyBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
+            GL.Check "could not copy buffer"
 
         member x.Clone(b : Buffer, offset : nativeint, size : nativeint) =
             let mine = x.CreateBuffer(0n, int size, BufferUsage.Dynamic)

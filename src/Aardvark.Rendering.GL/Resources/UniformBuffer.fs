@@ -102,14 +102,8 @@ module UniformBufferExtensions =
                 let handle = GL.GenBuffer()
                 GL.Check "could not create uniform buffer"
 
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
-                GL.Check "could not bind uniform buffer"
-
-                GL.BufferData(BufferTarget.CopyWriteBuffer, nativeint block.DataSize, 0n, BufferUsageHint.DynamicRead)
+                GL.NamedBufferData(handle, nativeint block.DataSize, 0n, BufferUsageHint.DynamicDraw)
                 GL.Check "could not allocate uniform buffer"
-
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                GL.Check "could not unbind uniform buffer"
 
                 addUniformBuffer x (int64 block.DataSize)
                 UniformBuffer(x, handle, block.DataSize, block)
@@ -128,13 +122,7 @@ module UniformBufferExtensions =
             if b.Dirty then
                 b.Dirty <- false
                 using x.ResourceLock (fun _ ->
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
-                    GL.Check "could not bind uniform buffer"
-
-                    GL.BufferSubData(BufferTarget.CopyWriteBuffer, 0n, nativeint b.Size, b.Data)
-                    GL.Check "could not upload uniform buffer"                    
-
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                    GL.Check "could not unbind uniform buffer"
+                    GL.NamedBufferSubData(b.Handle, 0n, nativeint b.Size, b.Data)
+                    GL.Check "could not upload uniform buffer" 
                 )
     

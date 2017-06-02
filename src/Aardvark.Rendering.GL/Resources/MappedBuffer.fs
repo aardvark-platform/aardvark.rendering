@@ -16,44 +16,9 @@ open Aardvark.Rendering.GL
 #nowarn "9"
 #nowarn "51"
 
-open Aardvark.Base.Native.NewImpl
-
 [<AutoOpen>]
 module ResizeBufferImplementation =
     
-    [<AutoOpen>]
-    module private SparseBuffers = 
-        type private BufferPageCommitmentDel = delegate of BufferTarget * nativeint * nativeint * bool -> unit
-
-        let private lockObj = obj()
-        let mutable private initialized = false
-        let mutable private del : BufferPageCommitmentDel = null
-        let mutable supported = false
-
-        let init() =
-            lock lockObj (fun () ->
-                if not initialized then
-                    initialized <- true
-                    let handle = ContextHandle.Current |> Option.get
-                    let ctx = handle.Handle |> unbox<IGraphicsContextInternal>
-                    let ptr = ctx.GetAddress("glBufferPageCommitmentARB")
-                    if ptr <> 0n then
-                        supported <- true
-                        del <- Marshal.GetDelegateForFunctionPointer(ptr, typeof<BufferPageCommitmentDel>) |> unbox
-                    else
-                        supported <- false
-            )
-
-        type GL with
-            static member BufferPageCommitment(target : BufferTarget, offset : nativeint, size : nativeint, commit : bool) =
-                del.Invoke(target, offset, size, commit)
-
-        type BufferStorageFlags with
-            static member inline SparseStorageBit = unbox<BufferStorageFlags> 0x0400
-
-        type GetPName with
-            static member inline BufferPageSize = unbox<GetPName> 0x82F8
-
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module private Alignment = 
         let prev (align : int64) (v : int64) =
@@ -260,33 +225,21 @@ module ResizeBufferImplementation =
         inherit AbstractResizeBuffer(ctx, handle, pageSize)
 
         override x.Realloc(oldCapacity : nativeint, newCapacity : nativeint) =
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
-            GL.Check "[ResizeableBuffer] could not bind buffer"
-
             if newCapacity > oldCapacity then
-                GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, oldCapacity, newCapacity - oldCapacity, true)
+                GL.NamedBufferPageCommitment(handle, oldCapacity, newCapacity - oldCapacity, true)
                 GL.Check "[ResizeableBuffer] could not commit pages"
 
             elif newCapacity < oldCapacity then
-                GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, newCapacity, oldCapacity - newCapacity, false)
+                GL.NamedBufferPageCommitment(handle, newCapacity, oldCapacity - newCapacity, false)
                 GL.Check "[ResizeableBuffer] could not decommit pages"
                 
-
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            GL.Check "[ResizeableBuffer] could not unbind buffer"
 
         override x.MapWrite(offset : nativeint, size : nativeint, writer : nativeint -> 'a) =
             let data = Marshal.AllocHGlobal size
             let res = writer data
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
-            GL.Check "[ResizeableBuffer] could not bind buffer"
-
-            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
+            GL.NamedBufferSubData(x.Handle, offset, size, data)
             GL.Check "[ResizeableBuffer] could not upload buffer"
-
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            GL.Check "[ResizeableBuffer] could not unbind buffer"
                     
             Marshal.FreeHGlobal data
             res
@@ -294,14 +247,8 @@ module ResizeBufferImplementation =
         override x.MapRead(offset : nativeint, size : nativeint, reader : nativeint -> 'a) =
             let data = Marshal.AllocHGlobal size
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
-            GL.Check "[ResizeableBuffer] could not bind buffer"
-
-            GL.GetBufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
+            GL.GetNamedBufferSubData(x.Handle,  offset, size, data)
             GL.Check "[ResizeableBuffer] could not download buffer"
-
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            GL.Check "[ResizeableBuffer] could not unbind buffer"
 
             let res = reader data
             Marshal.FreeHGlobal data
@@ -314,66 +261,43 @@ module ResizeBufferImplementation =
         override x.Realloc(oldCapacity : nativeint, newCapacity : nativeint) =
             let copyBytes = min newCapacity oldCapacity
 
-            GL.BindBuffer(BufferTarget.CopyReadBuffer, x.Handle)
-            GL.Check "[ResizeableBuffer] could not bind buffer"
-
             if copyBytes <> 0n then
                 let tmpBuffer = GL.GenBuffer()
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, tmpBuffer)
-                GL.Check "[ResizeableBuffer] could not bind buffer"
-
-                GL.BufferData(BufferTarget.CopyWriteBuffer, copyBytes, 0n, BufferUsageHint.StaticDraw)
+                GL.NamedBufferData(tmpBuffer, copyBytes, 0n, BufferUsageHint.StaticDraw)
                 GL.Check "[ResizeableBuffer] could not allocate buffer"
 
-                GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copyBytes)
+                GL.NamedCopyBufferSubData(x.Handle, tmpBuffer, 0n, 0n, copyBytes)
                 GL.Check "[ResizeableBuffer] could not copy buffer"
 
-                GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                GL.NamedBufferData(x.Handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
                 GL.Check "[ResizeableBuffer] could not allocate buffer"
-
-                GL.CopyBufferSubData(BufferTarget.CopyWriteBuffer, BufferTarget.CopyReadBuffer, 0n, 0n, copyBytes)
+                
+                GL.NamedCopyBufferSubData(tmpBuffer, x.Handle, 0n, 0n, copyBytes)
                 GL.Check "[ResizeableBuffer] could not copy buffer"
-
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                GL.Check "[ResizeableBuffer] could not unbind buffer"
 
                 GL.DeleteBuffer(tmpBuffer)
                 GL.Check "[ResizeableBuffer] could not delete buffer"
 
             else
-                GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                GL.NamedBufferData(x.Handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
                 GL.Check "[ResizeableBuffer] could not allocate buffer"
 
-            GL.BindBuffer(BufferTarget.CopyReadBuffer,  0)
-            GL.Check "[ResizeableBuffer] could not ubbind buffer"
 
         override x.MapWrite(offset : nativeint, size : nativeint, writer : nativeint -> 'a) =
             let data = Marshal.AllocHGlobal size
             let res = writer data
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
-            GL.Check "[ResizeableBuffer] could not bind buffer"
-
-            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
+            GL.NamedBufferSubData(x.Handle, offset, size, data)
             GL.Check "[ResizeableBuffer] could not upload buffer"
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            GL.Check "[ResizeableBuffer] could not unbind buffer"
-                    
             Marshal.FreeHGlobal data
             res
 
         override x.MapRead(offset : nativeint, size : nativeint, reader : nativeint -> 'a) =
             let data = Marshal.AllocHGlobal size
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
-            GL.Check "[ResizeableBuffer] could not bind buffer"
-
-            GL.GetBufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
+            GL.GetNamedBufferSubData(x.Handle, offset, size, data)
             GL.Check "[ResizeableBuffer] could not download buffer"
-
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            GL.Check "[ResizeableBuffer] could not unbind buffer"
 
             let res = reader data
             Marshal.FreeHGlobal data
@@ -382,25 +306,25 @@ module ResizeBufferImplementation =
 
     type Context with
         member x.CreateResizeBuffer() =
-            using x.ResourceLock (fun _ ->
-                SparseBuffers.init()
-                if not RuntimeConfig.SupressSparseBuffers && SparseBuffers.supported then
-                    let pageSize = GL.GetInteger64(GetPName.BufferPageSize)
+            use __ = x.ResourceLock
+            if not RuntimeConfig.SupressSparseBuffers && GL.ARB_sparse_buffer then
+                let pageSize = GL.GetInteger64(GetPName.BufferPageSize)
+                GL.Check "could not get sparse page-size"
 
-                    let buffer = GL.GenBuffer()
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer)
-                    GL.BufferStorage(
-                        BufferTarget.CopyWriteBuffer, 
-                        2n <<< 30, 0n, 
-                        BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit
-                    )
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                let buffer = GL.GenBuffer()
+                GL.Check "could not create buffer"
 
-                    SparseMemoryResizeBuffer(x, pageSize, buffer) :> AbstractResizeBuffer
-                else
-                    let buffer = GL.GenBuffer()
-                    CopyResizeBuffer(x, buffer) :> AbstractResizeBuffer
-            )
+                GL.NamedBufferStorage(
+                    buffer, 
+                    2n <<< 30, 0n, 
+                    BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit
+                )
+                GL.Check "could not allocate sparse storage"
+
+                SparseMemoryResizeBuffer(x, pageSize, buffer) :> AbstractResizeBuffer
+            else
+                let buffer = GL.GenBuffer()
+                CopyResizeBuffer(x, buffer) :> AbstractResizeBuffer
 
 module ManagedBufferImplementation =
     
@@ -499,20 +423,19 @@ module ManagedBufferImplementation =
     module private Allocator = 
         let rec alloc (cap : byref<int64>) =
             let b = GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, b)
-            GL.Check "could not bind buffer"
+            GL.Check "could not create buffer"
 
-            GL.BufferStorage(BufferTarget.CopyWriteBuffer, nativeint cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
+            GL.NamedBufferStorage(b, nativeint cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
             let err = GL.GetError()
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
             if err = ErrorCode.OutOfMemory then
                 GL.DeleteBuffer(b)
+                GL.Check "could not delete buffer"
+
                 cap <- cap / 2L
                 alloc(&cap)
             else
                 if err <> ErrorCode.NoError then
                     Log.warn "%A: could not allocate sparse buffer" err
-                Log.line "buffer-size: %A" (Mem cap)
                 b
 
 
@@ -571,11 +494,7 @@ module ManagedBufferImplementation =
             fences.WaitGPU()
 
             for (_,(b,_,s)) in Map.toSeq handles do
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, b.Handle)
-                GL.Check "[Pool] could not bind buffer"
                 b.Commitment(ptrs, s, false)
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                GL.Check "[Pool] could not unbind buffer"
                         
             fences.Enqueue()
 
@@ -616,9 +535,6 @@ module ManagedBufferImplementation =
                 let o = es * ptr.Offset
                 let s = es * ptr.Size
 
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, buffer.Handle)
-                GL.Check "[Pool] could not bind buffer"
-
                 buffer.Commitment(o, s, true) 
                 match g.IndexedAttributes.TryGetValue sem with
                     | (true, data) ->
@@ -626,15 +542,11 @@ module ManagedBufferImplementation =
                         assert(data.Length >= int ptr.Size)
 
                         let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                        GL.BufferSubData(BufferTarget.CopyWriteBuffer, o, s, gc.AddrOfPinnedObject())
+                        GL.NamedBufferSubData(buffer.Handle, o, s, gc.AddrOfPinnedObject())
                         GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
                         gc.Free()
                     | _ ->
                         ()
-                        //Log.error "%s undefined" (string sem)
-
-                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                GL.Check "[Pool] could not unbind buffer"
 
             fences.Enqueue()
             ptr
@@ -686,7 +598,7 @@ module ManagedBufferImplementation =
                 if refCount = 1 then
                     Interlocked.Add(totalSize, int64 size) |> ignore
                     wait()
-                    GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, offset, size, true)
+                    GL.NamedBufferPageCommitment(b, offset, size, true)
                     GL.Sync()
                     let f = Fence.Create()
                     fence <- f
@@ -700,7 +612,7 @@ module ManagedBufferImplementation =
                 if refCount = 0 then
                     Interlocked.Add(totalSize, int64 -size) |> ignore
                     wait()
-                    GL.BufferPageCommitment(BufferTarget.CopyWriteBuffer, offset, size, false)
+                    GL.NamedBufferPageCommitment(b, offset, size, false)
                     let f = Fence.Create()
                     fence <- f
                 else
@@ -892,44 +804,31 @@ module ManagedBufferImplementation =
                 x.SizeInBytes <- newCapacity
 
                 if copySize > 0n then
-                    // bind the current buffer to read
-                    GL.BindBuffer(BufferTarget.CopyReadBuffer, handle)
-                    GL.Check "could not bind buffer"
-
                     // allocate a temp buffer
                     let temp = GL.GenBuffer()
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, temp)
-                    GL.Check "could not bind temp-buffer"
-                    GL.BufferData(BufferTarget.CopyWriteBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                    GL.Check "could not create temp-buffer"
+                    GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
                     GL.Check "could not allocate temp-buffer"
 
                     // copy data to temp
-                    GL.CopyBufferSubData(BufferTarget.CopyReadBuffer, BufferTarget.CopyWriteBuffer, 0n, 0n, copySize)
+                    GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
                     GL.Check (sprintf "could not copy buffer (size: %A)" copySize)
-
+                    
                     // resize the original buffer
-                    GL.BufferData(BufferTarget.CopyReadBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                    GL.NamedBufferData(handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
                     GL.Check "could not reallocate buffer"
-
+                    
                     // copy data back
-                    GL.CopyBufferSubData(BufferTarget.CopyWriteBuffer, BufferTarget.CopyReadBuffer, 0n, 0n, copySize)
+                    GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
                     GL.Check "could not copy buffer"
 
-                    // cleanup
-                    GL.BindBuffer(BufferTarget.CopyReadBuffer, 0)
-                    GL.Check "could not unbind buffer"
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                    GL.Check "could not unbind temp-buffer"
+                    // delete the temp buffer
                     GL.DeleteBuffer(temp)
                     GL.Check "could not delete temp-buffer"
 
                 else
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
-                    GL.Check "could not bind buffer"
-                    GL.BufferData(BufferTarget.CopyWriteBuffer, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                    GL.NamedBufferData(handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
                     GL.Check "could not resize buffer"
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-                    GL.Check "could not unbind buffer"
 
 
         member internal x.Resize(newCapacity : nativeint) =
@@ -941,14 +840,9 @@ module ManagedBufferImplementation =
         member internal x.Write(offset : nativeint, size : nativeint, data : nativeint) =
             use __ = ctx.ResourceLock
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
-            GL.Check "could not bind buffer"
-
-            GL.BufferSubData(BufferTarget.CopyWriteBuffer, offset, size, data)
+            GL.NamedBufferSubData(handle, offset, size, data) 
             GL.Check "could not upload buffer"
 
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
-            GL.Check "could not unbind buffer"
 
 
         interface ILockedResource with
