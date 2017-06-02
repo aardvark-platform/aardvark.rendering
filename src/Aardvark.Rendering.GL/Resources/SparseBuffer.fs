@@ -182,23 +182,27 @@ module private SparseBufferImplementation =
                     writeFences.WaitCPU()
                     let copySize = min c x.SizeInBytes
 
-                    let temp = GL.GenBuffer()
-                    GL.Check "could not create temp buffer"
+                    if copySize > 0n then
+                        let temp = GL.GenBuffer()
+                        GL.Check "could not create temp buffer"
 
-                    GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticCopy)
-                    GL.Check "could not allocate temp buffer"
+                        GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticCopy)
+                        GL.Check "could not allocate temp buffer"
 
-                    GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
-                    GL.Check "could not copy to temp buffer"
+                        GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
+                        GL.Check "could not copy to temp buffer"
 
-                    GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
-                    GL.Check "could not resize buffer"
+                        GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
+                        GL.Check "could not resize buffer"
+                    
+                        GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
+                        GL.Check "could not copy from temp buffer"
 
-                    GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
-                    GL.Check "could not copy from temp buffer"
-
-                    GL.DeleteBuffer(temp)
-                    GL.Check "could not delete temp buffer"
+                        GL.DeleteBuffer(temp)
+                        GL.Check "could not delete temp buffer"
+                    else
+                        GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
+                        GL.Check "could not resize buffer"
 
                     GL.Sync()
                     x.SizeInBytes <- c
