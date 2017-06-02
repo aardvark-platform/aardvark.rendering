@@ -221,7 +221,7 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
     let size = block.DataSize
     let alignedSize = (size + 255) &&& ~~~255
 
-    let buffer = ctx.CreateResizeBuffer()
+    let buffer = ctx.CreateSparseBuffer()
     let manager = MemoryManager.createNop()
 
     let viewCache = ResourceCache<UniformBufferView>(None, None)
@@ -252,29 +252,32 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
                 let writers = List.map2 (fun f (_,v) -> nativeint f.Offset, ShaderParameterWriter.adaptive v f.Type) block.Fields values
 
                 let mutable block = Unchecked.defaultof<_>
+                let mutable store = 0n
                 { new Resource<UniformBufferView>(ResourceKind.UniformBuffer) with
                     member x.GetInfo b = 
                         b.Size |> Mem |> ResourceInfo
 
                     member x.Create(token, rt, old) =
+                        use __ = ctx.ResourceLock
                         let handle = 
                             match old with
                                 | Some old -> old
                                 | None ->
                                     block <- manager.Alloc (nativeint alignedSize)
-                                    let mcap = nativeint manager.Capacity
-                                    buffer.ResizeUnsafe(mcap)
+                                    store <- System.Runtime.InteropServices.Marshal.AllocHGlobal alignedSize
+                                    buffer.Commitment(block.Offset, block.Size, true)
                                     UniformBufferView(buffer, block.Offset, nativeint block.Size)
 
-                        buffer.UseWriteUnsafe(handle.Offset, handle.Size, fun ptr ->
-                            for (offset,w) in writers do w.Write(token, ptr + offset)
-                        )
+                        for (offset,w) in writers do w.Write(token, store + offset)
+                        buffer.WriteUnsafe(handle.Offset, handle.Size, store)
                         handle
 
                     member x.Destroy h =
-                        manager.Free block
-                        if manager.AllocatedBytes = 0n then
-                            buffer.Resize 0n
+                        if not block.Free then
+                            System.Runtime.InteropServices.Marshal.FreeHGlobal store
+                            use __ = ctx.ResourceLock
+                            buffer.Commitment(block.Offset, block.Size, false)
+                            manager.Free block
 
                 }
         )

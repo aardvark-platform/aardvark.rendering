@@ -7,7 +7,109 @@ open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Base.Incremental
 
+type ColoredLockStatus<'a> =
+    | Exclusive
+    | Colored of 'a
+    | NotEntered
+
 type ColoredLock<'a when 'a : equality and 'a : comparison>() =
+    let mutable color = Unchecked.defaultof<'a>
+    let mutable count = 0
+    let lockObj = obj()
+    let myCount = new ThreadLocal<ref<int> * ref<'a>>(fun _ -> ref 0, ref Unchecked.defaultof<'a>)
+    //let stashColor = new ThreadLocal<'a>(fun _ -> Unchecked.defaultof<'a>)
+
+    member __.Status =
+        if Monitor.IsEntered lockObj then Exclusive
+        else
+            let (local,_) = myCount.Value
+            if !local > 0 then Colored color
+            else NotEntered
+
+    member __.HasExclusiveLock =
+        Monitor.IsEntered lockObj
+
+    member __.Enter(onLock : Option<'a> -> unit) =
+        let local, stash = myCount.Value
+
+        if Monitor.IsEntered lockObj then
+            count <- count - 1
+        else
+            Monitor.Enter lockObj
+
+            if !local > 0 then
+                // give away all readers acquired by the current thread
+                count <- count - !local
+                stash := color
+
+            // wait until the count gets zero
+            while not (count = 0) do
+                Monitor.Wait lockObj |> ignore
+
+            // set it to -1 and call onLock
+            count <- -1
+            onLock None
+
+    member __.Enter(c : 'a, onLock : Option<'a> -> unit) =
+        let local, stash = myCount.Value
+        if Monitor.IsEntered lockObj then
+            count <- count - 1
+        else
+            Monitor.Enter lockObj
+            while not (count = 0 || (count > 0 && color = c)) do
+                Monitor.Wait lockObj |> ignore
+
+            if count = 0 then
+                color <- c
+                count <- 1
+                local := 1
+                onLock (Some c)
+
+            elif color = c then
+                count <- count + 1
+                local := !local + 1
+        
+            Monitor.Exit lockObj
+
+    member __.Exit(onUnlock : Option<'a> -> unit) =
+        let local,stash = myCount.Value
+
+        if Monitor.IsEntered lockObj then
+            count <- count + 1
+            if count = 0 then
+                count <- !local
+                color <- !stash
+                Monitor.PulseAll lockObj
+                onUnlock None
+                Monitor.Exit lockObj
+        else
+            Monitor.Enter lockObj
+            count <- count - 1
+            local := !local - 1
+
+            if count = 0 then
+                Monitor.PulseAll lockObj
+                onUnlock (Some color)
+                color <- Unchecked.defaultof<_>
+
+            Monitor.Exit lockObj
+            ()
+        
+    member x.Enter (c : 'a) = x.Enter(c, ignore)
+    member x.Enter() = x.Enter(ignore)
+    member x.Exit() = x.Exit(ignore)
+
+    member inline x.Use(color : 'a, f : unit -> 'x) =
+        x.Enter(color)
+        try f()
+        finally x.Exit()
+          
+    member inline x.Use(f : unit -> 'x) =
+        x.Enter()
+        try f()
+        finally x.Exit()
+
+type ColoredLockOld<'a when 'a : equality and 'a : comparison>() =
     let isZero = new ManualResetEventSlim(true)
     let mutable color = Unchecked.defaultof<'a>
     let mutable count = 0

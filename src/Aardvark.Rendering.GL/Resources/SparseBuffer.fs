@@ -2,6 +2,7 @@
 
 open System
 open System.Threading
+open System.Runtime.InteropServices
 open System.Collections.Generic
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
@@ -13,7 +14,7 @@ open Aardvark.Rendering.GL
 type SparseBuffer(ctx : Context, size : nativeint, handle : int, beforeRender : unit -> unit, afterRender : unit -> unit) =
     inherit Buffer(ctx, size, handle)
     
-    let writeFence = FenceSet()
+    //let writeFence = FenceSet()
     let resourceLock = ResourceLock()
 
     abstract member UsedMemory : Mem
@@ -23,23 +24,28 @@ type SparseBuffer(ctx : Context, size : nativeint, handle : int, beforeRender : 
     abstract member Release : unit -> unit
     default x.Release() = ()
 
+    //member x.WriteFences = writeFence
+
     member x.Dispose() =
         use __ = ctx.ResourceLock
         x.Release()
         GL.DeleteBuffer(handle)
         GL.Check "could not delete buffer"
 
+    member x.WriteUnsafe(offset : nativeint, size : nativeint, data : nativeint) =
+        use __ = ctx.ResourceLock
+        x.PerformWrite(offset, size, data)
+
     member x.Write(offset : nativeint, size : nativeint, data : nativeint) =
-        LockedResource.access x (fun () ->
-            x.PerformWrite(offset, size, data)
-            writeFence.Enqueue()
-        )
+        use __ = ctx.ResourceLock
+        x.PerformWrite(offset, size, data)
+        //writeFence.Enqueue()
 
     member x.OnLock(usage : Option<ResourceUsage>) =
         match usage with
             | Some ResourceUsage.Render -> 
                 beforeRender()
-                writeFence.WaitGPU()
+                //writeFence.WaitGPU()
             | _ -> ()
 
     member x.OnUnlock(usage : Option<ResourceUsage>) =
@@ -108,6 +114,7 @@ module private SparseBufferImplementation =
     type RealSparseBuffer(ctx : Context, handle : int, totalSize : nativeint, pageSize : nativeint, beforeRender : unit -> unit, afterRender : unit -> unit) =
         inherit SparseBuffer(ctx, 0n, handle, beforeRender, afterRender)
         let committedSize = ref 0L
+        let mutable blaSize = 0L
 
         let pages = 
             let pageCount = totalSize / pageSize |> int
@@ -115,18 +122,24 @@ module private SparseBufferImplementation =
                 Page(handle, nativeint pi * pageSize, pageSize, committedSize)
             )
 
-        override x.UsedMemory = Mem !committedSize
+        override x.UsedMemory = Mem !committedSize //blaSize
 
         override x.PerformWrite(offset : nativeint, size : nativeint, data : nativeint) =
             if offset < 0n || size < 0n || offset + size > totalSize then
                 failwith "[GL] commitment region out of bounds"
             
+
             if size > 0n then
                 GL.NamedBufferSubData(handle, offset, size, data)
 
         override x.Commitment(offset : nativeint, size : nativeint, c : bool) =
             if offset < 0n || size < 0n || offset + size > totalSize then
                 failwith "[GL] commitment region out of bounds"
+                
+            let delta =
+                if c then int64 size
+                else int64 -size
+            Interlocked.Add(&blaSize, delta) |> ignore
 
             if size > 0n then
                 let lastByte = offset + size - 1n
@@ -138,55 +151,72 @@ module private SparseBufferImplementation =
 
     type FakeSparseBuffer(ctx : Context, handle : int, beforeRender : unit -> unit, afterRender : unit -> unit) =
         inherit SparseBuffer(ctx, 0n, handle, beforeRender, afterRender)
+        let lockObj = obj()
 
-        let usedBytes = SortedSet<nativeint>()
+        let mutable usedBytes = MapExt.empty
+        let writeFences = FenceSet()
 
         let changeCommitment(lastByte : nativeint, c : bool) =
-            lock usedBytes (fun () ->
-                if c then usedBytes.Add lastByte |> ignore
-                else usedBytes.Remove lastByte |> ignore
-                if usedBytes.Count = 0 then
-                    0n
-                else
-                    usedBytes.Max + 1n |> int64 |> Fun.NextPowerOfTwo |> nativeint
+            lock lockObj (fun () ->
+                let key = int64 lastByte
+                usedBytes <-
+                    usedBytes |> MapExt.alter key (fun s ->
+                        let s = Option.defaultValue 0 s
+                        let n = if c then s + 1 else s - 1
+                        if n > 0 then
+                            Some n
+                        else
+                            None
+                    )
+
+                match MapExt.tryMax usedBytes with
+                    | Some max ->
+                        max + 1L |> Fun.NextPowerOfTwo |> nativeint
+                    | _ ->
+                        0n
             )
 
         member x.AdjustCapacity(c : nativeint) =
-            if c <> x.SizeInBytes then
-                LockedResource.update x (fun () ->
-                    if c <> x.SizeInBytes then
-                        let copySize = min c x.SizeInBytes
+            LockedResource.update x (fun () ->
+                if c <> x.SizeInBytes then
+                    writeFences.WaitCPU()
+                    let copySize = min c x.SizeInBytes
 
-                        let temp = GL.GenBuffer()
-                        GL.Check "could not create temp buffer"
+                    let temp = GL.GenBuffer()
+                    GL.Check "could not create temp buffer"
 
-                        GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticCopy)
-                        GL.Check "could not allocate temp buffer"
+                    GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticCopy)
+                    GL.Check "could not allocate temp buffer"
 
-                        GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
-                        GL.Check "could not copy to temp buffer"
+                    GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
+                    GL.Check "could not copy to temp buffer"
 
-                        GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
-                        GL.Check "could not resize buffer"
+                    GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
+                    GL.Check "could not resize buffer"
 
-                        GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
-                        GL.Check "could not copy from temp buffer"
+                    GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
+                    GL.Check "could not copy from temp buffer"
 
-                        GL.DeleteBuffer(temp)
-                        GL.Check "could not delete temp buffer"
+                    GL.DeleteBuffer(temp)
+                    GL.Check "could not delete temp buffer"
 
-                        x.SizeInBytes <- c
-                )
+                    GL.Sync()
+                    x.SizeInBytes <- c
+            )
 
         override x.Release() =
-            usedBytes.Clear()
+            usedBytes <- MapExt.empty
 
         override x.PerformWrite(offset : nativeint, size : nativeint, data : nativeint) =
-            if offset < 0n || size < 0n || offset + size > x.SizeInBytes then
-                failwith "[GL] commitment region out of bounds"
+            LockedResource.access x (fun () ->
+                if offset < 0n || size < 0n || offset + size > x.SizeInBytes then
+                    failwith "[GL] write region out of bounds"
             
-            if size > 0n then
-                GL.NamedBufferSubData(handle, offset, size, data)
+                if size > 0n then
+                    GL.NamedBufferSubData(handle, offset, size, data)
+
+                writeFences.Enqueue()
+            )
 
         override x.UsedMemory = Mem x.SizeInBytes
 
@@ -251,21 +281,125 @@ module SparseBufferExtensions =
 
             if not RuntimeConfig.SupressSparseBuffers && GL.ARB_sparse_buffer then
                 let pageSize = GL.GetInteger(GetPName.BufferPageSize) |> nativeint
-                let pageSize = 16n * pageSize
+                let pageSize = 2n * pageSize
 
                 let memorySize = SparseHelpers.totalMemory x
                 let mutable virtualSize = memorySize |> Alignment.next pageSize
 
                 let handle = SparseHelpers.tryAlloc(&virtualSize)
-                RealSparseBuffer(x, handle, virtualSize, pageSize, beforeRender, afterRender) :> SparseBuffer
+                new RealSparseBuffer(x, handle, virtualSize, pageSize, beforeRender, afterRender) :> SparseBuffer
             else
                 let handle = GL.GenBuffer()
                 GL.Check "could not create buffer"
         
-                FakeSparseBuffer(x, handle, beforeRender, afterRender) :> SparseBuffer
+                new FakeSparseBuffer(x, handle, beforeRender, afterRender) :> SparseBuffer
       
         member x.CreateSparseBuffer() =
             x.CreateSparseBuffer(id, id)
 
         member x.Delete(b : SparseBuffer) =
             b.Dispose()
+
+
+type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
+    
+    let mutable count = 0
+    let mutable rendering = 0
+    let notRendering = new ManualResetEventSlim(true)
+    let hasFrees = new ManualResetEventSlim(false)
+    let mutable pendingFrees : list<managedptr> = []
+    let fences = FenceSet()
+
+    let beforeRender() =
+        if Interlocked.Increment(&rendering) = 1 then
+            notRendering.Reset()
+            fences.WaitGPU()
+
+    let afterRender() =
+        if Interlocked.Decrement(&rendering) = 0 then
+            notRendering.Set()
+
+    let buffers = 
+        types |> Map.map (fun sem t ->
+            let s = nativeint t.GLSize
+            ctx.CreateSparseBuffer(beforeRender, afterRender),t,s
+        )
+        
+    let manager = MemoryManager.createNop()
+        
+    let free ( ptrs : list<managedptr>) =
+        use __ = ctx.ResourceLock
+        fences.WaitGPU()
+
+        for (_,(b,_,s)) in Map.toSeq buffers do
+            for p in ptrs do
+                b.Commitment(p.Offset * s, p.Size * s, false)
+                        
+        fences.Enqueue()
+
+        for f in ptrs do
+            manager.Free f
+
+    let freeThread =
+        new Thread(ThreadStart(fun () ->
+            while true do
+                WaitHandle.WaitAll([| hasFrees.WaitHandle; notRendering.WaitHandle |]) |> ignore
+                hasFrees.Reset()
+
+                let frees = Interlocked.Exchange(&pendingFrees, [])
+                free frees
+        ), IsBackground = true)
+
+    do freeThread.Start()
+
+    member x.Alloc(fvc : int, g : IndexedGeometry) =
+        let ptr = manager.Alloc(nativeint fvc)
+        use __ = ctx.ResourceLock
+        Interlocked.Increment(&count) |> ignore
+
+        for (sem, (buffer, t, es)) in Map.toSeq buffers do
+            let o = es * ptr.Offset
+            let s = es * ptr.Size
+
+            buffer.Commitment(o, s, true) 
+            match g.IndexedAttributes.TryGetValue sem with
+                | (true, data) ->
+                    assert(data.GetType().GetElementType() = t)
+                    assert(data.Length >= int ptr.Size)
+
+                    let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                    buffer.Write(o, s, gc.AddrOfPinnedObject())
+                    gc.Free()
+
+                | _ ->
+                    ()
+
+        fences.Enqueue()
+        ptr
+
+    member x.Free(ptr : managedptr) =
+        Interlocked.Decrement(&count) |> ignore
+        if notRendering.IsSet then
+            free [ptr]
+        else
+            Interlocked.Change(&pendingFrees, fun l -> ptr :: l) |> ignore
+            hasFrees.Set() |> ignore
+
+    member x.TryGetBufferView(sem : Symbol) =
+        match Map.tryFind sem buffers with
+            | Some (b,t,_) -> BufferView(Mod.constant (b :> IBuffer), t) |> Some
+            | _ -> None
+
+    member x.Dispose() =
+        use __ = ctx.ResourceLock
+        for (_,(b,_,_)) in Map.toSeq buffers do
+            b.Dispose()
+
+    interface IGeometryPool with
+        member x.Count = count
+        member x.UsedMemory = buffers |> Map.toSeq |> Seq.sumBy (fun (_,(b,_,_)) -> b.UsedMemory)
+        member x.Dispose() = x.Dispose()
+        member x.Alloc(c,g) = x.Alloc(c,g)
+        member x.Free p = x.Free p
+        member x.TryGetBufferView sem = x.TryGetBufferView sem
+

@@ -101,7 +101,9 @@ module Error =
                 Report.Line(5, "[GL:{0}] {1}", userParam, message)
 
              | DebugSeverity.DebugSeverityMedium ->
-                 Report.Warn("[GL:{0}] {1}", userParam, message)
+                match debugType with
+                    | DebugType.DebugTypePerformance -> Report.Line(4, "[GL:{0}] {1}", userParam, message)
+                    | _ -> Report.Warn("[GL:{0}] {1}", userParam, message)
 
              | DebugSeverity.DebugSeverityHigh ->
                  Report.Error("[GL:{0}] {1}", userParam, message)

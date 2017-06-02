@@ -342,12 +342,108 @@ module TreeDiff =
 
 
         
+open System.Threading.Tasks
 
 
+let colorLockTest() =
+    let l = ColoredLock<int>()
+    
+    let mutable counts : int[] = Array.zeroCreate 2
+    let mutable maxCounts : int[] = Array.zeroCreate 2
+    let mutable exCount = 0
+    let mutable bad = false
+
+    let size = 1 <<< 13
+    let start = new ManualResetEventSlim(false)
+    let countDown = new CountdownEvent(size)
+
+    let rand = RandomSystem()
+    for _ in 1 .. size do
+        Task.Run(fun () ->
+            let nested = rand.UniformDouble() > 0.9
+            let isColored = rand.UniformDouble() > 0.2
+            let color = rand.UniformInt(counts.Length)
+            start.Wait()
+            if isColored then
+                if l.Status <> NotEntered then
+                    bad <- true
+
+                l.Enter(color)
+                let cnt = Interlocked.Increment(&counts.[color])
+
+                if l.Status <> Colored color then
+                    bad <- true
+
+                if cnt > maxCounts.[color] then
+                    maxCounts.[color] <- cnt
+
+                if nested then
+                    l.Enter()
+                    if l.Status <> Exclusive then
+                        bad <- true
+                    l.Exit()
+                    if l.Status <> Colored color then
+                        bad <- true
+
+                Thread.Sleep(1)
+                Interlocked.Decrement(&counts.[color]) |> ignore
+                l.Exit()
+
+                if l.Status <> NotEntered then
+                    bad <- true
+
+                countDown.Signal()
+            else
+                if l.Status <> NotEntered then
+                    bad <- true
+                l.Enter()
+                if l.Status <> Exclusive then
+                    bad <- true
+                let c = Interlocked.Increment(&exCount)
+                if c > 1 then bad <- true
+                Thread.Sleep(1)
+                Interlocked.Decrement(&exCount) |> ignore
+                l.Exit()
+                if l.Status <> NotEntered then
+                    bad <- true
+                countDown.Signal()
+            
+        ) |> ignore
+
+
+    start.Set()
+    countDown.Wait()
+    printfn "count: %A" maxCounts
+    printfn "bad:   %A" bad
+
+
+    let check should =
+        if l.Status <> should then printfn "error: %A vs %A" l.Status should
+        else printfn "good: %A" should
+
+    check NotEntered
+    l.Enter(1)
+    check (Colored 1)
+    l.Enter(1)
+    check (Colored 1)
+    l.Enter()
+    check (Exclusive)
+    l.Enter()
+    check (Exclusive)
+    l.Exit()
+    check (Exclusive)
+    l.Exit()
+    check (Colored 1)
+    l.Exit()
+    check (Colored 1)
+    l.Exit()
+    check NotEntered
+    Environment.Exit 0
 
 [<EntryPoint>]
 [<STAThread>]
 let main args =
+
 
     //Examples.Tutorial.run()
     //Examples.Instancing.run()
