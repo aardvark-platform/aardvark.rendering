@@ -16,7 +16,7 @@ open ExtensionHelpers
 module EXT_direct_state_access =
     type GL private() =
 
-        static let supported = ExtensionHelpers.isSupported (Version(4,5,0)) "GL_EXT_direct_state_access"
+        static let supported = ExtensionHelpers.vendor() <> GPUVendor.Intel && ExtensionHelpers.isSupported (Version(4,5,0)) "GL_EXT_direct_state_access"
 
         static member EXT_direct_state_access = supported
 

@@ -82,7 +82,7 @@ let main argv =
     Aardvark.Init()
 
 
-    use app = new OpenGlApplication()
+    use app = new OpenGlApplication(true)
     use win = app.CreateSimpleRenderWindow(16)
     
 
@@ -357,7 +357,7 @@ let main argv =
         )
     )
 
-    let config = { BackendConfiguration.ManagedUnoptimized with useDebugOutput = true }
+    let config = { BackendConfiguration.Default with useDebugOutput = true }
 
     let calls = Mod.init 999
     

@@ -8,6 +8,13 @@ open OpenTK.Graphics.OpenGL4
 module ExtensionHelpers =
     let private suffixes = [""; "ARB"; "EXT"; "NV"; "AMD"]
 
+    let vendor() =
+        let str = GL.GetString(StringName.Vendor).ToLower()
+        if str.Contains "nvidia" then GPUVendor.nVidia
+        elif str.Contains "amd" || str.Contains "ati" then GPUVendor.AMD
+        elif str.Contains "intel" then GPUVendor.Intel
+        else GPUVendor.Unknown
+
     let rec private hasExtension (i : int) (name : string) =
         if i >= 0 then
             let ext = GL.GetString(StringNameIndexed.Extensions, uint32 i)
