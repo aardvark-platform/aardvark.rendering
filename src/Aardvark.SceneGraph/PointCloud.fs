@@ -499,6 +499,8 @@ module PointCloudRenderObjectSemantics =
                     let proj = proj.GetValue(token)
                     let size = size.GetValue(token)
                     let decider = decider.GetValue(token)
+                    for d in data.Dependencies do d.GetValue token |> ignore
+
                     view, proj, size, decider
                 )
 

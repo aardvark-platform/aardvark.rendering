@@ -329,13 +329,13 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
         
     let free ( ptrs : list<managedptr>) =
         use __ = ctx.ResourceLock
-        fences.WaitGPU()
+        //fences.WaitGPU()
 
         for (_,(b,_,s)) in Map.toSeq buffers do
             for p in ptrs do
                 b.Commitment(p.Offset * s, p.Size * s, false)
                         
-        fences.Enqueue()
+        //fences.Enqueue()
 
         for f in ptrs do
             manager.Free f
@@ -373,8 +373,8 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
 
                 | _ ->
                     ()
-
-        fences.Enqueue()
+        GL.Sync()
+        //fences.Enqueue()
         ptr
 
     member x.Free(ptr : managedptr) =
