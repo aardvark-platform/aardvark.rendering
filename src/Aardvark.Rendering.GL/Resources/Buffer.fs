@@ -171,19 +171,21 @@ module BufferExtensions =
 
 
 
-        member x.Upload(b : Buffer, data : IBuffer) =
+        member x.Upload(b : Buffer, data : IBuffer, useNamed : bool) =
             if b.Handle = 0 then failwith "cannot update null buffer"
             match data with
-                | :? ArrayBuffer as ab -> x.Upload(b, ab.Data)
+                | :? ArrayBuffer as ab -> x.Upload(b, ab.Data, useNamed)
 
                 | :? Buffer as bb ->
                     if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
 
                 | :? INativeBuffer as n ->
-                    n.Use (fun ptr -> x.Upload(b, ptr, nativeint n.SizeInBytes))
+                    n.Use (fun ptr -> x.Upload(b, ptr, nativeint n.SizeInBytes, useNamed))
                 | _ ->
                     failwithf "unsupported buffer-data-type: %A" data
 
+        member x.Upload(b : Buffer, data : IBuffer) =
+            x.Upload(b, data, true)
 
         // =======================================================================================================================
         //      UploadRange Overloads
@@ -342,7 +344,7 @@ module BufferExtensions =
         /// note that performing this operation will cause the buffer's
         /// usage-hint to become "DynamicDraw"
         /// </summary>
-        member x.Upload(buffer : Buffer, src : nativeint, size : nativeint) =
+        member x.Upload(buffer : Buffer, src : nativeint, size : nativeint, useNamed : bool) =
             use __ = x.ResourceLock
             assert(size >= 0n)
             assert(src <> 0n)
@@ -353,12 +355,28 @@ module BufferExtensions =
                 buffer.SizeInBytes <- size
                 let source = if size = 0n then 0n else src
 
-                GL.NamedBufferData(buffer.Handle, size, source, BufferUsageHint.StaticDraw)
-                GL.Check "could not resize buffer"
+                if useNamed then
+                    GL.NamedBufferData(buffer.Handle, size, source, BufferUsageHint.StaticDraw)
+                    GL.Check "could not resize buffer"
+                else
+                    ExtensionHelpers.bindBuffer buffer.Handle (fun t ->
+                        GL.BufferData(t, size, source, BufferUsageHint.StaticDraw)
+                        GL.Check "could not resize buffer"
+                    )
 
             elif size <> 0n then
-                GL.NamedBufferSubData(buffer.Handle, 0n, size, src)
-                GL.Check "failed to upload buffer"
+                if useNamed then
+                    GL.NamedBufferSubData(buffer.Handle, 0n, size, src)
+                    GL.Check "failed to upload buffer"
+                else
+                    ExtensionHelpers.bindBuffer buffer.Handle (fun t ->
+                        GL.BufferSubData(t, 0n, size, src)
+                        GL.Check "could not upload buffer"
+                    )
+                    
+        member x.Upload(buffer : Buffer, src : nativeint, size : nativeint) =
+            x.Upload(buffer, src, size, true)
+  
 
 
         /// <summary>
@@ -366,7 +384,7 @@ module BufferExtensions =
         /// note that performing this operation will cause the buffer's
         /// usage-hint to become "DynamicDraw"
         /// </summary>
-        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, count : int) =
+        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, count : int, useNamed : bool) =
             assert(sourceStartIndex >= 0)
             assert(count >= 0)
             assert(sourceStartIndex + count <= source.Length)
@@ -379,16 +397,26 @@ module BufferExtensions =
 
             let ptr = handle.AddrOfPinnedObject() + nativeint sourceStartIndex * elementSize
 
-            x.Upload(buffer, ptr, size)
+            x.Upload(buffer, ptr, size, useNamed)
 
 
             handle.Free()
 
+        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, count : int) =
+            x.Upload(buffer, source, sourceStartIndex, count, true)
+
+        member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int, useNamed : bool) =
+            x.Upload(buffer, source, sourceStartIndex, source.Length - sourceStartIndex, useNamed)
+
+        member x.Upload(buffer : Buffer, source : Array, useNamed : bool) =
+            x.Upload(buffer, source, 0, source.Length, useNamed)
+
+
         member x.Upload(buffer : Buffer, source : Array, sourceStartIndex : int) =
-            x.Upload(buffer, source, sourceStartIndex, source.Length - sourceStartIndex)
+            x.Upload(buffer, source, sourceStartIndex, source.Length - sourceStartIndex, true)
 
         member x.Upload(buffer : Buffer, source : Array) =
-            x.Upload(buffer, source, 0, source.Length)
+            x.Upload(buffer, source, 0, source.Length, true)
 
 
         // =======================================================================================================================
@@ -593,7 +621,7 @@ module IndirectBufferExtensions =
                         x.Copy(b, 0n, indirect.Buffer, 0n, b.SizeInBytes)
 
                     | b -> 
-                        x.Upload(indirect.Buffer, b)
+                        x.Upload(indirect.Buffer, b, false)
 
                 let callCount = postProcessDrawCallBuffer indexed indirect.Buffer
                 indirect.Indexed <- indexed
