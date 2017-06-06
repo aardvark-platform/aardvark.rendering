@@ -21,12 +21,11 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
     let init =
         let initialized = ref false
-        fun (ctx : Context) (glctx : OpenTK.Graphics.IGraphicsContext) (w : OpenTK.Platform.IWindowInfo) ->
+        fun (ctx : Context) (handle : ContextHandle)->
             if not !initialized then
                 initialized := true
-                glctx.MakeCurrent(w)
+                handle.MakeCurrent()
 
-                let handle = ContextHandle(glctx,w)
                 ctx.CurrentContextHandle <- Some handle
                 ContextHandle.Current <- Some handle
 
@@ -48,7 +47,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
                     Log.stop()
                 )
 
-                glctx.MakeCurrent(null)
+                handle.ReleaseCurrent()
                 ctx.CurrentContextHandle <- None
                 ContextHandle.Current <- None
 
@@ -67,9 +66,10 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
         
         match ctrl with
             | :? RenderControl as ctrl ->
-                let impl = new OpenGlRenderControl(runtime, enableDebug, samples)
+                //let impl = new OpenGlRenderControl(runtime, enableDebug, samples)
+                let impl = new OpenGlSharingRenderControl(runtime)
                 ctrl.Implementation <- impl
-                init ctx impl.Context impl.WindowInfo
+                init ctx impl.ContextHandle
             | _ ->
                 failwithf "unknown control type: %A" ctrl
                     
@@ -77,7 +77,8 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
     member x.CreateGameWindow(samples : int) =
         let w = new GameWindow(runtime, enableDebug, samples)
-        init ctx w.Context w.WindowInfo
+        let handle = ContextHandle(w.Context, w.WindowInfo)
+        init ctx handle
         w
 
     interface IApplication with

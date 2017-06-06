@@ -67,7 +67,9 @@ type RenderControl() as self =
                 mouse.SetControl(host.Child)
                 setupDragAndDrop()
             | _ ->
-                failwith "impossible to create WPF mouse"
+                Log.warn "[WPF] keyboard/mouse not working"
+//            | _ ->
+//                failwith "impossible to create WPF mouse"
 
         match renderTask with
             | Some task -> cr.RenderTask <- task

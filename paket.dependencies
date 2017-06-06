@@ -33,6 +33,8 @@ nuget NUnit.Console                      ~> 3.6.0
 nuget NUnit                              ~> 3.6.0
 nuget FsUnit                             ~> 2.4.0-alpha-2
 
+nuget SharpDX.Direct3D9
+
 group Build
 framework: net45
 content: none
