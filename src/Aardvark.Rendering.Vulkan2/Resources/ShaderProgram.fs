@@ -202,7 +202,7 @@ module ShaderProgram =
 [<AbstractClass; Sealed; Extension>]
 type ContextShaderProgramExtensions private() =
     [<Extension>]
-    static member inline CreateShaderProgram(this : Device, pass : RenderPass, surface : ISurface) =
+    static member CreateShaderProgram(this : Device, pass : RenderPass, surface : ISurface) =
         match surface with
             | :? SignaturelessBackendSurface as s -> s.Get pass |> unbox<ShaderProgram>
             | :? ShaderProgram as p -> p

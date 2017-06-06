@@ -6,9 +6,9 @@ nuget Aardvark.Base.FSharp               ~> 3.0.20
 nuget Aardvark.Base.Incremental          ~> 3.0.20
 nuget Aardvark.Base.Runtime              ~> 3.0.20
                                          
-nuget FShade.Core                        ~> 3.2.0
-nuget FShade                             ~> 3.2.0
-nuget FSharp.Core
+nuget FShade.Core                        ~> 3.2.1
+nuget FShade                             ~> 3.2.1
+nuget FSharp.Core                        ~> 4.0.0.1
 nuget GLSLangSharp                       ~> 0.3.2
 
 nuget Another.Unofficial.Xilium.CefGlue.UnpackNativeDependencies ~> 0.0.9

@@ -467,7 +467,7 @@ module private RefCountedResources =
             let res = res.GetValue(token, t)
 
             match Map.tryFind semantic res.Attachments with
-                | Some (:? BackendTextureOutputView as t) ->
+                | Some (:? IBackendTextureOutputView as t) ->
                     t.texture :> ITexture
                 | _ ->
                     failwithf "could not get result for semantic %A as texture" semantic

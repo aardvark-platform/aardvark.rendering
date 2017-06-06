@@ -86,6 +86,15 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     do device.Runtime <- this
     let manager = new ResourceManager(device, None, shareTextures, shareBuffers)
 
+    static let shaderStages =
+        LookupTable.lookupTable [
+            FShade.ShaderStage.Vertex, Aardvark.Base.ShaderStage.Vertex
+            FShade.ShaderStage.TessControl, Aardvark.Base.ShaderStage.TessControl
+            FShade.ShaderStage.TessEval, Aardvark.Base.ShaderStage.TessEval
+            FShade.ShaderStage.Geometry, Aardvark.Base.ShaderStage.Geometry
+            FShade.ShaderStage.Fragment, Aardvark.Base.ShaderStage.Fragment
+        ]
+
     #if DEBUG 
     let seen = System.Collections.Concurrent.ConcurrentHashSet()
 
@@ -180,7 +189,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let views =
             bindings |> Map.map (fun s o ->
                 match o with
-                    | :? BackendTextureOutputView as view ->
+                    | :? IBackendTextureOutputView as view ->
                         device.CreateImageView(unbox view.texture, view.level, 1, view.slice, 1)
 
                     | :? Image as img ->
@@ -312,7 +321,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let src =
             match source with
-                | :? BackendTextureOutputView as view ->
+                | :? IBackendTextureOutputView as view ->
                     let image = unbox<Image> view.texture
                     let flags = VkFormat.toAspect image.Format
                     image.[unbox (int flags), view.level, view.slice]
@@ -345,7 +354,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             let entries =
                 effect.Shaders 
                     |> Map.toSeq
-                    |> Seq.map (fun (stage,_) -> unbox<Aardvark.Base.ShaderStage> (int stage), "main") 
+                    |> Seq.map (fun (stage,_) -> shaderStages stage, "main") 
                     |> Dictionary.ofSeq
 
             BackendSurface(glsl.code, entries)

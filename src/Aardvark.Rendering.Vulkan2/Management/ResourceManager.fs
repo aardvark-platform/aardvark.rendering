@@ -260,7 +260,11 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                 writeBuffers :> obj
             ]
 
-        let anyAttachment = pass.ColorAttachments |> Map.toSeq |> Seq.head |> snd |> snd
+        let anyAttachment = 
+            match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
+                | Some (_,(_,a)) -> a
+                | None -> pass.DepthStencilAttachment |> Option.get
+
         pipelineCache.GetOrCreateVulkan(
             key, fun () ->
                 let writeMasks = Array.zeroCreate pass.ColorAttachmentCount

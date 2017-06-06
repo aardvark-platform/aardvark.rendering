@@ -632,7 +632,18 @@ type IRenderbuffer =
     inherit IFramebufferOutput
     abstract member Handle : obj
 
+type IBackendTextureOutputView =
+    inherit IFramebufferOutput
+    abstract member texture : IBackendTexture
+    abstract member level : int
+    abstract member slice : int
+
 type BackendTextureOutputView = { texture : IBackendTexture; level : int; slice : int } with
+    interface IBackendTextureOutputView with
+        member x.texture = x.texture
+        member x.level = x.level
+        member x.slice = x.slice
+
     interface IFramebufferOutput with
         member x.Format = TextureFormat.toRenderbufferFormat x.texture.Format
         member x.Samples = x.texture.Samples

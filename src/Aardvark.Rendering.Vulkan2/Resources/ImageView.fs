@@ -19,6 +19,11 @@ type ImageView =
         val mutable public MipLevelRange    : Range1i
         val mutable public ArrayRange       : Range1i
 
+        interface IBackendTextureOutputView with
+            member x.texture = x.Image :> IBackendTexture
+            member x.level = x.MipLevelRange.Min
+            member x.slice = x.ArrayRange.Min
+
         interface IFramebufferOutput with
             member x.Format = VkFormat.toTextureFormat x.Image.Format |> TextureFormat.toRenderbufferFormat
             member x.Samples = x.Image.Samples
