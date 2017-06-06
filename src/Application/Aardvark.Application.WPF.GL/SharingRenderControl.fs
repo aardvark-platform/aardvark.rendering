@@ -222,16 +222,24 @@ type SharedSurface(ctx : Context, dxDev : SharpDX.Direct3D9.DeviceEx, signature 
 
     let glDepth = GL.GenRenderbuffer()
     do  GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, glDepth)
-        GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, RenderbufferStorage.Depth24Stencil8, size.X, size.Y)
+        GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, 1, RenderbufferStorage.Depth24Stencil8, size.X, size.Y)
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
 
     let glBuffer= GL.GenRenderbuffer()
     do  GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, glBuffer)
-        GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, RenderbufferStorage.Rgba8, size.X, size.Y)
+        GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, 1, RenderbufferStorage.Rgba8, size.X, size.Y)
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
+
+
+    do GL.Flush()
+       GL.Finish()
+       let ok = sharing.SetResourceShareHandle(dxSurface.NativePointer, sharedHandle) 
+       if not ok then Log.warn "[GL] SetResourceShareHandle failed"
+    let shareHandle = sharing.RegisterObject(shareDevice, dxSurface.NativePointer, glBuffer, All.Renderbuffer, WglDXAccess.WriteDiscard)
 
     let glFbo = GL.GenFramebuffer()
     do
+        GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
         GL.BindFramebuffer(FramebufferTarget.Framebuffer, glFbo)
         GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, glBuffer)
         GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthAttachment, RenderbufferTarget.Renderbuffer, glDepth)
@@ -244,11 +252,6 @@ type SharedSurface(ctx : Context, dxDev : SharpDX.Direct3D9.DeviceEx, signature 
         let color = Renderbuffer(ctx, glBuffer, size, RenderbufferFormat.Rgba8, 1, 0L) :> IFramebufferOutput
         let depth = Renderbuffer(ctx, glDepth, size, RenderbufferFormat.Depth24Stencil8, 1, 0L) :> IFramebufferOutput
         new Framebuffer(ctx, signature, (fun _ -> glFbo), ignore, [0, DefaultSemantic.Colors, color], Some depth)
-
-    do GL.Flush()
-       GL.Finish()
-       sharing.SetResourceShareHandle(dxSurface.NativePointer, sharedHandle) |> ignore
-    let shareHandle = sharing.RegisterObject(shareDevice, dxSurface.NativePointer, glBuffer, All.Renderbuffer, WglDXAccess.WriteDiscard)
 
     member x.Size = size
 
@@ -278,7 +281,7 @@ type OpenGlSharingRenderControl(runtime : Runtime) as this =
     inherit ContentControl()
 
     let ctx = runtime.Context
-    let handle = ContextHandle.create(false)
+    let handle = ContextHandle.create(true)
     let sharing = WGLDX(handle)
 
     let dx = new SharpDX.Direct3D9.Direct3DEx()
@@ -344,11 +347,8 @@ type OpenGlSharingRenderControl(runtime : Runtime) as this =
         if not locked then
             Log.warn "[DX] could not lock dx texture"
 
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, ping.Framebuffer.Handle)
-        GL.Viewport(0, 0, size.X, size.Y)
+        
         action ping.Framebuffer
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-
       
         let unlocked = ping.Unlock()
         if not unlocked then
@@ -364,10 +364,17 @@ type OpenGlSharingRenderControl(runtime : Runtime) as this =
                         transact (fun () -> size.Value <- s)
 
                         render s (fun fbo ->
+                            GL.Check "before wtf"
+                            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
+                            GL.Check "first bind framebuffer"
+                            GL.Viewport(0, 0, s.X, s.Y)
+                            GL.Check "viewport"
                             GL.ClearColor(1.0f, 0.0f, 0.0f, 1.0f)
                             GL.ClearDepth(1.0)
-                            GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit)
-
+                            GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                            GL.Check "clear framebuffer"
+                            GL.BindFramebuffer(FramebufferTarget.Framebuffer,0)
+                            GL.Check "Unbind framebuffer"
                             let output = OutputDescription.ofFramebuffer fbo
                             caller.EvaluateAlways AdaptiveToken.Top (fun token ->
                                 renderTask.Run(token, RenderToken.Empty, output)
