@@ -9,7 +9,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering
 open Aardvark.Rendering.NanoVg
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.WPF
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open System.Windows.Media
@@ -76,18 +76,18 @@ module Sems =
             ASet.single (o :> IRenderObject)
 
 
-[<EntryPoint>]
+[<EntryPoint; STAThread>]
 let main argv = 
     Ag.initialize()
     Aardvark.Init()
 
 
     use app = new OpenGlApplication(true)
-    use win = app.CreateSimpleRenderWindow(16)
+    let win = app.CreateSimpleRenderWindow(1)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
-    let proj = CameraProjectionPerspective(60.0, 0.1, 1000.0, float win.Width / float win.Height)
+    let proj = CameraProjectionPerspective(60.0, 0.1, 1000.0, float 1024 / float 768)
 
     let geometry = 
         IndexedGeometry(
@@ -373,7 +373,7 @@ let main argv =
                     )
         |]
 
-    let calls = Mod.init (randomCalls 10)
+    let calls = Mod.init (randomCalls 990)
 
     win.Keyboard.DownWithRepeats.Values.Add (function
         | Keys.Add ->
@@ -402,6 +402,8 @@ let main argv =
         let rand = RandomSystem()
         Array.init 1000 (ignore >> rand.UniformV3d >> V3f)
 
+    let trafo = win.Time |> Mod.map (fun t -> Trafo3d.RotationZ (float t.Ticks / float TimeSpan.TicksPerSecond))
+
     let blasg = 
         BlaNode(calls, IndexedGeometryMode.PointList)
             |> Sg.vertexAttribute' DefaultSemantic.Positions pos
@@ -409,6 +411,7 @@ let main argv =
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.constantColor C4f.White
             }
+            |> Sg.trafo trafo
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
 
