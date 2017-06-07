@@ -109,28 +109,31 @@ module WGLDXExtensions =
                 failwith str
             ) fmt
 
+        
+
         static let check() =
-            if not supported then 
-                fail "WGL_NV_DX_interop is not supported"
+            lock l (fun () ->
+                if not supported then 
+                    fail "WGL_NV_DX_interop is not supported"
 
-            assert (Option.isSome ContextHandle.Current)
+                if not loaded then
+                    loaded <- true
+                    match ContextHandle.Current with
+                        | Some handle ->
+                            wglDXSetResourceShareHandleNV <- handle.Import "wglDXSetResourceShareHandleNV"
+                            wglDXOpenDeviceNV <- handle.Import "wglDXOpenDeviceNV"
+                            wglDXCloseDeviceNV <- handle.Import "wglDXCloseDeviceNV"
+                            wglDXRegisterObjectNV <- handle.Import "wglDXRegisterObjectNV"
+                            wglDXUnregisterObjectNV <- handle.Import "wglDXUnregisterObjectNV"
+                            wglDXObjectAccessNV <- handle.Import "wglDXObjectAccessNV"
+                            wglDXLockObjectsNV <- handle.Import "wglDXLockObjectsNV"
+                            wglDXUnlockObjectsNV <- handle.Import "wglDXUnlockObjectsNV"
+                        | None ->
+                            failwith "[WGL] cannot load WGL_NV_DX_interop without a context"
 
 
-
-        static do
-            if supported then
-                match ContextHandle.Current with
-                    | Some handle ->
-                        wglDXSetResourceShareHandleNV <- handle.Import "wglDXSetResourceShareHandleNV"
-                        wglDXOpenDeviceNV <- handle.Import "wglDXOpenDeviceNV"
-                        wglDXCloseDeviceNV <- handle.Import "wglDXCloseDeviceNV"
-                        wglDXRegisterObjectNV <- handle.Import "wglDXRegisterObjectNV"
-                        wglDXUnregisterObjectNV <- handle.Import "wglDXUnregisterObjectNV"
-                        wglDXObjectAccessNV <- handle.Import "wglDXObjectAccessNV"
-                        wglDXLockObjectsNV <- handle.Import "wglDXLockObjectsNV"
-                        wglDXUnlockObjectsNV <- handle.Import "wglDXUnlockObjectsNV"
-                    | None ->
-                        failwith "[WGL] cannot load WGL_NV_DX_interop without a context"
+                assert (Option.isSome ContextHandle.Current)
+            )
 
         static member WGL_NV_DX_interop = supported
 
@@ -249,22 +252,25 @@ module WGLDXContextExtensions =
         member x.Surface = dxSurface
 
         member x.Lock() =
+//            let mutable a = 0
+//            for i in 1 .. 1 <<< 30 do
+//                a <- a + i
+//            Log.line "lock"
+            //System.Threading.Thread.Sleep(10)
             ()
 
         member x.Unlock() =
             use __ = ctx.Context.ResourceLock
             
-            GL.Flush()
-            GL.Finish()
             WGL.LockObjects(ctx.ShareDevice, [| shareHandle |])
 
+            GL.Flush()
+            GL.Finish()
             blit size renderBuffer resolveBuffer
+            GL.Flush()
+            GL.Finish()
 
-            GL.Flush()
-            GL.Finish()
             WGL.UnlockObjects(ctx.ShareDevice, [| shareHandle |])
-            GL.Flush()
-            GL.Finish()
 
         member x.Dispose() =
             if shareHandle.NotNull then
@@ -469,8 +475,8 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
                 if s.AllDifferent 0 then
                     transact (fun () -> size.Value <- s)
 
-                    img.Lock()
                     let buffer = render s 
+                    img.Lock()
                     img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, buffer.Surface.NativePointer)
                     img.AddDirtyRect(Int32Rect(0, 0, img.PixelWidth, img.PixelHeight))
                     img.Unlock()
