@@ -230,23 +230,47 @@ module WGLDXContextExtensions =
         inherit Aardvark.Rendering.GL.Renderbuffer(ctx.Context, renderBuffer, size, fmt, samples, 0L)
         let mutable shareHandle = shareHandle
 
-        static let blit (size : V2i) (srcBuffer : int) (dstBuffer : int) =
+        let hateBuffer = // for amd double blit
+            match ctx.Context.Driver.device with
+                | GPUVendor.AMD when samples > 1 -> 
+                    let b = GL.GenRenderbuffer()
+                    GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, b)
+                    GL.Check "could not bind renderbuffer"
+                    GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, unbox (int fmt), size.X, size.Y)
+                    GL.Check "renderbuffer storage"
+                    GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
+                    b
+                | _ -> -1
+
+        static let blit (size : V2i) (srcBuffer : int) (dstBuffer : int) (flip : bool) =
+
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+            GL.Enable(EnableCap.Multisample)
+
             let srcFbo = GL.GenFramebuffer()
-            let dstFbo = GL.GenFramebuffer()
 
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, srcFbo)
             GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, srcBuffer)
 
+            let dstFbo = GL.GenFramebuffer()
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, dstFbo)
             GL.FramebufferRenderbuffer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, dstBuffer)
 
-            GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, size.Y - 1, size.X, -1, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
-            
+            GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
+            GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
+
+            if flip then
+                GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, size.Y - 1, size.X, -1, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+            else
+                GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+            GL.Check "blit failed"
+
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
 
             GL.DeleteFramebuffer(srcFbo)
             GL.DeleteFramebuffer(dstFbo)
+
 
 
 
@@ -260,10 +284,14 @@ module WGLDXContextExtensions =
             //System.Threading.Thread.Sleep(10)
             ()
 
-        member x.Unlock() =
+        member x.Unlock() = 
             use __ = ctx.Context.ResourceLock
             WGL.LockObjects(ctx.ShareDevice, [| shareHandle |])
-            blit size renderBuffer resolveBuffer
+            if hateBuffer >= 0 then 
+                blit size renderBuffer hateBuffer true // amd double blit
+                blit size hateBuffer resolveBuffer false
+            else
+                blit size renderBuffer resolveBuffer true // non amd just works
             WGL.UnlockObjects(ctx.ShareDevice, [| shareHandle |])
             GL.Flush()
             GL.Finish()
@@ -317,6 +345,11 @@ module WGLDXContextExtensions =
 
             let resolveBuffer = GL.GenRenderbuffer()
             GL.Check "could not create renderbuffer"
+            GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, resolveBuffer)
+            GL.Check "could not bind renderbuffer"
+            //GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, unbox (int format), size.X, size.Y)
+            GL.Check "renderbuffer storage"
+            GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
 
             let renderBuffer = GL.GenRenderbuffer()
             GL.Check "could not create renderbuffer"
@@ -336,6 +369,7 @@ module WGLDXContextExtensions =
 
             WGL.SetResourceShareHandle(surface.NativePointer, wddmHandle)
             let shareHandle = WGL.RegisterObject(ctx.ShareDevice, surface.NativePointer, resolveBuffer, All.Renderbuffer, WglDXAccess.WriteDiscard)
+            //let shareHandle = WglDxShareHandle.Null
 
 //            let mutable ssamples = 0
 //            let mutable ssize = V2i.Zero
@@ -467,23 +501,6 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
 
     let renderTick (s : obj) (e : EventArgs) =
-        //let isBackBufferDirty = Interlocked.Exchange(&backBufferDirty, 0) = 1 
-//
-//        if isBackBufferDirty then
-//            lock colorBufferLock (fun () ->
-//                match color with
-//                    | Some c -> 
-//                        use __ = ctx.RenderingLock(handle)
-//                        img.Lock()
-//                        c.Lock()
-//                        img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, c.Surface.NativePointer)
-//
-//                        c.Unlock()
-//                        img.AddDirtyRect(Int32Rect(0,0,img.PixelWidth, img.PixelHeight))
-//                        img.Unlock()
-//                    | None ->
-//                        ()
-//            )
 
         if Interlocked.CompareExchange(&isRendering, 1, 0) = 0  then
             if Interlocked.Exchange(&pending, 0) = 1 then

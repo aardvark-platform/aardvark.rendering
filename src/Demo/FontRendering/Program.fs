@@ -9,7 +9,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering
 open Aardvark.Rendering.NanoVg
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.WPF
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open System.Windows.Media
@@ -83,7 +83,7 @@ let main argv =
 
 
     use app = new OpenGlApplication(true)
-    let win = app.CreateSimpleRenderWindow(8)
+    let win = app.CreateSimpleRenderWindow(1)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
