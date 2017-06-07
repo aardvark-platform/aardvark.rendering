@@ -9,7 +9,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering
 open Aardvark.Rendering.NanoVg
 open Aardvark.Application
-open Aardvark.Application.WPF
+open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open System.Windows.Media
@@ -83,7 +83,7 @@ let main argv =
 
 
     use app = new OpenGlApplication(true)
-    let win = app.CreateSimpleRenderWindow(1)
+    let win = app.CreateSimpleRenderWindow(8)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -326,11 +326,12 @@ let main argv =
 
     let sg = 
         Sg.group [label1; label2]
-            |> Sg.andAlso quad
+            //|> Sg.andAlso quad
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
             |> Sg.fillMode mode
             |> Sg.uniform "Antialias" aa
+            //|> Sg.uniform "FillGlyphs"
 //            |> Sg.shader {
 //                    do! DefaultSurfaces.trafo 
 //                    let! mode = mode
@@ -416,7 +417,7 @@ let main argv =
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
 
 
-    let main = app.Runtime.CompileRender(win.FramebufferSignature, config, blasg) //|> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, config, sg) //|> DefaultOverlays.withStatistics
     let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
 
     win.Keyboard.Press.Values.Add (fun c ->

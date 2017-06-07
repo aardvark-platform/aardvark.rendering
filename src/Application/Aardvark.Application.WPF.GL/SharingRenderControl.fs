@@ -15,6 +15,7 @@ open System.Windows.Forms.Integration
 open Aardvark.Application
 open System.Windows.Threading
 open System.Security
+open System.Threading
 
 [<AutoOpen>]
 module private DXSharingHelpers =
@@ -261,16 +262,11 @@ module WGLDXContextExtensions =
 
         member x.Unlock() =
             use __ = ctx.Context.ResourceLock
-            
             WGL.LockObjects(ctx.ShareDevice, [| shareHandle |])
-
-            GL.Flush()
-            GL.Finish()
             blit size renderBuffer resolveBuffer
+            WGL.UnlockObjects(ctx.ShareDevice, [| shareHandle |])
             GL.Flush()
             GL.Finish()
-
-            WGL.UnlockObjects(ctx.ShareDevice, [| shareHandle |])
 
         member x.Dispose() =
             if shareHandle.NotNull then
@@ -362,7 +358,7 @@ module WGLDXContextExtensions =
             new D3DRenderbuffer(ctx, resolveBuffer, renderBuffer, size, format, samples, surface, shareHandle)
 
 type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
-    inherit ContentControl()
+    inherit UserControl()
 
     let ctx = runtime.Context
     let handle = ContextHandle.create(true)
@@ -374,6 +370,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
     let mutable pending = 1
     let trigger() = pending <- 1
+
     let caller = AdaptiveObject()
     let subscription = caller.AddMarkingCallback trigger
     do this.SizeChanged.Add (fun _ -> trigger())
@@ -396,43 +393,40 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     let time = Mod.custom (fun _ -> startTime + sw.Elapsed)
     
     let mutable running = false
-    let mutable ping : Option<D3DRenderbuffer> = None
-    let mutable pong : Option<D3DRenderbuffer> = None
+    let mutable color : Option<D3DRenderbuffer> = None
     let mutable depth : Option<Renderbuffer> = None
-
-    let renderLock = obj()
+    
+    let colorBufferLock = obj()
 
     let render (size : V2i) =
-        use __ = ctx.RenderingLock(handle)
+        lock colorBufferLock (fun () ->
+            use __ = ctx.RenderingLock(handle)
             
-        let backBuffer =
-            match ping with
-                | None -> 
-                    ctx.CreateD3DRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
-                | Some o when o.Size = size -> o
-                | Some o ->
-                    o.Dispose()
-                    ctx.CreateD3DRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
+            let backBuffer =
+                match color with
+                    | None -> 
+                        ctx.CreateD3DRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
+                    | Some o when o.Size = size -> o
+                    | Some o ->
+                        o.Dispose()
+                        ctx.CreateD3DRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
 
-        ping <- Some backBuffer
+            color <- Some backBuffer
 
-        let depthBuffer =
-            match depth with
-                | None ->
-                    ctx.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
-                | Some d when d.Size <> size ->
-                    ctx.Delete d
-                    ctx.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
-                | Some d ->
-                    d
+            let depthBuffer =
+                match depth with
+                    | None ->
+                        ctx.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
+                    | Some d when d.Size <> size ->
+                        ctx.Delete d
+                        ctx.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
+                    | Some d ->
+                        d
 
-        depth <- Some depthBuffer
+            depth <- Some depthBuffer
 
-        let fbo = GL.GenFramebuffer()
-        GL.Check "could not create frambuffer"
-
-        try 
-            backBuffer.Lock()
+            let fbo = GL.GenFramebuffer()
+            GL.Check "could not create frambuffer"
 
             // create the framebuffer
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
@@ -463,39 +457,158 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
                 renderTask.Run(token, RenderToken.Empty, output)
             )
 
-            backBuffer
-        finally 
             GL.DeleteFramebuffer fbo
-            backBuffer.Unlock()
+            GL.Flush()
+            GL.Finish()
+        )
+
+    //let mutable backBufferDirty = 0
+    let mutable isRendering = 0
+
 
     let renderTick (s : obj) (e : EventArgs) =
-        if System.Threading.Interlocked.Exchange(&pending, 0) = 1 then
-            lock renderLock (fun () ->
+        //let isBackBufferDirty = Interlocked.Exchange(&backBufferDirty, 0) = 1 
+//
+//        if isBackBufferDirty then
+//            lock colorBufferLock (fun () ->
+//                match color with
+//                    | Some c -> 
+//                        use __ = ctx.RenderingLock(handle)
+//                        img.Lock()
+//                        c.Lock()
+//                        img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, c.Surface.NativePointer)
+//
+//                        c.Unlock()
+//                        img.AddDirtyRect(Int32Rect(0,0,img.PixelWidth, img.PixelHeight))
+//                        img.Unlock()
+//                    | None ->
+//                        ()
+//            )
+
+        if Interlocked.CompareExchange(&isRendering, 1, 0) = 0  then
+            if Interlocked.Exchange(&pending, 0) = 1 then
                 let s = V2i(this.ActualWidth, this.ActualHeight)
                 if s.AllDifferent 0 then
-                    transact (fun () -> size.Value <- s)
+                    let sctx = DispatcherSynchronizationContext.Current
 
-                    let buffer = render s 
-                    img.Lock()
-                    img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, buffer.Surface.NativePointer)
-                    img.AddDirtyRect(Int32Rect(0, 0, img.PixelWidth, img.PixelHeight))
-                    img.Unlock()
-                    Fun.Swap(&ping, &pong)
-                    transact (fun () -> time.MarkOutdated())
-            )
+                    let doit =
+                        async {
+                            do! Async.SwitchToThreadPool()
+                            try render s
+                            with e -> Log.error "render faulted"
 
+                            do! Async.SwitchToContext sctx
+
+                            try
+                                lock colorBufferLock (fun () ->
+                                    match color with
+                                        | Some c -> 
+                                            use __ = ctx.RenderingLock(handle)
+                                            img.Lock()
+                                            c.Lock()
+                                            img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, c.Surface.NativePointer)
+
+                                            c.Unlock()
+                                            img.AddDirtyRect(Int32Rect(0,0,img.PixelWidth, img.PixelHeight))
+                                            img.Unlock()
+                                        | None ->
+                                            ()
+                                )
+                            with e ->
+                                Log.error "swap faulted"
+
+
+                            do! Async.SwitchToThreadPool()
+                            transact(fun () -> size.Value <- s)
+                            transact (fun () -> time.MarkOutdated())
+                            isRendering <- 0
+                        }
+                    
+                    Async.Start doit
+            else
+                isRendering <- 0
     let renderTimer = 
         running <- true
         DispatcherTimer(
-            TimeSpan.FromMilliseconds(1000.0 / 60.0), 
+            TimeSpan.FromMilliseconds(1000.0 / 120.0), 
             DispatcherPriority.Render, 
             EventHandler(renderTick), 
             this.Dispatcher
         )
 
     let keyboard = EventKeyboard()
-    let mouse = EventMouse(false)
+    let mouse = EventMouse(true)
+    
+    do this.bootIO()
 
+    member private x.bootIO() =
+        let key (k : Input.Key) =
+            int k |> unbox<Aardvark.Application.Keys>
+
+        let button (b : Input.MouseButton) =
+            match b with
+                | Input.MouseButton.Left -> MouseButtons.Left
+                | Input.MouseButton.Middle -> MouseButtons.Middle
+                | Input.MouseButton.Right -> MouseButtons.Right
+                | _ -> MouseButtons.None
+
+        let mousePos() =
+            let pt = Input.Mouse.GetPosition(x)
+            PixelPosition(int pt.X, int pt.Y, int x.ActualWidth, int x.ActualHeight)
+
+        x.Focusable <- true
+
+        x.KeyDown.Add(fun e ->
+            keyboard.KeyDown(key e.Key)
+        )
+
+        x.KeyUp.Add(fun e ->
+            keyboard.KeyUp(key e.Key)
+        )
+
+        x.PreviewKeyDown.Add (fun e ->
+            keyboard.KeyDown(key e.Key)
+            e.Handled <- true
+        )
+
+        x.TextInput.Add (fun e ->
+            for c in e.Text do
+                keyboard.KeyPress(c)
+            e.Handled <- true
+        )
+
+        
+
+        x.MouseEnter.Add (fun e ->
+            mouse.Enter(mousePos())
+        )
+
+        x.MouseLeave.Add (fun e ->
+            mouse.Leave(mousePos())
+        )
+
+        x.MouseDown.Add (fun e ->
+            let button = button e.ChangedButton
+            mouse.Down(mousePos(), button)
+        )
+
+        x.MouseUp.Add (fun e ->
+            let button = button e.ChangedButton
+            mouse.Up(mousePos(), button)
+        )
+
+        (mouse :> IMouse).Click.Values.Add(fun _ -> x.Focus() |> ignore)
+
+        x.MouseMove.Add (fun e ->
+            mouse.Move(mousePos())
+        )
+
+        x.MouseWheel.Add (fun e ->
+            mouse.Scroll(mousePos(), float e.Delta)
+        )
+
+
+        ()
 
     member private x.Stop() =
         if running then
@@ -506,16 +619,10 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, 0n)
             img.Unlock()
 
-            match ping with
+            match color with
                 | Some b -> 
                     b.Dispose()
-                    ping <- None
-                | _ -> ()
-
-            match pong with
-                | Some b -> 
-                    b.Dispose()
-                    pong <- None
+                    color <- None
                 | _ -> ()
             
             match depth with
