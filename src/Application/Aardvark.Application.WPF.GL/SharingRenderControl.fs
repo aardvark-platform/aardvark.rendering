@@ -188,12 +188,19 @@ module WGLDXContextExtensions =
                 let hndl = GetDesktopWindow()
                 let parameters = 
                     SharpDX.Direct3D9.PresentParameters(
-                        Windowed = SharpDX.Mathematics.Interop.RawBool(true),
+                        BackBufferWidth = 10,
+                        BackBufferHeight = 10,
+                        BackBufferFormat = SharpDX.Direct3D9.Format.A8R8G8B8,
+                        BackBufferCount = 0,
+                        MultiSampleType = SharpDX.Direct3D9.MultisampleType.None,
+                        MultiSampleQuality = 0,
                         SwapEffect = SharpDX.Direct3D9.SwapEffect.Discard,
+                        Windowed = SharpDX.Mathematics.Interop.RawBool(true),
                         DeviceWindowHandle = hndl, 
-                        PresentationInterval = SharpDX.Direct3D9.PresentInterval.Immediate
+                        PresentationInterval = SharpDX.Direct3D9.PresentInterval.Default
                     )
-        
+                
+
                 new SharpDX.Direct3D9.DeviceEx(
                     d3d, 0, 
                     SharpDX.Direct3D9.DeviceType.Hardware, 0n, 
@@ -215,24 +222,49 @@ module WGLDXContextExtensions =
 
     let private shareContexts = System.Runtime.CompilerServices.ConditionalWeakTable<Context, ShareContext>()
 
-    type D3DRenderbuffer(ctx : ShareContext, handle : int, size : V2i, fmt : RenderbufferFormat, samples : int, dxSurface : SharpDX.Direct3D9.Surface, shareHandle : WglDxShareHandle) =
-        inherit Aardvark.Rendering.GL.Renderbuffer(ctx.Context, handle, size, fmt, samples, 0L)
+    type D3DRenderbuffer(ctx : ShareContext, resolveBuffer : int, renderBuffer : int, size : V2i, fmt : RenderbufferFormat, samples : int, dxSurface : SharpDX.Direct3D9.Surface, shareHandle : WglDxShareHandle) =
+        inherit Aardvark.Rendering.GL.Renderbuffer(ctx.Context, renderBuffer, size, fmt, samples, 0L)
         let mutable shareHandle = shareHandle
+
+        static let blit (size : V2i) (srcBuffer : int) (dstBuffer : int) =
+            let srcFbo = GL.GenFramebuffer()
+            let dstFbo = GL.GenFramebuffer()
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, srcFbo)
+            GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, srcBuffer)
+
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, dstFbo)
+            GL.FramebufferRenderbuffer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, dstBuffer)
+
+            GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, size.Y - 1, size.X, -1, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+            
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+
+            GL.DeleteFramebuffer(srcFbo)
+            GL.DeleteFramebuffer(dstFbo)
+
 
 
         member x.Surface = dxSurface
 
         member x.Lock() =
+            ()
+
+        member x.Unlock() =
             use __ = ctx.Context.ResourceLock
+            
             GL.Flush()
             GL.Finish()
             WGL.LockObjects(ctx.ShareDevice, [| shareHandle |])
 
-        member x.Unlock() =
-            use __ = ctx.Context.ResourceLock
+            blit size renderBuffer resolveBuffer
+
             GL.Flush()
             GL.Finish()
             WGL.UnlockObjects(ctx.ShareDevice, [| shareHandle |])
+            GL.Flush()
+            GL.Finish()
 
         member x.Dispose() =
             if shareHandle.NotNull then
@@ -240,7 +272,8 @@ module WGLDXContextExtensions =
                 WGL.UnregisterObject(ctx.ShareDevice, shareHandle)
                 shareHandle <- WglDxShareHandle.Null
                 dxSurface.Dispose()
-                GL.DeleteRenderbuffer(handle)
+                GL.DeleteRenderbuffer(resolveBuffer)
+                GL.DeleteRenderbuffer(renderBuffer)
                 x.Handle <- 0
         
         interface IDisposable with
@@ -268,47 +301,39 @@ module WGLDXContextExtensions =
 
             let dxFormat = dxFormat format
             let ctx = x.ShareContext
-            let sampleType, sampleQualityLevels =
-                if samples <= 1 then
-                    SharpDX.Direct3D9.MultisampleType.None, 1
-                else
-                    let t = unbox<SharpDX.Direct3D9.MultisampleType> samples
-                    let mutable levels = 0
-                    if ctx.Direct3D.CheckDeviceMultisampleType(0, SharpDX.Direct3D9.DeviceType.Hardware, dxFormat, true, t, &levels) then
-                        t, levels
-                    else
-                        Log.warn "multisampling %d not supported" samples
-                        SharpDX.Direct3D9.MultisampleType.None, 1
 
             let mutable wddmHandle = 0n
             let surface =
-                if format = RenderbufferFormat.Depth24Stencil8 then
-                    SharpDX.Direct3D9.Surface.CreateDepthStencil(
-                        ctx.Device,
-                        size.X, size.Y, 
-                        dxFormat,
-                        sampleType, sampleQualityLevels - 1,
-                        true,
-                        &wddmHandle
-                    )
-                else
-                    SharpDX.Direct3D9.Surface.CreateRenderTarget(
-                        ctx.Device,
-                        size.X, size.Y, 
-                        dxFormat,
-                        sampleType, sampleQualityLevels - 1,
-                        true,
-                        &wddmHandle
-                    )
+                SharpDX.Direct3D9.Surface.CreateRenderTarget(
+                    ctx.Device,
+                    size.X, size.Y, 
+                    dxFormat,
+                    SharpDX.Direct3D9.MultisampleType.None, 0,
+                    true,
+                    &wddmHandle
+                )
 
-            let b = GL.GenRenderbuffer()
+            let resolveBuffer = GL.GenRenderbuffer()
             GL.Check "could not create renderbuffer"
-//            GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, b)
-//            GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, samples, unbox (int format), size.X, size.Y)
-//            GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
+
+            let renderBuffer = GL.GenRenderbuffer()
+            GL.Check "could not create renderbuffer"
+            GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, renderBuffer)
+            GL.Check "could not bind renderbuffer"
+
+            if samples > 1 then
+                GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, samples, unbox (int format), size.X, size.Y)
+            else
+                GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, unbox (int format), size.X, size.Y)
+            GL.Check "could not allocate renderbuffer"
+
+            GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
+            GL.Check "could not unbind renderbuffer"
+
+
 
             WGL.SetResourceShareHandle(surface.NativePointer, wddmHandle)
-            let shareHandle = WGL.RegisterObject(ctx.ShareDevice, surface.NativePointer, b, All.Renderbuffer, WglDXAccess.WriteDiscard)
+            let shareHandle = WGL.RegisterObject(ctx.ShareDevice, surface.NativePointer, resolveBuffer, All.Renderbuffer, WglDXAccess.WriteDiscard)
 
 //            let mutable ssamples = 0
 //            let mutable ssize = V2i.Zero
@@ -328,7 +353,7 @@ module WGLDXContextExtensions =
 //            Log.stop()
 
 
-            new D3DRenderbuffer(ctx, b, size, format, samples, surface, shareHandle)
+            new D3DRenderbuffer(ctx, resolveBuffer, renderBuffer, size, format, samples, surface, shareHandle)
 
 type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     inherit ContentControl()
@@ -347,8 +372,6 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     let subscription = caller.AddMarkingCallback trigger
     do this.SizeChanged.Add (fun _ -> trigger())
 
-
-    let mutable textureSize = V2i.Zero
     let size = Mod.init V2i.II
 
     let mutable renderTask = RenderTask.empty
@@ -362,18 +385,18 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             None
         )
 
-
     let startTime = DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
     let time = Mod.custom (fun _ -> startTime + sw.Elapsed)
-
+    
+    let mutable running = false
     let mutable ping : Option<D3DRenderbuffer> = None
     let mutable pong : Option<D3DRenderbuffer> = None
-    let mutable depth : Option<D3DRenderbuffer> = None
+    let mutable depth : Option<Renderbuffer> = None
 
     let renderLock = obj()
 
-    let render (size : V2i) (action : Framebuffer -> unit) =
+    let render (size : V2i) =
         use __ = ctx.RenderingLock(handle)
             
         let backBuffer =
@@ -390,80 +413,132 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         let depthBuffer =
             match depth with
                 | None ->
-                    ctx.CreateD3DRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
+                    ctx.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
                 | Some d when d.Size <> size ->
-                    d.Dispose()
-                    ctx.CreateD3DRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
+                    ctx.Delete d
+                    ctx.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
                 | Some d ->
                     d
 
         depth <- Some depthBuffer
 
         let fbo = GL.GenFramebuffer()
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
-        GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, backBuffer.Handle)
-        GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthStencilAttachment, RenderbufferTarget.Renderbuffer, depthBuffer.Handle)
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-
-        let framebuffer = new Framebuffer(ctx, signature, (fun _ -> fbo), ignore, [0, DefaultSemantic.Colors, backBuffer :> IFramebufferOutput], Some (depthBuffer :> IFramebufferOutput))
+        GL.Check "could not create frambuffer"
 
         try 
-            depthBuffer.Lock()
             backBuffer.Lock()
-            action framebuffer
+
+            // create the framebuffer
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
+            GL.Check "could not bind frambuffer"
+            GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, backBuffer.Handle)
+            GL.Check "could not attach color to frambuffer"
+            GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthStencilAttachment, RenderbufferTarget.Renderbuffer, depthBuffer.Handle)
+            GL.Check "could not attach depth to frambuffer"
+        
+            // clear the framebuffer
+            GL.Viewport(0, 0, size.X, size.Y)
+            GL.Check "could not set viewport"
+            GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+            GL.Check "could not set clear color"
+            GL.ClearDepth(1.0)
+            GL.Check "could not set clear depth"
+            GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+            GL.Check "could not clear framebuffer"
+
+            // unbind the framebuffer
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+            GL.Check "could not unbind frambuffer"
+            
+            // render to the framebuffer
+            let framebuffer = new Framebuffer(ctx, signature, (fun _ -> fbo), ignore, [0, DefaultSemantic.Colors, backBuffer :> IFramebufferOutput], Some (depthBuffer :> IFramebufferOutput))
+            let output = OutputDescription.ofFramebuffer framebuffer
+            caller.EvaluateAlways AdaptiveToken.Top (fun token ->
+                renderTask.Run(token, RenderToken.Empty, output)
+            )
+
             backBuffer
         finally 
             GL.DeleteFramebuffer fbo
             backBuffer.Unlock()
-            depthBuffer.Unlock()
+
+    let renderTick (s : obj) (e : EventArgs) =
+        if System.Threading.Interlocked.Exchange(&pending, 0) = 1 then
+            lock renderLock (fun () ->
+                let s = V2i(this.ActualWidth, this.ActualHeight)
+                if s.AllDifferent 0 then
+                    transact (fun () -> size.Value <- s)
+
+                    img.Lock()
+                    let buffer = render s 
+                    img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, buffer.Surface.NativePointer)
+                    img.AddDirtyRect(Int32Rect(0, 0, img.PixelWidth, img.PixelHeight))
+                    img.Unlock()
+                    Fun.Swap(&ping, &pong)
+                    transact (fun () -> time.MarkOutdated())
+            )
 
     let renderTimer = 
-        let doit s e =
-            if System.Threading.Interlocked.Exchange(&pending, 0) = 1 then
-                lock renderLock (fun () ->
-                    let s = V2i(this.ActualWidth, this.ActualHeight)
-                    if s.AllDifferent 0 then
-                        img.Lock()
-                        transact (fun () -> size.Value <- s)
-
-                        let buffer = 
-                            render s (fun fbo ->
-                                GL.Check "before wtf"
-                                GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
-                                GL.Check "first bind framebuffer"
-                                GL.Viewport(0, 0, s.X, s.Y)
-                                GL.Check "viewport"
-                                GL.ClearColor(1.0f, 0.0f, 0.0f, 1.0f)
-                                GL.ClearDepth(1.0)
-                                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                                GL.Check "clear framebuffer"
-                                GL.BindFramebuffer(FramebufferTarget.Framebuffer,0)
-                                GL.Check "Unbind framebuffer"
-                                let output = OutputDescription.ofFramebuffer fbo
-                                caller.EvaluateAlways AdaptiveToken.Top (fun token ->
-                                    renderTask.Run(token, RenderToken.Empty, output)
-                                )
-                            )
-
-                        img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, buffer.Surface.NativePointer)
-                        img.AddDirtyRect(Int32Rect(0, 0, img.PixelWidth, img.PixelHeight))
-                        img.Unlock()
-                        Fun.Swap(&ping, &pong)
-                        transact (fun () -> time.MarkOutdated())
-                )
-        DispatcherTimer(TimeSpan.FromMilliseconds(1000.0 / 60.0), DispatcherPriority.Render, EventHandler(doit), this.Dispatcher)
-
+        running <- true
+        DispatcherTimer(
+            TimeSpan.FromMilliseconds(1000.0 / 60.0), 
+            DispatcherPriority.Render, 
+            EventHandler(renderTick), 
+            this.Dispatcher
+        )
 
     let keyboard = EventKeyboard()
     let mouse = EventMouse(false)
+
+
+    member private x.Stop() =
+        if running then
+            running <- false
+            Log.warn "stop"
+            renderTimer.Stop()
+            img.Lock()
+            img.SetBackBuffer(Interop.D3DResourceType.IDirect3DSurface9, 0n)
+            img.Unlock()
+
+            match ping with
+                | Some b -> 
+                    b.Dispose()
+                    ping <- None
+                | _ -> ()
+
+            match pong with
+                | Some b -> 
+                    b.Dispose()
+                    pong <- None
+                | _ -> ()
+            
+            match depth with
+                | Some b -> 
+                    ctx.Delete b
+                    depth <- None
+                | _ -> ()
+    
+    member private x.Start() =
+        if not running then
+            running <- true
+            Log.warn "start"
+            renderTimer.Start()
+
+    override x.OnVisualParentChanged(oldParent) =
+        let newParent = x.VisualParent
+
+        match oldParent, newParent with
+            | null, null -> ()
+            | null, _ -> x.Start()
+            | _, null -> x.Stop()
+            | _ -> ()
+
+        base.OnVisualParentChanged(oldParent)
 
     member x.ContextHandle = handle
 
     member x.FramebufferSignature = signature :> IFramebufferSignature
     
-    member x.ForceRedraw() =
-        x.Dispatcher.Invoke(fun () -> x.InvalidateVisual())
-
     member x.Keyboard = keyboard :> IKeyboard
     member x.Mouse = mouse :> IMouse
     
@@ -483,6 +558,10 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
         member x.Sizes = x.Sizes
+
+    interface IRenderControl with
+        member x.Mouse = mouse :> IMouse
+        member x.Keyboard = keyboard :> IKeyboard
 
 
 #endif
