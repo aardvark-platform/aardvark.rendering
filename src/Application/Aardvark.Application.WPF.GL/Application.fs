@@ -67,7 +67,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
         match ctrl with
             | :? RenderControl as ctrl ->
                 //let impl = new OpenGlRenderControl(runtime, enableDebug, samples)
-                let impl = new OpenGlSharingRenderControl(runtime)
+                let impl = new OpenGlSharingRenderControl(runtime, samples)
                 ctrl.Implementation <- impl
                 init ctx impl.ContextHandle
             | _ ->

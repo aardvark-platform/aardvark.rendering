@@ -57,7 +57,7 @@ type WPFApplicationExtensions private() =
     [<Extension>]
     static member CreateSimpleRenderWindow(this : IApplication, samples : int) =
         let w = new SimpleRenderWindow()
-        this.Initialize(w.Control)
+        this.Initialize(w.Control, samples)
         w
 
     [<Extension>]
