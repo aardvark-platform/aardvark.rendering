@@ -313,6 +313,7 @@ type LoaderProgress =
 
 type LoadConfig<'a, 'b> =
     {
+        initLoadThread      : unit -> IDisposable
         load                : CancellationToken -> 'a -> 'b
         unload              : 'b -> unit
         priority            : SetOperation<'a> -> int
@@ -542,6 +543,7 @@ module Loader =
                     cb.Dispose()
 
             let loadThread () =
+                use __ = config.initLoadThread()
                 try
                     let sw = System.Diagnostics.Stopwatch()
 

@@ -157,28 +157,28 @@ module private SparseBufferImplementation =
         let writeFences = FenceSet()
 
         let changeCommitment(lastByte : nativeint, c : bool) =
-            lock lockObj (fun () ->
-                let key = int64 lastByte
-                usedBytes <-
-                    usedBytes |> MapExt.alter key (fun s ->
-                        let s = Option.defaultValue 0 s
-                        let n = if c then s + 1 else s - 1
-                        if n > 0 then
-                            Some n
-                        else
-                            None
-                    )
+            let key = int64 lastByte
+            usedBytes <-
+                usedBytes |> MapExt.alter key (fun s ->
+                    let s = Option.defaultValue 0 s
+                    let n = if c then s + 1 else s - 1
+                    if n > 0 then
+                        Some n
+                    else
+                        None
+                )
 
-                match MapExt.tryMax usedBytes with
-                    | Some max ->
-                        max + 1L |> Fun.NextPowerOfTwo |> nativeint
-                    | _ ->
-                        0n
-            )
+            match MapExt.tryMax usedBytes with
+                | Some mv ->
+                    mv + 1L |> Fun.NextPowerOfTwo |> nativeint
+                | _ ->
+                    0n
 
         member x.AdjustCapacity(c : nativeint) =
-            LockedResource.update x (fun () ->
-                if c <> x.SizeInBytes then
+            if c <> x.SizeInBytes then
+                LockedResource.update x (fun () ->
+                    if c < x.SizeInBytes then Log.warn "shrink: %A" (Mem c)
+                    else  Log.warn "grow: %A" (Mem c)
                     writeFences.WaitCPU()
                     let copySize = min c x.SizeInBytes
 
@@ -186,7 +186,7 @@ module private SparseBufferImplementation =
                         let temp = GL.GenBuffer()
                         GL.Check "could not create temp buffer"
 
-                        GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticCopy)
+                        GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not allocate temp buffer"
 
                         GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
@@ -206,7 +206,7 @@ module private SparseBufferImplementation =
 
                     GL.Sync()
                     x.SizeInBytes <- c
-            )
+                )
 
         override x.Release() =
             usedBytes <- MapExt.empty
@@ -226,8 +226,10 @@ module private SparseBufferImplementation =
 
         override x.Commitment(offset : nativeint, size : nativeint, c : bool) =
             let lastByte = offset + size - 1n
-            let c = changeCommitment(lastByte, c)
-            x.AdjustCapacity(c)
+            lock lockObj (fun () ->
+                let c = changeCommitment(lastByte, c)
+                x.AdjustCapacity(c)
+            )
 
 [<AutoOpen>]
 module SparseBufferExtensions =
@@ -346,12 +348,15 @@ type SparseBufferGeometryPool(ctx : Context, types : Map<Symbol, Type>) =
 
     let freeThread =
         new Thread(ThreadStart(fun () ->
-            while true do
-                WaitHandle.WaitAll([| hasFrees.WaitHandle; notRendering.WaitHandle |]) |> ignore
-                hasFrees.Reset()
+            try
+                while true do
+                    WaitHandle.WaitAll([| hasFrees.WaitHandle; notRendering.WaitHandle |]) |> ignore
+                    hasFrees.Reset()
 
-                let frees = Interlocked.Exchange(&pendingFrees, [])
-                free frees
+                    let frees = Interlocked.Exchange(&pendingFrees, [])
+                    free frees
+            with e -> 
+                Log.error "[SparseBuffer] free thread gone down: %A" e.Message
         ), IsBackground = true)
 
     do freeThread.Start()
