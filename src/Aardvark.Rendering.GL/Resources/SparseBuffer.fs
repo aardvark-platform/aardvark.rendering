@@ -212,7 +212,7 @@ module private SparseBufferImplementation =
             usedBytes <- MapExt.empty
 
         override x.PerformWrite(offset : nativeint, size : nativeint, data : nativeint) =
-            LockedResource.access x (fun () ->
+            LockedResource.render x (fun () ->
                 if offset < 0n || size < 0n || offset + size > x.SizeInBytes then
                     failwith "[GL] write region out of bounds"
             
