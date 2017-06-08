@@ -359,56 +359,58 @@ let colorLockTest() =
 
     let rand = RandomSystem()
     for _ in 1 .. size do
-        Task.Run(fun () ->
-            let nested = rand.UniformDouble() > 0.9
-            let isColored = rand.UniformDouble() > 0.2
-            let color = rand.UniformInt(counts.Length)
-            start.Wait()
-            if isColored then
-                if l.Status <> NotEntered then
-                    bad <- true
-
-                l.Enter(color)
-                let cnt = Interlocked.Increment(&counts.[color])
-
-                if l.Status <> Colored color then
-                    bad <- true
-
-                if cnt > maxCounts.[color] then
-                    maxCounts.[color] <- cnt
-
-                if nested then
-                    l.Enter()
-                    if l.Status <> Exclusive then
+        let a =
+            async {
+                do! Async.SwitchToNewThread()
+                let nested = rand.UniformDouble() > 0.9
+                let isColored = rand.UniformDouble() > 0.2
+                let color = rand.UniformInt(counts.Length)
+                start.Wait()
+                if isColored then
+                    if l.Status <> NotEntered then
                         bad <- true
-                    l.Exit()
+
+                    l.Enter(color)
+                    let cnt = Interlocked.Increment(&counts.[color])
+
                     if l.Status <> Colored color then
                         bad <- true
 
-                Thread.Sleep(1)
-                Interlocked.Decrement(&counts.[color]) |> ignore
-                l.Exit()
+                    if cnt > maxCounts.[color] then
+                        maxCounts.[color] <- cnt
 
-                if l.Status <> NotEntered then
-                    bad <- true
+                    if nested then
+                        l.Enter()
+                        if l.Status <> Exclusive then
+                            bad <- true
+                        l.Exit()
+                        if l.Status <> Colored color then
+                            bad <- true
 
-                countDown.Signal()
-            else
-                if l.Status <> NotEntered then
-                    bad <- true
-                l.Enter()
-                if l.Status <> Exclusive then
-                    bad <- true
-                let c = Interlocked.Increment(&exCount)
-                if c > 1 then bad <- true
-                Thread.Sleep(1)
-                Interlocked.Decrement(&exCount) |> ignore
-                l.Exit()
-                if l.Status <> NotEntered then
-                    bad <- true
-                countDown.Signal()
-            
-        ) |> ignore
+                    Thread.Sleep(0)
+                    Interlocked.Decrement(&counts.[color]) |> ignore
+                    l.Exit()
+
+                    if l.Status <> NotEntered then
+                        bad <- true
+
+                    countDown.Signal() |> ignore
+                else
+                    if l.Status <> NotEntered then
+                        bad <- true
+                    l.Enter()
+                    if l.Status <> Exclusive then
+                        bad <- true
+                    let c = Interlocked.Increment(&exCount)
+                    if c > 1 then bad <- true
+                    Thread.Sleep(0)
+                    Interlocked.Decrement(&exCount) |> ignore
+                    l.Exit()
+                    if l.Status <> NotEntered then
+                        bad <- true
+                    countDown.Signal() |> ignore
+            }
+        Async.Start a
 
 
     start.Set()
@@ -452,9 +454,10 @@ let main args =
     //Examples.Render2TexturePrimiviteChangeableSize.run()
     //Examples.Render2TexturePrimitiveFloat.run()
     //Examples.ComputeTest.run()
+    //colorLockTest()
     Ag.initialize()
     Aardvark.Init()
-    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
+    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- true
     Examples.LoD.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 

@@ -389,7 +389,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.DeleteStreamingTexture(t) = x.DeleteStreamingTexture(t)
 
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
-        member x.CreateTexture(size, format, levels, samples, count) = x.CreateTexture(size, format, levels, samples, count)
+        member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples, 1)
+        member x.CreateTextureArray(size, format, levels, samples, count) = x.CreateTexture(size, format, levels, samples, count)
         member x.CreateTextureCube(size, format, levels, samples) = x.CreateTextureCube(size, format, levels, samples)
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
         member x.CreateMappedBuffer() = x.CreateMappedBuffer()

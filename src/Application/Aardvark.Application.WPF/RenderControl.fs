@@ -23,6 +23,7 @@ type RenderControl() as self =
     let mouse = new Aardvark.Application.WinForms.Mouse()
     let sizes = Mod.init (V2i(base.ActualWidth, base.ActualHeight))
 
+
     let actualSize = 
         adaptive {
             let! s = sizes
@@ -61,15 +62,16 @@ type RenderControl() as self =
         self.Child <- c
         runtime <- cr.Runtime
 
-        match c with
+        match c :> obj with
             | :? WindowsFormsHost as host ->
                 keyboard.SetControl(host.Child)
                 mouse.SetControl(host.Child)
                 setupDragAndDrop()
+            | :? IRenderControl as c ->
+                keyboard.Use(c.Keyboard) |> ignore
+                mouse.Use(c.Mouse) |> ignore
             | _ ->
-                Log.warn "[WPF] keyboard/mouse not working"
-//            | _ ->
-//                failwith "impossible to create WPF mouse"
+                failwith "impossible to create WPF mouse"
 
         match renderTask with
             | Some task -> cr.RenderTask <- task

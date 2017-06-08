@@ -181,8 +181,11 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
             x.CreateFramebuffer(signature, bindings) :> _
 
-        member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
-            x.CreateTexture(size, format, levels, samples, count) :> _
+        member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
+            ctx.CreateTexture2D(size, levels, format, samples) :> _
+
+        member x.CreateTextureArray(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
+            ctx.CreateTexture2DArray(size, count, levels, format, samples) :> _
 
         member x.CreateTextureCube(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
             x.CreateTextureCube(size, format, levels, samples) :> _

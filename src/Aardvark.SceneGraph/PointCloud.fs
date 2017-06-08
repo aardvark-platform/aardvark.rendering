@@ -565,12 +565,18 @@ module PointCloudRenderObjectSemantics =
                         | Some ptr -> pool.Free ptr
                         | None -> ()
 
+                let init () =
+                    //let a = runtime.ContextLock
+                    //a
+                    { new IDisposable with member x.Dispose() = () }
+
                 dependencies |> Loader.load rasterize {
+                    initLoadThread      = init
                     load                = load
                     unload              = unload
                     priority            = fun op -> if op.Count < 0 then -op.Value.level else op.Value.level
                     numThreads          = 4
-                    submitDelay         = TimeSpan.FromMilliseconds 50.0
+                    submitDelay         = TimeSpan.FromMilliseconds 120.0
                     progressInterval    = TimeSpan.FromSeconds 1.0
                     progress            = progress
                 }

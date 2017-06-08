@@ -67,7 +67,7 @@ type EventKeyboard() =
     member x.Use(o : IKeyboard) =
         let subscriptions =
             [
-                o.Down.Values.Subscribe(x.KeyDown)
+                o.DownWithRepeats.Values.Subscribe(x.KeyDown)
                 o.Up.Values.Subscribe(x.KeyUp)
                 o.Press.Values.Subscribe(x.KeyPress)
             ]
