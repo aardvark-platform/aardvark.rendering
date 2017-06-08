@@ -274,6 +274,79 @@ module RenderTasks =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
+    [<AbstractClass>]
+    type AbstractCommandSubTask() =
+        static let nop = System.Lazy<unit>(id)
+
+        let programUpdateWatch  = Stopwatch()
+        let sortWatch           = Stopwatch()
+        let runWatch            = OpenGlStopwatch()
+
+        let fragments = HashSet<RenderFragment>()
+
+        member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                programUpdateWatch.Restart()
+                let res = f()
+                programUpdateWatch.Stop()
+                res
+
+        member x.Sorting (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                sortWatch.Restart()
+                let res = f()
+                sortWatch.Stop()
+                res
+
+        member x.Execution (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                runWatch.Restart()
+                let res = f()
+                runWatch.Stop()
+                res
+
+        //member x.Parent = parent
+
+        abstract member Update : AdaptiveToken * RenderToken -> unit
+        abstract member Perform : AdaptiveToken * RenderToken -> unit
+        abstract member Dispose : unit -> unit
+        abstract member Set : Index * RenderCommand -> unit
+        abstract member Remove : Index -> unit
+
+        member x.Add(t : RenderFragment) = 
+            fragments.Add t |> ignore
+
+        member x.Remove(t : RenderFragment) = 
+            fragments.Remove t |> ignore
+
+
+        member x.Run(token : AdaptiveToken, t : RenderToken, output : OutputDescription) =
+
+            for task in fragments do
+                task.Run(token, t, output)
+
+            x.Perform(token, t)
+            if RenderToken.isEmpty t then
+                nop
+            else
+                lazy (
+                    t.AddSubTask(
+                        MicroTime sortWatch.Elapsed,
+                        MicroTime programUpdateWatch.Elapsed,
+                        runWatch.ElapsedGPU,
+                        runWatch.ElapsedCPU
+                    )
+                )
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
     type SortKey = list<int>
 
     type ProjectionComparer(projections : list<RenderObject -> IMod>) =
@@ -330,6 +403,9 @@ module RenderTasks =
         let mutable program : IRenderProgram = Unchecked.defaultof<_>
         let structuralChange = Mod.custom ignore
         let scope = { scope with structuralChange = structuralChange }
+
+        let commands : alist<RenderCommand> = failwith ""
+
 
         // TODO: add AdaptiveProgram creator not taking a separate key but simply comparing the values
         let objectsWithKeys = objects |> ASet.map (fun o -> (o :> IRenderObject, o))
@@ -459,6 +535,116 @@ module RenderTasks =
             )
 
 
+
+    type CommandSubTask(scope : CompilerInfo, config : IMod<BackendConfiguration>) =
+        inherit AbstractCommandSubTask()
+        static let empty = new PreparedMultiRenderObject([PreparedRenderObject.empty])
+        let objects = clist [RenderCommand.Render empty]
+
+        let mutable hasProgram = false
+        let mutable currentConfig = BackendConfiguration.Default
+        let mutable program : IRenderProgram = Unchecked.defaultof<_>
+        let structuralChange = Mod.custom ignore
+        let scope = { scope with structuralChange = structuralChange }
+
+
+        static let toIndexedASet (l : alist<'a>) =
+            ASet.create (fun scope ->
+                let r = l.GetReader()
+                {
+                    new AbstractReader<hdeltaset<Index * 'a>>(scope, HDeltaSet.monoid) with
+                        member x.Compute(t) =
+                            let state = r.State
+                            let ops = r.GetOperations t
+
+                            ops |> PDeltaList.toSeq 
+                                |> Seq.collect (fun (i,op) -> 
+                                    match op with
+                                        | Set v ->
+                                            match PList.tryGet i state with
+                                                | Some o -> [ Rem(i,o); Add(i,v) ]
+                                                | None -> [Add(i,v)]
+                                        | Remove ->
+                                            match PList.tryGet i state with
+                                                | Some o -> [ Rem(i,o) ]
+                                                | None -> []
+                                )
+                                |> HDeltaSet.ofSeq
+
+
+                        member x.Release() =
+                            r.Dispose()
+                }
+            )
+
+
+        // TODO: add AdaptiveProgram creator not taking a separate key but simply comparing the values
+        let objectsWithKeys = objects |> toIndexedASet //|> ASet.map (fun o -> (o :> IRenderObject, o))
+
+        let reinit (self : CommandSubTask) (config : BackendConfiguration) =
+            // if the config changed or we never compiled a program
+            // we need to do something
+            if config <> currentConfig || not hasProgram then
+
+                // if we have a program we'll dispose it now
+                if hasProgram then program.Dispose()
+
+                // use the config to create a comparer for IRenderObjects
+                let comparer = Comparer<Index>.Default
+                 
+
+                // create the new program
+                let newProgram = 
+                    match config.execution, config.redundancy with
+                        | ExecutionEngine.Native, RedundancyRemoval.Static -> 
+                            Log.line "using optimized native program"
+                            RenderProgram.Native.optimizedCommand scope comparer objectsWithKeys
+
+                        | t ->
+                            failwithf "[GL] unsupported backend configuration: %A" t
+
+
+                // finally we store the current config/ program and set hasProgram to true
+                program <- newProgram
+                hasProgram <- true
+                currentConfig <- config
+
+        override x.Update(token, t) =
+            let config = config.GetValue token
+            reinit x config
+
+            //TODO
+            let programStats = x.ProgramUpdate (t, fun () -> program.Update AdaptiveToken.Top)
+            ()
+        override x.Perform(token, t) =
+            x.Update(token, t) |> ignore
+
+            let stats = x.Execution (t, fun () -> program.Run(t))
+
+            stats
+               
+
+        override x.Dispose() =
+            if hasProgram then
+                hasProgram <- false
+                program.Dispose()
+
+                let mutable foo = 0
+                (objects :> alist<_>).Content.Outputs.Consume(&foo) |> ignore
+
+                objects.Clear()
+        
+        override x.Set(i : Index, o) = 
+            transact (fun () -> 
+                structuralChange.MarkOutdated()
+                objects.[i] <- o
+            )
+
+        override x.Remove(i) = 
+            transact (fun () -> 
+                structuralChange.MarkOutdated()
+                objects.Remove i |> ignore
+            )
     
 
                 
@@ -973,6 +1159,186 @@ module RenderTasks =
                 )
             )
 
+    type CommandRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, commands : alist<RenderCommand>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
+        inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
+        
+        let ctx = man.Context
+        let resources = new Aardvark.Base.Rendering.ResourceInputSet()
+        let inputSet = InputSet(this) 
+        let resourceUpdateWatch = OpenGlStopwatch()
+        let structuralChange = Mod.init ()
+        
+        let commandReader = commands.GetReader()
+
+        let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
+
+        let vaoCache = ResourceCache(None, Some this.RenderTaskLock)
+
+        let add (ro : PreparedRenderObject) = 
+            let all = ro.Resources |> Seq.toList
+            for r in all do resources.Add(r)
+
+            
+            let old = ro.Activation
+            ro.Activation <- 
+                { new IDisposable with
+                    member x.Dispose() =
+                        old.Dispose()
+                        for r in all do resources.Remove r
+                        //callStats.Remove ro
+                        ro.Activation <- old
+                }
+
+            ro
+
+        let rec prepareRenderObject (ro : IRenderObject) =
+            match ro with
+                | :? RenderObject as r ->
+                    let hooked = this.HookRenderObject r 
+                    new PreparedMultiRenderObject([this.ResourceManager.Prepare(fboSignature, hooked) |> add]) |> Object
+
+                | :? PreparedRenderObject as prep ->
+                    new PreparedMultiRenderObject([prep |> PreparedRenderObject.clone |> add]) |> Object
+
+                | :? MultiRenderObject as seq ->
+                    let all = 
+                        seq.Children |> List.collect(fun o -> 
+                            match prepareRenderObject o with
+                                | Object a -> a.Children
+                                | _ -> failwith "no work"
+                        )
+                    new PreparedMultiRenderObject(all) |> Object
+
+                | :? PreparedMultiRenderObject as seq ->
+                    new PreparedMultiRenderObject (seq.Children |> List.map (PreparedRenderObject.clone >> add)) |> Object
+
+                | :? RenderTaskObject as t ->
+                    t.Fragment.AddRef()
+                    Task(t.Pass, t.Fragment)
+
+                | _ ->
+                    failwithf "[RenderTask] unsupported IRenderObject: %A" ro
+
+        let prepare (o : IRenderObject) =
+            match prepareRenderObject o with | Object o -> o | _ -> failwith ""
+
+        let cache = Cache(prepare)
+
+        let mutable subtasks = Map.empty
+
+        let getSubTask (pass : RenderPass) : AbstractCommandSubTask =
+            match Map.tryFind pass subtasks with
+                | Some task -> task
+                | _ ->
+                    let task = 
+                        match pass.Order with
+                            | RenderPassOrder.Arbitrary ->
+                                new CommandSubTask(this.Scope, this.Config) :> AbstractCommandSubTask
+
+                            | order ->
+                                failwith ""
+
+                    subtasks <- Map.add pass task subtasks
+                    task
+
+        let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
+            let oldState = commandReader.State
+            let deltas = commandReader.GetOperations x
+
+            if not (PDeltaList.isEmpty deltas) then
+                parent.StructureChanged()
+
+            let mutable added = 0
+            let mutable removed = 0
+
+            let dead = HashSet<IRenderObject>()
+
+            let preparedDeltas =
+                deltas |> PDeltaList.map (fun i op ->
+                    match op with
+                        | Remove -> 
+                            match PList.tryGet i oldState with
+                                | Some oldCommand ->
+                                    match oldCommand with
+                                        | RenderCommand.Render o ->
+                                            dead.Add o |> ignore
+                                        | _ ->
+                                            ()
+                                | None ->
+                                    ()
+                            Remove
+                        | Set cmd ->
+                            match cmd with
+                                | RenderCommand.Render o -> 
+                                    RenderCommand.Render (cache.Invoke o) |> Set
+                                | c -> 
+                                    Set c
+                )
+            let t = getSubTask RenderPass.main
+
+            for (i, op) in PDeltaList.toSeq preparedDeltas do
+                match op with
+                    | Set v -> t.Set(i, v)
+                    | Remove -> t.Remove i
+
+            for d in dead do
+                let (deleted, po) = cache.RevokeAndGetDeleted(d)
+                if deleted then po.Dispose()
+
+        let updateResources (x : AdaptiveToken) (t : RenderToken) =
+            if RenderToken.isEmpty t then
+                resources.Update(x, t)
+            else
+                resourceUpdateWatch.Restart()
+                resources.Update(x, t)
+                resourceUpdateWatch.Stop()
+
+                t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
+
+
+        override x.ProcessDeltas(token, t) =
+            processDeltas token x t
+
+        override x.UpdateResources(token,t) =
+            updateResources token t
+
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
+            x.ResourceManager.DrawBufferManager.Write(fbo)
+
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
+                primitivesGenerated.Restart()
+
+            let mutable runStats = []
+            for (_,t) in Map.toSeq subtasks do
+                let s = t.Run(token,rt, output)
+                runStats <- s::runStats
+
+            if RuntimeConfig.SyncUploadsAndFrames then
+                GL.Sync()
+            
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
+                primitivesGenerated.Stop()
+                runStats |> List.iter (fun l -> l.Value)
+                rt.AddPrimitiveCount(primitivesGenerated.Value)
+
+
+
+        override x.Release() =
+            commandReader.Dispose()
+            resources.Dispose()
+            for (_,t) in Map.toSeq subtasks do
+                t.Dispose()
+
+            subtasks <- Map.empty
+
+        override x.Use (f : unit -> 'a) =
+            lock x (fun () ->
+                x.RenderTaskLock.Run (fun () ->
+                    lock resources (fun () ->
+                        f()
+                    )
+                )
+            )
 
     type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
         inherit AbstractRenderTask()

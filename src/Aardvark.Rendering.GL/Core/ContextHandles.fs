@@ -136,6 +136,7 @@ module ContextHandle =
 
             GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
             GL.Enable(EnableCap.TextureCubeMapSeamless)
+            GL.Disable(EnableCap.PolygonSmooth)
 
             context.MakeCurrent(null)
             window, context

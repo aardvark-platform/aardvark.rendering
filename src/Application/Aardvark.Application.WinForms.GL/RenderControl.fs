@@ -145,6 +145,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
         GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
         GL.Enable(EnableCap.TextureCubeMapSeamless)
+        GL.Disable(EnableCap.PolygonSmooth)
         if c <> null then
             c.MakeCurrent(null)
 

@@ -170,13 +170,50 @@ module RenderProgram =
         let compileDelta (scope : CompilerInfo) (l : Option<PreparedMultiRenderObject>) (r : PreparedMultiRenderObject) =
             compileDeltaInternal true scope l r
 
+        let compileDeltaCommand (scope : CompilerInfo) (l : Option<RenderCommand>) (r : RenderCommand) =
+            match r with
+                | RenderCommand.Render (:? PreparedMultiRenderObject as r) when r.First.Id < 0 -> 
+                    if Option.isNone l then emptyCode
+                    else None |> DeltaCompiler.compileEpilog |> DeltaCompiler.run scope
+                | _ ->
+                    let code = DeltaCompiler.compileDeltaCommand scope l r
+                    code |> DeltaCompiler.run scope
+
+
         let compileFull scope r =
             compileDeltaInternal false scope None r
+
 
     module Native =
         let private instructionToCall (i : Instruction) : NativeCall =
             let compiled = ExecutionContext.compile i
             compiled.functionPointer, compiled.args
+
+        let optimizedCommand scope comparer input =
+            //let scope = { scope with stats = ref FrameStatistics.Zero }
+            let inner = FragmentHandler.native 6
+
+            
+
+            let handler = FragmentHandler.warpDifferential instructionToCall ExecutionContext.callToInstruction (compileDeltaCommand scope) inner
+//
+//            let epilog = Compiler.compileEpilog scope
+//
+//            let handler () =
+//                let h = handler()
+//                let code =
+//                    epilog |> Array.map instructionToCall |> ASM.assembleCalls 0
+//                let c = Array.append code h.epilog.Memory.UInt8Array
+//                h.epilog.Write(c)
+//                h.writeNext h.prolog h.epilog |> ignore
+//                h
+            let inner = AdaptiveProgram.custom comparer handler input
+            { new WrappedRenderProgram(inner) with
+                override x.Run(t) =
+                    x.RunInner()
+                    t.AddInstructions(inner.NativeCallCount, inner.NativeCallCount)
+
+            } :> IRenderProgram
 
         let optimized scope comparer input =
             //let scope = { scope with stats = ref FrameStatistics.Zero }

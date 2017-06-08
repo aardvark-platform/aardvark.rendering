@@ -253,6 +253,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CreateStreamingTexture(mipMaps : bool) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture
 
+    member x.ResourceManager = manager
+
     member x.DeleteStreamingTexture(t : IStreamingTexture) =
         match t with
             | :? StreamingTexture as t ->

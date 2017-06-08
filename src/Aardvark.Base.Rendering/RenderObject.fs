@@ -148,6 +148,16 @@ type UniformProvider private() =
 
     static member Empty = empty
     
+    static member union (l : IUniformProvider) (r : IUniformProvider) =
+        { new IUniformProvider with
+            member x.Dispose() = l.Dispose(); r.Dispose()
+            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
+                match l.TryGetUniform(scope, name) with
+                    | Some m -> Some m
+                    | None -> r.TryGetUniform(scope, name)
+            
+        }
+
     static member ofDict (values : SymbolDict<IMod>) =
         { new IUniformProvider with
             member x.Dispose() = ()
@@ -963,6 +973,5 @@ module GeometrySetUtilities =
 
         
     
-
 
 
