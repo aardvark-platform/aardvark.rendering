@@ -1004,7 +1004,7 @@ module RenderTasks =
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
 
-        let vaoCache = ResourceCache(None, Some this.RenderTaskLock)
+        //let vaoCache = ResourceCache(None, Some this.RenderTaskLock)
 
         let add (ro : PreparedRenderObject) = 
             let all = ro.Resources |> Seq.toList
@@ -1172,7 +1172,7 @@ module RenderTasks =
 
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
 
-        let vaoCache = ResourceCache(None, Some this.RenderTaskLock)
+        //let vaoCache = ResourceCache(None, Some this.RenderTaskLock)
 
         let add (ro : PreparedRenderObject) = 
             let all = ro.Resources |> Seq.toList

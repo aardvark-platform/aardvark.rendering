@@ -23,23 +23,23 @@ type PreparedRenderObject =
         FramebufferSignature : IFramebufferSignature
         LastTextureSlot : int
         Program : IResource<Program>
-        UniformBuffers : Map<int, IResource<UniformBufferView>>
-        Uniforms : Map<int, IResource<UniformLocation>>
-        Textures : Map<int, IResource<Texture> * IResource<Sampler>>
-        Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer>>
-        IndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer>>
+        UniformBuffers : Map<int, IResource<UniformBufferView, int>>
+        Uniforms : Map<int, IResource<UniformLocation, nativeint>>
+        Textures : Map<int, IResource<Texture, int> * IResource<Sampler, int>>
+        Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>
+        IndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>
         
-        IsActive : IResource<IsActiveHandle>
-        BeginMode : IResource<BeginModeHandle>
-        DrawCallInfos : IResource<DrawCallInfoListHandle>
-        IndirectBuffer : Option<IResource<IndirectBuffer>>
-        DepthTestMode : IResource<DepthTestModeHandle>
-        CullMode : IResource<CullModeHandle>
-        PolygonMode : IResource<PolygonModeHandle>
-        BlendMode : IResource<BlendModeHandle>
-        StencilMode : IResource<StencilModeHandle>
+        IsActive : IResource<IsActiveHandle, IsActiveHandle>
+        BeginMode : IResource<BeginModeHandle, BeginModeHandle>
+        DrawCallInfos : IResource<DrawCallInfoListHandle, DrawCallInfoListHandle>
+        IndirectBuffer : Option<IResource<IndirectBuffer, V2i>>
+        DepthTestMode : IResource<DepthTestModeHandle, DepthTestModeHandle>
+        CullMode : IResource<CullModeHandle, CullModeHandle>
+        PolygonMode : IResource<PolygonModeHandle, PolygonModeHandle>
+        BlendMode : IResource<BlendModeHandle, BlendModeHandle>
+        StencilMode : IResource<StencilModeHandle, StencilModeHandle>
 
-        VertexInputBinding : IResource<VertexInputBindingHandle>
+        VertexInputBinding : IResource<VertexInputBindingHandle, VertexInputBindingHandle>
         
         ColorAttachmentCount : int
         DrawBuffers : Option<DrawBufferConfig>

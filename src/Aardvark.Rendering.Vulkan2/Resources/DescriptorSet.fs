@@ -19,7 +19,7 @@ type Descriptor =
 
 type AdaptiveDescriptor =
     | AdaptiveUniformBuffer of int * UniformBuffer
-    | AdaptiveCombinedImageSampler of int * array<Option<IResource<ImageView> * IResource<Sampler>>>
+    | AdaptiveCombinedImageSampler of int * array<Option<IResource<ImageView, VkImageView> * IResource<Sampler, VkSampler>>>
 
 type DescriptorSet =
     class

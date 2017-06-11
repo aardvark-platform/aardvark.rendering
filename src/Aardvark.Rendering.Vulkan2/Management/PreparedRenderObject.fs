@@ -19,13 +19,13 @@ type PreparedRenderObject =
         device                  : Device
         original                : RenderObject
         
-        pipeline                : VulkanResource<Pipeline, VkPipeline>
-        indexBuffer             : Option<IResource<nativeptr<IndexBufferBinding>>>
-        uniformBuffers          : list<IResource<UniformBuffer>>
-        descriptorSets          : IResource<nativeptr<DescriptorSetBinding>>
-        vertexBuffers           : IResource<nativeptr<VertexBufferBinding>>
+        pipeline                : IResource<Pipeline, VkPipeline>
+        indexBuffer             : Option<IResource<IndexBufferBinding, IndexBufferBinding>>
+        uniformBuffers          : list<IResource<UniformBuffer, VkBuffer>>
+        descriptorSets          : IResource<DescriptorSetBinding, DescriptorSetBinding>
+        vertexBuffers           : IResource<VertexBufferBinding, VertexBufferBinding>
         drawCalls               : IResource<nativeint>
-        isActive                : IResource<nativeint>
+        isActive                : IResource<bool, int>
         activation              : IDisposable
     }
     member x.DrawCallInfos = x.original.DrawCallInfos
@@ -124,7 +124,7 @@ type DevicePreparedRenderObjectExtensions private() =
         let program = this.CreateShaderProgram(renderPass, ro.Surface)
         let prog = program.Handle.GetValue()
 
-        let uniformBuffers = System.Collections.Generic.List<IResource<UniformBuffer>>()
+        let uniformBuffers = System.Collections.Generic.List<IResource<UniformBuffer, VkBuffer>>()
         let descriptorSets = 
             prog.PipelineLayout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
@@ -257,19 +257,15 @@ type DevicePreparedRenderObjectExtensions private() =
             this.CreateDescriptorSetBinding(prog.PipelineLayout, descriptorSets)
 
         let isActive =
-            { new Rendering.Resource<nativeint>(ResourceKind.Unknown) with
-                member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<nativeint>) =
-                    let ptr =
-                        match old with
-                            | Some ptr -> ptr
-                            | None -> Marshal.AllocHGlobal 4
+            { new Rendering.Resource<bool, int>(ResourceKind.Unknown) with
+                member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<bool>) =
+                    ro.IsActive.GetValue(token)
 
-                    let v = ro.IsActive.GetValue(token)
-                    NativeInt.write ptr (if v then 1 else 0)
-                    ptr
+                member x.Destroy (h : bool) =
+                    ()
 
-                member x.Destroy (h : nativeint) =
-                    Marshal.FreeHGlobal h
+                member x.View b =
+                    if b then 1 else 0
 
                 member x.GetInfo h =
                     ResourceInfo.Zero

@@ -6,7 +6,9 @@ open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Base.Incremental
+open Microsoft.FSharp.NativeInterop
 
+#nowarn "9"
 
 type IOutputMod =
     inherit IMod
@@ -134,40 +136,47 @@ type IResource =
     abstract member IsDisposed : bool
     abstract member Info : ResourceInfo
 
-
 type IResource<'h when 'h : equality> =
     inherit IResource
-
     abstract member Handle : IMod<'h>
 
-type ResourceDescription<'d, 'h when 'h : equality> =
+type IResource<'h, 'v when 'h : equality and 'v : unmanaged> =
+    inherit IResource<'h>
+    abstract member Pointer : nativeptr<'v>
+
+type ResourceDescription<'d, 'h, 'v when 'h : equality and 'v : unmanaged> =
     {
         create : 'd -> 'h
         update : 'h -> 'd -> 'h
         delete : 'h -> unit
+        view   : 'h -> 'v
         info   : 'h -> ResourceInfo
         kind   : ResourceKind
     }
 
 [<AbstractClass>]
-type Resource<'h when 'h : equality>(kind : ResourceKind) =
+type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind) =
     inherit AdaptiveObject()
 
     let mutable current = None
     let handle = Mod.init Unchecked.defaultof<'h>
+    let pointer : nativeptr<'v> = NativePtr.alloc 1
 
     let mutable refCount = 0
     let onDispose = new System.Reactive.Subjects.Subject<unit>()
 
 
+
+
     let mutable info = ResourceInfo.Zero
     let lockObj = obj()
 
-    let destroy(x : Resource<_>) =
+    let destroy(x : Resource<_,_>) =
         onDispose.OnNext()
         x.Destroy handle.Value
         current <- None
         info <- ResourceInfo.Zero
+        NativePtr.free pointer
 
         lock x (fun () ->
             let mutable foo = 0
@@ -176,9 +185,18 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
             handle.UnsafeCache <- Unchecked.defaultof<_>
         )
 
+    let setHandle (x : Resource<'h, 'v>) (h : 'h) : unit =
+        if h <> handle.Value then
+            let v : 'v = x.View(h)
+            NativePtr.write pointer v
+            transact (fun () -> handle.Value <- h)
+
     abstract member Create : AdaptiveToken * RenderToken * Option<'h> -> 'h
     abstract member Destroy : 'h -> unit
     abstract member GetInfo : 'h -> ResourceInfo
+    abstract member View : 'h -> 'v
+
+
 
     member x.IsDisposed = Option.isNone current
 
@@ -203,12 +221,12 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
 
             | Some old ->  
                 current <- Some h
-                if h <> handle.Value then transact (fun () -> handle.Value <- h)
+                setHandle x h
                 t.ReplacedResource(kind)
 
             | None -> 
                 current <- Some h
-                if h <> handle.Value then transact (fun () -> handle.Value <- h)
+                setHandle x h
                 t.CreatedResource(kind)
 
     member x.AddRef() =
@@ -247,7 +265,7 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
     interface IDisposable with
         member x.Dispose() = x.RemoveRef()
 
-    interface IResource<'h> with
+    interface IResource<'h, 'v> with
         member x.IsDisposed = x.IsDisposed
         member x.Kind = kind
         member x.AddRef() = x.AddRef()
@@ -255,9 +273,10 @@ type Resource<'h when 'h : equality>(kind : ResourceKind) =
         member x.Handle = x.Handle
         member x.Update(token, rt) = x.Update(token, rt)
         member x.Info = x.Info
+        member x.Pointer = pointer
 
-and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, renderTaskLock : Option<RenderTaskLock>) =
-    let store = ConcurrentDictionary<list<obj>, Resource<'h>>()
+and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<ResourceCache<'h, 'v>>, renderTaskLock : Option<RenderTaskLock>) =
+    let store = ConcurrentDictionary<list<obj>, Resource<'h, 'v>>()
 
 
     let acquireOutput (old : Option<'x>) (m : IMod<'a>) =
@@ -301,7 +320,7 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             | (true,v) -> Some v
             | _ -> None
      
-    member x.GetOrCreateLocalWrapped<'x when 'x : equality>(key : list<obj>, create : unit -> Resource<'x>, wrap : Resource<'x> -> Resource<'h>) =
+    member x.GetOrCreateLocalWrapped<'x, 'y when 'x : equality and 'y : unmanaged>(key : list<obj>, create : unit -> Resource<'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
         let resource = 
             store.GetOrAdd(key, fun _ -> 
                 let res = create()
@@ -309,27 +328,27 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                 wrap res
             )
         resource.AddRef()
-        resource :> IResource<_>
+        resource :> IResource<_,_>
 
-    member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'h>) =
-        x.GetOrCreateLocalWrapped<'h>(key, create, id)
+    member x.GetOrCreateLocal(key : list<obj>, create : unit -> Resource<'h, 'v>) =
+        x.GetOrCreateLocalWrapped<'h, 'v>(key, create, id)
 
-    member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h>) =
+    member x.GetOrCreate(key : list<obj>, create : unit -> Resource<'h, 'v>) =
         match tryGetParent key with
             | Some r -> 
                 r.AddRef()
-                r :> IResource<_>
+                r :> IResource<_,_>
             | None -> x.GetOrCreateLocal(key, create)
 
-    member x.GetOrCreateWrapped<'x when 'x : equality>(key : list<obj>, create : unit -> Resource<'x>, wrap : Resource<'x> -> Resource<'h>) =
+    member x.GetOrCreateWrapped<'x, 'y when 'x : equality and 'y : unmanaged>(key : list<obj>, create : unit -> Resource<'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
         match tryGetParent key with
             | Some r -> 
                 r.AddRef()
-                r :> IResource<_>
+                r :> IResource<_,_>
             | None -> 
                 x.GetOrCreateLocalWrapped(key, create, wrap)
 
-    member x.GetOrCreateWrapped<'a, 'x when 'x : equality>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x>, wrap : Resource<'x> -> Resource<'h>) =
+    member x.GetOrCreateWrapped<'a, 'x, 'y when 'x : equality and 'y : unmanaged>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
         let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
@@ -338,7 +357,10 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                         x.GetOrCreateLocal(key, fun () ->
                             v.AddRef()
                             let mutable oldData = None
-                            { new Resource<'h>(v.Kind) with
+                            { new Resource<'h, 'v>(v.Kind) with
+                                member x.View (h : 'h) =
+                                    v.View(h)
+
                                 member x.GetInfo(h : 'h) =
                                     v.GetInfo h
 
@@ -368,14 +390,17 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                         )
                     | _ ->
                         v.AddRef()
-                        v :> IResource<_>
+                        v :> IResource<_,_>
             | None ->
                 x.GetOrCreateLocal(key, fun _ -> 
                     let mutable ownsHandle = false
                     let mutable oldData = None
 
                     let resource = 
-                        { new Resource<'x>(desc.kind) with
+                        { new Resource<'x, 'y>(desc.kind) with
+                            member x.View (h : 'x) =
+                                desc.view h
+
                             member x.GetInfo (h : 'x) =
                                 desc.info h
 
@@ -432,20 +457,23 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                     wrap resource
                 )
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
-        x.GetOrCreateWrapped<'a, 'h>(dataMod, additionalKeys, desc, id)
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h, 'v>) =
+        x.GetOrCreateWrapped<'a, 'h, 'v>(dataMod, additionalKeys, desc, id)
 
-    member x.GetOrCreateDependent<'a when 'a : equality>(res : IResource<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h>) =
+    member x.GetOrCreateDependent<'a, 'b when 'a : equality and 'b : unmanaged>(res : IResource<'a, 'b>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'h, 'v>) =
         let key = (res :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
                 v.AddRef()
-                v :> IResource<_>
+                v :> IResource<_,_>
             | None ->
                 x.GetOrCreateLocal(key, fun _ -> 
                     let mutable ownsHandle = false
                 
-                    { new Resource<'h>(desc.kind) with
+                    { new Resource<'h,'v>(desc.kind) with
+                        member x.View(h : 'h) =
+                            desc.view h
+
                         member x.GetInfo (h : 'h) =
                             desc.info h
 
@@ -491,7 +519,7 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
                 )
 
 
-    member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h>) =
+    member x.GetOrCreate<'a>(dataMod : IMod<'a>, desc : ResourceDescription<'a, 'h, 'v>) =
         x.GetOrCreate(dataMod, [], desc)
 
     member x.Count = store.Count
@@ -502,10 +530,12 @@ and ResourceCache<'h when 'h : equality>(parent : Option<ResourceCache<'h>>, ren
             r.ForceDispose()
         store.Clear()
 
-type ConstantResource<'h when 'h : equality>(kind : ResourceKind, handle : 'h) =
+type ConstantResource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind, handle : 'h, v : 'v) =
     inherit ConstantObject()
 
     let h = Mod.constant handle
+    let ptr = NativePtr.alloc 1
+    do NativePtr.write ptr v
 
     member x.Handle = handle
 
@@ -513,13 +543,13 @@ type ConstantResource<'h when 'h : equality>(kind : ResourceKind, handle : 'h) =
 
     override x.Equals o =
         match o with
-            | :? ConstantResource<'h> as o -> o.Handle = x.Handle
+            | :? ConstantResource<'h, 'v> as o -> o.Handle = x.Handle
             | _ -> false
 
     interface IDisposable with
         member x.Dispose() = ()
 
-    interface IResource<'h> with
+    interface IResource<'h, 'v> with
         member x.IsDisposed = false
         member x.Kind = kind
         member x.AddRef() = ()
@@ -527,6 +557,7 @@ type ConstantResource<'h when 'h : equality>(kind : ResourceKind, handle : 'h) =
         member x.Handle = h
         member x.Update(token, caller) = ()
         member x.Info = ResourceInfo.Zero
+        member x.Pointer = ptr
 
 type InputSet(o : IAdaptiveObject) =
     let l = obj()

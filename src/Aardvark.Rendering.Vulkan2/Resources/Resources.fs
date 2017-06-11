@@ -26,8 +26,8 @@ type IResourceExtensions private() =
         this.Handle.GetValue()
 
 
-type CustomResource<'a when 'a : equality>(owned : list<IResource>, create : AdaptiveToken -> RenderToken -> Option<'a> -> 'a, destroy : 'a -> unit) =
-    inherit Aardvark.Base.Rendering.Resource<'a>(ResourceKind.Unknown)
+type CustomResource<'a, 'v when 'a : equality and 'v : unmanaged>(owned : list<IResource>, create : AdaptiveToken -> RenderToken -> Option<'a> -> 'a, destroy : 'a -> unit, view : 'a -> 'v) =
+    inherit Aardvark.Base.Rendering.Resource<'a, 'v>(ResourceKind.Unknown)
  
     override x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<'a>) =
         let stats = owned |> List.iter (fun o -> o.Update(token, rt))
@@ -44,57 +44,52 @@ type CustomResource<'a when 'a : equality>(owned : list<IResource>, create : Ada
     override x.GetInfo _ =
         owned |> List.sumBy (fun r -> r.Info)
 
+    override x.View h =
+        view h
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Resource =
-    let map (f : AdaptiveToken -> RenderToken -> Option<'b> -> 'a -> 'b) (destroy : 'b -> unit) (r : IResource<'a>) =
+    let map (f : AdaptiveToken -> RenderToken -> Option<'b> -> 'a -> 'b) (destroy : 'b -> unit) (view : 'b -> 'v) (r : IResource<'a>) =
         let create (token : AdaptiveToken) (t : RenderToken) (old : Option<'b>) =
             let a = r.Handle |> Mod.force
             f token t old a
 
-        new CustomResource<'b>([r :> IResource],create, destroy) :> IResource<'b>
+        new CustomResource<'b, 'v>([r :> IResource], create, destroy, view) :> IResource<'b, 'v>
     
-    let custom (create : AdaptiveToken -> RenderToken -> Option<'a> -> 'a) (destroy : 'a -> unit) (inputs : list<IResource>) =
-        new CustomResource<'a>(inputs, create, destroy) :> IResource<'a>
+    let custom (create : AdaptiveToken -> RenderToken -> Option<'a> -> 'a) (destroy : 'a -> unit) (view : 'a -> 'v) (inputs : list<IResource>) =
+        new CustomResource<'a, 'v>(inputs, create, destroy, view) :> IResource<'a, 'v>
 
 type VulkanResource<'a, 'b when 'a : equality and 'b : unmanaged>(input : IResource<'a>, f : 'a -> 'b) =
-    inherit Aardvark.Base.Rendering.Resource<nativeptr<'b>>(ResourceKind.Unknown)
+    inherit Aardvark.Base.Rendering.Resource<'a, 'b>(ResourceKind.Unknown)
     do input.AddRef()
 
     member x.ManagedHandle = input.Handle
-    member x.Pointer = x.Handle.GetValue()
 
-    override x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<nativeptr<'b>>) =
-        let ptr =
-            match old with
-                | Some ptr -> ptr
-                | None -> NativePtr.alloc 1
+    override x.View h = f h
 
-        let handle = input.UpdateAndGetHandle(token, rt)
-        NativePtr.write ptr (f handle)
+    override x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<'a>) =
+        input.UpdateAndGetHandle(token, rt)
 
-        ptr
-
-    override x.Destroy (old : nativeptr<'b>) =
-        NativePtr.free old
+    override x.Destroy (old : 'a) =
         input.RemoveRef()
         input.RemoveOutput x
 
     override x.GetInfo (ptr) =
         ResourceInfo.Zero
 
-[<AbstractClass; Sealed; Extension>]
-type ResourceCacheExtensions private() =
-
-    [<Extension>]
-    static member inline GetOrCreateVulkan(this : ResourceCache<nativeptr<'h>>, dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x>) =
-        let handle v = (^x : (member Handle : ^h) (v))
-        let res = this.GetOrCreateWrapped(dataMod, additionalKeys, desc, fun r -> new VulkanResource<'x, 'h>(r, handle) :> Rendering.Resource<_>)
-        unbox<VulkanResource<'x, 'h>> res
-
-    [<Extension>]
-    static member inline GetOrCreateVulkan(this : ResourceCache<nativeptr< ^h >>, keys : list<obj>, create : unit -> Rendering.Resource< ^x >) =
-        let handle v = (^x : (member Handle : ^h) (v))
-        let wrap (v : Rendering.Resource<'x>) =
-            new VulkanResource<'x, 'h>(v, handle) :> Rendering.Resource<nativeptr<'h>>
-        let res : IResource<nativeptr<'h>> = this.GetOrCreateWrapped(keys, create, wrap)
-        unbox<VulkanResource<'x, 'h>> res
+//[<AbstractClass; Sealed; Extension>]
+//type ResourceCacheExtensions private() =
+//
+//    [<Extension>]
+//    static member inline GetOrCreateVulkan(this : ResourceCache<'h, 'h>, dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x, 'h>) =
+//        let handle v = (^x : (member Handle : ^h) (v))
+//        let res = this.GetOrCreateWrapped(dataMod, additionalKeys, desc, fun r -> new VulkanResource<'x, 'h>(r, handle) :> Rendering.Resource<_,_>)
+//        unbox<VulkanResource<'x, 'h>> res
+//
+//    [<Extension>]
+//    static member inline GetOrCreateVulkan(this : ResourceCache< ^h, ^h >, keys : list<obj>, create : unit -> Rendering.Resource< ^x, ^y >) =
+//        let handle v = (^x : (member Handle : ^h) (v))
+//        let wrap (v : Rendering.Resource<'x, 'y>) =
+//            new VulkanResource<'x, 'h>(v, handle) :> Rendering.Resource<_,_>
+//        let res : IResource<'h, 'h> = this.GetOrCreateWrapped(keys, create, wrap)
+//        unbox<VulkanResource<'x, 'h>> res

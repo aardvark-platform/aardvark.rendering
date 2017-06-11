@@ -67,20 +67,20 @@ module Compiler =
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Instruction =
-        let bindPipeline (r : VulkanResource<Pipeline, VkPipeline>) : Instruction =
+        let bindPipeline (r : IResource<Pipeline, VkPipeline>) : Instruction =
             VKVM.Pointers.vmBindPipeline, [| r.Pointer :> obj |]
 
-        let bindDescriptorSets (r : IResource<nativeptr<DescriptorSetBinding>>) : Instruction =
-            VKVM.Pointers.vmBindDescriptorSets, [| r.Handle.GetValue() :> obj |]
+        let bindDescriptorSets (r : IResource<DescriptorSetBinding, DescriptorSetBinding>) : Instruction =
+            VKVM.Pointers.vmBindDescriptorSets, [| r.Pointer :> obj |]
 
-        let bindVertexBuffers (r : IResource<nativeptr<VertexBufferBinding>>) : Instruction =
-            VKVM.Pointers.vmBindVertexBuffers, [| r.Handle.GetValue() :> obj |]
+        let bindVertexBuffers (r : IResource<VertexBufferBinding, VertexBufferBinding>) : Instruction =
+            VKVM.Pointers.vmBindVertexBuffers, [| r.Pointer :> obj |]
             
-        let bindIndexBuffer (r : IResource<nativeptr<IndexBufferBinding>>) : Instruction =
-            VKVM.Pointers.vmBindIndexBuffer, [| r.Handle.GetValue() :> obj |]
+        let bindIndexBuffer (r : IResource<IndexBufferBinding, IndexBufferBinding>) : Instruction =
+            VKVM.Pointers.vmBindIndexBuffer, [| r.Pointer :> obj |]
 
-        let draw (stats : nativeptr<V2i>) (isActive : IResource<nativeint>) (r : IResource<nativeint>) : Instruction =
-            VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Handle.GetValue() :> obj; r.Handle.GetValue() :> obj |]
+        let draw (stats : nativeptr<V2i>) (isActive : IResource<bool, int>) (r : IResource<nativeint>) : Instruction =
+            VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Pointer :> obj; r.Handle.GetValue() :> obj |]
 
     let compileSingle (scope : CompilerScope) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =
         match prev with

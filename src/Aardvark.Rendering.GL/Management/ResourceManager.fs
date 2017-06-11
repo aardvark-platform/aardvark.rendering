@@ -224,10 +224,10 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
     let buffer = ctx.CreateSparseBuffer()
     let manager = MemoryManager.createNop()
 
-    let viewCache = ResourceCache<UniformBufferView>(None, None)
+    let viewCache = ResourceCache<UniformBufferView, int>(None, None)
     let rw = new ReaderWriterLockSlim()
 
-    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView> =
+    member x.CreateUniformBuffer(scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView, int> =
         let values =
             block.Fields 
             |> List.map (fun f ->
@@ -253,9 +253,12 @@ type UniformBufferManager(ctx : Context, block : ShaderBlock) =
 
                 let mutable block = Unchecked.defaultof<_>
                 let mutable store = 0n
-                { new Resource<UniformBufferView>(ResourceKind.UniformBuffer) with
+                { new Resource<UniformBufferView, int>(ResourceKind.UniformBuffer) with
                     member x.GetInfo b = 
                         b.Size |> Mem |> ResourceInfo
+
+                    member x.View(b : UniformBufferView) =
+                        b.Buffer.Handle
 
                     member x.Create(token, rt, old) =
                         use __ = ctx.ResourceLock
@@ -379,8 +382,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             | Some (signature, _) -> DrawBufferManager(signature) |> Some
             | _ -> None
 
-    let derivedCache (f : ResourceManager -> ResourceCache<'a>) =
-        ResourceCache<'a>(Option.map f parent, Option.map snd renderTaskInfo)
+    let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
+        ResourceCache<'a, 'b>(Option.map f parent, Option.map snd renderTaskInfo)
 
    
     let bufferManager           = Sharing.BufferManager(ctx, shareBuffers)
@@ -407,24 +410,24 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let uniformBufferManagers = ConcurrentDictionary<ShaderBlock, UniformBufferManager>()
 
-    member private x.ArrayBufferCache       : ResourceCache<Buffer>                 = arrayBufferCache
-    member private x.BufferCache            : ResourceCache<Buffer>                 = bufferCache
-    member private x.TextureCache           : ResourceCache<Texture>                = textureCache
-    member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer>         = indirectBufferCache
-    member private x.ProgramCache           : ResourceCache<Program>                = programCache
-    member private x.SamplerCache           : ResourceCache<Sampler>                = samplerCache
-    member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle>   = vertexInputCache
-    member private x.UniformLocationCache   : ResourceCache<UniformLocation>        = uniformLocationCache
-    member private x.UniformBufferManagers                                          = uniformBufferManagers
+    member private x.ArrayBufferCache       : ResourceCache<Buffer, int>                    = arrayBufferCache
+    member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
+    member private x.TextureCache           : ResourceCache<Texture, int>                   = textureCache
+    member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
+    member private x.ProgramCache           : ResourceCache<Program, int>                   = programCache
+    member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
+    member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, VertexInputBindingHandle>  = vertexInputCache
+    member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
+    member private x.UniformBufferManagers                                                  = uniformBufferManagers
                                                                                     
-    member private x.IsActiveCache          : ResourceCache<IsActiveHandle>         = isActiveCache
-    member private x.BeginModeCache         : ResourceCache<BeginModeHandle>        = beginModeCache
-    member private x.DrawCallInfoCache      : ResourceCache<DrawCallInfoListHandle> = drawCallInfoCache
-    member private x.DepthTestCache         : ResourceCache<DepthTestModeHandle>    = depthTestCache
-    member private x.CullModeCache          : ResourceCache<CullModeHandle>         = cullModeCache
-    member private x.PolygonModeCache       : ResourceCache<PolygonModeHandle>      = polygonModeCache
-    member private x.BlendModeCache         : ResourceCache<BlendModeHandle>        = blendModeCache
-    member private x.StencilModeCache       : ResourceCache<StencilModeHandle>      = stencilModeCache
+    member private x.IsActiveCache          : ResourceCache<IsActiveHandle, IsActiveHandle>         = isActiveCache
+    member private x.BeginModeCache         : ResourceCache<BeginModeHandle, BeginModeHandle>        = beginModeCache
+    member private x.DrawCallInfoCache      : ResourceCache<DrawCallInfoListHandle, DrawCallInfoListHandle> = drawCallInfoCache
+    member private x.DepthTestCache         : ResourceCache<DepthTestModeHandle, DepthTestModeHandle>    = depthTestCache
+    member private x.CullModeCache          : ResourceCache<CullModeHandle, CullModeHandle>         = cullModeCache
+    member private x.PolygonModeCache       : ResourceCache<PolygonModeHandle, PolygonModeHandle>      = polygonModeCache
+    member private x.BlendModeCache         : ResourceCache<BlendModeHandle, BlendModeHandle>        = blendModeCache
+    member private x.StencilModeCache       : ResourceCache<StencilModeHandle, StencilModeHandle>      = stencilModeCache
 
     member x.RenderTaskLock = renderTaskInfo
 
@@ -455,6 +458,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> arrayBufferManager.Update(h, b)
             delete = fun h      -> arrayBufferManager.Delete h
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
+            view =   fun h      -> h.Handle
             kind = ResourceKind.Buffer
         })
 
@@ -465,7 +469,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     [data :> obj],
                     fun () ->
                         let mutable r = Unchecked.defaultof<_>
-                        { new Resource<Buffer>(ResourceKind.Buffer) with
+                        { new Resource<Buffer, int>(ResourceKind.Buffer) with
+                            
+                            member x.View b =
+                                b.Handle
 
                             member x.GetInfo b = 
                                 b.SizeInBytes |> Mem |> ResourceInfo
@@ -495,6 +502,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     update = fun h b    -> h
                     delete = fun h      -> ()
                     info =   fun h      -> ResourceInfo.Zero
+                    view =   fun h      -> h.Handle
                     kind = ResourceKind.Buffer
                 })
 
@@ -504,6 +512,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     update = fun h b    -> bufferManager.Update(h, b)
                     delete = fun h      -> bufferManager.Delete h
                     info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
+                    view =   fun h      -> h.Handle
                     kind = ResourceKind.Buffer
                 })
 
@@ -513,6 +522,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> textureManager.Update(h, b)
             delete = fun h      -> textureManager.Delete h
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
+            view =   fun h      -> h.Handle
             kind = ResourceKind.Texture
         })
 
@@ -522,6 +532,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h   -> ctx.Delete h
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
+            view =   fun h   -> V2i(h.Buffer.Handle, NativePtr.read h.Count)
             kind = ResourceKind.IndirectBuffer
         })
 
@@ -538,6 +549,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Delete(h); create b
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view =   fun h      -> h.Handle
             kind = ResourceKind.ShaderProgram
         })
 
@@ -547,10 +559,11 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view =   fun h      -> h.Handle
             kind = ResourceKind.SamplerState
         })
 
-    member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer>>) =
+    member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>) =
         let createView (self : AdaptiveToken) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =
             match view.SingleValue with
                 | Some value ->
@@ -576,7 +589,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
-                { new Resource<VertexInputBindingHandle>(ResourceKind.VertexArrayObject) with
+                { new Resource<VertexInputBindingHandle, VertexInputBindingHandle>(ResourceKind.VertexArrayObject) with
+
+                    member x.View a = a
 
                     member x.GetInfo _ = ResourceInfo.Zero
 
@@ -608,8 +623,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         let inputs = Map.ofList [sem, v :> IAdaptiveObject]
                         let writer = ShaderParameterWriter.adaptive v uniform.Type
 
-                        { new Resource<UniformLocation>(ResourceKind.UniformLocation) with
+                        { new Resource<UniformLocation, nativeint>(ResourceKind.UniformLocation) with
                             
+                            member x.View h = h.Data
+
                             member x.GetInfo h =
                                 h.Size |> Mem |> ResourceInfo
 
@@ -651,6 +668,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view = id
             kind = ResourceKind.Unknown
         })
       
@@ -660,6 +678,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h, b, hasTess); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view = id
             kind = ResourceKind.Unknown
         })
 
@@ -669,6 +688,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h,List.toArray b); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view = id
             kind = ResourceKind.Unknown
         })
 
@@ -678,6 +698,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view = id
             kind = ResourceKind.Unknown
         })
 
@@ -687,6 +708,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view = id
             kind = ResourceKind.Unknown
         })
 
@@ -696,6 +718,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view = id
             kind = ResourceKind.Unknown
         })
 
@@ -705,6 +728,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view = id
             kind = ResourceKind.Unknown
         })
 
@@ -714,5 +738,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
+            view = id
             kind = ResourceKind.Unknown
         })
