@@ -126,15 +126,15 @@ module DeltaCompiler =
 
             // bind the VAO (if needed)
             if prev.VertexInputBinding <> me.VertexInputBinding then
-                let ptr = me.VertexInputBinding.Handle |> Mod.force 
+                let ptr = me.VertexInputBinding.Pointer
                 yield Instruction.HBindVertexAttributes(s.info.contextHandle, ptr)
 
             // draw the thing
             // TODO: surface assumed to be constant here
             let prog = me.Program.Handle.GetValue()
 
-            let isActive = me.IsActive.Handle |> Mod.force
-            let beginMode = me.BeginMode.Handle |> Mod.force
+            let isActive = me.IsActive.Pointer
+            let beginMode = me.BeginMode.Pointer
             let! s = compilerState
             let stats = NativePtr.toNativeInt s.runtimeStats
 
@@ -153,7 +153,7 @@ module DeltaCompiler =
                                 )
 
                 | None ->
-                    let calls = me.DrawCallInfos.Handle |> Mod.force
+                    let calls = me.DrawCallInfos.Pointer
                     match me.IndexBuffer with
                         | Some (it,_) ->
                             yield Instruction.HDrawElements stats isActive beginMode (int it) calls

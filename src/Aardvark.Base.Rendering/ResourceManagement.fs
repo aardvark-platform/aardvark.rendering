@@ -186,9 +186,9 @@ type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind)
         )
 
     let setHandle (x : Resource<'h, 'v>) (h : 'h) : unit =
+        let v : 'v = x.View(h)
+        NativePtr.write pointer v
         if h <> handle.Value then
-            let v : 'v = x.View(h)
-            NativePtr.write pointer v
             transact (fun () -> handle.Value <- h)
 
     abstract member Create : AdaptiveToken * RenderToken * Option<'h> -> 'h
@@ -277,6 +277,8 @@ type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind)
 
 and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<ResourceCache<'h, 'v>>, renderTaskLock : Option<RenderTaskLock>) =
     let store = ConcurrentDictionary<list<obj>, Resource<'h, 'v>>()
+    static let hNonPrimitive =
+        not typeof<'h>.IsPrimitive && not typeof<'h>.IsEnum
 
 
     let acquireOutput (old : Option<'x>) (m : IMod<'a>) =
@@ -395,6 +397,8 @@ and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<
                 x.GetOrCreateLocal(key, fun _ -> 
                     let mutable ownsHandle = false
                     let mutable oldData = None
+                    let xNonPrimitive = not typeof<'x>.IsPrimitive && not typeof<'x>.IsEnum
+
 
                     let resource = 
                         { new Resource<'x, 'y>(desc.kind) with
@@ -417,7 +421,7 @@ and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<
                                 match old with
                                     | Some old ->
                                         match data :> obj with
-                                            | :? 'x as handle ->
+                                            | :? 'x as handle when xNonPrimitive ->
                                                 if ownsHandle then desc.delete old
                                                 ownsHandle <- false
                                                 handle
@@ -432,10 +436,8 @@ and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<
                                                     newHandle
 
                                     | None -> 
-
-
                                         match data :> obj with
-                                            | :? 'x as handle -> 
+                                            | :? 'x as handle when xNonPrimitive -> 
                                                 ownsHandle <- false
                                                 handle
                                             | _ ->
@@ -485,7 +487,7 @@ and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<
                             match old with
                                 | Some old ->
                                     match data :> obj with
-                                        | :? 'h as handle ->
+                                        | :? 'h as handle when hNonPrimitive ->
                                             if ownsHandle then desc.delete old
                                             ownsHandle <- false
                                             handle
@@ -501,7 +503,7 @@ and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<
 
                                 | None -> 
                                     match data :> obj with
-                                        | :? 'h as handle -> 
+                                        | :? 'h as handle when hNonPrimitive -> 
                                             ownsHandle <- false
                                             handle
                                         | _ ->

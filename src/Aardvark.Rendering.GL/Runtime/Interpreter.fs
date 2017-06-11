@@ -147,8 +147,8 @@ module OpenGLInterpreter =
         member x.ShouldSetVertexArray (vao : int) =
             x.set(&currentVAO, vao)
 
-        member x.ShouldBindVertexAttributes (vibh : VertexInputBindingHandle) =
-            x.set(&currentVIBH, vibh.Pointer)
+        member x.ShouldBindVertexAttributes (vibh : nativeptr<VertexInputBinding>) =
+            x.set(&currentVIBH, vibh)
 
         member x.ShouldSetProgram (program : int) =
             x.set(&currentProgram, program)
@@ -303,9 +303,9 @@ module OpenGLInterpreter =
             if x.ShouldSetVertexArray vao then
                 GL.BindVertexArray vao
                 
-        member inline x.bindVertexAttributes (contextHandle : nativeptr<nativeint>) (vibh : VertexInputBindingHandle) =
+        member inline x.bindVertexAttributes (contextHandle : nativeptr<nativeint>) (vibh : nativeptr<VertexInputBinding>) =
             if x.ShouldBindVertexAttributes vibh then
-                GL.HBindVertexAttributes (NativePtr.toNativeInt contextHandle) (NativePtr.toNativeInt vibh.Pointer)
+                GL.HBindVertexAttributes (NativePtr.toNativeInt contextHandle) (NativePtr.toNativeInt vibh)
 
         member inline x.bindProgram (prog : int) =
             if x.ShouldSetProgram prog then
@@ -571,7 +571,7 @@ module OpenGLObjectInterpreter =
                 gl.setStencilMode stencilMode
 
                 let program = o.Program.Handle.GetValue()
-                let vibh = o.VertexInputBinding.Handle.GetValue()
+                let vibh = o.VertexInputBinding.Pointer
                 let indexed = Option.isSome o.IndexBuffer
 
                 let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)

@@ -416,18 +416,18 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
     member private x.ProgramCache           : ResourceCache<Program, int>                   = programCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
-    member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, VertexInputBindingHandle>  = vertexInputCache
+    member private x.VertexInputCache       : ResourceCache<VertexInputBinding, VertexInputBinding>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
     member private x.UniformBufferManagers                                                  = uniformBufferManagers
                                                                                     
-    member private x.IsActiveCache          : ResourceCache<IsActiveHandle, IsActiveHandle>         = isActiveCache
-    member private x.BeginModeCache         : ResourceCache<BeginModeHandle, BeginModeHandle>        = beginModeCache
-    member private x.DrawCallInfoCache      : ResourceCache<DrawCallInfoListHandle, DrawCallInfoListHandle> = drawCallInfoCache
-    member private x.DepthTestCache         : ResourceCache<DepthTestModeHandle, DepthTestModeHandle>    = depthTestCache
-    member private x.CullModeCache          : ResourceCache<CullModeHandle, CullModeHandle>         = cullModeCache
-    member private x.PolygonModeCache       : ResourceCache<PolygonModeHandle, PolygonModeHandle>      = polygonModeCache
-    member private x.BlendModeCache         : ResourceCache<BlendModeHandle, BlendModeHandle>        = blendModeCache
-    member private x.StencilModeCache       : ResourceCache<StencilModeHandle, StencilModeHandle>      = stencilModeCache
+    member private x.IsActiveCache          : ResourceCache<bool, int>         = isActiveCache
+    member private x.BeginModeCache         : ResourceCache<GLBeginMode, GLBeginMode>        = beginModeCache
+    member private x.DrawCallInfoCache      : ResourceCache<DrawCallInfoList, DrawCallInfoList> = drawCallInfoCache
+    member private x.DepthTestCache         : ResourceCache<DepthTestInfo, DepthTestInfo>    = depthTestCache
+    member private x.CullModeCache          : ResourceCache<int, int>         = cullModeCache
+    member private x.PolygonModeCache       : ResourceCache<int, int>      = polygonModeCache
+    member private x.BlendModeCache         : ResourceCache<GLBlendMode, GLBlendMode>        = blendModeCache
+    member private x.StencilModeCache       : ResourceCache<GLStencilMode, GLStencilMode>      = stencilModeCache
 
     member x.RenderTaskLock = renderTaskInfo
 
@@ -589,19 +589,18 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
-                { new Resource<VertexInputBindingHandle, VertexInputBindingHandle>(ResourceKind.VertexArrayObject) with
+                { new Resource<VertexInputBinding, VertexInputBinding>(ResourceKind.VertexArrayObject) with
 
                     member x.View a = a
 
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
+                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBinding>) =
                         let attributes = bindings |> List.map (createView token)
                         let index = match index with | Some (_,i) -> i.Handle.GetValue token |> Some | _ -> None
                         match old with
                             | Some old ->
                                 ctx.Update(old, index, attributes)
-                                old
 
                             | None ->
                                 let h = ctx.CreateVertexInputBinding(index, attributes)
@@ -664,19 +663,19 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
       
     member x.CreateIsActive(value : IMod<bool>) =
         isActiveCache.GetOrCreate(value, {
-            create = fun b      -> ctx.CreateIsActive b
-            update = fun h b    -> ctx.Update(h,b); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> b
+            update = fun h b    -> b
+            delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
-            view = id
+            view =   fun h      -> if h then 1 else 0
             kind = ResourceKind.Unknown
         })
       
     member x.CreateBeginMode(hasTess : bool, value : IMod<IndexedGeometryMode>) =
         beginModeCache.GetOrCreate(value, {
-            create = fun b      -> ctx.CreateBeginMode(b, hasTess)
-            update = fun h b    -> ctx.Update(h, b, hasTess); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> ctx.ToBeginMode(b, hasTess)
+            update = fun h b    -> ctx.ToBeginMode(b, hasTess)
+            delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -685,7 +684,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member x.CreateDrawCallInfoList(value : IMod<list<DrawCallInfo>>) =
         drawCallInfoCache.GetOrCreate(value, {
             create = fun b      -> ctx.CreateDrawCallInfoList(List.toArray b)
-            update = fun h b    -> ctx.Update(h,List.toArray b); h
+            update = fun h b    -> ctx.Update(h,List.toArray b)
             delete = fun h      -> ctx.Delete h
             info =   fun h      -> ResourceInfo.Zero
             view = id
@@ -694,9 +693,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.CreateDepthTest(value : IMod<DepthTestMode>) =
         depthTestCache.GetOrCreate(value, {
-            create = fun b      -> ctx.CreateDepthTest b
-            update = fun h b    -> ctx.Update(h,b); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> ctx.ToDepthTest b
+            update = fun h b    -> ctx.ToDepthTest b
+            delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -704,9 +703,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.CreateCullMode(value : IMod<CullMode>) =
         cullModeCache.GetOrCreate(value, {
-            create = fun b      -> ctx.CreateCullMode b
-            update = fun h b    -> ctx.Update(h,b); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> ctx.ToCullMode b
+            update = fun h b    -> ctx.ToCullMode b
+            delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -714,19 +713,19 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.CreatePolygonMode(value : IMod<FillMode>) =
         polygonModeCache.GetOrCreate(value, {
-            create = fun b      -> ctx.CreatePolygonMode b
-            update = fun h b    -> ctx.Update(h,b); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> ctx.ToPolygonMode(b)
+            update = fun h b    -> ctx.ToPolygonMode(b)
+            delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
-            view = id
+            view =  id
             kind = ResourceKind.Unknown
         })
 
     member x.CreateBlendMode(value : IMod<BlendMode>) =
         blendModeCache.GetOrCreate(value, {
-            create = fun b      -> ctx.CreateBlendMode b
-            update = fun h b    -> ctx.Update(h,b); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> ctx.ToBlendMode b
+            update = fun h b    -> ctx.ToBlendMode b
+            delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -734,9 +733,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.CreateStencilMode(value : IMod<StencilMode>) =
         stencilModeCache.GetOrCreate(value, {
-            create = fun b      -> ctx.CreateStencilMode b
-            update = fun h b    -> ctx.Update(h,b); h
-            delete = fun h      -> ctx.Delete h
+            create = fun b      -> ctx.ToStencilMode b
+            update = fun h b    -> ctx.ToStencilMode b
+            delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown

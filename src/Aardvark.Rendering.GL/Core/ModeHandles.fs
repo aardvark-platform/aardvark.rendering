@@ -15,7 +15,7 @@ open OpenTK.Graphics.OpenGL4
 #nowarn "9"
 
 [<StructLayout(LayoutKind.Sequential)>]
-type BeginMode =
+type GLBeginMode =
     struct
         val mutable public Mode : int
         val mutable public PatchVertices : int
@@ -62,21 +62,21 @@ type GLStencilMode =
         val mutable public OpBackPass : int
     end
 
-[<StructLayout(LayoutKind.Sequential)>]
-type DrawCallInfoListHandle =
-    struct
-        val mutable public Pointer : nativeptr<DrawCallInfoList>
-
-        member x.Count
-            with get() = NativePtr.read<int64> (NativePtr.cast x.Pointer) |> int
-            and set (v : int) = NativePtr.write (NativePtr.cast x.Pointer) (int64 v)
-
-        member x.Infos
-            with get() : nativeptr<DrawCallInfo> = NativeInt.read (NativePtr.toNativeInt x.Pointer + 8n)
-            and set (v : nativeptr<DrawCallInfo>) = NativeInt.write (NativePtr.toNativeInt x.Pointer + 8n) v
-    
-        new(ptr) = { Pointer = ptr }
-    end
+//[<StructLayout(LayoutKind.Sequential)>]
+//type DrawCallInfoListHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<DrawCallInfoList>
+//
+//        member x.Count
+//            with get() = NativePtr.read<int64> (NativePtr.cast x.Pointer) |> int
+//            and set (v : int) = NativePtr.write (NativePtr.cast x.Pointer) (int64 v)
+//
+//        member x.Infos
+//            with get() : nativeptr<DrawCallInfo> = NativeInt.read (NativePtr.toNativeInt x.Pointer + 8n)
+//            and set (v : nativeptr<DrawCallInfo>) = NativeInt.write (NativePtr.toNativeInt x.Pointer + 8n) v
+//    
+//        new(ptr) = { Pointer = ptr }
+//    end
 
 type DepthTestInfo =
     struct
@@ -85,55 +85,55 @@ type DepthTestInfo =
 
         new(comparison, clamp) = { Comparison = comparison; Clamp = clamp }
     end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type DepthTestModeHandle =
-    struct
-        val mutable public Pointer : nativeptr<DepthTestInfo>
-        new(p) = { Pointer = p }
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type CullModeHandle =
-    struct
-        val mutable public Pointer : nativeptr<int>
-        new(p) = { Pointer = p }
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type PolygonModeHandle =
-    struct
-        val mutable public Pointer : nativeptr<int>
-        new(p) = { Pointer = p }
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type BeginModeHandle =
-    struct
-        val mutable public Pointer : nativeptr<BeginMode>
-        new(p) = { Pointer = p }
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type IsActiveHandle =
-    struct
-        val mutable public Pointer : nativeptr<int>
-        new(p) = { Pointer = p }
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type BlendModeHandle =
-    struct
-        val mutable public Pointer : nativeptr<GLBlendMode>
-        new(p) = { Pointer = p }
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type StencilModeHandle =
-    struct
-        val mutable public Pointer : nativeptr<GLStencilMode>
-        new(p) = { Pointer = p }
-    end
+//
+//[<StructLayout(LayoutKind.Sequential)>]
+//type DepthTestModeHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<DepthTestInfo>
+//        new(p) = { Pointer = p }
+//    end
+//
+//[<StructLayout(LayoutKind.Sequential)>]
+//type CullModeHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<int>
+//        new(p) = { Pointer = p }
+//    end
+//
+//[<StructLayout(LayoutKind.Sequential)>]
+//type PolygonModeHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<int>
+//        new(p) = { Pointer = p }
+//    end
+//
+//[<StructLayout(LayoutKind.Sequential)>]
+//type BeginModeHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<BeginMode>
+//        new(p) = { Pointer = p }
+//    end
+//
+//[<StructLayout(LayoutKind.Sequential)>]
+//type IsActiveHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<int>
+//        new(p) = { Pointer = p }
+//    end
+//
+//[<StructLayout(LayoutKind.Sequential)>]
+//type BlendModeHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<GLBlendMode>
+//        new(p) = { Pointer = p }
+//    end
+//
+//[<StructLayout(LayoutKind.Sequential)>]
+//type StencilModeHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<GLStencilMode>
+//        new(p) = { Pointer = p }
+//    end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VertexBufferBinding =
@@ -176,9 +176,9 @@ type VertexInputBinding =
         new(i,bc,bb,vc,vb,v,vaoc) = { IndexBuffer = i; BufferBindingCount = bc; BufferBindings = bb; ValueBindingCount = vc; ValueBindings = vb; VAO = v; VAOContext = vaoc }
     end
     
-[<StructLayout(LayoutKind.Sequential)>]
-type VertexInputBindingHandle =
-    struct
-        val mutable public Pointer : nativeptr<VertexInputBinding>
-        new(p) = { Pointer = p }
-    end
+//[<StructLayout(LayoutKind.Sequential)>]
+//type VertexInputBindingHandle =
+//    struct
+//        val mutable public Pointer : nativeptr<VertexInputBinding>
+//        new(p) = { Pointer = p }
+//    end

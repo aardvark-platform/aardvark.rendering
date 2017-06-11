@@ -22,24 +22,24 @@ type PreparedRenderObject =
         Original : RenderObject
         FramebufferSignature : IFramebufferSignature
         LastTextureSlot : int
-        Program : IResource<Program>
+        Program : IResource<Program, int>
         UniformBuffers : Map<int, IResource<UniformBufferView, int>>
         Uniforms : Map<int, IResource<UniformLocation, nativeint>>
         Textures : Map<int, IResource<Texture, int> * IResource<Sampler, int>>
         Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>
         IndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>
         
-        IsActive : IResource<IsActiveHandle, IsActiveHandle>
-        BeginMode : IResource<BeginModeHandle, BeginModeHandle>
-        DrawCallInfos : IResource<DrawCallInfoListHandle, DrawCallInfoListHandle>
+        IsActive : IResource<bool, int>
+        BeginMode : IResource<GLBeginMode, GLBeginMode>
+        DrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
         IndirectBuffer : Option<IResource<IndirectBuffer, V2i>>
-        DepthTestMode : IResource<DepthTestModeHandle, DepthTestModeHandle>
-        CullMode : IResource<CullModeHandle, CullModeHandle>
-        PolygonMode : IResource<PolygonModeHandle, PolygonModeHandle>
-        BlendMode : IResource<BlendModeHandle, BlendModeHandle>
-        StencilMode : IResource<StencilModeHandle, StencilModeHandle>
+        DepthTestMode : IResource<DepthTestInfo, DepthTestInfo>
+        CullMode : IResource<int, int>
+        PolygonMode : IResource<int, int>
+        BlendMode : IResource<GLBlendMode, GLBlendMode>
+        StencilMode : IResource<GLStencilMode, GLStencilMode>
 
-        VertexInputBinding : IResource<VertexInputBindingHandle, VertexInputBindingHandle>
+        VertexInputBinding : IResource<VertexInputBinding, VertexInputBinding>
         
         ColorAttachmentCount : int
         DrawBuffers : Option<DrawBufferConfig>

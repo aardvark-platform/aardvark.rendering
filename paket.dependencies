@@ -2,9 +2,9 @@ framework: net45
 source https://api.nuget.org/v3/index.json
 source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 
-nuget Aardvark.Base.FSharp               ~> 3.0.20
-nuget Aardvark.Base.Incremental          ~> 3.0.20
-nuget Aardvark.Base.Runtime              ~> 3.0.20
+nuget Aardvark.Base.FSharp               ~> 3.0.22
+nuget Aardvark.Base.Incremental          ~> 3.0.22
+nuget Aardvark.Base.Runtime              ~> 3.0.22
                                          
 nuget FShade.Core                        ~> 3.2.1
 nuget FShade                             ~> 3.2.1

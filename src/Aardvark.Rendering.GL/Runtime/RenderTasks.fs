@@ -393,6 +393,318 @@ module RenderTasks =
                 let right = project r
                 compare left right
 
+
+    type IAssemblerStream with
+        
+        member x.SetDepthMask(mask : bool) =
+            x.BeginCall(1)
+            x.PushArg(if mask then 1 else 0)
+            x.Call(OpenGl.Pointers.DepthMask)
+
+        member x.SetStencilMask(mask : bool) =
+            x.BeginCall(1)
+            x.PushArg(if mask then 0b11111111111111111111111111111111 else 0)
+            x.Call(OpenGl.Pointers.StencilMask)
+        
+        member x.SetDrawBuffers(count : int, ptr : nativeint) =
+            x.BeginCall(2)
+            x.PushArg(ptr)
+            x.PushArg(count)
+            x.Call(OpenGl.Pointers.DrawBuffers)
+            
+        member x.SetDepthTest(m : IResource<'a, DepthTestInfo>) =
+             x.BeginCall(1)
+             x.PushArg(NativePtr.toNativeInt m.Pointer)
+             x.Call(OpenGl.Pointers.HSetDepthTest)
+             
+        member x.SetPolygonMode(m : IResource<'a, int>) =
+             x.BeginCall(1)
+             x.PushArg(NativePtr.toNativeInt m.Pointer)
+             x.Call(OpenGl.Pointers.HSetPolygonMode)
+             
+        member x.SetCullMode(m : IResource<'a, int>) =
+             x.BeginCall(1)
+             x.PushArg(NativePtr.toNativeInt m.Pointer)
+             x.Call(OpenGl.Pointers.HSetCullFace)
+             
+        member x.SetBlendMode(m : IResource<'a, GLBlendMode>) =
+             x.BeginCall(1)
+             x.PushArg(NativePtr.toNativeInt m.Pointer)
+             x.Call(OpenGl.Pointers.HSetBlendMode)
+
+        member x.SetStencilMode(m : IResource<'a, GLStencilMode>) =
+             x.BeginCall(1)
+             x.PushArg(NativePtr.toNativeInt m.Pointer)
+             x.Call(OpenGl.Pointers.HSetStencilMode)
+             
+        member x.UseProgram(m : IResource<Program, int>) =
+             x.BeginCall(1)
+             x.PushIntArg(NativePtr.toNativeInt m.Pointer)
+             x.Call(OpenGl.Pointers.BindProgram)
+
+        member x.Enable(v : int) =
+             x.BeginCall(1)
+             x.PushArg(v)
+             x.Call(OpenGl.Pointers.Enable)
+
+        member x.Disable(v : int) =
+             x.BeginCall(1)
+             x.PushArg(v)
+             x.Call(OpenGl.Pointers.Disable)
+
+        member x.BindUniformBufferView(slot : int, view : IResource<UniformBufferView, int>) =
+            ()
+            let v = view.Handle.GetValue()
+            x.BeginCall(5)
+            x.PushArg(v.Size)
+            x.PushArg(v.Offset)
+            x.PushIntArg(NativePtr.toNativeInt view.Pointer)
+            x.PushArg(slot)
+            x.PushArg(int OpenGl.Enums.BufferTarget.UniformBuffer)
+            x.Call(OpenGl.Pointers.BindBufferRange)
+
+        member x.SetActiveTexture(slot : int) =
+            x.BeginCall(1)
+            x.PushArg(int OpenGl.Enums.TextureUnit.Texture0 + slot)
+            x.Call(OpenGl.Pointers.ActiveTexture)
+            
+        member x.BindTexture (texture : IResource<Texture, int>) =
+            let target = 
+                let r = texture.Handle.GetValue()
+                Translations.toGLTarget r.Dimension r.IsArray r.Multisamples
+
+            x.BeginCall(2)
+            x.PushIntArg(texture.Pointer |> NativePtr.toNativeInt)
+            x.PushArg(target)
+            x.Call(OpenGl.Pointers.BindTexture)
+
+        member x.BindSampler (slot : int, sampler : IResource<Sampler, int>) =
+            x.BeginCall(2)
+            x.PushIntArg(NativePtr.toNativeInt sampler.Pointer)
+            x.PushArg(slot)
+            x.Call(OpenGl.Pointers.BindSampler)
+
+        member x.BindUniformLocation(loc : int, l : IResource<UniformLocation, nativeint>) : unit = 
+            failwith "not implemented"
+//            let h = l.Handle.GetValue()
+//            match h.Type with
+//                | Vector(Float, 1) | Float  -> yield Instruction.Uniform1fv l 1 loc.Data
+//                | Vector(Int, 1) | Int      -> yield Instruction.Uniform1iv l 1 loc.Data
+//                | Vector(Float, 2)          -> yield Instruction.Uniform2fv l 1 loc.Data
+//                | Vector(Int, 2)            -> yield Instruction.Uniform2iv l 1 loc.Data
+//                | Vector(Float, 3)          -> yield Instruction.Uniform3fv l 1 loc.Data
+//                | Vector(Int, 3)            -> yield Instruction.Uniform3iv l 1 loc.Data
+//                | Vector(Float, 4)          -> yield Instruction.Uniform4fv l 1 loc.Data
+//                | Vector(Int, 4)            -> yield Instruction.Uniform4iv l 1 loc.Data
+//                | Matrix(Float, 2, 2, true) -> yield Instruction.UniformMatrix2fv l 1 1 loc.Data
+//                | Matrix(Float, 3, 3, true) -> yield Instruction.UniformMatrix3fv l 1 1 loc.Data
+//                | Matrix(Float, 4, 4, true) -> yield Instruction.UniformMatrix4fv l 1 1 loc.Data
+//                | _                         -> failwithf "no uniform-setter for: %A" loc
+            //x.Push
+            
+        member x.BindVertexAttributes(ctx : nativeptr<nativeint>, vao : IResource<_,VertexInputBinding>) =
+            x.BeginCall(2)
+            x.PushArg(NativePtr.toNativeInt vao.Pointer)
+            x.PushArg(NativePtr.toNativeInt ctx)
+            x.Call(OpenGl.Pointers.HBindVertexAttributes)
+
+        member x.DrawArrays(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, calls : IResource<_,DrawCallInfoList>) =
+            x.BeginCall(4)
+            x.PushArg(NativePtr.toNativeInt calls.Pointer)
+            x.PushArg(NativePtr.toNativeInt beginMode.Pointer)
+            x.PushArg(NativePtr.toNativeInt isActive.Pointer)
+            x.PushArg(NativePtr.toNativeInt stats)
+            x.Call(OpenGl.Pointers.HDrawArrays)
+
+        member x.DrawElements(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, calls : IResource<_,DrawCallInfoList>) =
+            x.BeginCall(5)
+            x.PushArg(NativePtr.toNativeInt calls.Pointer)
+            x.PushArg(indexType)
+            x.PushArg(NativePtr.toNativeInt beginMode.Pointer)
+            x.PushArg(NativePtr.toNativeInt isActive.Pointer)
+            x.PushArg(NativePtr.toNativeInt stats)
+            x.Call(OpenGl.Pointers.HDrawElements)
+
+        member x.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indirect : IResource<_, V2i>) =
+            x.BeginCall(5)
+            x.PushIntArg(NativePtr.toNativeInt indirect.Pointer)
+            x.PushArg(NativePtr.toNativeInt indirect.Pointer + nativeint sizeof<nativeint>)
+            x.PushArg(NativePtr.toNativeInt beginMode.Pointer)
+            x.PushArg(NativePtr.toNativeInt isActive.Pointer)
+            x.PushArg(NativePtr.toNativeInt stats)
+            x.Call(OpenGl.Pointers.HDrawArraysIndirect)
+
+        member x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, V2i>) =
+            x.BeginCall(6)
+            x.PushIntArg(NativePtr.toNativeInt indirect.Pointer)
+            x.PushArg(NativePtr.toNativeInt indirect.Pointer + nativeint sizeof<nativeint>)
+            x.PushArg(indexType)
+            x.PushArg(NativePtr.toNativeInt beginMode.Pointer)
+            x.PushArg(NativePtr.toNativeInt isActive.Pointer)
+            x.PushArg(NativePtr.toNativeInt stats)
+            x.Call(OpenGl.Pointers.HDrawElementsIndirect)
+
+        member x.Clear() =
+            x.BeginCall(1)
+            x.PushArg(ClearBufferMask.DepthBufferBit |> int)
+            x.Call(OpenGl.Pointers.Clear)
+
+        member x.Compile(s : CompilerInfo, prev: PreparedRenderObject, me : PreparedRenderObject) : unit =
+            if prev.DepthBufferMask <> me.DepthBufferMask then
+                x.SetDepthMask(me.DepthBufferMask)
+
+            if prev.StencilBufferMask <> me.StencilBufferMask then
+                x.SetStencilMask(me.StencilBufferMask)
+
+            if prev.DrawBuffers <> me.DrawBuffers then
+                match me.DrawBuffers with
+                    | None ->
+                        x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
+                    | Some b ->
+                        x.SetDrawBuffers(b.Count, NativePtr.toNativeInt b.Buffers)
+                   
+            if prev.DepthTestMode <> me.DepthTestMode then
+                x.SetDepthTest(me.DepthTestMode)  
+                
+            if prev.PolygonMode <> me.PolygonMode then
+                x.SetPolygonMode(me.PolygonMode)
+                
+            if prev.CullMode <> me.CullMode then
+                x.SetCullMode(me.CullMode)
+
+            if prev.BlendMode <> me.BlendMode then
+                x.SetBlendMode(me.BlendMode)
+
+            if prev.StencilMode <> me.StencilMode then
+                x.SetStencilMode(me.StencilMode)
+            
+            if prev.Program <> me.Program then
+                let myProg = me.Program.Handle.GetValue()
+                x.UseProgram(me.Program)
+                if myProg.WritesPointSize then
+                    x.Enable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+                else
+                    x.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ProgramPointSize)
+            
+
+            // bind all uniform-buffers (if needed)
+            for (id,ub) in Map.toSeq me.UniformBuffers do
+                //do! useUniformBufferSlot id
+                
+                match Map.tryFind id prev.UniformBuffers with
+                    | Some old when old = ub -> 
+                        // the same UniformBuffer has already been bound
+                        ()
+                    | _ -> 
+                        x.BindUniformBufferView(id, ub)
+
+            // bind all textures/samplers (if needed)
+            let latestSlot = ref prev.LastTextureSlot
+            for (id,(tex,sam)) in Map.toSeq me.Textures do
+                //do! useTextureSlot id
+
+                let texEqual, samEqual =
+                    match Map.tryFind id prev.Textures with
+                        | Some (ot, os) -> (ot = tex), (os = sam)
+                        | _ -> false, false
+
+
+                if id <> !latestSlot then
+                    x.SetActiveTexture(id)
+                    latestSlot := id 
+
+                if not texEqual then 
+                    x.BindTexture(tex)
+                    //yield Instructions.bindTexture tex
+
+                if not samEqual || (not ExecutionContext.samplersSupported && not texEqual) then
+                    x.BindSampler(id, sam)
+
+            // bind all top-level uniforms (if needed)
+            for (id,u) in Map.toSeq me.Uniforms do
+                match Map.tryFind id prev.Uniforms with
+                    | Some old when old = u -> ()
+                    | _ ->
+                        // TODO: UniformLocations cannot change structurally atm.
+                        x.BindUniformLocation(id, u)
+
+
+            // bind the VAO (if needed)
+            if prev.VertexInputBinding <> me.VertexInputBinding then
+                x.BindVertexAttributes(s.contextHandle, me.VertexInputBinding)
+
+            // draw the thing
+            // TODO: surface assumed to be constant here
+            let prog = me.Program.Handle.GetValue()
+
+            let isActive = me.IsActive
+            let beginMode = me.BeginMode
+
+            match me.IndirectBuffer with
+                | Some indirect ->
+                    match me.IndexBuffer with
+                        | Some (it,_) ->
+                            x.DrawElementsIndirect(s.runtimeStats, isActive, beginMode, int it, indirect)
+                        | None ->
+                            x.DrawArraysIndirect(s.runtimeStats, isActive, beginMode, indirect)
+
+                | None ->
+                    match me.IndexBuffer with
+                        | Some (it,_) ->
+                            x.DrawElements(s.runtimeStats, isActive, beginMode, (int it), me.DrawCallInfos)
+                        | None ->
+                            x.DrawArrays(s.runtimeStats, isActive, beginMode, me.DrawCallInfos)
+
+        member x.Compile(s : CompilerInfo, l : Option<PreparedRenderObject>, self : PreparedRenderObject) : unit =
+            if self <> PreparedRenderObject.empty then
+                let l = l |> Option.defaultValue PreparedRenderObject.empty
+                x.Compile(s, l, self)
+
+        member x.Compile(state : CompilerInfo, last : Option<PreparedMultiRenderObject>, self : PreparedMultiRenderObject) =
+            let mutable last = 
+                match last with
+                    | Some l -> Some l.Last
+                    | None -> None
+
+            for s in self.Children do
+                x.Compile(state, last, s)
+                last <- Some s
+
+        member x.Compile(state : CompilerInfo, l : Option<RenderCommand>, r : RenderCommand) =
+            match l, r with
+                | Some (RenderCommand.Render p), RenderCommand.Render o -> 
+                    let p = unbox<PreparedMultiRenderObject> p
+                    let o = unbox<PreparedMultiRenderObject> o
+                    x.Compile(state, Some p, o)
+
+                | _, RenderCommand.Render o ->  
+                    let o = unbox<PreparedMultiRenderObject> o
+                    x.Compile(state, None, o)
+
+                | _, RenderCommand.Clear(c,d,s) -> 
+                    x.Clear()
+
+    type NativeRenderProgram(cmp : IComparer<IRenderObject>, scope : CompilerInfo, content : aset<IRenderObject * PreparedMultiRenderObject>) =
+        inherit NativeProgram<IRenderObject * PreparedMultiRenderObject>(ASet.sortWith (fun (l,_) (r,_) -> cmp.Compare(l,r)) content, fun l (_,r) s -> s.Compile(scope,Option.map snd l,r))
+
+        interface IAdaptiveProgram<unit> with
+            member x.Disassemble() = null
+            member x.Run(_) = x.Run()
+            member x.Update(t) = x.Update(t) |> ignore; AdaptiveProgramStatistics.Zero
+            member x.StartDefragmentation() = Threading.Tasks.Task.FromResult(TimeSpan.Zero)
+            member x.AutoDefragmentation
+                with get() = false
+                and set _ = ()
+            member x.FragmentCount = 10
+            member x.NativeCallCount = 10
+            member x.ProgramSizeInBytes = 10L
+            member x.TotalJumpDistanceInBytes = 10L
+
+        interface IRenderProgram with
+            member x.Run(t) = x.Run() |> ignore
+            member x.Update(at,rt) = x.Update(at) |> ignore; AdaptiveProgramStatistics.Zero
+
+
     type StaticOrderSubTask(scope : CompilerInfo, config : IMod<BackendConfiguration>) =
         inherit AbstractSubTask()
         static let empty = new PreparedMultiRenderObject([PreparedRenderObject.empty])
@@ -403,9 +715,6 @@ module RenderTasks =
         let mutable program : IRenderProgram = Unchecked.defaultof<_>
         let structuralChange = Mod.custom ignore
         let scope = { scope with structuralChange = structuralChange }
-
-        let commands : alist<RenderCommand> = failwith ""
-
 
         // TODO: add AdaptiveProgram creator not taking a separate key but simply comparing the values
         let objectsWithKeys = objects |> ASet.map (fun o -> (o :> IRenderObject, o))
@@ -453,7 +762,8 @@ module RenderTasks =
 
                         | ExecutionEngine.Native, RedundancyRemoval.Static -> 
                             Log.line "using optimized native program"
-                            RenderProgram.Native.optimized scope comparer objectsWithKeys
+                            new NativeRenderProgram(comparer, scope, objectsWithKeys) :> IRenderProgram
+                            //RenderProgram.Native.optimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Native, RedundancyRemoval.None -> 
                             Log.line "using unoptimized native program"
@@ -534,7 +844,7 @@ module RenderTasks =
                 objects.Remove o |> ignore
             )
 
-
+    
 
     type CommandSubTask(scope : CompilerInfo, config : IMod<BackendConfiguration>) =
         inherit AbstractCommandSubTask()
@@ -543,7 +853,7 @@ module RenderTasks =
 
         let mutable hasProgram = false
         let mutable currentConfig = BackendConfiguration.Default
-        let mutable program : IRenderProgram = Unchecked.defaultof<_>
+        let mutable program : NativeProgram<RenderCommand> = Unchecked.defaultof<_>
         let structuralChange = Mod.custom ignore
         let scope = { scope with structuralChange = structuralChange }
 
@@ -598,7 +908,12 @@ module RenderTasks =
                     match config.execution, config.redundancy with
                         | ExecutionEngine.Native, RedundancyRemoval.Static -> 
                             Log.line "using optimized native program"
-                            RenderProgram.Native.optimizedCommand scope comparer objectsWithKeys
+
+                            let compile (l : Option<RenderCommand>) (r : RenderCommand) (s : IAssemblerStream) =
+                                s.Compile(scope, l,r)
+
+                            NativeProgram.differential compile objects
+                            //RenderProgram.Native.optimizedCommand scope comparer objectsWithKeys
 
                         | t ->
                             failwithf "[GL] unsupported backend configuration: %A" t
@@ -619,7 +934,7 @@ module RenderTasks =
         override x.Perform(token, t) =
             x.Update(token, t) |> ignore
 
-            let stats = x.Execution (t, fun () -> program.Run(t))
+            let stats = x.Execution (t, fun () -> program.Run())
 
             stats
                

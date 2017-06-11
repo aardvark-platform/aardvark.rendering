@@ -256,7 +256,7 @@ let main argv =
             // textures can also be bound (using file-texture here)
             do! Air.BindTexture(
                     DefaultSemantic.DiffuseColorTexture, 
-                    @"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg"
+                    @"E:\Development\WorkDirectory\DataSVN\pattern.jpg"
                 )
 
             do! Air.BindVertexBuffers [
@@ -326,7 +326,7 @@ let main argv =
 
     let sg = 
         Sg.group [label1; label2]
-            //|> Sg.andAlso quad
+            |> Sg.andAlso quad
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
             |> Sg.fillMode mode

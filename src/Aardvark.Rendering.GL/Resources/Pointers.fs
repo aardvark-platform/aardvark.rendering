@@ -34,9 +34,9 @@ module PointerContextExtensions =
 
         let inline toBeginMode (hasTessellation : bool) (mode : IndexedGeometryMode) =
             if hasTessellation then
-                BeginMode(int BeginMode.Patches, Translations.toPatchCount mode)
+                GLBeginMode(int BeginMode.Patches, Translations.toPatchCount mode)
             else
-                BeginMode(Translations.toGLMode mode, 0)
+                GLBeginMode(Translations.toGLMode mode, 0)
 
         let inline toGLBlendMode (mode : BlendMode) =
             GLBlendMode(
@@ -159,40 +159,24 @@ module PointerContextExtensions =
 
     type Context with
 
-        member x.CreateIsActive(active : bool) =
-            let value = if active then 1 else 0
-            IsActiveHandle(ptr value)
+        member x.ToIsActive(active : bool) =
+            if active then 1 else 0
 
-        member x.Update(handle : IsActiveHandle, active : bool) =
-            handle.Pointer := if active then 1 else 0
-
-        member x.Delete(handle : IsActiveHandle) =
-            NativePtr.free handle.Pointer
-
-
-        member x.CreateBeginMode(mode : IndexedGeometryMode, hasTessellation : bool) =
-            let value = toBeginMode hasTessellation mode
-            BeginModeHandle(ptr value)
-
-        member x.Update(handle : BeginModeHandle, mode : IndexedGeometryMode, hasTessellation : bool) =
-            let value = toBeginMode hasTessellation mode
-            handle.Pointer := value
-
-        member x.Delete(handle : BeginModeHandle) =
-            NativePtr.free handle.Pointer
-
+        member x.ToBeginMode(mode : IndexedGeometryMode, hasTessellation : bool) =
+            toBeginMode hasTessellation mode
 
         member x.CreateDrawCallInfoList(calls : DrawCallInfo[]) =
             let infos = NativePtr.alloc calls.Length
             for i in 0 .. calls.Length - 1 do infos.[i] <- calls.[i]
-            DrawCallInfoListHandle(NativePtr.alloc 1, Count = calls.Length, Infos = infos)
+            DrawCallInfoList(calls.Length, infos)
 
-        member x.Update(list : DrawCallInfoListHandle, calls : DrawCallInfo[]) =
-            if list.Count = calls.Length then
+        member x.Update(list : DrawCallInfoList, calls : DrawCallInfo[]) =
+            if list.Count = int64 calls.Length then
                 let ptr = list.Infos
                 for i in 0 .. calls.Length-1 do
                     ptr.[i] <- calls.[i]
 
+                list
             else
                 NativePtr.free list.Infos
                 let ptr = NativePtr.alloc calls.Length
@@ -200,74 +184,31 @@ module PointerContextExtensions =
                     ptr.[i] <- calls.[i]
 
                 let mutable list = list // F# is very picky with property-setters
-                list.Count <- calls.Length
+                list.Count <- int64 calls.Length
                 list.Infos <- ptr
+                list
 
-        member x.Delete(list : DrawCallInfoListHandle) =
+        member x.Delete(list : DrawCallInfoList) =
             NativePtr.free list.Infos
-            NativePtr.free list.Pointer
 
 
-        member x.CreateDepthTest(mode : DepthTestMode) =
+        member x.ToDepthTest(mode : DepthTestMode) =
             let value = Translations.toGLComparison mode.Comparison
             let clamp = if mode.Clamp then 1 else 0
-            let value = DepthTestInfo(value, clamp)
-            DepthTestModeHandle(ptr value)
+            DepthTestInfo(value, clamp)
 
-        member x.Update(gl : DepthTestModeHandle, mode : DepthTestMode) =
-            let value = Translations.toGLComparison mode.Comparison
-            let clamp = if mode.Clamp then 1 else 0
-            gl.Pointer := DepthTestInfo(value, clamp)
+        member x.ToCullMode(mode : CullMode) =
+            Translations.toGLFace mode
 
-        member x.Delete(gl : DepthTestModeHandle) =
-            NativePtr.free gl.Pointer
+        member x.ToPolygonMode(mode : FillMode) =
+            Translations.toGLPolygonMode mode
 
+        member x.ToBlendMode(mode : BlendMode) =
+            toGLBlendMode mode
 
-        member x.CreateCullMode(mode : CullMode) =
-            let value = Translations.toGLFace mode
-            CullModeHandle(ptr value)
+        member x.ToStencilMode(mode : StencilMode) =
+            toGLStencilMode mode
 
-        member x.Update(gl : CullModeHandle, mode : CullMode) =
-            gl.Pointer := Translations.toGLFace mode
-
-        member x.Delete(gl : CullModeHandle) =
-            NativePtr.free gl.Pointer
-
-
-        member x.CreatePolygonMode(mode : FillMode) =
-            let value = Translations.toGLPolygonMode mode
-            PolygonModeHandle(ptr value)
-
-        member x.Update(handle : PolygonModeHandle, mode : FillMode) =
-            handle.Pointer := Translations.toGLPolygonMode mode
-
-        member x.Delete(handle : PolygonModeHandle) =
-            NativePtr.free handle.Pointer
-
-
-        member x.CreateBlendMode(mode : BlendMode) =
-            let value = toGLBlendMode mode
-            BlendModeHandle(ptr value)
-
-        member x.Update(handle : BlendModeHandle, value : BlendMode) =
-            handle.Pointer := toGLBlendMode value
-
-        member x.Delete(handle : BlendModeHandle) =
-            NativePtr.free handle.Pointer
-
-
-        member x.CreateStencilMode(mode : StencilMode) =
-            let value = toGLStencilMode mode
-            StencilModeHandle(ptr value)
-
-        member x.Update(handle : StencilModeHandle, mode : StencilMode) =
-            handle.Pointer := toGLStencilMode mode
-
-        member x.Delete(handle : StencilModeHandle) =
-            NativePtr.free handle.Pointer
-
-
-//
 //        member private x.GetVertexBindings(index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
 //            let res = System.Collections.Generic.List<_>()
 //
@@ -302,15 +243,13 @@ module PointerContextExtensions =
             let pValues = NativePtr.allocArray values
 
             let value = VertexInputBinding(index, buffers.Length, pBuffers, values.Length, pValues, -1, 0n)
-            let res = NativePtr.alloc 1
-            NativePtr.write res value
-            VertexInputBindingHandle res
+            value
 
-        member x.Update(binding : VertexInputBindingHandle, index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
+        member x.Update(value : VertexInputBinding, index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
             let buffers, values = Attribute.bindings attributes
             let index = match index with | Some i -> i.Handle | _ -> 0
 
-            let mutable value = NativePtr.read binding.Pointer
+            let mutable value = value
 
             if buffers.Length = value.BufferBindingCount then
                 for i in 0 .. buffers.Length - 1 do  
@@ -333,12 +272,10 @@ module PointerContextExtensions =
 
             value.IndexBuffer <- index
             value.VAOContext <- 0n
-            NativePtr.write binding.Pointer value
+            value
 
-        member x.Delete(b : VertexInputBindingHandle) =
-            let v = NativePtr.read b.Pointer
+        member x.Delete(v : VertexInputBinding) =
             if v.VAO > 0 then
                 GLVM.hglDeleteVAO(v.VAOContext, v.VAO)
             NativePtr.free v.BufferBindings
             NativePtr.free v.ValueBindings
-            NativePtr.free b.Pointer
