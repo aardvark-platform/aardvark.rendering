@@ -748,8 +748,8 @@ module RenderTasks =
 
 
             // bind the VAO (if needed)
-            if prev.VertexInputBinding <> me.VertexInputBinding then
-                x.BindVertexAttributes(s.contextHandle, me.VertexInputBinding)
+            //if prev.VertexInputBinding <> me.VertexInputBinding then
+            x.BindVertexAttributes(s.contextHandle, me.VertexInputBinding)
 
             // draw the thing
             // TODO: surface assumed to be constant here
@@ -815,10 +815,19 @@ module RenderTasks =
     type NativeRenderProgram(cmp : IComparer<IRenderObject>, scope : CompilerInfo, content : aset<IRenderObject * PreparedMultiRenderObject>) =
         inherit NativeProgram<IRenderObject * PreparedMultiRenderObject>(ASet.sortWith (fun (l,_) (r,_) -> cmp.Compare(l,r)) content, fun l (_,r) s -> s.Compile(scope,Option.map snd l,r))
 
+        let mutable stats = NativeProgramUpdateStatistics.Zero
+        member x.Count = stats.Count
+
+        member private x.UpdateInt(t) =
+            let s = x.Update(t)
+            if s <> NativeProgramUpdateStatistics.Zero then
+                stats <- s
+
+
         interface IAdaptiveProgram<unit> with
             member x.Disassemble() = null
             member x.Run(_) = x.Run()
-            member x.Update(t) = x.Update(t) |> ignore; AdaptiveProgramStatistics.Zero
+            member x.Update(t) = x.UpdateInt(t); AdaptiveProgramStatistics.Zero
             member x.StartDefragmentation() = Threading.Tasks.Task.FromResult(TimeSpan.Zero)
             member x.AutoDefragmentation
                 with get() = false
@@ -829,8 +838,13 @@ module RenderTasks =
             member x.TotalJumpDistanceInBytes = 10L
 
         interface IRenderProgram with
-            member x.Run(t) = x.Run() |> ignore
-            member x.Update(at,rt) = x.Update(at) |> ignore; AdaptiveProgramStatistics.Zero
+            member x.Run(t) = 
+                printfn "render %d objects" stats.Count
+                x.Run()
+
+            member x.Update(at,rt) = 
+                x.UpdateInt(at)
+                AdaptiveProgramStatistics.Zero
 
 
     type StaticOrderSubTask(scope : CompilerInfo, config : IMod<BackendConfiguration>) =
