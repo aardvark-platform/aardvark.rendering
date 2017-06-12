@@ -126,8 +126,8 @@ module DeltaCompiler =
 
             // bind the VAO (if needed)
             if prev.VertexInputBinding <> me.VertexInputBinding then
-                let ptr = me.VertexInputBinding.Pointer
-                yield Instruction.HBindVertexAttributes(s.info.contextHandle, ptr)
+                let ptr = me.VertexInputBinding.Handle.GetValue() // unchangeable
+                yield Instruction.HBindVertexAttributes(s.info.contextHandle, ptr.Pointer)
 
             // draw the thing
             // TODO: surface assumed to be constant here

@@ -416,7 +416,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
     member private x.ProgramCache           : ResourceCache<Program, int>                   = programCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
-    member private x.VertexInputCache       : ResourceCache<VertexInputBinding, VertexInputBinding>  = vertexInputCache
+    member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
     member private x.UniformBufferManagers                                                  = uniformBufferManagers
                                                                                     
@@ -589,19 +589,19 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
-                { new Resource<VertexInputBinding, VertexInputBinding>(ResourceKind.VertexArrayObject) with
+                { new Resource<VertexInputBindingHandle, int>(ResourceKind.VertexArrayObject) with
 
-                    member x.View a = a
+                    member x.View a = 0
 
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBinding>) =
+                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
                         let attributes = bindings |> List.map (createView token)
                         let index = match index with | Some (_,i) -> i.Handle.GetValue token |> Some | _ -> None
                         match old with
                             | Some old ->
                                 ctx.Update(old, index, attributes)
-
+                                old
                             | None ->
                                 ctx.CreateVertexInputBinding(index, attributes)
                         

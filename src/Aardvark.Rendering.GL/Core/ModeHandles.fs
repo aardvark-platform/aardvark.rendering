@@ -176,9 +176,9 @@ type VertexInputBinding =
         new(i,bc,bb,vc,vb,v,vaoc) = { IndexBuffer = i; BufferBindingCount = bc; BufferBindings = bb; ValueBindingCount = vc; ValueBindings = vb; VAO = v; VAOContext = vaoc }
     end
     
-//[<StructLayout(LayoutKind.Sequential)>]
-//type VertexInputBindingHandle =
-//    struct
-//        val mutable public Pointer : nativeptr<VertexInputBinding>
-//        new(p) = { Pointer = p }
-//    end
+[<StructLayout(LayoutKind.Sequential)>]
+type VertexInputBindingHandle =
+    struct
+        val mutable public Pointer : nativeptr<VertexInputBinding>
+        new(p) = { Pointer = p }
+    end

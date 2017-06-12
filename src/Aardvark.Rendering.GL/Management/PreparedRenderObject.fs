@@ -39,7 +39,7 @@ type PreparedRenderObject =
         BlendMode : IResource<GLBlendMode, GLBlendMode>
         StencilMode : IResource<GLStencilMode, GLStencilMode>
 
-        VertexInputBinding : IResource<VertexInputBinding, VertexInputBinding>
+        VertexInputBinding : IResource<VertexInputBindingHandle, int>
         
         ColorAttachmentCount : int
         DrawBuffers : Option<DrawBufferConfig>

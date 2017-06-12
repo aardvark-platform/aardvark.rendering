@@ -621,9 +621,10 @@ module RenderTasks =
                 | _                             -> failwithf "no uniform-setter for: %A" loc
 
             
-        member x.BindVertexAttributes(ctx : nativeptr<nativeint>, vao : IResource<_,VertexInputBinding>) =
+        member x.BindVertexAttributes(ctx : nativeptr<nativeint>, vao : IResource<VertexInputBindingHandle,_>) =
+            let handle = vao.Handle.GetValue() // unchangeable
             x.BeginCall(2)
-            x.PushArg(NativePtr.toNativeInt vao.Pointer)
+            x.PushArg(NativePtr.toNativeInt handle.Pointer)
             x.PushArg(NativePtr.toNativeInt ctx)
             x.Call(OpenGl.Pointers.HBindVertexAttributes)
 

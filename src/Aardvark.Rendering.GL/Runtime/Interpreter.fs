@@ -571,7 +571,7 @@ module OpenGLObjectInterpreter =
                 gl.setStencilMode stencilMode
 
                 let program = o.Program.Handle.GetValue()
-                let vibh = o.VertexInputBinding.Pointer
+                let vibh = o.VertexInputBinding.Handle.GetValue()
                 let indexed = Option.isSome o.IndexBuffer
 
                 let hasTess = program.Shaders |> List.exists (fun s -> s.Stage = ShaderStage.TessControl)
@@ -630,7 +630,7 @@ module OpenGLObjectInterpreter =
                     let u = u.Handle.GetValue()
                     gl.bindUniformLocation id u
 
-                gl.bindVertexAttributes gl.ContextHandle vibh
+                gl.bindVertexAttributes gl.ContextHandle vibh.Pointer
 
                 if hasTess then
                     gl.patchVertices patchSize

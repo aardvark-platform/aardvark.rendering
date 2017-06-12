@@ -243,9 +243,12 @@ module PointerContextExtensions =
             let pValues = NativePtr.allocArray values
 
             let value = VertexInputBinding(index, buffers.Length, pBuffers, values.Length, pValues, -1, 0n)
-            value
+            let ptr = NativePtr.alloc 1
+            NativePtr.write ptr value
+            VertexInputBindingHandle ptr
 
-        member x.Update(value : VertexInputBinding, index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
+        member x.Update(ptr : VertexInputBindingHandle, index : Option<Buffer>, attributes : list<int * AttributeDescription>) =
+            let mutable value = NativePtr.read ptr.Pointer
             let buffers, values = Attribute.bindings attributes
             let index = match index with | Some i -> i.Handle | _ -> 0
 
@@ -272,10 +275,12 @@ module PointerContextExtensions =
 
             value.IndexBuffer <- index
             value.VAOContext <- 0n
-            value
+            NativePtr.write ptr.Pointer value
 
-        member x.Delete(v : VertexInputBinding) =
+        member x.Delete(ptr : VertexInputBindingHandle) =
+            let v = NativePtr.read ptr.Pointer
             if v.VAO > 0 then
                 GLVM.hglDeleteVAO(v.VAOContext, v.VAO)
             NativePtr.free v.BufferBindings
             NativePtr.free v.ValueBindings
+            NativePtr.free ptr.Pointer
