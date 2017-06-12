@@ -82,8 +82,8 @@ let main argv =
     Aardvark.Init()
 
 
-    use app = new OpenGlApplication(true)
-    let win = app.CreateSimpleRenderWindow(1)
+    use app = new OpenGlApplication()
+    let win = app.CreateSimpleRenderWindow(16)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -256,7 +256,7 @@ let main argv =
             // textures can also be bound (using file-texture here)
             do! Air.BindTexture(
                     DefaultSemantic.DiffuseColorTexture, 
-                    @"E:\Development\WorkDirectory\DataSVN\pattern.jpg"
+                    @"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg"
                 )
 
             do! Air.BindVertexBuffers [

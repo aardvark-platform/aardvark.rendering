@@ -362,7 +362,7 @@ let main argv =
 
 
     let cached = main
-    w.RenderTask <- cached |> DefaultOverlays.withStatistics//cached |> DefaultOverlays.withStatistics
+    w.RenderTask <- cached //|> DefaultOverlays.withStatistics//cached |> DefaultOverlays.withStatistics
 
     // a very sketch controller for changing the viewport
     let lastPos = ref V2d.Zero

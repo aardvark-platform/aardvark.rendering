@@ -913,8 +913,8 @@ module RenderTasks =
 
                         | ExecutionEngine.Native, RedundancyRemoval.Static -> 
                             Log.line "using optimized native program"
-                            //new NativeRenderProgram(comparer, scope, objectsWithKeys) :> IRenderProgram
-                            RenderProgram.Native.optimized scope comparer objectsWithKeys
+                            new NativeRenderProgram(comparer, scope, objectsWithKeys) :> IRenderProgram
+                            //RenderProgram.Native.optimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Native, RedundancyRemoval.None -> 
                             Log.line "using unoptimized native program"
