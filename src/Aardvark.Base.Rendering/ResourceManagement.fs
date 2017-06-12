@@ -214,6 +214,7 @@ type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind)
         let h = x.Create(token, t,current)
         info <- x.GetInfo h
         let memDelta = info.AllocatedSize - oldInfo.AllocatedSize
+        setHandle x h
 
         match current with
             | Some old when old = h -> 
@@ -221,12 +222,10 @@ type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind)
 
             | Some old ->  
                 current <- Some h
-                setHandle x h
                 t.ReplacedResource(kind)
 
             | None -> 
                 current <- Some h
-                setHandle x h
                 t.CreatedResource(kind)
 
     member x.AddRef() =

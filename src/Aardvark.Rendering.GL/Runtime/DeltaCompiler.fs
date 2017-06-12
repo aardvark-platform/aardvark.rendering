@@ -142,15 +142,9 @@ module DeltaCompiler =
                 | Some indirect ->
                     match me.IndexBuffer with
                         | Some (it,_) ->
-                            yield
-                                indirect.Handle |> Mod.map (fun i -> 
-                                    [ Instruction.HDrawElementsIndirect stats isActive beginMode (int it) i.Count i.Buffer.Handle]
-                                )
+                            yield Instruction.HDrawElementsIndirect stats isActive beginMode (int it) indirect.Pointer
                         | None ->
-                            yield
-                                indirect.Handle |> Mod.map (fun i -> 
-                                    [ Instruction.HDrawArraysIndirect stats isActive beginMode i.Count i.Buffer.Handle]
-                                )
+                            yield Instruction.HDrawArraysIndirect stats isActive beginMode indirect.Pointer
 
                 | None ->
                     let calls = me.DrawCallInfos.Pointer

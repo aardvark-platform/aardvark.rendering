@@ -532,7 +532,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
             delete = fun h   -> ctx.Delete h
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun h   -> V2i(h.Buffer.Handle, NativePtr.read h.Count)
+            view =   fun h   -> V2i(h.Buffer.Handle, h.Count)
             kind = ResourceKind.IndirectBuffer
         })
 
@@ -603,8 +603,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                 ctx.Update(old, index, attributes)
 
                             | None ->
-                                let h = ctx.CreateVertexInputBinding(index, attributes)
-                                h
+                                ctx.CreateVertexInputBinding(index, attributes)
                         
                     member x.Destroy vao =
                         ctx.Delete vao

@@ -182,11 +182,11 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
     static member VertexAttrib4f (index : int) (v0 : float32) (v1 : float32) (v2 : float32) (v3 : float32) =
         Instruction(InstructionCode.VertexAttrib4f, [|index :> obj; v0 :> obj; v1 :> obj; v2 :> obj; v3 :> obj|])
 
-    static member MultiDrawArraysIndirectPtr (mode : int) (indirect : nativeint) (drawCountPtr : nativeint) (stride : int) =
-        Instruction(InstructionCode.MultiDrawArraysIndirect, [|mode :> obj; indirect :> obj; Aardvark.Base.Ptr32 drawCountPtr :> obj; stride :> obj|])
+    static member MultiDrawArraysIndirect (mode : int) (indirect : nativeint) (drawCount : int) (stride : int) =
+        Instruction(InstructionCode.MultiDrawArraysIndirect, [|mode :> obj; indirect :> obj; drawCount :> obj; stride :> obj|])
 
-    static member MultiDrawElementsIndirectPtr (mode : int) (t : int) (indirect : nativeint) (drawCountPtr : nativeint) (stride : int) =
-        Instruction(InstructionCode.MultiDrawElementsIndirect, [|mode :> obj; t :> obj; indirect :> obj; Aardvark.Base.Ptr32 drawCountPtr :> obj; stride :> obj|])
+    static member MultiDrawElementsIndirect (mode : int) (t : int) (indirect : nativeint) (drawCount : int) (stride : int) =
+        Instruction(InstructionCode.MultiDrawElementsIndirect, [|mode :> obj; t :> obj; indirect :> obj; drawCount :> obj; stride :> obj|])
 
     static member DepthMask (enabled : int) =
         Instruction(InstructionCode.DepthMask, [|enabled :> obj|])
@@ -208,11 +208,11 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
     static member HDrawElements (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (indexType : int) (infos : nativeptr<DrawCallInfoList>) =
         Instruction(InstructionCode.HDrawElements, [| runtimeStats :> obj; isActive :> obj; mode :> obj; indexType :> obj; infos :> obj |])
 
-    static member HDrawArraysIndirect (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (count : nativeptr<int>) (buffer : int) =
-        Instruction(InstructionCode.HDrawArraysIndirect, [| runtimeStats :> obj; isActive :> obj; mode :> obj; count :> obj; buffer :> obj |])
+    static member HDrawArraysIndirect (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (handleAndCount : nativeptr<Aardvark.Base.V2i>) =
+        Instruction(InstructionCode.HDrawArraysIndirect, [| runtimeStats :> obj; isActive :> obj; mode :> obj; handleAndCount :> obj |])
 
-    static member HDrawElementsIndirect (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (indexType : int) (count : nativeptr<int>) (buffer : int) =
-        Instruction(InstructionCode.HDrawElementsIndirect, [| runtimeStats :> obj; isActive :> obj; mode :> obj; indexType :> obj; count :> obj; buffer :> obj |])
+    static member HDrawElementsIndirect (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (indexType : int) (handleAndCount : nativeptr<Aardvark.Base.V2i>) =
+        Instruction(InstructionCode.HDrawElementsIndirect, [| runtimeStats :> obj; isActive :> obj; mode :> obj; indexType :> obj; handleAndCount :> obj |])
 
     static member HSetDepthTest (test : nativeptr<DepthTestInfo>) =
         Instruction(InstructionCode.HSetDepthTest, [| test :> obj |])

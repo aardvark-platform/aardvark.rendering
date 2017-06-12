@@ -457,9 +457,9 @@ let main args =
     //colorLockTest()
     Ag.initialize()
     Aardvark.Init()
-    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- true
-    Examples.CommandTest.run()
-    //Examples.LoD.run()
+    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
+    //Examples.CommandTest.run()
+    Examples.LoD.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 
     //Examples.ShaderSignatureTest.run()

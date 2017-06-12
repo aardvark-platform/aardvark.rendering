@@ -569,13 +569,13 @@ module IndirectBufferExtensions =
     type IndirectBuffer =
         class
             val mutable public Buffer : Buffer
-            val mutable public Count : nativeptr<int>
+            val mutable public Count : int
             val mutable public Stride : int
             val mutable public Indexed : bool
 
             interface IIndirectBuffer with
                 member x.Buffer = x.Buffer :> IBuffer
-                member x.Count = NativePtr.read x.Count
+                member x.Count = x.Count
 
             new(b, ptr, stride, indexed) = { Buffer = b; Count = ptr; Stride = stride; Indexed = indexed }
         end 
@@ -610,7 +610,6 @@ module IndirectBufferExtensions =
 
         member x.Delete(buffer : IndirectBuffer) =
             x.Delete(buffer.Buffer)
-            NativePtr.free buffer.Count
 
         member x.UploadIndirect(indirect : IndirectBuffer, indexed : bool, data : IIndirectBuffer) =
             using x.ResourceLock (fun _ ->
@@ -625,7 +624,7 @@ module IndirectBufferExtensions =
 
                 let callCount = postProcessDrawCallBuffer indexed indirect.Buffer
                 indirect.Indexed <- indexed
-                NativePtr.write indirect.Count callCount
+                indirect.Count <- data.Count
             )
 
         member x.CreateIndirect(indexed : bool, data : IIndirectBuffer) =
@@ -635,10 +634,8 @@ module IndirectBufferExtensions =
                         | :? Buffer as b -> x.Clone(b)
                         | _ -> x.CreateBuffer(data.Buffer)
 
-                let cnt = NativePtr.alloc 1
                 let callCount = postProcessDrawCallBuffer indexed buffer
-                NativePtr.write cnt callCount
-                IndirectBuffer(buffer, cnt, sizeof<DrawCallInfo>, indexed)
+                IndirectBuffer(buffer, data.Count, sizeof<DrawCallInfo>, indexed)
             )
 
 

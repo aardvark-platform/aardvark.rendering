@@ -117,7 +117,6 @@ module Instructions =
             adaptive {
                 let! buffer = buffer.Handle
                 let! igMode = mode
-                let count = NativePtr.toNativeInt buffer.Count
                 let mode =
                     if hasTess then int OpenGl.Enums.DrawMode.Patches
                     else 
@@ -144,9 +143,9 @@ module Instructions =
                         elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
                         else failwithf "unsupported index type: %A"  indexType
 
-                    return igMode, Instruction.MultiDrawElementsIndirectPtr mode indexType 0n count buffer.Stride
+                    return igMode, Instruction.MultiDrawElementsIndirect mode indexType 0n buffer.Count buffer.Stride
                 else
-                    return igMode, Instruction.MultiDrawArraysIndirectPtr mode 0n count buffer.Stride
+                    return igMode, Instruction.MultiDrawArraysIndirect mode 0n buffer.Count buffer.Stride
             }
 
 

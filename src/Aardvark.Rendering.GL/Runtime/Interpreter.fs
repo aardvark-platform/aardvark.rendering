@@ -638,7 +638,7 @@ module OpenGLObjectInterpreter =
                 match o.IndirectBuffer with
                     | Some ib ->
                         let ib = ib.Handle.GetValue()
-                        let cnt = ib.Count |> Microsoft.FSharp.NativeInterop.NativePtr.read
+                        let cnt = ib.Count
 
                         if cnt > 0 then
                             let cnt =

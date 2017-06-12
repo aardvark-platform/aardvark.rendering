@@ -9,7 +9,7 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering
 open Aardvark.Rendering.NanoVg
 open Aardvark.Application
-open Aardvark.Application.WPF
+open Aardvark.Application.WinForms
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
 open System.Windows.Media

@@ -15,6 +15,7 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL.Compiler
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Base.ShaderReflection
 
 module RenderTasks =
     open System.Collections.Generic
@@ -441,6 +442,11 @@ module RenderTasks =
              x.BeginCall(1)
              x.PushIntArg(NativePtr.toNativeInt m.Pointer)
              x.Call(OpenGl.Pointers.BindProgram)
+             
+        member x.UseProgram(p : int) =
+             x.BeginCall(1)
+             x.PushArg(p)
+             x.Call(OpenGl.Pointers.BindProgram)
 
         member x.Enable(v : int) =
              x.BeginCall(1)
@@ -463,6 +469,12 @@ module RenderTasks =
             x.PushArg(int OpenGl.Enums.BufferTarget.UniformBuffer)
             x.Call(OpenGl.Pointers.BindBufferRange)
 
+        member x.BindBuffer(target : int, buffer : int) =
+            x.BeginCall(2)
+            x.PushArg(buffer)
+            x.PushArg(target)
+            x.Call(OpenGl.Pointers.BindBuffer)
+
         member x.SetActiveTexture(slot : int) =
             x.BeginCall(1)
             x.PushArg(int OpenGl.Enums.TextureUnit.Texture0 + slot)
@@ -478,29 +490,136 @@ module RenderTasks =
             x.PushArg(target)
             x.Call(OpenGl.Pointers.BindTexture)
 
-        member x.BindSampler (slot : int, sampler : IResource<Sampler, int>) =
-            x.BeginCall(2)
-            x.PushIntArg(NativePtr.toNativeInt sampler.Pointer)
-            x.PushArg(slot)
-            x.Call(OpenGl.Pointers.BindSampler)
+        member x.TexParameteri(target : int, name : TextureParameterName, value : int) =
+            x.BeginCall(3)
+            x.PushArg(value)
+            x.PushArg(int name)
+            x.PushArg(target)
+            x.Call(OpenGl.Pointers.TexParameteri)
 
-        member x.BindUniformLocation(loc : int, l : IResource<UniformLocation, nativeint>) : unit = 
-            failwith "not implemented"
-//            let h = l.Handle.GetValue()
-//            match h.Type with
-//                | Vector(Float, 1) | Float  -> yield Instruction.Uniform1fv l 1 loc.Data
-//                | Vector(Int, 1) | Int      -> yield Instruction.Uniform1iv l 1 loc.Data
-//                | Vector(Float, 2)          -> yield Instruction.Uniform2fv l 1 loc.Data
-//                | Vector(Int, 2)            -> yield Instruction.Uniform2iv l 1 loc.Data
-//                | Vector(Float, 3)          -> yield Instruction.Uniform3fv l 1 loc.Data
-//                | Vector(Int, 3)            -> yield Instruction.Uniform3iv l 1 loc.Data
-//                | Vector(Float, 4)          -> yield Instruction.Uniform4fv l 1 loc.Data
-//                | Vector(Int, 4)            -> yield Instruction.Uniform4iv l 1 loc.Data
-//                | Matrix(Float, 2, 2, true) -> yield Instruction.UniformMatrix2fv l 1 1 loc.Data
-//                | Matrix(Float, 3, 3, true) -> yield Instruction.UniformMatrix3fv l 1 1 loc.Data
-//                | Matrix(Float, 4, 4, true) -> yield Instruction.UniformMatrix4fv l 1 1 loc.Data
-//                | _                         -> failwithf "no uniform-setter for: %A" loc
-            //x.Push
+        member x.TexParameterf(target : int, name : TextureParameterName, value : float32) =
+            x.BeginCall(3)
+            x.PushArg(value)
+            x.PushArg(int name)
+            x.PushArg(target)
+            x.Call(OpenGl.Pointers.TexParameterf)
+
+        member x.BindSampler (slot : int, sampler : IResource<Sampler, int>) =
+            if ExecutionContext.samplersSupported then
+                x.BeginCall(2)
+                x.PushIntArg(NativePtr.toNativeInt sampler.Pointer)
+                x.PushArg(slot)
+                x.Call(OpenGl.Pointers.BindSampler)
+            else
+                let s = sampler.Handle.GetValue().Description
+                let target = int OpenGl.Enums.TextureTarget.Texture2D
+                let unit = int OpenGl.Enums.TextureUnit.Texture0 + slot 
+                x.TexParameteri(target, TextureParameterName.TextureWrapS, SamplerStateHelpers.wrapMode s.AddressU)
+                x.TexParameteri(target, TextureParameterName.TextureWrapT, SamplerStateHelpers.wrapMode s.AddressV)
+                x.TexParameteri(target, TextureParameterName.TextureWrapR, SamplerStateHelpers.wrapMode s.AddressW)
+                x.TexParameteri(target, TextureParameterName.TextureMinFilter, SamplerStateHelpers.minFilter s.Filter.Min s.Filter.Mip)
+                x.TexParameteri(target, TextureParameterName.TextureMagFilter, SamplerStateHelpers.magFilter s.Filter.Mag)
+                x.TexParameterf(target, TextureParameterName.TextureMinLod, s.MinLod)
+                x.TexParameterf(target, TextureParameterName.TextureMaxLod, s.MaxLod)
+                
+
+        member x.Uniform1fv(location : int, cnt : int, ptr : nativeint) =
+            x.BeginCall(3)
+            x.PushArg(ptr)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.Uniform1fv)
+
+        member x.Uniform1iv(location : int, cnt : int, ptr : nativeint) =
+            x.BeginCall(3)
+            x.PushArg(ptr)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.Uniform1iv)
+
+        member x.Uniform2fv(location : int, cnt : int, ptr : nativeint) =
+            x.BeginCall(3)
+            x.PushArg(ptr)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.Uniform2fv)
+
+        member x.Uniform2iv(location : int, cnt : int, ptr : nativeint) =
+            x.BeginCall(3)
+            x.PushArg(ptr)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.Uniform2iv)
+
+        member x.Uniform3fv(location : int, cnt : int, ptr : nativeint) =
+            x.BeginCall(3)
+            x.PushArg(ptr)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.Uniform3fv)
+
+        member x.Uniform3iv(location : int, cnt : int, ptr : nativeint) =
+            x.BeginCall(3)
+            x.PushArg(ptr)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.Uniform3iv)
+            
+        member x.Uniform4fv(location : int, cnt : int, ptr : nativeint) =
+            x.BeginCall(3)
+            x.PushArg(ptr)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.Uniform4fv)
+
+        member x.Uniform4iv(location : int, cnt : int, ptr : nativeint) =
+            x.BeginCall(3)
+            x.PushArg(ptr)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.Uniform4iv)
+
+        member x.UniformMatrix2fv(location : int, cnt : int, transpose : int, ptr : nativeint) =
+            x.BeginCall(4)
+            x.PushArg(ptr)
+            x.PushArg(transpose)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.UniformMatrix2fv)
+
+        member x.UniformMatrix3fv(location : int, cnt : int, transpose : int, ptr : nativeint) =
+            x.BeginCall(4)
+            x.PushArg(ptr)
+            x.PushArg(transpose)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.UniformMatrix3fv)
+
+        member x.UniformMatrix4fv(location : int, cnt : int, transpose : int, ptr : nativeint) =
+            x.BeginCall(4)
+            x.PushArg(ptr)
+            x.PushArg(transpose)
+            x.PushArg(cnt)
+            x.PushArg(location)
+            x.Call(OpenGl.Pointers.UniformMatrix4fv)
+
+        member x.BindUniformLocation(l : int, loc : IResource<UniformLocation, nativeint>) : unit = 
+            let loc = loc.Handle.GetValue()
+
+            match loc.Type with
+                | Vector(Float, 1) | Float      -> x.Uniform1fv(l, 1, loc.Data)
+                | Vector(Int, 1) | Int          -> x.Uniform1iv(l, 1, loc.Data)
+                | Vector(Float, 2)              -> x.Uniform2fv(l, 1, loc.Data)
+                | Vector(Int, 2)                -> x.Uniform2iv(l, 1, loc.Data)
+                | Vector(Float, 3)              -> x.Uniform3fv(l, 1, loc.Data)
+                | Vector(Int, 3)                -> x.Uniform3iv(l, 1, loc.Data)
+                | Vector(Float, 4)              -> x.Uniform4fv(l, 1, loc.Data)
+                | Vector(Int, 4)                -> x.Uniform4iv(l, 1, loc.Data)
+                | Matrix(Float, 2, 2, true)     -> x.UniformMatrix2fv(l, 1, 0, loc.Data)
+                | Matrix(Float, 3, 3, true)     -> x.UniformMatrix3fv(l, 1, 0, loc.Data)
+                | Matrix(Float, 4, 4, true)     -> x.UniformMatrix4fv(l, 1, 0, loc.Data)
+                | _                             -> failwithf "no uniform-setter for: %A" loc
+
             
         member x.BindVertexAttributes(ctx : nativeptr<nativeint>, vao : IResource<_,VertexInputBinding>) =
             x.BeginCall(2)
@@ -526,18 +645,16 @@ module RenderTasks =
             x.Call(OpenGl.Pointers.HDrawElements)
 
         member x.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indirect : IResource<_, V2i>) =
-            x.BeginCall(5)
-            x.PushIntArg(NativePtr.toNativeInt indirect.Pointer)
-            x.PushArg(NativePtr.toNativeInt indirect.Pointer + nativeint sizeof<nativeint>)
+            x.BeginCall(4)
+            x.PushArg(NativePtr.toNativeInt indirect.Pointer)
             x.PushArg(NativePtr.toNativeInt beginMode.Pointer)
             x.PushArg(NativePtr.toNativeInt isActive.Pointer)
             x.PushArg(NativePtr.toNativeInt stats)
             x.Call(OpenGl.Pointers.HDrawArraysIndirect)
 
         member x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, V2i>) =
-            x.BeginCall(6)
-            x.PushIntArg(NativePtr.toNativeInt indirect.Pointer)
-            x.PushArg(NativePtr.toNativeInt indirect.Pointer + nativeint sizeof<nativeint>)
+            x.BeginCall(5)
+            x.PushArg(NativePtr.toNativeInt indirect.Pointer)
             x.PushArg(indexType)
             x.PushArg(NativePtr.toNativeInt beginMode.Pointer)
             x.PushArg(NativePtr.toNativeInt isActive.Pointer)
@@ -655,10 +772,20 @@ module RenderTasks =
                         | None ->
                             x.DrawArrays(s.runtimeStats, isActive, beginMode, me.DrawCallInfos)
 
+        member x.CompileEpilog(s : CompilerInfo, prev : Option<PreparedRenderObject>) =
+            //TODO: unbind textures/uniformbuffers
+            x.SetDepthMask(true)
+            x.SetStencilMask(true)
+            x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
+            x.UseProgram(0)
+            x.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
+
         member x.Compile(s : CompilerInfo, l : Option<PreparedRenderObject>, self : PreparedRenderObject) : unit =
             if self <> PreparedRenderObject.empty then
                 let l = l |> Option.defaultValue PreparedRenderObject.empty
                 x.Compile(s, l, self)
+            else
+                x.CompileEpilog(s, l)
 
         member x.Compile(state : CompilerInfo, last : Option<PreparedMultiRenderObject>, self : PreparedMultiRenderObject) =
             let mutable last = 
