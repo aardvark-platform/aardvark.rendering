@@ -361,15 +361,19 @@ module RenderTasks =
                 | :? RenderTaskObject as t -> failwith "needs some info"
                 | _ -> failwithf "[ProjectionComparer] unknown RenderObject: %A" ro
 
-        let ids = ConditionalWeakTable<IMod, ref<int>>()
-        let mutable currentId = 0
+        let mutable constantId = 0
+        let constantTable = Dict<IMod, int>()
+
+        let getConstantId (m : IMod) =
+            constantTable.GetOrCreate(m, fun m ->
+                Interlocked.Decrement(&constantId)
+            )
+
         let getId (m : IMod) =
-            match ids.TryGetValue m with
-                | (true, r) -> !r
-                | _ ->
-                    let id = Interlocked.Increment &currentId
-                    ids.Add(m, ref id)
-                    id
+            if m.IsConstant then
+                getConstantId m
+            else
+                m.Id
 
         let maxKey = Int32.MaxValue :: (projections |> List.map (fun _ -> Int32.MaxValue))
 
@@ -384,6 +388,7 @@ module RenderTasks =
                         maxKey
                     else
                         let key = projections |> List.map (fun p -> p ro |> getId)
+                        let key = key @ [ro.Id]
                         keys.Add(ro, key)
                         key
 
@@ -815,6 +820,7 @@ module RenderTasks =
     type NativeRenderProgram(cmp : IComparer<IRenderObject>, scope : CompilerInfo, content : aset<IRenderObject * PreparedMultiRenderObject>) =
         inherit NativeProgram<IRenderObject * PreparedMultiRenderObject>(ASet.sortWith (fun (l,_) (r,_) -> cmp.Compare(l,r)) content, fun l (_,r) s -> s.Compile(scope,Option.map snd l,r))
 
+
         let mutable stats = NativeProgramUpdateStatistics.Zero
         member x.Count = stats.Count
 
@@ -839,7 +845,10 @@ module RenderTasks =
 
         interface IRenderProgram with
             member x.Run(t) = 
-                printfn "render %d objects" stats.Count
+//                if not (x.Validate()) then
+//                    System.Diagnostics.Debugger.Break()
+//
+//                printfn "render %d objects" stats.Count
                 x.Run()
 
             member x.Update(at,rt) = 
@@ -904,8 +913,8 @@ module RenderTasks =
 
                         | ExecutionEngine.Native, RedundancyRemoval.Static -> 
                             Log.line "using optimized native program"
-                            new NativeRenderProgram(comparer, scope, objectsWithKeys) :> IRenderProgram
-                            //RenderProgram.Native.optimized scope comparer objectsWithKeys
+                            //new NativeRenderProgram(comparer, scope, objectsWithKeys) :> IRenderProgram
+                            RenderProgram.Native.optimized scope comparer objectsWithKeys
 
                         | ExecutionEngine.Native, RedundancyRemoval.None -> 
                             Log.line "using unoptimized native program"
