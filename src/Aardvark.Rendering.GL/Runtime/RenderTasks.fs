@@ -633,6 +633,12 @@ module RenderTasks =
             x.PushArg(NativePtr.toNativeInt ctx)
             x.Call(OpenGl.Pointers.HBindVertexAttributes)
 
+        member x.SetConservativeRaster(r : IResource<_,int>) =
+            x.BeginCall(1)
+            x.PushArg(NativePtr.toNativeInt r.Pointer)
+            x.Call(OpenGl.Pointers.HSetConservativeRaster)
+            
+
         member x.DrawArrays(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, calls : IResource<_,DrawCallInfoList>) =
             x.BeginCall(4)
             x.PushArg(NativePtr.toNativeInt calls.Pointer)
@@ -701,6 +707,9 @@ module RenderTasks =
             if prev.StencilMode <> me.StencilMode then
                 x.SetStencilMode(me.StencilMode)
             
+            if prev.ConservativeRaster <> me.ConservativeRaster then
+                x.SetConservativeRaster(me.ConservativeRaster)
+
             if prev.Program <> me.Program then
                 let myProg = me.Program.Handle.GetValue()
                 x.UseProgram(me.Program)

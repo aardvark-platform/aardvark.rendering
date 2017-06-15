@@ -69,6 +69,8 @@ module DeltaCompiler =
             if prev.StencilMode <> me.StencilMode then
                 yield Instructions.setStencilMode me.StencilMode
 
+            if prev.ConservativeRaster <> me.ConservativeRaster then
+                yield Instruction.HSetConservativeRaster(me.ConservativeRaster.Pointer)
             
 
             // bind the program (if needed)

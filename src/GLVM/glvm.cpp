@@ -395,6 +395,9 @@ void runInstruction(Instruction* i)
 	case HBindVertexAttributes:
 		hglBindVertexAttributes((void**)i->Arg0, (VertexInputBinding*)i->Arg1);
 		break;
+	case HSetConservativeRaster:
+		hglSetConservativeRaster((int*)i->Arg0);
+		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
 		break;
@@ -713,6 +716,13 @@ Statistics runRedundancyChecks(Fragment* frag)
 					if (state.HShouldBindVertexAttributes((VertexInputBinding*)i->Arg1))
 					{
 						hglBindVertexAttributes((void**)i->Arg0, (VertexInputBinding*)i->Arg1);
+					}
+					break;
+
+				case HSetConservativeRaster:
+					if (state.HShouldSetConservativeRaster((int*)i->Arg0))
+					{
+						hglSetConservativeRaster((int*)i->Arg0);
 					}
 					break;
 
@@ -1117,5 +1127,20 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 		}
 	}
 
+}
+
+#define GL_CONSERVATIVE_RASTERIZATION_NV 0x9346
+
+DllExport(void) hglSetConservativeRaster(int * enable)
+{
+	auto e = *enable;
+	if (e)
+	{
+		glEnable(GL_CONSERVATIVE_RASTERIZATION_NV);
+	}
+	else
+	{
+		glDisable(GL_CONSERVATIVE_RASTERIZATION_NV);
+	}
 }
 

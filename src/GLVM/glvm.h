@@ -148,7 +148,8 @@ typedef enum {
 	HSetPolygonMode = 106,
 	HSetBlendMode = 107,
 	HSetStencilMode = 108,
-	HBindVertexAttributes = 109
+	HBindVertexAttributes = 109,
+	HSetConservativeRaster = 110
 
 } InstructionCode;
 
@@ -221,3 +222,4 @@ DllExport(void) hglSetBlendMode(BlendMode* mode);
 DllExport(void) hglSetStencilMode(StencilMode* mode);
 DllExport(void) hglBindVertexArray(int* vao);
 DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding* binding);
+DllExport(void) hglSetConservativeRaster(int* enable);

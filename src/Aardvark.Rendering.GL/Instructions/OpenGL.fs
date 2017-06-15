@@ -688,6 +688,7 @@ module OpenGl =
         let HSetBlendMode = getGLVMProcAddress "hglSetBlendMode"
         let HSetStencilMode = getGLVMProcAddress "hglSetStencilMode"
         let HBindVertexAttributes = getGLVMProcAddress "hglBindVertexAttributes"
+        let HSetConservativeRaster = getGLVMProcAddress "hglSetConservativeRaster"
 
 
 
@@ -765,6 +766,7 @@ module OpenGl =
               HSetBlendMode, "hglSetBlendMode"
               HSetStencilMode, "hglSetStencilMode"
               HBindVertexAttributes, "hglBindVertexAttributes"
+              HSetConservativeRaster, "hglSetConservativeRaster"
 
             ] |> Map.ofList
 
@@ -854,3 +856,4 @@ module OpenGl =
         let HSetBlendMode : nativeint -> unit = wrap Pointers.HSetBlendMode
         let HSetStencilMode : nativeint -> unit = wrap Pointers.HSetStencilMode
         let HBindVertexAttributes : nativeint -> nativeint -> unit = wrap Pointers.HBindVertexAttributes
+        let HSetConservativeRaster : nativeint -> unit = wrap Pointers.HSetConservativeRaster

@@ -80,6 +80,7 @@ type InstructionCode =
     | HSetBlendMode                 = 107
     | HSetStencilMode               = 108
     | HBindVertexAttributes         = 109
+    | HSetConservativeRaster        = 110
 
 
 /// <summary>
@@ -234,3 +235,6 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
 
     static member HBindVertexAttributes (contextHandle : nativeptr<nativeint>, binding : nativeptr<VertexInputBinding>) =
         Instruction(InstructionCode.HBindVertexAttributes, [| contextHandle :> obj; binding :> obj |])
+
+    static member HSetConservativeRaster (enabled : nativeptr<int>) =
+        Instruction(InstructionCode.HSetConservativeRaster, [| enabled |])

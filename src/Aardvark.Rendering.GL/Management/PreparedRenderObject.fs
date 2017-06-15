@@ -38,6 +38,7 @@ type PreparedRenderObject =
         PolygonMode : IResource<int, int>
         BlendMode : IResource<GLBlendMode, GLBlendMode>
         StencilMode : IResource<GLStencilMode, GLStencilMode>
+        ConservativeRaster : IResource<bool, int>
 
         VertexInputBinding : IResource<VertexInputBindingHandle, int>
         
@@ -46,7 +47,6 @@ type PreparedRenderObject =
         ColorBufferMasks : Option<list<V4i>>
         DepthBufferMask : bool
         StencilBufferMask : bool
-
 
         mutable ResourceCount : int
         mutable ResourceCounts : Map<ResourceKind, int>
@@ -96,7 +96,7 @@ type PreparedRenderObject =
             yield x.VertexInputBinding :> _ 
             yield x.IsActive :> _
             yield x.BeginMode :> _
-            
+            yield x.ConservativeRaster :> _
             yield x.DepthTestMode :> _
             yield x.CullMode :> _
             yield x.PolygonMode :> _
@@ -140,7 +140,7 @@ type PreparedRenderObject =
         x.PolygonMode.Update(caller, token)
         x.BlendMode.Update(caller, token)
         x.StencilMode.Update(caller, token)
-
+        x.ConservativeRaster.Update(caller, token)
 
     member x.Dispose() =
         lock x (fun () -> 
@@ -181,6 +181,7 @@ type PreparedRenderObject =
                         x.PolygonMode.Dispose()
                         x.BlendMode.Dispose()
                         x.StencilMode.Dispose()
+                        x.ConservativeRaster.Dispose()
         )
         
              
@@ -238,6 +239,7 @@ module PreparedRenderObject =
             PolygonMode = Unchecked.defaultof<_>
             BlendMode = Unchecked.defaultof<_>
             StencilMode = Unchecked.defaultof<_>
+            ConservativeRaster = Unchecked.defaultof<_>
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -282,6 +284,7 @@ module PreparedRenderObject =
                 PolygonMode  = o.PolygonMode 
                 BlendMode  = o.BlendMode 
                 StencilMode  = o.StencilMode 
+                ConservativeRaster = o.ConservativeRaster
             }  
 
         for r in res.Resources do
@@ -566,7 +569,7 @@ type ResourceManagerExtensions private() =
         let polygonMode = x.CreatePolygonMode rj.FillMode
         let blendMode = x.CreateBlendMode rj.BlendMode
         let stencilMode = x.CreateStencilMode rj.StencilMode
-
+        let conservativeRaster = x.CreateConservativeRaster rj.ConservativeRaster
 
 
         // finally return the PreparedRenderObject
@@ -604,7 +607,7 @@ type ResourceManagerExtensions private() =
                 PolygonMode = polygonMode
                 BlendMode = blendMode
                 StencilMode = stencilMode
-
+                ConservativeRaster = conservativeRaster
             }
 
         res.ResourceCount <- res.Resources |> Seq.length

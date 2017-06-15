@@ -407,6 +407,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let polygonModeCache        = derivedCache (fun m -> m.PolygonModeCache)
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
+    let conservativeRasterCache = derivedCache (fun m -> m.ConservativeRasterCache)
 
     let uniformBufferManagers = ConcurrentDictionary<ShaderBlock, UniformBufferManager>()
 
@@ -428,6 +429,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.PolygonModeCache       : ResourceCache<int, int>      = polygonModeCache
     member private x.BlendModeCache         : ResourceCache<GLBlendMode, GLBlendMode>        = blendModeCache
     member private x.StencilModeCache       : ResourceCache<GLStencilMode, GLStencilMode>      = stencilModeCache
+    member private x.ConservativeRasterCache       : ResourceCache<bool, int>      = conservativeRasterCache
 
     member x.RenderTaskLock = renderTaskInfo
 
@@ -737,5 +739,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateConservativeRaster(value : IMod<bool>) =
+        conservativeRasterCache.GetOrCreate(value, {
+            create = fun b      -> b
+            update = fun h b    -> b
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun v -> if v then 1 else 0
             kind = ResourceKind.Unknown
         })

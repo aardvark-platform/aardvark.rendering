@@ -15,6 +15,7 @@ State::State()
 	currentDepthMask = 1;
 	currentStencilMask = 0xFFFFFFFF;
 	currentVertexInput = nullptr;
+	hConservativeRaster = nullptr;
 
 	currentColorMask = std::unordered_map<intptr_t, int>();
 	currentDrawBuffers = std::vector<GLenum>();
@@ -50,6 +51,7 @@ void State::Reset()
 	currentDepthMask = 1;
 	currentStencilMask = 0xFFFFFFFF;
 	currentVertexInput = nullptr;
+
 	currentColorMask.clear();
 	currentDrawBuffers.clear();
 
@@ -71,8 +73,23 @@ void State::Reset()
 	hPolygonMode = nullptr;
 	hBlendMode = nullptr;
 	hStencilMode = nullptr;
+	hConservativeRaster = nullptr;
 }
 
+
+bool State::HShouldSetConservativeRaster(int* enabled)
+{
+	if (hConservativeRaster == nullptr || memcmp(hConservativeRaster, enabled, sizeof(int)) != 0)
+	{
+		hConservativeRaster = enabled;
+		return true;
+	}
+	else 
+	{
+		removedInstructions++;
+		return false;
+	}
+}
 
 bool State::HShouldSetDepthTest(DepthTestMode* test)
 {
