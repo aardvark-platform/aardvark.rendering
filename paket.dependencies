@@ -6,8 +6,8 @@ nuget Aardvark.Base.FSharp               ~> 3.0.23
 nuget Aardvark.Base.Incremental          ~> 3.0.23
 nuget Aardvark.Base.Runtime              ~> 3.0.23
                                          
-nuget FShade.Core                        ~> 3.2.1
-nuget FShade                             ~> 3.2.1
+nuget FShade.Core                        ~> 3.2.2
+nuget FShade                             ~> 3.2.2
 nuget FSharp.Core                        ~> 4.0.0.1
 nuget GLSLangSharp                       ~> 0.3.2
 
