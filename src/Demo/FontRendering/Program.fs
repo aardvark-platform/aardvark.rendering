@@ -83,7 +83,7 @@ let main argv =
 
 
     use app = new OpenGlApplication()
-    let win = app.CreateSimpleRenderWindow(16)
+    let win = app.CreateSimpleRenderWindow(8)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -256,7 +256,7 @@ let main argv =
             // textures can also be bound (using file-texture here)
             do! Air.BindTexture(
                     DefaultSemantic.DiffuseColorTexture, 
-                    @"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg"
+                    @"E:\Development\WorkDirectory\DataSVN\pattern.jpg"
                 )
 
             do! Air.BindVertexBuffers [
