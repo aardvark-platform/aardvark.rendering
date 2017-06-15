@@ -51,7 +51,8 @@ module RenderObject =
         rj.StencilMode <- scope?StencilMode
         rj.BlendMode <- scope?BlendMode
         rj.Surface <- scope?Surface
-            
+        rj.ConservativeRaster <- scope?ConservativeRaster
+
         rj
 
     let inline create() =

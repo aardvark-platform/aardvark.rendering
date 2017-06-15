@@ -233,6 +233,10 @@ module Sg =
         inherit AbstractApplicator(child)
         member x.WriteBuffers = buffers
         new(buffers : Option<Set<Symbol>>, child : ISg) = WriteBuffersApplicator(buffers, Mod.constant child)
+        
+    type ConservativeRasterApplicator(state : IMod<bool>, child : IMod<ISg>) =
+        inherit AbstractApplicator(child)
+        member x.ConservativeRaster = state
 
     type ColorWriteMaskApplicator(maskRgba : IMod<bool*bool*bool*bool>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
