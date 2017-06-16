@@ -238,6 +238,11 @@ module Sg =
         inherit AbstractApplicator(child)
         member x.ConservativeRaster = state
 
+    type MultisampleApplicator(state : IMod<bool>, child : IMod<ISg>) =
+        inherit AbstractApplicator(child)
+        member x.Multisample = state
+
+
     type ColorWriteMaskApplicator(maskRgba : IMod<bool*bool*bool*bool>, child : IMod<ISg>) =
         inherit AbstractApplicator(child)
         member x.MaskRgba = maskRgba

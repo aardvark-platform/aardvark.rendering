@@ -637,6 +637,11 @@ module RenderTasks =
             x.BeginCall(1)
             x.PushArg(NativePtr.toNativeInt r.Pointer)
             x.Call(OpenGl.Pointers.HSetConservativeRaster)
+
+        member x.SetMultisample(r : IResource<_,int>) =
+            x.BeginCall(1)
+            x.PushArg(NativePtr.toNativeInt r.Pointer)
+            x.Call(OpenGl.Pointers.HSetMultisample)
             
 
         member x.DrawArrays(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, calls : IResource<_,DrawCallInfoList>) =
@@ -709,6 +714,9 @@ module RenderTasks =
             
             if prev.ConservativeRaster <> me.ConservativeRaster then
                 x.SetConservativeRaster(me.ConservativeRaster)
+            
+            if prev.Multisample <> me.Multisample then
+                x.SetMultisample(me.Multisample)
 
             if prev.Program <> me.Program then
                 let myProg = me.Program.Handle.GetValue()

@@ -398,6 +398,9 @@ void runInstruction(Instruction* i)
 	case HSetConservativeRaster:
 		hglSetConservativeRaster((int*)i->Arg0);
 		break;
+	case HSetMultisample:
+		hglSetMultisample((int*)i->Arg0);
+		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
 		break;
@@ -723,6 +726,13 @@ Statistics runRedundancyChecks(Fragment* frag)
 					if (state.HShouldSetConservativeRaster((int*)i->Arg0))
 					{
 						hglSetConservativeRaster((int*)i->Arg0);
+					}
+					break;
+
+				case HSetMultisample:
+					if (state.HShouldSetMultisample((int*)i->Arg0))
+					{
+						hglSetMultisample((int*)i->Arg0);
 					}
 					break;
 
@@ -1141,6 +1151,18 @@ DllExport(void) hglSetConservativeRaster(int * enable)
 	else
 	{
 		glDisable(GL_CONSERVATIVE_RASTERIZATION_NV);
+	}
+}
+DllExport(void) hglSetMultisample(int * enable)
+{
+	auto e = *enable;
+	if (e)
+	{
+		glEnable(GL_MULTISAMPLE);
+	}
+	else
+	{
+		glDisable(GL_MULTISAMPLE);
 	}
 }
 

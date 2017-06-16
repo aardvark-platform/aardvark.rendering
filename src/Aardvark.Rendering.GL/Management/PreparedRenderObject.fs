@@ -39,6 +39,7 @@ type PreparedRenderObject =
         BlendMode : IResource<GLBlendMode, GLBlendMode>
         StencilMode : IResource<GLStencilMode, GLStencilMode>
         ConservativeRaster : IResource<bool, int>
+        Multisample : IResource<bool, int>
 
         VertexInputBinding : IResource<VertexInputBindingHandle, int>
         
@@ -97,6 +98,7 @@ type PreparedRenderObject =
             yield x.IsActive :> _
             yield x.BeginMode :> _
             yield x.ConservativeRaster :> _
+            yield x.Multisample :> _
             yield x.DepthTestMode :> _
             yield x.CullMode :> _
             yield x.PolygonMode :> _
@@ -141,6 +143,7 @@ type PreparedRenderObject =
         x.BlendMode.Update(caller, token)
         x.StencilMode.Update(caller, token)
         x.ConservativeRaster.Update(caller, token)
+        x.Multisample.Update(caller, token)
 
     member x.Dispose() =
         lock x (fun () -> 
@@ -182,6 +185,7 @@ type PreparedRenderObject =
                         x.BlendMode.Dispose()
                         x.StencilMode.Dispose()
                         x.ConservativeRaster.Dispose()
+                        x.Multisample.Dispose()
         )
         
              
@@ -240,6 +244,7 @@ module PreparedRenderObject =
             BlendMode = Unchecked.defaultof<_>
             StencilMode = Unchecked.defaultof<_>
             ConservativeRaster = Unchecked.defaultof<_>
+            Multisample = Unchecked.defaultof<_>
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -285,6 +290,7 @@ module PreparedRenderObject =
                 BlendMode  = o.BlendMode 
                 StencilMode  = o.StencilMode 
                 ConservativeRaster = o.ConservativeRaster
+                Multisample = o.Multisample
             }  
 
         for r in res.Resources do
@@ -569,7 +575,8 @@ type ResourceManagerExtensions private() =
         let polygonMode = x.CreatePolygonMode rj.FillMode
         let blendMode = x.CreateBlendMode rj.BlendMode
         let stencilMode = x.CreateStencilMode rj.StencilMode
-        let conservativeRaster = x.CreateConservativeRaster rj.ConservativeRaster
+        let conservativeRaster = x.CreateFlag rj.ConservativeRaster
+        let multisample = x.CreateFlag rj.Multisample
 
 
         // finally return the PreparedRenderObject
@@ -608,6 +615,7 @@ type ResourceManagerExtensions private() =
                 BlendMode = blendMode
                 StencilMode = stencilMode
                 ConservativeRaster = conservativeRaster
+                Multisample = multisample
             }
 
         res.ResourceCount <- res.Resources |> Seq.length

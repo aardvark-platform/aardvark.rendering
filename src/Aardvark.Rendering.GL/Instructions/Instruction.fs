@@ -81,6 +81,7 @@ type InstructionCode =
     | HSetStencilMode               = 108
     | HBindVertexAttributes         = 109
     | HSetConservativeRaster        = 110
+    | HSetMultisample               = 111
 
 
 /// <summary>
@@ -238,3 +239,6 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
 
     static member HSetConservativeRaster (enabled : nativeptr<int>) =
         Instruction(InstructionCode.HSetConservativeRaster, [| enabled |])
+
+    static member HSetMultisample (enabled : nativeptr<int>) =
+        Instruction(InstructionCode.HSetMultisample, [| enabled |])

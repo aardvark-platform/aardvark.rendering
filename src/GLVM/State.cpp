@@ -16,6 +16,7 @@ State::State()
 	currentStencilMask = 0xFFFFFFFF;
 	currentVertexInput = nullptr;
 	hConservativeRaster = nullptr;
+	hMultisample = nullptr;
 
 	currentColorMask = std::unordered_map<intptr_t, int>();
 	currentDrawBuffers = std::vector<GLenum>();
@@ -74,6 +75,7 @@ void State::Reset()
 	hBlendMode = nullptr;
 	hStencilMode = nullptr;
 	hConservativeRaster = nullptr;
+	hMultisample = nullptr;
 }
 
 
@@ -85,6 +87,21 @@ bool State::HShouldSetConservativeRaster(int* enabled)
 		return true;
 	}
 	else 
+	{
+		removedInstructions++;
+		return false;
+	}
+}
+
+
+bool State::HShouldSetMultisample(int* enabled)
+{
+	if (hMultisample == nullptr || memcmp(hMultisample, enabled, sizeof(int)) != 0)
+	{
+		hMultisample = enabled;
+		return true;
+	}
+	else
 	{
 		removedInstructions++;
 		return false;

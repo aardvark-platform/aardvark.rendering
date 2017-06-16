@@ -72,6 +72,9 @@ module DeltaCompiler =
             if prev.ConservativeRaster <> me.ConservativeRaster then
                 yield Instruction.HSetConservativeRaster(me.ConservativeRaster.Pointer)
             
+            if prev.Multisample <> me.Multisample then
+                yield Instruction.HSetMultisample(me.Multisample.Pointer)
+            
 
             // bind the program (if needed)
             if prev.Program <> me.Program then

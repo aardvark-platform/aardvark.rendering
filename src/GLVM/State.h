@@ -163,6 +163,7 @@ private:
 	BlendMode* hBlendMode;
 	StencilMode* hStencilMode;
 	int* hConservativeRaster;
+	int* hMultisample;
 	VertexInputBinding* currentVertexInput;
 
 public:
@@ -201,6 +202,7 @@ public:
 	bool HShouldSetStencilMode(StencilMode* mode);
 	bool HShouldBindVertexAttributes(VertexInputBinding* binding);
 	bool HShouldSetConservativeRaster(int* enabled);
+	bool HShouldSetMultisample(int* enabled);
 
 	int GetRemovedInstructions();
 };

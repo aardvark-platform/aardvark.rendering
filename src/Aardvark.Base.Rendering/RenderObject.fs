@@ -251,6 +251,7 @@ type RenderObject =
         mutable Uniforms            : IUniformProvider
 
         mutable ConservativeRaster  : IMod<bool>
+        mutable Multisample         : IMod<bool>
 
         mutable Activate            : unit -> IDisposable
         mutable WriteBuffers        : Option<Set<Symbol>>
@@ -286,6 +287,7 @@ type RenderObject =
           VertexAttributes = null
           Uniforms = null
           ConservativeRaster = null
+          Multisample = null
           Activate = nopActivate
           WriteBuffers = None
         }
@@ -337,6 +339,7 @@ module RenderObjectExtensions =
           StencilMode = null
           Indices = None
           ConservativeRaster = null
+          Multisample = null
           InstanceAttributes = emptyAttributes
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms

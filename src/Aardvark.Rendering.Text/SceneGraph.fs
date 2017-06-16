@@ -110,13 +110,6 @@ module Sg =
                     member x.Dispose() = old.Dispose()
                 }
 
-            let mutable blendMode = BlendMode(true)
-            blendMode.AlphaOperation <- BlendOperation.Add
-            blendMode.SourceAlphaFactor <- BlendFactor.One
-            blendMode.DestinationAlphaFactor <- BlendFactor.One
-            blendMode.Operation <- BlendOperation.Add
-            blendMode.SourceFactor <- BlendFactor.One
-            blendMode.DestinationFactor <- BlendFactor.One
 
             let aa =
                 match shapes.Uniforms.TryGetUniform(Ag.emptyScope, Symbol.Create "Antialias") with
@@ -129,7 +122,7 @@ module Sg =
                     | _ -> Mod.constant true
 
 
-            //shapes.ConservativeRaster <- Mod.map2 (&&) aa fill
+            shapes.Multisample <- Mod.map2 (fun a f -> not f || a) aa fill
             shapes.RenderPass <- RenderPass.shapes
             shapes.BlendMode <- Mod.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
@@ -140,7 +133,7 @@ module Sg =
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.create()
-            boundary.ConservativeRaster <- Mod.constant false
+            //boundary.ConservativeRaster <- Mod.constant false
             boundary.RenderPass <- RenderPass.shapes
             boundary.BlendMode <- Mod.constant BlendMode.Blend
             boundary.VertexAttributes <- cache.VertexBuffers
@@ -214,9 +207,6 @@ module Sg =
             boundary.FillMode <- Mod.constant FillMode.Fill
             shapes.DepthTest <- Mod.constant DepthTestMode.None
             shapes.StencilMode <- Mod.constant readStencil
-
-
-          
 
 
             MultiRenderObject [boundary; shapes] :> IRenderObject |> ASet.single
