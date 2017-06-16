@@ -68,10 +68,10 @@ module DeltaCompiler =
 
             if prev.StencilMode <> me.StencilMode then
                 yield Instructions.setStencilMode me.StencilMode
-
-            if prev.ConservativeRaster <> me.ConservativeRaster then
-                yield Instruction.HSetConservativeRaster(me.ConservativeRaster.Pointer)
-            
+//
+//            if prev.ConservativeRaster <> me.ConservativeRaster then
+//                yield Instruction.HSetConservativeRaster(me.ConservativeRaster.Pointer)
+//            
             if prev.Multisample <> me.Multisample then
                 yield Instruction.HSetMultisample(me.Multisample.Pointer)
             

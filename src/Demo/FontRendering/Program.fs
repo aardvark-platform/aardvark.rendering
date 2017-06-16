@@ -83,7 +83,7 @@ let main argv =
 
 
     use app = new OpenGlApplication()
-    let win = app.CreateSimpleRenderWindow(16)
+    let win = app.CreateSimpleRenderWindow(8)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -325,8 +325,7 @@ let main argv =
     let aa = Mod.init true
 
     
-    let f = Font "Times New Roman"
-
+    let f = Aardvark.Rendering.Text.Font.create "starjedi.ttf" FontStyle.Regular
     let label3 =
         Sg.text f C4b.White message
             |> Sg.scale 0.1

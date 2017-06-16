@@ -712,9 +712,9 @@ module RenderTasks =
             if prev.StencilMode <> me.StencilMode then
                 x.SetStencilMode(me.StencilMode)
             
-            if prev.ConservativeRaster <> me.ConservativeRaster then
-                x.SetConservativeRaster(me.ConservativeRaster)
-            
+//            if prev.ConservativeRaster <> me.ConservativeRaster then
+//                x.SetConservativeRaster(me.ConservativeRaster)
+//            
             if prev.Multisample <> me.Multisample then
                 x.SetMultisample(me.Multisample)
 
