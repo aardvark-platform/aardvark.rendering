@@ -458,8 +458,8 @@ let main args =
     Ag.initialize()
     Aardvark.Init()
     Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
-    //Examples.CommandTest.run()
-    Examples.LoD.run()
+    Examples.CommandTest.run()
+    //Examples.LoD.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 
     //Examples.ShaderSignatureTest.run()

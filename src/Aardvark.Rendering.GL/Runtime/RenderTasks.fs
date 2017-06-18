@@ -17,8 +17,13 @@ open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ShaderReflection
 
+
+
+
 module RenderTasks =
     open System.Collections.Generic
+
+
 
 
     [<AbstractClass>]
@@ -275,79 +280,6 @@ module RenderTasks =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    [<AbstractClass>]
-    type AbstractCommandSubTask() =
-        static let nop = System.Lazy<unit>(id)
-
-        let programUpdateWatch  = Stopwatch()
-        let sortWatch           = Stopwatch()
-        let runWatch            = OpenGlStopwatch()
-
-        let fragments = HashSet<RenderFragment>()
-
-        member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
-            if RenderToken.isEmpty t then
-                f()
-            else
-                programUpdateWatch.Restart()
-                let res = f()
-                programUpdateWatch.Stop()
-                res
-
-        member x.Sorting (t : RenderToken, f : unit -> 'a) =
-            if RenderToken.isEmpty t then
-                f()
-            else
-                sortWatch.Restart()
-                let res = f()
-                sortWatch.Stop()
-                res
-
-        member x.Execution (t : RenderToken, f : unit -> 'a) =
-            if RenderToken.isEmpty t then
-                f()
-            else
-                runWatch.Restart()
-                let res = f()
-                runWatch.Stop()
-                res
-
-        //member x.Parent = parent
-
-        abstract member Update : AdaptiveToken * RenderToken -> unit
-        abstract member Perform : AdaptiveToken * RenderToken -> unit
-        abstract member Dispose : unit -> unit
-        abstract member Set : Index * RenderCommand -> unit
-        abstract member Remove : Index -> unit
-
-        member x.Add(t : RenderFragment) = 
-            fragments.Add t |> ignore
-
-        member x.Remove(t : RenderFragment) = 
-            fragments.Remove t |> ignore
-
-
-        member x.Run(token : AdaptiveToken, t : RenderToken, output : OutputDescription) =
-
-            for task in fragments do
-                task.Run(token, t, output)
-
-            x.Perform(token, t)
-            if RenderToken.isEmpty t then
-                nop
-            else
-                lazy (
-                    t.AddSubTask(
-                        MicroTime sortWatch.Elapsed,
-                        MicroTime programUpdateWatch.Elapsed,
-                        runWatch.ElapsedGPU,
-                        runWatch.ElapsedCPU
-                    )
-                )
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
-
     type SortKey = list<int>
 
     type ProjectionComparer(projections : list<RenderObject -> IMod>) =
@@ -398,6 +330,7 @@ module RenderTasks =
                 let left = project l
                 let right = project r
                 compare left right
+
 
 
     type IAssemblerStream with
@@ -469,7 +402,7 @@ module RenderTasks =
             x.BeginCall(5)
             x.PushArg(v.Size)
             x.PushArg(v.Offset)
-            x.PushIntArg(NativePtr.toNativeInt view.Pointer)
+            x.PushArg(v.Buffer.Handle)
             x.PushArg(slot)
             x.PushArg(int OpenGl.Enums.BufferTarget.UniformBuffer)
             x.Call(OpenGl.Pointers.BindBufferRange)
@@ -678,10 +611,65 @@ module RenderTasks =
             x.PushArg(NativePtr.toNativeInt stats)
             x.Call(OpenGl.Pointers.HDrawElementsIndirect)
 
-        member x.Clear() =
+        member x.ClearColor(c : IResource<C4f, C4f>) =
+            x.BeginCall(4)
+            x.PushFloatArg(12n + NativePtr.toNativeInt c.Pointer)
+            x.PushFloatArg(8n + NativePtr.toNativeInt c.Pointer)
+            x.PushFloatArg(4n + NativePtr.toNativeInt c.Pointer)
+            x.PushFloatArg(0n + NativePtr.toNativeInt c.Pointer)
+            x.Call(OpenGl.Pointers.ClearColor)
+            
+        member x.ClearDepth(c : IResource<float, float>) =
             x.BeginCall(1)
-            x.PushArg(ClearBufferMask.DepthBufferBit |> int)
+            x.PushDoubleArg(NativePtr.toNativeInt c.Pointer)
+            x.Call(OpenGl.Pointers.ClearDepth)
+            
+        member x.ClearStencil(c : IResource<int, int>) =
+            x.BeginCall(1)
+            x.PushIntArg(NativePtr.toNativeInt c.Pointer)
+            x.Call(OpenGl.Pointers.ClearStencil)
+
+        member x.Clear(mask : ClearBufferMask) =
+            x.BeginCall(1)
+            x.PushArg(mask |> int)
             x.Call(OpenGl.Pointers.Clear)
+
+        member x.Clear(s : CompilerInfo, colors : list<int * IResource<C4f, C4f>>, depth : Option<IResource<float, float>>, stencil : Option<IResource<int, int>>) =
+            let mutable mask = ClearBufferMask.None
+
+            match colors with
+                | [] ->
+                    ()
+                | [0, color] ->
+                    x.ClearColor(color)
+                    mask <- mask ||| ClearBufferMask.ColorBufferBit
+
+                | colors ->
+                    let buffers = s.drawBuffers
+                    for (i,c) in colors do
+                        x.SetDrawBuffers(1, buffers + 4n * nativeint i)
+                        x.ClearColor(c)
+                        x.Clear(ClearBufferMask.ColorBufferBit)
+
+                    x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
+
+            match depth with
+                | Some d ->
+                    x.ClearDepth(d)
+                    mask <- mask ||| ClearBufferMask.DepthBufferBit
+                | None ->
+                    ()
+
+            match stencil with
+                | Some s ->
+                    x.ClearStencil(s)
+                    mask <- mask ||| ClearBufferMask.StencilBufferBit
+                | None ->
+                    ()
+
+            if mask <> ClearBufferMask.None then
+                x.Clear(mask)
+
 
         member x.Compile(s : CompilerInfo, prev: PreparedRenderObject, me : PreparedRenderObject) : unit =
             if prev.DepthBufferMask <> me.DepthBufferMask then
@@ -820,19 +808,7 @@ module RenderTasks =
                 x.Compile(state, last, s)
                 last <- Some s
 
-        member x.Compile(state : CompilerInfo, l : Option<RenderCommand>, r : RenderCommand) =
-            match l, r with
-                | Some (RenderCommand.Render p), RenderCommand.Render o -> 
-                    let p = unbox<PreparedMultiRenderObject> p
-                    let o = unbox<PreparedMultiRenderObject> o
-                    x.Compile(state, Some p, o)
 
-                | _, RenderCommand.Render o ->  
-                    let o = unbox<PreparedMultiRenderObject> o
-                    x.Compile(state, None, o)
-
-                | _, RenderCommand.Clear(c,d,s) -> 
-                    x.Clear()
 
     type NativeRenderProgram(cmp : IComparer<IRenderObject>, scope : CompilerInfo, content : aset<IRenderObject * PreparedMultiRenderObject>) =
         inherit NativeProgram<IRenderObject * PreparedMultiRenderObject>(ASet.sortWith (fun (l,_) (r,_) -> cmp.Compare(l,r)) content, fun l (_,r) s -> s.Compile(scope,Option.map snd l,r))
@@ -862,16 +838,21 @@ module RenderTasks =
 
         interface IRenderProgram with
             member x.Run(t) = 
-//                if not (x.Validate()) then
-//                    System.Diagnostics.Debugger.Break()
-//
-//                printfn "render %d objects" stats.Count
                 x.Run()
 
             member x.Update(at,rt) = 
                 x.UpdateInt(at)
                 AdaptiveProgramStatistics.Zero
 
+    type ObjectOrTask =
+        | Object of PreparedMultiRenderObject
+        | Task of RenderPass * RenderFragment
+
+        interface IDisposable with
+            member x.Dispose() =
+                match x with
+                    | Object o -> o.Dispose()
+                    | Task(_,t) -> t.RemoveRef()  
 
     type StaticOrderSubTask(scope : CompilerInfo, config : IMod<BackendConfiguration>) =
         inherit AbstractSubTask()
@@ -1011,124 +992,6 @@ module RenderTasks =
                 structuralChange.MarkOutdated()
                 objects.Remove o |> ignore
             )
-
-    
-
-    type CommandSubTask(scope : CompilerInfo, config : IMod<BackendConfiguration>) =
-        inherit AbstractCommandSubTask()
-        static let empty = new PreparedMultiRenderObject([PreparedRenderObject.empty])
-        let objects = clist [RenderCommand.Render empty]
-
-        let mutable hasProgram = false
-        let mutable currentConfig = BackendConfiguration.Default
-        let mutable program : NativeProgram<RenderCommand> = Unchecked.defaultof<_>
-        let structuralChange = Mod.custom ignore
-        let scope = { scope with structuralChange = structuralChange }
-
-
-        static let toIndexedASet (l : alist<'a>) =
-            ASet.create (fun scope ->
-                let r = l.GetReader()
-                {
-                    new AbstractReader<hdeltaset<Index * 'a>>(scope, HDeltaSet.monoid) with
-                        member x.Compute(t) =
-                            let state = r.State
-                            let ops = r.GetOperations t
-
-                            ops |> PDeltaList.toSeq 
-                                |> Seq.collect (fun (i,op) -> 
-                                    match op with
-                                        | Set v ->
-                                            match PList.tryGet i state with
-                                                | Some o -> [ Rem(i,o); Add(i,v) ]
-                                                | None -> [Add(i,v)]
-                                        | Remove ->
-                                            match PList.tryGet i state with
-                                                | Some o -> [ Rem(i,o) ]
-                                                | None -> []
-                                )
-                                |> HDeltaSet.ofSeq
-
-
-                        member x.Release() =
-                            r.Dispose()
-                }
-            )
-
-
-        // TODO: add AdaptiveProgram creator not taking a separate key but simply comparing the values
-        let objectsWithKeys = objects |> toIndexedASet //|> ASet.map (fun o -> (o :> IRenderObject, o))
-
-        let reinit (self : CommandSubTask) (config : BackendConfiguration) =
-            // if the config changed or we never compiled a program
-            // we need to do something
-            if config <> currentConfig || not hasProgram then
-
-                // if we have a program we'll dispose it now
-                if hasProgram then program.Dispose()
-
-                // use the config to create a comparer for IRenderObjects
-                let comparer = Comparer<Index>.Default
-                 
-
-                // create the new program
-                let newProgram = 
-                    match config.execution, config.redundancy with
-                        | ExecutionEngine.Native, RedundancyRemoval.Static -> 
-                            Log.line "using optimized native program"
-
-                            let compile (l : Option<RenderCommand>) (r : RenderCommand) (s : IAssemblerStream) =
-                                s.Compile(scope, l,r)
-
-                            NativeProgram.differential compile objects
-                            //RenderProgram.Native.optimizedCommand scope comparer objectsWithKeys
-
-                        | t ->
-                            failwithf "[GL] unsupported backend configuration: %A" t
-
-
-                // finally we store the current config/ program and set hasProgram to true
-                program <- newProgram
-                hasProgram <- true
-                currentConfig <- config
-
-        override x.Update(token, t) =
-            let config = config.GetValue token
-            reinit x config
-
-            //TODO
-            let programStats = x.ProgramUpdate (t, fun () -> program.Update AdaptiveToken.Top)
-            ()
-        override x.Perform(token, t) =
-            x.Update(token, t) |> ignore
-
-            let stats = x.Execution (t, fun () -> program.Run())
-
-            stats
-               
-
-        override x.Dispose() =
-            if hasProgram then
-                hasProgram <- false
-                program.Dispose()
-
-                let mutable foo = 0
-                (objects :> alist<_>).Content.Outputs.Consume(&foo) |> ignore
-
-                objects.Clear()
-        
-        override x.Set(i : Index, o) = 
-            transact (fun () -> 
-                structuralChange.MarkOutdated()
-                objects.[i] <- o
-            )
-
-        override x.Remove(i) = 
-            transact (fun () -> 
-                structuralChange.MarkOutdated()
-                objects.Remove i |> ignore
-            )
-    
 
                 
     [<AllowNullLiteral>]
@@ -1466,15 +1329,6 @@ module RenderTasks =
                 objects.Remove o |> ignore
             )
 
-    type ObjectOrTask =
-        | Object of PreparedMultiRenderObject
-        | Task of RenderPass * RenderFragment
-
-        interface IDisposable with
-            member x.Dispose() =
-                match x with
-                    | Object o -> o.Dispose()
-                    | Task(_,t) -> t.RemoveRef()
 
     type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
@@ -1642,187 +1496,6 @@ module RenderTasks =
                 )
             )
 
-    type CommandRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, commands : alist<RenderCommand>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
-        inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
-        
-        let ctx = man.Context
-        let resources = new Aardvark.Base.Rendering.ResourceInputSet()
-        let inputSet = InputSet(this) 
-        let resourceUpdateWatch = OpenGlStopwatch()
-        let structuralChange = Mod.init ()
-        
-        let commandReader = commands.GetReader()
-
-        let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
-
-        //let vaoCache = ResourceCache(None, Some this.RenderTaskLock)
-
-        let add (ro : PreparedRenderObject) = 
-            let all = ro.Resources |> Seq.toList
-            for r in all do resources.Add(r)
-
-            
-            let old = ro.Activation
-            ro.Activation <- 
-                { new IDisposable with
-                    member x.Dispose() =
-                        old.Dispose()
-                        for r in all do resources.Remove r
-                        //callStats.Remove ro
-                        ro.Activation <- old
-                }
-
-            ro
-
-        let rec prepareRenderObject (ro : IRenderObject) =
-            match ro with
-                | :? RenderObject as r ->
-                    let hooked = this.HookRenderObject r 
-                    new PreparedMultiRenderObject([this.ResourceManager.Prepare(fboSignature, hooked) |> add]) |> Object
-
-                | :? PreparedRenderObject as prep ->
-                    new PreparedMultiRenderObject([prep |> PreparedRenderObject.clone |> add]) |> Object
-
-                | :? MultiRenderObject as seq ->
-                    let all = 
-                        seq.Children |> List.collect(fun o -> 
-                            match prepareRenderObject o with
-                                | Object a -> a.Children
-                                | _ -> failwith "no work"
-                        )
-                    new PreparedMultiRenderObject(all) |> Object
-
-                | :? PreparedMultiRenderObject as seq ->
-                    new PreparedMultiRenderObject (seq.Children |> List.map (PreparedRenderObject.clone >> add)) |> Object
-
-                | :? RenderTaskObject as t ->
-                    t.Fragment.AddRef()
-                    Task(t.Pass, t.Fragment)
-
-                | _ ->
-                    failwithf "[RenderTask] unsupported IRenderObject: %A" ro
-
-        let prepare (o : IRenderObject) =
-            match prepareRenderObject o with | Object o -> o | _ -> failwith ""
-
-        let cache = Cache(prepare)
-
-        let mutable subtasks = Map.empty
-
-        let getSubTask (pass : RenderPass) : AbstractCommandSubTask =
-            match Map.tryFind pass subtasks with
-                | Some task -> task
-                | _ ->
-                    let task = 
-                        match pass.Order with
-                            | RenderPassOrder.Arbitrary ->
-                                new CommandSubTask(this.Scope, this.Config) :> AbstractCommandSubTask
-
-                            | order ->
-                                failwith ""
-
-                    subtasks <- Map.add pass task subtasks
-                    task
-
-        let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
-            let oldState = commandReader.State
-            let deltas = commandReader.GetOperations x
-
-            if not (PDeltaList.isEmpty deltas) then
-                parent.StructureChanged()
-
-            let mutable added = 0
-            let mutable removed = 0
-
-            let dead = HashSet<IRenderObject>()
-
-            let preparedDeltas =
-                deltas |> PDeltaList.map (fun i op ->
-                    match op with
-                        | Remove -> 
-                            match PList.tryGet i oldState with
-                                | Some oldCommand ->
-                                    match oldCommand with
-                                        | RenderCommand.Render o ->
-                                            dead.Add o |> ignore
-                                        | _ ->
-                                            ()
-                                | None ->
-                                    ()
-                            Remove
-                        | Set cmd ->
-                            match cmd with
-                                | RenderCommand.Render o -> 
-                                    RenderCommand.Render (cache.Invoke o) |> Set
-                                | c -> 
-                                    Set c
-                )
-            let t = getSubTask RenderPass.main
-
-            for (i, op) in PDeltaList.toSeq preparedDeltas do
-                match op with
-                    | Set v -> t.Set(i, v)
-                    | Remove -> t.Remove i
-
-            for d in dead do
-                let (deleted, po) = cache.RevokeAndGetDeleted(d)
-                if deleted then po.Dispose()
-
-        let updateResources (x : AdaptiveToken) (t : RenderToken) =
-            if RenderToken.isEmpty t then
-                resources.Update(x, t)
-            else
-                resourceUpdateWatch.Restart()
-                resources.Update(x, t)
-                resourceUpdateWatch.Stop()
-
-                t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
-
-
-        override x.ProcessDeltas(token, t) =
-            processDeltas token x t
-
-        override x.UpdateResources(token,t) =
-            updateResources token t
-
-        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
-            x.ResourceManager.DrawBufferManager.Write(fbo)
-
-            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
-                primitivesGenerated.Restart()
-
-            let mutable runStats = []
-            for (_,t) in Map.toSeq subtasks do
-                let s = t.Run(token,rt, output)
-                runStats <- s::runStats
-
-            if RuntimeConfig.SyncUploadsAndFrames then
-                GL.Sync()
-            
-            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
-                primitivesGenerated.Stop()
-                runStats |> List.iter (fun l -> l.Value)
-                rt.AddPrimitiveCount(primitivesGenerated.Value)
-
-
-
-        override x.Release() =
-            commandReader.Dispose()
-            resources.Dispose()
-            for (_,t) in Map.toSeq subtasks do
-                t.Dispose()
-
-            subtasks <- Map.empty
-
-        override x.Use (f : unit -> 'a) =
-            lock x (fun () ->
-                x.RenderTaskLock.Run (fun () ->
-                    lock resources (fun () ->
-                        f()
-                    )
-                )
-            )
-
     type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
         inherit AbstractRenderTask()
 
@@ -1907,3 +1580,719 @@ module RenderTasks =
 
         override x.Use f = lock x f
 
+[<AutoOpen>]
+module ``Prepared Commands`` =
+    type ICommandRenderTask =
+        inherit IRenderTask
+        inherit IResource
+        abstract member EntryPointer : nativeptr<nativeint>
+
+    [<RequireQualifiedAccess>]
+    type PreparedRenderCommand =
+        | Render of PreparedMultiRenderObject
+        | Call of ICommandRenderTask
+        | Custom of IResource<PinnedDelegate, nativeint> * list<IResource>
+        | Clear of list<int * IResource<C4f, C4f>> * Option<IResource<float, float>> * Option<IResource<int, int>>
+        | IfThenElse of IResource<bool, int> * list<PreparedRenderCommand> * list<PreparedRenderCommand> with
+        
+        member x.Dispose() =
+            match x with
+                | PreparedRenderCommand.Render o -> o.Dispose()
+                | PreparedRenderCommand.Call t -> ()
+                | PreparedRenderCommand.Clear(colors, depth, stencil) ->
+                    colors |> List.iter (fun (_,c) -> c.Dispose())
+                    depth |> Option.iter (fun o -> o.Dispose())
+                    stencil |> Option.iter (fun o -> o.Dispose())
+                | PreparedRenderCommand.IfThenElse(cond, i, e) ->
+                    cond.Dispose()
+                    i |> List.iter (fun c -> c.Dispose())
+                    e |> List.iter (fun c -> c.Dispose())
+
+                | PreparedRenderCommand.Custom(c, res) ->
+                    c.Dispose()
+                    for r in res do r.Dispose()
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+        member x.Update(token : AdaptiveToken, rt : RenderToken) =
+            match x with
+                | PreparedRenderCommand.Render o -> o.Update(token, rt)
+                | PreparedRenderCommand.Call t -> t.Update(token, rt)
+                | PreparedRenderCommand.Clear(c,d,s) ->
+                    c |> List.iter (fun (_,c) -> c.Update(token, rt))
+                    d |> Option.iter (fun d -> d.Update(token, rt))
+                    s |> Option.iter (fun s -> s.Update(token, rt))
+                | PreparedRenderCommand.IfThenElse(cond, i, e) ->
+                    cond.Update(token, rt)
+                    i |> List.iter (fun c -> c.Update(token, rt))
+                    e |> List.iter (fun c -> c.Update(token, rt))
+
+                | PreparedRenderCommand.Custom(c,res) ->
+                    c.Update(token, rt)
+                    for r in res do r.Update(token, rt)
+
+        member x.Resources =
+            match x with
+                | PreparedRenderCommand.Render o -> o.Children |> Seq.collect (fun c -> c.Resources)
+                | PreparedRenderCommand.Call t -> Seq.singleton (t :> IResource)
+                | PreparedRenderCommand.Clear(c,d,s) ->
+                    seq {
+                        yield! Seq.map (fun (_,c) -> c :> IResource) c
+
+                        match d with
+                            | Some d -> yield d :> IResource
+                            | _ -> ()
+
+                        match s with
+                            | Some s -> yield s :> IResource
+                            | _ -> ()
+                    }
+                | PreparedRenderCommand.IfThenElse(cond, i, e) ->
+                    seq {
+                        yield cond :> IResource
+                        for c in i do yield! c.Resources
+                        for c in e do yield! c.Resources
+                    }
+                | PreparedRenderCommand.Custom (ptr, res) ->
+                    seq {
+                        yield ptr :> IResource
+                        yield! res
+                    }
+                    
+
+    type private CustomCommand = IRuntime -> AdaptiveToken -> RenderToken -> OutputDescription -> unit
+    let private clearColorCache = new ResourceCache<C4f, C4f>(None, None)
+    let private clearDepthCache = new ResourceCache<float, float>(None, None)
+    let private clearStencilCache = new ResourceCache<int, int>(None, None)
+    let private conditionalFlagCache = new ResourceCache<bool, int>(None, None)
+    let private customCache = new ResourceCache<PinnedDelegate, nativeint>(None, None)
+
+    type RuntimeValues =
+        {
+            runtime     : IRuntime
+            token       : AdaptiveToken
+            renderToken : RenderToken
+            output      : OutputDescription
+        }
+
+
+    open System.Runtime.InteropServices
+
+    type private RenderTaskResource(r : IRenderTask) =
+        inherit AdaptiveObject()
+
+        member x.RenderTask = r
+
+        member x.Update(token : AdaptiveToken, rt : RenderToken) =
+            x.EvaluateIfNeeded token () (fun token ->
+                r.Update(token, rt)
+            )
+
+        override x.GetHashCode() = r.GetHashCode()
+        override x.Equals o =
+            match o with
+                | :? RenderTaskResource as o -> r = o.RenderTask
+                | _ -> false
+
+        interface IResource with
+            member x.IsDisposed = false
+            member x.Dispose() = ()
+            member x.AddRef() = ()
+            member x.RemoveRef() = ()
+            member x.Info = ResourceInfo.Zero
+            member x.Kind = ResourceKind.Unknown
+            member x.Update(t,rt) = x.Update(t, rt)
+
+    type private RenderTaskCustomCommand(r : IRenderTask) =
+        let res = [ new RenderTaskResource(r) :> IResource ]
+
+        member x.RenderTask = r
+
+        override x.GetHashCode() = r.GetHashCode()
+        override x.Equals o =
+            match o with
+                | :? RenderTaskCustomCommand as o -> r = o.RenderTask
+                | _ -> false
+
+        interface ICustomRenderCommand with
+            member x.AddRef() = ()
+            member x.RemoveRef() = ()
+            member x.Run(_,t,rt,o) = r.Run(t,rt,o)
+            member x.UsedResources = res
+
+    type ResourceManager with
+
+        member x.PrepareClearColor(c : IMod<C4f>) =
+            clearColorCache.GetOrCreate(
+                c, 
+                {
+                    create = fun v -> v
+                    update = fun o v -> v
+                    delete = fun _ -> ()
+                    view = fun h -> h
+                    info = fun h -> ResourceInfo.Zero
+                    kind = ResourceKind.Unknown
+                }
+            )
+
+        member x.PrepareClearDepth(c : IMod<float>) =
+            clearDepthCache.GetOrCreate(
+                c, 
+                {
+                    create = fun v -> v
+                    update = fun o v -> v
+                    delete = fun _ -> ()
+                    view = fun h -> h
+                    info = fun h -> ResourceInfo.Zero
+                    kind = ResourceKind.Unknown
+                }
+            )
+
+        member x.PrepareClearStencil(c : IMod<int>) =
+            clearStencilCache.GetOrCreate(
+                c, 
+                {
+                    create = fun v -> v
+                    update = fun o v -> v
+                    delete = fun _ -> ()
+                    view = fun h -> h
+                    info = fun h -> ResourceInfo.Zero
+                    kind = ResourceKind.Unknown
+                }
+            )
+            
+        member x.PrepareConditional(c : IMod<bool>) =
+            conditionalFlagCache.GetOrCreate(
+                c, 
+                {
+                    create = fun v -> v
+                    update = fun o v -> v
+                    delete = fun _ -> ()
+                    view = fun h -> if h then 1 else 0
+                    info = fun h -> ResourceInfo.Zero
+                    kind = ResourceKind.Unknown
+                }
+            )
+
+        member x.PrepareObject (signature : IFramebufferSignature, o : IRenderObject) =
+            match o with
+                | :? RenderObject as o -> 
+                    let p = x.Prepare(signature, o) 
+                    new PreparedMultiRenderObject([p])
+
+                | :? MultiRenderObject as o ->
+                    let children = o.Children |> List.collect (fun o -> x.PrepareObject(signature, o).Children)
+                    new PreparedMultiRenderObject(children)
+
+                | :? PreparedMultiRenderObject as o ->
+                    let children = o.Children |> List.collect (fun o -> x.PrepareObject(signature, o).Children)
+                    new PreparedMultiRenderObject(children)
+
+                | :? PreparedRenderObject as o ->
+                    for r in o.Resources do r.AddRef()
+                    new PreparedMultiRenderObject([o])
+
+                | _ ->
+                    failwith ""
+            
+        member x.PrepareCustom (get : unit -> RuntimeValues, f : ICustomRenderCommand) =
+            
+            let create (cmd : ICustomRenderCommand) = 
+                let run() = 
+                    let values = get()
+                    cmd.Run(values.runtime, values.token, values.renderToken, values.output)
+
+                Marshal.PinDelegate(Action(run))
+
+            let update (o : PinnedDelegate) (v : ICustomRenderCommand) = 
+                o.Dispose()
+                create v
+
+            let view (o : PinnedDelegate) = 
+                o.Pointer
+
+            let delete (o : PinnedDelegate) = 
+                o.Dispose()
+
+            customCache.GetOrCreate(
+                Mod.constant f,  [get :> obj],
+                {
+                    create = create
+                    update = update
+                    delete = delete
+                    view = view
+                    info = fun h -> ResourceInfo.Zero
+                    kind = ResourceKind.Unknown
+                }
+            )
+
+        member x.PrepareCommand (signature : IFramebufferSignature, runtimeValues : unit -> RuntimeValues, cmd : RenderCommand) : PreparedRenderCommand =
+            match cmd with
+                | RenderCommand.RenderC o -> 
+                    x.PrepareObject(signature, o) |> PreparedRenderCommand.Render
+
+                | RenderCommand.ClearC(c,d,s) ->
+                    let colors = 
+                        signature.ColorAttachments |> Map.toList |> List.choose (fun (i,(s,_)) ->
+                            match Map.tryFind s c with
+                                | Some color -> Some (i, x.PrepareClearColor color)
+                                | _ -> None
+                        )
+
+                    let d = d |> Option.map x.PrepareClearDepth
+                    let s = s |> Option.map x.PrepareClearStencil
+                    PreparedRenderCommand.Clear(colors, d, s)
+
+                | RenderCommand.CallC t ->
+                    match t with
+                        | :? ICommandRenderTask as t ->
+                            PreparedRenderCommand.Call(t)
+
+                        | _ ->
+                            let ptr = 
+                                x.PrepareCustom(runtimeValues, RenderTaskCustomCommand(t))
+
+                            let resource = new RenderTaskResource(t)
+                            PreparedRenderCommand.Custom(ptr, [resource :> IResource])
+
+                | RenderCommand.IfThenElseC(cond, ifTrue, ifFalse) ->
+                    let ifTrue = ifTrue |> List.map (fun c -> x.PrepareCommand(signature, runtimeValues, c))
+                    let ifFalse = ifFalse |> List.map (fun c -> x.PrepareCommand(signature, runtimeValues, c))
+                    let active = x.PrepareConditional cond
+                    PreparedRenderCommand.IfThenElse(active, ifTrue, ifFalse)
+
+                | RenderCommand.CustomC f ->
+                    let ptr = x.PrepareCustom(runtimeValues, f)
+                    PreparedRenderCommand.Custom(ptr, [])
+                    
+
+
+[<AutoOpen>]
+module ``Command Tasks`` =
+    open RenderTasks
+
+    type IAssemblerStream with
+        member x.Compile(state : CompilerInfo, l : Option<PreparedRenderCommand>, r : PreparedRenderCommand) =
+            match l, r with
+                | Some (PreparedRenderCommand.Render p), PreparedRenderCommand.Render o -> 
+                    x.Compile(state, Some p, o)
+
+                | _, PreparedRenderCommand.Render o ->  
+                    let o = unbox<PreparedMultiRenderObject> o
+                    x.Compile(state, None, o)
+
+                | _, PreparedRenderCommand.Clear(c,d,s) -> 
+                    x.Clear(state, c, d, s)
+
+                | _, PreparedRenderCommand.Call t ->
+                    x.BeginCall(0)
+                    x.CallIndirect(t.EntryPointer)
+
+                | _, PreparedRenderCommand.IfThenElse(cond, ifTrue, ifFalse) ->
+                    match ifTrue, ifFalse with
+                        | [], [] -> ()
+                        | cmd, [] ->
+                            let lEnd = x.NewLabel()
+                            x.Cmp(NativePtr.toNativeInt cond.Pointer, 0)
+                            x.Jump(JumpCondition.Equal, lEnd)
+                            for c in cmd do
+                                x.Compile(state, l, c)
+                            x.Mark(lEnd)
+                        | [], cmd ->
+                            let lEnd = x.NewLabel()
+                            x.Cmp(NativePtr.toNativeInt cond.Pointer, 0)
+                            x.Jump(JumpCondition.NotEqual, lEnd)
+                            for c in cmd do
+                                x.Compile(state, l, c)
+                            x.Mark(lEnd)
+
+                        | i, e ->
+                            let lEnd = x.NewLabel()
+                            let lFalse = x.NewLabel()
+                            x.Cmp(NativePtr.toNativeInt cond.Pointer, 0)
+                            x.Jump(JumpCondition.Equal, lFalse)
+                            for c in i do x.Compile(state, l, c)
+                            x.Jump(lEnd)
+                            x.Mark(lFalse)
+                            for c in e do x.Compile(state, l, c)
+                            x.Mark(lEnd)
+
+                | _, PreparedRenderCommand.Custom(ptr,_) ->
+                    x.BeginCall(0)
+                    x.CallIndirect(ptr.Pointer)
+
+
+    [<AbstractClass>]
+    type AbstractCommandSubTask() =
+        static let nop = System.Lazy<unit>(id)
+
+        let programUpdateWatch  = Stopwatch()
+        let sortWatch           = Stopwatch()
+        let runWatch            = OpenGlStopwatch()
+
+
+        member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                programUpdateWatch.Restart()
+                let res = f()
+                programUpdateWatch.Stop()
+                res
+
+        member x.Sorting (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                sortWatch.Restart()
+                let res = f()
+                sortWatch.Stop()
+                res
+
+        member x.Execution (t : RenderToken, f : unit -> 'a) =
+            if RenderToken.isEmpty t then
+                f()
+            else
+                runWatch.Restart()
+                let res = f()
+                runWatch.Stop()
+                res
+
+        //member x.Parent = parent
+
+        abstract member Update : AdaptiveToken * RenderToken -> unit
+        abstract member Perform : AdaptiveToken * RenderToken -> unit
+        abstract member Dispose : unit -> unit
+        abstract member Set : Index * PreparedRenderCommand -> unit
+        abstract member Remove : Index -> unit
+
+
+        member x.Run(token : AdaptiveToken, t : RenderToken, output : OutputDescription) =
+
+            x.Perform(token, t)
+            if RenderToken.isEmpty t then
+                nop
+            else
+                lazy (
+                    t.AddSubTask(
+                        MicroTime sortWatch.Elapsed,
+                        MicroTime programUpdateWatch.Elapsed,
+                        runWatch.ElapsedGPU,
+                        runWatch.ElapsedCPU
+                    )
+                )
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    and CommandSubTask(scope : CompilerInfo, config : IMod<BackendConfiguration>) =
+        inherit AbstractCommandSubTask()
+        static let empty = new PreparedMultiRenderObject([PreparedRenderObject.empty])
+        let objects = clist [PreparedRenderCommand.Render empty]
+
+        let mutable hasProgram = false
+        let mutable currentConfig = BackendConfiguration.Default
+        let mutable program : NativeProgram<PreparedRenderCommand> = Unchecked.defaultof<_>
+        let structuralChange = Mod.custom ignore
+        let scope = { scope with structuralChange = structuralChange }
+
+
+        static let toIndexedASet (l : alist<'a>) =
+            ASet.create (fun scope ->
+                let r = l.GetReader()
+                {
+                    new AbstractReader<hdeltaset<Index * 'a>>(scope, HDeltaSet.monoid) with
+                        member x.Compute(t) =
+                            let state = r.State
+                            let ops = r.GetOperations t
+
+                            ops |> PDeltaList.toSeq 
+                                |> Seq.collect (fun (i,op) -> 
+                                    match op with
+                                        | Set v ->
+                                            match PList.tryGet i state with
+                                                | Some o -> [ Rem(i,o); Add(i,v) ]
+                                                | None -> [Add(i,v)]
+                                        | Remove ->
+                                            match PList.tryGet i state with
+                                                | Some o -> [ Rem(i,o) ]
+                                                | None -> []
+                                )
+                                |> HDeltaSet.ofSeq
+
+
+                        member x.Release() =
+                            r.Dispose()
+                }
+            )
+
+
+        // TODO: add AdaptiveProgram creator not taking a separate key but simply comparing the values
+        let objectsWithKeys = objects |> toIndexedASet //|> ASet.map (fun o -> (o :> IRenderObject, o))
+
+        let reinit (self : CommandSubTask) (config : BackendConfiguration) =
+            // if the config changed or we never compiled a program
+            // we need to do something
+            if config <> currentConfig || not hasProgram then
+
+                // if we have a program we'll dispose it now
+                if hasProgram then program.Dispose()
+
+                // use the config to create a comparer for IRenderObjects
+                let comparer = Comparer<Index>.Default
+                 
+
+                // create the new program
+                let newProgram = 
+                    match config.execution, config.redundancy with
+                        | ExecutionEngine.Native, RedundancyRemoval.Static -> 
+                            Log.line "using optimized native program"
+
+                            let compile (l : Option<PreparedRenderCommand>) (r : PreparedRenderCommand) (s : IAssemblerStream) =
+                                s.Compile(scope, l, r)
+
+                            NativeProgram.differential compile objects
+                            //RenderProgram.Native.optimizedCommand scope comparer objectsWithKeys
+
+                        | t ->
+                            failwithf "[GL] unsupported backend configuration: %A" t
+
+
+                // finally we store the current config/ program and set hasProgram to true
+                program <- newProgram
+                hasProgram <- true
+                currentConfig <- config
+
+        member x.EntryPointer =
+            let config = config.GetValue AdaptiveToken.Top
+            reinit x config
+            program.EntryPointer
+
+        member x.UpdateForCall(token, t) =
+            let config = config.GetValue token
+            reinit x config
+            let programStats = x.ProgramUpdate (t, fun () -> program.Update AdaptiveToken.Top)
+
+            let intCtx = ContextHandle.Current.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
+            NativePtr.write scope.contextHandle intCtx.Context.Handle
+
+        override x.Update(token, t) =
+            let config = config.GetValue token
+            reinit x config
+            let programStats = x.ProgramUpdate (t, fun () -> program.Update AdaptiveToken.Top)
+            ()
+
+        override x.Perform(token, t) =
+            x.Update(token, t) |> ignore
+            let stats = x.Execution (t, fun () -> program.Run())
+            stats
+               
+
+        override x.Dispose() =
+            if hasProgram then
+                hasProgram <- false
+                program.Dispose()
+
+                let mutable foo = 0
+                (objects :> alist<_>).Content.Outputs.Consume(&foo) |> ignore
+
+                objects.Clear()
+        
+        override x.Set(i : Index, o : PreparedRenderCommand) = 
+            transact (fun () -> 
+                structuralChange.MarkOutdated()
+                objects.[i] <- o
+            )
+
+        override x.Remove(i) = 
+            transact (fun () -> 
+                structuralChange.MarkOutdated()
+                objects.Remove i |> ignore
+            )
+ 
+    and CommandRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, commands : alist<RenderCommand>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
+        inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
+      
+        let resourceUpdateWatch = OpenGlStopwatch()
+        let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
+        
+        let ctx = man.Context
+        let resources = new Aardvark.Base.Rendering.ResourceInputSet()
+        let commandReader = commands.GetReader()
+
+
+        let mutable runtimeValues =
+            {
+                runtime = man.Context.Runtime
+                token = AdaptiveToken.Top
+                renderToken = RenderToken.Empty
+                output = Unchecked.defaultof<_>
+            }
+
+        let getRuntimeValues() = runtimeValues
+
+        let rec add (cmd : PreparedRenderCommand) =
+            let all = cmd.Resources |> Seq.toList
+            for r in all do resources.Add(r)
+
+
+        let rec rem (cmd : PreparedRenderCommand) =
+            let all = cmd.Resources |> Seq.toList
+            for r in all do resources.Remove(r)
+//            match cmd with
+//                | PreparedRenderCommand.Render o ->
+//                    for ro in o.Children do
+//                        let all = ro.Resources |> Seq.toList
+//                        for r in all do resources.Remove(r)
+//
+//                | PreparedRenderCommand.Call t ->
+//                    resources.Remove t
+//
+//                | PreparedRenderCommand.Clear(c,d,s) ->
+//                    c |> List.iter (fun (_,c) -> resources.Remove c)
+//                    d |> Option.iter (fun d -> resources.Remove d)
+//                    s |> Option.iter (fun s -> resources.Remove s)
+//
+//                | PreparedRenderCommand.Conditional(cond, cmd) ->
+//                    resources.Remove cond
+//                    rem cmd
+            
+        let rec hookObject (o : IRenderObject) =
+            match o with
+                | :? RenderObject as o -> this.HookRenderObject(o) :> IRenderObject
+                | :? MultiRenderObject as o -> o.Children |> List.map hookObject |> MultiRenderObject :> IRenderObject
+                | _ ->  o
+
+        let rec hook (o : RenderCommand) =
+            match o with
+                | RenderCommand.ClearC _ -> o
+                | RenderCommand.CallC _ -> o
+                | RenderCommand.CustomC _ -> o
+
+                | RenderCommand.RenderC(o) ->
+                    RenderCommand.RenderC(hookObject o)
+
+                | RenderCommand.IfThenElseC(cond, i, e) ->
+                    RenderCommand.IfThenElseC(cond, i |> List.map hook, e |> List.map hook)
+
+
+        let prepare (o : RenderCommand) =
+            let o = hook o            
+            let res = this.ResourceManager.PrepareCommand(fboSignature, getRuntimeValues, o)
+            add res
+            res
+
+        let cache = Cache(prepare)
+
+
+        let subtask = new CommandSubTask(this.Scope, this.Config)
+
+
+        let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
+            let oldState = commandReader.State
+            let deltas = commandReader.GetOperations x
+
+            if not (PDeltaList.isEmpty deltas) then
+                parent.StructureChanged()
+
+            let mutable added = 0
+            let mutable removed = 0
+
+            let dead = HashSet<RenderCommand>()
+
+            let preparedDeltas =
+                deltas |> PDeltaList.map (fun i op ->
+                    match op with
+                        | Remove -> 
+                            match PList.tryGet i oldState with
+                                | Some oldCommand ->
+                                    dead.Add oldCommand |> ignore
+                                | None ->
+                                    ()
+                            Remove
+                        | Set cmd ->
+                            cache.Invoke cmd |> Set
+                )
+
+            for (i, op) in PDeltaList.toSeq preparedDeltas do
+                match op with
+                    | Set v -> subtask.Set(i, v)
+                    | Remove -> subtask.Remove i
+
+            for d in dead do
+                let (deleted, po) = cache.RevokeAndGetDeleted(d)
+                if deleted then 
+                    rem po
+                    po.Dispose()
+
+        let updateResources (x : AdaptiveToken) (t : RenderToken) =
+            if RenderToken.isEmpty t then
+                resources.Update(x, t)
+            else
+                resourceUpdateWatch.Restart()
+                resources.Update(x, t)
+                resourceUpdateWatch.Stop()
+
+                t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
+
+        interface IResource with
+            member x.AddRef() = ()
+            member x.RemoveRef() = ()
+            member x.Update(t,rt) = 
+                x.Update(t, rt)
+                subtask.UpdateForCall(t, rt)
+
+            member x.Info = ResourceInfo.Zero
+            member x.IsDisposed = false
+            member x.Kind = ResourceKind.Unknown
+
+        interface ICommandRenderTask with
+            member x.EntryPointer = subtask.EntryPointer
+
+        override x.ProcessDeltas(token, t) =
+            processDeltas token x t
+
+        override x.UpdateResources(token,t) =
+            updateResources token t
+
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
+
+            runtimeValues <-
+                { runtimeValues with
+                    token = token
+                    renderToken = rt
+                    output = output
+                }
+
+            x.ResourceManager.DrawBufferManager.Write(fbo)
+
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
+                primitivesGenerated.Restart()
+
+            let mutable runStats = []
+            let s = subtask.Run(token,rt, output)
+            runStats <- s::runStats
+
+            if RuntimeConfig.SyncUploadsAndFrames then
+                GL.Sync()
+            
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
+                primitivesGenerated.Stop()
+                runStats |> List.iter (fun l -> l.Value)
+                rt.AddPrimitiveCount(primitivesGenerated.Value)
+
+        override x.Release() =
+            commandReader.Dispose()
+            resources.Dispose()
+            subtask.Dispose()
+
+        override x.Use (f : unit -> 'a) =
+            lock x (fun () ->
+                x.RenderTaskLock.Run (fun () ->
+                    lock resources (fun () ->
+                        f()
+                    )
+                )
+            )
+  

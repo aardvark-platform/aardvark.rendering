@@ -136,15 +136,15 @@ type IResource =
     abstract member IsDisposed : bool
     abstract member Info : ResourceInfo
 
-type IResource<'h when 'h : equality> =
+type IResource<'h> =
     inherit IResource
     abstract member Handle : IMod<'h>
 
-type IResource<'h, 'v when 'h : equality and 'v : unmanaged> =
+type IResource<'h, 'v when 'v : unmanaged> =
     inherit IResource<'h>
     abstract member Pointer : nativeptr<'v>
 
-type ResourceDescription<'d, 'h, 'v when 'h : equality and 'v : unmanaged> =
+type ResourceDescription<'d, 'h, 'v when 'v : unmanaged> =
     {
         create : 'd -> 'h
         update : 'h -> 'd -> 'h
@@ -155,7 +155,7 @@ type ResourceDescription<'d, 'h, 'v when 'h : equality and 'v : unmanaged> =
     }
 
 [<AbstractClass>]
-type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind) =
+type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
     inherit AdaptiveObject()
 
     let mutable current = None
@@ -188,7 +188,7 @@ type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind)
     let setHandle (x : Resource<'h, 'v>) (h : 'h) : unit =
         let v : 'v = x.View(h)
         NativePtr.write pointer v
-        if h <> handle.Value then
+        if not (Unchecked.equals h handle.Value) then
             transact (fun () -> handle.Value <- h)
 
     abstract member Create : AdaptiveToken * RenderToken * Option<'h> -> 'h
@@ -217,7 +217,7 @@ type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind)
         setHandle x h
 
         match current with
-            | Some old when old = h -> 
+            | Some old when Unchecked.equals old h -> 
                 t.InPlaceResourceUpdate(kind)
 
             | Some old ->  
@@ -274,7 +274,7 @@ type Resource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind)
         member x.Info = x.Info
         member x.Pointer = pointer
 
-and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<ResourceCache<'h, 'v>>, renderTaskLock : Option<RenderTaskLock>) =
+and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 'v>>, renderTaskLock : Option<RenderTaskLock>) =
     let store = ConcurrentDictionary<list<obj>, Resource<'h, 'v>>()
     static let hNonPrimitive =
         not typeof<'h>.IsPrimitive && not typeof<'h>.IsEnum
@@ -321,7 +321,7 @@ and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<
             | (true,v) -> Some v
             | _ -> None
      
-    member x.GetOrCreateLocalWrapped<'x, 'y when 'x : equality and 'y : unmanaged>(key : list<obj>, create : unit -> Resource<'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
+    member x.GetOrCreateLocalWrapped<'x, 'y when 'y : unmanaged>(key : list<obj>, create : unit -> Resource<'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
         let resource = 
             store.GetOrAdd(key, fun _ -> 
                 let res = create()
@@ -341,7 +341,7 @@ and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<
                 r :> IResource<_,_>
             | None -> x.GetOrCreateLocal(key, create)
 
-    member x.GetOrCreateWrapped<'x, 'y when 'x : equality and 'y : unmanaged>(key : list<obj>, create : unit -> Resource<'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
+    member x.GetOrCreateWrapped<'x, 'y when 'y : unmanaged>(key : list<obj>, create : unit -> Resource<'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
         match tryGetParent key with
             | Some r -> 
                 r.AddRef()
@@ -349,7 +349,7 @@ and ResourceCache<'h, 'v when 'h : equality and 'v : unmanaged>(parent : Option<
             | None -> 
                 x.GetOrCreateLocalWrapped(key, create, wrap)
 
-    member x.GetOrCreateWrapped<'a, 'x, 'y when 'x : equality and 'y : unmanaged>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
+    member x.GetOrCreateWrapped<'a, 'x, 'y when 'y : unmanaged>(dataMod : IMod<'a>, additionalKeys : list<obj>, desc : ResourceDescription<'a, 'x, 'y>, wrap : Resource<'x, 'y> -> Resource<'h, 'v>) =
         let key = (dataMod :> obj)::additionalKeys
         match tryGetParent key with
             | Some v -> 
@@ -583,10 +583,7 @@ type ResourceInputSet() =
 
 
     let updateOne (token : AdaptiveToken) (r : IResource) (t : RenderToken) =
-        let oldInfo = r.Info
         r.Update(token, t)
-        let newInfo = r.Info
-        ()
 
     let updateDirty (x : ResourceInputSet) (token : AdaptiveToken) (rt : RenderToken) =
         let rec run (level : int) (token : AdaptiveToken) (rt : RenderToken) = 
@@ -594,9 +591,6 @@ type ResourceInputSet() =
                 let d = x.Dirty
                 x.Dirty <- HashSet()
                 d
-
-//            if level = 0 then
-//                dirty.IntersectWith all
 
             if level > 4 && dirty.Count > 0 then
                 Log.warn "nested shit"

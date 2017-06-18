@@ -18,7 +18,7 @@ open FShade.Imperative
 
 module CommandTest =
     let run() =
-        use app = new OpenGlApplication()
+        use app = new OpenGlApplication(true)
         let win = app.CreateSimpleRenderWindow(1)
         let runtime = app.Runtime
 
@@ -83,29 +83,64 @@ module CommandTest =
             }
             |> Seq.cache
 
+
+        let quad = 
+            Sg.sphere' 5 C4b.White 0.1
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+                    do! DefaultSurfaces.constantColor C4f.White
+                }
+                |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
+                |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+
+        let quadCommands = quad.RenderObjects() |> ASet.toAList |> AList.map RenderCommand.Render
+        let quadTask = runtime.Compile(win.FramebufferSignature, quadCommands)
+
+        let quadActive = Mod.init true
+
         let commands = 
             alist {
                 let! n = n
                 for i in 0 .. n-1 do
                     let a = Seq.item i boxes
                     yield RenderCommand.Render a
-                    yield RenderCommand.Clear(Mod.constant C4f.Red, Mod.constant 1.0, Mod.constant 0)
+                    yield RenderCommand.Clear(Map.empty, Some (Mod.constant 1.0), Some (Mod.constant 0))
 
+                yield RenderCommand.IfThenElse(
+                    quadActive, 
+                    [ 
+                        RenderCommand.Call(quadTask) 
+                        RenderCommand.Custom <| fun runtime token renderToken output ->
+                            Log.line "size: %A" output.viewport.Size
+                            ()
+                    ],
+                    [
+                        RenderCommand.Custom <| fun runtime token renderToken output ->
+                            Log.line "no quad" 
+                            ()
+                    ]
+                )
             }
 
         win.Keyboard.DownWithRepeats.Values.Add(fun k ->    
-            let newValue =
-                match k with
-                    | Keys.Add -> n.Value + 1
-                    | Keys.Subtract -> max 1 (n.Value - 1)
-                    | _ -> n.Value
+            match k with
+                | Keys.Enter ->
+                    transact (fun () -> quadActive.Value <- not quadActive.Value)
+                | _ -> 
+                    let newValue =
+                        match k with
+                            | Keys.Add -> n.Value + 1
+                            | Keys.Subtract -> max 0 (n.Value - 1)
+                            | _ -> n.Value
             
-            if newValue <> n.Value then
-                Log.warn "count: %d" newValue
-                transact (fun () -> n.Value <- newValue)
+                    if newValue <> n.Value then
+                        Log.warn "count: %d" newValue
+                        transact (fun () -> n.Value <- newValue)
         )
 
-        let task = new Aardvark.Rendering.GL.RenderTasks.CommandRenderTask(runtime.ResourceManager, win.FramebufferSignature, commands, Mod.constant BackendConfiguration.Default, true, true)
+
+
+        let task = runtime.Compile(win.FramebufferSignature, commands) //new Aardvark.Rendering.GL.``Command Tasks``.CommandRenderTask(runtime.ResourceManager, win.FramebufferSignature, commands, Mod.constant BackendConfiguration.Default, true, true)
 
         win.RenderTask <- task
         win.Run()

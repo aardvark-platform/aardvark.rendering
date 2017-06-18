@@ -144,6 +144,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
         member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
       
+            
+
+
         member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
@@ -301,6 +304,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, Mod.constant engine, set)
+        
+    member x.Compile (signature : IFramebufferSignature, commands : alist<RenderCommand>) =
+        new CommandRenderTask(manager, signature, commands, Mod.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
 
     member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let clearValues =

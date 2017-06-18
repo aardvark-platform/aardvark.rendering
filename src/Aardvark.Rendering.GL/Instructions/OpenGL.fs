@@ -602,6 +602,11 @@ module OpenGl =
         let ClearDepth  = getProcAddress "glClearDepth"
 
         /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClearStencil.xml
+        /// </summary>
+        let ClearStencil  = getProcAddress "glClearStencil"
+
+        /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glGetError.xml
         /// </summary>
         let GetError  = getProcAddress "glGetError"
@@ -657,6 +662,12 @@ module OpenGl =
         /// https://www.opengl.org/sdk/docs/man/html/glDrawBuffers.xhtml
         /// </summary>
         let DrawBuffers = getProcAddress "glDrawBuffers"
+
+        
+        /// <summary>
+        /// https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDrawBuffer.xhtml
+        /// </summary>
+        let DrawBuffer = getProcAddress "glDrawBuffer"
 
 
         let Uniform1iv = getProcAddress "glUniform1iv"

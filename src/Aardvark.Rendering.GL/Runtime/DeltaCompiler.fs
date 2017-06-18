@@ -168,31 +168,6 @@ module DeltaCompiler =
     let compileFull (me : PreparedRenderObject) =
         compileDelta PreparedRenderObject.empty me
 
-    let compileDeltaCommand (scope : CompilerInfo) (l : Option<RenderCommand>) (r : RenderCommand) =
-        match l, r with
-            | Some (RenderCommand.Render p), RenderCommand.Render o -> 
-                let p = unbox<PreparedMultiRenderObject> p
-                let o = unbox<PreparedMultiRenderObject> o
-                compiled {
-                    let mutable prev = p.Last
-                    for m in o.Children do
-                        do! compileDelta prev m
-                        prev <- m
-                }
-            | _, RenderCommand.Render o ->  
-                let o = unbox<PreparedMultiRenderObject> o
-                compiled {
-                    let mutable prev = PreparedRenderObject.empty
-                    for m in o.Children do
-                        do! compileDelta prev m
-                        prev <- m
-                }
-
-            | _, RenderCommand.Clear(c,d,s) -> 
-                compiled {
-                    yield Instruction.Clear(int OpenGl.Enums.ClearMask.DepthBuffer)
-                }
-
 
     let compileEpilog (prev : Option<PreparedMultiRenderObject>) =
         compiled {
