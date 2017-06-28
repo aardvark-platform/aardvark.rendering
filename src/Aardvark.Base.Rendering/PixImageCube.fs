@@ -159,10 +159,10 @@ module FSharpPixImageCubeExtensions =
                 Map.ofList [
                     CubeSide.PositiveX, (CubeSide.PositiveX, ImageTrafo.Rot90)   
                     CubeSide.NegativeX, (CubeSide.NegativeX, ImageTrafo.Rot270)   
-                    CubeSide.PositiveZ, (CubeSide.PositiveY, ImageTrafo.Rot0)   
-                    CubeSide.NegativeZ, (CubeSide.NegativeY, ImageTrafo.Rot180)   
-                    CubeSide.PositiveY, (CubeSide.NegativeZ, ImageTrafo.Rot180)   
-                    CubeSide.NegativeY, (CubeSide.PositiveZ, ImageTrafo.Rot0)   
+                    CubeSide.PositiveZ, (CubeSide.NegativeY, ImageTrafo.Rot0)   
+                    CubeSide.NegativeZ, (CubeSide.PositiveY, ImageTrafo.Rot180)   
+                    CubeSide.PositiveY, (CubeSide.PositiveZ, ImageTrafo.Rot0)   
+                    CubeSide.NegativeY, (CubeSide.NegativeZ, ImageTrafo.Rot180)   
                 ]
 
             let RotX180 = compose RotX90 RotX90
@@ -171,10 +171,10 @@ module FSharpPixImageCubeExtensions =
 
             let RotY90 =
                 Map.ofList [
-                    CubeSide.PositiveX, (CubeSide.PositiveZ, ImageTrafo.Rot0)   
-                    CubeSide.NegativeX, (CubeSide.NegativeZ, ImageTrafo.Rot0)   
-                    CubeSide.PositiveZ, (CubeSide.NegativeX, ImageTrafo.Rot0)   
-                    CubeSide.NegativeZ, (CubeSide.PositiveX, ImageTrafo.Rot0)   
+                    CubeSide.PositiveX, (CubeSide.NegativeZ, ImageTrafo.Rot0)   
+                    CubeSide.NegativeX, (CubeSide.PositiveZ, ImageTrafo.Rot0)   
+                    CubeSide.PositiveZ, (CubeSide.PositiveX, ImageTrafo.Rot0)   
+                    CubeSide.NegativeZ, (CubeSide.NegativeX, ImageTrafo.Rot0)   
                     CubeSide.NegativeY, (CubeSide.NegativeY, ImageTrafo.Rot270)   
                     CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.Rot90)   
                 ]

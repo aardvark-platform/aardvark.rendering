@@ -347,14 +347,20 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     interface IRuntime with
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
+            let module_ = signature.Link(effect, Range1d(0.0, 1.0), true)
             let glsl = 
-                signature.Link(effect, Range1d(0.0, 1.0), true)
-                    |> ModuleCompiler.compileGLSLVulkan
+                module_ |> ModuleCompiler.compileGLSLVulkan
             
             let entries =
-                effect.Shaders 
-                    |> Map.toSeq
-                    |> Seq.map (fun (stage,_) -> shaderStages stage, "main") 
+                module_.entries
+                    |> Seq.choose (fun e -> 
+                        let stage = e.decorations |> List.tryPick (function Imperative.EntryDecoration.Stages { self = self } -> Some self | _ -> None)
+                        match stage with
+                            | Some stage ->
+                                Some (shaderStages stage, "main")
+                            | None ->
+                                None
+                    ) 
                     |> Dictionary.ofSeq
 
             BackendSurface(glsl.code, entries)
