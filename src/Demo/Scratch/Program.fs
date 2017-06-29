@@ -111,7 +111,8 @@ let quadTexture() =
 
     let environment =
         environment 
-            |> PixImageCube.ofOpenGlConvention
+            |> PixImageCube.toOpenGlConvention
+            //|> PixImageCube.rotZ90
             |> PixImageCube.toTexture true
 
     let env =
@@ -121,6 +122,13 @@ let quadTexture() =
                }
             |> Sg.texture (Symbol.Create "EnvironmentMap") (Mod.constant environment)
 
+    let coord =
+        Sg.coordinateCross' 3.0
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.vertexColor
+            }
+
     Sg.fullScreenQuad
         |> Sg.effect [
             DefaultSurfaces.trafo |> toEffect
@@ -129,6 +137,7 @@ let quadTexture() =
            ]
         |> Sg.diffuseFileTexture' @"E:\Development\WorkDirectory\DataSVN\pattern.jpg" false
         |> Sg.andAlso env
+        |> Sg.andAlso coord
 
 
 
@@ -486,15 +495,11 @@ type DependentHandle =
 
 [<EntryPoint>]
 let main argv = 
-    Scratch.VolumeTest.run()
-    //Scratch.InteractionExperiments.run() |> ignore
-    //Scratch.FablishInterop.run argv |> ignore
-    System.Environment.Exit 0
 
     Ag.initialize()
     Aardvark.Init()
 
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
-    App.run()
+    App.run(quadTexture())
 
     0 // return an integer exit code

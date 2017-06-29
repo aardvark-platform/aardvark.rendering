@@ -746,8 +746,97 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+and private FenceCallbacks(device : Device) =
+    static let noDisposable = { new IDisposable with member x.Dispose() = () }
+
+    let cont = Dict<Fence, Dictionary<int, unit -> unit>>()
+    let mutable version = 0
+
+    let mutable currentId = 0
+    let newId() = Interlocked.Increment(&currentId)
+
+    let timeout = 1000UL
+    let run () =
+        let mutable all = [||]
+        let mutable ptr : nativeptr<VkFence> = NativePtr.alloc 1
+        let mutable lastVersion = -1
+
+        while true do
+            if version <> lastVersion then
+                lastVersion <- version
+
+                all <-
+                    lock cont (fun () ->
+                        while cont.Count = 0 do
+                            Monitor.Wait(cont) |> ignore
+                        cont.Keys |> Seq.toArray
+                    )
+
+                NativePtr.free ptr
+                ptr <- NativePtr.alloc all.Length
+                for i in 0 .. all.Length - 1 do
+                    NativePtr.set ptr i all.[i].Handle
+
+            let status = 
+                VkRaw.vkWaitForFences(device.Handle, uint32 all.Length, ptr, 0u, timeout)
+                    
+            match status with
+                | VkResult.VkSuccess ->
+                    let finished = all |> Seq.filter (fun f -> f.Completed) |> Seq.toList
+
+                    for f in all do
+                        if f.Completed then
+                            match cont.TryRemove f with
+                                | (true, cs) -> for cb in cs do cb()
+                                | _ -> ()
+         
+
+                | _ ->
+                    ()
+
+    let thread = Thread(ThreadStart(run), IsBackground = true, Priority = ThreadPriority.Highest)
+    do thread.Start()
+
+    let remove (f : Fence) (id : int) =
+        lock cont (fun () ->
+            match cont.TryGetValue f with
+                | (true, cbs) ->
+                    if cbs.Remove id then
+                        if cbs.Count = 0 then 
+                            version <- version + 1
+                            cont.Remove f |> ignore
+                        true
+                    else
+                        false
+                | _ ->
+                    false
+        )
+
+    member x.ContinueWith(f : Fence, ct : CancellationToken, cb : unit -> unit) =
+        if not ct.IsCancellationRequested then
+            if f.Completed then 
+                cb()
+            else
+                lock cont (fun () ->
+                    let mutable isNew = false
+                    let l = cont.GetOrCreate(f, fun _ -> isNew <- true; Dictionary())
+                    let id = newId()
+                    if ct.CanBeCanceled then
+                        let mutable reg = noDisposable
+                        l.[id] <- (fun () -> reg.Dispose(); cb())
+                        reg <- ct.Register(fun () -> remove f id |> ignore)
+                    else
+                        l.[id] <- cb
+                
+                    if isNew then 
+                        version <- version + 1
+                        Monitor.Pulse cont
+                )
+
+   
 and Fence internal(device : Device, signaled : bool) =
-    static let infinite = -1L
+    static let infinite = System.UInt64.MaxValue
+    static let cbs = ConcurrentDictionary<Device, FenceCallbacks>()
 
     let mutable handle : VkFence = VkFence.Null
     do 
@@ -763,6 +852,33 @@ and Fence internal(device : Device, signaled : bool) =
     member x.Device = device
     member x.Handle = handle
 
+    member x.ContinueWith(f : unit -> unit, cancellationToken : CancellationToken) =
+        let cb = cbs.GetOrAdd(device, fun d -> FenceCallbacks(d))
+        cb.ContinueWith(x, cancellationToken, f)
+
+    member x.ContinueWith(f : unit -> unit) =
+        x.ContinueWith(f, CancellationToken.None)
+
+    static member WaitAll(fences : Fence[]) =
+        if fences.Length > 0 then
+            let device = fences.[0].Device
+            let pFences = NativePtr.stackalloc fences.Length
+            for i in 0 .. fences.Length - 1 do
+                NativePtr.set pFences i fences.[i].Handle
+
+            VkRaw.vkWaitForFences(device.Handle, uint32 fences.Length, pFences, 1u,  infinite)
+                |> check "failed to wait for fences"
+
+    static member WaitAny(fences : Fence[]) =
+        if fences.Length > 0 then
+            let device = fences.[0].Device
+            let pFences = NativePtr.stackalloc fences.Length
+            for i in 0 .. fences.Length - 1 do
+                NativePtr.set pFences i fences.[i].Handle
+
+            VkRaw.vkWaitForFences(device.Handle, uint32 fences.Length, pFences, 0u,  infinite)
+                |> check "failed to wait for fences"
+
     member x.Signaled =
         if handle.IsValid then
             VkRaw.vkGetFenceStatus(device.Handle, handle) = VkResult.VkSuccess
@@ -774,6 +890,14 @@ and Fence internal(device : Device, signaled : bool) =
             VkRaw.vkGetFenceStatus(device.Handle, handle) <> VkResult.VkNotReady
         else
             true
+
+    member x.Reset() =
+        if handle.IsValid then
+            VkRaw.vkResetFences(device.Handle, 1u, &&handle)
+                |> check "failed to reset fence"
+        else
+            failf "cannot reset disposed fence"
+
     member x.TryWait(timeoutInNanoseconds : int64) =
         let waitResult = VkRaw.vkWaitForFences(device.Handle, 1u, &&handle, 1u, uint64 timeoutInNanoseconds)
         match waitResult with
@@ -787,7 +911,7 @@ and Fence internal(device : Device, signaled : bool) =
                 handle <- VkFence.Null
                 failf "could not wait for fences: %A" err
     
-    member x.TryWait() = x.TryWait(infinite)
+    member x.TryWait() = x.TryWait(-1L)
 
     member x.Wait(timeoutInNanoseconds : int64) = 
         if not (x.TryWait(timeoutInNanoseconds)) then

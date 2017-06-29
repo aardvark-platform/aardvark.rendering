@@ -13,25 +13,25 @@ open Aardvark.Base.Incremental
 #nowarn "9"
 #nowarn "51"
 
-type private DrawCallResource(device : Device, indexed : bool, calls : IMod<list<DrawCallInfo>>) =
-    inherit Rendering.Resource<nativeint, nativeint>(ResourceKind.Unknown)
-
-    override x.View h = h
-
-    override x.Create(token : AdaptiveToken, rt : RenderToken, old : Option<nativeint>) =
-        match old with
-            | Some o ->
-                device.UpdateDrawCall(NativePtr.ofNativeInt o, indexed, calls.GetValue token)
-                o
-            | None -> 
-                let ptr = device.CreateDrawCall(indexed, calls.GetValue token)
-                NativePtr.toNativeInt ptr
-
-    override x.Destroy(old : nativeint) =
-        device.Delete(NativePtr.ofNativeInt<DrawCall> old)
-
-    override x.GetInfo _ =
-        ResourceInfo.Zero
+//type private DrawCallResource(device : Device, indexed : bool, calls : IMod<list<DrawCallInfo>>) =
+//    inherit Rendering.Resource<nativeint, nativeint>(ResourceKind.Unknown)
+//
+//    override x.View h = h
+//
+//    override x.Create(token : AdaptiveToken, rt : RenderToken, old : Option<nativeint>) =
+//        match old with
+//            | Some o ->
+//                device.UpdateDrawCall(NativePtr.ofNativeInt o, indexed, calls.GetValue token)
+//                o
+//            | None -> 
+//                let ptr = device.CreateDrawCall(indexed, calls.GetValue token)
+//                NativePtr.toNativeInt ptr
+//
+//    override x.Destroy(old : nativeint) =
+//        device.Delete(NativePtr.ofNativeInt<DrawCall> old)
+//
+//    override x.GetInfo _ =
+//        ResourceInfo.Zero
 
 
 [<AllowNullLiteral>]
@@ -74,8 +74,8 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
     member private x.UniformBufferCache : ResourceCache<UniformBuffer, VkBuffer> = uniformBufferCache
     member private x.PipelineCache : ResourceCache<Pipeline, VkPipeline> = pipelineCache
     member private x.DescriptorSetCache : ResourceCache<DescriptorSet, VkDescriptorSet> = descriptorSetCache
-    member private x.DirectCallCache : ResourceCache<nativeint, nativeint> = directCallCache
-    member private x.IndirectCallCache : ResourceCache<nativeint, nativeint> = indirectCallCache
+    member private x.DirectCallCache : ResourceCache<DrawCall, DrawCall> = directCallCache
+    member private x.IndirectCallCache : ResourceCache<DrawCall, DrawCall> = indirectCallCache
     member private x.VertexBindingCache : ResourceCache<VertexBufferBinding, VertexBufferBinding> = vertexBindingCache
     member private x.DescriptorSetBindingCache : ResourceCache<DescriptorSetBinding, DescriptorSetBinding> = descriptorSetBindingCache
     member private x.IndexBufferBindingCache : ResourceCache<IndexBufferBinding, IndexBufferBinding> = indexBufferBindingCache
@@ -407,18 +407,22 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
 
 
     member x.CreateDrawCall(indexed : bool, calls : IMod<list<DrawCallInfo>>) =
-        directCallCache.GetOrCreate(
-            [calls :> obj; indexed :> obj],
-            fun () -> new DrawCallResource(device, indexed, calls) :> Rendering.Resource<_,_>
-        )
+        directCallCache.GetOrCreate( calls, [indexed], {
+            create = fun b      -> device.CreateDrawCall(indexed, b)
+            update = fun h b    -> device.CreateDrawCall(indexed, b)
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun h      -> h
+            kind = ResourceKind.Unknown
+        })
 
     member x.CreateDrawCall(indexed : bool, calls : IResource<IndirectBuffer, VkBuffer>) =
         indirectCallCache.GetOrCreateDependent(calls, [indexed :> obj], {
-            create = fun b      -> device.CreateDrawCall(indexed, b) |> NativePtr.toNativeInt
-            update = fun h b    -> device.UpdateDrawCall(NativePtr.ofNativeInt h, indexed, b); h
-            delete = fun h      -> device.Delete(NativePtr.ofNativeInt<DrawCall> h)
+            create = fun b      -> device.CreateDrawCall(indexed, b)
+            update = fun h b    -> device.CreateDrawCall(indexed, b)
+            delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
-            view =   fun h      -> 0n
+            view =   fun h      -> h
             kind = ResourceKind.Unknown
         })
 

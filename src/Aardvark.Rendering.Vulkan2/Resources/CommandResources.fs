@@ -62,38 +62,13 @@ type DrawCall =
 type DeviceDrawCallExtensions private() =
     [<Extension>]
     static member CreateDrawCall(this : Device, indexed : bool, calls : list<DrawCallInfo>) =
-        let res = DrawCall.Direct(indexed, List.toArray calls)
-        let ptr = NativePtr.alloc 1
-        NativePtr.write ptr res
-        ptr
+        DrawCall.Direct(indexed, List.toArray calls)
+
 
     [<Extension>]
     static member CreateDrawCall(this : Device, indexed : bool, buffer : IndirectBuffer) =
-        let res = DrawCall.Indirect(indexed, buffer)
-        let ptr = NativePtr.alloc 1
-        NativePtr.write ptr res
-        ptr
+        DrawCall.Indirect(indexed, buffer)
 
-    [<Extension>]
-    static member UpdateDrawCall(this : Device, ptr : nativeptr<DrawCall>, indexed : bool, calls : list<DrawCallInfo>) =
-        let old = NativePtr.read ptr
-        old.Dispose()
-        let res = DrawCall.Direct(indexed, List.toArray calls)
-        NativePtr.write ptr res
-
-    [<Extension>]
-    static member UpdateDrawCall(this : Device, ptr : nativeptr<DrawCall>, indexed : bool, indirect : IndirectBuffer) =
-        let old = NativePtr.read ptr
-        old.Dispose()
-        let res = DrawCall.Indirect(indexed, indirect)
-        NativePtr.write ptr res
-
-    [<Extension>]
-    static member Delete(this : Device, ptr : nativeptr<DrawCall>) =
-        if not (NativePtr.isNull ptr) then
-            let old = NativePtr.read ptr
-            old.Dispose()
-            NativePtr.free ptr
 
 
 

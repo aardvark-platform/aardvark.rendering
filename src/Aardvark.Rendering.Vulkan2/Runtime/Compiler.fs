@@ -79,8 +79,8 @@ module Compiler =
         let bindIndexBuffer (r : IResource<IndexBufferBinding, IndexBufferBinding>) : Instruction =
             VKVM.Pointers.vmBindIndexBuffer, [| r.Pointer :> obj |]
 
-        let draw (stats : nativeptr<V2i>) (isActive : IResource<bool, int>) (r : IResource<nativeint>) : Instruction =
-            VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Pointer :> obj; r.Handle.GetValue() :> obj |]
+        let draw (stats : nativeptr<V2i>) (isActive : IResource<bool, int>) (r : IResource<DrawCall, DrawCall>) : Instruction =
+            VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Pointer :> obj; r.Pointer :> obj |]
 
     let compileSingle (scope : CompilerScope) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =
         match prev with

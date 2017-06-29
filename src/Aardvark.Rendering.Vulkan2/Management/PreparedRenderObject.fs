@@ -24,7 +24,7 @@ type PreparedRenderObject =
         uniformBuffers          : list<IResource<UniformBuffer, VkBuffer>>
         descriptorSets          : IResource<DescriptorSetBinding, DescriptorSetBinding>
         vertexBuffers           : IResource<VertexBufferBinding, VertexBufferBinding>
-        drawCalls               : IResource<nativeint>
+        drawCalls               : IResource<DrawCall, DrawCall>
         isActive                : IResource<bool, int>
         activation              : IDisposable
     }
