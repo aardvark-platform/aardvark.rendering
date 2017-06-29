@@ -69,8 +69,8 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                 match families with
                     | [] -> None
                     | (_, fam) :: _ -> 
-                        available.[fam.index] <- { fam with count = fam.count - count }
-                        Some (allFamilies.[fam.index], count)
+                        available.[fam.index] <- { fam with count = 0 }
+                        Some (allFamilies.[fam.index], fam.count)
 
 type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
     let pool = QueueFamilyPool(physical.QueueFamilies)

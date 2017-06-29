@@ -140,6 +140,30 @@ module IndexedGeometryPrimitives =
             Line3d(V3d.Zero, V3d.ZAxis * size), C4b.Blue
         ] |> lines
 
+    let coordinateBox (size : float) =
+        let s = size
+
+        let ppp = V3d( s, s, s)
+        let ppm = V3d( s, s,-s)
+        let pmp = V3d( s,-s, s)
+        let pmm = V3d( s,-s,-s)
+        let mpp = V3d(-s, s, s)
+        let mpm = V3d(-s, s,-s)
+        let mmp = V3d(-s,-s, s)
+        let mmm = V3d(-s,-s,-s)
+
+        let hi = 70
+        let lo = 30
+
+        let qf = quad' pmp ppp ppm pmm (C4b(hi,lo,lo,255))
+        let qb = quad' mmp mmm mpm mpp (C4b(lo,hi,hi,255))
+        let ql = quad' pmp pmm mmm mmp (C4b(lo,hi,lo,255))
+        let qr = quad' ppp mpp mpm ppm (C4b(hi,lo,hi,255))
+        let qu = quad' pmp ppp mpp mmp (C4b(lo,lo,hi,255))
+        let qd = quad' pmm mmm mpm ppm (C4b(hi,hi,lo,255))
+
+        [qf; qb; ql; qr; qu; qd]
+
     module Sphere =
 
         let subdivisionWithMode (sphere : Sphere3d) level (color : C4b) (mode : IndexedGeometryMode) =
