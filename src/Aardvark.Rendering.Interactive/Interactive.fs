@@ -46,7 +46,7 @@ type Interactive private() =
                 let a = 
                     match renderer with
                         | GL -> new OpenGlApplication() :> IApplication
-                        | Vulkan -> new VulkanApplication() :> IApplication
+                        | Vulkan -> new VulkanApplication(true) :> IApplication
                 app <- Some a
                 a
             | Some v -> v
@@ -56,7 +56,7 @@ type Interactive private() =
             initialized <- true
             let app = getApp()
             window.Text <- sprintf "Aardvark Interactive Session Setup running: %A" renderer
-            app.Initialize(window.Control, 8)
+            app.Initialize(window.Control, 1)
             let task = 
                 match renderer with
                     | Vulkan -> 

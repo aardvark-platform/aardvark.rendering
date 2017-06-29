@@ -350,7 +350,7 @@ type ResourceManagerExtensions private() =
 
         // create a program and get its handle (ISSUE: assumed to be constant here)
         let program = x.CreateSurface(fboSignature, rj.Surface)
-        let prog = program.Handle.GetValue(AdaptiveToken.Top)
+        let prog = program.Handle.GetValue()
 
         GL.Check "[Prepare] Create Surface"
 

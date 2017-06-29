@@ -114,11 +114,10 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         1, 1, 1,
                         TextureDimension.Texture2D,
                         description.colorFormat,
-                        VkComponentMapping.Identity,
                         Unchecked.defaultof<_>,
                         VkImageLayout.Undefined
                     )
-                device.CreateImageView(image, 0, 1, 0, 1)
+                device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)
 
             )
 
@@ -139,10 +138,9 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     )
                 // hacky-hack
                 image.Format <- description.colorFormat
-                image.ComponentMapping <- VkComponentMapping.Identity
                 token.Enqueue (Command.TransformLayout(image, VkImageLayout.ColorAttachmentOptimal))
 
-                let view = device.CreateImageView(image, 0, 1, 0, 1)
+                let view = device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)
                 Some view
 
         let depthView =
@@ -157,10 +155,9 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         )
                     // hacky-hack
                     image.Format <- depthFormat
-                    image.ComponentMapping <- VkComponentMapping.Identity
                     token.Enqueue (Command.TransformLayout(image, VkImageLayout.DepthStencilAttachmentOptimal))
 
-                    let view = device.CreateImageView(image, 0, 1, 0, 1)
+                    let view = device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)
 
                     Some view
                 | _ -> 

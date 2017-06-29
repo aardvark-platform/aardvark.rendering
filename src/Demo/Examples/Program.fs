@@ -442,6 +442,8 @@ let colorLockTest() =
     check NotEntered
     Environment.Exit 0
 
+open Aardvark.Rendering.Interactive
+
 [<EntryPoint>]
 [<STAThread>]
 let main args =
@@ -455,11 +457,18 @@ let main args =
     //Examples.Render2TexturePrimitiveFloat.run()
     //Examples.ComputeTest.run()
     //colorLockTest()
+
+
+
     Ag.initialize()
     Aardvark.Init()
+    
+    Interactive.Renderer <- Vulkan
+    
     Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
-    Examples.CommandTest.run()
-    //Examples.LoD.run()
+    //Examples.PostProcessing.run()
+    //Examples.CommandTest.run()
+    Examples.LoD.run()
     //Examples.Shadows.run()
     //Examples.AssimpInterop.run() 
     //Examples.ShaderSignatureTest.run()

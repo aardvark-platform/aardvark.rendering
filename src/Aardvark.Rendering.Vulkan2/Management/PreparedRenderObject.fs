@@ -150,7 +150,8 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 | Some (:? IMod<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
-                                                    let view = this.CreateImageView(tex)
+                                                    // TODO: proper formats
+                                                    let view = this.CreateImageView(tex, VkComponentMapping.Identity)
                                                     let sam = this.CreateSampler(Mod.constant samplerState)
 
                                                     Some(view, sam)

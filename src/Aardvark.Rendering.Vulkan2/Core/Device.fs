@@ -749,11 +749,18 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
 and private FenceCallbacks(device : Device) =
     static let noDisposable = { new IDisposable with member x.Dispose() = () }
 
+    let infinite = System.UInt64.MaxValue
+
     let cont = Dict<Fence, Dictionary<int, unit -> unit>>()
+    
     let mutable version = 0
 
     let mutable currentId = 0
     let newId() = Interlocked.Increment(&currentId)
+
+    let sem = device.CreateSemaphore()
+    let changedFence = device.CreateFence()
+    let mutable changed = 0
 
     let timeout = 1000UL
     let run () =
@@ -762,6 +769,8 @@ and private FenceCallbacks(device : Device) =
         let mutable lastVersion = -1
 
         while true do
+            let version = Volatile.Read(&version)
+
             if version <> lastVersion then
                 lastVersion <- version
 
@@ -769,28 +778,29 @@ and private FenceCallbacks(device : Device) =
                     lock cont (fun () ->
                         while cont.Count = 0 do
                             Monitor.Wait(cont) |> ignore
+
+                        changedFence.Reset()
+                        changed <- 0
                         cont.Keys |> Seq.toArray
                     )
 
                 NativePtr.free ptr
-                ptr <- NativePtr.alloc all.Length
+                ptr <- NativePtr.alloc (1 + all.Length)
+                NativePtr.write ptr changedFence.Handle
                 for i in 0 .. all.Length - 1 do
-                    NativePtr.set ptr i all.[i].Handle
+                    NativePtr.set ptr (i + 1) all.[i].Handle
 
             let status = 
-                VkRaw.vkWaitForFences(device.Handle, uint32 all.Length, ptr, 0u, timeout)
+                VkRaw.vkWaitForFences(device.Handle, uint32 (1 + all.Length), ptr, 0u, infinite)
                     
             match status with
                 | VkResult.VkSuccess ->
-                    let finished = all |> Seq.filter (fun f -> f.Completed) |> Seq.toList
-
                     for f in all do
                         if f.Completed then
-                            match cont.TryRemove f with
-                                | (true, cs) -> for cb in cs do cb()
+                            match lock cont (fun () -> cont.TryRemove f) with
+                                | (true, cs) -> for (KeyValue(_,cb)) in cs do cb()
                                 | _ -> ()
-         
-
+                    
                 | _ ->
                     ()
 
@@ -830,7 +840,12 @@ and private FenceCallbacks(device : Device) =
                 
                     if isNew then 
                         version <- version + 1
-                        Monitor.Pulse cont
+                        if changed = 0 then
+                            changed <- 1
+                            changedFence.Set()
+
+                        if cont.Count = 1 then
+                            Monitor.Pulse cont
                 )
 
    
@@ -847,7 +862,6 @@ and Fence internal(device : Device, signaled : bool) =
             )
         VkRaw.vkCreateFence(device.Handle, &&info, NativePtr.zero, &&handle)
             |> check "could not create fence"
-
 
     member x.Device = device
     member x.Handle = handle
@@ -898,10 +912,19 @@ and Fence internal(device : Device, signaled : bool) =
         else
             failf "cannot reset disposed fence"
 
+    member x.Set() =
+        if handle.IsValid then
+            let queue = device.ComputeFamily.GetQueue()
+            VkRaw.vkQueueSubmit(queue.Handle, 0u, NativePtr.zero, handle)
+                |> check "cannot signal fence"
+        else
+            failf "cannot signal disposed fence" 
+
     member x.TryWait(timeoutInNanoseconds : int64) =
         let waitResult = VkRaw.vkWaitForFences(device.Handle, 1u, &&handle, 1u, uint64 timeoutInNanoseconds)
         match waitResult with
-            | VkResult.VkTimeout -> false
+            | VkResult.VkTimeout -> 
+                false
             | VkResult.VkSuccess -> 
                 VkRaw.vkDestroyFence(device.Handle, handle, NativePtr.zero)
                 handle <- VkFence.Null

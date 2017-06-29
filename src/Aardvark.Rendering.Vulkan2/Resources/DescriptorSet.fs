@@ -101,7 +101,7 @@ module DescriptorSet =
                                             VkDescriptorImageInfo(
                                                 sam.Handle,
                                                 view.Handle,
-                                                view.Image.Layout
+                                                VkImageLayout.ShaderReadOnlyOptimal
                                             )
 
                                         NativePtr.write imageInfos info

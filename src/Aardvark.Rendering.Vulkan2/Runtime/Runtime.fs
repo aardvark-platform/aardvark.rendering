@@ -190,10 +190,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             bindings |> Map.map (fun s o ->
                 match o with
                     | :? IBackendTextureOutputView as view ->
-                        device.CreateImageView(unbox view.texture, view.level, 1, view.slice, 1)
+                        device.CreateImageView(unbox view.texture, view.level, 1, view.slice, 1, VkComponentMapping.Identity)
 
                     | :? Image as img ->
-                        device.CreateImageView(img, 0, 1, 0, 1)
+                        device.CreateImageView(img, 0, 1, 0, 1, VkComponentMapping.Identity)
 
                     | _ -> failf "invalid framebuffer attachment %A: %A" s o
             )
@@ -242,12 +242,20 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 | _ -> false
 
         let layout =
-            if isDepth then VkImageLayout.DepthStencilAttachmentOptimal
-            else VkImageLayout.ColorAttachmentOptimal
+            if isDepth then VkImageLayout.ShaderReadOnlyOptimal
+            else VkImageLayout.ShaderReadOnlyOptimal
 
         let usage =
-            if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
-            else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
+            if isDepth then 
+                VkImageUsageFlags.DepthStencilAttachmentBit ||| 
+                VkImageUsageFlags.TransferSrcBit ||| 
+                VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.SampledBit
+            else 
+                VkImageUsageFlags.ColorAttachmentBit ||| 
+                VkImageUsageFlags.TransferSrcBit ||| 
+                VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.SampledBit
 
         let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, count, samples, TextureDimension.Texture2D, format, usage) 
         device.GraphicsFamily.run {

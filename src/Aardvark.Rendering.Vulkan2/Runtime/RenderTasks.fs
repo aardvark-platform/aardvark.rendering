@@ -377,9 +377,22 @@ module RenderTasks =
                 for cmd in commandBuffers do
                     do! Command.Barrier
 
+                    let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
+                    for i in 0 .. fbo.ImageViews.Length - 1 do
+                        let img = fbo.ImageViews.[i].Image
+                        oldLayouts.[i] <- img.Layout
+                        if VkFormat.hasDepth img.Format then
+                            do! Command.TransformLayout(img, VkImageLayout.DepthStencilAttachmentOptimal)
+                        else
+                            do! Command.TransformLayout(img, VkImageLayout.ColorAttachmentOptimal)
+
                     do! Command.BeginPass (renderPass, fbo, false)
                     do! Command.Execute cmd
                     do! Command.EndPass
+
+                    for i in 0 .. fbo.ImageViews.Length - 1 do
+                        let img = fbo.ImageViews.[i].Image
+                        do! Command.TransformLayout(img, oldLayouts.[i])
             }
 
             // really run the stuff

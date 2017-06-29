@@ -743,7 +743,6 @@ module RenderTasks =
 
                 if not texEqual then 
                     x.BindTexture(tex)
-                    //yield Instructions.bindTexture tex
 
                 if not samEqual || (not ExecutionContext.samplersSupported && not texEqual) then
                     x.BindSampler(id, sam)
@@ -752,19 +751,14 @@ module RenderTasks =
             for (id,u) in Map.toSeq me.Uniforms do
                 match Map.tryFind id prev.Uniforms with
                     | Some old when old = u -> ()
-                    | _ ->
-                        // TODO: UniformLocations cannot change structurally atm.
-                        x.BindUniformLocation(id, u)
+                    | _ -> x.BindUniformLocation(id, u)
 
 
             // bind the VAO (if needed)
-            //if prev.VertexInputBinding <> me.VertexInputBinding then
-            x.BindVertexAttributes(s.contextHandle, me.VertexInputBinding)
+            if prev.VertexInputBinding <> me.VertexInputBinding then
+                x.BindVertexAttributes(s.contextHandle, me.VertexInputBinding)
 
             // draw the thing
-            // TODO: surface assumed to be constant here
-            let prog = me.Program.Handle.GetValue()
-
             let isActive = me.IsActive
             let beginMode = me.BeginMode
 

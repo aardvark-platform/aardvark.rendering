@@ -70,7 +70,7 @@ module BufferCommands =
                             VkBufferCreateFlags.None,
                             uint64 srcBufferSize, VkBufferUsageFlags.TransferSrcBit, VkSharingMode.Exclusive, 
                             0u, NativePtr.zero
-                    )
+                        )
 
                     VkRaw.vkCreateBuffer(device.Handle, &&srcInfo, NativePtr.zero, &&srcBuffer)
                         |> check "could not create temporary buffer"

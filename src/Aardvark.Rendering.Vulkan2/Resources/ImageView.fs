@@ -57,13 +57,13 @@ module ImageView =
             | _ ->
                 failf "invalid image type: %A" imageType
 
-    let create (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
+    let create (componentMapping : VkComponentMapping) (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min
         let slices = 1 + arrayRange.Max - arrayRange.Min
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
-        let aspect = VkFormat.toAspect img.Format
+        let aspect = VkFormat.toShaderAspect img.Format
 
         let viewType = viewType img.Dimension slices
         let mutable info = 
@@ -73,7 +73,7 @@ module ImageView =
                 img.Handle,
                 viewType, 
                 img.Format,
-                img.ComponentMapping,
+                componentMapping,
                 VkImageSubresourceRange(
                     aspect, 
                     uint32 levelRange.Min,
@@ -97,24 +97,24 @@ module ImageView =
 type ContextImageViewExtensions private() =
 
     [<Extension>]
-    static member inline CreateImageView(this : Device, image : Image, levelRange : Range1i, arrayRange : Range1i) =
-        this |> ImageView.create image levelRange arrayRange
+    static member inline CreateImageView(this : Device, image : Image, levelRange : Range1i, arrayRange : Range1i, comp : VkComponentMapping) =
+        this |> ImageView.create comp image levelRange arrayRange
 
     [<Extension>]
-    static member inline CreateImageView(this : Device, image : Image, baseLevel : int, levels : int, baseSlice : int, slices : int) =
-        this |> ImageView.create image (Range1i(baseLevel, baseLevel + levels - 1)) (Range1i(baseSlice, baseSlice + slices - 1))
+    static member inline CreateImageView(this : Device, image : Image, baseLevel : int, levels : int, baseSlice : int, slices : int, comp : VkComponentMapping) =
+        this |> ImageView.create comp image (Range1i(baseLevel, baseLevel + levels - 1)) (Range1i(baseSlice, baseSlice + slices - 1))
 
     [<Extension>]
-    static member inline CreateImageView(this : Device, image : Image, levelRange : Range1i) =
-        this |> ImageView.create image levelRange (Range1i(0, image.Count - 1))
+    static member inline CreateImageView(this : Device, image : Image, levelRange : Range1i, comp : VkComponentMapping) =
+        this |> ImageView.create comp image levelRange (Range1i(0, image.Count - 1))
 
     [<Extension>]
-    static member inline CreateImageView(this : Device, image : Image) =
-        this |> ImageView.create image (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Count - 1))
+    static member inline CreateImageView(this : Device, image : Image, comp : VkComponentMapping) =
+        this |> ImageView.create comp image (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Count - 1))
 
     [<Extension>]
-    static member inline CreateImageView(this : Device, image : Image, level : int, slice : int) =
-        this |> ImageView.create image (Range1i(level, level)) (Range1i(slice, slice))
+    static member inline CreateImageView(this : Device, image : Image, level : int, slice : int, comp : VkComponentMapping) =
+        this |> ImageView.create comp image (Range1i(level, level)) (Range1i(slice, slice))
 
 
 

@@ -27,7 +27,6 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Base.Incremental.Operators
 open Aardvark.Base.Rendering
-open Aardvark.Rendering.NanoVg
 open Aardvark.Base.ShaderReflection
 
 module PostProcessing = 
@@ -158,24 +157,24 @@ module PostProcessing =
                 |> Sg.trafo ~~(Trafo3d.Scale(overlayRelativeSize) * Trafo3d.Translation(-1.0 + overlayRelativeSize, 1.0 - overlayRelativeSize, 0.0))
                 |> Sg.pass overlayPass
                 |> Sg.blendMode ~~BlendMode.Blend
-
-        let overlayBox =
-            let box = win.Sizes |> Mod.map (fun s -> Box2d.FromMinAndSize(0.0, 0.0, overlayRelativeSize * float s.X, overlayRelativeSize * float s.Y))
-
-            box |> Mod.map Rectangle
-                |> Nvg.stroke
-                |> Nvg.strokeColor ~~C4f.Gray50
-                |> Nvg.strokeWidth ~~2.0
-
-        let overlayText =
-            Nvg.text ~~"Original"
-                |> Nvg.fontSize ~~20.0
-                |> Nvg.trafo (win.Sizes |> Mod.map (fun s -> M33d.Translation(float s.X * 0.5 * overlayRelativeSize, float s.Y * overlayRelativeSize - 10.0)))
-                |> Nvg.systemFont "Consolas" FontStyle.Bold
-                |> Nvg.align ~~TextAlign.Center
-                |> Nvg.andAlso overlayBox
-                |> win.Runtime.CompileRender
-                |> Sg.overlay
+//
+//        let overlayBox =
+//            let box = win.Sizes |> Mod.map (fun s -> Box2d.FromMinAndSize(0.0, 0.0, overlayRelativeSize * float s.X, overlayRelativeSize * float s.Y))
+//
+//            box |> Mod.map Rectangle
+//                |> Nvg.stroke
+//                |> Nvg.strokeColor ~~C4f.Gray50
+//                |> Nvg.strokeWidth ~~2.0
+//
+//        let overlayText =
+//            Nvg.text ~~"Original"
+//                |> Nvg.fontSize ~~20.0
+//                |> Nvg.trafo (win.Sizes |> Mod.map (fun s -> M33d.Translation(float s.X * 0.5 * overlayRelativeSize, float s.Y * overlayRelativeSize - 10.0)))
+//                |> Nvg.systemFont "Consolas" FontStyle.Bold
+//                |> Nvg.align ~~TextAlign.Center
+//                |> Nvg.andAlso overlayBox
+//                |> win.Runtime.CompileRender
+//                |> Sg.overlay
 
 
         let mainResult =
@@ -183,7 +182,7 @@ module PostProcessing =
                 |> Sg.texture DefaultSemantic.DiffuseColorTexture blurredOnlyX
                 |> Sg.effect [Shaders.gaussY |> toEffect]
         
-        Sg.group' [mainResult; overlayOriginal; overlayText]
+        Sg.group' [mainResult; overlayOriginal]
 
     let showTexture t =
         Interactive.SceneGraph <- 
@@ -200,31 +199,31 @@ module PostProcessing =
 //        ComputeTest.run()
 //        Environment.Exit 0
 
-        let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, Mod.constant (V2i(1024, 768)))
-        fbo.Acquire()
-        let fboHandle = fbo.GetValue()
-        let color = unbox<BackendTextureOutputView> fboHandle.Attachments.[DefaultSemantic.Colors]
-        let output = OutputDescription.ofFramebuffer fboHandle
-        let clear = win.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
-        let view1 = CameraView.lookAt V3d.III V3d.Zero V3d.OOI |> CameraView.viewTrafo
-        let view2 = CameraView.lookAt (10.0 * V3d.III) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+//        let fbo = win.Runtime.CreateFramebuffer(win.FramebufferSignature, Mod.constant (V2i(1024, 768)))
+//        fbo.Acquire()
+//        let fboHandle = fbo.GetValue()
+//        let color = unbox<BackendTextureOutputView> fboHandle.Attachments.[DefaultSemantic.Colors]
+//        let output = OutputDescription.ofFramebuffer fboHandle
+//        let clear = win.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black, Mod.constant 1.0)
+//        let view1 = CameraView.lookAt V3d.III V3d.Zero V3d.OOI |> CameraView.viewTrafo
+//        let view2 = CameraView.lookAt (10.0 * V3d.III) V3d.Zero V3d.OOI |> CameraView.viewTrafo
+//
+//        let desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
 
-        let desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
-
-
-        clear.Run(RenderToken.Empty, fboHandle)
-        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.empty })
-        win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view0.png"])
-
-        clear.Run(RenderToken.Empty, fboHandle)
-        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view1 :> obj] })
-        win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view1.png"])
-        
-        clear.Run(RenderToken.Empty, fboHandle)
-        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view2 :> obj] })
-        win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view2.png"])
-
-        fbo.Release()
+//
+//        clear.Run(RenderToken.Empty, fboHandle)
+//        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.empty })
+//        win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view0.png"])
+//
+//        clear.Run(RenderToken.Empty, fboHandle)
+//        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view1 :> obj] })
+//        win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view1.png"])
+//        
+//        clear.Run(RenderToken.Empty, fboHandle)
+//        mainTask.Run(AdaptiveToken.Top, RenderToken.Empty, { output with overrides = Map.ofList ["ViewTrafo", view2 :> obj] })
+//        win.Runtime.Download(color.texture).SaveAsImage (Path.combine [desktop; "view2.png"])
+//
+//        fbo.Release()
 
 
 

@@ -426,8 +426,16 @@ module ``Image Format Extensions`` =
         let private depthFormats = HashSet.ofList [ VkFormat.D16Unorm; VkFormat.D32Sfloat; VkFormat.X8D24UnormPack32 ]
         let private depthStencilFormats = HashSet.ofList [VkFormat.D16UnormS8Uint; VkFormat.D24UnormS8Uint; VkFormat.D32SfloatS8Uint ]
 
+        let hasDepth (fmt : VkFormat) =
+            depthFormats.Contains fmt || depthStencilFormats.Contains fmt
+
         let toAspect (fmt : VkFormat) =
             if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit
+            elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
+            else VkImageAspectFlags.ColorBit
+
+        let toShaderAspect (fmt : VkFormat) =
+            if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit 
             elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
             else VkImageAspectFlags.ColorBit
 
@@ -1249,7 +1257,6 @@ type Image =
         val mutable public Samples : int
         val mutable public Dimension : TextureDimension
         val mutable public Format : VkFormat
-        val mutable public ComponentMapping : VkComponentMapping
         val mutable public Memory : DevicePtr
         val mutable public Layout : VkImageLayout
 
@@ -1274,7 +1281,7 @@ type Image =
         member x.IsNull = x.Handle.IsNull
 
         member x.Item with get(aspect : ImageAspect) = ImageSubresourceRange(x, aspect, 0, x.MipMapLevels, 0, x.Count)
-        member x.Item with get(aspect : ImageAspect, level : int) = ImageSubresourceLevels(x, aspect, level, 0, x.Count)
+        member x.Item with get(aspect : ImageAspect, level : int) = ImageSubresourceLayers(x, aspect, level, 0, x.Count)
         member x.Item with get(aspect : ImageAspect, level : int, slice : int) = ImageSubresource(x, aspect, level, slice)
               
                 
@@ -1291,7 +1298,7 @@ type Image =
         override x.ToString() =
             sprintf "0x%08X" x.Handle.Handle
 
-        new(dev, handle, s, levels, count, samples, dim, fmt, mapping, mem, layout) = 
+        new(dev, handle, s, levels, count, samples, dim, fmt, mem, layout) = 
             {
                 inherit Resource<_>(dev, handle);
                 Size = s
@@ -1299,7 +1306,6 @@ type Image =
                 Count = count
                 Samples = samples
                 Dimension = dim
-                ComponentMapping = mapping
                 Format = fmt
                 Memory = mem
                 Layout = layout
@@ -1587,7 +1593,7 @@ module DeviceMemoryImage =
         VkRaw.vkBindImageMemory(device.Handle, handle, memory.Memory.Handle, uint64 memory.Offset)
             |> check "could not bind image memory for DeviceVolume"
 
-        let image = Image(device, handle, V3i(size.X, size.Y, 1), levels, 1, 1, TextureDimension.Texture2D, format, VkComponentMapping.Identity, memory, VkImageLayout.Preinitialized)
+        let image = Image(device, handle, V3i(size.X, size.Y, 1), levels, 1, 1, TextureDimension.Texture2D, format, memory, VkImageLayout.Preinitialized)
         DeviceMemoryImage<'a>(device, image, ImageAspect.Color)
 
     let delete (mipMap : DeviceMemoryImage) (device : Device) =
@@ -1962,6 +1968,7 @@ module ``Image Command Extensions`` =
                                 elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
                                 elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
                                 elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                                elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit ||| VkAccessFlags.InputAttachmentReadBit
                                 else VkAccessFlags.None
 
                             let dst =
@@ -2073,7 +2080,7 @@ module Image =
                 table (typeof<'a>) (x, img)
 
 
-    let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (compMapping : VkComponentMapping) (usage : VkImageUsageFlags) (device : Device) =
+    let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
             failf "bad image format %A" fmt
 
@@ -2111,7 +2118,7 @@ module Image =
         VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind image memory"
 
-        let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, compMapping, ptr, VkImageLayout.Undefined)
+        let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
         result
 
     let delete (img : Image) (device : Device) =
@@ -2122,8 +2129,7 @@ module Image =
 
     let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
         let vkfmt = VkFormat.ofTextureFormat fmt
-        let swizzle = VkComponentMapping.ofTextureFormat fmt
-        alloc size mipMapLevels count samples dim vkfmt swizzle usage device
+        alloc size mipMapLevels count samples dim vkfmt usage device
 
     let private ofDeviceMemoryImage (dispose : bool) (tempImage : DeviceMemoryImage) (info : TextureParams) (device : Device) =
         if tempImage.LevelCount <= 0 then failf "empty PixImageMipMap"
@@ -2147,8 +2153,7 @@ module Image =
         let format          = tempImage.Image.Format
         let size            = V3i(size, 1)
         let usage           = VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
-        let compMapping     = VkComponentMapping.Identity
-        let img             = device |> alloc size mipMapLevels 1 1 TextureDimension.Texture2D format compMapping usage
+        let img             = device |> alloc size mipMapLevels 1 1 TextureDimension.Texture2D format usage
         let copyLevels      = min tempImage.LevelCount mipMapLevels
 
         // enqueue the copy command and finally delete the temporary image
@@ -2213,8 +2218,7 @@ module Image =
         let aspect          = faces.[0].Aspect
         let size            = V3i(faceSize, 1)
         let usage           = VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
-        let compMapping     = VkComponentMapping.Identity
-        let img             = device |> alloc size mipMapLevels 6 1 TextureDimension.TextureCube format compMapping usage
+        let img             = device |> alloc size mipMapLevels 6 1 TextureDimension.TextureCube format usage
 
 
         // enqueue the copy command and finally delete the temporary image
@@ -2260,7 +2264,7 @@ module Image =
                 device |> ofPixImageCube c.PixImageCube c.TextureParams
 
             | :? NullTexture as t ->
-                Image(device, VkImage.Null, V3i.Zero, 0, 0, 1, TextureDimension.Texture2D, VkFormat.Undefined, VkComponentMapping.Identity, DevicePtr.Null, VkImageLayout.ShaderReadOnlyOptimal)
+                Image(device, VkImage.Null, V3i.Zero, 0, 0, 1, TextureDimension.Texture2D, VkFormat.Undefined, DevicePtr.Null, VkImageLayout.ShaderReadOnlyOptimal)
 
             | :? PixTexture3d as t ->
                 failf "please implement volume textures"

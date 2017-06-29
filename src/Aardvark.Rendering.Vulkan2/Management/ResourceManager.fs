@@ -160,10 +160,10 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
             kind = ResourceKind.Texture
         })
 
-    member x.CreateImageView(data : IResource<Image, VkImage>) =
-        imageViewCache.GetOrCreateDependent<Image, VkImage>(data, [], {
-            create = fun b      -> device.CreateImageView(b)
-            update = fun h b    -> device.Delete(h); device.CreateImageView(b)
+    member x.CreateImageView(data : IResource<Image, VkImage>, mapping : VkComponentMapping) =
+        imageViewCache.GetOrCreateDependent<Image, VkImage>(data, [mapping], {
+            create = fun b      -> device.CreateImageView(b, mapping)
+            update = fun h b    -> device.Delete(h); device.CreateImageView(b, mapping)
             delete = fun h      -> device.Delete(h)
             info =   fun h      -> ResourceInfo.Zero
             view =   fun h      -> h.Handle

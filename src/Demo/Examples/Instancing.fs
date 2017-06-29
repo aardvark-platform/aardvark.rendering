@@ -21,16 +21,16 @@ module Instancing =
 
     let win = Interactive.Window
 
-    let cylinder = Primitives.unitSphere 10
+    let cylinder = Primitives.unitSphere 5
 
     let cameraView = Interactive.ControlledViewTrafo (V3d.III * 3.0) V3d.Zero
     let projection = Interactive.DefaultProjTrafo
 
     let trafos =
         [|
-            for x in 0 .. 9 do
-                for y in 0 .. 9 do
-                    for z in 0 .. 9 do
+            for x in 0 .. 30 do
+                for y in 0 .. 30 do
+                    for z in 0 .. 30 do
                         yield Trafo3d.Translation(float x,float y,float z)
         |]
 
