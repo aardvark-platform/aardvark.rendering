@@ -45,7 +45,7 @@ type Command() =
                 cmd.AppendCommand()
                 VkRaw.vkCmdPipelineBarrier(
                     cmd.Handle,
-                    VkPipelineStageFlags.BottomOfPipeBit,
+                    VkPipelineStageFlags.AllCommandsBit,
                     VkPipelineStageFlags.TopOfPipeBit,
                     VkDependencyFlags.None,
                     0u, NativePtr.zero,

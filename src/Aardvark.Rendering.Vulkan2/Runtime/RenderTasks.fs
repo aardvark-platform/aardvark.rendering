@@ -356,8 +356,8 @@ module RenderTasks =
 
 
         override x.Perform (caller : AdaptiveToken, token : RenderToken, fbo : Framebuffer) =
+            
             use devToken = device.Token
-
 
             let bounds = Box2i(V2i.Zero, fbo.Size - V2i.II)
             let vp = Array.create renderPass.AttachmentCount bounds
@@ -373,10 +373,9 @@ module RenderTasks =
                         cmd
                     )
 
-            devToken.enqueue {
-                for cmd in commandBuffers do
-                    do! Command.Barrier
 
+            x.RenderTaskLock.Run (fun () ->
+                devToken.enqueue {
                     let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
                     for i in 0 .. fbo.ImageViews.Length - 1 do
                         let img = fbo.ImageViews.[i].Image
@@ -386,17 +385,20 @@ module RenderTasks =
                         else
                             do! Command.TransformLayout(img, VkImageLayout.ColorAttachmentOptimal)
 
-                    do! Command.BeginPass (renderPass, fbo, false)
-                    do! Command.Execute cmd
-                    do! Command.EndPass
+                    for cmd in commandBuffers do
+                        do! Command.Barrier
+                        do! Command.BeginPass (renderPass, fbo, false)
+                        do! Command.Execute cmd
+                        do! Command.EndPass
 
                     for i in 0 .. fbo.ImageViews.Length - 1 do
                         let img = fbo.ImageViews.[i].Image
                         do! Command.TransformLayout(img, oldLayouts.[i])
-            }
+                }
 
-            // really run the stuff
-            x.RenderTaskLock.Run devToken.Sync
+                // really run the stuff
+                devToken.Sync()
+            )
 
 
         override x.Release() =

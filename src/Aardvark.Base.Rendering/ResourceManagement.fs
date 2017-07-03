@@ -188,6 +188,8 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
     let setHandle (x : Resource<'h, 'v>) (h : 'h) : unit =
         let v : 'v = x.View(h)
         NativePtr.write pointer v
+        
+        handle.Level <- max (1 + x.Level) handle.Level
         if not (Unchecked.equals h handle.Value) then
             transact (fun () -> handle.Value <- h)
 
@@ -227,6 +229,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
             | None -> 
                 current <- Some h
                 t.CreatedResource(kind)
+
 
     member x.AddRef() =
         lock lockObj (fun () -> 

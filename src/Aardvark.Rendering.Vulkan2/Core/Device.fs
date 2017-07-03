@@ -402,6 +402,54 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                     |> check "could not submit command buffer"
             )
 
+    member x.StartAsync(cmd : CommandBuffer, waitFor : list<Semaphore>) =
+        if cmd.IsRecording then
+            failf "cannot submit recording CommandBuffer"
+
+        let sem = device.CreateSemaphore()
+        lock x (fun () ->
+            let cnt = if cmd.IsEmpty then 0u else 1u
+            let mutable handle = cmd.Handle
+            let mutable semHandle = sem.Handle
+
+            match waitFor with
+                | [] ->
+                    let mutable submitInfo =
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, 0n,
+                            0u, NativePtr.zero, NativePtr.zero,
+                            cnt, &&handle,
+                            1u, &&semHandle
+                        )
+
+                    VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
+                        |> check "could not submit command buffer"
+                    sem
+
+                | _ ->
+                    let handles = waitFor |> List.map (fun s -> s.Handle) |> List.toArray
+                    let mask = Array.create handles.Length VkPipelineStageFlags.TopOfPipeBit
+            
+                    mask |> NativePtr.withA (fun pMask ->
+                        handles |> NativePtr.withA (fun pWaitFor ->
+                            let mutable submitInfo =
+                                VkSubmitInfo(
+                                    VkStructureType.SubmitInfo, 0n,
+                                    uint32 handles.Length, pWaitFor, pMask,
+                                    cnt, &&handle,
+                                    1u, &&semHandle
+                                )
+
+                            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
+                                |> check "could not submit command buffer"
+                            sem
+                        )
+                    )
+        )
+
+    member x.StartAsync(cmd : CommandBuffer) =
+        x.StartAsync(cmd, [])
+
     member x.Wait(sem : Semaphore) =
         lock x (fun () ->
             let mutable semHandle = sem.Handle
@@ -433,6 +481,14 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                 |> check "vkQueueWaitSemaphore"
         )
         sem
+
+    member x.Fence() =
+        let fence = device.CreateFence()
+        lock x (fun () ->
+            VkRaw.vkQueueSubmit(x.Handle, 0u, NativePtr.zero, fence.Handle)
+                |> check "could not submit command buffer"
+        )
+        fence
 
     member x.WaitIdle() =
         VkRaw.vkQueueWaitIdle(x.Handle)
@@ -961,6 +1017,22 @@ and Semaphore internal(device : Device) =
     member x.Device = device
     member x.Handle = handle
 
+    member x.Set() =
+        if handle.IsValid then
+            let queue = device.ComputeFamily.GetQueue()
+
+            let mutable submitInfo =
+                VkSubmitInfo(
+                    VkStructureType.SubmitInfo, 0n,
+                    0u, NativePtr.zero, NativePtr.zero,
+                    0u, NativePtr.zero,
+                    1u, &&handle
+                )
+
+            VkRaw.vkQueueSubmit(queue.Handle, 1u, &&submitInfo, VkFence.Null)
+                |> check "cannot signal fence"
+        else
+            failf "cannot signal disposed fence" 
 
     member x.Dispose() =
         if handle.IsValid && device.Handle <> 0n then
@@ -1278,6 +1350,7 @@ and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
             failf "cannot map host-invisible memory"
 
 
+
 and ICommand =
     abstract member Compatible : QueueFlags
     abstract member TryEnqueue : CommandBuffer * byref<Disposable> -> bool
@@ -1292,7 +1365,6 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
 
     let mutable isEmpty = true
     let mutable refCount = 1
-
 //    #if DEBUG
 //    let owner = Thread.CurrentThread.ManagedThreadId
 //    let check() =
@@ -1340,6 +1412,7 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
             | None ->
                 ()
 
+
     member x.Flush() =
         check()
         flush()
@@ -1347,7 +1420,7 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
     member x.Sync() =
         check()
         flush()
-        if not isEmpty then queue.WaitIdle()
+        if not isEmpty then queue.Fence().Wait()
 
     member x.AddCleanup(f : unit -> unit) =
         check()

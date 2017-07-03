@@ -293,8 +293,6 @@ type SparseBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
 
         )
 
-
-
 type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer, virtualSize : int64) =
     inherit Buffer(device, handle, new DevicePtr(DeviceMemory.Null, 0L, 2L <<< 30))
 
@@ -476,8 +474,6 @@ type ResizeBuffer(device : Device, usage : VkBufferUsageFlags, handle : VkBuffer
         member x.Resize c = x.Resize (int64 c)
         member x.UseRead(offset, size, reader) = x.UseRead(int64 offset, int64 size, reader)
         member x.UseWrite(offset, size, writer) = x.UseWrite(int64 offset, int64 size, writer)
-
-
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ResizeBuffer =

@@ -447,7 +447,8 @@ open Aardvark.Rendering.Interactive
 [<EntryPoint>]
 [<STAThread>]
 let main args =
-    
+    colorLockTest()
+
 
     //Examples.Tutorial.run()
     //Examples.Instancing.run()

@@ -842,6 +842,7 @@ type FragmentInfo =
     {
         flags           : FragmentFlags
         discard         : bool
+        sampleShading   : bool
     }
 
 type ShaderExecutionInfo =
@@ -1140,13 +1141,13 @@ module private ShaderInfo =
 
         functions.Values
             |> Seq.map (fun m ->
-                let stage, kind =
+                let mutable stage, kind =
                     match m.entryModel with
                         | ExecutionModel.Vertex -> ShaderStage.Vertex, Vertex
                         | ExecutionModel.TessellationControl -> ShaderStage.TessControl, TessControl { flags = m.tessFlags; outputVertices = m.outputVertices }
                         | ExecutionModel.TessellationEvaluation -> ShaderStage.TessEval, TessEval m.tessFlags
                         | ExecutionModel.Geometry -> ShaderStage.Geometry, Geometry { flags = m.geometryFlags; outputVertices = m.outputVertices; invocations = m.invocations }
-                        | ExecutionModel.Fragment -> ShaderStage.Fragment, Fragment { flags = m.fragFlags; discard = m.discards }
+                        | ExecutionModel.Fragment -> ShaderStage.Fragment, Fragment { flags = m.fragFlags; discard = m.discards; sampleShading = false }
                         | m -> failf "unsupported ExecutionModel %A" m
 
                 let inputs          = CSharpList.empty
@@ -1161,10 +1162,20 @@ module private ShaderInfo =
                     match vPar.paramType with
                         | Ptr(StorageClass.Input,t) -> 
                             match t with
-                                | ShaderType.Struct(name,fields) when name.StartsWith "gl_" -> ()
+                                | ShaderType.Struct(name,fields) when name.StartsWith "gl_" -> 
+                                    ()
                                 | _ -> 
                                     match ShaderParameter.tryGetBuiltInSemantic vPar with
-                                        | Some sem -> builtInInputs.[sem] <- t
+                                        | Some sem -> 
+                                            match sem with
+                                                | BuiltIn.SampleId | BuiltIn.SamplePosition -> 
+                                                    kind <- 
+                                                        match kind with
+                                                            | Fragment info -> Fragment { info with sampleShading = true }
+                                                            | _ -> kind
+                                                | _ ->
+                                                    ()
+                                            builtInInputs.[sem] <- t
                                         | None -> inputs.Add(ShaderIOParameter.ofShaderParameter vPar)
 
                         | Ptr(StorageClass.Output,t) ->

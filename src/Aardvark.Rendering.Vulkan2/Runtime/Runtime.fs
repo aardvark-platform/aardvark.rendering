@@ -99,9 +99,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     let seen = System.Collections.Concurrent.ConcurrentHashSet()
 
     let debugBreak (str : string) =
-        let stack = StackTrace().GetFrames() |> Array.toList |> List.map (fun f -> f.GetMethod().MetadataToken)
-        if seen.Add ((stack, str)) then
-            if Debugger.IsAttached then
+        if Debugger.IsAttached then
+            let stack = StackTrace().GetFrames() |> Array.toList |> List.map (fun f -> f.GetMethod().MetadataToken)
+            if seen.Add ((stack, str)) then
                 Debugger.Break()
     #else
     let debugBreak (str : string) = ()
@@ -409,4 +409,4 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
         member x.CreateMappedBuffer() = x.CreateMappedBuffer()
         member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
-        member x.CreateGeometryPool(types) = failf "not implemented"
+        member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool

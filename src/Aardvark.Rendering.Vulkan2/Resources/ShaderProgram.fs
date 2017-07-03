@@ -60,7 +60,7 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
     let fragInfo =
         match fragInfo with
             | Some i -> i
-            | None -> { flags = FragmentFlags.None; discard = false }
+            | None -> { flags = FragmentFlags.None; discard = false; sampleShading = false }
 
     let createInfos =
         shaders |> Array.map (fun shader ->
@@ -91,6 +91,7 @@ type ShaderProgram(device : Device, renderPass : RenderPass, shaders : array<Sha
     member x.HasTessellation = Option.isSome tessInfo
     member x.HasDiscard = fragInfo.discard
     member x.FragmentFlags = fragInfo.flags
+    member x.SampleShading = fragInfo.sampleShading
     member x.ShaderCreateInfos = createInfos
 
     interface IBackendSurface with

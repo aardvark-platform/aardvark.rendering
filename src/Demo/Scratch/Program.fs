@@ -493,8 +493,280 @@ type DependentHandle =
 
     end
 
+module Ranges =
+    open System.Collections.Generic
+
+    type HalfRangeKind =
+        | Left = 0
+        | Right = 1
+
+    [<StructuredFormatDisplay("{AsString}")>]
+    type RangeSet(store : MapExt<int64, HalfRangeKind>) =
+        static let empty = RangeSet(MapExt.empty)
+
+        static member Empty = empty
+
+        member private x.store = store
+
+        static member OfSeq(s : seq<Range1l>) =
+            let arr = s |> Seq.toArray
+            if arr.Length = 0 then
+                empty
+            elif arr.Length = 1 then
+                let r = arr.[0]
+                RangeSet(MapExt.ofList [r.Min, HalfRangeKind.Left; r.Max + 1L, HalfRangeKind.Right ])
+            else
+                // TODO: better impl possible (sort array and traverse)
+                arr |> Array.fold (fun s r -> s.Add r) empty
+
+        member x.Add(r : Range1l) =
+            let min = r.Min
+            let max = r.Max + 1L
+
+            let lm, _, inner = MapExt.split min store
+            let inner, _, rm = MapExt.split max inner
+
+            let before = MapExt.tryMax lm |> Option.map (fun mk -> mk, lm.[mk])
+            let after = MapExt.tryMin rm |> Option.map (fun mk -> mk, rm.[mk])
+
+            let newStore = 
+                match before, after with
+                    | None, None ->
+                        MapExt.ofList [ min, HalfRangeKind.Left; max, HalfRangeKind.Right]
+
+                    | Some(bk, HalfRangeKind.Right), None ->
+                        lm 
+                        |> MapExt.add min HalfRangeKind.Left
+                        |> MapExt.add max HalfRangeKind.Right
+
+                    | Some(bk, HalfRangeKind.Left), None ->
+                        lm 
+                        |> MapExt.add max HalfRangeKind.Right
+
+                    | None, Some(ak, HalfRangeKind.Left) ->
+                        rm
+                        |> MapExt.add min HalfRangeKind.Left
+                        |> MapExt.add max HalfRangeKind.Right
+
+                    | None, Some(ak, HalfRangeKind.Right) ->
+                        rm
+                        |> MapExt.add min HalfRangeKind.Left
+
+                    | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Left) ->
+                        let self = MapExt.ofList [ min, HalfRangeKind.Left; max, HalfRangeKind.Right]
+                        MapExt.union (MapExt.union lm self) rm
+                        
+                    | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Left) ->
+                        let self = MapExt.ofList [ max, HalfRangeKind.Right]
+                        MapExt.union (MapExt.union lm self) rm
+
+                    | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Right) ->
+                        let self = MapExt.ofList [ min, HalfRangeKind.Left ]
+                        MapExt.union (MapExt.union lm self) rm
+
+                    | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Right) ->
+                        MapExt.union lm rm
+
+                    | _ ->
+                        failwithf "impossible"
+
+            RangeSet(newStore)
+
+        member x.Remove(r : Range1l) =
+            let min = r.Min
+            let max = r.Max + 1L
+
+            let lm, _, inner = MapExt.split min store
+            let inner, _, rm = MapExt.split max inner
+
+            let before = MapExt.tryMax lm |> Option.map (fun mk -> mk, lm.[mk])
+            let after = MapExt.tryMin rm |> Option.map (fun mk -> mk, rm.[mk])
+
+            let newStore = 
+                match before, after with
+                    | None, None ->
+                        MapExt.empty
+
+                    | Some(bk, HalfRangeKind.Right), None ->
+                        lm
+
+                    | Some(bk, HalfRangeKind.Left), None ->
+                        lm 
+                        |> MapExt.add min HalfRangeKind.Right
+
+                    | None, Some(ak, HalfRangeKind.Left) ->
+                        rm
+
+                    | None, Some(ak, HalfRangeKind.Right) ->
+                        rm
+                        |> MapExt.add max HalfRangeKind.Left
+
+                    | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Left) ->
+                        MapExt.union lm rm
+                        
+                    | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Left) ->
+                        let self = MapExt.ofList [ min, HalfRangeKind.Right]
+                        MapExt.union (MapExt.union lm self) rm
+
+                    | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Right) ->
+                        let self = MapExt.ofList [ max, HalfRangeKind.Left ]
+                        MapExt.union (MapExt.union lm self) rm
+
+                    | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Right) ->
+                        let self = MapExt.ofList [ min, HalfRangeKind.Right; max, HalfRangeKind.Left]
+                        MapExt.union (MapExt.union lm self) rm
+
+                    | _ ->
+                        failwithf "impossible"
+
+            RangeSet(newStore)
+
+        member x.Contains(v : int64) =
+            let l, s, _ = MapExt.neighbours v store
+            match s with
+                | Some(_,k) -> 
+                    k = HalfRangeKind.Left
+                | _ ->
+                    match l with
+                        | Some(_,HalfRangeKind.Left) -> true
+                        | _ -> false
+
+        member x.Count = 
+            assert (store.Count &&& 1 = 0)
+            store.Count / 2
+
+        member private x.AsString = x.ToString()
+
+        member x.ToArray() =
+            let arr = Array.zeroCreate (store.Count / 2)
+            let rec write (i : int) (l : list<int64 * HalfRangeKind>) =
+                match l with
+                    | (lKey,lValue) :: (rKey, rValue) :: rest ->
+                        arr.[i] <- Range1l(lKey, rKey - 1L)
+                        write (i + 1) rest
+
+                    | [_] -> failwith "bad RangeSet"
+
+                    | [] -> ()
+                    
+            store |> MapExt.toList |> write 0
+            arr
+
+        member x.ToList() =
+            let rec build (l : list<int64 * HalfRangeKind>) =
+                match l with
+                    | (lKey,lValue) :: (rKey, rValue) :: rest ->
+                        Range1l(lKey, rKey - 1L) :: 
+                        build rest
+
+                    | [_] -> failwith "bad RangeSet"
+
+                    | [] -> []
+
+            store |> MapExt.toList |> build
+             
+        member x.ToSeq() =
+            x :> seq<_>       
+
+        override x.ToString() =
+            let rec ranges (l : list<int64 * HalfRangeKind>) =
+                match l with
+                    | (kMin, vMin) :: (kMax, vMax) :: rest ->
+                        sprintf "[%d,%d)" kMin kMax ::
+                        ranges rest
+
+                    | [(k,v)] ->
+                        [ sprintf "ERROR: %d %A" k v ]
+
+                    | [] ->
+                        []
+                
+            store |> MapExt.toList |> ranges |> String.concat ", " |> sprintf "ranges [ %s ]"
+
+        interface System.Collections.IEnumerable with
+            member x.GetEnumerator() = new RangeSetEnumerator((store :> seq<_>).GetEnumerator()) :> _
+            
+        interface System.Collections.Generic.IEnumerable<Range1l> with
+            member x.GetEnumerator() = new RangeSetEnumerator((store :> seq<_>).GetEnumerator()) :> _
+
+    and private RangeSetEnumerator(e : IEnumerator<KeyValuePair<int64, HalfRangeKind>>) =
+        
+        let mutable a = Unchecked.defaultof<_>
+        let mutable b = Unchecked.defaultof<_>
+
+        member x.MoveNext() =
+            if e.MoveNext() then
+                a <- e.Current
+                if e.MoveNext() then
+                    b <- e.Current
+                    true
+                else
+                    failwithf "impossible"
+            else
+                false
+            
+        member x.Reset() =
+            e.Reset()
+            a <- Unchecked.defaultof<_>
+            b <- Unchecked.defaultof<_>
+
+        member x.Current =
+            assert (a.Value = HalfRangeKind.Left && b.Value = HalfRangeKind.Right)
+            Range1l(a.Key, b.Key - 1L)
+
+        member x.Dispose() =
+            e.Dispose()
+            a <- Unchecked.defaultof<_>
+            b <- Unchecked.defaultof<_>
+
+        interface System.Collections.IEnumerator with
+            member x.MoveNext() = x.MoveNext()
+            member x.Current = x.Current :> obj
+            member x.Reset() = x.Reset()
+
+        interface System.Collections.Generic.IEnumerator<Range1l> with
+            member x.Dispose() = x.Dispose()
+            member x.Current = x.Current
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module RangeSet =
+        let empty = RangeSet.Empty
+
+        let inline ofSeq (s : seq<Range1l>) = RangeSet.OfSeq s
+        let inline ofList (s : list<Range1l>) = RangeSet.OfSeq s
+        let inline ofArray (s : Range1l[]) = RangeSet.OfSeq s
+
+        let inline add (r : Range1l) (s : RangeSet) = s.Add r
+        let inline remove (r : Range1l) (s : RangeSet) = s.Remove r
+        let inline contains (v : int64) (s : RangeSet) = s.Contains v
+        let inline count (s : RangeSet) = s.Count
+
+        let inline toSeq (s : RangeSet) = s :> seq<_>
+        let inline toList (s : RangeSet) = s.ToList()
+        let inline toArray (s : RangeSet) = s.ToArray()
+
+
+        
+open Ranges 
+
+
 [<EntryPoint>]
 let main argv = 
+    
+
+    let a = RangeSet.Empty.Add(Range1l(0L, 10L)).Add(Range1l(100L, 1000L)).Add(Range1l(12L, 98L))
+    let b = a.Remove(Range1l(50L, 100L))
+    printfn "%A" a
+    printfn "%A" b
+
+    printf "contained: "
+    for i in 0 .. 10000 do
+        let c = b.Contains (int64 i)
+        if c then printf "%d " i
+
+    printfn ""
+
+    System.Environment.Exit 0
 
     Ag.initialize()
     Aardvark.Init()

@@ -206,10 +206,10 @@ module Sg =
             boundary.StencilMode <- Mod.constant writeStencil
             boundary.FillMode <- Mod.constant FillMode.Fill
             shapes.DepthTest <- Mod.constant DepthTestMode.None
-            shapes.StencilMode <- Mod.constant readStencil
+            //shapes.StencilMode <- Mod.constant readStencil
 
-
-            MultiRenderObject [boundary; shapes] :> IRenderObject |> ASet.single
+            shapes :> IRenderObject |> ASet.single
+            //MultiRenderObject [boundary; shapes] :> IRenderObject |> ASet.single
                 //ASet.ofList [boundary :> IRenderObject; shapes :> IRenderObject]
 
         member x.FillGlyphs(s : ISg) =

@@ -82,8 +82,8 @@ let main argv =
     Aardvark.Init()
 
 
-    use app = new OpenGlApplication()
-    let win = app.CreateSimpleRenderWindow(8)
+    use app = new VulkanApplication(true)
+    let win = app.CreateSimpleRenderWindow(1)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -325,15 +325,15 @@ let main argv =
     let aa = Mod.init true
 
     
-    let f = Aardvark.Rendering.Text.Font.create "starjedi.ttf" FontStyle.Regular
+    let f = Aardvark.Rendering.Text.Font("Consolas")
     let label3 =
         Sg.text f C4b.White message
             |> Sg.scale 0.1
-            |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 5.0)))
+            |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.0)))
 
     let sg = 
-        Sg.group [label1; label2; label3]
-            //|> Sg.andAlso quad
+        Sg.group [label3]
+            |> Sg.andAlso quad
             |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
             |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
             |> Sg.fillMode mode
@@ -425,7 +425,7 @@ let main argv =
 
 
     let main = app.Runtime.CompileRender(win.FramebufferSignature, config, sg) //|> DefaultOverlays.withStatistics
-    let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
+    //let clear = app.Runtime.CompileClear(win.FramebufferSignature, Mod.constant C4f.Black)
 
     win.Keyboard.Press.Values.Add (fun c ->
         if c = '\b' then
@@ -435,6 +435,6 @@ let main argv =
             transact (fun () -> message.Value <- message.Value + string c)
     )
 
-    win.RenderTask <- RenderTask.ofList [clear; main]
+    win.RenderTask <- main
     win.Run()
     0 

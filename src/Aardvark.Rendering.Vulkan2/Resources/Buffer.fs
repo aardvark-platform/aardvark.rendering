@@ -7,6 +7,7 @@ open System.Runtime.InteropServices
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
+open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 #nowarn "51"
@@ -145,6 +146,24 @@ module BufferCommands =
                     Disposable.Empty
             }
 
+        static member Copy(src : Buffer, dst : Buffer, ranges : Range1l[]) =
+            if ranges.Length = 0 then
+                Command.Nop
+            else
+                { new Command() with
+                    member x.Compatible = QueueFlags.All
+                    member x.Enqueue cmd =
+                        let pCopyInfos = NativePtr.stackalloc ranges.Length
+                        let mutable current = NativePtr.toNativeInt pCopyInfos
+                        for r in ranges do
+                            let ci = VkBufferCopy(uint64 r.Min, uint64 r.Min, uint64 (1L + r.Max - r.Min))
+                            NativeInt.write current ci
+                            current <- current + nativeint sizeof<VkBufferCopy>
+
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, uint32 ranges.Length, pCopyInfos)
+                        Disposable.Empty
+                }
 
         static member inline Copy(src : DevicePtr, dst : Buffer, size : int64) = 
             Command.Copy(src, 0L, dst, 0L, size)
@@ -163,6 +182,34 @@ module BufferCommands =
 
         static member inline Copy(src : Buffer, dst : Buffer) = 
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
+
+        static member SyncWrite(b : Buffer) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let mutable barrier =
+                        VkBufferMemoryBarrier(
+                            VkStructureType.BufferMemoryBarrier, 0n,
+                            VkAccessFlags.TransferWriteBit ||| VkAccessFlags.HostWriteBit ||| VkAccessFlags.MemoryWriteBit ||| VkAccessFlags.ShaderWriteBit,
+                            VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.IndexReadBit ||| VkAccessFlags.VertexAttributeReadBit ||| VkAccessFlags.UniformReadBit,
+                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            b.Handle,
+                            0UL,
+                            uint64 b.Size
+                        )
+
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle, 
+                        VkPipelineStageFlags.TopOfPipeBit, 
+                        VkPipelineStageFlags.BottomOfPipeBit,
+                        VkDependencyFlags.None,
+                        0u, NativePtr.zero,
+                        1u, &&barrier,
+                        0u, NativePtr.zero
+                    )
+
+                    Disposable.Empty
+            }
 
 
 // =======================================================================
@@ -217,15 +264,16 @@ module Buffer =
         )
 
 
-    let alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
+    let allocConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
         let mutable info =
             VkBufferCreateInfo(
                 VkStructureType.BufferCreateInfo, 0n,
                 VkBufferCreateFlags.None,
                 uint64 size, 
                 flags,
-                VkSharingMode.Exclusive,
-                0u, NativePtr.zero
+                (if conc then device.AllSharingMode else VkSharingMode.Exclusive),
+                (if conc then device.AllQueueFamiliesCnt else 0u), 
+                (if conc then device.AllQueueFamiliesPtr else NativePtr.zero)
             )
 
         let mutable handle = VkBuffer.Null
@@ -242,6 +290,9 @@ module Buffer =
 
 
         Buffer(device, handle, ptr)
+
+    let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
+        allocConcurrent false flags size device
 
     let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
         let align = int64 device.MinUniformBufferOffsetAlignment

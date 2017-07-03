@@ -449,10 +449,10 @@ module ColorBlendState =
  
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module MultisampleState =
-    let create (samples : int) =
+    let create (sampleShading : bool) (samples : int) =
         {
             samples                 = samples
-            sampleShadingEnable     = false
+            sampleShadingEnable     = samples > 1 && sampleShading
             minSampleShading        = 0.0
             sampleMask              = [||]
             alphaToCoverageEnable   = false
