@@ -45,8 +45,8 @@ type Interactive private() =
             | None -> 
                 let a = 
                     match renderer with
-                        | GL -> new OpenGlApplication() :> IApplication
-                        | Vulkan -> new VulkanApplication(true) :> IApplication
+                        | GL -> new OpenGlApplication(true) :> IApplication
+                        | Vulkan -> new VulkanApplication() :> IApplication
                 app <- Some a
                 a
             | Some v -> v

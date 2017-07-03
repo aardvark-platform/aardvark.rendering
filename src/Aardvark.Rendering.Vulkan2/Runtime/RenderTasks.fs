@@ -65,17 +65,15 @@ module RenderTasks =
                     | :? Framebuffer as fbo -> fbo
                     | _ -> failwithf "unsupported framebuffer: %A" fbo
 
-            renderTaskLock.Run (fun () -> 
-                NativePtr.write runtimeStats V2i.Zero
-                let r = x.Perform(token, rt, fbo)
-                let rts = NativePtr.read runtimeStats
-                rt.AddDrawCalls(rts.X, rts.Y)
-            )
+            NativePtr.write runtimeStats V2i.Zero
+            let r = x.Perform(token, rt, fbo)
+            let rts = NativePtr.read runtimeStats
+            rt.AddDrawCalls(rts.X, rts.Y)
 
 
     [<AbstractClass>]
     type DependentCommandBuffer(renderPass : RenderPass, pool : CommandPool) as this =
-        inherit DirtyTrackingAdaptiveObject<IResource>()
+        inherit AdaptiveObject()
 
         let objects = CSet.empty
         let mutable initialized = false
@@ -84,6 +82,14 @@ module RenderTasks =
         let mutable lastViewports = [||]
         let mutable version = 0
         let mutable commandVersion = -1
+
+        let dirty = HashSet<IResource>()
+
+        override x.InputChanged(_,o) =
+            match o with
+                | :? IResource as o -> dirty.Add o |> ignore
+                | _ -> ()
+
 
         member private x.init(token : AdaptiveToken) =
             if not initialized then
@@ -118,13 +124,29 @@ module RenderTasks =
                 cmd.Dispose()
 
         member x.Update(caller : AdaptiveToken, token : RenderToken) =
-            x.EvaluateAlways' caller (fun caller dirty ->
+            x.EvaluateAlways caller (fun caller ->
                 x.init(caller)
                 if x.OutOfDate then
-                    for d in dirty do
-                        if not d.IsDisposed then
-                            d.Update(caller, token)
+                    let rec doit() =
+                        let mine = dirty.ToArray(dirty.Count)
+                        dirty.Clear()
+                        if mine.Length > 0 then
+                            let delayed = List(mine.Length)
+                            for d in mine do
+                                match d with
+                                    | :? IResource<DrawCall> as r ->
+                                        if not d.IsDisposed then
+                                            d.Update(caller, token)
+                                    | _ ->
+                                        delayed.Add d |> ignore
 
+                            for d in delayed do
+                                if not d.IsDisposed then
+                                    d.Update(caller, token)
+
+                            doit()
+
+                    doit()
                     x.UpdateProgram(caller, token)
             )
 
@@ -376,6 +398,7 @@ module RenderTasks =
 
             x.RenderTaskLock.Run (fun () ->
                 devToken.enqueue {
+                    
                     let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
                     for i in 0 .. fbo.ImageViews.Length - 1 do
                         let img = fbo.ImageViews.[i].Image

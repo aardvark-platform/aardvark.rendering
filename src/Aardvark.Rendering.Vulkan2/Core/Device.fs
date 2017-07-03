@@ -466,6 +466,26 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                 |> check "vkQueueWaitSemaphore"
         )
 
+    member x.WaitSync(sem : Semaphore) =
+        let f = device.CreateFence()
+        lock x (fun () ->
+            let mutable semHandle = sem.Handle
+            let mutable submitInfo =
+                let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
+                VkSubmitInfo(
+                    VkStructureType.SubmitInfo, 0n, 
+                    1u, &&semHandle, &&dstStage,
+                    0u, NativePtr.zero,
+                    0u, NativePtr.zero
+                )
+
+            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, f.Handle) 
+                |> check "vkQueueWaitSemaphore"
+        )
+        f.Wait()
+
+
+
     member x.Signal() =
         let sem = device.CreateSemaphore()
         lock x (fun () ->
@@ -814,7 +834,6 @@ and private FenceCallbacks(device : Device) =
     let mutable currentId = 0
     let newId() = Interlocked.Increment(&currentId)
 
-    let sem = device.CreateSemaphore()
     let changedFence = device.CreateFence()
     let mutable changed = 0
 
@@ -1034,10 +1053,10 @@ and Semaphore internal(device : Device) =
         else
             failf "cannot signal disposed fence" 
 
-    member x.Dispose() =
-        if handle.IsValid && device.Handle <> 0n then
-            VkRaw.vkDestroySemaphore(device.Handle, handle, NativePtr.zero)
-            handle <- VkSemaphore.Null
+    member x.Dispose() = ()
+//        if handle.IsValid && device.Handle <> 0n then
+//            VkRaw.vkDestroySemaphore(device.Handle, handle, NativePtr.zero)
+//            handle <- VkSemaphore.Null
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -1357,7 +1376,7 @@ and ICommand =
 
 and IQueueCommand =
     abstract member Compatible : QueueFlags
-    abstract member TryEnqueue : queue : DeviceQueue * disp : byref<Disposable> -> bool
+    abstract member TryEnqueue : queue : DeviceQueue * waitFor : list<Semaphore> * disp : byref<Disposable> -> Semaphore
 
 and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
     let mutable current             : Option<CommandBuffer> = None
@@ -1365,6 +1384,9 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
 
     let mutable isEmpty = true
     let mutable refCount = 1
+
+    let mutable lastSems : list<Semaphore> = []
+
 //    #if DEBUG
 //    let owner = Thread.CurrentThread.ManagedThreadId
 //    let check() =
@@ -1406,7 +1428,8 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
                 disposables.Add { new Disposable() with member x.Dispose() = buffer.Dispose() }
                 if not buffer.IsEmpty then
                     isEmpty <- false
-                    queue.Start(buffer)
+                    let sem = queue.StartAsync(buffer, lastSems)
+                    lastSems <- [sem]
                 current <- None
 
             | None ->
@@ -1420,7 +1443,13 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
     member x.Sync() =
         check()
         flush()
-        if not isEmpty then queue.Fence().Wait()
+
+        match lastSems with
+            | [sem] -> queue.WaitSync(sem)
+            | _ -> ()
+
+        lastSems <- []
+
 
     member x.AddCleanup(f : unit -> unit) =
         check()
@@ -1442,12 +1471,10 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
         check()
         flush ()
         let mutable disp = Disposable.Empty
-        if cmd.TryEnqueue(queue, &disp) then
-            if not (isNull disp) then disposables.Add disp
-            isEmpty <- false
-        else
-            cleanup()
-            failf "could not enqueue command: %A" cmd
+        let sem = cmd.TryEnqueue(queue, lastSems, &disp) 
+        if not (isNull disp) then disposables.Add disp
+        isEmpty <- false
+        lastSems <- [sem]
 
     member internal x.AddRef() = 
         check()

@@ -95,7 +95,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             FShade.ShaderStage.Fragment, Aardvark.Base.ShaderStage.Fragment
         ]
 
-    #if DEBUG 
+    #if false
     let seen = System.Collections.Concurrent.ConcurrentHashSet()
 
     let debugBreak (str : string) =

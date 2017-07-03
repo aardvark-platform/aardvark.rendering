@@ -7,6 +7,7 @@ open System.Runtime.InteropServices
 open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Rendering.Vulkan
 
 #nowarn "9"
 #nowarn "51"
@@ -14,20 +15,22 @@ open Aardvark.Base
 [<AbstractClass>]
 type QueueCommand() =
     abstract member Compatible : QueueFlags
-    abstract member Enqueue : DeviceQueue -> Disposable
+    abstract member Enqueue : DeviceQueue * list<Semaphore> -> Semaphore * Disposable
     interface IQueueCommand with
         member x.Compatible = x.Compatible
-        member x.TryEnqueue(queue, disp) =
-            disp <- x.Enqueue(queue)
-            true
-
-    static member Wait(sem : Aardvark.Rendering.Vulkan.Semaphore) =
-        { new QueueCommand() with
-            member x.Compatible = QueueFlags.All
-            member x.Enqueue queue =
-                queue.Wait sem
-                Disposable.Empty
-        }
+        member x.TryEnqueue(queue, waitFor, disp) =
+            let (s,d) = x.Enqueue(queue, waitFor)
+            disp <- d
+            s
+//
+//    static member Wait(sem : Aardvark.Rendering.Vulkan.Semaphore) =
+//        { new QueueCommand() with
+//            member x.Compatible = QueueFlags.All
+//            member x.Enqueue(queue, waitFor) =
+//                let waitFor = sem :: waitFor
+//                queue.Wait sem
+//                Disposable.Empty
+//        }
 
 
 [<AbstractClass>]

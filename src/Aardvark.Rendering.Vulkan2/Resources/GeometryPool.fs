@@ -458,31 +458,33 @@ module GeometryPoolUtilities =
 
         let reallocIfNeeded () =
             let newCapacity = manager.LastUsedByte + 1n |> int64 |> Fun.NextPowerOfTwo |> max minCapacity
-            if capacity <> newCapacity then
+            if newCapacity <> capacity then
                 lock.Lock.Use(fun () ->
-                    use t = new Transaction()
-                    let commands = List<Command>()
-                    let deleteBuffers = List<MappedBuffer>()
+                    let newCapacity = manager.LastUsedByte + 1n |> int64 |> Fun.NextPowerOfTwo |> max minCapacity
+                    if capacity <> newCapacity then
+                        use t = new Transaction()
+                        let commands = List<Command>()
+                        let deleteBuffers = List<MappedBuffer>()
 
-                    for (_, (elemSize,_,b)) in Map.toSeq buffers do
-                        let old = b.Value |> unbox<MappedBuffer>
-                        b.UnsafeCache <- old.Realloc(elemSize * newCapacity, commands.Add)
-                        t.Enqueue(b)
-                        deleteBuffers.Add old
+                        for (_, (elemSize,_,b)) in Map.toSeq buffers do
+                            let old = b.Value |> unbox<MappedBuffer>
+                            b.UnsafeCache <- old.Realloc(elemSize * newCapacity, commands.Add)
+                            t.Enqueue(b)
+                            deleteBuffers.Add old
 
-                    device.perform {
-                        for cmd in commands do do! cmd
-                    }
-                    t.Commit()
+                        device.perform {
+                            for cmd in commands do do! cmd
+                        }
+                        t.Commit()
 
-                    for d in deleteBuffers do d.Dispose()
-                    capacity <- newCapacity
+                        for d in deleteBuffers do d.Dispose()
+                        capacity <- newCapacity
                 )
 
         member private x.onLock (c : Option<ResourceUsage>) =
-            use token = device.Token
             match c with
                 | Some ResourceUsage.Render ->
+                    use token = device.Token
                     let update = 
                         lock.Lock.Use (fun () ->
                             command {

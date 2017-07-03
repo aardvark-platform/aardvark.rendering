@@ -83,7 +83,7 @@ let main argv =
 
 
     use app = new VulkanApplication(true)
-    let win = app.CreateSimpleRenderWindow(1)
+    let win = app.CreateSimpleRenderWindow(8)
     
 
     let cam = CameraViewWithSky(Location = V3d.III * 2.0, Forward = -V3d.III.Normalized)
@@ -331,23 +331,26 @@ let main argv =
             |> Sg.scale 0.1
             |> Sg.transform (Trafo3d.FromBasis(-V3d.IOO, V3d.OOI, V3d.OIO, V3d(0.0, 0.0, 0.0)))
 
+    let active = Mod.init true
+
     let sg = 
-        Sg.group [label3]
-            |> Sg.andAlso quad
-            |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
-            |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
-            |> Sg.fillMode mode
-            |> Sg.uniform "Antialias" aa
-            //|> Sg.uniform "FillGlyphs"
-//            |> Sg.shader {
-//                    do! DefaultSurfaces.trafo 
-//                    let! mode = mode
-//                    match mode with
-//                        | FillMode.Fill -> 
-//                            do! DefaultSurfaces.diffuseTexture
-//                        | _ -> 
-//                            do! DefaultSurfaces.constantColor C4f.Red
-//               }
+        active |> Mod.map (fun a ->
+            if a then
+                Sg.group [label3]
+                    //|> Sg.andAlso quad
+                    |> Sg.viewTrafo (cam |> Mod.map CameraView.viewTrafo)
+                    |> Sg.projTrafo (win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
+                    |> Sg.fillMode mode
+                    |> Sg.uniform "Antialias" aa
+            else
+                Sg.ofList []
+        ) |> Sg.dynamic
+
+    win.Keyboard.KeyDown(Keys.Enter).Values.Add (fun _ ->
+        transact (fun () ->
+            active.Value <- not active.Value
+        )
+    )
 
     win.Keyboard.KeyDown(Keys.F8).Values.Add (fun _ ->
         transact (fun () ->
