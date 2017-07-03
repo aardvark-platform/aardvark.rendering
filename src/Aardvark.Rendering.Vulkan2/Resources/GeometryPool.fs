@@ -313,7 +313,7 @@ module GeometryPoolUtilities =
         member private x.HostBuffer = hostBuffer
 
         member x.Write(offset : int64, size : int64, data : nativeint) =
-            LockedResource.render x (fun () ->
+            LockedResource.access x (fun () ->
                 isEmpty <- false
                 assert (offset >= 0L && size >= 0L && offset + size <= hm.Size)
                 Marshal.Copy(data, ptr + nativeint offset, size)
@@ -366,7 +366,7 @@ module GeometryPoolUtilities =
             )
 
         member x.Realloc(newCapacity : int64, run : Command -> unit) =
-            LockedResource.render x (fun () ->
+            LockedResource.access x (fun () ->
                 if x.Size <> newCapacity then
                     let copySize = min newCapacity x.Size
                     LockedResource.update x (fun () ->
@@ -506,7 +506,7 @@ module GeometryPoolUtilities =
             ()
 
         member x.Alloc(fvc : int, geometry : IndexedGeometry) =
-            lock.Lock.Use(ResourceUsage.Render, fun () -> 
+            lock.Lock.Use(ResourceUsage.Access, fun () -> 
                 let ptr = manager.Alloc(nativeint fvc)
                 reallocIfNeeded()
             
