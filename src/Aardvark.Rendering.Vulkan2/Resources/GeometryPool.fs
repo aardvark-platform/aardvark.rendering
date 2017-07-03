@@ -274,22 +274,23 @@ module GeometryPoolUtilities =
         abstract member OnUnlock : Option<ResourceUsage> -> unit
 
 
-    type MappedBuffer(device : Device, lock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, ptr : DevicePtr) =
-        inherit Buffer(device, handle, ptr)
+    type MappedBuffer(device : Device, lock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr) =
+        inherit Buffer(device, handle, devPtr)
         static let sRange = sizeof<VkMappedMemoryRange> |> nativeint
 
         let transfer = device.TransferFamily
 
         let align = int64 device.MinUniformBufferOffsetAlignment
-        let hm = device.HostMemory.AllocRaw(ptr.Size)
-
-        let hostBuffer =
+        //let hm = device.HostMemory.AllocRaw(ptr.Size)
+        
+        let mutable ptr = 0n
+        let hm, hostBuffer =
             let mutable handle = VkBuffer.Null
             let mutable info =
                 VkBufferCreateInfo(
                     VkStructureType.BufferCreateInfo, 0n,
                     VkBufferCreateFlags.None,
-                    uint64 ptr.Size, 
+                    uint64 devPtr.Size, 
                     VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
                     device.AllSharingMode,
                     device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr
@@ -297,17 +298,20 @@ module GeometryPoolUtilities =
             VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&handle)
                 |> check "could not create buffer"
 
+            let mutable reqs = VkMemoryRequirements()
+            VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
+            let hm = device.HostMemory.AllocRaw(int64 reqs.size)
+
             VkRaw.vkBindBufferMemory(device.Handle, handle, hm.Handle, 0UL)
                 |> check "could not bind host memory"
 
-            Buffer(device, handle, hm)
+            VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, &&ptr)
+                |> check "could not map memory"
+            
+            hm, Buffer(device, handle, hm)
 
         let mutable isEmpty = true
 
-        let mutable ptr = 0n
-        do VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, &&ptr)
-            |> check "could not map memory"
-            
         let mutable dirty = RangeSet.empty
 
         member private x.HostBuffer = hostBuffer
@@ -315,7 +319,7 @@ module GeometryPoolUtilities =
         member x.Write(offset : int64, size : int64, data : nativeint) =
             LockedResource.access x (fun () ->
                 isEmpty <- false
-                assert (offset >= 0L && size >= 0L && offset + size <= hm.Size)
+                assert (offset >= 0L && size >= 0L && offset + size <= hostBuffer.Size)
                 Marshal.Copy(data, ptr + nativeint offset, size)
 
                 let range = Range1l(offset, offset + size - 1L)

@@ -15,7 +15,7 @@ open Aardvark.Rendering.Vulkan
 [<AbstractClass>]
 type QueueCommand() =
     abstract member Compatible : QueueFlags
-    abstract member Enqueue : DeviceQueue * list<Semaphore> -> Semaphore * Disposable
+    abstract member Enqueue : DeviceQueue * list<Semaphore> -> Option<Semaphore> * Disposable
     interface IQueueCommand with
         member x.Compatible = x.Compatible
         member x.TryEnqueue(queue, waitFor, disp) =

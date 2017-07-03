@@ -194,7 +194,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
     let mutable renderViews : ImageView[] = Array.zeroCreate 0
     let mutable colorView : Option<ImageView> = None
     let mutable framebuffers : Framebuffer[] = Array.zeroCreate 0
-    let mutable currentBuffer = 0u
+    let currentBuffer = ref 0u
 
     let update() =
         if surface.Handle.IsValid && disposed = 0 then
@@ -215,7 +215,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 renderViews <- newRenderViews
                 colorView <- newColorView
                 framebuffers <- newFramebuffers
-                currentBuffer <- 0u
+                currentBuffer := 0u
 
     static let presentCommand(handle : VkSwapchainKHR, currentBuffer : uint32)  =
         { new QueueCommand() with
@@ -240,9 +240,21 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         VkRaw.vkQueuePresentKHR(queue.Handle, &&info) |> check "could not swap buffers"
                     )
                 )
-                Disposable.Empty
+                None, Disposable.Empty
         }
 
+    static let acquireNextImage(handle : VkSwapchainKHR, currentBuffer : ref<uint32>) =
+        { new QueueCommand() with
+            member x.Compatible = QueueFlags.Graphics
+            member x.Enqueue(queue, waitFor) =
+                let sem = queue.Device.CreateSemaphore()
+                let mutable c = !currentBuffer
+                VkRaw.vkAcquireNextImageKHR(queue.Device.Handle, handle, ~~~0UL, sem.Handle, VkFence.Null, &&c)
+                    |> check "could not acquire Swapchain Image"
+                currentBuffer := c
+
+                Some sem, Disposable.Empty
+        }
 
     member x.Size = update(); size
     member x.Description = description
@@ -250,20 +262,22 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
     member x.RenderFrame (render : Framebuffer -> 'a) =
         if disposed <> 0 then failf "cannot use disposed Swapchain"
-        let sem = device.CreateSemaphore()
+        //let sem = device.CreateSemaphore()
 
         let res = 
             device.perform {
                 update()
-                // acquire a swapchain image for rendering
-                VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, sem.Handle, VkFence.Null, &&currentBuffer)
-                    |> check "could not acquire Swapchain Image"
 
-                do! QueueCommand.Wait sem
+                do! acquireNextImage(handle, currentBuffer)
+                // acquire a swapchain image for rendering
+//                VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, sem.Handle, VkFence.Null, &&currentBuffer)
+//                    |> check "could not acquire Swapchain Image"
+
+                //do! QueueCommand.Wait sem
             
 
                 // determine color and output images (may differ when using MSAA)
-                let outputIndex = int currentBuffer
+                let outputIndex = int !currentBuffer
                 let outputImage = renderViews.[outputIndex].Image
 
                 let renderImage = 
@@ -298,12 +312,11 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 do! Command.TransformLayout(outputImage, VkImageLayout.PresentSrcKhr)
 
                 // present the image
-                do! presentCommand(handle, currentBuffer)
+                do! presentCommand(handle, !currentBuffer)
 
                 return res
             }
 
-        sem.Dispose()
         res
 
     member x.Dispose() =
@@ -322,7 +335,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             renderViews <- Array.zeroCreate 0
             colorView <- None
             framebuffers <- Array.zeroCreate 0
-            currentBuffer <- 0u
+            currentBuffer := 0u
 
 
     interface IDisposable with

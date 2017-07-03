@@ -76,6 +76,12 @@ module BufferCommands =
                     VkRaw.vkCreateBuffer(device.Handle, &&srcInfo, NativePtr.zero, &&srcBuffer)
                         |> check "could not create temporary buffer"
 
+                    let mutable reqs = VkMemoryRequirements()
+                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, srcBuffer, &&reqs)
+
+                    if srcBufferOffset % (int64 reqs.alignment) <> 0L then
+                        VkRaw.warn "bad buffer alignment"
+
                     VkRaw.vkBindBufferMemory(device.Handle, srcBuffer, src.Memory.Handle, uint64 srcBufferOffset)
                         |> check "could not bind temporary buffer memory"
 

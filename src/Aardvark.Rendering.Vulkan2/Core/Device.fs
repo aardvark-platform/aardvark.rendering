@@ -382,25 +382,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                     |> check "could not submit command buffer"
             )
             fence.Wait()
-
-    member x.Start(cmd : CommandBuffer) =
-        if cmd.IsRecording then
-            failf "cannot submit recording CommandBuffer"
-
-        if not cmd.IsEmpty then
-            lock x (fun () ->
-                let mutable handle = cmd.Handle
-                let mutable submitInfo =
-                    VkSubmitInfo(
-                        VkStructureType.SubmitInfo, 0n,
-                        0u, NativePtr.zero, NativePtr.zero,
-                        1u, &&handle,
-                        0u, NativePtr.zero
-                    )
-
-                VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null)
-                    |> check "could not submit command buffer"
-            )
+            fence.Dispose()
 
     member x.StartAsync(cmd : CommandBuffer, waitFor : list<Semaphore>) =
         if cmd.IsRecording then
@@ -428,14 +410,14 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
 
                 | _ ->
                     let handles = waitFor |> List.map (fun s -> s.Handle) |> List.toArray
-                    let mask = Array.create handles.Length VkPipelineStageFlags.TopOfPipeBit
+                    let mask = Array.create handles.Length (int VkPipelineStageFlags.TopOfPipeBit)
             
                     mask |> NativePtr.withA (fun pMask ->
                         handles |> NativePtr.withA (fun pWaitFor ->
                             let mutable submitInfo =
                                 VkSubmitInfo(
                                     VkStructureType.SubmitInfo, 0n,
-                                    uint32 handles.Length, pWaitFor, pMask,
+                                    uint32 handles.Length, pWaitFor, NativePtr.cast pMask,
                                     cnt, &&handle,
                                     1u, &&semHandle
                                 )
@@ -449,24 +431,24 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
 
     member x.StartAsync(cmd : CommandBuffer) =
         x.StartAsync(cmd, [])
+//
+//    member x.Wait(sem : Semaphore) =
+//        lock x (fun () ->
+//            let mutable semHandle = sem.Handle
+//            let mutable submitInfo =
+//                let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
+//                VkSubmitInfo(
+//                    VkStructureType.SubmitInfo, 0n, 
+//                    1u, &&semHandle, &&dstStage,
+//                    0u, NativePtr.zero,
+//                    0u, NativePtr.zero
+//                )
+//
+//            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
+//                |> check "vkQueueWaitSemaphore"
+//        )
 
     member x.Wait(sem : Semaphore) =
-        lock x (fun () ->
-            let mutable semHandle = sem.Handle
-            let mutable submitInfo =
-                let mutable dstStage = VkPipelineStageFlags.BottomOfPipeBit
-                VkSubmitInfo(
-                    VkStructureType.SubmitInfo, 0n, 
-                    1u, &&semHandle, &&dstStage,
-                    0u, NativePtr.zero,
-                    0u, NativePtr.zero
-                )
-
-            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
-                |> check "vkQueueWaitSemaphore"
-        )
-
-    member x.WaitSync(sem : Semaphore) =
         let f = device.CreateFence()
         lock x (fun () ->
             let mutable semHandle = sem.Handle
@@ -483,32 +465,56 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                 |> check "vkQueueWaitSemaphore"
         )
         f.Wait()
+        f.Dispose()
 
-
-
-    member x.Signal() =
-        let sem = device.CreateSemaphore()
+    member x.Wait(sems : seq<Semaphore>) =
+        let f = device.CreateFence()
         lock x (fun () ->
-            let mutable semHandle = sem.Handle
-            let mutable submitInfo =
-                VkSubmitInfo(
-                    VkStructureType.SubmitInfo, 0n, 
-                    0u, NativePtr.zero, NativePtr.zero,
-                    0u, NativePtr.zero,
-                    1u, &&semHandle
+            let sems = sems |> Seq.map (fun s -> s.Handle) |> Seq.toArray
+            let masks = Array.create sems.Length (int VkPipelineStageFlags.BottomOfPipeBit)
+
+            sems |> NativePtr.withA (fun pSems ->
+                masks |> NativePtr.withA (fun pMask ->
+                    let mutable submitInfo =
+                        VkSubmitInfo(
+                            VkStructureType.SubmitInfo, 0n, 
+                            uint32 sems.Length, pSems, NativePtr.cast pMask,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero
+                        )
+
+                    VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, f.Handle) 
+                        |> check "vkQueueWaitSemaphore"
                 )
-            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
-                |> check "vkQueueWaitSemaphore"
+            )
         )
-        sem
+        f.Wait()
+        f.Dispose()
 
-    member x.Fence() =
-        let fence = device.CreateFence()
-        lock x (fun () ->
-            VkRaw.vkQueueSubmit(x.Handle, 0u, NativePtr.zero, fence.Handle)
-                |> check "could not submit command buffer"
-        )
-        fence
+//
+//    member x.Signal() =
+//        let sem = device.CreateSemaphore()
+//        lock x (fun () ->
+//            let mutable semHandle = sem.Handle
+//            let mutable submitInfo =
+//                VkSubmitInfo(
+//                    VkStructureType.SubmitInfo, 0n, 
+//                    0u, NativePtr.zero, NativePtr.zero,
+//                    0u, NativePtr.zero,
+//                    1u, &&semHandle
+//                )
+//            VkRaw.vkQueueSubmit(x.Handle, 1u, &&submitInfo, VkFence.Null) 
+//                |> check "vkQueueWaitSemaphore"
+//        )
+//        sem
+
+//    member x.Fence() =
+//        let fence = device.CreateFence()
+//        lock x (fun () ->
+//            VkRaw.vkQueueSubmit(x.Handle, 0u, NativePtr.zero, fence.Handle)
+//                |> check "could not submit command buffer"
+//        )
+//        fence
 
     member x.WaitIdle() =
         VkRaw.vkQueueWaitIdle(x.Handle)
@@ -928,18 +934,21 @@ and Fence internal(device : Device, signaled : bool) =
     static let infinite = System.UInt64.MaxValue
     static let cbs = ConcurrentDictionary<Device, FenceCallbacks>()
 
-    let mutable handle : VkFence = VkFence.Null
+    let pFence : nativeptr<VkFence> = NativePtr.alloc 1
+
     do 
-        let mutable info =
+        let info =
             VkFenceCreateInfo(
                 VkStructureType.FenceCreateInfo, 0n,
                 (if signaled then VkFenceCreateFlags.SignaledBit else VkFenceCreateFlags.None)
             )
-        VkRaw.vkCreateFence(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create fence"
+        [|info|] |> NativePtr.withA (fun pInfo ->
+            VkRaw.vkCreateFence(device.Handle, pInfo, NativePtr.zero, pFence)
+                |> check "could not create fence"
+        )
 
     member x.Device = device
-    member x.Handle = handle
+    member x.Handle = NativePtr.read pFence
 
     member x.ContinueWith(f : unit -> unit, cancellationToken : CancellationToken) =
         let cb = cbs.GetOrAdd(device, fun d -> FenceCallbacks(d))
@@ -969,25 +978,29 @@ and Fence internal(device : Device, signaled : bool) =
                 |> check "failed to wait for fences"
 
     member x.Signaled =
+        let handle = NativePtr.read pFence
         if handle.IsValid then
             VkRaw.vkGetFenceStatus(device.Handle, handle) = VkResult.VkSuccess
         else
             true
 
     member x.Completed =
+        let handle = NativePtr.read pFence
         if handle.IsValid then
             VkRaw.vkGetFenceStatus(device.Handle, handle) <> VkResult.VkNotReady
         else
             true
 
     member x.Reset() =
+        let handle = NativePtr.read pFence
         if handle.IsValid then
-            VkRaw.vkResetFences(device.Handle, 1u, &&handle)
+            VkRaw.vkResetFences(device.Handle, 1u, pFence)
                 |> check "failed to reset fence"
         else
             failf "cannot reset disposed fence"
 
     member x.Set() =
+        let handle = NativePtr.read pFence
         if handle.IsValid then
             let queue = device.ComputeFamily.GetQueue()
             VkRaw.vkQueueSubmit(queue.Handle, 0u, NativePtr.zero, handle)
@@ -996,20 +1009,24 @@ and Fence internal(device : Device, signaled : bool) =
             failf "cannot signal disposed fence" 
 
     member x.TryWait(timeoutInNanoseconds : int64) =
-        let waitResult = VkRaw.vkWaitForFences(device.Handle, 1u, &&handle, 1u, uint64 timeoutInNanoseconds)
+        let waitResult = VkRaw.vkWaitForFences(device.Handle, 1u, pFence, 1u, uint64 timeoutInNanoseconds)
         match waitResult with
             | VkResult.VkTimeout -> 
                 false
             | VkResult.VkSuccess -> 
-                VkRaw.vkDestroyFence(device.Handle, handle, NativePtr.zero)
-                handle <- VkFence.Null
                 true
             | err -> 
-                VkRaw.vkDestroyFence(device.Handle, handle, NativePtr.zero)
-                handle <- VkFence.Null
                 failf "could not wait for fences: %A" err
     
     member x.TryWait() = x.TryWait(-1L)
+
+    member x.Dispose() =
+        if not (NativePtr.isNull pFence) then
+            let handle = NativePtr.read pFence
+            if handle.IsValid then
+                VkRaw.vkDestroyFence(device.Handle, handle, NativePtr.zero)
+                NativePtr.write pFence VkFence.Null
+            NativePtr.free pFence
 
     member x.Wait(timeoutInNanoseconds : int64) = 
         if not (x.TryWait(timeoutInNanoseconds)) then
@@ -1023,15 +1040,20 @@ and Fence internal(device : Device, signaled : bool) =
     new(device : Device) = new Fence(device, false)
 
 and Semaphore internal(device : Device) =
-    let mutable info =
-        VkSemaphoreCreateInfo(
-            VkStructureType.SemaphoreCreateInfo, 0n,
-            0u
-        )
 
-    let mutable handle = VkSemaphore.Null
-    do VkRaw.vkCreateSemaphore(device.Handle, &&info, NativePtr.zero, &&handle)
-        |> check "could not create semaphore"
+
+    let mutable handle = 
+        let mutable handle = VkSemaphore.Null
+        let mutable info =
+            VkSemaphoreCreateInfo(
+                VkStructureType.SemaphoreCreateInfo, 0n,
+                0u
+            )
+
+        VkRaw.vkCreateSemaphore(device.Handle, &&info, NativePtr.zero, &&handle)
+            |> check "could not create semaphore"
+
+        handle
 
     member x.Device = device
     member x.Handle = handle
@@ -1053,10 +1075,10 @@ and Semaphore internal(device : Device) =
         else
             failf "cannot signal disposed fence" 
 
-    member x.Dispose() = ()
-//        if handle.IsValid && device.Handle <> 0n then
-//            VkRaw.vkDestroySemaphore(device.Handle, handle, NativePtr.zero)
-//            handle <- VkSemaphore.Null
+    member x.Dispose() =
+        if handle.IsValid && device.Handle <> 0n then
+            VkRaw.vkDestroySemaphore(device.Handle, handle, NativePtr.zero)
+            handle <- VkSemaphore.Null
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -1376,11 +1398,12 @@ and ICommand =
 
 and IQueueCommand =
     abstract member Compatible : QueueFlags
-    abstract member TryEnqueue : queue : DeviceQueue * waitFor : list<Semaphore> * disp : byref<Disposable> -> Semaphore
+    abstract member TryEnqueue : queue : DeviceQueue * waitFor : list<Semaphore> * disp : byref<Disposable> -> Option<Semaphore>
 
 and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
     let mutable current             : Option<CommandBuffer> = None
     let disposables                 : List<Disposable>      = List()
+    let semaphores                  : List<Semaphore>       = List()
 
     let mutable isEmpty = true
     let mutable refCount = 1
@@ -1402,7 +1425,6 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
     let cleanup() =
         for d in disposables do d.Dispose()
         disposables.Clear()
-
         match current with
             | Some b -> 
                 b.Dispose()
@@ -1425,11 +1447,13 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
         match current with
             | Some buffer ->
                 buffer.End()
-                disposables.Add { new Disposable() with member x.Dispose() = buffer.Dispose() }
                 if not buffer.IsEmpty then
                     isEmpty <- false
                     let sem = queue.StartAsync(buffer, lastSems)
+                    semaphores.Add sem
+                    disposables.Add { new Disposable() with member x.Dispose() = buffer.Dispose() }
                     lastSems <- [sem]
+
                 current <- None
 
             | None ->
@@ -1445,9 +1469,11 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
         flush()
 
         match lastSems with
-            | [sem] -> queue.WaitSync(sem)
-            | _ -> ()
+            | [] -> queue.WaitIdle()
+            | sems -> queue.Wait(sems)
 
+        for s in semaphores do s.Dispose()
+        semaphores.Clear()
         lastSems <- []
 
 
@@ -1473,8 +1499,9 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
         let mutable disp = Disposable.Empty
         let sem = cmd.TryEnqueue(queue, lastSems, &disp) 
         if not (isNull disp) then disposables.Add disp
+        sem |> Option.iter semaphores.Add
         isEmpty <- false
-        lastSems <- [sem]
+        lastSems <- Option.toList sem
 
     member internal x.AddRef() = 
         check()
