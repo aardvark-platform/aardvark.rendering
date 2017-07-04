@@ -40,106 +40,113 @@ module GeometryPoolUtilities =
                 arr |> Array.fold (fun s r -> s.Add r) empty
 
         member x.Add(r : Range1l) =
-            let min = r.Min
-            let max = r.Max + 1L
 
-            let lm, _, inner = MapExt.split min store
-            let inner, _, rm = MapExt.split max inner
+            if r.Max < r.Min then 
+                x 
+            else
+                let min = r.Min
+                let max = r.Max + 1L
 
-            let before = MapExt.tryMax lm |> Option.map (fun mk -> mk, lm.[mk])
-            let after = MapExt.tryMin rm |> Option.map (fun mk -> mk, rm.[mk])
+                let lm, _, inner = MapExt.split min store
+                let inner, _, rm = MapExt.split max inner
 
-            let newStore = 
-                match before, after with
-                    | None, None ->
-                        MapExt.ofList [ min, HalfRangeKind.Left; max, HalfRangeKind.Right]
+                let before = MapExt.tryMax lm |> Option.map (fun mk -> mk, lm.[mk])
+                let after = MapExt.tryMin rm |> Option.map (fun mk -> mk, rm.[mk])
 
-                    | Some(bk, HalfRangeKind.Right), None ->
-                        lm 
-                        |> MapExt.add min HalfRangeKind.Left
-                        |> MapExt.add max HalfRangeKind.Right
+                let newStore = 
+                    match before, after with
+                        | None, None ->
+                            MapExt.ofList [ min, HalfRangeKind.Left; max, HalfRangeKind.Right]
 
-                    | Some(bk, HalfRangeKind.Left), None ->
-                        lm 
-                        |> MapExt.add max HalfRangeKind.Right
+                        | Some(bk, HalfRangeKind.Right), None ->
+                            lm 
+                            |> MapExt.add min HalfRangeKind.Left
+                            |> MapExt.add max HalfRangeKind.Right
 
-                    | None, Some(ak, HalfRangeKind.Left) ->
-                        rm
-                        |> MapExt.add min HalfRangeKind.Left
-                        |> MapExt.add max HalfRangeKind.Right
+                        | Some(bk, HalfRangeKind.Left), None ->
+                            lm 
+                            |> MapExt.add max HalfRangeKind.Right
 
-                    | None, Some(ak, HalfRangeKind.Right) ->
-                        rm
-                        |> MapExt.add min HalfRangeKind.Left
+                        | None, Some(ak, HalfRangeKind.Left) ->
+                            rm
+                            |> MapExt.add min HalfRangeKind.Left
+                            |> MapExt.add max HalfRangeKind.Right
 
-                    | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Left) ->
-                        let self = MapExt.ofList [ min, HalfRangeKind.Left; max, HalfRangeKind.Right]
-                        MapExt.union (MapExt.union lm self) rm
+                        | None, Some(ak, HalfRangeKind.Right) ->
+                            rm
+                            |> MapExt.add min HalfRangeKind.Left
+
+                        | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Left) ->
+                            let self = MapExt.ofList [ min, HalfRangeKind.Left; max, HalfRangeKind.Right]
+                            MapExt.union (MapExt.union lm self) rm
                         
-                    | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Left) ->
-                        let self = MapExt.ofList [ max, HalfRangeKind.Right]
-                        MapExt.union (MapExt.union lm self) rm
+                        | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Left) ->
+                            let self = MapExt.ofList [ max, HalfRangeKind.Right]
+                            MapExt.union (MapExt.union lm self) rm
 
-                    | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Right) ->
-                        let self = MapExt.ofList [ min, HalfRangeKind.Left ]
-                        MapExt.union (MapExt.union lm self) rm
+                        | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Right) ->
+                            let self = MapExt.ofList [ min, HalfRangeKind.Left ]
+                            MapExt.union (MapExt.union lm self) rm
 
-                    | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Right) ->
-                        MapExt.union lm rm
+                        | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Right) ->
+                            MapExt.union lm rm
 
-                    | _ ->
-                        failwithf "impossible"
-
-            RangeSet(newStore)
+                        | _ ->
+                            failwithf "impossible"
+                assert (newStore.Count % 2 = 0)
+                RangeSet(newStore)
 
         member x.Remove(r : Range1l) =
-            let min = r.Min
-            let max = r.Max + 1L
+            if r.Max < r.Min then
+                x
+            else
+                let min = r.Min
+                let max = r.Max + 1L
 
-            let lm, _, inner = MapExt.split min store
-            let inner, _, rm = MapExt.split max inner
+                let lm, _, inner = MapExt.split min store
+                let inner, _, rm = MapExt.split max inner
 
-            let before = MapExt.tryMax lm |> Option.map (fun mk -> mk, lm.[mk])
-            let after = MapExt.tryMin rm |> Option.map (fun mk -> mk, rm.[mk])
+                let before = MapExt.tryMax lm |> Option.map (fun mk -> mk, lm.[mk])
+                let after = MapExt.tryMin rm |> Option.map (fun mk -> mk, rm.[mk])
 
-            let newStore = 
-                match before, after with
-                    | None, None ->
-                        MapExt.empty
+                let newStore = 
+                    match before, after with
+                        | None, None ->
+                            MapExt.empty
 
-                    | Some(bk, HalfRangeKind.Right), None ->
-                        lm
+                        | Some(bk, HalfRangeKind.Right), None ->
+                            lm
 
-                    | Some(bk, HalfRangeKind.Left), None ->
-                        lm 
-                        |> MapExt.add min HalfRangeKind.Right
+                        | Some(bk, HalfRangeKind.Left), None ->
+                            lm 
+                            |> MapExt.add min HalfRangeKind.Right
 
-                    | None, Some(ak, HalfRangeKind.Left) ->
-                        rm
+                        | None, Some(ak, HalfRangeKind.Left) ->
+                            rm
 
-                    | None, Some(ak, HalfRangeKind.Right) ->
-                        rm
-                        |> MapExt.add max HalfRangeKind.Left
+                        | None, Some(ak, HalfRangeKind.Right) ->
+                            rm
+                            |> MapExt.add max HalfRangeKind.Left
 
-                    | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Left) ->
-                        MapExt.union lm rm
+                        | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Left) ->
+                            MapExt.union lm rm
                         
-                    | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Left) ->
-                        let self = MapExt.ofList [ min, HalfRangeKind.Right]
-                        MapExt.union (MapExt.union lm self) rm
+                        | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Left) ->
+                            let self = MapExt.ofList [ min, HalfRangeKind.Right]
+                            MapExt.union (MapExt.union lm self) rm
 
-                    | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Right) ->
-                        let self = MapExt.ofList [ max, HalfRangeKind.Left ]
-                        MapExt.union (MapExt.union lm self) rm
+                        | Some(bk, HalfRangeKind.Right), Some(ak, HalfRangeKind.Right) ->
+                            let self = MapExt.ofList [ max, HalfRangeKind.Left ]
+                            MapExt.union (MapExt.union lm self) rm
 
-                    | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Right) ->
-                        let self = MapExt.ofList [ min, HalfRangeKind.Right; max, HalfRangeKind.Left]
-                        MapExt.union (MapExt.union lm self) rm
+                        | Some(bk, HalfRangeKind.Left), Some(ak, HalfRangeKind.Right) ->
+                            let self = MapExt.ofList [ min, HalfRangeKind.Right; max, HalfRangeKind.Left]
+                            MapExt.union (MapExt.union lm self) rm
 
-                    | _ ->
-                        failwithf "impossible"
+                        | _ ->
+                            failwithf "impossible"
 
-            RangeSet(newStore)
+                RangeSet(newStore)
 
         member x.Contains(v : int64) =
             let l, s, _ = MapExt.neighbours v store

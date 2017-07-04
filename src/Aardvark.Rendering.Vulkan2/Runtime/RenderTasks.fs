@@ -170,8 +170,8 @@ module RenderTasks =
             let viewportChanged     = lastViewports <> viewports
 
             if resourceHandlesChanged || versionChanged || viewportChanged then
-                resourceHandlesChanged <- false
                 Log.line "{ handles: %A; version: %A; viewport: %A }" resourceHandlesChanged versionChanged viewportChanged
+                resourceHandlesChanged <- false
                 cmd.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
                 cmd.enqueue {
                     do! Command.SetViewports viewports

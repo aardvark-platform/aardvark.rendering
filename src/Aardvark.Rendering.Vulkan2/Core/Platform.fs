@@ -143,7 +143,7 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
     member x.Devices = devices
 
-    member x.PrintInfo(l : ILogger) =
+    member x.PrintInfo(l : ILogger, chosenDevice : int) =
         let caps = 
             [
                 QueueFlags.Compute, "compute"
@@ -177,6 +177,8 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
             l.section "devices:" (fun () ->
                 for d in devices do
                     l.section "%d:" d.Index (fun () ->
+                        if d.Index = chosenDevice then 
+                            l.line "CHOSEN DEVICE"
                         l.line "type:     %A" d.Type
                         l.line "vendor:   %s" d.Vendor
                         l.line "name:     %s" d.Name
