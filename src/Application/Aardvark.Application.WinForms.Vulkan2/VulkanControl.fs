@@ -73,7 +73,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     static let messageLoop = MessageLoop()
     static do messageLoop.Start()
 
-    let mutable renderTask : IRenderTask = Unchecked.defaultof<_>
+    let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable taskSubscription : IDisposable = null
     let mutable sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
     let mutable needsRedraw = false
@@ -103,6 +103,12 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
             x.Invalidate()
 
     override x.OnUnload() =
+        if not (isNull taskSubscription) then
+            taskSubscription.Dispose()
+            taskSubscription <- null
+
+        renderTask.Dispose()
+        renderTask <- RenderTask.empty
         ()
 
     member x.Time = time

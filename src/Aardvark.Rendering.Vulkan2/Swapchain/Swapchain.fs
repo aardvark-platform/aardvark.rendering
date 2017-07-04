@@ -256,68 +256,63 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 Some sem, Disposable.Empty
         }
 
+    member x.Present = presentCommand(handle, !currentBuffer)
+    member x.AcquireNextImage = acquireNextImage(handle, currentBuffer)
+
     member x.Size = update(); size
     member x.Description = description
     member x.Samples = description.samples
 
     member x.RenderFrame (render : Framebuffer -> 'a) =
-        if disposed <> 0 then failf "cannot use disposed Swapchain"
-        //let sem = device.CreateSemaphore()
+        if disposed <> 0 then 
+            failf "cannot use disposed Swapchain"
 
-        let res = 
-            device.perform {
-                update()
+        device.perform {
+            update()
 
-                do! acquireNextImage(handle, currentBuffer)
-                // acquire a swapchain image for rendering
-//                VkRaw.vkAcquireNextImageKHR(device.Handle, handle, ~~~0UL, sem.Handle, VkFence.Null, &&currentBuffer)
-//                    |> check "could not acquire Swapchain Image"
+            // acquire a swapchain image for rendering
+            do! x.AcquireNextImage
 
-                //do! QueueCommand.Wait sem
-            
+            // determine color and output images (may differ when using MSAA)
+            let outputIndex = int !currentBuffer
+            let outputImage = renderViews.[outputIndex].Image
 
-                // determine color and output images (may differ when using MSAA)
-                let outputIndex = int !currentBuffer
-                let outputImage = renderViews.[outputIndex].Image
-
-                let renderImage = 
-                    match colorView with
-                        | Some view -> view.Image
-                        | None -> renderViews.[outputIndex].Image
+            let renderImage = 
+                match colorView with
+                    | Some view -> view.Image
+                    | None -> renderViews.[outputIndex].Image
 
 
-                let framebuffer =
-                    framebuffers.[outputIndex % framebuffers.Length]
+            let framebuffer =
+                framebuffers.[outputIndex % framebuffers.Length]
 
-                // clear color & depth
-                do! Command.ClearColor(renderImage.[ImageAspect.Color], C4f.Black)
-                match depthView with
-                    | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil], 1.0, 0u)
-                    | _ -> ()
+            // clear color & depth
+            do! Command.ClearColor(renderImage.[ImageAspect.Color], C4f.Black)
+            match depthView with
+                | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil], 1.0, 0u)
+                | _ -> ()
 
-                // ensure that colorImage is ColorAttachmentOptimal
-                do! Command.TransformLayout(renderImage, VkImageLayout.ColorAttachmentOptimal)
+            // ensure that colorImage is ColorAttachmentOptimal
+            do! Command.TransformLayout(renderImage, VkImageLayout.ColorAttachmentOptimal)
 
-                // render the scene
-                let res = render framebuffer
+            // render the scene
+            let res = render framebuffer
 
-                // if colorView and outputView are not identical (MSAA) then
-                // resolve colorView to outputView
-                if renderImage <> outputImage then
-                    do! Command.TransformLayout(renderImage, VkImageLayout.TransferSrcOptimal)
-                    do! Command.TransformLayout(outputImage, VkImageLayout.TransferDstOptimal)
-                    do! Command.ResolveMultisamples(renderImage.[ImageAspect.Color, 0, *], outputImage.[ImageAspect.Color, 0, *])
+            // if colorView and outputView are not identical (MSAA) then
+            // resolve colorView to outputView
+            if renderImage <> outputImage then
+                do! Command.TransformLayout(renderImage, VkImageLayout.TransferSrcOptimal)
+                do! Command.TransformLayout(outputImage, VkImageLayout.TransferDstOptimal)
+                do! Command.ResolveMultisamples(renderImage.[ImageAspect.Color, 0, *], outputImage.[ImageAspect.Color, 0, *])
        
-                // finally the outputImage needs to be in layout PresentSrcKhr
-                do! Command.TransformLayout(outputImage, VkImageLayout.PresentSrcKhr)
+            // finally the outputImage needs to be in layout PresentSrcKhr
+            do! Command.TransformLayout(outputImage, VkImageLayout.PresentSrcKhr)
 
-                // present the image
-                do! presentCommand(handle, !currentBuffer)
+            // present the image
+            do! x.Present
 
-                return res
-            }
-
-        res
+            return res
+        }
 
     member x.Dispose() =
         let o = System.Threading.Interlocked.Exchange(&disposed, 1)
@@ -336,7 +331,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             colorView <- None
             framebuffers <- Array.zeroCreate 0
             currentBuffer := 0u
-
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

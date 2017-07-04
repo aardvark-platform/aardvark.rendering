@@ -352,8 +352,8 @@ and DrawBufferManager (signature : IFramebufferSignature) =
 
 type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource<'a>) =
     inherit AdaptiveDecorator(inner)
+    static let th = typeof<'b>
     let handle = inner.Handle |> Mod.cast
-
     member x.Inner = inner
 
     override x.GetHashCode() = inner.GetHashCode()
@@ -362,7 +362,8 @@ type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource
             | :? CastResource<'a,'b> as o -> inner.Equals o.Inner
             | _ -> false
 
-    interface IResource with
+    interface IResource with  
+        member x.HandleType = th
         member x.Dispose() = inner.Dispose()
         member x.AddRef() = inner.AddRef()
         member x.RemoveRef() = inner.RemoveRef()

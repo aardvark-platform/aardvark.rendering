@@ -332,7 +332,7 @@ module GeometryPoolUtilities =
                 
                 let cnt = dirty.Count
                 if cnt <> 0 then
-                    Log.warn "flush %A" dirty
+                    Log.warn "flush %d" cnt
                     let pRanges = NativePtr.alloc cnt
                     let ranges = Array.zeroCreate cnt
                     try
@@ -418,6 +418,108 @@ module GeometryPoolUtilities =
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
+
+    type StreamingBuffer(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr) =
+        let size = devPtr.Size
+        
+        let streamSize = max (size / 2L) 1024L
+
+        let scratchBuffer, scratchMem, scratchPtr =
+            let mutable buffer = VkBuffer.Null
+            let mutable info =
+                VkBufferCreateInfo(
+                    VkStructureType.BufferCreateInfo, 0n,
+                    VkBufferCreateFlags.None,
+                    uint64 streamSize,
+                    VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
+                    device.AllSharingMode,
+                    device.AllQueueFamiliesCnt,
+                    device.AllQueueFamiliesPtr
+                )
+
+            VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&buffer)
+                |> check "could not create buffer"
+
+            let mutable reqs = VkMemoryRequirements()
+            VkRaw.vkGetBufferMemoryRequirements(device.Handle, buffer, &&reqs)
+
+            let compatible = reqs.memoryTypeBits &&& (1u <<< device.HostMemory.Index) <> 0u
+            if not compatible then
+                failf "cannot create buffer with host visible memory"
+
+            let bufferMem = device.HostMemory.AllocRaw(int64 reqs.size)
+
+            VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Handle, 0UL)
+                |> check "could not bind buffer memory"
+
+            let mutable memPtr = 0n
+            VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, &&memPtr)
+                |> check "could not map memory"
+
+            buffer, bufferMem, memPtr
+
+        let todoLock = obj()
+        let mutable todo : VkBufferCopy[] = Array.zeroCreate 16
+        let mutable todoCount = 0
+        let mutable scratchOffset = 0L
+
+        member x.Flush =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue(cmd : CommandBuffer) =
+                    let todo, todoCount = 
+                        lock todoLock (fun () ->
+                            let mine = todo
+                            let myCount = todoCount
+                            todo <- Array.zeroCreate 16
+                            todoCount <- 0
+                            scratchOffset <- 0L
+                            mine, myCount
+                        )
+
+                    let gc = GCHandle.Alloc(todo, GCHandleType.Pinned)
+                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, uint32 todoCount, NativePtr.ofNativeInt (gc.AddrOfPinnedObject()))
+                    gc.Free()
+                    Disposable.Empty
+            }
+
+        member x.Write(offset : int64, size : int64, data : nativeint) =
+            rlock.Lock.Use(ResourceUsage.Access, fun () ->
+                let scratchOffset = 
+                    lock todoLock (fun () ->
+                        let localOffset = scratchOffset
+                        if localOffset + size > size then
+                            None
+                        else
+                            scratchOffset <- scratchOffset + size
+                            if todoCount >= todo.Length then
+                                Array.Resize(&todo, todo.Length * 2)
+
+                            todo.[todoCount] <- VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
+                            todoCount <- todoCount + 1
+                            Some localOffset
+                    )
+
+
+                match scratchOffset with
+                    | None -> 
+                        device.perform { do! x.Flush }
+                        x.Write(offset, size, data)
+
+                    | Some scratchOffset ->
+                        Marshal.Copy(data, scratchPtr + nativeint scratchOffset, size)
+                        let mutable region =
+                            VkMappedMemoryRange(
+                                VkStructureType.MappedMemoryRange, 0n,
+                                scratchMem.Handle, 
+                                uint64 scratchOffset, uint64 size
+                            )
+
+                        VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&region)
+                            |> check "could not flush range"
+            )
+
+
 
     [<AbstractClass; Sealed; Extension>]
     type DeviceMappedBufferExts private() =
@@ -548,7 +650,13 @@ module GeometryPoolUtilities =
             Map.tryFind sem views
 
         member x.Dispose() =
-            Log.warn "disposal not implemented"
+            buffers |> Map.iter (fun _ (_,_,b) ->
+                let b = unbox<MappedBuffer> b.Value
+                b.Dispose()
+                manager.Dispose()
+                capacity <- 0L
+                count <- 0
+            )
 
         interface IGeometryPool with
             member x.Dispose() = x.Dispose()

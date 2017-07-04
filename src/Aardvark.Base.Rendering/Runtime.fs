@@ -85,6 +85,7 @@ type IResourceManager =
     abstract member CreateTexture : texture : IMod<ITexture> -> IResource<IBackendTexture>
 
 and IRuntime =
+    abstract member OnDispose : Microsoft.FSharp.Control.IEvent<unit>
     abstract member ResourceManager : IResourceManager
     abstract member ContextLock : IDisposable
 

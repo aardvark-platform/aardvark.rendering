@@ -84,6 +84,12 @@ module RenderTasks =
         let mutable commandVersion = -1
 
         let dirty = HashSet<IResource>()
+        let mutable resourceHandlesChanged = false
+
+        static let inPlaceResources =
+            HashSet.ofList [
+                typeof<UniformBuffer>
+            ]
 
         override x.InputChanged(_,o) =
             match o with
@@ -127,12 +133,17 @@ module RenderTasks =
             x.EvaluateAlways caller (fun caller ->
                 x.init(caller)
                 if x.OutOfDate then
-                    let rec doit() =
+                    
+                    let rec doit(refill : bool) =
                         let mine = dirty.ToArray(dirty.Count)
                         dirty.Clear()
                         if mine.Length > 0 then
+                            let mutable refill = refill
                             let delayed = List(mine.Length)
                             for d in mine do
+                                if not (inPlaceResources.Contains d.HandleType) then
+                                    refill <- true
+
                                 match d with
                                     | :? IResource<DrawCall> as r ->
                                         if not d.IsDisposed then
@@ -144,22 +155,23 @@ module RenderTasks =
                                 if not d.IsDisposed then
                                     d.Update(caller, token)
 
-                            doit()
+                            doit(refill)
+                        else
+                            refill
 
-                    doit()
+                    let refill = doit false
+                    if refill then resourceHandlesChanged <- true
                     x.UpdateProgram(caller, token)
             )
 
         member x.GetCommandBuffer(caller : AdaptiveToken, token : RenderToken, viewports : Box2i[]) =
-            let inner = RenderToken(token)
-            x.Update(caller, inner)
-
-            let handlesChanged      = inner.CreatedResources <> 0 || inner.ReplacedResources <> 0
+            x.Update(caller, token)
             let versionChanged      = version <> commandVersion
             let viewportChanged     = lastViewports <> viewports
 
-            if handlesChanged || versionChanged || viewportChanged then
-                Log.line "{ handles: %A; version: %A; viewport: %A }" handlesChanged versionChanged viewportChanged
+            if resourceHandlesChanged || versionChanged || viewportChanged then
+                resourceHandlesChanged <- false
+                Log.line "{ handles: %A; version: %A; viewport: %A }" resourceHandlesChanged versionChanged viewportChanged
                 cmd.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
                 cmd.enqueue {
                     do! Command.SetViewports viewports
@@ -325,8 +337,29 @@ module RenderTasks =
             this.ResourceManager.PrepareRenderObject(renderPass, o, this.HookRenderObject)
 
         let device = man.Device
-        let preparedObjects = objects |> ASet.mapUse prepare
-        let preparedObjectReader = preparedObjects.GetReader()
+        let preparedCache = Cache<IRenderObject, PreparedMultiRenderObject>(prepare)
+        let objectReader = objects.GetReader()
+
+        let preparedObjectReader =
+            { new AbstractReader<hdeltaset<PreparedMultiRenderObject>>(Ag.emptyScope, HDeltaSet.monoid) with
+                member x.Compute(token) =
+                    let deltas = objectReader.GetOperations token
+
+                    deltas |> HDeltaSet.map (fun op ->
+                        match op with
+                            | Add(_,v) -> 
+                                let res = preparedCache.Invoke(v)
+                                Add(res)
+                            | Rem(_,v) -> 
+                                let deleted, res = preparedCache.RevokeAndGetDeleted(v)
+                                if deleted then res.Dispose()
+                                Rem(res)
+                    )
+
+                member x.Release() =
+                    preparedCache.Clear(fun o -> o.Dispose())
+                    objectReader.Dispose()
+            }
 
 
         let pool = device.GraphicsFamily.CreateCommandPool()
@@ -425,9 +458,9 @@ module RenderTasks =
 
 
         override x.Release() =
+            preparedObjectReader.Dispose()
             commandBuffers |> Map.iter (fun _ c -> c.Dispose())
             pool.Dispose()
-            preparedObjectReader.Dispose()
             commandBuffers <- Map.empty
 
 

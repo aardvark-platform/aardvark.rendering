@@ -440,4 +440,5 @@ let main argv =
 
     win.RenderTask <- main
     win.Run()
+    win.Dispose()
     0 

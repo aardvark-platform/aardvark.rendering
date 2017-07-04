@@ -120,13 +120,14 @@ module private DebugReportHelpers =
             let layerPrefix = layerPrefix |> CStr.toString
             let msg = msg |> CStr.toString
 
-            let hash = Guid.Empty
-//                computeHash (fun w ->
-//                    w.Write (int flags)
-//                    w.Write (int objType)
-//                    w.Write msgCode
-//                    w.Write layerPrefix
-//                )
+            let hash = //Guid.Empty
+                computeHash (fun w ->
+                    w.Write (int flags)
+                    w.Write (int objType)
+                    w.Write msgCode
+                    w.Write layerPrefix
+                    w.Write location
+                )
 
             if not (ignoreRx.IsMatch msg) then
                 raise {

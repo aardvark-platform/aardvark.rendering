@@ -110,7 +110,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let ignored =
         HashSet.ofList [
-            Guid.Parse("{d7f7c939-f97a-e8a9-8289-e4faac682bde}")
+            Guid.Empty
+            //Guid.Parse("{d7f7c939-f97a-e8a9-8289-e4faac682bde}")
         ]
 
     let debugMessage (msg : DebugMessage) =
@@ -136,7 +137,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         if debug then instance.DebugMessages.Subscribe debugMessage
         else { new IDisposable with member x.Dispose() = () }
 
-
+    let onDispose = Event<unit>()
 
     member x.Device = device
     member x.ResourceManager = manager
@@ -346,6 +347,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         token.Enqueue (Command.ResolveMultisamples(src, dst))
 
     member x.Dispose() = 
+        onDispose.Trigger()
         debugSubscription.Dispose()
         manager.Dispose()
         device.Dispose()
@@ -354,6 +356,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
             let module_ = signature.Link(effect, Range1d(0.0, 1.0), true)
             let glsl = 

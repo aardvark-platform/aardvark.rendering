@@ -135,6 +135,7 @@ type IResource =
     abstract member Kind : ResourceKind
     abstract member IsDisposed : bool
     abstract member Info : ResourceInfo
+    abstract member HandleType : Type
 
 type IResource<'h> =
     inherit IResource
@@ -157,6 +158,7 @@ type ResourceDescription<'d, 'h, 'v when 'v : unmanaged> =
 [<AbstractClass>]
 type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
     inherit AdaptiveObject()
+    static let th = typeof<'h>
 
     let mutable current = None
     let handle = Mod.init Unchecked.defaultof<'h>
@@ -199,7 +201,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
     abstract member View : 'h -> 'v
 
 
-
+    member x.HandleType = th
     member x.IsDisposed = Option.isNone current
 
     member x.Info = info
@@ -268,6 +270,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
         member x.Dispose() = x.RemoveRef()
 
     interface IResource<'h, 'v> with
+        member x.HandleType = th
         member x.IsDisposed = x.IsDisposed
         member x.Kind = kind
         member x.AddRef() = x.AddRef()
@@ -536,6 +539,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
 
 type ConstantResource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : ResourceKind, handle : 'h, v : 'v) =
     inherit ConstantObject()
+    static let th = typeof<'h>
 
     let h = Mod.constant handle
     let ptr = NativePtr.alloc 1
@@ -554,6 +558,7 @@ type ConstantResource<'h, 'v when 'h : equality and 'v : unmanaged>(kind : Resou
         member x.Dispose() = ()
 
     interface IResource<'h, 'v> with
+        member x.HandleType = th
         member x.IsDisposed = false
         member x.Kind = kind
         member x.AddRef() = ()

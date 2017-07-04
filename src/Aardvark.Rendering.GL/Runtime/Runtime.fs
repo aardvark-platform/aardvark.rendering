@@ -76,6 +76,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     let mutable ctx = ctx
     let mutable manager = if ctx <> null then ResourceManager(ctx, None, shareTextures, shareBuffers) else null
 
+    let onDispose = Event<unit>()
+
     do if not (isNull ctx) then using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
     new(ctx) = new Runtime(ctx, false, false)
@@ -96,14 +98,15 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.Dispose() = 
         if ctx <> null then
+            onDispose.Trigger()
             ctx.Dispose()
             ctx <- null
-        
 
     interface IDisposable with
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
             let glsl = 
                 signature.Link(effect, Range1d(-1.0, 1.0), false)

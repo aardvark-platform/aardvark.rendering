@@ -49,30 +49,11 @@ module Surface =
                 if isNull xp then failwithf "could not get System.Windows.Forms.XplatUIX11"
                 let display = xp?DisplayHandle
                 let window = ctrl.Handle
-                
-
-//                if Set.contains Instance.Extensions.XlibSurface instance.EnabledExtensions then
-//                    let dpy = NativePtr.alloc 1
-//                    NativePtr.write dpy display
-//                    
-//                    Log.warn "display: %A" display
-//                    Log.warn "window:  %A" window
-//
-//                    let info = XLib { dpy = NativePtr.ofNativeInt display; window = window }
-//                    let res = device.CreateSurface info
-//                    res.OnDispose.Add (fun () -> NativePtr.free dpy)
-//                    res
-//
-//                else
 
                 let connection = Xcb.XGetXCBConnection(display)
 
-//                let dpy = NativePtr.alloc 1
-//                NativePtr.write dpy connection
-
                 let info = Xcb { connection = NativePtr.ofNativeInt connection; window = window }
                 let res = device.CreateSurface info
-                //res.OnDispose.Add (fun () -> NativePtr.free dpy)
                 res
 
             | Mac ->

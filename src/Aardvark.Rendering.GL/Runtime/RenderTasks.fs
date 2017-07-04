@@ -1690,6 +1690,7 @@ module ``Prepared Commands`` =
                 | _ -> false
 
         interface IResource with
+            member x.HandleType = typeof<IRenderTask>
             member x.IsDisposed = false
             member x.Dispose() = ()
             member x.AddRef() = ()
@@ -2231,6 +2232,7 @@ module ``Command Tasks`` =
                 t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
 
         interface IResource with
+            member x.HandleType = typeof<ICommandRenderTask>
             member x.AddRef() = ()
             member x.RemoveRef() = ()
             member x.Update(t,rt) = 
