@@ -110,8 +110,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let ignored =
         HashSet.ofList [
-            Guid.Empty
-            //Guid.Parse("{d7f7c939-f97a-e8a9-8289-e4faac682bde}")
+            Guid.Parse("{2f3e2b49-7f12-eb9c-578f-c46f5981d022}")
         ]
 
     let debugMessage (msg : DebugMessage) =

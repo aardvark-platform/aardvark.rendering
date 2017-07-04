@@ -128,14 +128,14 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     
         new Instance(Version(1,0,0), enabledLayers, enabledExtensions)
 
-    do instance.PrintInfo(Logger.Get 2)
-
     // choose a physical device
     let physicalDevice = 
         if instance.Devices.Length = 0 then
             failwithf "[Vulkan] could not get vulkan devices"
         else
             chooseDevice (Array.toList instance.Devices)
+
+    do instance.PrintInfo(Logger.Get 2, physicalDevice.Index)
 
     // create a device
     let device = 
