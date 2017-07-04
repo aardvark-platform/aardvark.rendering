@@ -1468,13 +1468,14 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
         check()
         flush()
 
-        match lastSems with
-            | [] -> queue.WaitIdle()
-            | sems -> queue.Wait(sems)
+        if not isEmpty then
+            match lastSems with
+                | [] -> queue.WaitIdle()
+                | sems -> queue.Wait(sems)
 
-        for s in semaphores do s.Dispose()
-        semaphores.Clear()
-        lastSems <- []
+            for s in semaphores do s.Dispose()
+            semaphores.Clear()
+            lastSems <- []
 
 
     member x.AddCleanup(f : unit -> unit) =

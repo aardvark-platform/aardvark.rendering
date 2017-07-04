@@ -208,7 +208,7 @@ let main argv =
 
     let message = 
         "# This is Aardvark.Rendering\r\n" +
-        "I'm uploading my first screenshot to tracker"
+        "I'm uploading my first screenshot to tracker ฿"
     // old school stuff here^^
 
     // here's an example-usage of AIR (Aardvark Imperative Renderer) 
