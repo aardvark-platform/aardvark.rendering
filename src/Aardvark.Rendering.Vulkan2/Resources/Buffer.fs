@@ -317,11 +317,48 @@ module Buffer =
 
         buffer
 
+    let internal updateWriter (writer : nativeint -> unit) (buffer : Buffer) =
+        let device = buffer.Device
+        let align = int64 device.MinUniformBufferOffsetAlignment
+
+        let deviceAlignedSize = Alignment.next align (int64 buffer.Size)
+        let deviceMem = buffer.Memory
+        
+        let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
+        hostPtr.Mapped (fun dst -> writer dst)
+
+        device.eventually {
+            try do! Command.Copy(hostPtr, 0L, buffer, 0L, buffer.Size)
+            finally hostPtr.Dispose()
+        }
+
     let delete (buffer : Buffer) (device : Device) =
         if buffer.Handle.IsValid && buffer.Size > 0L then
             VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
             buffer.Handle <- VkBuffer.Null
             buffer.Memory.Dispose()
+
+    let tryUpdate (data : IBuffer) (buffer : Buffer) =
+        match data with 
+            | :? ArrayBuffer as ab ->
+                let size = ab.Data.LongLength * int64 (Marshal.SizeOf ab.ElementType)
+                if size = buffer.Size then
+                    let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
+                    buffer |> updateWriter (fun ptr -> Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size) )
+                    true
+                else
+                    false
+            | :? INativeBuffer as nb ->
+                let size = nb.SizeInBytes |> int64
+                if size = buffer.Size then
+                    nb.Use(fun src ->
+                        buffer |> updateWriter (fun dst -> Marshal.Copy(src, dst, size))
+                    )
+                    true
+                else
+                    false
+            | _ ->
+                false
 
     let ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
         match buffer with
@@ -396,7 +433,10 @@ type ContextBufferExtensions private() =
     [<Extension>]
     static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, b : IBuffer) =
         device |> Buffer.ofBuffer flags b
-
+        
+    [<Extension>]
+    static member inline TryUpdate(buffer : Buffer, b : IBuffer) =
+        buffer |> Buffer.tryUpdate b
 
     [<Extension>]
     static member inline CreateBufferView(device : Device, buffer : Buffer, format : VkFormat, offset : int64, size : int64) =

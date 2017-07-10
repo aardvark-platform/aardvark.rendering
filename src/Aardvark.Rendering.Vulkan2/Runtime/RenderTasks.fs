@@ -19,13 +19,13 @@ open Aardvark.Base.Runtime
 module RenderTasks =
     
     [<AbstractClass>]
-    type AbstractVulkanRenderTask(manager : ResourceManager, renderPass : RenderPass, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
+    type AbstractVulkanRenderTask(manager : ResourcesNew.ResourceManager, renderPass : RenderPass, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
 
         let fboSignature = renderPass :> IFramebufferSignature
         let device = manager.Device
         let renderTaskLock = RenderTaskLock()
-        let manager = new ResourceManager(manager, manager.Device, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
+        let manager = manager
         let runtimeStats = NativePtr.alloc 1
         let mutable isDisposed = false
 
@@ -48,7 +48,8 @@ module RenderTasks =
         override x.Dispose() =
             if not isDisposed then
                 isDisposed <- true
-                manager.Dispose()
+                //Log.warn "manager dispose not implemented"
+                //manager.Dispose()
                 x.Release()
                 NativePtr.free runtimeStats
 
@@ -82,20 +83,14 @@ module RenderTasks =
         let mutable lastViewports = [||]
         let mutable version = 0
         let mutable commandVersion = -1
-
-        let dirty = HashSet<IResource>()
         let mutable resourceHandlesChanged = false
+
+        let resources = ResourcesNew.ResourceSet()
 
         static let inPlaceResources =
             HashSet.ofList [
                 typeof<UniformBuffer>
             ]
-
-        override x.InputChanged(_,o) =
-            match o with
-                | :? IResource as o -> dirty.Add o |> ignore
-                | _ -> ()
-
 
         member private x.init(token : AdaptiveToken) =
             if not initialized then
@@ -105,14 +100,23 @@ module RenderTasks =
         member x.Add (token : AdaptiveToken, o : PreparedMultiRenderObject) =
             x.init(token.WithCaller x)
             version <- version + 1
+
+            for co in o.Children do
+                for r in co.resources do
+                    resources.Add r
+
             transact (fun () ->
-                o.Update(token.WithCaller x, RenderToken.Empty) |> ignore
                 objects.Add o |> ignore
             )
 
         member x.Remove(token : AdaptiveToken, o : PreparedMultiRenderObject) =
             x.init(token.WithCaller x)
             version <- version + 1
+
+            for co in o.Children do
+                for r in co.resources do
+                    resources.Remove r
+
             transact (fun () ->
                 objects.Remove o |> ignore
             )
@@ -133,34 +137,7 @@ module RenderTasks =
             x.EvaluateAlways caller (fun caller ->
                 x.init(caller)
                 if x.OutOfDate then
-                    
-                    let rec doit(refill : bool) =
-                        let mine = dirty.ToArray(dirty.Count)
-                        dirty.Clear()
-                        if mine.Length > 0 then
-                            let mutable refill = refill
-                            let delayed = List(mine.Length)
-                            for d in mine do
-                                if not (inPlaceResources.Contains d.HandleType) then
-                                    refill <- true
-
-                                match d with
-                                    | :? IResource<DrawCall> as r ->
-                                        if not d.IsDisposed then
-                                            d.Update(caller, token)
-                                    | _ ->
-                                        delayed.Add d |> ignore
-
-                            for d in delayed do
-                                if not d.IsDisposed then
-                                    d.Update(caller, token)
-
-                            doit(refill)
-                        else
-                            refill
-
-                    let refill = doit false
-                    if refill then resourceHandlesChanged <- true
+                    resourceHandlesChanged <- resources.Update(caller, token)
                     x.UpdateProgram(caller, token)
             )
 
@@ -330,11 +307,13 @@ module RenderTasks =
 
             objectsWithKeys <- Unchecked.defaultof<_>
 
-    type RenderTask(man : ResourceManager, renderPass : RenderPass, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
+    type RenderTask(man : ResourcesNew.ResourceManager, renderPass : RenderPass, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractVulkanRenderTask(man, renderPass, config, shareTextures, shareBuffers)
 
+        let mutable currentToken = Unchecked.defaultof<AdaptiveToken>
+
         let prepare (o : IRenderObject) =
-            this.ResourceManager.PrepareRenderObject(renderPass, o, this.HookRenderObject)
+            this.ResourceManager.PrepareRenderObject(currentToken, renderPass, o, this.HookRenderObject)
 
         let device = man.Device
         let preparedCache = Cache<IRenderObject, PreparedMultiRenderObject>(prepare)
@@ -382,6 +361,8 @@ module RenderTasks =
                     task
 
         let update ( x : AdaptiveToken ) =
+            let t = AdaptiveToken(null, HashSet(), null)
+            currentToken <- t
             let deltas = preparedObjectReader.GetOperations x
 
             for d in deltas do 
@@ -393,7 +374,7 @@ module RenderTasks =
                         let task = getCommandBuffer v.RenderPass
                         task.Remove(x, v)
 
-
+            for l in t.Locked do t.ExitRead l
 
         
 
@@ -464,7 +445,7 @@ module RenderTasks =
             commandBuffers <- Map.empty
 
 
-    type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
+    type ClearTask(manager : ResourcesNew.ResourceManager, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
         inherit AdaptiveObject()
         static let depthStencilFormats =
             HashSet.ofList [

@@ -13,15 +13,17 @@ open Aardvark.Base.Incremental
 #nowarn "9"
 #nowarn "51"
 
+open ResourcesNew
 
 type PreparedRenderObject =
     {
         device                  : Device
         original                : RenderObject
         
+        resources               : list<IResource>
+
         pipeline                : IResource<Pipeline, VkPipeline>
         indexBuffer             : Option<IResource<IndexBufferBinding, IndexBufferBinding>>
-        uniformBuffers          : list<IResource<UniformBuffer, VkBuffer>>
         descriptorSets          : IResource<DescriptorSetBinding, DescriptorSetBinding>
         vertexBuffers           : IResource<VertexBufferBinding, VertexBufferBinding>
         drawCalls               : IResource<DrawCall, DrawCall>
@@ -33,45 +35,16 @@ type PreparedRenderObject =
     member x.AttributeScope = x.original.AttributeScope
 
     member x.Dispose() =
-        x.activation.Dispose()
-
-        x.pipeline.Dispose()
-        for b in x.uniformBuffers do
-            b.Dispose()
-        x.descriptorSets.Dispose()
-        x.vertexBuffers.Dispose()
-        x.drawCalls.Dispose()
-
-        match x.indexBuffer with
-            | Some ib -> ib.Dispose()
-            | None -> ()
+        for r in x.resources do r.Release(null)
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
-        use devToken = x.device.Token
-        for b in x.uniformBuffers do
-            b.Update(caller, token)
-        x.pipeline.Update(caller, token)
-        x.descriptorSets.Update(caller, token)
-        x.vertexBuffers.Update(caller, token)
-        x.drawCalls.Update(caller, token)
-
-        match x.indexBuffer with
-            | Some b -> b.Update(caller, token)
-            | None -> ()
+        for r in x.resources do r.Update(caller, ResourceUpdateToken(-1L, token)) |> ignore
 
 
-    member x.IncrementReferenceCount() =
-        x.pipeline.AddRef()
-        x.descriptorSets.AddRef()
-        x.vertexBuffers.AddRef()
-        x.drawCalls.AddRef()
-        
-        for b in x.uniformBuffers do
-            b.AddRef()
+//
+//    member x.IncrementReferenceCount() =
+//        for r in x.resources do r.Acquire()
 
-        match x.indexBuffer with
-            | Some ib -> ib.AddRef()
-            | None -> ()
 
     interface IPreparedRenderObject with
         member x.Id = x.original.Id
@@ -120,11 +93,15 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
 
-    static let prepareObject (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
-        let program = this.CreateShaderProgram(renderPass, ro.Surface)
-        let prog = program.Handle.GetValue()
+    static let prepareObject (token : AdaptiveToken) (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
+        
+        let resources = System.Collections.Generic.List<IResource>()
 
-        let uniformBuffers = System.Collections.Generic.List<IResource<UniformBuffer, VkBuffer>>()
+        let program = this.CreateShaderProgram(renderPass, ro.Surface)
+        resources.Add program
+                
+        let prog,_ = program.GetHandle(AdaptiveToken.Top, ResourceUpdateToken(-1L, RenderToken.Empty))
+
         let descriptorSets = 
             prog.PipelineLayout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
@@ -132,8 +109,8 @@ type DevicePreparedRenderObjectExtensions private() =
                         match b.Parameter with
                             | UniformBlockParameter block ->
                                 let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, prog.UniformGetters)
-                                uniformBuffers.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer.Handle.GetValue()) |> Some
+                                resources.Add buffer
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
                             | ImageParameter img ->
                                 match img.description with
@@ -150,9 +127,11 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 | Some (:? IMod<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
-                                                    // TODO: proper formats
-                                                    let view = this.CreateImageView(tex, VkComponentMapping.Identity)
+                                                    let view = this.CreateImageView(tex)
                                                     let sam = this.CreateSampler(Mod.constant samplerState)
+                                                    resources.Add tex
+                                                    resources.Add view
+                                                    resources.Add sam
 
                                                     Some(view, sam)
 
@@ -162,27 +141,13 @@ type DevicePreparedRenderObjectExtensions private() =
                                             )
 
                                         AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
-//                                        descriptions |> List.choosei (fun ai desc -> 
-//                                            let textureName = desc.textureName
-//                                            let samplerState = desc.samplerState
-//
-//                                            match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-//                                                | Some (:? IMod<ITexture> as tex) ->
-//
-//                                                    let tex = this.CreateImage(tex)
-//                                                    let view = this.CreateImageView(tex)
-//                                                    let sam = this.CreateSampler(Mod.constant samplerState)
-//
-//                                                    AdaptiveDescriptor.AdaptiveCombinedImageSampler (i + ai, view, sam) |> Some
-//
-//                                                | _ ->
-//                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
-//                                                    None
-//                                        )
                                 
                     )
 
-                this.CreateDescriptorSet(ds, descriptors)
+                let res = this.CreateDescriptorSet(ds, Array.toList descriptors)
+                resources.Add res
+
+                res
             )
 
 
@@ -208,7 +173,8 @@ type DevicePreparedRenderObjectExtensions private() =
         let buffers =
             bufferViews 
                 |> List.map (fun (name,loc, _, view) ->
-                    let buffer = this.CreateBuffer(view.Buffer)
+                    let buffer = this.CreateVertexBuffer(view.Buffer)
+                    resources.Add buffer
                     buffer, int64 view.Offset
                 )
 
@@ -229,14 +195,16 @@ type DevicePreparedRenderObjectExtensions private() =
                 ro.StencilMode,
                 ro.WriteBuffers
             )
+        resources.Add pipeline
 
         let indexed = Option.isSome ro.Indices
         let indexBufferBinding =
             match ro.Indices with
                 | Some view -> 
                     let buffer = this.CreateIndexBuffer(view.Buffer)
-                    let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
-
+                    let res = this.CreateIndexBufferBinding(buffer, view.ElementType)
+                    resources.Add buffer
+                    resources.Add res
                     Some res
                 | None -> 
                     None
@@ -246,39 +214,31 @@ type DevicePreparedRenderObjectExtensions private() =
         let calls =
             match ro.IndirectBuffer with
                 | null -> 
-                    this.CreateDrawCall(indexed, ro.DrawCallInfos)
+                    this.CreateDrawCall(ro.DrawCallInfos, indexed)
                 | b -> 
-                    let indirect = this.CreateIndirectBuffer(indexed, b)
-                    this.CreateDrawCall(indexed, indirect)
-
+                    let indirect = this.CreateIndirectBuffer(b, indexed)
+                    resources.Add indirect
+                    this.CreateDrawCall(indirect, indexed)
+        resources.Add calls
         let bindings =
-            this.CreateVertexBufferBinding(buffers)
+            this.CreateVertexBufferBinding(List.unzip buffers)
+            
+        resources.Add bindings
 
         let descriptorBindings =
-            this.CreateDescriptorSetBinding(prog.PipelineLayout, descriptorSets)
+            this.CreateDescriptorSetBinding(prog.PipelineLayout, Array.toList descriptorSets)
+            
+        resources.Add(descriptorBindings)
 
-        let isActive =
-            { new Rendering.Resource<bool, int>(ResourceKind.Unknown) with
-                member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<bool>) =
-                    ro.IsActive.GetValue(token)
-
-                member x.Destroy (h : bool) =
-                    ()
-
-                member x.View b =
-                    if b then 1 else 0
-
-                member x.GetInfo h =
-                    ResourceInfo.Zero
-            }
-        isActive.AddRef()
+        let isActive = this.CreateIsActive ro.IsActive
+        resources.Add isActive
 
 
         let res = 
             {
                 device                      = this.Device
                 original                    = ro
-                uniformBuffers              = CSharpList.toList uniformBuffers
+                resources                   = CSharpList.toList resources
                 descriptorSets              = descriptorBindings
                 pipeline                    = pipeline
                 vertexBuffers               = bindings
@@ -287,34 +247,33 @@ type DevicePreparedRenderObjectExtensions private() =
                 isActive                    = isActive
                 activation                  = ro.Activate()
             }
+
         res
 
     [<Extension>]
-    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =
-        prepareObject this renderPass ro
+    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : RenderObject) =
+        prepareObject token this renderPass ro
 
     [<Extension>]
-    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
+    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
         match ro with
             | :? RenderObject as ro ->
-                let res = prepareObject this renderPass (hook ro)
+                let res = prepareObject token this renderPass (hook ro)
                 new PreparedMultiRenderObject([res])
 
             | :? MultiRenderObject as mo ->
-                let all = mo.Children |> List.collect (fun c -> DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, c, hook).Children)
+                let all = mo.Children |> List.collect (fun c -> DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, token, renderPass, c, hook).Children)
                 new PreparedMultiRenderObject(all)
 
             | :? PreparedRenderObject as o ->
-                o.IncrementReferenceCount()
                 new PreparedMultiRenderObject([o])
 
             | :? PreparedMultiRenderObject as mo ->
-                mo.Children |> List.iter (fun c -> c.IncrementReferenceCount())
                 mo
 
             | _ ->
                 failf "unsupported RenderObject-type: %A" ro
 
     [<Extension>]
-    static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : IRenderObject) =
-        DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, renderPass, ro, id)
+    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : IRenderObject) =
+        DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, token, renderPass, ro, id)

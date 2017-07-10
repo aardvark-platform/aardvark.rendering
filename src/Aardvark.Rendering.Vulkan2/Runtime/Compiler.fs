@@ -67,19 +67,19 @@ module Compiler =
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Instruction =
-        let bindPipeline (r : IResource<Pipeline, VkPipeline>) : Instruction =
+        let bindPipeline (r : ResourcesNew.IResource<Pipeline, VkPipeline>) : Instruction =
             VKVM.Pointers.vmBindPipeline, [| r.Pointer :> obj |]
 
-        let bindDescriptorSets (r : IResource<DescriptorSetBinding, DescriptorSetBinding>) : Instruction =
+        let bindDescriptorSets (r : ResourcesNew.IResource<DescriptorSetBinding, DescriptorSetBinding>) : Instruction =
             VKVM.Pointers.vmBindDescriptorSets, [| r.Pointer :> obj |]
 
-        let bindVertexBuffers (r : IResource<VertexBufferBinding, VertexBufferBinding>) : Instruction =
+        let bindVertexBuffers (r : ResourcesNew.IResource<VertexBufferBinding, VertexBufferBinding>) : Instruction =
             VKVM.Pointers.vmBindVertexBuffers, [| r.Pointer :> obj |]
             
-        let bindIndexBuffer (r : IResource<IndexBufferBinding, IndexBufferBinding>) : Instruction =
+        let bindIndexBuffer (r : ResourcesNew.IResource<IndexBufferBinding, IndexBufferBinding>) : Instruction =
             VKVM.Pointers.vmBindIndexBuffer, [| r.Pointer :> obj |]
 
-        let draw (stats : nativeptr<V2i>) (isActive : IResource<bool, int>) (r : IResource<DrawCall, DrawCall>) : Instruction =
+        let draw (stats : nativeptr<V2i>) (isActive : ResourcesNew.IResource<bool, int>) (r : ResourcesNew.IResource<DrawCall, DrawCall>) : Instruction =
             VKVM.Pointers.vmDraw, [| stats :> obj; isActive.Pointer :> obj; r.Pointer :> obj |]
 
     let compileSingle (scope : CompilerScope) (prev : Option<PreparedRenderObject>) (self : PreparedRenderObject) =

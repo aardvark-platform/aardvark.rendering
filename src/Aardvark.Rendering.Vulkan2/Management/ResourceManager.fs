@@ -310,6 +310,7 @@ type ResourceManager private (parent : Option<ResourceManager>, device : Device,
                         
                         let desc =
                             {
+
                                 renderPass              = pass
                                 shaderProgram           = program.Handle.GetValue()
                                 vertexInputState        = vertexInputState

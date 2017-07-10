@@ -239,6 +239,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
                         VkRaw.vkQueuePresentKHR(queue.Handle, &&info) |> check "could not swap buffers"
                     )
+                    queue.WaitIdle()
                 )
                 None, Disposable.Empty
         }

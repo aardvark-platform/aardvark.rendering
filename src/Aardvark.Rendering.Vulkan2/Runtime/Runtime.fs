@@ -84,7 +84,7 @@ type private MappedIndirectBuffer private(device : Device, indexed : bool, store
 type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
     let instance = device.Instance
     do device.Runtime <- this
-    let manager = new ResourceManager(device, None, shareTextures, shareBuffers)
+    let manager = new ResourcesNew.ResourceManager(device)
 
     static let shaderStages =
         LookupTable.lookupTable [
@@ -166,7 +166,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         device.UploadLevel(image.[ImageAspect.Color, level, slice], source)
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
-        manager.PrepareRenderObject(unbox fboSignature, rj) :> IPreparedRenderObject
+        let t = AdaptiveToken.Top
+        try manager.PrepareRenderObject(t, unbox fboSignature, rj) :> IPreparedRenderObject
+        finally for l in t.Locked do t.ExitRead l
+
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
         new RenderTasks.RenderTask(manager, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
@@ -348,7 +351,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.Dispose() = 
         onDispose.Trigger()
         debugSubscription.Dispose()
-        manager.Dispose()
+        Log.warn "dispose resource manager"
+        //manager.Dispose()
         device.Dispose()
         
     interface IDisposable with

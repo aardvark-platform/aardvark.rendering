@@ -79,6 +79,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
     let onDispose = Event<unit>()
 
+
     let layers, extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
         let availableLayerNames = physical.AvailableLayers |> Seq.map (fun l -> l.name.ToLower(), l) |> Map.ofSeq
@@ -227,6 +228,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     let currentResourceToken = new ThreadLocal<ref<Option<DeviceToken>>>(fun _ -> ref None)
     let mutable runtime = Unchecked.defaultof<IRuntime>
     let memoryLimits = physical.Limits.Memory
+
 
     member x.Token =
         let ref = currentResourceToken.Value
@@ -471,7 +473,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         let f = device.CreateFence()
         lock x (fun () ->
             let sems = sems |> Seq.map (fun s -> s.Handle) |> Seq.toArray
-            let masks = Array.create sems.Length (int VkPipelineStageFlags.BottomOfPipeBit)
+            let masks = Array.create sems.Length (int VkPipelineStageFlags.TopOfPipeBit)
 
             sems |> NativePtr.withA (fun pSems ->
                 masks |> NativePtr.withA (fun pMask ->
@@ -615,6 +617,9 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
         member x.Dispose() = x.Dispose()
 
 and DeviceCommandPool internal(device : Device, index : int, queueFamily : DeviceQueueFamily) =
+
+    let allPools = ConcurrentHashSet<VkCommandPool>()
+
     let createCommandPoolHandle _ =
         let mutable createInfo =
             VkCommandPoolCreateInfo(
@@ -626,39 +631,45 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
         VkRaw.vkCreateCommandPool(device.Handle, &&createInfo, NativePtr.zero, &&handle)
             |> check "could not create command pool"
 
-        handle, ConcurrentBag<CommandBuffer>(), ConcurrentBag<CommandBuffer>()
+        allPools.Add handle |> ignore
 
-    let handles = new ConcurrentDictionary<int, VkCommandPool * ConcurrentBag<CommandBuffer> * ConcurrentBag<CommandBuffer>>()
-    let get (key : int) =
-        handles.GetOrAdd(key, System.Func<_,_>(createCommandPoolHandle))
+        handle
+
+    let handles = new ThreadLocal<VkCommandPool>(createCommandPoolHandle)
+
+    //let handles = new ConcurrentDictionary<int, VkCommandPool * ConcurrentBag<CommandBuffer> * ConcurrentBag<CommandBuffer>>()
+    let get () =
+        handles.Value
+        //handles.GetOrAdd(key, System.Func<_,_>(createCommandPoolHandle))
 
     member x.Device = device
     member x.QueueFamily = queueFamily
 
     member x.CreateCommandBuffer(level : CommandBufferLevel) =
-        let id = Thread.CurrentThread.ManagedThreadId
-        let pool, primaryBag, secondaryBag = get id
+        let pool = get()
+//
+//        let bag =
+//            match level with
+//                | CommandBufferLevel.Primary -> primaryBag
+//                | CommandBufferLevel.Secondary -> secondaryBag
+//                | _ -> failf "invalid command-buffer level"
+//
+//        match bag.TryTake() with
+//            | (true, cmd) -> cmd
+//            | _ -> 
+        { new CommandBuffer(device, pool, queueFamily, level) with
+            override x.Dispose() =
+                let mutable handle = x.Handle
+                VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, &&handle)
 
-        let bag =
-            match level with
-                | CommandBufferLevel.Primary -> primaryBag
-                | CommandBufferLevel.Secondary -> secondaryBag
-                | _ -> failf "invalid command-buffer level"
-
-        match bag.TryTake() with
-            | (true, cmd) -> cmd
-            | _ -> 
-                { new CommandBuffer(device, pool, queueFamily, level) with
-                    override x.Dispose() =
-                        x.Reset()
-                        bag.Add x
-                }
+        }
 
 
     member x.Dispose() =
         if device.Handle <> 0n then
-            let all = handles |> Seq.map (fun (KeyValue(_,(p,_,_))) -> p) |> Seq.toArray
-            handles.Clear()
+            let all = allPools |> Seq.toArray
+            allPools.Clear()
+            handles.Dispose()
             all |> Seq.iter (fun h -> 
                 if h.IsValid then
                     VkRaw.vkDestroyCommandPool(device.Handle, h, NativePtr.zero)
@@ -694,18 +705,21 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
         member x.Dispose() = x.Dispose()
 
 and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : DeviceQueueFamily, level : CommandBufferLevel) =   
-    let mutable info =
-        VkCommandBufferAllocateInfo(
-            VkStructureType.CommandBufferAllocateInfo, 0n,
-            pool,
-            unbox (int level),
-            1u
-        )
 
-    let mutable handle = VkCommandBuffer.Zero
-    do VkRaw.vkAllocateCommandBuffers(device.Handle, &&info, &&handle)
-        |> check "could not allocated command buffer"
-    
+    let mutable handle = 
+        let mutable info =
+            VkCommandBufferAllocateInfo(
+                VkStructureType.CommandBufferAllocateInfo, 0n,
+                pool,
+                unbox (int level),
+                1u
+            )
+        let mutable handle = VkCommandBuffer.Zero
+        VkRaw.vkAllocateCommandBuffers(device.Handle, &&info, &&handle)
+            |> check "could not allocated command buffer"
+
+        handle
+
     let mutable commands = 0
     let mutable recording = false
     let cleanupTasks = List<IDisposable>()
@@ -1470,7 +1484,7 @@ and DeviceToken(queue : DeviceQueue, ref : ref<Option<DeviceToken>>) =
 
         if not isEmpty then
             match lastSems with
-                | [] -> queue.WaitIdle()
+                | [] -> ()
                 | sems -> queue.Wait(sems)
 
             for s in semaphores do s.Dispose()

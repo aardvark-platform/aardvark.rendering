@@ -426,7 +426,7 @@ module GeometryPoolUtilities =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    type StreamingBuffer(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr) =
+    type StreamingBufferOld(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr) =
         inherit Buffer(device, handle, devPtr)
         let size = devPtr.Size
         
@@ -470,22 +470,15 @@ module GeometryPoolUtilities =
                 VkBuffer.Null, DeviceMemory.Null, 0n
 
         let todoLock = obj()
+
+        let scratchManager = MemoryManager.createNop()
+
+
         let mutable todo : VkBufferCopy[] = Array.zeroCreate 16
         let mutable todoCount = 0
         let mutable scratchOffset = 0L
 
-        member x.Dispose() =
-            if scratchBuffer.IsValid then
-                device.Delete x
-                VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
-                scratchMem.Dispose()
-                scratchBuffer <- VkBuffer.Null
-                scratchPtr <- 0n
-                todo <- null
-                todoCount <- 0
-                scratchOffset <- 0L
-
-        member x.Flush =
+        let flush =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue(cmd : CommandBuffer) =
@@ -507,6 +500,19 @@ module GeometryPoolUtilities =
 
                     Disposable.Empty
             }
+
+        member x.Dispose() =
+            if scratchBuffer.IsValid then
+                device.Delete x
+                VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
+                scratchMem.Dispose()
+                scratchBuffer <- VkBuffer.Null
+                scratchPtr <- 0n
+                todo <- null
+                todoCount <- 0
+                scratchOffset <- 0L
+
+        member x.Flush = flush
 
         member x.Write(offset : int64, size : int64, data : nativeint) =
             rlock.Lock.Use(ResourceUsage.Access, fun () ->
@@ -546,7 +552,119 @@ module GeometryPoolUtilities =
 
                         VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&region)
                             |> check "could not flush range"
+
+                        use t = device.Token
+
+                        t.Enqueue 
+                            { new Command() with
+                                member x.Compatible = QueueFlags.All
+                                member x.Enqueue cmd =
+                                    let mutable copyInfo =
+                                        VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
+                                    cmd.AppendCommand()
+                                    VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
+                                    Disposable.Empty
+                            }
+
+                        t.Sync()
             )
+
+        interface ILockedResource with
+            member x.Lock = rlock.Lock
+            member x.OnLock c = rlock.OnLock c
+            member x.OnUnlock c = rlock.OnUnlock c
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    type StreamingBuffer(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr) =
+        inherit Buffer(device, handle, devPtr)
+        let size = devPtr.Size
+        
+        let streamSize = size
+
+        let mutable scratchBuffer, scratchMem, scratchPtr =
+            if size > 0L then
+                let mutable buffer = VkBuffer.Null
+                let mutable info =
+                    VkBufferCreateInfo(
+                        VkStructureType.BufferCreateInfo, 0n,
+                        VkBufferCreateFlags.None,
+                        uint64 streamSize,
+                        VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit,
+                        device.AllSharingMode,
+                        device.AllQueueFamiliesCnt,
+                        device.AllQueueFamiliesPtr
+                    )
+
+                VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&buffer)
+                    |> check "could not create buffer"
+
+                let mutable reqs = VkMemoryRequirements()
+                VkRaw.vkGetBufferMemoryRequirements(device.Handle, buffer, &&reqs)
+
+                let compatible = reqs.memoryTypeBits &&& (1u <<< device.HostMemory.Index) <> 0u
+                if not compatible then
+                    failf "cannot create buffer with host visible memory"
+
+                let bufferMem = device.HostMemory.AllocRaw(int64 reqs.size)
+
+                VkRaw.vkBindBufferMemory(device.Handle, buffer, bufferMem.Handle, 0UL)
+                    |> check "could not bind buffer memory"
+
+                let mutable memPtr = 0n
+                VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, &&memPtr)
+                    |> check "could not map memory"
+
+                let mutable all = VkMappedMemoryRange(VkStructureType.MappedMemoryRange, 0n, bufferMem.Handle, 0UL, uint64 bufferMem.Size)
+                VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&all)
+                    |> check "could not flush mapped range"
+
+                
+
+                buffer, bufferMem, memPtr
+            else
+                VkBuffer.Null, DeviceMemory.Null, 0n
+
+        let mutable isEmpty = true
+
+        member x.Dispose() =
+            if scratchBuffer.IsValid then
+                device.Delete x
+                VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
+                scratchMem.Dispose()
+                scratchBuffer <- VkBuffer.Null
+                scratchPtr <- 0n
+
+        member x.Write(offset : int64, size : int64, data : nativeint) =
+            rlock.Lock.Use(ResourceUsage.Access, fun () ->
+                isEmpty <- false
+                Marshal.Copy(data, scratchPtr + nativeint offset, size)
+                let mutable region =
+                    VkMappedMemoryRange(
+                        VkStructureType.MappedMemoryRange, 0n,
+                        scratchMem.Handle, 
+                        uint64 offset, uint64 size
+                    )
+
+                VkRaw.vkFlushMappedMemoryRanges(device.Handle, 1u, &&region)
+                    |> check "could not flush range"
+
+                let cmd = device.TransferFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+                cmd.Begin(CommandBufferUsage.OneTimeSubmit)
+                let mutable copyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
+                cmd.AppendCommand()
+                VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, &&copyInfo)
+                cmd.End()
+                let queue = device.TransferFamily.GetQueue()
+                queue.RunSynchronously(cmd)
+                cmd.Dispose()
+
+            )
+
+        member x.IsEmpty
+            with get() = isEmpty
+            and set e = isEmpty <- e
 
         interface ILockedResource with
             member x.Lock = rlock.Lock
@@ -582,6 +700,7 @@ module GeometryPoolUtilities =
         let mutable capacity = minCapacity
         let mutable count = 0
 
+
         static let usage = VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit
         let lock = 
             { new ResourceLock2() with
@@ -613,40 +732,33 @@ module GeometryPoolUtilities =
                     lock.Lock.Use(fun () ->
                         let newCapacity = manager.LastUsedByte + 1n |> int64 |> Fun.NextPowerOfTwo |> max minCapacity
                         if capacity <> newCapacity then
+                            Log.line "realloc %A -> %A" (Mem (vertexSize * capacity)) (Mem (vertexSize * newCapacity))
                             let copySize = min capacity newCapacity
-                            use t = new Transaction()
+                            let t = new Transaction()
                             let commands = List<Command>()
                             let deleteBuffers = List<StreamingBuffer>()
-
+                            
+                            use token = device.Token
                             for (_, (elemSize,_,b)) in Map.toSeq buffers do
                                 let old = b.Value |> unbox<StreamingBuffer>
                                 let n = device.CreateStreamingBuffer(lock, usage, elemSize * newCapacity)
 
-                                if copySize > 0L then
-                                    let copy =
-                                        command {
-                                            do! old.Flush
-                                            do! Command.SyncWrite(old)
-                                            do! Command.Copy(old, n, elemSize * copySize)
-                                            do! Command.SyncWrite(n)
-                                        }
-                            
-                                    commands.Add(copy)
+                                if copySize > 0L && not old.IsEmpty then
+                                    let copy = Command.Copy(old, n, elemSize * copySize)
+                                    token.Enqueue(copy)
+                                    n.IsEmpty <- false
 
                                 b.UnsafeCache <- n
-
-                                //b.UnsafeCache <- old.Realloc(elemSize * newCapacity, commands.Add)
                                 t.Enqueue(b)
                                 deleteBuffers.Add old
 
-                            device.perform {
-                                for cmd in commands do do! cmd
-                            }
+                            token.Sync()
                             capacity <- newCapacity
 
                             fun () ->
                                 t.Commit()
                                 for d in deleteBuffers do d.Dispose()
+                                t.Dispose()
                         else
                             id
                     )
@@ -656,16 +768,17 @@ module GeometryPoolUtilities =
         member private x.onLock (c : Option<ResourceUsage>) =
             match c with
                 | Some ResourceUsage.Render ->
-                    use token = device.Token
-                    let update = 
-                        command {
-                            for (_, (_,_,b)) in Map.toSeq buffers do
-                                let b = b.Value |> unbox<StreamingBuffer>
-                                do! b.Flush
-                                do! Command.SyncWrite b
-                        }
-
-                    token.Enqueue update
+                    ()
+//                    use token = device.Token
+//                    let update = 
+//                        command {
+//                            for (_, (_,_,b)) in Map.toSeq buffers do
+//                                let b = b.Value |> unbox<StreamingBuffer>
+//                                //do! b.Flush
+//                                //do! Command.SyncWrite b
+//                        }
+//
+//                    token.Enqueue update
                 | _ -> 
 
                     ()
@@ -677,7 +790,10 @@ module GeometryPoolUtilities =
             let ptr = manager.Alloc(nativeint fvc)
             reallocIfNeeded()
 
+//            use t = device.Token
+//            try
             lock.Lock.Use(ResourceUsage.Access, fun () -> 
+
                 for (sem, (elemSize, elemType, buffer)) in Map.toSeq buffers do
                     let buffer = buffer.Value |> unbox<StreamingBuffer>
                     let offset = elemSize * int64 ptr.Offset
@@ -689,12 +805,17 @@ module GeometryPoolUtilities =
                             let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
                             try buffer.Write(offset, size, gc.AddrOfPinnedObject())
                             finally gc.Free()
+
+                            //t.Enqueue buffer.Flush
+
                         | _ ->
                             ()
 
                 Interlocked.Increment(&count) |> ignore
                 ptr
             )
+//            finally 
+//                t.Sync()
 
         member x.Free(ptr : managedptr) =
             manager.Free ptr

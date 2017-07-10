@@ -95,6 +95,32 @@ type VertexBufferBinding =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
+        member x.TryUpdate(first : int, buffers : array<Buffer>, offsets : int64[]) =
+            if x.FirstBinding = first && buffers.Length = x.BindingCount then
+                let count = x.BindingCount
+                for i in 0 .. count-1 do
+                    NativePtr.set x.Buffers i (buffers.[i].Handle)
+                    NativePtr.set x.Offsets i (uint64 offsets.[i])
+                true
+            else
+                false
+
+        new(first : int, buffers : array<Buffer>, offsets : int64[]) =
+            let count = buffers.Length
+            let pBuffers = NativePtr.alloc count
+            let pOffsets = NativePtr.alloc count
+
+            for i in 0 .. count-1 do
+                NativePtr.set pBuffers i (buffers.[i].Handle)
+                NativePtr.set pOffsets i (uint64 offsets.[i])
+
+            {
+                FirstBinding = first
+                BindingCount = count
+                Buffers = pBuffers
+                Offsets = pOffsets
+            }
+
         new(first : int, buffersAndOffsets : array<Buffer * int64>) =
             let count = buffersAndOffsets.Length
             let pBuffers = NativePtr.alloc count
