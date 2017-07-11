@@ -56,7 +56,6 @@ module BufferCommands =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
-                    let mutable srcBuffer = VkBuffer.Null
                     let device = src.Memory.Heap.Device
                     let align = device.MinUniformBufferOffsetAlignment
 
@@ -72,9 +71,12 @@ module BufferCommands =
                             uint64 srcBufferSize, VkBufferUsageFlags.TransferSrcBit, VkSharingMode.Exclusive, 
                             0u, NativePtr.zero
                         )
-
-                    VkRaw.vkCreateBuffer(device.Handle, &&srcInfo, NativePtr.zero, &&srcBuffer)
-                        |> check "could not create temporary buffer"
+                        
+                    let mutable srcBuffer =
+                        let mutable srcBuffer = VkBuffer.Null
+                        VkRaw.vkCreateBuffer(device.Handle, &&srcInfo, NativePtr.zero, &&srcBuffer)
+                            |> check "could not create temporary buffer"
+                        srcBuffer
 
                     let mutable reqs = VkMemoryRequirements()
                     VkRaw.vkGetBufferMemoryRequirements(device.Handle, srcBuffer, &&reqs)
@@ -243,7 +245,7 @@ module Buffer =
                 VkBufferCreateInfo(
                     VkStructureType.BufferCreateInfo, 0n,
                     VkBufferCreateFlags.None,
-                    0UL,
+                    256UL,
                     usage,
                     device.AllSharingMode,
                     device.AllQueueFamiliesCnt,
@@ -258,8 +260,8 @@ module Buffer =
             VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
 
             let ptr = device.GetMemory(reqs.memoryTypeBits).Null
-            VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, 0UL)
-                |> check "could not bind empty buffer's memory"
+//            VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, 0UL)
+//                |> check "could not bind empty buffer's memory"
 
             device.OnDispose.Add (fun () ->
                 VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
@@ -301,21 +303,24 @@ module Buffer =
         allocConcurrent false flags size device
 
     let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
-        let align = int64 device.MinUniformBufferOffsetAlignment
+        if size > 0n then
+            let align = int64 device.MinUniformBufferOffsetAlignment
 
-        let deviceAlignedSize = Alignment.next align (int64 size)
-        let buffer = device |> alloc flags deviceAlignedSize
-        let deviceMem = buffer.Memory
+            let deviceAlignedSize = Alignment.next align (int64 size)
+            let buffer = device |> alloc flags deviceAlignedSize
+            let deviceMem = buffer.Memory
         
-        let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
-        hostPtr.Mapped (fun dst -> writer dst)
+            let hostPtr = device.HostMemory.AllocTemp(align, deviceAlignedSize)
+            hostPtr.Mapped (fun dst -> writer dst)
 
-        device.eventually {
-            try do! Command.Copy(hostPtr, 0L, buffer, 0L, int64 size)
-            finally hostPtr.Dispose()
-        }
+            device.eventually {
+                try do! Command.Copy(hostPtr, 0L, buffer, 0L, int64 size)
+                finally hostPtr.Dispose()
+            }
 
-        buffer
+            buffer
+        else
+            empty flags device
 
     let internal updateWriter (writer : nativeint -> unit) (buffer : Buffer) =
         let device = buffer.Device

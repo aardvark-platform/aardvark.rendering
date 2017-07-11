@@ -100,6 +100,7 @@ type DevicePreparedRenderObjectExtensions private() =
         let program = this.CreateShaderProgram(renderPass, ro.Surface)
         resources.Add program
                 
+        program.Acquire()
         let prog,_ = program.GetHandle(AdaptiveToken.Top, ResourceUpdateToken(-1L, RenderToken.Empty))
 
         let descriptorSets = 

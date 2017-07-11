@@ -716,7 +716,7 @@ module ResourcesNew =
                 for b in buffers do b.Acquire()
                 let buffers = List.toArray buffers
                 let offsets = List.toArray offsets
-                let handles = Array.zeroCreate buffers.Length
+                let mutable handles = Array.zeroCreate buffers.Length
 
                 let mutable old : Option<VertexBufferBinding> = None
 
@@ -736,15 +736,17 @@ module ResourcesNew =
                         match old with
                             | Some o ->
                                 if handles <> newHandles then
+                                    handles <- newHandles
                                     x.HandleChanged()
                                     o.Dispose()
-                                    let binding = new VertexBufferBinding(0, handles, offsets)
+                                    let binding = new VertexBufferBinding(0, newHandles, offsets)
                                     old <- Some binding
                                     binding, locks
                                 else
                                     o, locks
                             | None -> 
-                                let binding = new VertexBufferBinding(0, handles, offsets)
+                                handles <- newHandles
+                                let binding = new VertexBufferBinding(0, newHandles, offsets)
                                 old <- Some binding
                                 binding, locks
                             
