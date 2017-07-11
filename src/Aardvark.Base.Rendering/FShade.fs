@@ -228,6 +228,9 @@ module FShadeInterop =
             RenderbufferFormat.Rgb10A2ui, typeof<V4d>
         ]
 
+    type SamplerState with
+        member x.SamplerStateDescription = toSamplerStateDescription x
+
     type IFramebufferSignature with
         member x.Link(effect : Effect, depthRange : Range1d, flip : bool) =
             let outputs = 
@@ -248,12 +251,21 @@ module FShadeInterop =
 
             effect |> Effect.toModule config
 
+        member x.ExtractSemantics() =
+            let colors = x.ColorAttachments |> Map.toSeq |> Seq.map (fun (k,(i,s)) -> (k,i)) |> Seq.toList
+            match x.DepthAttachment with
+                | None -> 
+                    colors
+                | Some d -> 
+                    (-1,DefaultSemantic.Depth) :: colors
 
-    type FShadeSurface(effect : FShadeEffect) =
+
+    type FShadeSurface private(effect : FShadeEffect) =
+        static let surfaceCache = System.Collections.Concurrent.ConcurrentDictionary<string, FShadeSurface>()
+
         let cache = Dict<IFramebufferSignature, BackendSurface>()
         let uniforms = SymDict.empty
         let samplerStates = SymDict.empty
-
 
         static let formatToExpectedType (format : RenderbufferFormat) : Type =
             let cf = RenderbufferFormat.toColFormat format
@@ -276,28 +288,16 @@ module FShadeInterop =
                 DefaultSemantic.Positions, typeof<V4d>
             ]
 
+        static member Get(e : FShadeEffect) =
+            surfaceCache.GetOrAdd(e.Id, fun _ -> FShadeSurface(e))
+
         member x.Effect = effect
 
         interface IGeneratedSurface with
             member x.Generate (r : IRuntime, signature : IFramebufferSignature) =
-                let bs = r.AssembleEffect(effect, signature) 
-                
-                let samplers = Dictionary.empty
+                r.AssembleEffect(effect, signature) 
 
-                for KeyValue(k,v) in effect.Uniforms do
-                    match v.uniformValue with
-                        | UniformValue.Sampler(texName,sam) ->
-                            samplers.[(k, 0)] <- { textureName = Symbol.Create texName; samplerState = toSamplerStateDescription sam }
-                        | UniformValue.SamplerArray semSams ->
-                            for i in 0 .. semSams.Length - 1 do
-                                let (sem, sam) = semSams.[i]
-                                samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = toSamplerStateDescription sam }
-                        | _ ->
-                            ()
-                BackendSurface(bs.Code, bs.EntryPoints, bs.BuiltIns, bs.Uniforms, samplers, true)
-
-    let toFShadeSurface (e : FShadeEffect) =
-        FShadeSurface(e) :> ISurface
+    let toFShadeSurface (e : FShadeEffect) = FShadeSurface.Get e :> ISurface
 
     let inline toEffect a = Effect.ofFunction a
 
@@ -307,8 +307,8 @@ type FShadeRuntimeExtensions private() =
 
     static let toSurface (l : list<FShadeEffect>) =
         match l with
-            | [s] -> FShadeSurface s
-            | l -> FShadeSurface (FShade.Effect.compose l)
+            | [s] -> FShadeSurface.Get s
+            | l -> FShadeSurface.Get (FShade.Effect.compose l)
 
     [<Extension>]
     static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : list<FShadeEffect>) =

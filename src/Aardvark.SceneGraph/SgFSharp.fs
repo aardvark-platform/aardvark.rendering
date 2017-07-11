@@ -64,6 +64,8 @@ module SgFSharp =
         let ofList (l : list<#ISg>) =
             l |> ofSeq
 
+        let empty = ofSeq Seq.empty
+
         let ofArray (arr : array<#ISg>) =
             arr |> ofSeq
 

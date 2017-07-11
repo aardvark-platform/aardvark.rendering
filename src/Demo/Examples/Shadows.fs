@@ -58,7 +58,7 @@ module EffectStack =
         type ComposeEffectsSemantics() =
             member x.Surface(sg : Sg.ComposeEffects) =
                 let e = FShade.Effect.compose sg.EffectStack
-                let s = Mod.constant (FShadeSurface(e) :> ISurface)
+                let s = Mod.constant (FShadeSurface.Get(e) :> ISurface)
                 sg.Child?Surface <- s
 
             member x.EffectStack(s : Sg.AttachEffects) =

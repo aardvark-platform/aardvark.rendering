@@ -172,7 +172,7 @@ type PreparedRenderObject =
                         x.Textures |> Map.iter (fun _ (t,s) -> t.Dispose(); s.Dispose())
                         x.Uniforms |> Map.iter (fun _ (ul) -> ul.Dispose())
                         x.UniformBuffers |> Map.iter (fun _ (ub) -> ub.Dispose())
-                        x.Program.Dispose() 
+                        //x.Program.Dispose() // dont want anymore
 
                         x.IsActive.Dispose()
                         x.BeginMode.Dispose()
@@ -340,6 +340,15 @@ type ResourceManagerExtensions private() =
         let activation = rj.Activate()
 
         // create a program and get its handle (ISSUE: assumed to be constant here)
+//        let surface =
+//            if rj.Surface.IsConstant then
+//                let surface = rj.Surface.GetValue()
+//                match surface with
+//                    | :? IGeneratedSurface as s -> 
+//                        s.Generate(x.Context.Runtime,fboSignature) :> ISurface |> Mod.constant
+//                    | _ -> rj.Surface
+//            else rj.Surface
+
         let program = x.CreateSurface(fboSignature, rj.Surface)
         let prog = program.Handle.GetValue(AdaptiveToken.Top)
 

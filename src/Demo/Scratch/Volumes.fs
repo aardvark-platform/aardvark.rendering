@@ -1142,8 +1142,9 @@ module VolumeTest =
                     for i in far .. near do
                         let v = volumeTexture.SampleLevel(c, 1.0).X
                         let v4 = volumeTexture.SampleLevel(c, 4.0).X
-                        if v < 0.25 && v4 > 0.25 then
-                            res <- 100.0 * V3d.III + res
+                        //if v < 0.25 && v4 > 0.25 then
+                        //    res <- 100.0 * V3d.III + res
+                        res <- v + res
 
 //                        let v2 = volumeTexture.SampleLevel(c, 2.0).X
 //                        let v = volumeTexture.SampleLevel(c, 1.0).X
@@ -1170,8 +1171,9 @@ module VolumeTest =
 
                         c <- c + step
 
-
-                    value <- f * res / 1000.0
+                    // stufen
+                    //value <- f * res / 1000.0
+                    value <- f * res / 10.0
                 return V4d(value, 1.0)
                
 //                    
@@ -1959,7 +1961,7 @@ module VolumeTest =
         use win = app.CreateSimpleRenderWindow()
         //use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px.raw", V3i(1850, 1850, 1000))
 
-        use store =  VolumeStore.Open @"C:\Users\Schorsch\Desktop\blubber.store"
+        use store =  VolumeStore.Open @"C:\volumes\blubber.store"
 
         win.Width <- 1024
         win.Height <- 1024
@@ -2046,7 +2048,7 @@ module VolumeTest =
         let colorImage = app.Runtime.Download(color.GetValue() |> unbox<IBackendTexture>)
 
         color.Release()
-        colorImage.SaveAsImage @"C:\Users\Schorsch\Desktop\output.jpg"
+        colorImage.SaveAsImage @"C:\volumes\output.jpg"
 
 
 
@@ -2063,23 +2065,34 @@ module VolumeTest =
         let simple (img : PixImage<uint16>) =
             PixTexture2d(PixImageMipMap [| img :> PixImage |], TextureParams.mipmapped) :> ITexture
 
-        runTest [Shader.blubb |> toEffect] simple
+        //runTest [Shader.blubb |> toEffect] simple
 
 
 
-        test()
+        //test()
 
         Ag.initialize()
         Aardvark.Init()
 
         use app = new OpenGlApplication()
         use win = app.CreateSimpleRenderWindow()
-        let sliceFolder = @"C:\Users\Schorsch\Desktop\slices\"
+        let sliceFolder = @"C:\volumes\slices\"
+
+
+        let data, store, size =
+            // quader
+            //@"C:\volumes\Testdatensatz_600x600x1000px.raw", @"C:\volumes\blubber2.store",  V3i(600, 600, 1000)
+            
+            // motorteil
+            @"C:\volumes\MT-M6-845x549x1820-10076.raw", @"C:\volumes\mt.store", V3i(845, 549, 1820)
+
+            // stufenzyliner
+            //@"C:\volumes\GussPK_AlSi_0.5Sn_180kV_1850x1850x1000px.raw", @"C:\volumes\blubber.store", V3i(1850,1850,1000)
 
         
         // create
-        use input = RawVolume.OpenRead<uint16>(@"C:\Users\Schorsch\Desktop\Testdatensatz_600x600x1000px.raw", V3i(600, 600, 1000))
-        use store =  input |> openOrCreate @"C:\Users\Schorsch\Desktop\blubber2.store"
+        use input = RawVolume.OpenRead<uint16>(data, size)
+        use store =  input |> openOrCreate store
 //
 //        for i in 0 .. input.Size.Z - 1 do
 //            let slice = input.[i]
@@ -2137,7 +2150,13 @@ module VolumeTest =
         )
 
 
-        let sg = 
+        let should = Mod.init true
+
+        win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
+            transact (fun () -> should.Value <- not should.Value)
+        )
+
+        let sg_ () = 
             Sg.box' C4b.Red (Box3d(-size, size))
                 |> Sg.scale 5.0
                 |> Sg.uniform "ScaleFactor" factor
@@ -2150,6 +2169,11 @@ module VolumeTest =
                 |> Sg.cullMode (Mod.constant CullMode.CounterClockwise)
                 |> Sg.viewTrafo (view |> Mod.map CameraView.viewTrafo)
                 |> Sg.projTrafo (proj |> Mod.map Frustum.projTrafo)
+
+        let sg =
+            should |> Mod.map (function | true -> sg_() | false -> Sg.ofList []) |> Sg.dynamic
+
+        let sg = sg
 
         let task = app.Runtime.CompileRender(win.FramebufferSignature, sg)
         win.RenderTask <- task

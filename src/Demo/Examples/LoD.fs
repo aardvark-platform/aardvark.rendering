@@ -254,7 +254,7 @@ module LoD =
             DefaultSurfaces.vertexColor  |> toEffect         
         ]
         let e = FShade.Effect.compose effects
-        FShadeSurface(e) :> ISurface 
+        FShadeSurface.Get(e) :> ISurface 
 //
 //    let surf = 
 //        win.Runtime.PrepareSurface(

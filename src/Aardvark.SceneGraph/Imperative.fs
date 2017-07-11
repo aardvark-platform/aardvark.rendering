@@ -103,7 +103,7 @@ module ``Air Builder`` =
                 f() |> Mod.map (fun effects ->
                     effects
                         |> FShade.Effect.compose
-                        |> FShadeSurface
+                        |> FShadeSurface.Get
                         :> ISurface
                 )
             { new Air<unit>() with
@@ -512,7 +512,7 @@ type Air private() =
         modify (fun s -> { s with surface = Mod.constant surface })
 
     static member BindEffect (l : list<FShadeEffect>) =
-        let surf = FShadeSurface (FShade.Effect.compose l) :> ISurface
+        let surf = FShadeSurface.Get (FShade.Effect.compose l) :> ISurface
         modify (fun s -> { s with surface = Mod.constant surf })
 
     static member BindShader = airShader

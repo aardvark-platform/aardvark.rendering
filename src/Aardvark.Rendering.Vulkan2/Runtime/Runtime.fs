@@ -363,7 +363,22 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                     ) 
                     |> Dictionary.ofSeq
 
-            BackendSurface(glsl.code, entries)
+            let samplers = Dictionary.empty
+
+            for KeyValue(k,v) in effect.Uniforms do
+                match v.uniformValue with
+                    | UniformValue.Sampler(texName,sam) ->
+                        samplers.[(k, 0)] <- { textureName = Symbol.Create texName; samplerState = sam.SamplerStateDescription }
+                    | UniformValue.SamplerArray semSams ->
+                        for i in 0 .. semSams.Length - 1 do
+                            let (sem, sam) = semSams.[i]
+                            samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = sam.SamplerStateDescription }
+                    | _ ->
+                        ()
+
+            // TODO: gl_PointSize (builtIn)
+            BackendSurface(glsl.code, entries, Map.empty, SymDict.empty, samplers, true)
+
         member x.ResourceManager = failf "not implemented"
 
         member x.CreateFramebufferSignature(a,b) = x.CreateFramebufferSignature(a,b)

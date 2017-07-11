@@ -76,6 +76,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     let mutable ctx = ctx
     let mutable manager = if ctx <> null then ResourceManager(ctx, None, shareTextures, shareBuffers) else null
 
+    let shaderCache = System.Collections.Concurrent.ConcurrentDictionary<string*list<int*Symbol>,BackendSurface>()
+
     do if not (isNull ctx) then using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
     new(ctx) = new Runtime(ctx, false, false)
@@ -105,25 +107,41 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     interface IRuntime with
         member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
-            let glsl = 
-                signature.Link(effect, Range1d(-1.0, 1.0), false)
-                    |> ModuleCompiler.compileGLSL410
+            let key = effect.Id, signature.ExtractSemantics()
+            shaderCache.GetOrAdd(key,fun _ -> 
+                let glsl = 
+                    signature.Link(effect, Range1d(-1.0, 1.0), false)
+                        |> ModuleCompiler.compileGLSL410
 
-            let entries =
-                effect.Shaders 
-                    |> Map.toSeq
-                    |> Seq.map (fun (stage,_) -> aardStage stage, "main") 
-                    |> Dictionary.ofSeq
+                let entries =
+                    effect.Shaders 
+                        |> Map.toSeq
+                        |> Seq.map (fun (stage,_) -> aardStage stage, "main") 
+                        |> Dictionary.ofSeq
 
-            let builtIns =
-                glsl.builtIns
-                    |> Map.toSeq 
-                    |> Seq.map (fun (k,v) -> aardStage k, v)
-                    |> Map.ofSeq
-                
+                let builtIns =
+                    glsl.builtIns
+                        |> Map.toSeq 
+                        |> Seq.map (fun (k,v) -> aardStage k, v)
+                        |> Map.ofSeq
 
+                    
+                let samplers = Dictionary.empty
 
-            BackendSurface(glsl.code, entries, builtIns)
+                for KeyValue(k,v) in effect.Uniforms do
+                    match v.uniformValue with
+                        | UniformValue.Sampler(texName,sam) ->
+                            samplers.[(k, 0)] <- { textureName = Symbol.Create texName; samplerState = sam.SamplerStateDescription }
+                        | UniformValue.SamplerArray semSams ->
+                            for i in 0 .. semSams.Length - 1 do
+                                let (sem, sam) = semSams.[i]
+                                samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = sam.SamplerStateDescription }
+                        | _ ->
+                            ()
+
+                BackendSurface(glsl.code, entries, builtIns, SymDict.empty, samplers, true)
+
+            )
 
         member x.ResourceManager = manager :> IResourceManager
 

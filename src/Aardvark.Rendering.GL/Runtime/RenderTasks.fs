@@ -914,8 +914,8 @@ module RenderTasks =
 
 
                         
-
-
+            if added > 0 || removed > 0 then
+                Log.line "[GL] RenderObjects: +%d/-%d" added removed
             t.RenderObjectDeltas(added, removed)
 
         let updateResources (x : AdaptiveToken) (t : RenderToken) =
