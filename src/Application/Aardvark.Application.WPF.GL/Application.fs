@@ -10,6 +10,8 @@ open Aardvark.Base.Incremental
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
+module Config =
+    let mutable useSharingControl = false
 
 type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
@@ -21,13 +23,9 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
     let init =
         let initialized = ref false
-        fun (ctx : Context) (handle : ContextHandle)->
+        fun (ctx : Context)->
             if not !initialized then
                 initialized := true
-                handle.MakeCurrent()
-
-                ctx.CurrentContextHandle <- Some handle
-                ContextHandle.Current <- Some handle
 
                 using ctx.ResourceLock (fun _ ->
                     try GLVM.vmInit()
@@ -47,9 +45,6 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
                     Log.stop()
                 )
 
-                handle.ReleaseCurrent()
-                ctx.CurrentContextHandle <- None
-                ContextHandle.Current <- None
 
     new(enableDebug) = new OpenGlApplication(true, enableDebug)
     new() = new OpenGlApplication(true, false)
@@ -66,10 +61,14 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
         
         match ctrl with
             | :? RenderControl as ctrl ->
-                //let impl = new OpenGlRenderControl(runtime, enableDebug, samples)
-                let impl = new OpenGlSharingRenderControl(runtime, samples)
-                ctrl.Implementation <- impl
-                init ctx impl.ContextHandle
+                if Config.useSharingControl then
+                    let impl = new OpenGlSharingRenderControl(runtime, samples)
+                    ctrl.Implementation <- impl
+                    init ctx
+                else 
+                    let impl = new OpenGlRenderControl(runtime, enableDebug, samples) 
+                    ctrl.Implementation <- impl
+                    init ctx 
             | _ ->
                 failwithf "unknown control type: %A" ctrl
                     
@@ -77,8 +76,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 
     member x.CreateGameWindow(samples : int) =
         let w = new GameWindow(runtime, enableDebug, samples)
-        let handle = ContextHandle(w.Context, w.WindowInfo)
-        init ctx handle
+        init ctx 
         w
 
     interface IApplication with
