@@ -12,6 +12,8 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.SceneGraph
 
+#nowarn "9"
+
 module TreeDiff =
     open System.Collections.Generic
 
@@ -457,7 +459,52 @@ module Management =
             malloc : nativeint -> 'a
             mfree : 'a -> nativeint -> unit
             mcopy : 'a -> nativeint -> 'a -> nativeint -> nativeint -> unit
+            mrealloc : 'a -> nativeint -> nativeint -> 'a
         }
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module Memory =
+        open System.IO.MemoryMappedFiles
+
+        let hglobal =
+            {
+                malloc = Marshal.AllocHGlobal
+                mfree = fun ptr _ -> Marshal.FreeHGlobal ptr
+                mcopy = fun src srcOff dst dstOff size -> Marshal.Copy(src + srcOff, dst + dstOff, size)
+                mrealloc = fun ptr _ n -> Marshal.ReAllocHGlobal(ptr, n)
+            }
+
+        let cotask =
+            {
+                malloc = fun s -> Marshal.AllocCoTaskMem(int s)
+                mfree = fun ptr _ -> Marshal.FreeCoTaskMem ptr
+                mcopy = fun src srcOff dst dstOff size -> Marshal.Copy(src + srcOff, dst + dstOff, size)
+                mrealloc = fun ptr _ n -> Marshal.ReAllocCoTaskMem(ptr, int n)
+            }
+        
+        let array<'a> =
+            {
+                malloc = fun s -> Array.zeroCreate<'a> (int s)
+
+                mfree = fun a s -> 
+                    ()
+
+                mcopy = fun src srcOff dst dstOff size -> 
+                    Array.Copy(src, int64 srcOff, dst, int64 dstOff, int64 size)
+
+                mrealloc = fun ptr o n -> 
+                    let mutable ptr = ptr
+                    Array.Resize(&ptr, int n)
+                    ptr
+            }
+
+        let nop =
+            {
+                malloc = fun _ -> ()
+                mfree = fun _ _ -> ()
+                mrealloc = fun _ _ _ -> ()
+                mcopy = fun _ _ _ _ _ -> ()
+            }
 
 
     [<AllowNullLiteral>]
@@ -475,12 +522,6 @@ module Management =
 
             new(parent, o, s, f, p, n) = { Parent = parent; Offset = o; Size = s; IsFree = f; Prev = p; Next = n }
             new(parent, o, s, f) = { Parent = parent; Offset = o; Size = s; IsFree = f; Prev = null; Next = null }
-//
-//            interface IComparable with
-//                member x.CompareTo o =
-//                    match o with
-//                        | :? Block<'a> as o -> compare x.Size o.Size
-//                        | _ -> failwith "uncomparable"
 
         end
 
@@ -564,13 +605,10 @@ module Management =
             if newCapacity <> oldCapacity then
                 ReaderWriterLock.write rw (fun () ->
                     let o = store
-                    let n = mem.malloc newCapacity
-                    let copy = min oldCapacity newCapacity
-
-                    mem.mcopy o 0n n 0n copy
-                    mem.mfree o oldCapacity
+                    let n = mem.mrealloc o oldCapacity newCapacity
                     store <- n
                     capacity <- newCapacity
+                    let o = ()
 
                     let additional = newCapacity - oldCapacity
                     if additional > 0n then
@@ -791,11 +829,27 @@ module Management =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
+   
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module MemoryManager =
+        let createNop() = new MemoryManager<_>(Memory.nop, 16n) 
+
+
     let testMem<'a> : Memory<'a[]> = 
         {
-            malloc = fun s -> Array.zeroCreate (int s)
-            mfree = fun a s -> ()
-            mcopy = fun src srcOff dst dstOff size -> Array.Copy(src, int64 srcOff, dst, int64 dstOff, int64 size)
+            malloc = fun s -> 
+                Array.zeroCreate (int s)
+
+            mfree = fun a s -> 
+                ()
+
+            mcopy = fun src srcOff dst dstOff size -> 
+                Array.Copy(src, int64 srcOff, dst, int64 dstOff, int64 size)
+
+            mrealloc = fun ptr o n -> 
+                let mutable ptr = ptr
+                Array.Resize(&ptr, int n)
+                ptr
         }
 
     let run() =
@@ -824,6 +878,402 @@ module Management =
         ()
 
 
+module AdaptiveResources9000 =
+    let mutable currentResourceVersion = 0L
+
+    [<StructuralEquality; StructuralComparison>]
+    type ResourceVersion =
+        struct
+            val mutable private Value : int64
+
+            static member Zero = ResourceVersion(0L)
+            static member New = ResourceVersion(Interlocked.Increment(&currentResourceVersion))
+
+            private new(v) = { Value = v }
+        end
+
+    type ResourceInfo(v : ResourceVersion, h : obj, l : hset<ILockedResource>) =
+
+        static let empty = ResourceInfo(ResourceVersion.Zero, null, HSet.empty)
+
+        static member Empty = empty
+
+        member x.Version = v
+        member x.Handle = h
+        member x.Locked = l
+
+    type ResourceInfo<'h>(v : ResourceVersion, h : 'h, l : hset<ILockedResource>) =
+        inherit ResourceInfo(v, h :> obj, l)
+        member x.Handle = h
+
+    type IResourceDescription<'a, 'h> =
+        abstract member Create : 'a -> ResourceInfo<'h>
+        abstract member Update : ResourceInfo<'h> * 'a -> ResourceInfo<'h>
+        abstract member Delete : ResourceInfo<'h> -> unit
+
+
+    type ResourceDescription<'a, 'h> =
+        {
+            create : 'a -> ResourceInfo<'h>
+            update : 'a -> ResourceInfo<'h> -> ResourceInfo<'h>
+            delete : ResourceInfo<'h> -> unit
+        }
+
+
+    type IResource =
+        inherit IAdaptiveObject
+        abstract member Force : AdaptiveToken -> ResourceInfo
+    
+    type IResource<'h> =
+        inherit IResource
+        abstract member Force : AdaptiveToken -> ResourceInfo<'h>
+
+    type ResourceReference(set : ResourceSet, r : IResource) =
+        let mutable refCount = 0
+        let mutable currentInfo = ResourceInfo.Empty
+
+
+        member x.Resource = r
+        member x.Set = set
+        member x.CurrentInfo = currentInfo
+
+        member x.Update(token : AdaptiveToken) =
+            let info = r.Force(token)
+            currentInfo <- info
+            info
+
+        member internal x.Acquire() = Interlocked.Increment(&refCount) = 1
+        member internal x.Release() = Interlocked.Decrement(&refCount) = 0
+
+    and ResourceReference<'h>(set : ResourceSet, r : IResource<'h>) =
+        inherit ResourceReference(set, r :> IResource)
+        member x.Resource = r
+        
+        member x.Update(token : AdaptiveToken) =
+            let info = base.Update(token) |> unbox<ResourceInfo<'h>>
+            x.WriteHandle info.Handle
+            info
+
+        abstract member WriteHandle : 'h -> unit
+        default x.WriteHandle _ = ()
+            
+    and ResourceReference<'h, 'n when 'n : unmanaged>(set : ResourceSet, r : IResource<'h>, view : 'h -> 'n) =
+        inherit ResourceReference<'h>(set, r)
+
+        let mutable ptr : nativeptr<'n> = NativePtr.alloc 1
+
+        member x.Pointer = ptr
+
+        override x.WriteHandle(h : 'h) : unit =
+            NativePtr.write ptr (view h)
+
+    and private ResourceStore =
+        class
+            val mutable public Reference : ResourceReference
+            val mutable public ResourceInfo : ResourceInfo
+
+            member x.UpdateInfo(info : ResourceInfo) =
+                if info.Version > x.ResourceInfo.Version then
+                    let delta = HSet.computeDelta x.ResourceInfo.Locked info.Locked
+                    x.ResourceInfo <- info
+                    Some delta
+                else
+                    None
+
+            new(r) = { Reference = r; ResourceInfo = r.CurrentInfo }
+        end
+
+    and ResourceSet() =
+        inherit AdaptiveObject() 
+
+        let refStore = System.Collections.Concurrent.ConcurrentDictionary<IResource, ResourceStore>()
+        let dirty = System.Collections.Generic.HashSet<ResourceStore>()
+
+        let tryGetStore(r : IResource) =
+            match refStore.TryGetValue r with
+                | (true, s) -> Some s
+                | _ -> None
+
+        let mutable lockedResources : hrefset<ILockedResource> = HRefSet.empty
+
+        let addDirty o = lock dirty (fun () -> dirty.Add o |> ignore)
+        let remDirty o = lock dirty (fun () -> dirty.Remove o |> ignore)
+        let consumeDirty() =
+            lock dirty (fun () ->
+                let arr = dirty |> Seq.toArray
+                dirty.Clear()
+                arr
+            )
+
+        let mutable maxVersion = ResourceVersion.New
+
+        override x.InputChanged(_,o) =
+            match o with
+                | :? IResource as r ->
+                    match tryGetStore r with
+                        | Some s -> addDirty s
+                        | None -> ()
+                | _ ->
+                    ()
+
+
+        member x.Add(r : IResource<'h>, view : 'h -> 'n) : ResourceReference<'h, 'n> =
+            lock x (fun () ->
+                let store = refStore.GetOrAdd(r :> IResource, fun _ -> ResourceStore(ResourceReference<'h, 'n>(x, r, view))) 
+                let ref = store.Reference |> unbox<ResourceReference<'h, 'n>>
+
+                if ref.Acquire() then
+                    lock r (fun () ->
+                        if r.OutOfDate then
+                            addDirty store
+                            // mark x outofdate????
+                        else
+                            r.Outputs.Add(x) |> ignore
+                            x.Level <- max x.Level (r.Level + 1)
+                            maxVersion <- max maxVersion ref.CurrentInfo.Version
+                            match store.UpdateInfo ref.CurrentInfo with
+                                | Some deltas ->
+                                    let (l', _) = lockedResources.ApplyDelta(deltas)
+                                    lockedResources <- l'
+
+                                | None ->
+                                    Log.warn "strange case"
+
+                    )
+                    maxVersion <- ResourceVersion.New
+            
+                ref
+            )
+
+        member x.Add(r : IResource<'h>) : ResourceReference<'h> =
+            x.Add(r, fun _ -> 0) :> ResourceReference<_>
+
+        member x.Remove(r : IResource) =
+            lock x (fun () ->
+                match refStore.TryGetValue(r) with
+                    | (true, store) ->
+                        let res = store.Reference.Resource
+                        if store.Reference.Release() then
+                            lock res (fun () ->
+                                res.Outputs.Remove x |> ignore
+                                let deltas = HSet.computeDelta store.ResourceInfo.Locked HSet.empty
+                                let (l', _) = lockedResources.ApplyDelta(deltas)
+                                lockedResources <- l'
+                                remDirty store |> ignore
+                            )
+                            refStore.TryRemove r |> ignore
+                            maxVersion <- ResourceVersion.New
+                    | _ ->
+                        ()
+            )
+
+        member x.Use(token : AdaptiveToken, action : ResourceVersion -> 'r) =
+            x.EvaluateAlways token (fun token ->
+                let rec run() =
+                    let dirty = consumeDirty()
+                    if dirty.Length > 0 then
+                        for store in dirty do
+                            let info = store.Reference.Update(token)
+                            maxVersion <- max maxVersion info.Version
+                            match store.UpdateInfo info with
+                                | Some deltas ->
+                                    let (l', _) = lockedResources.ApplyDelta(deltas)
+                                    lockedResources <- l'
+
+                                | None ->
+                                    Log.warn "strange case"
+
+                        run()
+                run()
+
+                let mine = lockedResources
+                for l in mine do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
+                try 
+                    action maxVersion
+                finally 
+                    for l in mine do l.Lock.Exit(l.OnUnlock)
+            )
+
+
+
+module AdaptiveResourcesEager =
+    open System.Collections.Generic
+    open System.Linq
+
+    let mutable private currentTime = 0L
+    let private newTime() = Interlocked.Increment(&currentTime)
+
+    type IRefCounted =
+        abstract member Acquire : unit -> unit
+        abstract member Release : unit -> unit
+
+    type IResource =
+        inherit IRefCounted
+        abstract member AddOutput : IResource -> unit
+        abstract member RemoveOutput : IResource -> unit
+        abstract member Outputs : seq<IResource>
+        abstract member Level : int
+        abstract member Update : unit -> int64
+
+    type IResource<'h> =
+        inherit IResource
+        abstract member Handle : 'h
+
+    [<AbstractClass>]
+    type AbstractResource<'h>(level : int) =
+        let mutable refCount = 0
+
+        let mutable updateTime = -1L
+        let mutable currentHandle : Option<'h> = None
+        let mutable outputs : hset<IResource> = HSet.empty
+
+        abstract member Create : unit -> 'h
+        abstract member Update : 'h -> bool * 'h
+        abstract member Destroy : 'h -> unit
+
+        member x.Acquire() = 
+            if Interlocked.Increment(&refCount) = 1 then
+                updateTime <- newTime()
+                ()
+
+        member x.Release() = 
+            if Interlocked.Decrement(&refCount) = 0 then
+                match currentHandle with
+                    | Some h -> 
+                        x.Destroy h
+                        currentHandle <- None
+                        updateTime <- newTime()
+                    | None ->
+                        ()
+
+        member x.Level = level
+
+        member x.Outputs = outputs
+
+        member x.Handle = 
+            match currentHandle with
+                | Some h -> h
+                | _ -> failwith "[Resource] does not have a handle"
+
+        member x.AddOutput (r : IResource) =
+            assert(r.Level > x.Level)
+            outputs <- HSet.add r outputs
+
+        member x.RemoveOutput (r : IResource) =
+            assert(r.Level > x.Level)
+            outputs <- HSet.remove r outputs
+
+        member x.Update() =
+            lock x (fun () ->
+                if refCount = 0 then failwith "[Resource] cannot update without reference"
+
+                let (changed, handle) = 
+                    match currentHandle with
+                        | Some h -> x.Update(h)
+                        | None -> true, x.Create()
+
+                if changed then 
+                    updateTime <- newTime()
+
+                currentHandle <- Some handle
+                updateTime
+            )
+
+        interface IRefCounted with
+            member x.Acquire() = x.Acquire()
+            member x.Release() = x.Release()
+
+        interface IResource with
+            member x.Level = x.Level
+            member x.AddOutput o = x.AddOutput o
+            member x.RemoveOutput o = x.RemoveOutput o
+            member x.Outputs = x.Outputs :> seq<_>
+            member x.Update() = x.Update()
+
+        interface IResource<'h> with
+            member x.Handle = x.Handle
+
+    module Resource =
+        let mapN (update : Option<'b> -> 'h[] -> bool * 'b) (destroy : 'b -> unit) (inputs : IResource<'h>[]) =
+            let level = inputs |> Seq.map (fun r -> r.Level) |> Seq.max
+            {
+                new AbstractResource<'b>(1 + level) with
+                    override x.Update(old) =
+                        let handles = inputs |> Array.map (fun r -> r.Handle)
+                        update (Some old) handles
+
+                    override x.Create() =
+                        for i in inputs do 
+                            i.Acquire()
+                            i.AddOutput x
+
+                        let handles = inputs |> Array.map (fun r -> r.Handle)
+                        let _, h = update None handles
+                        h
+
+                    override x.Destroy h =
+                        for i in inputs do 
+                            i.Release()
+                            i.RemoveOutput x
+
+                        destroy h
+
+            } :> IResource<_>
+        
+        let map (update : Option<'b> -> 'h -> bool * 'b) (destroy : 'b -> unit) (input : IResource<'h>) =
+            {
+                new AbstractResource<'b>(1 + input.Level) with
+                    override x.Update(old) =
+                        update (Some old) input.Handle
+
+                    override x.Create() =
+                        input.Acquire()
+                        input.AddOutput x
+                        let _, h = update None input.Handle
+                        h
+
+                    override x.Destroy h =
+                        input.Release()
+                        input.RemoveOutput x
+                        destroy h
+
+            } :> IResource<_>
+
+    type ResourceSet() =
+        let all = ReferenceCountingSet<IResource>()
+
+        let mutable maxTime = -1L
+
+        let compareLevel =
+            Func<IResource, IResource, int>(fun l r ->
+                compare l.Level r.Level
+            )
+
+        member x.Add(r : IResource) =
+            if all.Add r then
+                r.Acquire()
+
+        member x.Remove(r : IResource) =
+            if all.Remove r then
+                r.Release()
+
+        member x.Update(dirty : seq<IResource>) =
+            let heap = List<IResource>()
+            for r in dirty do
+                if all.Contains r then
+                    heap.HeapEnqueue(compareLevel, r)
+
+            while heap.Count > 0 do
+                let r = heap.HeapDequeue(compareLevel)
+                let t = r.Update()
+                if t > maxTime then
+                    for o in r.Outputs do
+                        if all.Contains o then
+                            heap.HeapEnqueue(compareLevel, o)
+
+                    maxTime <- t
+
+            maxTime
 
 
 
