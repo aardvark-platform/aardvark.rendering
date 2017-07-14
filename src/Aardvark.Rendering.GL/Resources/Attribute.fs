@@ -100,6 +100,7 @@ module AttributeDescriptionExtensions =
             typeof<V4d>,        4
             typeof<M44f>,       16
 
+            typeof<C4f>,        4
             typeof<C4b>,        GL_BGRA
         ] 
 
@@ -129,6 +130,7 @@ module AttributeDescriptionExtensions =
             typeof<V4d>,        typeof<float>
 
             typeof<C4b>,        typeof<byte>
+            typeof<C4f>,        typeof<float>
 
             typeof<M44f>,       typeof<float>
         ] 
@@ -146,6 +148,8 @@ module AttributeDescriptionExtensions =
             typeof<float>, VertexAttribPointerType.Double
 
             typeof<M44f>, VertexAttribPointerType.Float
+
+            typeof<C4f>, VertexAttribPointerType.Float
         ]
 
     // some useful extensions for AttributeDescription
@@ -154,13 +158,21 @@ module AttributeDescriptionExtensions =
             Marshal.SizeOf(x.Type)
 
         member x.Dimension =
-            dimensions.[x.Type]
+            match dimensions.TryGetValue x.Type with
+                | (true,v) -> v
+                | _ -> failwithf "[GL] could not find dimensions for: %A, valid are: %A" x.Type (dimensions |> Seq.toList)
 
         member x.BaseType =
-            baseTypes.[x.Type]
+            match baseTypes.TryGetValue x.Type with
+                | (true,v) -> v
+                | _ -> failwithf "[GL] could not find baseTypes for: %A, valid are: %A" x.Type (baseTypes |> Seq.toList)
+
 
         member x.VertexAttributeType =
-            glTypes.[x.BaseType]
+            match glTypes.TryGetValue x.BaseType with
+                | (true,v) -> v
+                |  _ -> failwithf "[GL] could not find glTypes for: %A, valid are: %A" x.BaseType (glTypes |> Seq.toList)
+
 
 //
 //[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
