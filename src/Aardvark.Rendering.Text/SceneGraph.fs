@@ -145,9 +145,11 @@ module Sg =
                                 let scaleTrafo = 
                                     content |> Mod.map (fun s -> 
                                         let bounds = s.bounds.EnlargedByRelativeEps t.BoundaryExtent
-                                        Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
-                                        Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
-                                            
+                                        if bounds.IsValid then
+                                            Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
+                                            Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
+                                        else
+                                            Trafo3d.Scale(0.0)
                                     )
 
                                 match old.TryGetUniform(scope, sem) with
