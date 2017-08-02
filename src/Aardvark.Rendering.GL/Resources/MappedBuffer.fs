@@ -176,6 +176,7 @@ module ResizeBufferImplementation =
                     x.Realloc(oldCapacity, newCapacity)
                 )
                 x.SizeInBytes <- newCapacity
+                updateBuffer ctx (int64 oldCapacity) (int64 newCapacity)
 
         member x.UseReadUnsafe(offset : nativeint, size : nativeint, reader : nativeint -> 'x) =
             using ctx.ResourceLock (fun _ ->
@@ -199,7 +200,10 @@ module ResizeBufferImplementation =
                         afterResize()
                     )
                     x.SizeInBytes <- newCapacity
+                    updateBuffer ctx (int64 oldCapacity) (int64 newCapacity)
             )
+            
+
 
         member x.UseRead(offset : nativeint, size : nativeint, reader : nativeint -> 'x) =
             if size = 0n then
@@ -298,6 +302,8 @@ module ResizeBufferImplementation =
         override x.Realloc(oldCapacity : nativeint, newCapacity : nativeint) =
             let copyBytes = min newCapacity oldCapacity
 
+            GL.Check "[Realloc] entry"
+
             GL.BindBuffer(BufferTarget.CopyReadBuffer, x.Handle)
             GL.Check "[ResizeableBuffer] could not bind buffer"
 
@@ -335,6 +341,8 @@ module ResizeBufferImplementation =
             let data = Marshal.AllocHGlobal size
             let res = writer data
 
+            GL.Check "[MapWrite] entry"
+
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
             GL.Check "[ResizeableBuffer] could not bind buffer"
 
@@ -349,6 +357,8 @@ module ResizeBufferImplementation =
 
         override x.MapRead(offset : nativeint, size : nativeint, reader : nativeint -> 'a) =
             let data = Marshal.AllocHGlobal size
+
+            GL.Check "[MapRead] entry"
 
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, x.Handle)
             GL.Check "[ResizeableBuffer] could not bind buffer"
@@ -383,6 +393,7 @@ module ResizeBufferImplementation =
                     SparseMemoryResizeBuffer(x, pageSize, buffer) :> AbstractResizeBuffer
                 else
                     let buffer = GL.GenBuffer()
+                    addBuffer x 0L
                     CopyResizeBuffer(x, buffer) :> AbstractResizeBuffer
             )
 
@@ -410,7 +421,7 @@ module MappedBufferImplementations =
 
         member x.Capacity = buffer.SizeInBytes
 
-        member x.Resize(newCapacity) =
+        member x.Resize(newCapacity : nativeint) =
             buffer.Resize(newCapacity)
 
         member x.UseWrite(offset : nativeint, size : nativeint, f : nativeint -> 'a) =

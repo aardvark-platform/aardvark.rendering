@@ -19,11 +19,13 @@ type OpenGlStopwatch() =
 
     member private x.DoStop() =
         GL.EndQuery(QueryTarget.TimeElapsed)
+        GL.Check "[OpenGlStopwatch.DoStop] EndQuery"
         cpu.Stop()
 
     member private x.DoStart() =
         cpu.Start()
         GL.BeginQuery(QueryTarget.TimeElapsed, query)
+        GL.Check "[OpenGlStopwatch.DoStart] BeginQuery"
 
 
     member private x.Add(other : OpenGlStopwatch) =
@@ -34,6 +36,7 @@ type OpenGlStopwatch() =
         if not running then
             if query < 0 then 
                 query <- GL.GenQuery()
+                GL.Check "[OpenGlStopwatch.Start] GenQuery"
 
             match current.Value with
                 | Some p -> 
@@ -43,6 +46,8 @@ type OpenGlStopwatch() =
                     parent <- None
             
             GL.BeginQuery(QueryTarget.TimeElapsed, query)
+            GL.Check "[OpenGlStopwatch.Start] BeginQuery"
+
             running <- true
             children <- []
             current.Value <- Some x
@@ -52,11 +57,13 @@ type OpenGlStopwatch() =
         cpu.Reset()
         if running then 
             GL.EndQuery(QueryTarget.TimeElapsed)
+            GL.Check "[OpenGlStopwatch.Restart] EndQuery"
             running <- false
             current.Value <- parent
 
         if query >= 0 then 
             GL.DeleteQuery query
+            GL.Check "[OpenGlStopwatch.Restart] DeleteQuery"
             query <- -1
 
         x.Start()
@@ -65,6 +72,7 @@ type OpenGlStopwatch() =
         cpu.Stop()
         if running then
             GL.EndQuery(QueryTarget.TimeElapsed)
+            GL.Check "[OpenGlStopwatch.Stop] EndQuery"
 
             current.Value <- parent
             match parent with
@@ -79,6 +87,7 @@ type OpenGlStopwatch() =
     member x.ElapsedGPU =
         let mutable ns = 0L
         GL.GetQueryObject(query, GetQueryObjectParam.QueryResult, &ns)
+        GL.Check "[OpenGlStopwatch.ElapsedGPU] GetQueryObject"
         let childTime = children |> List.sumBy (fun c -> c.ElapsedGPU)
         MicroTime(ns) + childTime
 

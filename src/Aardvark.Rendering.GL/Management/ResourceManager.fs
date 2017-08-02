@@ -478,7 +478,7 @@ type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
     
-    let drawBufferManager = 
+    let drawBufferManager = // ISSUE: leak? nobody frees those DrawBufferConfigs
         match renderTaskInfo with
             | Some (signature, _) -> DrawBufferManager(signature) |> Some
             | _ -> None
@@ -509,7 +509,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
 
-    let uniformBufferManagers = ConcurrentDictionary<ShaderBlock, UniformBufferManager>()
+    let uniformBufferManagers = ConcurrentDictionary<ShaderBlock, UniformBufferManager>() // ISSUE: leak? the buffer of the UniformBufferManager is never disposed
 
     member private x.ArrayBufferCache       : ResourceCache<Buffer>                 = arrayBufferCache
     member private x.BufferCache            : ResourceCache<Buffer>                 = bufferCache
