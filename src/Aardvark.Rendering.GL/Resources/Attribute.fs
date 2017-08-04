@@ -94,9 +94,11 @@ module AttributeDescriptionExtensions =
             typeof<V2d>,        2
             typeof<V3i>,        3
             typeof<V3f>,        3
+            typeof<C3f>,        3
             typeof<V3d>,        3
             typeof<V4i>,        4
             typeof<V4f>,        4
+            typeof<C4f>,        4
             typeof<V4d>,        4
             typeof<M44f>,       16
 
@@ -123,9 +125,11 @@ module AttributeDescriptionExtensions =
             typeof<V2d>,        typeof<float>
             typeof<V3i>,        typeof<int>
             typeof<V3f>,        typeof<float32>
+            typeof<C3f>,        typeof<float32>
             typeof<V3d>,        typeof<float>
             typeof<V4i>,        typeof<int>
             typeof<V4f>,        typeof<float32>
+            typeof<C4f>,        typeof<float32>
             typeof<V4d>,        typeof<float>
 
             typeof<C4b>,        typeof<byte>
