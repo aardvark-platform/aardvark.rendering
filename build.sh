@@ -1,7 +1,7 @@
 #!/bin/bash
 
 mono .paket/paket.bootstrapper.exe
-mono .paket/paket.exe restore group Build
+mono .paket/paket.exe restore --group Build
 
 #clear
 
