@@ -76,10 +76,40 @@ module Sems =
             ASet.single (o :> IRenderObject)
 
 
+
+
+module VulkanTests =
+    open Aardvark.Rendering.Vulkan
+    open Aardvark.Application.WinForms
+
+    let run() =
+        let app = new VulkanApplication(true)
+        let device = app.Runtime.Device
+
+        let img = 
+            device.CreateSparseImage(
+                V3i(1024, 1024, 1024), 
+                10, 
+                TextureDimension.Texture3D, VkFormat.R16Unorm, 
+                VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit
+            )
+
+        let mem = img.Alloc(10 * V3i.III)
+        img.Bind(0, 0, V3i.OOO, 10*img.PageSize, mem)
+
+        img.Unbind(0, 0, V3i.III * img.PageSize, 10*img.PageSize)
+
+        mem.Dispose()
+
+        System.Environment.Exit 0
+
+
 [<EntryPoint; STAThread>]
 let main argv = 
     Ag.initialize()
     Aardvark.Init()
+
+    VulkanTests.run()
 
 
     use app = new VulkanApplication(true)

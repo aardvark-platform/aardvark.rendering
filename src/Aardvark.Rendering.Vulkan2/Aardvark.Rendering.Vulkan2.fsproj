@@ -92,6 +92,7 @@
     <Compile Include="Resources\ResizeBuffer.fs" />
     <Compile Include="Resources\CommandResources.fs" />
     <Compile Include="Resources\GeometryPool.fs" />
+    <Compile Include="Resources\SparseImage.fs" />
     <Compile Include="Swapchain\Surface.fs" />
     <Compile Include="Swapchain\SwapchainDescription.fs" />
     <Compile Include="Swapchain\Swapchain.fs" />

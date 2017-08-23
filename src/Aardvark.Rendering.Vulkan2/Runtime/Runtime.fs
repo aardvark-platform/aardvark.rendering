@@ -361,7 +361,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     interface IRuntime with
         member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
-            let module_ = signature.Link(effect, Range1d(0.0, 1.0), true)
+            let module_ = signature.Link(effect, Range1d(0.0, 1.0), false)
             let glsl = 
                 module_ |> ModuleCompiler.compileGLSLVulkan
             
