@@ -1968,7 +1968,7 @@ module ``Image Command Extensions`` =
                                 elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
                                 elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
                                 elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                                elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit ||| VkAccessFlags.InputAttachmentReadBit
+                                elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
                                 else VkAccessFlags.None
 
                             let dst =
@@ -1976,9 +1976,34 @@ module ``Image Command Extensions`` =
                                 elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
                                 elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
                                 elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                                elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit ||| VkAccessFlags.InputAttachmentReadBit
+                                elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
                                 elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                                elif target = VkImageLayout.General then VkAccessFlags.None
                                 else VkAccessFlags.None
+
+                            let srcMask =
+                                if source = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                                elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                                elif source = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
+                                elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
+                                elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
+                                elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
+                                elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.FragmentShaderBit
+                                elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
+                                elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
+                                else VkPipelineStageFlags.None
+
+                            let dstMask =
+                                if target = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
+                                elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
+                                elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                                elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                                elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.VertexShaderBit
+                                elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
+                                elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
+
+
+                                else VkPipelineStageFlags.None
 
                             let aspect = VkFormat.toAspect img.Format
 
@@ -2002,8 +2027,8 @@ module ``Image Command Extensions`` =
                             cmd.AppendCommand()
                             VkRaw.vkCmdPipelineBarrier(
                                 cmd.Handle,
-                                VkPipelineStageFlags.TopOfPipeBit,
-                                VkPipelineStageFlags.TopOfPipeBit,
+                                srcMask,
+                                dstMask,
                                 VkDependencyFlags.None,
                                 0u, NativePtr.zero,
                                 0u, NativePtr.zero,
@@ -2312,6 +2337,7 @@ module Image =
             finally 
                 device.Delete temp
         }
+
 
 [<AbstractClass; Sealed; Extension>]
 type ContextImageExtensions private() =

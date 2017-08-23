@@ -81,6 +81,7 @@ module Sems =
 module VulkanTests =
     open Aardvark.Rendering.Vulkan
     open Aardvark.Application.WinForms
+    open Microsoft.FSharp.NativeInterop
 
     let run() =
         let app = new VulkanApplication(true)
@@ -94,12 +95,93 @@ module VulkanTests =
                 VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit
             )
 
-        let mem = img.Alloc(10 * V3i.III)
-        img.Bind(0, 0, V3i.OOO, 10*img.PageSize, mem)
+        let x = 1
+        let y = 1
+        let z = 1
+        let mem = img.Alloc(V3i(x, y, z)) //f * V3i.IOO)
+        
 
-        img.Unbind(0, 0, V3i.III * img.PageSize, 10*img.PageSize)
+        let pi = 
+            let pi = PixImage<uint16>(Col.Format.Gray, V2i(32,32))
+            let rand = RandomSystem()
+            pi.GetChannel(Col.Channel.Gray).SetByCoord(fun _ ->
+                rand.UniformInt() |> uint16
+            ) |> ignore
+            pi
+
+        let pi2 = 
+            let pi = PixImage<uint16>(Col.Format.Gray, V2i(32,32))
+            let rand = RandomSystem()
+            pi.GetChannel(Col.Channel.Gray).SetByCoord(fun _ ->
+                rand.UniformInt() |> uint16
+            ) |> ignore
+            pi
+
+        let opi = PixImage<uint16>(Col.Format.Gray, pi.Size)
+
+        let input : DeviceMemoryImage<uint16> = device |> DeviceMemoryImage.create (V2i(32,32)) 1 Col.Format.Gray
+        let output : DeviceMemoryImage<uint16> = device |> DeviceMemoryImage.create (V2i(32,32)) 1 Col.Format.Gray
+        input.Upload(0, pi)
+
+        let ihandle = 
+            device.CreateSparseImage(V3i(32,32,32), 1, TextureDimension.Texture3D, VkFormat.R16Unorm, VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit)
+
+
+        ihandle.Bind(0, 0, V3i.Zero, ihandle.Size, mem)
+
+        // copy stuff there
+        device.perform {
+            do! Command.TransformLayout(input.Image, VkImageLayout.TransferSrcOptimal)
+            do! Command.TransformLayout(ihandle, VkImageLayout.TransferDstOptimal)
+            do! Command.Copy(input.Image.[ImageAspect.Color, 0, 0], V3i.Zero, ihandle.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(32,32,1))
+            do! Command.TransformLayout(input.Image, VkImageLayout.General)
+            //do! Command.TransformLayout(ihandle, VkImageLayout.General)
+        }
+
+        //ihandle.Unbind(0, 0, V3i.Zero, ihandle.Size)
+
+
+        img.Bind(0, 0, V3i.Zero, (V3i(x, y, z) * img.PageSize), mem)
+
+        input.Upload(0, pi2)
+        // copy stuff there
+        device.perform {
+            do! Command.TransformLayout(input.Image, VkImageLayout.TransferSrcOptimal)
+            do! Command.TransformLayout(ihandle, VkImageLayout.TransferDstOptimal)
+            do! Command.Copy(input.Image.[ImageAspect.Color, 0, 0], V3i.Zero, ihandle.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(32,32,1))
+            //do! Command.TransformLayout(ihandle, VkImageLayout.General)
+        }
+
+        //VkRaw.vkDestroyImage(device.Handle, ihandle.Handle, NativePtr.zero)
+
+        device.perform {
+//            do! Command.TransformLayout(input.Image, VkImageLayout.TransferSrcOptimal)
+//            do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
+//            do! Command.Copy(input.Image.[ImageAspect.Color, 0, 0], V3i.Zero, img.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(32,32,1))
+//            
+            do! Command.Barrier
+            do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
+            do! Command.TransformLayout(output.Image, VkImageLayout.TransferDstOptimal)
+            do! Command.Copy(img.[ImageAspect.Color, 0, 0], V3i.Zero, output.Image.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(32,32,1))
+            do! Command.TransformLayout(output.Image, VkImageLayout.General)
+            
+        }
+
+        output.Download(0, opi)
+
+        printfn "valid: %A" (pi2.Volume.Data = opi.Volume.Data)
+
+        img.Unbind(0, 0, V3i.Zero, (V3i(x, y, z) * img.PageSize))
 
         mem.Dispose()
+
+
+        let ptr = device.HostMemory.AllocRaw(128L)
+
+        printfn "%A" ptr.Handle.Handle
+
+
+        ptr.Dispose()
 
         System.Environment.Exit 0
 
@@ -109,7 +191,7 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    //VulkanTests.run()
+    VulkanTests.run()
 
 
     use app = new VulkanApplication(true)

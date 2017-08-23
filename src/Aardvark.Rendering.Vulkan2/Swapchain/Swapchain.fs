@@ -63,12 +63,12 @@ module ImageTrafoExtensions =
 
                 | ImageTrafo.MirrorX -> 
                     Box3i(V3i(x.Max.X, x.Min.Y, x.Min.Z), V3i(x.Min.X, x.Max.Y, x.Max.Z))
-
+                    
                 | ImageTrafo.MirrorY -> 
                     Box3i(V3i(x.Min.X, x.Max.Y, x.Min.Z), V3i(x.Max.X, x.Min.Y, x.Max.Z))
 
                 | _ ->
-                    failwith "box cannot be transformed using %A" t
+                    failwithf "box cannot be transformed using %A" t
 
 type Swapchain(device : Device, description : SwapchainDescription) =
     let surface = description.surface
@@ -348,9 +348,9 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
             do! Command.TransformLayout(backbuffer, VkImageLayout.TransferDstOptimal)
             do! Command.Blit(
-                    currentImage.[ImageAspect.Color, 0, 0],
+                    currentImage.[ImageAspect.Color, 0, *],
                     srcRange,
-                    backbuffer.[ImageAspect.Color, 0, 0],
+                    backbuffer.[ImageAspect.Color, 0, *],
                     dstRange,
                     VkFilter.Nearest
                 )

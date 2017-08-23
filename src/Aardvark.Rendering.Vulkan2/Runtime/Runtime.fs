@@ -113,17 +113,23 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             Guid.Parse("{2f3e2b49-7f12-eb9c-578f-c46f5981d022}")
         ]
 
+    let debugBreak (msg : DebugMessage) =
+        if Debugger.IsAttached then
+            Debugger.Break()
+            ignored.Add msg.id |> ignore
+
+
     let debugMessage (msg : DebugMessage) =
         if not (ignored.Contains msg.id) then
             let str = msg.layerPrefix + ": " + msg.message
             match msg.severity with
                 | MessageSeverity.Error ->
                     Report.Error("[Vulkan] {0}", str)
-                    debugBreak str
+                    debugBreak msg
 
                 | MessageSeverity.Warning ->
                     Report.Warn("[Vulkan] {0}", str)
-                    debugBreak str
+                    debugBreak msg
 
                 | MessageSeverity.PerformanceWarning ->
                     Report.Line("[Vulkan] performance: {0}", str)

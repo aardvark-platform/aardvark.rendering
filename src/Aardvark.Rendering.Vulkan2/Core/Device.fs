@@ -1268,7 +1268,7 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
             false
 
     member x.Alloc(align : int64, size : int64) =
-        if size > blockSize then
+        if size >= blockSize then
             heap.AllocRaw(size) :> DevicePtr
         else
             lock manager (fun () ->

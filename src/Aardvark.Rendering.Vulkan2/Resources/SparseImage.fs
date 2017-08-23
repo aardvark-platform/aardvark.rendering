@@ -125,8 +125,9 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             uint64 mem.Offset,
                             VkSparseMemoryBindFlags.MetadataBit
                         )
-
-                    binds.Add bind
+                        
+                    if bind.size <> 0UL then
+                        binds.Add bind
                 else
                     let mutable targetOffset = req.imageMipTailOffset
                     for layer in 0 .. slices - 1 do
@@ -141,7 +142,8 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                                 uint64 mem.Offset,
                                 VkSparseMemoryBindFlags.MetadataBit
                             )
-                        binds.Add bind
+                        if bind.size <> 0UL then
+                            binds.Add bind
 
                         targetOffset <- targetOffset + req.imageMipTailStride
 
@@ -159,7 +161,8 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             VkSparseMemoryBindFlags.None
                         )
 
-                    binds.Add bind
+                    if bind.size <> 0UL then
+                        binds.Add bind
                 else
                     let mutable targetOffset = req.imageMipTailOffset
                     for layer in 0 .. slices - 1 do
@@ -174,43 +177,39 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                                 uint64 mem.Offset,
                                 VkSparseMemoryBindFlags.None
                             )
-                        binds.Add bind
+                        if bind.size <> 0UL then
+                            binds.Add bind
 
                         targetOffset <- targetOffset + req.imageMipTailStride
         
-        
-        let binds = CSharpList.toArray binds
-        binds |> NativePtr.withA (fun pBinds ->
-            let mutable images =
-                VkSparseImageOpaqueMemoryBindInfo(
-                    handle, uint32 binds.Length, pBinds
-                )
+        if binds.Count > 0 then
+            let binds = CSharpList.toArray binds
+            binds |> NativePtr.withA (fun pBinds ->
+                let mutable images =
+                    VkSparseImageOpaqueMemoryBindInfo(
+                        handle, uint32 binds.Length, pBinds
+                    )
 
-            let mutable info =
-                VkBindSparseInfo(
-                    VkStructureType.BindSparseInfo, 0n,
-                    0u, NativePtr.zero,
-                    0u, NativePtr.zero,
-                    1u, &&images,
-                    0u, NativePtr.zero,
-                    0u, NativePtr.zero
+                let mutable info =
+                    VkBindSparseInfo(
+                        VkStructureType.BindSparseInfo, 0n,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero,
+                        1u, &&images,
+                        0u, NativePtr.zero,
+                        0u, NativePtr.zero
                 
+                    )
+
+                let q = device.GraphicsFamily.GetQueue()
+                let f = device.CreateFence()
+                lock q (fun () ->
+                    VkRaw.vkQueueBindSparse(q.Handle, 1u, &&info, f.Handle)
+                        |> check "could not bind sparse memory"
                 )
-
-            let q = device.GraphicsFamily.GetQueue()
-            let f = device.CreateFence()
-            lock q (fun () ->
-                VkRaw.vkQueueBindSparse(q.Handle, 1u, &&info, f.Handle)
-                    |> check "could not bind sparse memory"
+                f.Wait()
             )
-            f.Wait()
-        )
 
-        
-        ()
-
-    do printfn "%A" pageSize
-    do printfn "%A (%A)" pageSizeInBytes (pageSize.X * pageSize.Y * pageSize.Z)
 
     let pageCounts =
         Array.init levels (fun level ->
@@ -329,6 +328,12 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                 f.Wait()
             )
 
+    member x.Commit(level : int, slice : int, offset : V3i, size : V3i) =
+        ()
+        
+    member x.Decommit(level : int, slice : int, offset : V3i, size : V3i) =
+        ()
+
     member x.Bind(level : int, slice : int, offset : V3i, size : V3i, ptr : DevicePtr) =
         x.Update [{ level = level; slice = slice; offset = offset; size = size; pointer = Some ptr }]
      
@@ -347,7 +352,7 @@ type SparseImageDeviceExtensions private() =
         let mutable info =
             VkImageCreateInfo(
                 VkStructureType.ImageCreateInfo, 0n,
-                VkImageCreateFlags.SparseBindingBit ||| VkImageCreateFlags.SparseResidencyBit,
+                VkImageCreateFlags.SparseBindingBit ||| VkImageCreateFlags.SparseResidencyBit ||| VkImageCreateFlags.SparseAliasedBit,
                 imageType,
                 format,
                 VkExtent3D(size.X, size.Y, size.Z),
@@ -357,7 +362,7 @@ type SparseImageDeviceExtensions private() =
                 VkImageTiling.Optimal,
                 usage,
                 device.AllSharingMode, device.AllQueueFamiliesCnt, device.AllQueueFamiliesPtr,
-                VkImageLayout.Undefined
+                VkImageLayout.Preinitialized
             )
 
         let mutable handle = VkImage.Null
