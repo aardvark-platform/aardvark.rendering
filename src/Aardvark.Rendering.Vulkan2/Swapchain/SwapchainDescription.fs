@@ -15,6 +15,7 @@ open Microsoft.FSharp.NativeInterop
 
 [<AbstractClass>]
 type AbstractGraphicsMode() =
+    abstract member ImageTrafo                      : ImageTrafo
     abstract member ChooseColorFormat               : Set<VkFormat> -> VkFormat
     abstract member ChooseColorSpace                : Set<VkColorSpaceKHR> -> VkColorSpaceKHR
     abstract member ChooseDepthSteniclFormat        : Set<VkFormat> -> Option<VkFormat>
@@ -22,7 +23,7 @@ type AbstractGraphicsMode() =
     abstract member ChooseBufferCount               : int * int -> int
     abstract member Samples                         : int
 
-type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits : int, buffers : int, samples : int) =
+type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits : int, buffers : int, samples : int, imageTrafo : ImageTrafo) =
     inherit AbstractGraphicsMode()
     let bitType =
         match bits with
@@ -96,6 +97,7 @@ type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits 
     member x.StencilBits = stencilBits
     member x.Buffers = buffers
 
+    override x.ImageTrafo = imageTrafo
     override x.Samples = samples
     override x.ChooseColorFormat(available : Set<VkFormat>) =
         let map = available |> Seq.map (fun fmt -> VkFormat.toColFormat fmt, fmt) |> Map.ofSeqDupl
@@ -143,23 +145,32 @@ type SwapchainDescription =
         colorSpace      : VkColorSpaceKHR
         depthFormat     : Option<VkFormat>
         presentMode     : VkPresentModeKHR
-        transform       : VkSurfaceTransformFlagBitsKHR
+        presentTrafo    : ImageTrafo
+        blitTrafo       : ImageTrafo
         buffers         : int
         samples         : int
     }
+
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module SwapchainDescription =
     module private Chooser = 
         let transformProbes =
             [
-                VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformIdentityBitKhr
+                ImageTrafo.MirrorY
+                ImageTrafo.MirrorX
+                ImageTrafo.Rot0
+                ImageTrafo.Rot180
             ]
 
-        let chooseTransform (available : VkSurfaceTransformFlagBitsKHR) =
-            match transformProbes |> List.tryFind available.HasFlag with
-                | Some transform -> transform
-                | None -> failf "could not get valid Surface transformation from available: %A" available
+        let chooseTransform (desired : ImageTrafo) (available : Set<ImageTrafo>) =
+            if Set.contains desired available then
+                desired
+            else
+                match transformProbes |> List.tryFind (fun v -> Set.contains v available) with
+                    | Some transform -> transform
+                    | None -> failf "could not get valid Surface transformation from available: %A" available
 
     let create (surface : Surface) (mode : AbstractGraphicsMode) (device : Device) =
         if not surface.IsSupported then
@@ -170,7 +181,8 @@ module SwapchainDescription =
         let depthFormat         = mode.ChooseDepthSteniclFormat surface.DepthFormats
         let presentMode         = mode.ChoosePresentMode surface.PresentModes
         let buffers             = mode.ChooseBufferCount(surface.MinImageCount, surface.MaxImageCount)
-        let transform           = Chooser.chooseTransform surface.Transforms
+        let presentTrafo        = Chooser.chooseTransform mode.ImageTrafo surface.Transforms
+        let blitTrafo           = ImageTrafo.compose mode.ImageTrafo (ImageTrafo.inverse presentTrafo)
         let samples             = mode.Samples
 
         let renderPass = 
@@ -196,7 +208,8 @@ module SwapchainDescription =
             colorSpace = colorSpace
             depthFormat = depthFormat
             presentMode = presentMode
-            transform = transform
+            presentTrafo = presentTrafo
+            blitTrafo = blitTrafo
             buffers = buffers
             samples = samples
         }

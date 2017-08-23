@@ -109,7 +109,7 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    VulkanTests.run()
+    //VulkanTests.run()
 
 
     use app = new VulkanApplication(true)

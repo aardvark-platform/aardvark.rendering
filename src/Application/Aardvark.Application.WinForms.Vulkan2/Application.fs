@@ -162,7 +162,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         match ctrl with
             | :? Aardvark.Application.WinForms.RenderControl as ctrl ->
                 if canCreateRenderControl then
-                    let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples)
+                    let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples, ImageTrafo.MirrorY)
                     let impl = new VulkanRenderControl(runtime, mode)
                     ctrl.Implementation <- impl
                 else

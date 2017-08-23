@@ -36,6 +36,40 @@ type SurfaceInfo =
     | Android of AndroidSurfaceInfo
     | Win32 of Win32SurfaceInfo
 
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkSurfaceTransformFlagBitsKHR =
+    let ofImageTrafo =
+        LookupTable.lookupTable [
+            ImageTrafo.Rot0,            VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformIdentityBitKhr
+            ImageTrafo.Rot90,           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate90BitKhr
+            ImageTrafo.Rot180,          VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate180BitKhr
+            ImageTrafo.Rot270,          VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate270BitKhr
+            ImageTrafo.MirrorX,         VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorBitKhr
+            ImageTrafo.MirrorY,         VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate180BitKhr
+            ImageTrafo.Transpose,       VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate90BitKhr
+            ImageTrafo.Transverse,      VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate270BitKhr
+        ]
+
+    let toImageTrafo =
+        LookupTable.lookupTable [
+           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformIdentityBitKhr,                      ImageTrafo.Rot0
+           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate90BitKhr,                      ImageTrafo.Rot90
+           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate180BitKhr,                     ImageTrafo.Rot180
+           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformRotate270BitKhr,                     ImageTrafo.Rot270
+           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorBitKhr,              ImageTrafo.MirrorX
+           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate180BitKhr,     ImageTrafo.MirrorY
+           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate90BitKhr,      ImageTrafo.Transpose
+           VkSurfaceTransformFlagBitsKHR.VkSurfaceTransformHorizontalMirrorRotate270BitKhr,     ImageTrafo.Transverse
+        ]
+
+    let toImageTrafos (flags : VkSurfaceTransformFlagBitsKHR) =
+        let values = Enum.GetValues(typeof<VkSurfaceTransformFlagBitsKHR>) |> unbox<VkSurfaceTransformFlagBitsKHR[]>
+        values 
+            |> Seq.filter (fun v -> (flags &&& v) <> VkSurfaceTransformFlagBitsKHR.None)
+            |> Seq.map toImageTrafo
+            |> Set.ofSeq
+
 type Surface(device : Device, handle : VkSurfaceKHR) =
     inherit Resource<VkSurfaceKHR>(device, handle)
 
@@ -64,7 +98,7 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
             VkRaw.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical.Handle, handle, &&surfaceCaps) 
                 |> check "could not get Surface capabilities"
         
-    let supportedTransforms = unbox<VkSurfaceTransformFlagBitsKHR> (int surfaceCaps.supportedTransforms)
+    let supportedTransforms = unbox<VkSurfaceTransformFlagBitsKHR> (int surfaceCaps.supportedTransforms) |> VkSurfaceTransformFlagBitsKHR.toImageTrafos
     let supportedCompositeAlpha = unbox<VkCompositeAlphaFlagBitsKHR> (int surfaceCaps.supportedCompositeAlpha)
     let supportedUsage = surfaceCaps.supportedUsageFlags
     let minSize = V2i(int surfaceCaps.minImageExtent.width, int surfaceCaps.minImageExtent.height)
@@ -141,7 +175,6 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
         else
             V2i.Zero
         
-    member x.HasTransform (t : VkSurfaceTransformFlagBitsKHR) = (t &&& supportedTransforms) = t
     member x.HasCompositeAlpha (t : VkCompositeAlphaFlagBitsKHR) = (t &&& supportedCompositeAlpha) = t
     member x.HasUsage (t : VkImageUsageFlags) = (t &&& supportedUsage) = t
 
