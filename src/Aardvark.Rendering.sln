@@ -52,9 +52,9 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.SceneGraph.IO", "A
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Scratch", "Demo\Scratch\Scratch.fsproj", "{346185F9-AB7F-4973-8B80-24CEB113E4B5}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan2", "Aardvark.Rendering.Vulkan2\Aardvark.Rendering.Vulkan2.fsproj", "{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan", "Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj", "{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.Vulkan2", "Application\Aardvark.Application.WinForms.Vulkan2\Aardvark.Application.WinForms.Vulkan2.fsproj", "{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.Vulkan", "Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj", "{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

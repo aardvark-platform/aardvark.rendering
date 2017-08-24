@@ -110,8 +110,8 @@
       <Project>{fb0c63a7-519a-4fcc-9a4b-841aee5b8c97}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan2\Aardvark.Rendering.Vulkan2.fsproj">
-      <Name>Aardvark.Rendering.Vulkan2</Name>
+    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
+      <Name>Aardvark.Rendering.Vulkan</Name>
       <Project>{8bbc1ef6-9c85-4baf-a732-fc46dca64ec3}</Project>
       <Private>True</Private>
     </ProjectReference>
@@ -125,8 +125,8 @@
       <Project>{4f645de6-6d22-4bad-8489-c1f8456e3d55}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.Vulkan2\Aardvark.Application.WinForms.Vulkan2.fsproj">
-      <Name>Aardvark.Application.WinForms.Vulkan2</Name>
+    <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj">
+      <Name>Aardvark.Application.WinForms.Vulkan</Name>
       <Project>{99dd80b4-b1b8-4042-beea-b3a7fd617242}</Project>
       <Private>True</Private>
     </ProjectReference>
