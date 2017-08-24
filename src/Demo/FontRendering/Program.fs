@@ -90,16 +90,139 @@ module VulkanTests =
         let img = 
             device.CreateSparseImage(
                 V3i(1024, 1024, 1024), 
-                10, 
+                10, 1,  
                 TextureDimension.Texture3D, VkFormat.R16Unorm, 
                 VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit
             )
 
+        
+
         let x = 1
         let y = 1
         let z = 1
-        let mem = img.Alloc(V3i(x, y, z)) //f * V3i.IOO)
-        
+        let pageCount = img.PageCount 0
+        let mem = img.Memory.Alloc(img.PageSizeInBytes, int64 pageCount.X * int64 pageCount.Y * int64 pageCount.Z * img.PageSizeInBytes) //f * V3i.IOO)
+
+        let binds =
+            Array.init 10 (fun i ->
+                let x = i % pageCount.X
+                let i = i / pageCount.X
+                let y = i % pageCount.Y
+                let z = i / pageCount.Y
+
+                {
+                    level = 0
+                    slice = 0
+                    offset = V3i(x,y,z) * img.PageSize
+                    size = img.PageSize
+                    pointer = Some mem
+                }
+
+            )
+     
+        let unbinds =
+            binds |> Array.map (fun b -> { b with pointer = None })
+
+        for i in 1 .. 10 do
+            img.Update binds
+            img.Update unbinds
+
+    
+        Log.start "commit"
+        for pageFactorE in 1 .. 5 do
+            let pageFactor = 1 <<< pageFactorE
+            let pageCount = img.PageCount 0 / pageFactor
+            let pageSize = pageFactor * img.PageSize
+            let commits = pageCount.X * pageCount.Y * pageCount.Z //4096.0 / float (pageFactor * pageFactor * pageFactor) |> int
+
+            let binds =
+                Array.init commits (fun i ->
+                    let x = i % pageCount.X
+                    let i = i / pageCount.X
+                    let y = i % pageCount.Y
+                    let z = i / pageCount.Y
+
+                    if z >= pageCount.Z then failwith "asdsad"
+
+                    {
+                        level = 0
+                        slice = 0
+                        offset = V3i(x,y,z) * pageSize
+                        size = pageSize
+                        pointer = Some mem
+                    }
+
+                )
+     
+            let unbinds =
+                binds |> Array.map (fun b -> { b with pointer = None })
+
+
+            let rep = 4
+            let sw = System.Diagnostics.Stopwatch()
+            for i in 1 .. rep do
+                sw.Start()
+                img.Update binds
+                sw.Stop()
+                img.Update unbinds
+                System.GC.Collect()
+                System.GC.WaitForFullGCComplete() |> ignore
+
+            let totalTime = sw.MicroTime / rep
+
+            //Log.warn "%d³ bricks: %A per brick" pageSize.X (totalTime / commits)
+            Log.line "%d³: %A (%A)" pageSize.X (totalTime / float commits) totalTime
+        Log.stop()
+
+        Log.start "decommit"
+        for pageFactorE in 1 .. 5 do
+            let pageFactor = 1 <<< pageFactorE
+            let pageCount = img.PageCount 0 / pageFactor
+            let pageSize = pageFactor * img.PageSize
+            let commits = pageCount.X * pageCount.Y * pageCount.Z //4096.0 / float (pageFactor * pageFactor * pageFactor) |> int
+
+            let binds =
+                Array.init commits (fun i ->
+                    let x = i % pageCount.X
+                    let i = i / pageCount.X
+                    let y = i % pageCount.Y
+                    let z = i / pageCount.Y
+
+                    if z >= pageCount.Z then failwith "asdsad"
+
+                    {
+                        level = 0
+                        slice = 0
+                        offset = V3i(x,y,z) * pageSize
+                        size = pageSize
+                        pointer = Some mem
+                    }
+
+                )
+     
+            let unbinds =
+                binds |> Array.map (fun b -> { b with pointer = None })
+
+
+            let rep = 4
+            let sw = System.Diagnostics.Stopwatch()
+            for i in 1 .. rep do
+                img.Update binds
+                System.GC.Collect()
+                System.GC.WaitForFullGCComplete() |> ignore
+                sw.Start()
+                img.Update unbinds
+                sw.Stop()
+
+
+            let totalTime = sw.MicroTime / rep
+
+            //Log.warn "%d³ bricks: %A per brick" pageSize.X (totalTime / commits)
+            Log.line "%d³: %A (%A)" pageSize.X (totalTime / float commits) totalTime
+        Log.stop()
+
+
+        Environment.Exit 0
 
         let pi = 
             let pi = PixImage<uint16>(Col.Format.Gray, V2i(32,32))
@@ -124,7 +247,7 @@ module VulkanTests =
         input.Upload(0, pi)
 
         let ihandle = 
-            device.CreateSparseImage(V3i(32,32,32), 1, TextureDimension.Texture3D, VkFormat.R16Unorm, VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit)
+            device.CreateSparseImage(V3i(32,32,32), 1, 1, TextureDimension.Texture3D, VkFormat.R16Unorm, VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit)
 
 
         ihandle.Bind(0, 0, V3i.Zero, ihandle.Size, mem)
@@ -175,13 +298,6 @@ module VulkanTests =
 
         mem.Dispose()
 
-
-        let ptr = device.HostMemory.AllocRaw(128L)
-
-        printfn "%A" ptr.Handle.Handle
-
-
-        ptr.Dispose()
 
         System.Environment.Exit 0
 

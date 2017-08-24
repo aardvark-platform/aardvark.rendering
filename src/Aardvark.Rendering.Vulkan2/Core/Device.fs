@@ -1228,92 +1228,187 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSize : int64) =
-    let manager = MemoryManager.createNop()
-    do manager.Free(manager.Alloc(nativeint virtualSize))
+and [<AllowNullLiteral>] DeviceBlock(manager : DeviceMemoryManager, mem : DeviceMemory, offset : int64, size : int64, isFree : bool, prev : DeviceBlock, next : DeviceBlock) =
+    inherit DevicePtr(mem, offset, size)
 
-    let memories = List<DeviceMemory>()
+    let mutable prev = prev
+    let mutable next = next
+    let mutable isFree = isFree
 
-    let tryCollapse() =
-        if manager.AllocatedBytes = 0n then
-            for mem in memories do
-                mem.Dispose()
-            memories.Clear()
 
-        else
-            let e = manager.LastUsedByte |> int64
-            let memid = e / blockSize |> int
-            let mutable last = memories.Count - 1
-            while memid < last do
-                memories.[last].Dispose()
-                memories.RemoveAt last
-                last <- last - 1
+    member x.IsFree
+        with get() = isFree
+        and set f = isFree <- f
 
-    member internal x.Release (ptr : managedptr) =
-        if not ptr.Free then
-            lock manager (fun () ->
-                manager.Free ptr
-                tryCollapse()
+    member x.Prev
+        with get() = prev
+        and set p = prev <- p
+
+    member x.Next
+        with get() = next
+        and set p = next <- p
+
+    override x.Dispose() =
+        manager.Free x
+
+and DeviceFreeList() =
+    
+    static let comparer =
+        { new System.Collections.Generic.IComparer<DeviceBlock> with
+            member x.Compare(l : DeviceBlock, r : DeviceBlock) =
+                if isNull l then
+                    if isNull r then 0
+                    else 1
+                elif isNull r then
+                    -1
+                else
+                    let c = compare l.Size r.Size
+                    if c <> 0 then c
+                    else compare l.Offset r.Offset       
+        }
+
+    static let next (align : int64) (v : int64) =
+        if v % align = 0L then v
+        else v + (align - v % align)
+
+
+    let store = SortedSetExt<DeviceBlock>(Seq.empty, comparer)
+        
+
+    member x.TryGetGreaterOrEqual(size : int64) =
+        let query = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
+        let (_, _, r) = store.FindNeighbours(query)
+        if r.HasValue then 
+            let r = r.Value
+            store.Remove r |> ignore
+            Some r
+        else 
+            None
+
+    member x.TryGetAligned(align : int64, size : int64) =
+        let min = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
+        let view = store.GetViewBetween(min, null)
+
+        let res = 
+            view |> Seq.tryFind (fun b ->
+                let o = next align b.Offset
+                let s = b.Size - (o - b.Offset)
+                s >= size
             )
 
-    member internal x.TryResize (ptr : managedptr, newSize : int64) =
-        let newSize = nativeint newSize
-        if newSize = ptr.Size then 
-            true
-        elif newSize < ptr.Size then
-            manager.Realloc(ptr, nativeint newSize) |> ignore
-            tryCollapse()
-            true
-        else
-            false
+        match res with
+            | Some res -> 
+                store.Remove res |> ignore
+                Some res
+            | None ->
+                None
+
+    member x.Insert(b : DeviceBlock) =
+        store.Add b |> ignore
+
+    member x.Remove(b : DeviceBlock) =
+        store.Remove b |> ignore
+
+    member x.Clear() =
+        store.Clear()
+
+and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSize : int64) =
+    static let next (align : int64) (v : int64) =
+        if v % align = 0L then v
+        else v + (align - v % align)    
+  
+    let free = DeviceFreeList()
+
+    let addBlock(this : DeviceMemoryManager) =
+        let store = heap.AllocRaw blockSize
+
+        let block = new DeviceBlock(this, store, 0L, blockSize, true, null, null)
+        free.Insert(block)
+
 
     member x.Alloc(align : int64, size : int64) =
         if size >= blockSize then
             heap.AllocRaw(size) :> DevicePtr
         else
-            lock manager (fun () ->
-                let ptr = manager.AllocAligned(nativeint align, nativeint size)
+            lock free (fun () ->
+                match free.TryGetAligned(align, size) with
+                    | Some b ->
+                        let alignedOffset = next align b.Offset
+                        let alignedSize = b.Size - (alignedOffset - b.Offset)
+                        if alignedOffset > b.Offset then
+                            let l = new DeviceBlock(x, b.Memory, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
+                            if not (isNull l.Prev) then l.Prev.Next <- l
 
-                let offset = int64 ptr.Offset
-                let memid = offset / blockSize |> int
-                let offset = offset % blockSize
+                            b.Prev <- l
+                            free.Insert(l)
+                            b.Offset <- alignedOffset
+                            b.Size <- alignedSize    
 
-                if memid >= memories.Count then
-                    // the pointer is in an entirely new block
-                    let mem = heap.AllocRaw blockSize
-                    memories.Add mem
-                    new ManagedDevicePtr(mem, offset, size, x, ptr) :> DevicePtr
+                
+                        if alignedSize > size then
+                            let r = new DeviceBlock(x, b.Memory, alignedOffset + size, alignedSize - size, true, b, b.Next)
+                            if not (isNull r.Next) then r.Next.Prev <- r
+                            b.Next <- r
+                            free.Insert(r)
+                            b.Size <- size
 
-                elif offset + size > blockSize then
-                    // the allocated pointer crosses a block boundary
+                        b.IsFree <- false
+                        b :> DevicePtr
 
-                    // shrink the allocated pointer to s.t. it exactly fits into the block
-                    manager.Realloc(ptr, nativeint (blockSize - offset)) |> ignore
-
-                    // try to allocate again
-                    let realPtr = x.Alloc(align, size)
-
-                    // free the temporary pointer
-                    manager.Free(ptr)
-
-                    // return the real one
-                    realPtr
-                else
-                    // the allocated pointer lies in an existing block
-                    let mem = memories.[memid]
-                    new ManagedDevicePtr(mem, offset, size, x, ptr) :> DevicePtr
+                    | None ->
+                        addBlock x
+                        x.Alloc(align, size)
             )
 
-and ManagedDevicePtr internal(memory : DeviceMemory, offset : int64, size : int64, parent : DeviceMemoryManager, ptr : managedptr) =
-    inherit DevicePtr(memory, offset, size)
-    override x.Dispose() = parent.Release ptr
+    member internal x.Free(b : DeviceBlock) =
+        if not b.IsFree then
+            lock free (fun () ->
+                let old = b
+                    
+                let b = new DeviceBlock(x, b.Memory, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
 
-    override x.TryResize(s : int64) =
-        if parent.TryResize(ptr, s) then
-            x.Size <- s
-            true
-        else
-            false
+                if not (isNull b.Prev) then b.Prev.Next <- b
+                if not (isNull b.Next) then b.Next.Prev <- b
+
+                old.Next <- null
+                old.Prev <- null
+                old.Offset <- -1L
+                old.Size <- 0L
+
+
+
+                let prev = b.Prev
+                let next = b.Next
+                let mutable isFirst = isNull prev
+                let mutable isLast = isNull next
+                if not isFirst && prev.IsFree then
+                    free.Remove(prev) |> ignore
+                        
+                    b.Prev <- prev.Prev
+                    if isNull prev.Prev then isFirst <- true
+                    else prev.Prev.Next <- b
+
+                    b.Offset <- prev.Offset
+                    b.Size <- b.Size + prev.Size
+
+                if not isLast && next.IsFree then
+                    free.Remove(next) |> ignore
+                    b.Next <- next.Next
+                    if isNull next.Next then isLast <- true
+                    else next.Next.Prev <- b
+                    b.Next <- next.Next
+
+                    b.Size <- b.Size + next.Size
+
+                b.IsFree <- true
+
+                if isFirst && isLast then
+                    assert (b.Offset = 0L && b.Size = b.Memory.Size)
+                    b.Memory.Dispose()
+                else
+                    free.Insert(b)
+
+            )
 
 and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)
@@ -1341,8 +1436,10 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
     override x.Memory = x
     override x.Device = heap.Device
 
-and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
+and [<AllowNullLiteral>] DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
     let mutable size = size
+    let mutable offset = offset
+
     static let nullptr = lazy (new DevicePtr(DeviceMemory.Null, 0L, 0L))
     static member Null = nullptr.Value
 
@@ -1358,7 +1455,10 @@ and DevicePtr internal(memory : DeviceMemory, offset : int64, size : int64) =
     abstract member TryResize : int64 -> bool
     default x.TryResize (s : int64) = s = size
 
-    member x.Offset = offset
+    member x.Offset
+        with get() = offset
+        and internal set o = offset <- o
+
     member x.Size
         with get() = size
         and internal set s = size <- s
