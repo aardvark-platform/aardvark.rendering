@@ -79,111 +79,188 @@ module Sems =
 
 
 module VulkanTests =
+    open System.Threading
     open Aardvark.Rendering.Vulkan
-    open Aardvark.Application.WinForms
     open Microsoft.FSharp.NativeInterop
 
+    type Brick<'a>(level : int, index : V3i, data : Tensor4<'a>) =
+        let mutable witness : Option<IDisposable> = None
 
+        member x.Level = level
+        member x.Index = index
+        member x.Data = data
 
-
+        member x.Witness
+            with get() = witness
+            and set r = witness <- r
 
     let run() =
-        let app = new VulkanApplication(true)
-        let device = app.Runtime.Device
+        use app = new HeadlessVulkanApplication()
+        let device = app.Device
 
-        let img = 
-            device.CreateSparseImage(
-                V3i(1024, 1024, 1024), 
-                10, 1,
-                TextureDimension.Texture3D, VkFormat.R16Unorm, 
-                VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit
+
+        let size = V3i(1024, 512, 256)
+        let brickSize = V3i(128,128,128)
+        let levels = 8
+
+        let rand = RandomSystem()
+        let img = app.Runtime.CreateSparseTexture<uint16>(size, levels, 1, TextureDimension.Texture3D, Col.Format.Gray, brickSize, 2L <<< 30)
+
+        let randomTensor (s : V3i) =
+            let data = new Tensor4<uint16>(V4i(s.X, s.Y, s.Z, 1))
+            data.SetByIndex(fun _ -> rand.UniformInt() |> uint16)
+
+        let bricks =
+            [|
+                for l in 0 .. img.MipMapLevels - 1 do
+                    let size = img.Size / (1 <<< l)
+
+                    let size = V3i(min brickSize.X size.X, min brickSize.Y size.Y, min brickSize.Z size.Z)
+                    let cnt = img.GetBrickCount l
+                    for x in 0 .. cnt.X - 1 do
+                        for y in 0 .. cnt.Y - 1 do
+                            for z in 0 .. cnt.Z - 1 do
+                                yield Brick(l, V3i(x,y,z), randomTensor size)
+
+            |]
+
+        let mutable resident = 0
+
+        let mutable count = 0
+
+        let residentBricks = System.Collections.Generic.HashSet<Brick<uint16>>()
+        let mutable frontBricks = Array.zeroCreate 0
+
+        img.OnSwap.Add (fun _ ->
+            frontBricks <- lock residentBricks (fun () -> HashSet.toArray residentBricks)
+        )
+
+
+
+        let renderResult =
+            img.Texture |> Mod.map (fun t ->
+                let img = unbox<Image> t
+                let size = brickSize
+
+
+                let tensor = Tensor4<uint16>(V4i(brickSize, 1))
+
+                let sizeInBytes = int64 brickSize.X * int64 brickSize.Y * int64 brickSize.Z * int64 sizeof<uint16>
+                let tempBuffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit) sizeInBytes
+                
+
+                device.perform {
+                    do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
+                }
+
+                let result = 
+                    [
+                        for b in frontBricks do
+                            let size = V3i b.Data.Size.XYZ
+                            
+                            device.perform {
+                                do! Command.Copy(img.[ImageAspect.Color, b.Level, 0], b.Index * brickSize, tempBuffer, 0L, V2i.OO, size)
+                            }
+                                
+                            tempBuffer.Memory.MappedTensor4<uint16>(
+                                V4i(size.X, size.Y, size.Z, 1),
+                                fun src ->
+                                    NativeTensor4.using tensor (fun dst ->
+                                        let subDst = dst.SubTensor4(V4i.Zero, V4i(size.X, size.Y, size.Z, 1))
+                                        NativeTensor4.copy src subDst
+                                    )
+                            )
+
+
+
+
+                            let should = b.Data
+                            let real = tensor.SubTensor4(V4i.Zero, V4i(size, 1))
+                            let equal = should.InnerProduct(real, (=), true, (&&))
+                            if not equal then
+                                yield b
+
+
+                    ]
+                
+                device.Delete tempBuffer
+                result
             )
 
-        let x = 1
-        let y = 1
-        let z = 1
-        let mem = img.Memory.Alloc(img.PageAlign, img.PageSizeInBytes) //f * V3i.IOO)
-        
-
-        let pi = 
-            let pi = PixImage<uint16>(Col.Format.Gray, V2i(32,32))
-            let rand = RandomSystem()
-            pi.GetChannel(Col.Channel.Gray).SetByCoord(fun _ ->
-                rand.UniformInt() |> uint16
-            ) |> ignore
-            pi
-
-        let pi2 = 
-            let pi = PixImage<uint16>(Col.Format.Gray, V2i(32,32))
-            let rand = RandomSystem()
-            pi.GetChannel(Col.Channel.Gray).SetByCoord(fun _ ->
-                rand.UniformInt() |> uint16
-            ) |> ignore
-            pi
-
-        let opi = PixImage<uint16>(Col.Format.Gray, pi.Size)
-
-        let input : DeviceMemoryImage<uint16> = device |> DeviceMemoryImage.create (V3i(32,32,1)) TextureDimension.Texture3D 1 Col.Format.Gray
-        input.Upload(0, pi)
-
-        let ihandle = 
-            device.CreateSparseImage(V3i(32,32,32), 1, 1, TextureDimension.Texture3D, VkFormat.R16Unorm, VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit)
 
 
-        ihandle.Bind(0, 0, V3i.Zero, ihandle.Size, mem)
 
-        // copy stuff there
-        device.perform {
-            do! Command.TransformLayout(input.Image, VkImageLayout.TransferSrcOptimal)
-            do! Command.TransformLayout(ihandle, VkImageLayout.TransferDstOptimal)
-            do! Command.Copy(input.Image.[ImageAspect.Color, 0, 0], V3i.Zero, ihandle.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(32,32,1))
-            do! Command.TransformLayout(input.Image, VkImageLayout.General)
-            //do! Command.TransformLayout(ihandle, VkImageLayout.General)
-        }
+        let mutable modifications = 0
+        let mutable totalErros = 0L
+        let uploader() =
+            while true do
+                let brickIndex = rand.UniformInt(bricks.Length)
+                let brick = bricks.[brickIndex]
 
-        //ihandle.Unbind(0, 0, V3i.Zero, ihandle.Size)
+                lock brick (fun () ->
+                    match brick.Witness with
+                        | Some w ->
+                            // swap() -> frontBricks.Contains brick
+                            lock residentBricks (fun () -> residentBricks.Remove brick |> ignore)
+                            w.Dispose()
+                            Interlocked.Decrement(&resident) |> ignore
+                            brick.Witness <- None
+                        | None ->
+                            //Log.line "commit(%d, %A)" brick.Level brick.Index
+                            let witness = 
+                                NativeTensor4.using brick.Data (fun data ->
+                                    img.UploadBrick(brick.Level, 0, brick.Index, data)
+                                )
+                            brick.Witness <- Some witness
+                            lock residentBricks (fun () -> residentBricks.Add brick |> ignore)
+                            Interlocked.Increment(&resident) |> ignore
+                    Interlocked.Increment(&modifications) |> ignore
+                )
 
 
-        img.Bind(0, 0, V3i.Zero, (V3i(x, y, z) * img.PageSize), mem)
 
-        input.Upload(0, pi2)
-        // copy stuff there
-        device.perform {
-            do! Command.TransformLayout(input.Image, VkImageLayout.TransferSrcOptimal)
-            do! Command.TransformLayout(ihandle, VkImageLayout.TransferDstOptimal)
-            do! Command.Copy(input.Image.[ImageAspect.Color, 0, 0], V3i.Zero, ihandle.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(32,32,1))
-            //do! Command.TransformLayout(ihandle, VkImageLayout.General)
-        }
+        let renderer() =
+            while true do
+//                Mod.force img.Texture |> ignore
+//                Log.start "frame %d" count
+//                Log.line "modification: %A" modifications
+//                Log.line "resident: %A" resident
+//                Log.stop()
+//                Thread.Sleep(16)
 
-        //VkRaw.vkDestroyImage(device.Handle, ihandle.Handle, NativePtr.zero)
-        
-        
-        let output : DeviceMemoryImage<uint16> = device |> DeviceMemoryImage.create (V3i(32,32,1)) TextureDimension.Texture3D 1 Col.Format.Gray
+                let errors = Mod.force renderResult
 
-        device.perform {
-//            do! Command.TransformLayout(input.Image, VkImageLayout.TransferSrcOptimal)
-//            do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
-//            do! Command.Copy(input.Image.[ImageAspect.Color, 0, 0], V3i.Zero, img.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(32,32,1))
-//            
-            do! Command.Barrier
-            do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
-            do! Command.TransformLayout(output.Image, VkImageLayout.TransferDstOptimal)
-            do! Command.Copy(img.[ImageAspect.Color, 0, 0], V3i.Zero, output.Image.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(32,32,1))
-            do! Command.TransformLayout(output.Image, VkImageLayout.General)
+                match errors with
+                    | [] -> 
+                        Log.start "frame %d" count
+                        Log.line "modification: %A" modifications
+                        Log.line "resident: %A" resident
+                        if totalErros > 0L then Log.warn "totalErros %A" totalErros
+                        Log.stop()
+                    | _ ->
+                        let errs = List.length errors |> int64
+                        totalErros <- totalErros + errs
+                        Log.warn "errors: %A" errs
+                        ()
+
+                Interlocked.Increment(&count) |> ignore
+
+
+        let startThread (f : unit -> unit) =
+            let t = new Thread(ThreadStart(f))
+            t.IsBackground <- true
+            t.Start()
+            t
+
+        let uploaders = 
+            Array.init 2 (fun _ -> startThread uploader)
+
+        let renderers = 
+            Array.init 1 (fun _ -> startThread renderer)
             
-        }
-
-        output.Download(0, opi)
-
-        printfn "valid: %A" (pi2.Volume.Data = opi.Volume.Data)
-
-        img.Unbind(0, 0, V3i.Zero, (V3i(x, y, z) * img.PageSize))
-
-        mem.Dispose()
+        Console.ReadLine() |> ignore
 
 
-
-        System.Environment.Exit 0
 
 
 [<EntryPoint; STAThread>]
@@ -191,10 +268,8 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    Aardvark.Rendering.Vulkan.Impl.runTest()
-    Environment.Exit 0
-
     VulkanTests.run()
+    Environment.Exit 0
 
 
     use app = new VulkanApplication(true)

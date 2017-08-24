@@ -176,6 +176,11 @@ type Instance(apiVersion : Version, layers : Set<string>, extensions : Set<strin
 
             l.section "devices:" (fun () ->
                 for d in devices do
+                    let l =
+                        if d.Index = chosenDevice then l
+                        else l.WithVerbosity(l.Verbosity + 1)
+
+
                     l.section "%d:" d.Index (fun () ->
                         if d.Index = chosenDevice then 
                             l.line "CHOSEN DEVICE"
@@ -383,3 +388,104 @@ module Instance =
 module PhysicalDevice =
     module Extensions =
         let SwapChain = "VK_KHR_swapchain"
+
+
+
+module ConsoleDeviceChooser =
+    open System.IO
+    open System.Reflection
+    open System.Diagnostics
+    open System.Runtime.InteropServices
+
+    type private KeyCode =
+        | LeftAlt = 0xA4
+        | RightAlt = 0xA5
+        | LeftShift = 0xA0
+        | RightShift = 0xA1
+
+    module private Win32 =
+        [<DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)>]
+        extern uint16 private GetKeyState(KeyCode keyCode)
+
+        let isDown (key : KeyCode) =
+            let state = GetKeyState(key) 
+            (state &&& 0x8000us) = 0x8000us
+
+    let private md5 = System.Security.Cryptography.MD5.Create()
+
+    let private newHash() =
+        Guid.NewGuid().ToByteArray() |> Convert.ToBase64String
+
+    let private appHash =
+        try
+            let ass = Assembly.GetEntryAssembly()
+            if isNull ass || String.IsNullOrWhiteSpace ass.Location then 
+                newHash()
+            else
+                ass.Location 
+                    |> System.Text.Encoding.Unicode.GetBytes
+                    |> md5.ComputeHash
+                    |> Convert.ToBase64String
+                   
+        with _ ->
+            newHash()
+               
+    let private configFile =
+        let configDir = Path.Combine(Path.GetTempPath(), "vulkan")
+
+        if not (Directory.Exists configDir) then
+            Directory.CreateDirectory configDir |> ignore
+
+
+        let fileName = appHash.Replace('/', '_')
+        Path.Combine(configDir, sprintf "%s.vkconfig" fileName)
+
+    let run(devices : seq<PhysicalDevice>) =
+        let devices = Seq.toList devices
+        match devices with
+            | [single] -> single
+            | _ -> 
+                let allIds = devices |> List.map (fun d -> string d.Index) |> String.concat ";"
+
+                let choose() =
+                    let devices = List.toArray devices
+                    Log.line "Multiple GPUs detected (please select one)"
+                    for i in 0 .. devices.Length - 1 do
+                        let d = devices.[i]
+                        Log.line "   %d: %s %s" i d.Vendor d.Name
+                    
+                    let mutable chosenId = -1
+                    while chosenId < 0 do
+                        printf " 0: "
+                        let entry = Console.ReadLine()
+                        match Int32.TryParse(entry) with
+                            | (true, v) when v >= 0 && v < devices.Length ->
+                                File.WriteAllLines(configFile, [ allIds; string v ])
+                                chosenId <- v
+                            | _ ->
+                                ()
+                            
+                    File.WriteAllLines(configFile, [ allIds; string chosenId ])
+                    devices.[chosenId]
+
+                let altDown = 
+                    match System.Environment.OSVersion with
+                        | Windows -> Win32.isDown KeyCode.LeftAlt || Win32.isDown KeyCode.RightAlt
+                        | _ -> true
+
+                if File.Exists configFile && not altDown then
+                    let cache = File.ReadAllLines configFile
+                    match cache with
+                        | [| fAll; fcache |] when fAll = allIds ->
+                    
+                            let did = Int32.Parse(fcache)
+
+                            match devices |> List.tryFind (fun d -> d.Index = did) with
+                                | Some d -> d
+                                | _ -> choose()
+
+                        | _ ->
+                            choose()
+                else
+                    choose()
+

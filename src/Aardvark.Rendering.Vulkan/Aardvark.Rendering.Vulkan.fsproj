@@ -105,6 +105,7 @@
     <Compile Include="Runtime\Compiler.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Runtime.fs" />
+    <Compile Include="Runtime\Headless.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

@@ -267,54 +267,56 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
 
     member x.Update(bindings : SparseImageBind[]) =
         if bindings.Length > 0 then
-            let binds =
-                bindings |> Array.map (fun b ->
-                    //checkBind b
+            lock x (fun () ->
+                let binds =
+                    bindings |> Array.map (fun b ->
+                        //checkBind b
 
-                    let o = b.offset
-                    let s = b.size
+                        let o = b.offset
+                        let s = b.size
 
-                    let memory, offset =
-                        match b.pointer with
-                            | Some ptr -> ptr.Memory.Handle, ptr.Offset
-                            | None -> VkDeviceMemory.Null, 0L
+                        let memory, offset =
+                            match b.pointer with
+                                | Some ptr -> ptr.Memory.Handle, ptr.Offset
+                                | None -> VkDeviceMemory.Null, 0L
 
-                    VkSparseImageMemoryBind(
-                        VkImageSubresource(VkImageAspectFlags.ColorBit, uint32 b.level, uint32 b.slice),
-                        VkOffset3D(o.X, o.Y, o.Z),
-                        VkExtent3D(s.X, s.Y, s.Z),
-                        memory,
-                        uint64 offset,
-                        VkSparseMemoryBindFlags.None
+                        VkSparseImageMemoryBind(
+                            VkImageSubresource(VkImageAspectFlags.ColorBit, uint32 b.level, uint32 b.slice),
+                            VkOffset3D(o.X, o.Y, o.Z),
+                            VkExtent3D(s.X, s.Y, s.Z),
+                            memory,
+                            uint64 offset,
+                            VkSparseMemoryBindFlags.None
+                        )
+
                     )
 
-                )
+                binds |> NativePtr.withA (fun pBinds ->
+                    let mutable images =
+                        VkSparseImageMemoryBindInfo(
+                            handle, uint32 binds.Length, pBinds
+                        )
 
-            binds |> NativePtr.withA (fun pBinds ->
-                let mutable images =
-                    VkSparseImageMemoryBindInfo(
-                        handle, uint32 binds.Length, pBinds
-                    )
-
-                let mutable info =
-                    VkBindSparseInfo(
-                        VkStructureType.BindSparseInfo, 0n,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        1u, &&images,
-                        0u, NativePtr.zero
+                    let mutable info =
+                        VkBindSparseInfo(
+                            VkStructureType.BindSparseInfo, 0n,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero,
+                            1u, &&images,
+                            0u, NativePtr.zero
                 
+                        )
+
+                    let q = device.GraphicsFamily.GetQueue()
+                    let f = device.CreateFence()
+                    lock q (fun () ->
+                        VkRaw.vkQueueBindSparse(q.Handle, 1u, &&info, f.Handle)
+                            |> check "could not bind sparse memory"
+                        f.Wait()
                     )
 
-                let q = device.GraphicsFamily.GetQueue()
-                let f = device.CreateFence()
-                lock q (fun () ->
-                    VkRaw.vkQueueBindSparse(q.Handle, 1u, &&info, f.Handle)
-                        |> check "could not bind sparse memory"
-                    f.Wait()
                 )
-
             )
 
     member x.Bind(level : int, slice : int, offset : V3i, size : V3i, ptr : DevicePtr) =
@@ -371,41 +373,26 @@ type SparseImageDeviceExtensions private() =
     static member Delete(device : Device, image : SparseImage) =
         image.Dispose()
 
-        
-module Impl = 
-    open Aardvark.Base.Incremental
-
-    type ISparseImage<'a when 'a : unmanaged> =
-        inherit IDisposable
-
-        abstract member Size : V3i
-        abstract member MipMapLevels : int
-        abstract member Count : int
-        abstract member Format : Col.Format
-        abstract member Texture : IMod<ITexture>
-        abstract member GetBrickCount : level : int -> V3i
-
-        abstract member SparseLevels : int
-        abstract member BrickSize : V3i
-        abstract member UploadBrick : level : int * slice : int * index : V3i * data : NativeTensor4<'a> -> IDisposable
-
-    [<AbstractClass; Sealed; Extension>]
-    type BufferTensorExtensions private() =
-        [<Extension>]
-        static member MappedTensor4<'a when 'a : unmanaged>(x : DevicePtr, size : V4i, action : NativeTensor4<'a> -> unit) =
-            let size = V4l size
-            x.Mapped(fun dst ->
-                let dst = 
-                    NativeTensor4<'a>(
-                        NativePtr.ofNativeInt dst, 
-                        Tensor4Info(
-                            0L,
-                            size,
-                            V4l(size.W, size.X * size.W, size.X * size.Y * size.W, 1L)
-                        )
+[<AbstractClass; Sealed; Extension>]
+type BufferTensorExtensions private() =
+    [<Extension>]
+    static member MappedTensor4<'a when 'a : unmanaged>(x : DevicePtr, size : V4i, action : NativeTensor4<'a> -> unit) =
+        let size = V4l size
+        x.Mapped(fun dst ->
+            let dst = 
+                NativeTensor4<'a>(
+                    NativePtr.ofNativeInt dst, 
+                    Tensor4Info(
+                        0L,
+                        size,
+                        V4l(size.W, size.X * size.W, size.X * size.Y * size.W, 1L)
                     )
-                action dst
-            )
+                )
+            action dst
+        )
+   
+module SparseTextureImplemetation = 
+    open Aardvark.Base.Incremental
 
     type DoubleBufferedSparseImage<'a when 'a : unmanaged>(device : Device, size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, usage : VkImageUsageFlags, brickSize : V3i, maxMemory : int64) =
         let fmt = VkFormat.ofPixFormat (PixFormat(typeof<'a>, format))
@@ -451,20 +438,19 @@ module Impl =
         
         let swapResult = MVar.empty()
 
-        let onSwap = Event<unit>()
+        let onSwap = Event<EventHandler, EventArgs>()
 
         let swapBuffers() =
             System.Threading.Tasks.Task.Factory.StartNew(fun () ->
                 ReaderWriterLock.write updateLock (fun () ->
                     Fun.Swap(&back, &front)
 
-                    onSwap.Trigger()
-
+                    onSwap.Trigger(null, null)
                     MVar.put swapResult (front :> ITexture)
                     
                     let arr = Seq.toArray pendingBinds.Values
 
-                    
+
                     // apply pending bindings
                     back.Update arr
                     pendingBinds.Clear()
@@ -473,8 +459,13 @@ module Impl =
                     for ptr in unusedPointers do ptr.Dispose()
                     unusedPointers.Clear()
 
+
                     if arr.Length > 0 then
                         brickSem.Release(arr.Length) |> ignore
+
+                    device.perform {
+                        do! Command.TransformLayout(back, VkImageLayout.TransferDstOptimal)
+                    }
                 )
             ) |> ignore
 
@@ -611,7 +602,12 @@ module Impl =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
             
-        interface ISparseImage<'a> with
+        interface ISparseTexture<'a> with
+            
+            [<CLIEvent>]
+            member x.OnSwap = onSwap.Publish
+
+
             member x.Size = size
             member x.MipMapLevels = levels
             member x.SparseLevels = back.SparseLevels
@@ -623,7 +619,6 @@ module Impl =
             member x.GetBrickCount level = x.GetBrickCount level
             member x.UploadBrick(level, slice, index, data) = x.UploadBrick(level, slice, index, data)
 
-
     type Brick<'a>(level : int, index : V3i, data : Tensor4<'a>) =
         let mutable witness : Option<IDisposable> = None
 
@@ -634,7 +629,6 @@ module Impl =
         member x.Witness
             with get() = witness
             and set r = witness <- r
-
 
     let runTest() =
         let instance = new Instance(Version(1,0,0), Set.empty, Set.empty)
@@ -672,7 +666,7 @@ module Impl =
         let residentBricks = System.Collections.Generic.HashSet<Brick<uint16>>()
         let mutable frontBricks = Array.zeroCreate 0
 
-        img.OnSwap.Add (fun () ->
+        img.OnSwap.Add (fun _ ->
             frontBricks <- lock residentBricks (fun () -> HashSet.toArray residentBricks)
         )
 

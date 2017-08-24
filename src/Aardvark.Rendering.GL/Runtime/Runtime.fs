@@ -184,6 +184,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
 
+        member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
+            failwith "not implemented"
+
+
         member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
             x.CreateFramebuffer(signature, bindings) :> _
 

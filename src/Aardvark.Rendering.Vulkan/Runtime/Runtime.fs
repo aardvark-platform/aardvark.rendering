@@ -116,7 +116,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     let debugBreak (msg : DebugMessage) =
         if Debugger.IsAttached then
             Debugger.Break()
-            ignored.Add msg.id |> ignore
 
 
     let debugMessage (msg : DebugMessage) =
@@ -161,6 +160,16 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
     member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
+
+    member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
+        new SparseTextureImplemetation.DoubleBufferedSparseImage<'a>(
+            device, 
+            size, levels, slices, 
+            dim, format,
+            VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit,
+            brickSize,
+            maxMemory
+        ) :> ISparseTexture<_>
 
 
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
@@ -413,6 +422,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.CreateStreamingTexture(mipMap) = x.CreateStreamingTexture(mipMap)
         member x.DeleteStreamingTexture(t) = x.DeleteStreamingTexture(t)
+
+
+        member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
+            x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)
+
 
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
         member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples, 1)

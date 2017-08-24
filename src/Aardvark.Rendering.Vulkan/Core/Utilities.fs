@@ -39,6 +39,8 @@ module private Utilities =
 type ILogger =
     abstract member section<'a, 'x>     : Printf.StringFormat<'a, (unit -> 'x) -> 'x> -> 'a
     abstract member line<'a, 'x>        : Printf.StringFormat<'a, unit> -> 'a
+    abstract member WithVerbosity       : int -> ILogger
+    abstract member Verbosity           : int
 
 type Logger private(verbosity : int) =
     static let instances = Array.init 6 (fun i -> Logger(i) :> ILogger)
@@ -47,6 +49,8 @@ type Logger private(verbosity : int) =
     static member Get v = instances.[v]
 
     interface ILogger with
+        member x.Verbosity = verbosity
+        member x.WithVerbosity(v) = instances.[v]
         member x.section (fmt : Printf.StringFormat<'a, (unit -> 'x) -> 'x>) =
             fmt |> Printf.kprintf (fun (str : string) ->
                 fun cont -> 
