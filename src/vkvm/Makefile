@@ -2,7 +2,7 @@
 all: deploy 
 
 deploy: vkvm.so
-	cp vkvm.so ../../lib/Native/Aardvark.Rendering.Vulkan2/linux/AMD64/vkvm.so
+	cp vkvm.so ../../lib/Native/Aardvark.Rendering.Vulkan/linux/AMD64/vkvm.so
 	cp vkvm.so ../../bin/Debug/vkvm.so
 	cp vkvm.so ../../bin/Release/vkvm.so
 

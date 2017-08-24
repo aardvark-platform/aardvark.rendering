@@ -1,324 +1,123 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open System
+open System.Threading
+open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+open Aardvark.Base
+open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
+
 #nowarn "9"
 #nowarn "51"
 
-open System
-open System.Threading
-open System.Runtime.InteropServices
-open System.Runtime.CompilerServices
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base
-
 type ImageView =
     class
-        val mutable public Handle : VkImageView
-        val mutable public Image : Image
-        val mutable public ImageViewType : VkImageViewType
-        val mutable public Format : VkFormat
-        val mutable public ChannelMapping : VkComponentMapping
-        val mutable public MipLevelRange : Range1i
-        val mutable public ArrayRange : Range1i
+        inherit Resource<VkImageView>
+        val mutable public Image            : Image
+        val mutable public ImageViewType    : VkImageViewType
+        val mutable public MipLevelRange    : Range1i
+        val mutable public ArrayRange       : Range1i
 
-        new(handle, image, viewType, format, cm, mip, arr) = { Handle = handle; Image = image; ImageViewType = viewType; Format = format; ChannelMapping = cm; MipLevelRange = mip; ArrayRange = arr }
+        interface IBackendTextureOutputView with
+            member x.texture = x.Image :> IBackendTexture
+            member x.level = x.MipLevelRange.Min
+            member x.slice = x.ArrayRange.Min
+
+        interface IFramebufferOutput with
+            member x.Format = VkFormat.toTextureFormat x.Image.Format |> TextureFormat.toRenderbufferFormat
+            member x.Samples = x.Image.Samples
+            member x.Size = x.Image.Size.XY
+
+        new(device : Device, handle : VkImageView, img, viewType, levelRange, arrayRange) = { inherit Resource<_>(device, handle); Image = img; ImageViewType = viewType; MipLevelRange = levelRange; ArrayRange = arrayRange }
     end
 
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module VkComponentMapping =
-    type private C = VkComponentSwizzle
-    let ofTextureFormat =
-       
-        let r = VkComponentSwizzle.R
-        let g = VkComponentSwizzle.G
-        let b = VkComponentSwizzle.B
-        let a = VkComponentSwizzle.A
-        let z = VkComponentSwizzle.Zero
-        let i = VkComponentSwizzle.One
+module ImageView =
 
-        let create a b c d = VkComponentMapping(a,b,c,d)
+    let private viewType (imageType : TextureDimension) (count : int) =
+        match imageType with
+            | TextureDimension.Texture1D ->
+                if count = 1 then VkImageViewType.D1d
+                else VkImageViewType.D1dArray
 
-        lookupTable [
-            TextureFormat.DualAlpha4Sgis, create r g z i
-            TextureFormat.DualAlpha8Sgis, create r g z i
-            TextureFormat.DualAlpha16Sgis, create r g z i
-            TextureFormat.DualLuminance4Sgis, create r g z i
-            TextureFormat.DualLuminance8Sgis, create r g z i
-            TextureFormat.DualLuminance16Sgis, create r g z i
-            TextureFormat.DualIntensity4Sgis, create r g z i
-            TextureFormat.DualIntensity8Sgis, create r g z i
-            TextureFormat.DualIntensity16Sgis, create r g z i
-            TextureFormat.QuadAlpha4Sgis, create r g b a
-            TextureFormat.QuadAlpha8Sgis, create r g b a
-            TextureFormat.QuadLuminance4Sgis, create r g b a
-            TextureFormat.QuadLuminance8Sgis, create r g b a
-            TextureFormat.QuadIntensity4Sgis, create r g b a
-            TextureFormat.QuadIntensity8Sgis, create r g b a
-            TextureFormat.DepthComponent, create r r r i
-            TextureFormat.Rgb, create r g b i
-            TextureFormat.Rgba, create r g b a
-            TextureFormat.Luminance, create r r r i
-            TextureFormat.LuminanceAlpha, create r r r g
-            TextureFormat.Rgb5, create r g b i
-            TextureFormat.Rgb8, create r g b i
-            TextureFormat.Rgb10, create r g b i
-            TextureFormat.Rgb16, create r g b i
-            TextureFormat.Rgba4, create r g b a
-            TextureFormat.Rgb5A1, create r g b a
-            TextureFormat.Rgba8, create r g b a
-            TextureFormat.Rgb10A2, create r g b a
-            TextureFormat.Rgba16, create r g b a
-            TextureFormat.DepthComponent16, create r r r i
-            TextureFormat.DepthComponent24, create r r r i
-            TextureFormat.DepthComponent32, create r r r i
-            TextureFormat.CompressedRg, create r g z i
-            TextureFormat.R8, create r z z i
-            TextureFormat.R16, create r z z i
-            TextureFormat.Rg8, create r g z i
-            TextureFormat.Rg16, create r g z i
-            TextureFormat.R16f, create r z z i
-            TextureFormat.R32f, create r z z i
-            TextureFormat.Rg16f, create r g z i
-            TextureFormat.Rg32f, create r g z i
-            TextureFormat.R8i, create r z z i
-            TextureFormat.R8ui, create r z z i
-            TextureFormat.R16i, create r z z i
-            TextureFormat.R16ui, create r z z i
-            TextureFormat.R32i, create r z z i
-            TextureFormat.R32ui, create r z z i
-            TextureFormat.Rg8i, create r g z i
-            TextureFormat.Rg8ui, create r g z i
-            TextureFormat.Rg16i, create r g z i
-            TextureFormat.Rg16ui, create r g z i
-            TextureFormat.Rg32i, create r g z i
-            TextureFormat.Rg32ui, create r g z i
-            TextureFormat.RgbIccSgix, create r g b i
-            TextureFormat.RgbaIccSgix, create r g b a
-            TextureFormat.AlphaIccSgix, create z z z r
-            TextureFormat.LuminanceIccSgix, create r r r i
-            TextureFormat.IntensityIccSgix, create r r r i
-            TextureFormat.LuminanceAlphaIccSgix, create r r r g
-            TextureFormat.R5G6B5IccSgix, create r g b i
-            TextureFormat.Alpha16IccSgix, create z z z r
-            TextureFormat.Luminance16IccSgix, create r r r i
-            TextureFormat.Intensity16IccSgix, create r r r i
-            TextureFormat.CompressedRgb, create r g b i
-            TextureFormat.CompressedRgba, create r g b a
-            TextureFormat.DepthStencil, create r r r i
-            TextureFormat.Rgba32f, create r g b a
-            TextureFormat.Rgb32f, create r g b i
-            TextureFormat.Rgba16f, create r g b a
-            TextureFormat.Rgb16f, create r g b i
-            TextureFormat.Depth24Stencil8, create r r r i
-            TextureFormat.R11fG11fB10f, create b g r i
-            TextureFormat.Rgb9E5, create b g r i
-            TextureFormat.Srgb, create r g b i
-            TextureFormat.Srgb8, create r g b i
-            TextureFormat.SrgbAlpha, create r g b a
-            TextureFormat.Srgb8Alpha8, create r g b a
-            TextureFormat.SluminanceAlpha, create r r r g
-            TextureFormat.Sluminance8Alpha8, create r r r g
-            TextureFormat.Sluminance, create r r r i
-            TextureFormat.Sluminance8, create r r r i
-            TextureFormat.CompressedSrgb, create r g b i
-            TextureFormat.CompressedSrgbAlpha, create r g b a
-            TextureFormat.DepthComponent32f, create r r r i
-            TextureFormat.Depth32fStencil8, create r r r i
-            TextureFormat.Rgba32ui, create r g b a
-            TextureFormat.Rgb32ui, create r g b i
-            TextureFormat.Rgba16ui, create r g b a
-            TextureFormat.Rgb16ui, create r g b i
-            TextureFormat.Rgba8ui, create r g b a
-            TextureFormat.Rgb8ui, create r g b i
-            TextureFormat.Rgba32i, create r g b a
-            TextureFormat.Rgb32i, create r g b i
-            TextureFormat.Rgba16i, create r g b a
-            TextureFormat.Rgb16i, create r g b i
-            TextureFormat.Rgba8i, create r g b a
-            TextureFormat.Rgb8i, create r g b i
-            TextureFormat.Float32UnsignedInt248Rev, create r r r i
-            TextureFormat.CompressedRgbaBptcUnorm, create r g b a
-            TextureFormat.CompressedRgbBptcSignedFloat, create r g b a
-            TextureFormat.CompressedRgbBptcUnsignedFloat, create r g b a
-            TextureFormat.R8Snorm, create r z z i
-            TextureFormat.Rg8Snorm, create r g z i
-            TextureFormat.Rgb8Snorm, create r g b i
-            TextureFormat.Rgba8Snorm, create r g b a
-            TextureFormat.R16Snorm, create r z z i
-            TextureFormat.Rg16Snorm, create r g z i
-            TextureFormat.Rgb16Snorm, create r g b i
-            TextureFormat.Rgba16Snorm, create r g b a
-            TextureFormat.Rgb10A2ui, create r g b a
-        ]
+            | TextureDimension.Texture2D ->
+                if count = 1 then VkImageViewType.D2d
+                else VkImageViewType.D2dArray
 
-    let ofColFormat =
-        let r = VkComponentSwizzle.R
-        let g = VkComponentSwizzle.G
-        let b = VkComponentSwizzle.B
-        let a = VkComponentSwizzle.A
-        let z = VkComponentSwizzle.Zero
-        let i = VkComponentSwizzle.One
+            | TextureDimension.Texture3D ->
+                if count = 1 then VkImageViewType.D3d
+                else failf "3d array textures not supported"
 
-        let create a b c d = VkComponentMapping(a,b,c,d)
+            | TextureDimension.TextureCube ->
+                if count % 6 <> 0 then failf "ill-aligned cube-count %A" count
+                if count = 6 then VkImageViewType.Cube
+                else VkImageViewType.CubeArray
 
-        lookupTable [
-            Col.Format.Alpha,       create z z z a
-            Col.Format.BGR,         create r g b i
-            Col.Format.BGRA,        create r g b a
-            Col.Format.BGRP,        create r g b a
-            Col.Format.BW,          create r r r i
-            Col.Format.Gray,        create r r r i
-            Col.Format.GrayAlpha,   create r r r g
-            Col.Format.NormalUV,    create r g z i
-            Col.Format.RGB,         create r g b i
-            Col.Format.RGBA,        create r g b a
-            Col.Format.RGBP,        create r g b a
-        ]
+            | _ ->
+                failf "invalid image type: %A" imageType
 
-    let rgba =
-        VkComponentMapping(
-            VkComponentSwizzle.R,
-            VkComponentSwizzle.G,
-            VkComponentSwizzle.B, 
-            VkComponentSwizzle.A
-        )
+    let create (componentMapping : VkComponentMapping) (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
+        let levels = 1 + levelRange.Max - levelRange.Min
+        let slices = 1 + arrayRange.Max - arrayRange.Min
+        if levels < 1 then failf "cannot create image view with level-count: %A" levels
+        if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
-[<AbstractClass; Sealed; Extension>]
-type ImageViewExtensions private() =
+        let aspect = VkFormat.toShaderAspect img.Format
 
-    [<Extension>]
-    static member Delete(this : Context, view : ImageView) =
-        if view.Handle.IsValid then
-            VkRaw.vkDestroyImageView(this.Device.Handle, view.Handle, NativePtr.zero)
+        let viewType = viewType img.Dimension slices
+        let mutable info = 
+            VkImageViewCreateInfo(
+                VkStructureType.ImageViewCreateInfo, 0n,
+                VkImageViewCreateFlags.MinValue,
+                img.Handle,
+                viewType, 
+                img.Format,
+                componentMapping,
+                VkImageSubresourceRange(
+                    aspect, 
+                    uint32 levelRange.Min,
+                    uint32 levels,
+                    uint32 arrayRange.Min,
+                    uint32 slices
+                )
+            )
+        let mutable handle = VkImageView.Null
+        VkRaw.vkCreateImageView(device.Handle, &&info, NativePtr.zero, &&handle)
+            |> check "could not create image view"
+
+        ImageView(device, handle, img, viewType, levelRange, arrayRange)
+
+    let delete (view : ImageView) (device : Device) =
+        if device.Handle <> 0n && view.Handle.IsValid then
+            VkRaw.vkDestroyImageView(device.Handle, view.Handle, NativePtr.zero)
             view.Handle <- VkImageView.Null
 
-    [<Extension>]
-    static member CreateImageView(this : Context, image : Image, viewType : VkImageViewType,
-                                  levels : Range1i, slices : Range1i, aspect : VkImageAspectFlags) =
-
-        let mapping = 
-            image.Format 
-                |> VkFormat.toColFormat
-                |> VkComponentMapping.ofColFormat
-
-        let range = 
-            VkImageSubresourceRange(
-                aspect,
-                uint32 levels.Min, 
-                uint32 levels.Size + 1u, 
-                uint32 slices.Min, 
-                uint32 slices.Size + 1u
-            )
-
-        let mutable info =
-            VkImageViewCreateInfo(
-                VkStructureType.ImageViewCreateInfo,
-                0n, VkImageViewCreateFlags.MinValue,
-                image.Handle,
-                viewType, 
-                image.Format,
-                mapping,
-                range
-            )
-
-        let mutable view = VkImageView.Null
-        VkRaw.vkCreateImageView(this.Device.Handle, &&info, NativePtr.zero, &&view) |> check "vkCreateImageView"
-
-        ImageView(view, image, VkImageViewType.D2d, image.Format, mapping, Range1i(0, image.MipMapLevels-1), Range1i(0, 0))
+[<AbstractClass; Sealed; Extension>]
+type ContextImageViewExtensions private() =
 
     [<Extension>]
-    static member CreateImageView(this : Context, image : Image, viewType : VkImageViewType,
-                                  levels : Range1i, slices : Range1i) =
-        ImageViewExtensions.CreateImageView(
-            this,
-            image,
-            viewType,
-            levels,
-            slices, 
-            VkImageAspectFlags.ColorBit
-        )
+    static member inline CreateImageView(this : Device, image : Image, levelRange : Range1i, arrayRange : Range1i, comp : VkComponentMapping) =
+        this |> ImageView.create comp image levelRange arrayRange
 
     [<Extension>]
-    static member CreateImageView(this : Context, image : Image, viewType : VkImageViewType,
-                                  levels : Range1i) =
-        ImageViewExtensions.CreateImageView(
-            this,
-            image,
-            viewType,
-            levels,
-            Range1i(0, image.ArraySize-1), 
-            VkImageAspectFlags.ColorBit
-        )
+    static member inline CreateImageView(this : Device, image : Image, baseLevel : int, levels : int, baseSlice : int, slices : int, comp : VkComponentMapping) =
+        this |> ImageView.create comp image (Range1i(baseLevel, baseLevel + levels - 1)) (Range1i(baseSlice, baseSlice + slices - 1))
 
     [<Extension>]
-    static member CreateImageView(this : Context, image : Image, viewType : VkImageViewType) =
-        ImageViewExtensions.CreateImageView(
-            this,
-            image,
-            viewType,
-            Range1i(0, image.MipMapLevels-1),
-            Range1i(0, image.ArraySize-1), 
-            VkImageAspectFlags.ColorBit
-        )
+    static member inline CreateImageView(this : Device, image : Image, levelRange : Range1i, comp : VkComponentMapping) =
+        this |> ImageView.create comp image levelRange (Range1i(0, image.Count - 1))
 
     [<Extension>]
-    static member CreateImageView(this : Context, image : Image) =
-        let viewType =
-            match image.Dimension with
-                | TextureDimension.Texture1D ->
-                    if image.ArraySize > 1 then VkImageViewType.D1dArray
-                    else VkImageViewType.D1d
+    static member inline CreateImageView(this : Device, image : Image, comp : VkComponentMapping) =
+        this |> ImageView.create comp image (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Count - 1))
 
-                | TextureDimension.Texture2D ->
-                    if image.ArraySize > 1 then VkImageViewType.D2dArray
-                    else VkImageViewType.D2d
+    [<Extension>]
+    static member inline CreateImageView(this : Device, image : Image, level : int, slice : int, comp : VkComponentMapping) =
+        this |> ImageView.create comp image (Range1i(level, level)) (Range1i(slice, slice))
 
-                | TextureDimension.TextureCube ->
-                    if image.ArraySize > 6 then VkImageViewType.CubeArray
-                    else VkImageViewType.Cube
-
-                | _ ->
-                    VkImageViewType.D3d
-
-        ImageViewExtensions.CreateImageView(
-            this,
-            image,
-            viewType,
-            Range1i(0, image.MipMapLevels-1),
-            Range1i(0, image.ArraySize-1), 
-            VkImageAspectFlags.ColorBit
-        )
 
 
     [<Extension>]
-    static member CreateImageOutputView(this : Context, image : Image, level : int, slice : int) =
-        ImageViewExtensions.CreateImageView(
-            this,
-            image,
-            VkImageViewType.D2d,
-            Range1i(level, level),
-            Range1i(slice, slice), 
-            VkImageAspectFlags.ColorBit
-        )
-
-    [<Extension>]
-    static member CreateImageOutputView(this : Context, image : Image, level : int) =
-        ImageViewExtensions.CreateImageView(
-            this,
-            image,
-            VkImageViewType.D2d,
-            Range1i(level, level),
-            Range1i(0, 0), 
-            VkImageAspectFlags.ColorBit
-        )
-
-    [<Extension>]
-    static member CreateImageOutputView(this : Context, image : Image) =
-        ImageViewExtensions.CreateImageView(
-            this,
-            image,
-            VkImageViewType.D2d,
-            Range1i(0, 0),
-            Range1i(0, 0), 
-            VkImageAspectFlags.ColorBit
-        )
+    static member inline Delete(this : Device, view : ImageView) =
+        this |> ImageView.delete view

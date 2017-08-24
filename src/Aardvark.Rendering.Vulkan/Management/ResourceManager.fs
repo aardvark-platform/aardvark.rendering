@@ -1,413 +1,242 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open System
+open System.Threading
+open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+open Aardvark.Base
+open Aardvark.Base.Rendering
+open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
+open Aardvark.Base.Incremental
+
 #nowarn "9"
 #nowarn "51"
 
-open System
-open System.Threading
-open System.Runtime.InteropServices
-open System.Runtime.CompilerServices
-open System.Collections.Concurrent
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base
-open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
-open Aardvark.Rendering.Vulkan
-
-type IResource =
-    inherit IAdaptiveObject
-    inherit IDisposable
-    abstract member AddRef : unit -> unit
-    abstract member Update : IAdaptiveObject -> Command<unit>
-
-[<AbstractClass>]
-type Resource<'h when 'h : equality>(cache : ResourceCache<'h>) as this =
-    inherit AdaptiveObject()
-
-    static let resName = typeof<'h> |> ReflectionHelpers.getPrettyName
-
-    let mutable currentHandle = None
-    let handleMod = 
-        Mod.custom (fun self ->
-            match currentHandle with
-                | Some h -> h
-                | None ->
-                    let cmd = this.Update(null)
-                    cache.Context.DefaultQueue.RunSynchronously cmd
-                    currentHandle.Value
-        )
-    
-    let mutable refCount = 0
-    let mutable key = []
-        
+//type private DrawCallResource(device : Device, indexed : bool, calls : IMod<list<DrawCallInfo>>) =
+//    inherit Rendering.Resource<nativeint, nativeint>(ResourceKind.Unknown)
+//
+//    override x.View h = h
+//
+//    override x.Create(token : AdaptiveToken, rt : RenderToken, old : Option<nativeint>) =
+//        match old with
+//            | Some o ->
+//                device.UpdateDrawCall(NativePtr.ofNativeInt o, indexed, calls.GetValue token)
+//                o
+//            | None -> 
+//                let ptr = device.CreateDrawCall(indexed, calls.GetValue token)
+//                NativePtr.toNativeInt ptr
+//
+//    override x.Destroy(old : nativeint) =
+//        device.Delete(NativePtr.ofNativeInt<DrawCall> old)
+//
+//    override x.GetInfo _ =
+//        ResourceInfo.Zero
 
 
-    abstract member Create  : Option<'h> -> 'h * Command<unit>
-    abstract member Destroy : 'h -> unit
-   
-    member x.Handle = handleMod
-
-    member x.Key
-        with get() = key
-        and set k = key <- k
-
-    member x.AddRef() =
-        Interlocked.Increment(&refCount) |> ignore
-
-    member x.RemoveRef() =
-        if Interlocked.Decrement(&refCount) = 0 then
-            cache.Remove x.Key
-            x.Kill()
-
-    member x.Update(caller : IAdaptiveObject) =
-        x.EvaluateIfNeeded caller Command.nop (fun () ->
-            if refCount <= 0 then
-                failf "cannot update disposed resource"
-
-            let old = currentHandle
-            let h, update = x.Create old
-
-            match old with
-                | Some o when o = h -> 
-                    update
-
-                | Some o ->
-                    currentHandle <- Some h
-                    command {
-                        try 
-                            do! update
-                        finally
-                            transact (fun () -> handleMod.MarkOutdated())
-                            x.Destroy o
-                    }
-                    
-                | None ->
-                    currentHandle <- Some h
-                    transact (fun () -> handleMod.MarkOutdated())
-                    update
-
-
-        )
-            
-    member x.Dispose() = x.RemoveRef()
-
-    member internal x.Kill() =
-        refCount <- 0
-        key <- []
-        match currentHandle with
-            | Some h -> 
-                currentHandle <- None
-                transact (fun () -> handleMod.MarkOutdated())
-                x.Destroy h
-
-            | None -> 
-                ()
-
-
-    interface IDisposable with 
-        member x.Dispose() = x.Dispose()
-
-    interface IResource with
-        member x.AddRef() = x.AddRef()
-        member x.Update(caller) = x.Update(caller)
-                
-and ResourceCache<'h when 'h : equality>(context : Context) =
-    let cache = ConcurrentDictionary<list<obj>, Resource<'h>>()
-
-    member x.Context : Context = context
-
-    member x.Remove (key : list<obj>) : unit =
-        match cache.TryRemove key with
-            | (true, res) -> res.Key <- []
-            | _ -> ()
-
-    member x.GetOrCreate(key : list<obj>, f : unit -> Resource<'h>) =
-        let res = 
-            cache.GetOrAdd(key, fun _ -> 
-                let res = f()
-                res.Key <- key
-                res
-            ) 
-        res.AddRef()
-        res
-
-    member x.Clear() =
-        cache.Values |> Seq.iter (fun r -> r.Kill())
-        cache.Clear()
+[<AllowNullLiteral>]
+type ResourceManager private (parent : Option<ResourceManager>, device : Device, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
+    let derivedCache (f : ResourceManager -> ResourceCache<'a, 'v>) =
+        ResourceCache<'a, 'v>(Option.map f parent, Option.map snd renderTaskInfo)
  
-    
-type ResourceManager(runtime : IRuntime, ctx : Context) =
-    inherit Resource(ctx)
+        
+    let descriptorPool = 
+        match parent with
+            | Some p -> p.DescriptorPool
+            | _ -> device.CreateDescriptorPool(1 <<< 20, 1 <<< 22)
 
-    let descriptorPool = ctx.CreateDescriptorPool (1 <<< 20)
+    let bufferCache             = derivedCache (fun m -> m.BufferCache)
+    let bufferViewCache         = derivedCache (fun m -> m.BufferViewCache)
+    let indexBufferCache        = derivedCache (fun m -> m.IndexBufferCache)
+    let indirectBufferCache     = derivedCache (fun m -> m.IndirectBufferCache)
+    let imageCache              = derivedCache (fun m -> m.ImageCache)
+    let imageViewCache          = derivedCache (fun m -> m.ImageViewCache)
+    let surfaceCache            = derivedCache (fun m -> m.SurfaceCache)
+    let samplerCache            = derivedCache (fun m -> m.SamplerCache)
+    let uniformBufferCache      = derivedCache (fun m -> m.UniformBufferCache)
+    let pipelineCache           = derivedCache (fun m -> m.PipelineCache)
+    let descriptorSetCache      = derivedCache (fun m -> m.DescriptorSetCache)
 
-    let bufferCache = ResourceCache<Buffer>(ctx)
-    let indirectBufferCache = ResourceCache<IndirectBuffer>(ctx)
-    let bufferViewCache = ResourceCache<BufferView>(ctx)
-    let imageCache = ResourceCache<Image>(ctx)
-    let imageViewCache = ResourceCache<ImageView>(ctx)
-    let samplerCache = ResourceCache<Sampler>(ctx)
-    let shaderProgramCache = ResourceCache<ShaderProgram>(ctx)
-    let pipelineCache = ResourceCache<Pipeline>(ctx)
-    let uniformBufferCache = ResourceCache<UniformBuffer>(ctx)
-    let descriptorSetCache = ResourceCache<DescriptorSet>(ctx)
-    let renderPassCache = ResourceCache<RenderPass>(ctx)
+    let directCallCache = derivedCache (fun m -> m.DirectCallCache)
+    let indirectCallCache = derivedCache (fun m -> m.IndirectCallCache)
+    let vertexBindingCache = derivedCache (fun m -> m.VertexBindingCache)
+    let descriptorSetBindingCache = derivedCache (fun m -> m.DescriptorSetBindingCache)
+    let indexBufferBindingCache = derivedCache (fun m -> m.IndexBufferBindingCache)
 
-    override x.Release() =
+    member private x.BufferCache : ResourceCache<Buffer, VkBuffer> = bufferCache
+    member private x.BufferViewCache : ResourceCache<BufferView, VkBufferView> = bufferViewCache
+    member private x.IndexBufferCache : ResourceCache<Buffer, VkBuffer> = indexBufferCache
+    member private x.IndirectBufferCache : ResourceCache<IndirectBuffer, VkBuffer> = indirectBufferCache
+    member private x.ImageCache : ResourceCache<Image, VkImage> = imageCache
+    member private x.ImageViewCache : ResourceCache<ImageView, VkImageView> = imageViewCache
+    member private x.SurfaceCache : ResourceCache<ShaderProgram, nativeint> = surfaceCache
+    member private x.SamplerCache : ResourceCache<Sampler, VkSampler> = samplerCache
+    member private x.UniformBufferCache : ResourceCache<UniformBuffer, VkBuffer> = uniformBufferCache
+    member private x.PipelineCache : ResourceCache<Pipeline, VkPipeline> = pipelineCache
+    member private x.DescriptorSetCache : ResourceCache<DescriptorSet, VkDescriptorSet> = descriptorSetCache
+    member private x.DirectCallCache : ResourceCache<DrawCall, DrawCall> = directCallCache
+    member private x.IndirectCallCache : ResourceCache<DrawCall, DrawCall> = indirectCallCache
+    member private x.VertexBindingCache : ResourceCache<VertexBufferBinding, VertexBufferBinding> = vertexBindingCache
+    member private x.DescriptorSetBindingCache : ResourceCache<DescriptorSetBinding, DescriptorSetBinding> = descriptorSetBindingCache
+    member private x.IndexBufferBindingCache : ResourceCache<IndexBufferBinding, IndexBufferBinding> = indexBufferBindingCache
 
-        ctx.Delete descriptorPool
+    member private x.DescriptorPool : DescriptorPool = descriptorPool
 
-        bufferCache.Clear()
-        bufferViewCache.Clear()
-        imageCache.Clear()
-        imageViewCache.Clear()
-        samplerCache.Clear()
-        shaderProgramCache.Clear()
-        pipelineCache.Clear()
-        uniformBufferCache.Clear()
-        descriptorSetCache.Clear()
-
-    member x.Context = ctx
-    member x.Runtime = runtime
-
-    // render passes
+    member x.Device = device
 
     member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
-        renderPassCache.GetOrCreate(
-            [signature], 
-            fun self ->
-                let r = ref 0
-
-                let signature, depth =
-                    match Map.tryFind DefaultSemantic.Depth signature with
-                        | Some d -> (Map.remove DefaultSemantic.Depth signature), Some d
-                        | _ -> signature, None
-
-                { new Resource<RenderPass>(renderPassCache) with
-                    member x.Create _ = 
-                        
-                        let attachments =
-                            signature
-                                |> Map.toSeq
-                                |> Seq.map (fun (sem, a) ->
-                                    sem, {
-                                        format = VkFormat.ofRenderbufferFormat a.format
-                                        samples = a.samples
-                                        clearMask = ClearMask.None
-                                    }
-                                )
-                                |> Seq.toArray
-
-                        let depth =
-                            match depth with
-                                | Some d -> Some { format = VkFormat.ofRenderbufferFormat d.format; samples = d.samples; clearMask = ClearMask.None }
-                                | _ -> None
-
-                        match depth with
-                            | Some d -> ctx.Device.CreateRenderPass(attachments, d), Command.nop
-                            | None -> ctx.Device.CreateRenderPass(attachments), Command.nop
-
-                    member x.Destroy h =
-                        ctx.Device.Delete(h)
-                }
-        )
-
-
-    // buffers
-
-    member x.CreateBuffer(data : IMod<IBuffer>, usage : VkBufferUsageFlags) =
-        bufferCache.GetOrCreate(
-            [data; usage],
-            fun () ->
-                let mutable created = false
-                { new Resource<Buffer>(bufferCache) with
-                    member x.Create(old) =
-                        let input = data.GetValue(x)
-
-                        match input with
-                            | :? Buffer as b ->
-                                if created then 
-                                    old |> Option.iter ctx.Delete
-                                    created <- false
-
-                                b, Command.nop
-
-                            | content ->
-                                let old = if created then old else None
-                                created <- true
-                                ctx.CreateBufferCommand(old, content, usage)
-
-                    member x.Destroy(h) =
-                        if created then ctx.Delete h
-                        created <- false
-                }
-
-        )
-
-    member x.CreateBufferView(elementType : Type, offset : int64, size : int64, buffer : Resource<Buffer>) =
-        let format = elementType.GetVertexInputFormat()
-        bufferViewCache.GetOrCreate(
-            [elementType; offset; size; buffer],
-            fun () ->
-                { new Resource<BufferView>(bufferViewCache) with
-                    member x.Create(old) =
-                        old |> Option.iter ctx.Delete
-
-                        let buffer = buffer.Handle.GetValue(x)
-                        let size =
-                            if size < 0L then buffer.Size - offset
-                            else size
-
-                        let view =
-                            ctx.CreateBufferView(
-                                buffer, 
-                                format,
-                                offset,
-                                size
-                            )
-
-                        view, Command.nop
-
-                    member x.Destroy(h) =
-                        ctx.Delete(h)
-                }
-        )
-
-    member x.CreateBufferView(view : Aardvark.Base.BufferView, buffer : Resource<Buffer>) =
-        x.CreateBufferView(view.ElementType, int64 view.Offset, -1L, buffer)
-
-    member x.CreateBuffer(data : IMod<Array>, usage : VkBufferUsageFlags) =
-        x.CreateBuffer(data |> Mod.map (fun a -> ArrayBuffer(a) :> IBuffer), usage)
+        device.CreateRenderPass(signature)
 
     member x.CreateBuffer(data : IMod<IBuffer>) =
-        x.CreateBuffer(data, VkBufferUsageFlags.VertexBufferBit)
+        match data with
+            | :? SingleValueBuffer as data ->
+                let update (h : Buffer) (v : V4f) =
+                    device.eventually {
+                        let temp = device.HostMemory.AllocTemp(device.MinUniformBufferOffsetAlignment, 16L)
+                        temp.Mapped(fun ptr -> NativeInt.write ptr v)
+                        try do! Command.Copy(temp, h)
+                        finally temp.Dispose()
+                    }
+                    h
+                bufferCache.GetOrCreate(data.Value, {
+                    create = fun v      -> device.CreateBuffer(VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit, ArrayBuffer [|v|])
+                    update = fun h v    -> update h v
+                    delete = fun h      -> device.Delete(h)
+                    info =   fun h      -> h.Size |> Mem |> ResourceInfo
+                    view =   fun h -> h.Handle
+                    kind = ResourceKind.Buffer
+                })
+            | _ -> 
+                bufferCache.GetOrCreate<IBuffer>(data, {
+                    create = fun b      -> device.CreateBuffer(VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
+                    update = fun h b    -> device.Delete(h); device.CreateBuffer(VkBufferUsageFlags.VertexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
+                    delete = fun h      -> device.Delete(h)
+                    info =   fun h      -> h.Size |> Mem |> ResourceInfo
+                    view =   fun h -> h.Handle
+                    kind = ResourceKind.Buffer
+                })
+
+    member x.CreateBufferView(view : Aardvark.Base.BufferView, data : IResource<Buffer, VkBuffer>) =
+        let fmt = VkFormat.ofType view.ElementType
+        let offset = view.Offset |> int64
+
+        bufferViewCache.GetOrCreateDependent<Buffer, VkBuffer>(data, [fmt :> obj; offset :> obj], {
+            create = fun b      -> device.CreateBufferView(b, fmt, offset, b.Size - offset)
+            update = fun h b    -> device.Delete(h); device.CreateBufferView(b, fmt, offset, b.Size - offset)
+            delete = fun h      -> device.Delete(h)
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun h -> h.Handle
+            kind = ResourceKind.UniformLocation
+        })
 
     member x.CreateIndexBuffer(data : IMod<IBuffer>) =
-        x.CreateBuffer(data, VkBufferUsageFlags.IndexBufferBit)
+        indexBufferCache.GetOrCreate(data, [], {
+            create = fun b      -> device.CreateBuffer(VkBufferUsageFlags.IndexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
+            update = fun h b    -> device.Delete(h); device.CreateBuffer(VkBufferUsageFlags.IndexBufferBit ||| VkBufferUsageFlags.TransferDstBit, b)
+            delete = fun h      -> device.Delete(h)
+            info =   fun h      -> h.Size |> Mem |> ResourceInfo
+            view =   fun h -> h.Handle
+            kind = ResourceKind.Buffer
+        })
 
+    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IIndirectBuffer>) =
+        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed], {
+            create = fun b      -> device.CreateIndirectBuffer(indexed, b)
+            update = fun h b    -> device.Delete(h); device.CreateIndirectBuffer(indexed, b)
+            delete = fun h      -> device.Delete(h)
+            info =   fun h      -> h.Size |> Mem |> ResourceInfo
+            view =   fun h      -> h.Handle
+            kind = ResourceKind.Buffer
+        })
 
-    member x.CreateIndirectBuffer(data : IMod<IIndirectBuffer>, indexed : bool) =
-        indirectBufferCache.GetOrCreate(
-            [data; indexed],
-            fun () ->
-                let mutable created = false
-                { new Resource<IndirectBuffer>(indirectBufferCache) with
-                    member x.Create(old) =
-                        let input = data.GetValue(x).Buffer
-
-                        match input with
-                            | :? IndirectBuffer as b ->
-                                if created then 
-                                    old |> Option.iter ctx.Delete
-                                    created <- false
-
-                                b, Command.nop
-
-                            | content ->
-                                let old1 = if created then old else None
-                                created <- true
-                                ctx.CreateIndirectBufferCommand(old1, content, indexed)
-
-                    member x.Destroy(h) =
-                        if created then ctx.Delete h
-                }
-
-        )  
-
-    // textures
 
     member x.CreateImage(data : IMod<ITexture>) =
-        match data with
-            | :? IOutputMod<ITexture> as o ->
-                o.Acquire()
+        imageCache.GetOrCreate<ITexture>(data, {
+            create = fun b      -> device.CreateImage(b)
+            update = fun h b    -> device.Delete(h); device.CreateImage(b)
+            delete = fun h      -> device.Delete(h)
+            info =   fun h      -> h.Memory.Size |> Mem |> ResourceInfo
+            view =   fun h      -> h.Handle
+            kind = ResourceKind.Texture
+        })
 
-                { new Resource<Image>(Unchecked.defaultof<_>) with
-                    member x.Create _ =
-                        let img = o.GetValue(x) |> unbox<Image>
-                        img, Command.nop
-                    member x.Destroy _ = o.Release()
-                }
+    member x.CreateImageView(data : IResource<Image, VkImage>, mapping : VkComponentMapping) =
+        imageViewCache.GetOrCreateDependent<Image, VkImage>(data, [mapping], {
+            create = fun b      -> device.CreateImageView(b, mapping)
+            update = fun h b    -> device.Delete(h); device.CreateImageView(b, mapping)
+            delete = fun h      -> device.Delete(h)
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun h      -> h.Handle
+            kind = ResourceKind.Texture
+        })
 
-            | _ ->
-                imageCache.GetOrCreate(
-                    [data],
-                    fun () ->
-                        let mutable created = false
-                        { new Resource<Image>(imageCache) with
-                            member x.Create old =
-                                let tex = data.GetValue(x)
+    member x.CreateSampler (sam : IMod<SamplerStateDescription>) =
+        samplerCache.GetOrCreate<SamplerStateDescription>(sam, {
+            create = fun b      -> device.CreateSampler b
+            update = fun h b    -> device.Delete(h); device.CreateSampler b
+            delete = fun h      -> device.Delete h
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun h      -> h.Handle
+            kind = ResourceKind.SamplerState
+        })
 
-                                match tex with
-                                    | :? Image as t ->
-                                        if created then 
-                                            old |> Option.iter ctx.Delete
-                                            created <- false
-                                        t, Command.nop
+    member x.CreateShaderProgram(signature : IFramebufferSignature, surface : IMod<ISurface>) =
+        let renderPass =
+            match signature with
+                | :? RenderPass as p -> p
+                | _ -> failf "invalid signature: %A" signature
+        surfaceCache.GetOrCreate<ISurface>(surface, [signature :> obj], {
+            create = fun b      -> device.CreateShaderProgram(renderPass, b)
+            update = fun h b    -> device.Delete(h); device.CreateShaderProgram(renderPass, b)
+            delete = fun h      -> device.Delete(h);
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun h      -> 0n
+            kind = ResourceKind.ShaderProgram
+        })
 
-                                    | tex ->
-                                        if created then old |> Option.iter ctx.Delete
-                                        else created <- true
+    member x.CreateUniformBuffer(scope : Ag.Scope, layout : UniformBufferLayout, u : IUniformProvider, additional : SymbolDict<IMod>) =
+        let values =
+            layout.fields 
+            |> List.map (fun (f) ->
+                let sem = Symbol.Create f.name
+                match Uniforms.tryGetDerivedUniform f.name u with
+                    | Some r -> f, r
+                    | None -> 
+                        match u.TryGetUniform(scope, sem) with
+                            | Some v -> f, v
+                            | None -> 
+                                match additional.TryGetValue sem with
+                                    | (true, m) -> f, m
+                                    | _ -> failwithf "[Vulkan] could not get uniform: %A" f
+            )
 
-                                        ctx.CreateImageCommand(tex)
-                                    
+        let writers = 
+            values |> List.map (fun (target, m) ->
+                match m.GetType() with
+                    | ModOf tSource -> m, UniformWriters.getWriter target.offset target.fieldType tSource
+                    | _ -> failf ""
+            )
 
-                            member x.Destroy h =
-                                if created then ctx.Delete h
-                                created <- false
-                        }
-                )
+        let key = (layout :> obj) :: (values |> List.map (fun (_,v) -> v :> obj))
 
-    member x.CreateImageView(image : Resource<Image>) =
-        imageViewCache.GetOrCreate(
-            [image],
-            fun () ->
-                { new Resource<ImageView>(imageViewCache) with
-                    member x.Create old =
-                        let img = image.Handle.GetValue(x)
-                        let view = ctx.CreateImageView(img)
-                        view, Command.nop
+        uniformBufferCache.GetOrCreate(
+            key, fun () ->
+                { new Aardvark.Base.Rendering.Resource<UniformBuffer, VkBuffer>(ResourceKind.UniformBuffer) with
 
-                    member x.Destroy h = 
-                        ctx.Delete h
-                }
-        )
+                    member x.View h =
+                        h.Handle
 
-    member x.CreateSampler(sampler : IMod<SamplerStateDescription>) =
-        samplerCache.GetOrCreate(
-            [sampler],
-            fun () ->
-                { new Resource<Sampler>(samplerCache) with
-                    member x.Create old =
-                        old |> Option.iter ctx.Delete
-                        
-                        let desc = sampler.GetValue(x)
-                        let sam = ctx.CreateSampler(desc)
+                    member x.GetInfo b = 
+                        b.Size |> Mem |> ResourceInfo
 
-                        sam, Command.nop
-
-                    member x.Destroy h =
-                        ctx.Delete h
-                }
-        )
-
-    member x.CreateSampler(sampler : SamplerStateDescription) =
-        x.CreateSampler(Mod.constant sampler)
-
-
-    // shaders/pipelines
-
-    member x.CreateShaderProgram(pass : RenderPass, surface : IMod<ISurface>) =
-        shaderProgramCache.GetOrCreate(
-            [pass; surface],
-            fun () ->
-                let device = ctx.Device
-                { new Resource<ShaderProgram>(shaderProgramCache) with
-                    member x.Create old =
-                        old |> Option.iter device.Delete
-                        let s = surface.GetValue(x)
-                        let prog = device.CreateShaderProgram(runtime, s, pass)
-
-                        prog, Command.nop
+                    member x.Create(token, rt, old) =
+                        let buffer = 
+                            match old with
+                                | None -> device.CreateUniformBuffer(layout)
+                                | Some o -> o
+                        for (m,w) in writers do w.Write(token, m, buffer.Storage.Pointer)
+                        device.Upload(buffer)
+                        buffer
 
                     member x.Destroy h =
                         device.Delete h
@@ -415,157 +244,268 @@ type ResourceManager(runtime : IRuntime, ctx : Context) =
         )
 
     member x.CreatePipeline(pass            : RenderPass,
-                            program         : Resource<ShaderProgram>,
-                            inputs          : Map<string, bool * Type>,
+                            program         : IResource<ShaderProgram>,
+                            inputs          : Map<Symbol, bool * Aardvark.Base.BufferView>,
                             geometryMode    : IMod<IndexedGeometryMode>,
                             fillMode        : IMod<FillMode>,
                             cullMode        : IMod<CullMode>,
                             blendMode       : IMod<BlendMode>,
                             depthTest       : IMod<DepthTestMode>,
-                            stencilMode     : IMod<StencilMode>) =
+                            stencilMode     : IMod<StencilMode>,
+                            writeBuffers    : Option<Set<Symbol>>) =
+
+        let writeBuffers =
+            match writeBuffers with
+                | Some set -> 
+                    if Set.isSuperset set pass.Semantics then pass.Semantics
+                    else set
+                | None ->
+                    pass.Semantics
+        let key =
+            [ 
+                pass :> obj; 
+                program :> obj
+                inputs :> obj
+                geometryMode :> obj
+                fillMode :> obj
+                cullMode :> obj
+                blendMode :> obj
+                depthTest :> obj
+                stencilMode :> obj
+                writeBuffers :> obj
+            ]
+
+        let anyAttachment = 
+            match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
+                | Some (_,(_,a)) -> a
+                | None -> pass.DepthStencilAttachment |> Option.get
 
         pipelineCache.GetOrCreate(
-            [pass; program; inputs; geometryMode; cullMode; fillMode; blendMode; depthTest; stencilMode],
-            fun () ->
-                let attachments = pass.ColorAttachments.Length
+            key, fun () ->
+                let writeMasks = Array.zeroCreate pass.ColorAttachmentCount
+                for (i, (sem,_)) in Map.toSeq pass.ColorAttachments do 
+                    if Set.contains sem writeBuffers then writeMasks.[i] <- true
+                    else writeMasks.[i] <- false
 
-                let samples = 
-                    if attachments > 0 then
-                        let sem, t = pass.ColorAttachments.[0]
-                        t.samples
-                    else
-                        let t = pass.DepthAttachment.Value
-                        t.samples
+                let writeDepth = Set.contains DefaultSemantic.Depth writeBuffers
 
-                let vertexInputState = 
-                    VertexInputState.create inputs
+                let prog = program.Handle.GetValue()
+                let usesDiscard = program.Handle.GetValue().HasDiscard
+                let vertexInputState = VertexInputState.create inputs
+                let inputAssembly = Mod.map InputAssemblyState.ofIndexedGeometryMode geometryMode
+                let rasterizerState = Mod.custom (fun self -> RasterizerState.create usesDiscard (depthTest.GetValue self) (cullMode.GetValue self) (fillMode.GetValue self))
+                let colorBlendState = Mod.map (ColorBlendState.create writeMasks pass.ColorAttachmentCount) blendMode
+                let multisampleState = MultisampleState.create prog.SampleShading anyAttachment.samples
+                let depthState = Mod.map (DepthState.create writeDepth) depthTest
+                let stencilState = Mod.map StencilState.create stencilMode
 
-                let inputAssembly = 
-                    geometryMode |> Mod.map (fun m ->
-                        let top =
-                            match m with
-                                | IndexedGeometryMode.LineList -> VkPrimitiveTopology.LineList
-                                | IndexedGeometryMode.LineStrip -> VkPrimitiveTopology.LineStrip
-                                | IndexedGeometryMode.PointList -> VkPrimitiveTopology.PointList
-                                | IndexedGeometryMode.TriangleList -> VkPrimitiveTopology.TriangleList
-                                | IndexedGeometryMode.TriangleStrip -> VkPrimitiveTopology.TriangleStrip
-                                | m -> failf "unsupported geometry mode: %A" m
-                        { restartEnable = true; topology = top }
-                    )
+                { new Aardvark.Base.Rendering.Resource<Pipeline, VkPipeline>(ResourceKind.ShaderProgram) with
+                    member x.View h = h.Handle
 
-                let rasterizerState = 
-                    Mod.map2 RasterizerState.create cullMode fillMode
+                    member x.GetInfo b = 
+                        ResourceInfo.Zero
 
-                let colorBlendState =
-                    blendMode |> Mod.map (ColorBlendState.create attachments) 
+                    member x.Create(token, rt, old) =
+                        let stats = program.Update(token, rt)
+                        
+                        let desc =
+                            {
 
-                let multisampleState =
-                    MultisampleState.create samples
-
-                let depthState =
-                    depthTest |> Mod.map DepthState.create
-
-                let stencilState =
-                    stencilMode |> Mod.map StencilState.create
-
-                { new Resource<Pipeline>(pipelineCache) with
-                    member x.Create old =
-                        old |> Option.iter ctx.Delete
-
-                        let pipeline =
-                            ctx.CreateGraphicsPipeline {
                                 renderPass              = pass
-                                shaderProgram           = program.Handle.GetValue(x)
+                                shaderProgram           = program.Handle.GetValue()
                                 vertexInputState        = vertexInputState
-                                inputAssembly           = inputAssembly.GetValue(x)
-                                rasterizerState         = rasterizerState.GetValue(x)
-                                colorBlendState         = colorBlendState.GetValue(x)
-                                multisampleState        = multisampleState 
-                                depthState              = depthState.GetValue(x)
-                                stencilState            = stencilState.GetValue(x)
+                                inputAssembly           = inputAssembly.GetValue token
+                                rasterizerState         = rasterizerState.GetValue token
+                                colorBlendState         = colorBlendState.GetValue token
+                                multisampleState        = multisampleState
+                                depthState              = depthState.GetValue token
+                                stencilState            = stencilState.GetValue token
                                 dynamicStates           = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
                             }
-                        
-                        pipeline, Command.nop
+
+                        match old with
+                            | Some o -> 
+                                if o.Description = desc then 
+                                    o
+                                else
+                                    device.Delete o
+                                    device.CreateGraphicsPipeline desc
+                            | None ->
+                                device.CreateGraphicsPipeline desc
+
+
 
                     member x.Destroy h =
-                        ctx.Delete h
+                        program.RemoveRef()
+                        program.RemoveOutput x
+                        device.Delete h
                 }
         )
 
-
-    // uniform buffers
-
-    member x.CreateUniformBuffer(layout : UniformBufferLayout, provider : IUniformProvider) =
-        uniformBufferCache.GetOrCreate(
-            [layout; provider],
-            fun () ->
-                let fieldNames = layout.fieldTypes |> Map.toSeq |> Seq.map fst |> Seq.toList
-                let values = 
-                    fieldNames 
-                        |> List.map (fun n ->
-                            match provider.TryGetUniform(Ag.emptyScope, Symbol.Create n) with
-                                | Some value -> Symbol.Create n, (value :> IAdaptiveObject)
-                                | None -> failwithf "could not get required uniform-value: %A" n
-                           )
-                        |> Map.ofList
-
-                { new Resource<UniformBuffer>(uniformBufferCache) with
-                    member x.Create old =
-                        let buffer = 
-                            match old with
-                                | None -> ctx.CreateUniformBuffer(layout)
-                                | Some o -> o
-
-                        let writers = UniformWriters.writers layout values
-
-
-                        let update =
-                            command {
-                                writers |> List.iter (fun (_,w) -> w.Write(x, buffer.Storage.Pointer))
-                                buffer.IsDirty <- true
-                                do! ctx.Upload(buffer)
-                            }
-
-                        buffer, update
-
-                    member x.Destroy h =
-                        ctx.Delete h
-                }
-        )
-
-
-    // descriptor sets
-
-    member x.CreateDescriptorSet(layout : DescriptorSetLayout,
-                                 buffers : Map<int, Resource<UniformBuffer>>, 
-                                 images : Map<int, Resource<ImageView> * Resource<Sampler>>) =
+    member x.CreateDescriptorSet(layout : DescriptorSetLayout, descriptors : array<AdaptiveDescriptor>) =
+        let desc = descriptors |> Array.toList
         descriptorSetCache.GetOrCreate(
-            [layout; buffers; images],
+            [layout :> obj; desc :> obj],
             fun () ->
-                { new Resource<DescriptorSet>(descriptorSetCache) with
-                    member x.Create old =
+                { new Aardvark.Base.Rendering.Resource<DescriptorSet, VkDescriptorSet>(ResourceKind.UniformLocation) with
+                    member x.View h = h.Handle
+                    member x.Create(token, rt, old) =
                         let desc =
                             match old with
                                 | Some o -> o
-                                | None -> descriptorPool.CreateDescriptorSet(layout)
+                                | None -> descriptorPool.Alloc(layout)
                         
+                        let innerToken = RenderToken(rt)
+                        let descriptors =
+                            descriptors |> Array.map (fun d ->
+                                match d with
+                                    | AdaptiveUniformBuffer(i, b) -> 
+                                        Descriptor.UniformBuffer(i, b)
 
-                        let buffers = 
-                            buffers |> Map.map (fun _ r -> 
-                                UniformBuffer(r.Handle.GetValue(x))
-                            )
+                                    | AdaptiveCombinedImageSampler(i, viewSam) ->
+                                        let vs = Array.zeroCreate viewSam.Length
+                                        for i in 0 .. viewSam.Length - 1 do
+                                            match viewSam.[i] with
+                                                | Some(v,s) ->
+                                                    v.Update(token, innerToken)
+                                                    s.Update(token, innerToken)
+                                                    vs.[i] <- Some (v.Handle.GetValue(), s.Handle.GetValue())
+                                                | _ ->
+                                                    vs.[i] <- None
 
-                        let images = 
-                            images |> Map.map (fun _ (v,s) ->
-                                SampledImage(v.Handle.GetValue(x), s.Handle.GetValue(x))
-                            )
-                        
-                        desc.Update(Map.union buffers images)
-                        desc, Command.nop
+                                        Descriptor.CombinedImageSampler(i, vs)
+                            )   
+
+                        // update if any of the handles changed or there was no old
+                        if Option.isNone old || innerToken.ReplacedResources <> 0 then
+                            descriptorPool.Update(desc, descriptors)
+
+                        desc
 
 
                     member x.Destroy h =
-                        descriptorPool.Delete h
+                        descriptorPool.Free h
+
+                        for d in descriptors do
+                            match d with
+                                | AdaptiveCombinedImageSampler(_,vs) ->
+                                    for vv in vs do
+                                        match vv with
+                                            | Some(i,s) -> 
+                                                i.RemoveRef()
+                                                i.RemoveOutput x
+                                                s.RemoveRef()
+                                                s.RemoveOutput x
+                                            | None ->
+                                                ()
+                                | _ ->
+                                    ()
+
+                    member x.GetInfo h =
+                        ResourceInfo.Zero
+
                 }
         )
+
+
+    member x.CreateDrawCall(indexed : bool, calls : IMod<list<DrawCallInfo>>) =
+        directCallCache.GetOrCreate( calls, [indexed], {
+            create = fun b      -> device.CreateDrawCall(indexed, b)
+            update = fun h b    -> device.CreateDrawCall(indexed, b)
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun h      -> h
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateDrawCall(indexed : bool, calls : IResource<IndirectBuffer, VkBuffer>) =
+        indirectCallCache.GetOrCreateDependent(calls, [indexed :> obj], {
+            create = fun b      -> device.CreateDrawCall(indexed, b)
+            update = fun h b    -> device.CreateDrawCall(indexed, b)
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view =   fun h      -> h
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateVertexBufferBinding(buffers : list<IResource<Buffer, VkBuffer> * int64>) =
+        vertexBindingCache.GetOrCreate(
+            [buffers :> obj],
+            (fun () ->
+                let inputs = buffers |> List.map (fun (r,_) -> r :> IResource)
+
+                let create (caller : AdaptiveToken) (token : RenderToken) (old : Option<VertexBufferBinding>) =
+                    let buffersAndOffsets = buffers |> List.map (fun (b,o) -> (Mod.force b.Handle, o)) |> List.toArray
+                    new VertexBufferBinding(0, buffersAndOffsets)
+
+                let destroy (ptr : VertexBufferBinding) =
+                    ()
+
+                let view (p : VertexBufferBinding) = 
+                    p
+
+                inputs |> Resource.custom create destroy view |> unbox<Aardvark.Base.Rendering.Resource<VertexBufferBinding, VertexBufferBinding>>
+            )
+        )
+
+    member x.CreateDescriptorSetBinding(layout : PipelineLayout, bindings : array<IResource<DescriptorSet, VkDescriptorSet>>) =
+        let key = bindings |> Array.toList
+        descriptorSetBindingCache.GetOrCreate(
+            [key :> obj; layout :> obj],
+            (fun () ->
+                let inputs = bindings |> Array.map (fun r -> r :> IResource)
+
+                let create (caller : AdaptiveToken) (token : RenderToken) (old : Option<DescriptorSetBinding>) =
+                    let handles = bindings |> Array.map (fun b -> Mod.force b.Handle)
+                    new DescriptorSetBinding(layout, 0, handles)
+
+                let destroy (ptr : DescriptorSetBinding) =
+                    ()
+
+                inputs |> Array.toList |> Resource.custom create destroy id |> unbox<Aardvark.Base.Rendering.Resource<DescriptorSetBinding, DescriptorSetBinding>>
+            )
+        )
+        
+    member x.CreateIndexBufferBinding(binding : IResource<Buffer, VkBuffer>, t : VkIndexType) =
+        indexBufferBindingCache.GetOrCreate(
+            [binding :> obj; t :> obj],
+            (fun () ->
+                let create (caller : AdaptiveToken) (token : RenderToken) (old : Option<IndexBufferBinding>) =
+                    new IndexBufferBinding(binding.Handle.GetValue().Handle, t)
+
+                let destroy (ptr : IndexBufferBinding) =
+                    ()
+
+                [binding :> IResource] |> Resource.custom create destroy id |> unbox<Aardvark.Base.Rendering.Resource<IndexBufferBinding, IndexBufferBinding>>
+            )
+        )
+
+    member x.RenderTaskLock = renderTaskInfo
+
+    member x.Dispose() =
+        match parent with
+            | None -> 
+                device.Delete descriptorPool
+                bufferCache.Clear()             
+                bufferViewCache.Clear() 
+                indexBufferCache.Clear() 
+                indirectBufferCache.Clear() 
+                imageCache.Clear()     
+                imageViewCache.Clear()    
+                surfaceCache.Clear()           
+                samplerCache.Clear() 
+                uniformBufferCache.Clear() 
+                pipelineCache.Clear()       
+                descriptorSetCache.Clear() 
+                directCallCache.Clear()
+                indirectCallCache.Clear()
+                vertexBindingCache.Clear()
+                descriptorSetBindingCache.Clear()   
+            | Some p ->
+                ()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+    new(parent, ctx, lock, shareTextures, shareBuffers) = new ResourceManager(Some parent, ctx, lock, shareTextures, shareBuffers)
+    new(ctx, lock, shareTextures, shareBuffers) = new ResourceManager(None, ctx, lock, shareTextures, shareBuffers)

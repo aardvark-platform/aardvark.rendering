@@ -1,73 +1,73 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Runtime.InteropServices
+open System.Threading
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
-open Aardvark.Rendering
+open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
+
 #nowarn "9"
 #nowarn "51"
+[<AutoOpen>]
+module ``Sampler Extensions`` =
 
+    module VkFilter = 
+        let ofTextureFilterMode =
+            LookupTable.lookupTable [
+                TextureFilterMode.None, VkFilter.Nearest
+                TextureFilterMode.Point, VkFilter.Nearest
+                TextureFilterMode.Linear, VkFilter.Linear
+            ]
 
+    module VkSamplerMipmapMode = 
+        let ofTextureFilterMode =
+            LookupTable.lookupTable [
+                TextureFilterMode.None, VkSamplerMipmapMode.Nearest
+                TextureFilterMode.Point, VkSamplerMipmapMode.Nearest
+                TextureFilterMode.Linear, VkSamplerMipmapMode.Linear
+            ]
+
+    module VkSamplerAddressMode =
+        let ofWrapMode =
+            LookupTable.lookupTable [
+                unbox<_> 0, VkSamplerAddressMode.Repeat
+                WrapMode.Border, VkSamplerAddressMode.ClampToBorder
+                WrapMode.Clamp, VkSamplerAddressMode.ClampToEdge
+                WrapMode.Mirror, VkSamplerAddressMode.MirroredRepeat
+                WrapMode.MirrorOnce, VkSamplerAddressMode.MirroredRepeat
+                WrapMode.Wrap, VkSamplerAddressMode.Repeat
+
+            ]
+
+    module VkCompareOp =
+        let ofSamplerComparisonFunction =
+            LookupTable.lookupTable [
+                SamplerComparisonFunction.Always, VkCompareOp.Always
+                SamplerComparisonFunction.Equal, VkCompareOp.Equal
+                SamplerComparisonFunction.Greater, VkCompareOp.Greater
+                SamplerComparisonFunction.GreaterOrEqual, VkCompareOp.GreaterOrEqual
+                SamplerComparisonFunction.Less, VkCompareOp.Less
+                SamplerComparisonFunction.LessOrEqual, VkCompareOp.LessOrEqual
+                SamplerComparisonFunction.Never, VkCompareOp.Never
+                SamplerComparisonFunction.NotEqual, VkCompareOp.NotEqual
+
+                SamplerComparisonFunction.None, VkCompareOp.Always
+            ]
 
 type Sampler =
     class
-        val mutable public Context : Context
-        val mutable public Handle : VkSampler
-        val mutable public Description : SamplerStateDescription
+        inherit Resource<VkSampler>
 
-        new(ctx,h,desc) = { Context = ctx; Handle = h; Description = desc }
+        new(device : Device, handle : VkSampler) = { inherit Resource<_>(device, handle) }
     end
 
 
-[<AutoOpen>]
-module private SamplerHelpers =
-
-    let toVkFilter =
-        lookupTable [
-            TextureFilterMode.None, VkFilter.Nearest
-            TextureFilterMode.Point, VkFilter.Nearest
-            TextureFilterMode.Linear, VkFilter.Linear
-        ]
-
-    let toVkSamplerMipmapMode =
-        lookupTable [
-            TextureFilterMode.None, VkSamplerMipmapMode.Nearest
-            TextureFilterMode.Point, VkSamplerMipmapMode.Nearest
-            TextureFilterMode.Linear, VkSamplerMipmapMode.Linear
-        ]
-
-    let toVkSamplerAddressMode =
-        lookupTable [
-            unbox<_> 0, VkSamplerAddressMode.Repeat
-            WrapMode.Border, VkSamplerAddressMode.ClampToBorder
-            WrapMode.Clamp, VkSamplerAddressMode.ClampToEdge
-            WrapMode.Mirror, VkSamplerAddressMode.MirroredRepeat
-            WrapMode.MirrorOnce, VkSamplerAddressMode.MirroredRepeat
-            WrapMode.Wrap, VkSamplerAddressMode.Repeat
-
-        ]
-
-    let toVkCompareOp =
-        lookupTable [
-            SamplerComparisonFunction.Always, VkCompareOp.Always
-            SamplerComparisonFunction.Equal, VkCompareOp.Equal
-            SamplerComparisonFunction.Greater, VkCompareOp.Greater
-            SamplerComparisonFunction.GreaterOrEqual, VkCompareOp.GreaterOrEqual
-            SamplerComparisonFunction.Less, VkCompareOp.Less
-            SamplerComparisonFunction.LessOrEqual, VkCompareOp.LessOrEqual
-            SamplerComparisonFunction.Never, VkCompareOp.Never
-            SamplerComparisonFunction.NotEqual, VkCompareOp.NotEqual
-
-            SamplerComparisonFunction.None, VkCompareOp.Always
-        ]
-
-[<AbstractClass; Sealed; Extension>]
-type SamplerExtensions private() =
-    [<Extension>]
-    static member CreateSampler(this : Context, desc : SamplerStateDescription) =
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Sampler =
+    let create (desc : SamplerStateDescription) (device : Device) =
             
         let cmpEnable = 
             if desc.ComparisonFunction <> SamplerComparisonFunction.None then 1u
@@ -77,30 +77,41 @@ type SamplerExtensions private() =
             VkSamplerCreateInfo(
                 VkStructureType.SamplerCreateInfo,
                 0n, VkSamplerCreateFlags.MinValue,
-                toVkFilter desc.Filter.Mag,
-                toVkFilter desc.Filter.Min,
-                toVkSamplerMipmapMode desc.Filter.Mip,
-                toVkSamplerAddressMode desc.AddressU,
-                toVkSamplerAddressMode desc.AddressV,
-                toVkSamplerAddressMode desc.AddressW,
+                VkFilter.ofTextureFilterMode desc.Filter.Mag,
+                VkFilter.ofTextureFilterMode desc.Filter.Min,
+                VkSamplerMipmapMode.ofTextureFilterMode desc.Filter.Mip,
+                VkSamplerAddressMode.ofWrapMode desc.AddressU,
+                VkSamplerAddressMode.ofWrapMode desc.AddressV,
+                VkSamplerAddressMode.ofWrapMode desc.AddressW,
                 desc.MipLodBias,
                 (if desc.Filter.IsAnisotropic then 1u else 0u),
                 (if desc.Filter.IsAnisotropic then float32 desc.MaxAnisotropy else 1.0f),
                 cmpEnable,
-                toVkCompareOp desc.ComparisonFunction,
+                VkCompareOp.ofSamplerComparisonFunction desc.ComparisonFunction,
                 (if desc.Filter.Mip <> TextureFilterMode.None then desc.MinLod else 0.0f),
                 (if desc.Filter.Mip <> TextureFilterMode.None then desc.MaxLod else 0.0f),
                 VkBorderColor.FloatTransparentBlack, // vulkan does not seem to support real bordercolors
                 0u // unnormalized
             )
 
-        let mutable sampler = VkSampler.Null
-        VkRaw.vkCreateSampler(this.Device.Handle, &&info, NativePtr.zero, &&sampler) |> check "vkCreateSampler"
 
-        Sampler(this, sampler, desc)
+        let mutable handle = VkSampler.Null
+        VkRaw.vkCreateSampler(device.Handle, &&info, NativePtr.zero, &&handle)
+            |> check "could not create sampler"
+
+        Sampler(device, handle)
+
+    let delete (sampler : Sampler) (device : Device) =
+        if sampler.Handle.IsValid then
+            VkRaw.vkDestroySampler(device.Handle, sampler.Handle, NativePtr.zero)
+            sampler.Handle <- VkSampler.Null
+
+[<AbstractClass; Sealed; Extension>]
+type ContextSamplerExtensions private() =
+    [<Extension>]
+    static member inline CreateSampler(this : Device, desc : SamplerStateDescription) =
+        this |> Sampler.create desc
 
     [<Extension>]
-    static member Delete(this : Context, sam : Sampler) =
-        if sam.Handle.IsValid then
-            VkRaw.vkDestroySampler(this.Device.Handle, sam.Handle, NativePtr.zero)
-            sam.Handle <- VkSampler.Null
+    static member inline Delete(this : Device, sampler : Sampler) =
+        this |> Sampler.delete sampler

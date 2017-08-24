@@ -1,6 +1,8 @@
 ﻿namespace Aardvark.Application.WinForms
 
 open System
+open System.Diagnostics
+open System.Collections.Concurrent
 open Aardvark.Application
 open Aardvark.Rendering.Vulkan
 open Aardvark.Base
@@ -21,7 +23,8 @@ module VisualDeviceChooser =
     let private appHash =
         try
             let ass = Assembly.GetEntryAssembly()
-            if isNull ass || String.IsNullOrWhiteSpace ass.Location then newHash()
+            if isNull ass || String.IsNullOrWhiteSpace ass.Location then 
+                newHash()
             else
                 ass.Location 
                     |> System.Text.Encoding.Unicode.GetBytes
@@ -45,7 +48,7 @@ module VisualDeviceChooser =
         match devices with
             | [single] -> single
             | _ -> 
-                let allIds = devices |> List.map (fun d -> string d.DeviceId) |> String.concat ";"
+                let allIds = devices |> List.map (fun d -> string d.Index) |> String.concat ";"
 
                 let choose() =
                     let chosen = 
@@ -57,7 +60,7 @@ module VisualDeviceChooser =
                             |> ChooseForm.run
                     match chosen with
                         | Some d -> 
-                            File.WriteAllLines(configFile, [ allIds; string d.DeviceId ])
+                            File.WriteAllLines(configFile, [ allIds; string d.Index ])
                             d
                         | None -> 
                             Log.warn "no vulkan device chosen => stopping Application"
@@ -69,9 +72,9 @@ module VisualDeviceChooser =
                     match cache with
                         | [| fAll; fcache |] when fAll = allIds ->
                     
-                            let did = UInt32.Parse(fcache)
+                            let did = Int32.Parse(fcache)
 
-                            match devices |> List.tryFind (fun d -> d.DeviceId = did) with
+                            match devices |> List.tryFind (fun d -> d.Index = did) with
                                 | Some d -> d
                                 | _ -> choose()
 
@@ -82,7 +85,7 @@ module VisualDeviceChooser =
 
 
 
-type VulkanApplication(appName : string, debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
     let requestedExtensions =
         [
             yield Instance.Extensions.Surface
@@ -98,6 +101,7 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
     let requestedLayers =
         [
             if debug then
+                yield Instance.Layers.Nsight
                 yield Instance.Layers.SwapChain
                 yield Instance.Layers.DrawState
                 yield Instance.Layers.ParamChecker
@@ -113,143 +117,59 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
 
     let instance = 
         let availableExtensions =
-            Instance.AvailableExtensions |> Seq.map (fun e -> e.extensionName.Value) |> Set.ofSeq
+            Instance.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
 
         let availableLayers =
-            Instance.AvailableLayers |> Seq.map (fun l -> l.layerName.Value) |> Set.ofSeq
+            Instance.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
 
         // create an instance
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
     
-        new Instance(appName, Version(1,0,0), enabledLayers, enabledExtensions)
-
-    // install debug output to file (and errors/warnings to console)
-    do if debug then
-        instance.OnDebugMessage.Add (fun msg ->
-            
-            let str = sprintf "[%s] %s" msg.layerPrefix msg.message
-
-            match msg.messageFlags with
-                | VkDebugReportFlagBitsEXT.VkDebugReportErrorBitExt ->
-                    Log.error "%s" str
-
-                | VkDebugReportFlagBitsEXT.VkDebugReportWarningBitExt | VkDebugReportFlagBitsEXT.VkDebugReportPerformanceWarningBitExt ->
-                    Log.warn "%s" str
-
-                | VkDebugReportFlagBitsEXT.VkDebugReportInformationBitExt ->
-                    Report.Line(4, "{0}", str)
-
-                | _ -> ()
-
-        )
-
+        new Instance(Version(1,0,0), enabledLayers, enabledExtensions)
 
     // choose a physical device
     let physicalDevice = 
-        match instance.PhysicalDevices with
-            | [] -> failwithf "[Vulkan] could not get vulkan devices"
-            | l -> chooseDevice l
+        if instance.Devices.Length = 0 then
+            failwithf "[Vulkan] could not get vulkan devices"
+        else
+            chooseDevice (Array.toList instance.Devices)
+
+    do instance.PrintInfo(Logger.Get 2, physicalDevice.Index)
 
     // create a device
     let device = 
         let availableExtensions =
-            physicalDevice.Extensions |> Seq.map (fun e -> e.extensionName.Value) |> Set.ofSeq
+            physicalDevice.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
 
         let availableLayers =
-            physicalDevice.Layers |> Seq.map (fun l -> l.layerName.Value) |> Set.ofSeq
+            physicalDevice.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
 
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
+        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions) |> Set.ofList
+        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers) |> Set.ofList
         
-        instance.CreateDevice(physicalDevice, enabledLayers, enabledExtensions)
-
-    let printInfo() =
-        
-        Log.start "VulkanApplication"
-
-        do  Log.start "instance"
-
-            do  Log.start "layers"
-                for l in Instance.AvailableLayers do
-                    let layerName = l.layerName.Value
-                    let version = l.implementationVersion |> Version.FromUInt32
-                    if instance.Layers |> Array.exists (fun li -> li = layerName) then
-                        Log.line "* %s (v%A)" layerName version
-                    else
-                        Log.line "  %s (v%A)" layerName version
-                Log.stop()
-
-            do  Log.start "extensions"
-                for e in Instance.AvailableExtensions do
-                    let extName = e.extensionName.Value
-                    let version = e.specVersion |> Version.FromUInt32
-                    if instance.Extensions |> Array.exists (fun ei -> ei = extName) then
-                        Log.line "* %s (v%A)" extName version
-                    else
-                        Log.line "  %s (v%A)" extName version
-                Log.stop()
-
-            Log.stop()
-
-        do  Log.start "%A %s" physicalDevice.Vendor physicalDevice.Name
-
-            Log.line "kind:    %A" physicalDevice.DeviceType
-            Log.line "API:     v%A" (Version.FromUInt32(physicalDevice.Properties.apiVersion))
-            Log.line "driver:  v%A" (Version.FromUInt32(physicalDevice.Properties.driverVersion))
-
-            do  Log.start "memory"
-                for m in physicalDevice.MemoryHeaps do
-                    let suffix =
-                        if m.IsDeviceLocal then " (device)"
-                        else ""
-
-                    Log.line "memory %d: %A%s" m.HeapIndex m.Size suffix
-
-                Log.stop()
-
-            do  Log.start "layers"
-                for l in physicalDevice.Layers do
-                    let layerName = l.layerName.Value
-                    let version = l.implementationVersion |> Version.FromUInt32
-                    if device.Layers |> List.exists (fun li -> li = layerName) then
-                        Log.line "* %s (v%A)" layerName version
-                    else
-                        Log.line "  %s (v%A)" layerName version
-                Log.stop()
-
-            do  Log.start "extensions"
-                for e in physicalDevice.Extensions do
-                    let extName = e.extensionName.Value
-                    let version = e.specVersion |> Version.FromUInt32
-                    if device.Extensions |> List.exists (fun ei -> ei = extName) then
-                        Log.line "* %s (v%A)" extName version
-                    else
-                        Log.line "  %s (v%A)" extName version
-                Log.stop()
-            
-            Log.stop()
-
-        Log.stop()  
-
-
-    do printInfo()
-
+        physicalDevice.CreateDevice(enabledLayers, enabledExtensions)
 
     // create a runtime
-    let runtime = new Runtime(device)
+    let runtime = new Runtime(device, false, false, debug)
 
+    let canCreateRenderControl =
+        Set.contains Instance.Extensions.SwapChain device.EnabledExtensions
 
     member x.Runtime = runtime
 
     member x.Initialize(ctrl : IRenderControl, samples : int) =
         match ctrl with
             | :? Aardvark.Application.WinForms.RenderControl as ctrl ->
-                let impl = new VulkanRenderControl(runtime, samples)
-                ctrl.Implementation <- impl
+                if canCreateRenderControl then
+                    let mode = GraphicsMode(Col.Format.RGBA, 8, 24, 8, 2, samples, ImageTrafo.MirrorY)
+                    let impl = new VulkanRenderControl(runtime, mode)
+                    ctrl.Implementation <- impl
+                else
+                    failwithf "[Vulkan] cannot initialize RenderControl since device-extension (%s) is missing" Instance.Extensions.SwapChain
 
             | _ ->
-                failwith "unsupported RenderControl"
+                failwithf "[Vulkan] unsupported RenderControl-Type %A" ctrl
 
     member x.GetRenderPass(ctrl : IRenderControl) =
         match ctrl with
@@ -261,18 +181,19 @@ type VulkanApplication(appName : string, debug : bool, chooseDevice : list<Physi
             | _ ->
                 failwith "unsupported RenderControl"
 
+    member x.Dispose() =
+        runtime.Dispose()
+        device.Dispose()
+        instance.Dispose()
 
     interface IApplication with
         member x.Runtime = runtime :> _ 
         member x.Initialize(ctrl : IRenderControl, samples : int) =
             x.Initialize(ctrl, samples)
 
-        member x.Dispose() =
-            device.Dispose()
-            instance.Dispose()
+        member x.Dispose() = x.Dispose()
 
 
-    new(appName, debug) = new VulkanApplication(appName, debug, VisualDeviceChooser.run)
-    new(appName) = new VulkanApplication(appName, false)
-    new(debug) = new VulkanApplication("Aardvark", debug)
-    new() = new VulkanApplication("Aardvark", false)
+    new(debug)      = new VulkanApplication(debug, VisualDeviceChooser.run)
+    new(chooser)    = new VulkanApplication(false, chooser)
+    new()           = new VulkanApplication(false, VisualDeviceChooser.run)

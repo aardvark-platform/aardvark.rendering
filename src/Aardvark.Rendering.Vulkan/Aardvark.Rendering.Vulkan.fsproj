@@ -5,7 +5,7 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>67c2dd0d-8892-4953-b916-ced3aed034b1</ProjectGuid>
+    <ProjectGuid>8bbc1ef6-9c85-4baf-a732-fc46dca64ec3</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>Aardvark.Rendering.Vulkan</RootNamespace>
     <AssemblyName>Aardvark.Rendering.Vulkan</AssemblyName>
@@ -60,54 +60,53 @@
   </Target>
   -->
   <ItemGroup>
-    <None Include="Raw\Generator.fsx" />
-    <Compile Include="Raw\Types.fs" />
-    <Compile Include="Raw\Vulkan.fs" />
-    <Compile Include="Raw\PCI.fs" />
-    <Compile Include="Raw\PrimitiveValueConverter.fs" />
-    <Compile Include="Raw\Utilities.fs" />
-    <Compile Include="Raw\NativeVolume.fs" />
-    <Compile Include="Extensions\DebugReport.fs" />
-    <Compile Include="SpirV\ShaderInterface.fs" />
-    <Compile Include="SpirV\Reflector.fs" />
-    <Compile Include="Core\Core.fs" />
-    <Compile Include="Core\CommandBuffer.fs" />
-    <Compile Include="Core\Queue.fs" />
+    <None Include="Wrapper\Generator.fsx" />
+    <Compile Include="Wrapper\Types.fs" />
+    <Compile Include="Wrapper\Vulkan.fs" />
+    <Compile Include="Wrapper\PCI.fs" />
+    <Compile Include="Core\Utilities.fs" />
+    <Compile Include="Core\Info.fs" />
+    <Compile Include="Core\Limits.fs" />
+    <Compile Include="Core\Features.fs" />
+    <Compile Include="Core\Platform.fs" />
+    <Compile Include="Core\Device.fs" />
     <Compile Include="Core\Commands.fs" />
-    <Compile Include="Core\Synchronization.fs" />
-    <Compile Include="Core\Memory.fs" />
-    <Compile Include="Core\RenderPass.fs" />
-    <Compile Include="Core\ShaderProgram.fs" />
-    <Compile Include="Core\Instructions.fs" />
-    <Compile Include="Core\Context.fs" />
+    <Compile Include="Core\ShaderInterface.fs" />
+    <Compile Include="Resources\Resources.fs" />
     <Compile Include="Resources\Buffer.fs" />
-    <Compile Include="Resources\UniformBuffer.fs" />
     <Compile Include="Resources\Image.fs" />
     <Compile Include="Resources\ImageView.fs" />
     <Compile Include="Resources\Sampler.fs" />
+    <Compile Include="Resources\RenderPass.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
-    <Compile Include="Resources\Pipeline.fs" />
+    <Compile Include="Resources\ShaderModule.fs" />
+    <Compile Include="Resources\DescriptorSetLayout.fs" />
+    <Compile Include="Resources\PipelineLayout.fs" />
+    <Compile Include="Resources\ShaderProgram.fs" />
+    <Compile Include="Resources\UniformBuffer.fs" />
+    <Compile Include="Resources\DescriptorPool.fs" />
     <Compile Include="Resources\DescriptorSet.fs" />
-    <Compile Include="Resources\MappedBuffer.fs" />
+    <Compile Include="Resources\States.fs" />
+    <Compile Include="Resources\Pipeline.fs" />
+    <Compile Include="Resources\IndirectBuffer.fs" />
+    <Compile Include="Resources\ResizeBuffer.fs" />
+    <Compile Include="Resources\CommandResources.fs" />
+    <Compile Include="Resources\GeometryPool.fs" />
+    <Compile Include="Resources\SparseImage.fs" />
+    <Compile Include="Swapchain\Surface.fs" />
+    <Compile Include="Swapchain\SwapchainDescription.fs" />
+    <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
+    <Compile Include="Management\ResourcesNew.fs" />
+    <Compile Include="Management\ResourcesNewer.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
-    <Compile Include="Test.fs" />
-    <Compile Include="Runtime\CommandBufferExtensions.fs" />
-    <Compile Include="Runtime\InstructionExtensions.fs" />
-    <Compile Include="Runtime\RenderTaskBase.fs" />
-    <Compile Include="Runtime\CommandBufferProgram.fs" />
-    <Compile Include="Runtime\RenderTask.fs" />
+    <Compile Include="Runtime\DebugReport.fs" />
+    <Compile Include="Runtime\GraphicsCommands.fs" />
+    <Compile Include="Runtime\Compiler.fs" />
+    <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Runtime.fs" />
-    <None Include="Aardvark.Rendering.Vulkan.dll.config">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj">
-      <Name>Aardvark.SceneGraph</Name>
-      <Project>{b9ef48e4-7e73-4ddf-805a-d7324d907cb8}</Project>
-      <Private>True</Private>
-    </ProjectReference>
     <Reference Include="mscorlib" />
     <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
       <Private>True</Private>
@@ -209,8 +208,30 @@
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
+        <Reference Include="FShade.GLSL">
+          <HintPath>..\..\packages\FShade.GLSL\lib\net45\FShade.GLSL.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
         <Reference Include="FShade.Imperative">
           <HintPath>..\..\packages\FShade.Imperative\lib\net45\FShade.Imperative.dll</HintPath>
+          <Private>True</Private>
+          <Paket>True</Paket>
+        </Reference>
+      </ItemGroup>
+    </When>
+  </Choose>
+  <Choose>
+    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
+      <ItemGroup>
+        <Reference Include="FShade.SpirV">
+          <HintPath>..\..\packages\FShade.SpirV\lib\net45\FShade.SpirV.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>

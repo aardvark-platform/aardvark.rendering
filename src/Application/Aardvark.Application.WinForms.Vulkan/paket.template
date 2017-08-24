@@ -1,0 +1,8 @@
+type project
+id Aardvark.Application.WinForms.Vulkan
+authors VRVis Research Center
+description
+    Aardvark.Application.WinForms.Vulkan
+files
+    ..\..\..\bin\Release\Aardvark.Application.WinForms.Vulkan.dll ==> lib\net45
+    ..\..\..\bin\Release\Aardvark.Application.WinForms.Vulkan.pdb ==> lib\net45

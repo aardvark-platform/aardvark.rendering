@@ -1,287 +1,280 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open System
+open System.Threading
+open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+open Aardvark.Base
+open Aardvark.Base.Rendering
+open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
+open Aardvark.Base.Incremental
+
 #nowarn "9"
 #nowarn "51"
 
-open System
-open System.Threading
-open System.Runtime.InteropServices
-open System.Runtime.CompilerServices
-open System.Collections.Concurrent
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base
-open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
-open Aardvark.Rendering.Vulkan
-
+open ResourcesNew
 
 type PreparedRenderObject =
     {
-        ctx : Context
-        original : RenderObject
-        indirect : Option<Resource<IndirectBuffer>>
-        geometryMode : IMod<IndexedGeometryMode>
-        program : Resource<ShaderProgram>
-        descriptorResources : list<IResource>
-        descriptorSets : list<Resource<DescriptorSet>>
-        pipeline : Resource<Pipeline>
-        vertexBuffers : array<Resource<Buffer> * int>
-        indexBuffer : Option<Resource<Buffer>>
-        activation : IDisposable
-    }
+        device                  : Device
+        original                : RenderObject
+        
+        resources               : list<IResource>
 
+        pipeline                : IResource<Pipeline, VkPipeline>
+        indexBuffer             : Option<IResource<IndexBufferBinding, IndexBufferBinding>>
+        descriptorSets          : IResource<DescriptorSetBinding, DescriptorSetBinding>
+        vertexBuffers           : IResource<VertexBufferBinding, VertexBufferBinding>
+        drawCalls               : IResource<DrawCall, DrawCall>
+        isActive                : IResource<bool, int>
+        activation              : IDisposable
+    }
     member x.DrawCallInfos = x.original.DrawCallInfos
     member x.RenderPass = x.original.RenderPass
     member x.AttributeScope = x.original.AttributeScope
 
     member x.Dispose() =
-        //x.geometryMode.Dispose()
-        x.activation.Dispose()
-        x.program.Dispose()
-        x.pipeline.Dispose()
-        for r in x.descriptorResources do r.Dispose()
-        for r in x.descriptorSets do r.Dispose()
+        for r in x.resources do r.Release(null)
 
-        for (b,_) in x.vertexBuffers do b.Dispose()
+    member x.Update(caller : AdaptiveToken, token : RenderToken) =
+        for r in x.resources do r.Update(caller, ResourceUpdateToken(-1L, token)) |> ignore
 
-        match x.indirect with
-            | Some i -> i.Dispose()
-            | None -> ()
 
-        match x.indexBuffer with
-            | Some ib -> ib.Dispose()
-            | None -> ()
+//
+//    member x.IncrementReferenceCount() =
+//        for r in x.resources do r.Acquire()
 
-    member x.Update(caller : IAdaptiveObject) =
-        command {
-            x.geometryMode |> Mod.force |> ignore
-            do! x.program.Update(caller)
-            do! x.pipeline.Update(caller)
-
-            for r in x.descriptorResources do do! r.Update(caller)
-            for r in x.descriptorSets do do! r.Update(caller)
-            for (b,_) in x.vertexBuffers do do! b.Update(caller)
-
-            match x.indirect with
-                | Some b -> do! b.Update(caller)
-                | None -> ()
-
-            match x.indexBuffer with
-                | Some b -> do! b.Update(caller)
-                | None -> ()
-        }
-
-    member x.IncrementReferenceCount() =
-        //x.geometryMode.IncrementReferenceCount()
-        x.program.AddRef()
-        x.pipeline.AddRef()
-
-        for r in x.descriptorResources do r.AddRef()
-        for r in x.descriptorSets do r.AddRef()
-        for (b,_) in x.vertexBuffers do b.AddRef()
-
-        match x.indirect with
-            | Some ib -> ib.AddRef()
-            | None -> ()
-
-        match x.indexBuffer with
-            | Some ib -> ib.AddRef()
-            | None -> ()
 
     interface IPreparedRenderObject with
         member x.Id = x.original.Id
         member x.RenderPass = x.original.RenderPass
         member x.AttributeScope = x.original.AttributeScope
-        member x.Update(caller) = x.Update(caller) |> x.ctx.DefaultQueue.RunSynchronously
+        member x.Update(caller, token) = x.Update(caller, token) |> ignore
         member x.Original = Some x.original
         member x.Dispose() = x.Dispose()
 
+type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
+    let first =
+        match children with
+            | [] -> failwith "PreparedMultiRenderObject cannot be empty"
+            | h::_ -> h
+
+    let last = children |> List.last
+
+    member x.Children = children
+
+    member x.Dispose() =
+        children |> List.iter (fun c -> c.Dispose())
+
+    member x.Update(caller : AdaptiveToken, token : RenderToken) =
+        children |> List.iter (fun c -> c.Update(caller, token))
+        
+
+    member x.RenderPass = first.RenderPass
+    member x.Original = first.original
+
+    member x.First = first
+    member x.Last = last
+
+    interface IRenderObject with
+        member x.Id = first.original.Id
+        member x.AttributeScope = first.AttributeScope
+        member x.RenderPass = first.RenderPass
+
+    interface IPreparedRenderObject with
+        member x.Original = Some first.original
+        member x.Update(caller, token) = x.Update(caller, token) |> ignore
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+
 [<AbstractClass; Sealed; Extension>]
-type ResourceMangerExtensions private() =
+type DevicePreparedRenderObjectExtensions private() =
 
-    [<Extension>]
-    static member PrepareRenderObject(x : ResourceManager, pass : RenderPass, ro : IRenderObject) =
-        match ro with
-            | :? PreparedRenderObject as prep -> 
-                prep.IncrementReferenceCount()
-                prep
-            | :? RenderObject as ro ->
+    static let prepareObject (token : AdaptiveToken) (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
+        
+        let resources = System.Collections.Generic.List<IResource>()
 
-                    
-                let program = 
-                    x.CreateShaderProgram(
-                        pass, 
-                        ro.Surface
-                    )
+        let program = this.CreateShaderProgram(renderPass, ro.Surface)
+        resources.Add program
+                
+        program.Acquire()
+        let prog,_ = program.GetHandle(AdaptiveToken.Top, ResourceUpdateToken(-1L, RenderToken.Empty))
 
-                let prog = program.Handle |> Mod.force
+        let descriptorSets = 
+            prog.PipelineLayout.DescriptorSetLayouts |> Array.map (fun ds ->
+                let descriptors = 
+                    ds.Bindings |> Array.choosei (fun i b ->
+                        match b.Parameter with
+                            | UniformBlockParameter block ->
+                                let buffer = this.CreateUniformBuffer(ro.AttributeScope, block.layout, ro.Uniforms, prog.UniformGetters)
+                                resources.Add buffer
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
-                let descSetsAndResources = 
-                    prog.DescriptorSetLayouts
-                        |> Seq.map (fun dsl ->
-                            let buffers =
-                                dsl.Descriptors |> Seq.choose (fun desc ->
-                                    match desc.Parameter.paramType with
-                                        | ShaderType.Ptr(_, ShaderType.Struct(_,fields)) ->
-                                            let layout = UniformBufferLayoutStd140.structLayout fields
-                                            let buffer = x.CreateUniformBuffer(layout, ro.Uniforms)
-                                            match Parameter.tryGetBinding desc.Parameter with
-                                                | Some b ->
-                                                    (b, buffer) |> Some
-                                                | None ->
-                                                    None
+                            | ImageParameter img ->
+                                match img.description with
+                                    | [] ->
+                                        Log.warn "could not get sampler information for: %A" img
+                                        None
 
-                                        | _ -> None
-                                )
-                                |> Map.ofSeq
-
-
-                            let images =
-                                dsl.Descriptors |> Seq.choose (fun desc ->
-                                    match desc.Parameter.paramType with
-                                        | ShaderType.Ptr(_, ShaderType.Image(sampledType, dim, isDepth, isArray, isMS, _, _)) 
-                                        | ShaderType.Image(sampledType, dim, isDepth, isArray, isMS, _, _) ->
-                                            let sym = Symbol.Create desc.Parameter.paramName
-
-                             
-                                            let binding =
-                                                match Parameter.tryGetBinding desc.Parameter with
-                                                    | Some b -> b
-                                                    | None -> failwithf "image has not been given an explicit binding: %A" desc.Parameter
-
-                                            let samplerState = 
-                                                Log.warn "could not get sampler for texture: %A" sym
-                                                SamplerStateDescription()
-
-
-
-                                            match ro.Uniforms.TryGetUniform(Ag.emptyScope, sym) with
+                                    | descriptions ->
+                                        let viewSam = 
+                                            descriptions |> List.map (fun desc -> 
+                                                let textureName = desc.textureName
+                                                let samplerState = desc.samplerState
+                                                match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
                                                 | Some (:? IMod<ITexture> as tex) ->
 
-                                                    let tex = x.CreateImage(tex)
-                                                    let view = x.CreateImageView(tex)
-                                                    let sam = x.CreateSampler(samplerState)
+                                                    let tex = this.CreateImage(tex)
+                                                    let view = this.CreateImageView(tex)
+                                                    let sam = this.CreateSampler(Mod.constant samplerState)
+                                                    resources.Add tex
+                                                    resources.Add view
+                                                    resources.Add sam
 
-                                                    Some (binding, (tex, view, sam))
-                                                | _ -> 
-                                                    failwithf "could not find texture: %A" desc.Parameter
+                                                    Some(view, sam)
 
+                                                | _ ->
+                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
+                                                    None
+                                            )
 
-                                        | _ -> None
-                                )
-                                |> Map.ofSeq
-
-                            // TODO: images
-
-                            let resources = 
-                                List.concat [
-                                    buffers |> Map.toList |> List.map (fun (_,b) -> b :> IResource)
-                                    images |> Map.toList |> List.collect (fun (_,(t,v,s)) -> [t :> IResource; v; s])
-                                ]
-
-                            let imageViews =
-                                images |> Map.map (fun _ (t,v,s) -> v,s)
-
-                            x.CreateDescriptorSet(dsl, buffers, imageViews), resources
-                        )
-                        |> Seq.toList
-
-                let descriptorResources = descSetsAndResources |> List.collect snd
-                let descriptorSets = descSetsAndResources |> List.map fst
-
-
-                let isCompatible (shaderType : ShaderType) (dataType : Type) =
-                    // TODO: verify type compatibility
-                    true
-
-                let bufferViews =
-                    prog.Inputs
-                        |> Seq.map (fun param ->
-                            match Parameter.tryGetLocation param with
-                                | Some loc -> loc, param.paramName, param.paramType
-                                | None -> failwithf "no attribute location given for shader input: %A" param
-                            )
-
-                        |> Seq.map (fun (location, parameterName, parameterType) ->
-                            let sym = Symbol.Create parameterName
-
-                            let perInstance, view =
-                                match ro.VertexAttributes.TryGetAttribute sym with
-                                    | Some att -> false, att
-                                    | None ->
-                                        match ro.InstanceAttributes.TryGetAttribute sym with
-                                            | Some att -> true, att
-                                            | None -> failwithf "could not get vertex data for shader input: %A" parameterName
-
-                            if isCompatible parameterType view.ElementType then
-                                (parameterName, location, perInstance, view)
-                            else
-                                failwithf "vertex data has incompatible type for shader: %A vs %A" view.ElementType parameterType
-                            )
-                        |> Seq.toList
-
-                let bufferFormats = 
-                    bufferViews |> Seq.map (fun (name,location, perInstance, view) -> name, (perInstance, view.ElementType)) |> Map.ofSeq
-
-                // TODO: changeable geometry mode
-                let geometryMode =
-                    ro.Mode
-
-                let pipeline =
-                    x.CreatePipeline(
-                        pass,
-                        program,
-                        bufferFormats,
-                        geometryMode,
-                        ro.FillMode,
-                        ro.CullMode,
-                        ro.BlendMode,
-                        ro.DepthTest,
-                        ro.StencilMode
+                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
+                                
                     )
 
-                let buffers =
-                    bufferViews 
-                        |> Seq.sortBy (fun (_,l,_,_) -> l)
-                        |> Seq.map (fun (name,loc, _, view) ->
-                            let buffer = x.CreateBuffer(view.Buffer)
-                            buffer, view.Offset
-                            )
-                        |> Seq.toArray
+                let res = this.CreateDescriptorSet(ds, Array.toList descriptors)
+                resources.Add res
 
-                let indexBuffer =
-                    match ro.Indices with
-                        | Some view -> x.CreateBuffer(view.Buffer, VkBufferUsageFlags.IndexBufferBit) |> Some
-                        | None -> None
-//                    match ro.Indices with
-//                        | null -> None
-//                        | indices -> x.CreateBuffer(ro.Indices, VkBufferUsageFlags.IndexBufferBit) |> Some
-
-
-                let indirect =
-                    match ro.IndirectBuffer with
-                        | null -> None
-                        | indirect -> 
-                            let hasIndex = Option.isSome indexBuffer
-                            x.CreateIndirectBuffer(ro.IndirectBuffer, hasIndex) |> Some
-
-                let res =
-                    {
-                        ctx = x.Context
-                        original = ro
-                        geometryMode = geometryMode
-                        indirect = indirect
-                        program = program
-                        descriptorResources = descriptorResources
-                        descriptorSets = descriptorSets
-                        pipeline = pipeline
-                        vertexBuffers = buffers
-                        indexBuffer = indexBuffer
-                        activation = ro.Activate()
-                    }
-                
-                res.Update(null) |> x.Context.DefaultQueue.RunSynchronously
-                
                 res
+            )
 
-            | _ -> failwithf "unsupported RenderObject-type: %A" ro
+
+        let isCompatible (shaderType : ShaderType) (dataType : Type) =
+            // TODO: verify type compatibility
+            true
+
+        let bufferViews =
+            prog.Inputs
+                |> List.sortBy (fun p -> p.location)
+                |> List.map (fun p ->
+                    let perInstance, view =
+                        match ro.VertexAttributes.TryGetAttribute p.semantic with
+                            | Some att -> false, att
+                            | None ->
+                                match ro.InstanceAttributes.TryGetAttribute p.semantic with
+                                    | Some att -> true, att
+                                    | None -> failwithf "could not get vertex data for shader input: %A" p.semantic
+
+                    (p.semantic, p.location, perInstance, view)
+                )
+
+        let buffers =
+            bufferViews 
+                |> List.map (fun (name,loc, _, view) ->
+                    let buffer = this.CreateVertexBuffer(view.Buffer)
+                    resources.Add buffer
+                    buffer, int64 view.Offset
+                )
+
+
+        let bufferFormats = 
+            bufferViews |> List.map (fun (name,location, perInstance, view) -> name, (perInstance, view)) |> Map.ofSeq
+
+
+        let pipeline =
+            this.CreatePipeline(
+                renderPass, program,
+                bufferFormats,
+                ro.Mode,
+                ro.FillMode, 
+                ro.CullMode,
+                ro.BlendMode,
+                ro.DepthTest,
+                ro.StencilMode,
+                ro.WriteBuffers
+            )
+        resources.Add pipeline
+
+        let indexed = Option.isSome ro.Indices
+        let indexBufferBinding =
+            match ro.Indices with
+                | Some view -> 
+                    let buffer = this.CreateIndexBuffer(view.Buffer)
+                    let res = this.CreateIndexBufferBinding(buffer, view.ElementType)
+                    resources.Add buffer
+                    resources.Add res
+                    Some res
+                | None -> 
+                    None
+
+            
+
+        let calls =
+            match ro.IndirectBuffer with
+                | null -> 
+                    this.CreateDrawCall(ro.DrawCallInfos, indexed)
+                | b -> 
+                    let indirect = this.CreateIndirectBuffer(b, indexed)
+                    resources.Add indirect
+                    this.CreateDrawCall(indirect, indexed)
+        resources.Add calls
+        let bindings =
+            this.CreateVertexBufferBinding(List.unzip buffers)
+            
+        resources.Add bindings
+
+        let descriptorBindings =
+            this.CreateDescriptorSetBinding(prog.PipelineLayout, Array.toList descriptorSets)
+            
+        resources.Add(descriptorBindings)
+
+        let isActive = this.CreateIsActive ro.IsActive
+        resources.Add isActive
+
+
+        let res = 
+            {
+                device                      = this.Device
+                original                    = ro
+                resources                   = CSharpList.toList resources
+                descriptorSets              = descriptorBindings
+                pipeline                    = pipeline
+                vertexBuffers               = bindings
+                indexBuffer                 = indexBufferBinding
+                drawCalls                   = calls
+                isActive                    = isActive
+                activation                  = ro.Activate()
+            }
+
+        res
+
+    [<Extension>]
+    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : RenderObject) =
+        prepareObject token this renderPass ro
+
+    [<Extension>]
+    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : IRenderObject, hook : RenderObject -> RenderObject) =
+        match ro with
+            | :? RenderObject as ro ->
+                let res = prepareObject token this renderPass (hook ro)
+                new PreparedMultiRenderObject([res])
+
+            | :? MultiRenderObject as mo ->
+                let all = mo.Children |> List.collect (fun c -> DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, token, renderPass, c, hook).Children)
+                new PreparedMultiRenderObject(all)
+
+            | :? PreparedRenderObject as o ->
+                new PreparedMultiRenderObject([o])
+
+            | :? PreparedMultiRenderObject as mo ->
+                mo
+
+            | _ ->
+                failf "unsupported RenderObject-type: %A" ro
+
+    [<Extension>]
+    static member PrepareRenderObject(this : ResourceManager, token : AdaptiveToken, renderPass : RenderPass, ro : IRenderObject) =
+        DevicePreparedRenderObjectExtensions.PrepareRenderObject(this, token, renderPass, ro, id)

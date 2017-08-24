@@ -1,19 +1,16 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-
-open SpirV
-open Aardvark.Base
-open Aardvark.Base.Incremental
-open Aardvark.Base.Rendering
-open Microsoft.FSharp.NativeInterop
-open FShade.SpirV
 open System
-open System.Runtime.InteropServices
+open System.Threading
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+open Aardvark.Base
+open Aardvark.Base.Rendering
+open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 #nowarn "51"
-
 
 type UnmanagedStruct(ptr : nativeint, size : int) =
     let mutable ptr = ptr
@@ -79,447 +76,261 @@ module UnmanagedStruct =
 
 
 
-type UniformBufferLayout = { align : int; size : int; fieldOffsets : Map<string, int>; fieldTypes : Map<string, ShaderType> }
-
-module UniformBufferLayoutStd140 =
-    open System.Collections.Generic
-    open FShade.SpirV
-
-    
-
-    let rec private sizeAndAlignOf (t : ShaderType) : int * int =
-        match t with
-            | Int(w,_) | Float(w) -> 
-                // both the size and alignment are the size of the scalar
-                // in basic machine types (e.g. sizeof<int>)
-                let s = w / 8
-                (s,s)
-
-            | Bool -> 
-                (4,4)
-
-            | Vector(bt,3) -> 
-                // both the size and alignment are 4 times the size
-                // of the underlying scalar type.
-                let s = sizeOf bt * 4
-                (s,s)
-
-            | Vector(bt,d) ->  
-                // both the size and alignment are <d> times the size
-                // of the underlying scalar type.
-                let s = sizeOf bt * d
-                (s,s)
-
-            | Array(bt, len) -> 
-                let physicalSize = sizeOf bt
-
-                // the size of each element in the array will be the size
-                // of the element type rounded up to a multiple of the size
-                // of a vec4. This is also the array's alignment.
-                // The array's size will be this rounded-up element's size
-                // times the number of elements in the array.
-                let size =
-                    if physicalSize % 16 = 0 then physicalSize
-                    else physicalSize + 16 - (physicalSize % 16)
-
-                (size * len, size)
-
-            | Matrix(colType, cols) ->
-                // same layout as an array of N vectors each with 
-                // R components, where N is the total number of columns
-                // present.
-                sizeAndAlignOf (Array(colType, cols))
-
-            | Ptr(_,t) -> 
-                sizeAndAlignOf t
-
-            | Image(sampledType, dim,depth,arr, ms, sam, fmt) -> 
-                failf "cannot determine size for image type"
-
-            | Sampler -> 
-                failf "cannot determine size for sampler type"
-
-            | Struct(name,fields) -> 
-                let layout = structLayout fields
-                layout.align, layout.size
-
-            | Void -> 
-                failf "cannot determine size for void type"
-
-            | Function _ ->
-                failf "cannot use function in UniformBuffer"
-
-            | SampledImage _ ->
-                failf "cannot use SampledImage in UniformBuffer"
-                
-
-    and sizeOf (t : ShaderType) =
-        t |> sizeAndAlignOf |> fst
-
-    and alignOf (t : ShaderType) =
-        t |> sizeAndAlignOf |> snd
-
-    and structLayout (fields : list<ShaderType * string * list<Decoration * uint32[]>>) : UniformBufferLayout =
-        let mutable currentOffset = 0
-        let mutable offsets : Map<string, int> = Map.empty
-        let mutable types : Map<string, ShaderType> = Map.empty
-        let mutable biggestFieldSize = 0
-        let mutable biggestFieldAlign = 0
-
-        for (t,n,dec) in fields do
-            let (size,align) = sizeAndAlignOf t
-
-            // align the field offset
-            if currentOffset % align <> 0 then
-                currentOffset <- currentOffset + align - (currentOffset % align)
-
-            // keep track of the biggest member
-            if size > biggestFieldSize then
-                biggestFieldSize <- size
-                biggestFieldAlign <- align
-
-            // store the member's offset
-            offsets <- Map.add n currentOffset offsets
-            types <- Map.add n t types
-            currentOffset <- currentOffset + size
-            ()
-
-        // structure alignment will be the alignment for
-        // the biggest structure member, according to the previous
-        // rules, rounded up to a multiple of the size of a vec4.
-        // each structure will start on this alignment, and its size will
-        // be the space needed by its members, according to the previous
-        // rules, rounded up to a multiple of the structure alignment.
-        let structAlign =
-            if biggestFieldAlign % 16 = 0 then biggestFieldAlign
-            else biggestFieldAlign + 16 - (biggestFieldAlign % 16)
-
-        let structSize =
-            if currentOffset % structAlign = 0 then currentOffset
-            else currentOffset + structAlign - (currentOffset % structAlign)
-
-        { align = structAlign; size = structSize; fieldOffsets = offsets; fieldTypes = types }
-
-module UniformConverter =
-
-    let expectedType =
-        lookupTable [
-            ShaderType.Int ,                 typeof<int>
-            ShaderType.IntVec2 ,             typeof<V2i>
-            ShaderType.IntVec3 ,             typeof<V3i>
-            ShaderType.IntVec4 ,             typeof<V4i>
-
-            ShaderType.UnsignedInt ,         typeof<uint32>
-            ShaderType.UnsignedIntVec3 ,     typeof<C3ui>
-            ShaderType.UnsignedIntVec4 ,     typeof<C4ui>
-
-            ShaderType.Float ,               typeof<float32>
-            ShaderType.FloatVec2 ,           typeof<V2f>
-            ShaderType.FloatVec3 ,           typeof<V3f>
-            ShaderType.FloatVec4 ,           typeof<V4f>
-            ShaderType.FloatMat2 ,           typeof<M22f>
-            ShaderType.FloatMat3 ,           typeof<M34f>
-            ShaderType.FloatMat4 ,           typeof<M44f>
-            ShaderType.FloatMat2x3 ,         typeof<M23f>
-            ShaderType.FloatMat3x4 ,         typeof<M34f>
-
-            ShaderType.Double ,              typeof<float>
-            ShaderType.DoubleVec2 ,          typeof<V2d>
-            ShaderType.DoubleVec3 ,          typeof<V3d>
-            ShaderType.DoubleVec4 ,          typeof<V4d>
-            
-
-            ShaderType.Bool,                 typeof<int>
-            ShaderType.BoolVec2 ,            typeof<V2i>
-            ShaderType.BoolVec3 ,            typeof<V3i>
-            ShaderType.BoolVec4 ,            typeof<V4i>
-
-        ]
-
-module UniformWriters =
-    
-    type IWriter =
-        abstract member Write : IAdaptiveObject * nativeint -> unit
-
-    [<AbstractClass>]
-    type AbstractWriter() =
-        abstract member Write : IAdaptiveObject * nativeint -> unit
-
-        interface IWriter with
-            member x.Write(caller, ptr) = x.Write(caller, ptr)
-
-    type ViewWriter<'a, 'b when 'b : unmanaged>(source : IMod<'a>, fields : list<int * ('a -> 'b)>) =
-        inherit AbstractWriter()
-     
-        let fieldValues = source |> Mod.map (fun v -> fields |> List.map (fun (o,a) -> o, a v))
-
-        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
-            let fields = fieldValues.GetValue caller
-            for (offset, value) in fields do
-                let ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
-                NativePtr.write ptr value
-
-    type SingleValueWriter<'a when 'a : unmanaged>(source : IMod<'a>, offset : int) =
-        inherit AbstractWriter()
-
-        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
-            let ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
-            let v = source.GetValue caller
-            NativePtr.write ptr v
-
-    type ConversionArrayWriter<'a, 'b when 'b : unmanaged>(source : IMod<'a[]>, count : int, offset : int, stride : int, convert : 'a -> 'b) =
-        inherit AbstractWriter()
-
-        let stride = 
-            if stride = 0 then sizeof<'a>
-            else stride
-
-        let converted =
-            source |> Mod.map (Array.map convert)
-
-        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
-            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
-            let v = converted.GetValue caller
-
-            let c = min count v.Length
-            for i in 0..c-1 do
-                NativePtr.write ptr v.[i]
-                ptr <- NativePtr.ofNativeInt (NativePtr.toNativeInt ptr + nativeint stride)
-
-            for i in c..count-1 do
-                NativePtr.write ptr Unchecked.defaultof<'b>
-
-    type ConversionWriter<'a, 'b when 'b : unmanaged>(source : IMod<'a>, offset : int, convert : 'a -> 'b) =
-        inherit AbstractWriter()
-
-        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
-            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
-            let v = source.GetValue caller
-            let res = convert v
-            NativePtr.write ptr res
-
-
-    type NoConversionWriter<'a when 'a : unmanaged>(source : IMod<'a>, offset : int) =
-        inherit AbstractWriter()
-
-        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
-            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
-            let v = source.GetValue caller
-            NativePtr.write ptr v
-
-    type ConversionSeqWriter<'s, 'a, 'b when 'b : unmanaged and 's :> seq<'a>>(source : IMod<'s>, count : int, offset : int, stride : int, convert : 'a -> 'b) =
-        inherit AbstractWriter()
-
-        let stride = 
-            if stride = 0 then sizeof<'a>
-            else stride
-
-        let converted =
-            source |> Mod.map (Seq.toArray >> Array.map convert)
-
-        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
-            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
-            let v = converted.GetValue caller
-
-            let c = min count v.Length
-            for i in 0..c-1 do
-                NativePtr.write ptr v.[i]
-                ptr <- NativePtr.ofNativeInt (NativePtr.toNativeInt ptr + nativeint stride)
-
-            for i in c..count-1 do
-                NativePtr.write ptr Unchecked.defaultof<'b>
-
-    type MultiWriter(writers : list<IWriter>) =
-        inherit AbstractWriter()
-
-        override x.Write(caller : IAdaptiveObject, ptr : nativeint) =
-            for w in writers do w.Write(caller, ptr)
-
-
-    let private createTemplate (layout : UniformBufferLayout) (inputTypes : Map<Symbol, Type>) =
-        let fields = 
-            layout.fieldTypes 
-            |> Map.toList
-            |> List.map (fun (k,t) -> 
-                let off = Map.find k layout.fieldOffsets
-                t, k, off
-            )
-
-        fields 
-            |> Seq.groupBy(fun (t,n,_) -> n) 
-            |> Seq.map (fun (n,g) -> Sym.ofString n, g |> Seq.toList) 
-            |> Seq.map (fun (name, fields) ->
-                let tMod = 
-                    match Map.tryFind name inputTypes with
-                        | Some tMod -> tMod
-                        | _ -> failwithf "could not determine input type for semantic: %A" name
-
-                match tMod with
-                    | ModOf tSource ->
-
-                        let creators = 
-                            fields |> List.map (fun (t,n,offset) ->
-                                match t with
-                                    | Array(et,l) ->
-                                        let tTarget = UniformConverter.expectedType et
-                                        let tSeq = tSource.GetInterface("System.Collections.Generic.IEnumerable`1") 
-
-                                        if tSeq <> null then
-                                            let tSourceElement = tSeq.GetGenericArguments().[0]
-                                            let converter = PrimitiveValueConverter.getConverter tSourceElement tTarget
-
-                                            let ctor = 
-                                                if tSource.IsArray then
-                                                    let tWriter = typedefof<ConversionArrayWriter<int,int>>.MakeGenericType [|tSourceElement; tTarget|]
-                                                    tWriter.GetConstructor [|tMod; typeof<int>; typeof<int>; typeof<int>; converter.GetType()|]
-                                                else
-                                                    let tWriter = typedefof<ConversionSeqWriter<list<int>,int,int>>.MakeGenericType [|tSource; tSourceElement; tTarget|]
-                                                    tWriter.GetConstructor [|tMod; typeof<int>; typeof<int>; typeof<int>; converter.GetType()|]
-
-                                            fun (m : IAdaptiveObject) ->
-                                                ctor.Invoke [|m; l; offset; 0; converter|] |> unbox<IWriter>
-
-                                        else
-                                            failwithf "cannot write non-enumerable value to uniform-array: %A" (t,n,offset)
-
-                                    | _ ->
-                                        let tTarget = UniformConverter.expectedType t
-
-                                        if tSource <> tTarget then
-                                            let converter = PrimitiveValueConverter.getConverter tSource tTarget
-
-                                            let tWriter = typedefof<ConversionWriter<int,int>>.MakeGenericType [|tSource; tTarget|]
-                                            let ctor = tWriter.GetConstructor [|tMod; typeof<int>; converter.GetType()|]
-
-                                            fun (m : IAdaptiveObject) ->
-                                                ctor.Invoke [|m; offset; converter|] |> unbox<IWriter>
-                                        else
-                                            let tWriter = typedefof<NoConversionWriter<int>>.MakeGenericType [|tSource |]
-                                            let ctor = tWriter.GetConstructor [|tMod; typeof<int>|]
-
-                                            fun (m : IAdaptiveObject) ->
-                                                ctor.Invoke [|m; offset|] |> unbox<IWriter>
-      
-                            )
-
-                        let creator = 
-                            match creators with
-                                | [s] -> s
-                                | _ -> 
-                                    fun (m : IAdaptiveObject) ->
-                                        MultiWriter (creators |> List.map (fun c -> c m)) :> IWriter
-
-
-                        name, creator
-                    
-                    | _ ->
-                        failwithf "uniform input of unexpected type: %A" tMod
-                )
-            |> Seq.toList
-
-    let private templateCache = System.Collections.Generic.Dictionary<UniformBufferLayout * Map<_,_>, list<Symbol * (IAdaptiveObject -> IWriter)>>()
-
-    let getTemplate (layout : UniformBufferLayout) (inputTypes : Map<Symbol, Type>) =
-        let key = (layout, inputTypes)
-        lock templateCache (fun () ->
-            match templateCache.TryGetValue key with
-                | (true, template) -> template
-                | _ ->
-                    let template = createTemplate layout inputTypes
-                    templateCache.[key] <- template
-                    template
-        )
-
-    let writers (layout : UniformBufferLayout) (inputs : Map<Symbol, IAdaptiveObject>) =
-        let inputTypes = inputs |> Map.map (fun _ m -> m.GetType())
-        let creators = getTemplate layout inputTypes
-
-        creators |> List.choose (fun (n,create) ->
-            match Map.tryFind n inputs with
-                | Some m -> Some (m, create m)
-                | None -> None
-        )
 
 type UniformBuffer =
     class
-        val mutable public Context : Context
-        val mutable public Handle : VkBuffer
+        inherit Buffer
         val mutable public Storage : UnmanagedStruct
         val mutable public Layout : UniformBufferLayout
-        val mutable public IsDirty : bool
-        val mutable public Pointer : deviceptr
 
-        new(ctx,h,s,l,ptr) = { Context = ctx; Handle = h; Storage = s; Layout = l; IsDirty = false; Pointer = ptr }
+        new(device : Device, handle : VkBuffer, mem : DevicePtr, storage : UnmanagedStruct, layout : UniformBufferLayout) = 
+            { inherit Buffer(device, handle, mem); Storage = storage; Layout = layout }
     end
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module UniformBuffer =
+    let create (layout : UniformBufferLayout) (device : Device) =
+        let storage = UnmanagedStruct.alloc layout.size
+
+        let align = device.MinUniformBufferOffsetAlignment
+        let alignedSize = Alignment.next align (int64 layout.size)
+
+        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, alignedSize)
+
+        UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
+
+    let upload (b : UniformBuffer) (device : Device) =
+        use t = device.Token
+        t.Enqueue
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd = 
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
+                    Disposable.Empty
+            }
+
+    let delete (b : UniformBuffer) (device : Device) =
+        device.Delete(b :> Buffer)
+        UnmanagedStruct.free b.Storage
+        b.Storage <- UnmanagedStruct.Null
 
 
 [<AbstractClass; Sealed; Extension>]
-type UniformBufferExtensions private() =
-
-    static let createBuffer(ctx : Context, ptr : deviceptr, flags : VkBufferUsageFlags) =
-        let device = ctx.Device
-
-        let mem, off, size =
-            match ptr.Pointer with
-                | Real(m,s) -> m, 0L, s
-                | View(m,o,s) -> m, o, s
-                | Managed(_,b,s) -> b.Memory, b.Offset, s
-                | _ -> failf "cannot bind null memory to uniform buffer"
-
-        // create a buffer
-        let mutable info =
-            VkBufferCreateInfo(
-                VkStructureType.BufferCreateInfo,
-                0n, VkBufferCreateFlags.None,
-                uint64 size,
-                flags,
-                VkSharingMode.Exclusive,
-                0u,
-                NativePtr.zero
-            )
-        let mutable buffer = VkBuffer.Null
-
-        VkRaw.vkCreateBuffer(device.Handle, &&info, NativePtr.zero, &&buffer) |> check "vkCreateBuffer"
-
-        let mutable reqs = VkMemoryRequirements()
-        VkRaw.vkGetBufferMemoryRequirements(device.Handle, buffer, &&reqs)
-
-
-        if off % int64 device.Physical.Properties.limits.minUniformBufferOffsetAlignment <> 0L then
-            failwithf "invalid uniform-buffer alignment: %A" off
-
-
-        if size = 0L then warnf "size 0 binding"
-
-        // bind the buffer to the device memory
-        VkRaw.vkBindBufferMemory(device.Handle, buffer, mem.Handle, uint64 off) |> check "vkBindBufferMemory"
-
-        buffer
-
+type ContextUniformBufferExtensions private() =
+    [<Extension>]
+    static member inline CreateUniformBuffer(this : Device, layout : UniformBufferLayout) =
+        this |> UniformBuffer.create layout
 
     [<Extension>]
-    static member CreateUniformBuffer(x : Context, layout : UniformBufferLayout) =
-        let storage = UnmanagedStruct.alloc layout.size
-        let mem = x.DeviceLocalMemory.Alloc(int64 layout.size)
-        let buffer = createBuffer(x, mem, VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit)
-        UniformBuffer(x, buffer, storage, layout, mem)
+    static member inline Upload(this : Device, b : UniformBuffer) =
+        this |> UniformBuffer.upload b
 
     [<Extension>]
-    static member Delete(x : Context, ub : UniformBuffer) =
-        if ub.Storage.Pointer <> 0n then
-            VkRaw.vkDestroyBuffer(x.Device.Handle, ub.Handle, NativePtr.zero)
-            ub.Pointer.Dispose()
-            UnmanagedStruct.free ub.Storage
-            ub.Storage <- UnmanagedStruct.Null
+    static member inline Delete(this : Device, b : UniformBuffer) =
+        this |> UniformBuffer.delete b       
 
-    [<Extension>]
-    static member Upload(x : Context, ub : UniformBuffer) =
-        Command.custom( fun s ->
-            if ub.IsDirty then
-                VkRaw.vkCmdUpdateBuffer(s.buffer.Handle, ub.Handle, 0UL, uint64 ub.Storage.Size, ub.Storage.Pointer)
-                let updated() = ub.IsDirty <- false
-                { s with cleanupActions = updated::s.cleanupActions; isEmpty = false }
+
+module UniformWriters =
+    open Microsoft.FSharp.NativeInterop
+    open Aardvark.Base.Incremental
+    open System.Reflection
+
+    type IWriter = 
+        abstract member Write : AdaptiveToken * IAdaptiveObject * nativeint -> unit
+
+    type IWriter<'a> =
+        inherit IWriter
+        abstract member Write : AdaptiveToken * 'a * nativeint -> unit
+
+
+
+    [<AbstractClass>]
+    type AbstractWriter<'a>() =
+        abstract member Write : AdaptiveToken * 'a * nativeint -> unit
+
+
+        interface IWriter with
+            member x.Write(caller, value, ptr) =
+                let value = unbox<IMod<'a>> value
+                x.Write(caller, value.GetValue caller, ptr)
+
+        interface IWriter<'a> with
+            member x.Write(caller, value, ptr) = x.Write(caller, value, ptr)
+
+
+    type SingleValueWriter<'a when 'a : unmanaged>(offset : int) =
+        inherit AbstractWriter<'a>()
+
+        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
+            let ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+            NativePtr.write ptr value
+
+    type ConversionWriter<'a, 'b when 'b : unmanaged>(offset : int, convert : 'a -> 'b) =
+        inherit AbstractWriter<'a>()
+
+        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
+            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+            let res = convert value
+            NativePtr.write ptr res
+
+    type NoConversionWriter<'a when 'a : unmanaged>(offset : int) =
+        inherit AbstractWriter<'a>()
+
+        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
+            let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
+            NativePtr.write ptr value
+
+    type MultiWriter<'a>(writers : list<IWriter<'a>>) =
+        inherit AbstractWriter<'a>()
+
+        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
+            for w in writers do w.Write(caller, value, ptr)
+
+        new (writers : list<IWriter>) = MultiWriter<'a>(writers |> List.map unbox<IWriter<'a>>)
+
+    type PropertyWriter<'a, 'b>(prop : PropertyInfo, inner : IWriter<'b>) =
+        inherit AbstractWriter<'a>()
+
+        override x.Write(caller : AdaptiveToken, value : 'a, target : nativeint) =
+            let v = prop.GetValue(value) |> unbox<'b>
+            inner.Write(caller, v, target)
+
+    type FieldWriter<'a, 'b>(prop : FieldInfo, inner : IWriter<'b>) =
+        inherit AbstractWriter<'a>()
+
+        override x.Write(caller : AdaptiveToken, value : 'a, target : nativeint) =
+            let v = prop.GetValue(value) |> unbox<'b>
+            inner.Write(caller, v, target)
+
+    type SequenceWriter<'s, 'a when 's :> seq<'a>>(inner : IWriter<'a>[]) =
+        inherit AbstractWriter<'s>()
+
+        let rec run (caller : AdaptiveToken) (target : nativeint) (index : int) (e : System.Collections.Generic.IEnumerator<'a>) =
+            if index >= inner.Length then 
+                ()
             else
-                s
-        )
+                if e.MoveNext() then
+                    let v = e.Current
+                    inner.[index].Write(caller, v, target)
+                    run caller target (index + 1) e
+                else
+                    ()
 
+        override x.Write(caller : AdaptiveToken, value : 's, target : nativeint) =
+            use e = (value :> seq<'a>).GetEnumerator()
+            run caller target 0 e
+
+        new(writers : list<IWriter>) =
+            SequenceWriter<'s, 'a>(writers |> List.map unbox |> List.toArray)
+
+    module private List =
+        let rec mapOption (f : 'a -> Option<'b>) (l : list<'a>) =
+            match l with
+                | [] -> Some []
+                | h :: rest ->
+                    match f h, mapOption f rest with
+                        | Some h, Some t -> Some (h :: t)
+                        | _ ->  None
+                            
+
+    let rec private tryCreateWriterInternal (offset : int) (target : UniformType) (tSource : Type) =
+        match target with
+            | UniformType.Primitive(t, s, a) ->
+                let tTarget = PrimitiveType.toType t
+                if tSource <> tTarget then
+                    let converter = PrimitiveValueConverter.getConverter tSource tTarget
+
+                    let tWriter = typedefof<ConversionWriter<int,int>>.MakeGenericType [|tSource; tTarget|]
+                    let ctor = tWriter.GetConstructor [|typeof<int>; converter.GetType()|]
+
+                    let writer = ctor.Invoke [|offset; converter|] |> unbox<IWriter>
+                    Some writer
+                else
+                    let tWriter = typedefof<NoConversionWriter<int>>.MakeGenericType [|tSource |]
+                    let ctor = tWriter.GetConstructor [|typeof<int>|]
+
+                    let writer = ctor.Invoke [|offset|] |> unbox<IWriter>
+
+                    Some writer
+
+            | UniformType.Struct(layout) ->
+                let allMembers = tSource.GetMembers(BindingFlags.NonPublic ||| BindingFlags.Public ||| BindingFlags.Instance)
+                let table = allMembers |> Seq.map (fun m -> m.Name, m) |> Dictionary.ofSeq
+
+                let memberInfos =
+                    layout.fields |> List.mapOption (fun field ->
+                        match table.TryGetValue field.name with
+                            | (true, mem) -> Some (field, mem)
+                            | _ -> None
+                    )
+
+                match memberInfos with
+                    | Some list ->
+                        let writers =
+                            list |> List.mapOption (fun (field, mem) ->
+                                match mem with
+                                    | :? PropertyInfo as pi ->
+                                        let inner = tryCreateWriterInternal (offset + field.offset) field.fieldType pi.PropertyType
+                                        let tWriter = typedefof<PropertyWriter<int, int>>.MakeGenericType [|tSource; pi.PropertyType|]
+                                        let ctor = tWriter.GetConstructor [| typeof<PropertyInfo>; typedefof<IWriter<int>>.MakeGenericType pi.PropertyType |]
+                                        let writer = ctor.Invoke [|pi; inner |] |> unbox<IWriter>
+                                        Some writer
+                                    | :? FieldInfo as fi ->
+                                        let inner = tryCreateWriterInternal (offset + field.offset) field.fieldType fi.FieldType
+                                        let tWriter = typedefof<FieldWriter<int, int>>.MakeGenericType [|tSource; fi.FieldType|]
+                                        let ctor = tWriter.GetConstructor [| typeof<FieldInfo>; typedefof<IWriter<int>>.MakeGenericType fi.FieldType |]
+                                        let writer = ctor.Invoke [|fi; inner |] |> unbox<IWriter>
+                                        Some writer
+                                    | _ ->
+                                        None
+                            )
+
+                        match writers with
+                            | Some list ->
+                                match list with
+                                    | [x] -> Some x
+                                    | _ ->
+                                        let tWriter = typedefof<MultiWriter<_>>.MakeGenericType [|tSource|]
+                                        let ctor = tWriter.GetConstructor [| typeof<list<IWriter>> |]
+                                        let writer = ctor.Invoke [|list|] |> unbox<IWriter>
+                                        Some writer
+                            | None ->
+                                None
+
+                    | _ ->
+                        None
+
+            | UniformType.Array(itemType, len, s, a) ->
+                let iface = tSource.GetInterface(typedefof<System.Collections.Generic.IEnumerable<_>>.FullName)
+                if isNull iface then
+                    None
+                else
+                    let tItem = iface.GetGenericArguments().[0]
+                    let tSequence = tSource
+                    let writers = 
+                        List.init len id
+                        |> List.mapOption (fun i ->
+                            let off = offset + i * a
+                            match tryCreateWriterInternal off itemType tItem  with
+                                | Some writer -> Some writer
+                                | _ -> None
+                        )
+
+                    let tWriter = typedefof<SequenceWriter<list<int>, int>>.MakeGenericType [|tSequence; tItem|]
+                    let ctor = tWriter.GetConstructor [| typeof<list<IWriter>> |]
+                    let writer = ctor.Invoke [|writers|] |> unbox<IWriter>
+                    Some writer
+    
+    let cache = System.Collections.Concurrent.ConcurrentDictionary<int * UniformType * Type, Option<IWriter>>()
+
+    let tryGetWriter (offset : int) (tTarget : UniformType) (tSource : Type) =
+        let key = (offset, tTarget, tSource)
+        cache.GetOrAdd(key, fun (offset, tTarget, tSource) ->
+            tryCreateWriterInternal offset tTarget tSource
+        )
+    
+    let getWriter (offset : int) (tTarget : UniformType) (tSource : Type) =
+        match tryGetWriter offset tTarget tSource with
+            | Some w -> w
+            | None -> failf "could not create UniformWriter for field %A (input-type: %A)" tTarget tSource
