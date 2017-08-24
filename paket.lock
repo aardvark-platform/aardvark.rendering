@@ -54,11 +54,11 @@ NUGET
       Aardvark.Base (>= 2.1)
       Aardvark.Base.FSharp (>= 2.1)
       Aardvark.Base.Incremental (>= 2.1)
+    Unofficial.AssimpNet (3.3.3)
     Unofficial.LibTessDotNet (1.0.0)
   remote: https://api.nuget.org/v3/index.json
     Another.Unofficial.Xilium.CefGlue.UnpackNativeDependencies (0.0.9)
       SharpZipLib (>= 0.86 < 0.87)
-    AssimpNet (3.3.2)
     BruTile (0.12)
     Clipper (6.4)
     CommonMark.NET (0.12)
