@@ -295,7 +295,9 @@ module Buffer =
         if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
             failf "cannot create buffer using memory %A" memory
 
-        let ptr = memory.Alloc(int64 reqs.alignment, int64 reqs.size)
+        let ptr = 
+            if memory.IsHostVisible then memory.AllocRaw(int64 reqs.size) :> DevicePtr
+            else memory.Alloc(int64 reqs.alignment, int64 reqs.size)
 
         VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind buffer-memory"

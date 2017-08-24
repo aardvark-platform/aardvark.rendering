@@ -128,7 +128,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
                 | MessageSeverity.Warning ->
                     Report.Warn("[Vulkan] {0}", str)
-                    debugBreak msg
 
                 | MessageSeverity.PerformanceWarning ->
                     Report.Line("[Vulkan] performance: {0}", str)

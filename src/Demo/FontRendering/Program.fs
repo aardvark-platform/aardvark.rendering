@@ -95,7 +95,7 @@ module VulkanTests =
             and set r = witness <- r
 
     let run() =
-        use app = new HeadlessVulkanApplication()
+        use app = new HeadlessVulkanApplication(true)
         let device = app.Device
 
 
@@ -253,7 +253,7 @@ module VulkanTests =
             t
 
         let uploaders = 
-            Array.init 2 (fun _ -> startThread uploader)
+            Array.init 1 (fun _ -> startThread uploader)
 
         let renderers = 
             Array.init 1 (fun _ -> startThread renderer)
