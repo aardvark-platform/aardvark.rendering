@@ -1413,6 +1413,9 @@ type DeviceMemoryImage(device : Device, image : Image, aspect : ImageAspect) =
     abstract member Upload : level : int * format : PixFormat * srcTrafo : ImageTrafo * src : nativeint * srcRowSize : int64 -> unit
     abstract member Download : level : int * format : PixFormat * dstTrafo : ImageTrafo * dst : nativeint * dstRowSize : int64 -> unit
 
+
+
+
 type DeviceMemoryImage<'a when 'a : unmanaged> internal(device : Device, image : Image, aspect : ImageAspect) =
     inherit DeviceMemoryImage(device, image, aspect)
 
@@ -1556,17 +1559,21 @@ type DeviceMemoryImage<'a when 'a : unmanaged> internal(device : Device, image :
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DeviceMemoryImage =
 
-    let create<'a when 'a : unmanaged> (size : V2i) (levels : int) (fmt : Col.Format) (device : Device) =
+    let create<'a when 'a : unmanaged> (size : V3i) (dim : TextureDimension) (levels : int) (fmt : Col.Format) (device : Device) =
         let pixFormat = PixFormat(typeof<'a>, fmt)
         let format = device.GetSupportedFormat(VkImageTiling.Optimal, pixFormat)
-        let extent = VkExtent3D(size.X, size.Y, 1)
+        let extent = VkExtent3D(size.X, size.Y, size.Z)
+
+        let imageType = VkImageType.ofTextureDimension dim
+
         let mutable info =
             VkImageCreateInfo(
                 VkStructureType.ImageCreateInfo, 0n,
                 VkImageCreateFlags.None,
-                VkImageType.D2d,
+                imageType,
                 format,
                 extent, 
+
                 uint32 levels, 1u, VkSampleCountFlags.D1Bit,
                 VkImageTiling.Linear,
                 VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit,
@@ -1593,7 +1600,7 @@ module DeviceMemoryImage =
         VkRaw.vkBindImageMemory(device.Handle, handle, memory.Memory.Handle, uint64 memory.Offset)
             |> check "could not bind image memory for DeviceVolume"
 
-        let image = Image(device, handle, V3i(size.X, size.Y, 1), levels, 1, 1, TextureDimension.Texture2D, format, memory, VkImageLayout.Preinitialized)
+        let image = Image(device, handle, size, levels, 1, 1, dim, format, memory, VkImageLayout.Preinitialized)
         DeviceMemoryImage<'a>(device, image, ImageAspect.Color)
 
     let delete (mipMap : DeviceMemoryImage) (device : Device) =
@@ -1603,8 +1610,8 @@ module DeviceMemoryImage =
             VkRaw.vkDestroyImage(device.Handle, image.Handle, NativePtr.zero)
             image.Handle <- VkImage.Null
 
-    let inline private createUpcast<'a when 'a : unmanaged> (size : V2i) (levels : int) (fmt : Col.Format) (device : Device) =
-        create<'a> size levels fmt device :> DeviceMemoryImage
+    let inline private createUpcast<'a when 'a : unmanaged> (size : V3i) (dim : TextureDimension) (levels : int) (fmt : Col.Format) (device : Device) =
+        create<'a> size dim levels fmt device :> DeviceMemoryImage
 
     let private ctors =
         LookupTable.lookupTable [
@@ -1621,13 +1628,13 @@ module DeviceMemoryImage =
             typeof<float>, createUpcast<float>
         ]
 
-    let createUntyped (size : V2i) (levels : int) (pixFormat : PixFormat) (device : Device) =
-        ctors pixFormat.Type size levels pixFormat.Format device
+    let createUntyped (size : V3i) (dim : TextureDimension) (levels : int) (pixFormat : PixFormat) (device : Device) =
+        ctors pixFormat.Type size dim levels pixFormat.Format device
 
     let ofPixImageMipMap (data : PixImageMipMap) (levels : int) (device : Device) =
         let size = data.[0].Size
         let pixFormat = data.PixFormat
-        let res = device |> createUntyped size levels pixFormat
+        let res = device |> createUntyped (V3i(size, 1)) TextureDimension.Texture2D levels pixFormat
 
         for l in 0 .. levels - 1 do
             res.Upload(l, data.[l].Transformed(ImageTrafo.MirrorY))
@@ -1697,7 +1704,7 @@ module ``Devil Loader`` =
                     let bytesPerPixel = IL.GetInteger(IntName.ImageBytesPerPixel)
                     let rowSize = int64 bytesPerPixel * int64 width
 
-                    let target = device |> DeviceMemoryImage.createUntyped (V2i(width, height)) 1 pixFormat
+                    let target = device |> DeviceMemoryImage.createUntyped (V3i(width, height, 1)) TextureDimension.Texture2D 1 pixFormat
                     target.Upload(0, pixFormat, ImageTrafo.MirrorY, data, rowSize)
                     
                     target
@@ -1723,12 +1730,12 @@ type DeviceMemoryImageExtensions private() =
         this |> DeviceMemoryImage.ofFile file
 
     [<Extension>]
-    static member inline CreateDeviceMemoryImage(this : Device, size : V2i, levels : int, fmt : PixFormat) =
-        this |> DeviceMemoryImage.createUntyped size levels fmt
+    static member inline CreateDeviceMemoryImage(this : Device, size : V3i, dim : TextureDimension, levels : int, fmt : PixFormat) =
+        this |> DeviceMemoryImage.createUntyped size dim levels fmt
 
     [<Extension>]
-    static member inline CreateDeviceMemoryImage<'a when 'a : unmanaged>(this : Device, size : V2i, levels : int, fmt : Col.Format) =
-        this |> DeviceMemoryImage.create<'a> size levels fmt
+    static member inline CreateDeviceMemoryImage<'a when 'a : unmanaged>(this : Device, size : V3i, dim : TextureDimension, levels : int, fmt : Col.Format) =
+        this |> DeviceMemoryImage.create<'a> size dim levels fmt
 
     [<Extension>]
     static member inline Delete(this : Device, mipMap : DeviceMemoryImage) =
@@ -1820,6 +1827,44 @@ module ``Image Command Extensions`` =
                     do! Command.Copy(src.[i, *], dst.[i, *])
             }
 
+
+        static member Copy(src : Buffer, srcOffset : int64, srcStride : V2i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let mutable copy =
+                        VkBufferImageCopy(
+                            uint64 srcOffset,
+                            uint32 srcStride.X,
+                            uint32 srcStride.Y,
+                            dst.VkImageSubresourceLayers,
+                            VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
+                            VkExtent3D(size.X, size.Y, size.Z)
+                        )
+                        
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Image.Handle, dst.Image.Layout, 1u, &&copy)
+                    Disposable.Empty
+            }
+
+        static member Copy(src : ImageSubresourceLayers, srcOffset : V3i, dst : Buffer, dstOffset : int64, dstStride : V2i, size : V3i) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let mutable copy =
+                        VkBufferImageCopy(
+                            uint64 dstOffset,
+                            uint32 dstStride.X,
+                            uint32 dstStride.Y,
+                            src.VkImageSubresourceLayers,
+                            VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
+                            VkExtent3D(size.X, size.Y, size.Z)
+                        )
+                        
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Handle, 1u, &&copy)
+                    Disposable.Empty
+            }
 
         static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
             if src.SliceCount <> dst.SliceCount then
@@ -2310,7 +2355,7 @@ module Image =
                 failf "unsupported texture-type: %A" t
 
     let downloadLevel (src : ImageSubresource) (dst : PixImage) (device : Device) =
-        let temp = device.CreateDeviceMemoryImage(dst.Size, 1, dst.PixFormat)
+        let temp = device.CreateDeviceMemoryImage(V3i(dst.Size, 1), TextureDimension.Texture2D, 1, dst.PixFormat)
         try
             device.GraphicsFamily.run {
                 let layout = src.Image.Layout

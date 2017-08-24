@@ -224,6 +224,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
         )
 
     let hostMemory = memories.[physical.HostMemory.index]
+    let deviceMemory = memories.[physical.DeviceMemory.index]
 
     let currentResourceToken = new ThreadLocal<ref<Option<DeviceToken>>>(fun _ -> ref None)
     let mutable runtime = Unchecked.defaultof<IRuntime>
@@ -291,6 +292,7 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     member x.Memories = memories
 
     member x.HostMemory = hostMemory
+    member x.DeviceMemory = deviceMemory
 
     member x.OnDispose = onDispose.Publish :> IObservable<_>
 
@@ -1264,7 +1266,13 @@ and DeviceFreeList() =
                 else
                     let c = compare l.Size r.Size
                     if c <> 0 then c
-                    else compare l.Offset r.Offset       
+                    else 
+                        let c = compare l.Offset r.Offset     
+                        if c <> 0 then c
+                        else 
+                            let c = compare l.Memory.Handle.Handle r.Memory.Handle.Handle  
+                            if c = 0 then 0
+                            else c
         }
 
     static let next (align : int64) (v : int64) =
@@ -1273,17 +1281,6 @@ and DeviceFreeList() =
 
 
     let store = SortedSetExt<DeviceBlock>(Seq.empty, comparer)
-        
-
-    member x.TryGetGreaterOrEqual(size : int64) =
-        let query = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
-        let (_, _, r) = store.FindNeighbours(query)
-        if r.HasValue then 
-            let r = r.Value
-            store.Remove r |> ignore
-            Some r
-        else 
-            None
 
     member x.TryGetAligned(align : int64, size : int64) =
         let min = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
@@ -1327,7 +1324,9 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
 
 
     member x.Alloc(align : int64, size : int64) =
-        if size >= blockSize then
+        if size <= 0L then
+            DevicePtr.Null
+        elif size >= blockSize then
             heap.AllocRaw(size) :> DevicePtr
         else
             lock free (fun () ->
@@ -1337,9 +1336,10 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
                         let alignedSize = b.Size - (alignedOffset - b.Offset)
                         if alignedOffset > b.Offset then
                             let l = new DeviceBlock(x, b.Memory, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
-                            if not (isNull l.Prev) then l.Prev.Next <- l
 
+                            if not (isNull l.Prev) then l.Prev.Next <- l
                             b.Prev <- l
+
                             free.Insert(l)
                             b.Offset <- alignedOffset
                             b.Size <- alignedSize    
@@ -1366,15 +1366,14 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
                 let old = b
                     
                 let b = new DeviceBlock(x, b.Memory, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
-
                 if not (isNull b.Prev) then b.Prev.Next <- b
                 if not (isNull b.Next) then b.Next.Prev <- b
 
                 old.Next <- null
                 old.Prev <- null
-                old.Offset <- -1L
-                old.Size <- 0L
-
+                old.Offset <- -1234L
+                old.Size <- -2000L
+                old.IsFree <- true
 
 
                 let prev = b.Prev
@@ -1385,8 +1384,8 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
                     free.Remove(prev) |> ignore
                         
                     b.Prev <- prev.Prev
-                    if isNull prev.Prev then isFirst <- true
-                    else prev.Prev.Next <- b
+                    if isNull b.Prev then isFirst <- true
+                    else b.Prev.Next <- b
 
                     b.Offset <- prev.Offset
                     b.Size <- b.Size + prev.Size
@@ -1394,9 +1393,8 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
                 if not isLast && next.IsFree then
                     free.Remove(next) |> ignore
                     b.Next <- next.Next
-                    if isNull next.Next then isLast <- true
-                    else next.Next.Prev <- b
-                    b.Next <- next.Next
+                    if isNull b.Next then isLast <- true
+                    else b.Next.Prev <- b
 
                     b.Size <- b.Size + next.Size
 

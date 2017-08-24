@@ -311,6 +311,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
         ]
 
     let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
+    let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
 
     member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
         match tiling with
@@ -335,6 +336,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, inde
     member x.DriverVersion = driverVersion
 
     member x.HostMemory = hostMemory
+    member x.DeviceMemory = deviceMemory
 
     member x.Instance = instance
     member x.Limits : DeviceLimits = limits

@@ -272,7 +272,8 @@ module Buffer =
         )
 
 
-    let allocConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
+    let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
+        let device = memory.Device
         let mutable info =
             VkBufferCreateInfo(
                 VkStructureType.BufferCreateInfo, 0n,
@@ -291,13 +292,22 @@ module Buffer =
         let mutable reqs = VkMemoryRequirements()
         VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, &&reqs)
 
-        let ptr = device.Alloc(reqs, true)
+        if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
+            failf "cannot create buffer using memory %A" memory
+
+        let ptr = memory.Alloc(int64 reqs.alignment, int64 reqs.size)
 
         VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind buffer-memory"
 
 
         Buffer(device, handle, ptr)
+
+    let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
+        createConcurrent false flags size memory
+
+    let inline allocConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
+        createConcurrent conc flags size device.DeviceMemory
 
     let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
         allocConcurrent false flags size device

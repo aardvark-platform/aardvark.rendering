@@ -230,13 +230,7 @@ module MemoryFlags =
 
     let internal deviceScore (f : MemoryFlags) =
         if deviceLocal f then
-            let mutable res = 16
-
-            if hostVisible f then res <- res + 8
-            if hostCoherent f then res <- res + 4
-            if hostCached f then res <- res + 2
-            if lazilyAllocated f then res <- res + 2
-            res
+            1
         else
             0
 
