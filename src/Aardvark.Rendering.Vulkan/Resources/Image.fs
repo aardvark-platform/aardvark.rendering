@@ -1713,9 +1713,10 @@ type DeviceVector<'a when 'a : unmanaged>(memory : DeviceMemory, info : VectorIn
         )
 
     member x.Set(v : 'a) =
-        x.Mapped (fun dst ->
-            NativeVector.set v dst
-        )
+        if info.Size > 0L then
+            x.Mapped (fun dst ->
+                NativeVector.set v dst
+            )
         
 [<Struct>]
 type DeviceMatrix<'a when 'a : unmanaged>(memory : DeviceMemory, info : MatrixInfo) =
@@ -1805,9 +1806,10 @@ type DeviceMatrix<'a when 'a : unmanaged>(memory : DeviceMemory, info : MatrixIn
         )
 
     member x.Set(v : 'a) =
-        x.Mapped (fun dst ->
-            NativeMatrix.set v dst
-        )
+        if info.Size.AllGreater 0L then
+            x.Mapped (fun dst ->
+                NativeMatrix.set v dst
+            )
        
 [<Struct>]
 type DeviceVolume<'a when 'a : unmanaged>(memory : DeviceMemory, info : VolumeInfo) =
@@ -1958,9 +1960,10 @@ type DeviceVolume<'a when 'a : unmanaged>(memory : DeviceMemory, info : VolumeIn
         )
 
     member x.Set(v : 'a) =
-        x.Mapped (fun dst ->
-            NativeVolume.set v dst
-        )
+        if info.Size.AllGreater 0L then
+            x.Mapped (fun dst ->
+                NativeVolume.set v dst
+            )
        
 [<Struct>]
 type DeviceTensor4<'a when 'a : unmanaged>(memory : DeviceMemory, info : Tensor4Info) =
@@ -2146,9 +2149,10 @@ type DeviceTensor4<'a when 'a : unmanaged>(memory : DeviceMemory, info : Tensor4
         )
 
     member x.Set(v : 'a) =
-        x.Mapped (fun dst ->
-            NativeTensor4.set v dst
-        )
+        if info.Size.AllGreater 0L then
+            x.Mapped (fun dst ->
+                NativeTensor4.set v dst
+            )
 
 [<AbstractClass>]
 type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageFormat : VkFormat) =
