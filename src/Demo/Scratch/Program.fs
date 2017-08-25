@@ -111,8 +111,8 @@ let quadTexture() =
 
     let environment =
         environment 
-            |> PixImageCube.toOpenGlConvention
-            //|> PixImageCube.rotZ90
+            //|> PixImageCube.toOpenGlConvention
+            |> PixImageCube.rotX90
             |> PixImageCube.toTexture true
 
     let env =
@@ -752,21 +752,21 @@ open Ranges
 
 [<EntryPoint>]
 let main argv = 
-    
-
-    let a = RangeSet.Empty.Add(Range1l(0L, 10L)).Add(Range1l(100L, 1000L)).Add(Range1l(12L, 98L))
-    let b = a.Remove(Range1l(50L, 100L))
-    printfn "%A" a
-    printfn "%A" b
-
-    printf "contained: "
-    for i in 0 .. 10000 do
-        let c = b.Contains (int64 i)
-        if c then printf "%d " i
-
-    printfn ""
-
-    System.Environment.Exit 0
+//    
+//
+//    let a = RangeSet.Empty.Add(Range1l(0L, 10L)).Add(Range1l(100L, 1000L)).Add(Range1l(12L, 98L))
+//    let b = a.Remove(Range1l(50L, 100L))
+//    printfn "%A" a
+//    printfn "%A" b
+//
+//    printf "contained: "
+//    for i in 0 .. 10000 do
+//        let c = b.Contains (int64 i)
+//        if c then printf "%d " i
+//
+//    printfn ""
+//
+//    System.Environment.Exit 0
 
     Ag.initialize()
     Aardvark.Init()

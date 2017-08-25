@@ -16,6 +16,10 @@ open System.Windows.Media
 open System.Windows
 open FontRendering
 open Aardvark.Rendering.Text
+open System.Runtime.InteropServices
+open Microsoft.FSharp.NativeInterop
+
+#nowarn "9"
 
 module Shader =
     type Vertex = { 
@@ -219,31 +223,39 @@ module VulkanTests =
 
 
 
+        let sw = System.Diagnostics.Stopwatch()
+
         let renderer() =
             while true do
-//                Mod.force img.Texture |> ignore
-//                Log.start "frame %d" count
-//                Log.line "modification: %A" modifications
-//                Log.line "resident: %A" resident
-//                Log.stop()
-//                Thread.Sleep(16)
-
-                let errors = Mod.force renderResult
-
-                match errors with
-                    | [] -> 
-                        Log.start "frame %d" count
-                        Log.line "modification: %A" modifications
-                        Log.line "resident: %A" resident
-                        if totalErros > 0L then Log.warn "totalErros %A" totalErros
-                        Log.stop()
-                    | _ ->
-                        let errs = List.length errors |> int64
-                        totalErros <- totalErros + errs
-                        Log.warn "errors: %A" errs
-                        ()
-
+                sw.Start()
+                Mod.force img.Texture |> ignore
+                sw.Stop()
                 Interlocked.Increment(&count) |> ignore
+
+                if count % 10 = 0 then
+                    Log.start "frame %d" count
+                    Log.line "modifications: %A" modifications
+                    Log.line "resident:      %A" resident
+                    Log.line "force:         %A" (sw.MicroTime / 10.0)
+                    Log.stop()
+                    sw.Reset()
+                Thread.Sleep(16)
+
+//                let errors = Mod.force renderResult
+//
+//                match errors with
+//                    | [] -> 
+//                        Log.start "frame %d" count
+//                        Log.line "modification: %A" modifications
+//                        Log.line "resident: %A" resident
+//                        if totalErros > 0L then Log.warn "totalErros %A" totalErros
+//                        Log.stop()
+//                    | _ ->
+//                        let errs = List.length errors |> int64
+//                        totalErros <- totalErros + errs
+//                        Log.warn "errors: %A" errs
+//                        ()
+
 
 
         let startThread (f : unit -> unit) =
@@ -261,14 +273,100 @@ module VulkanTests =
         Console.ReadLine() |> ignore
 
 
+let tensorPerformance() =
+    
+    for sizeE in 4 .. 9 do
+        let size = V4i(1 <<< sizeE, 1 <<< sizeE, 1 <<< sizeE, 1)
+        //let size = V4i(1024,512,512,1)
+        let iter = 30
+
+        printfn " 0: copy %A" size
+
+        let srcManaged = new Tensor4<float32>(size)
+        let dstManaged = new Tensor4<float32>(size)
+
+        let s = V4l size
+        let srcManaged = 
+            srcManaged.SubTensor4(
+                V4l(10L, 10L, 10L, 0L),
+                srcManaged.Size - V4l(11L, 12L, 13L, 0L)
+            )
+
+        let dstManaged = 
+            dstManaged.SubTensor4(
+                V4l(10L, 10L, 10L, 0L),
+                dstManaged.Size - V4l(11L, 12L, 13L, 0L)
+            )
+
+
+
+        let sw = System.Diagnostics.Stopwatch()
+        // warmup
+        for i in 1 .. 2 do
+            dstManaged.Set(srcManaged) |> ignore
+
+        printf " 0:     managed: "
+        sw.Restart()
+        for i in 1 .. iter do
+            dstManaged.Set(srcManaged) |> ignore
+        sw.Stop()
+
+        printfn "%A" (sw.MicroTime / iter)
+
+        let sizeInBytes = nativeint size.X * nativeint size.Y * nativeint size.Z * nativeint size.W * nativeint sizeof<float32>
+        let srcPtr = Marshal.AllocHGlobal sizeInBytes |> NativePtr.ofNativeInt
+        let dstPtr = Marshal.AllocHGlobal sizeInBytes |> NativePtr.ofNativeInt
+        let srcNative = NativeTensor4<float32>(srcPtr, srcManaged.Info)
+        let dstNative = NativeTensor4<float32>(dstPtr, dstManaged.Info)
+        // warmup
+        for i in 1 .. 2 do
+            srcNative.CopyTo dstNative
+
+        printf " 0:     native: "
+        sw.Restart()
+        for i in 1 .. iter do
+            srcNative.CopyTo dstNative
+        sw.Stop()
+
+        printfn "%A" (sw.MicroTime / iter)
+
+
+        let srcRaw = NativePtr.toNativeInt srcPtr
+        let dstRaw = NativePtr.toNativeInt dstPtr
+        
+        // warmup
+        for i in 1 .. 2 do
+            Marshal.Copy(srcRaw, dstRaw, sizeInBytes)
+            
+        printf " 0:     raw: "
+        sw.Restart()
+        for i in 1 .. iter do
+            Marshal.Copy(srcRaw, dstRaw, sizeInBytes)
+        sw.Stop()
+
+        printfn "%A" (sw.MicroTime / iter)
+
+
+
+        NativePtr.free srcPtr
+        NativePtr.free dstPtr
+
+
+
+
+
+
+
 
 
 [<EntryPoint; STAThread>]
 let main argv = 
+    
     Ag.initialize()
     Aardvark.Init()
 
-    VulkanTests.run()
+    tensorPerformance()
+    //VulkanTests.run()
     Environment.Exit 0
 
 

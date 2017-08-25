@@ -9,9 +9,57 @@ open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Base.ReflectionHelpers
 
 #nowarn "9"
 #nowarn "51"
+
+[<AbstractClass>]
+type private PixImageVisitor<'r>() =
+    static let table =
+        LookupTable.lookupTable [
+            typeof<int8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int8>(unbox img, 127y))
+            typeof<uint8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint8>(unbox img, 255uy))
+            typeof<int16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int16>(unbox img, Int16.MaxValue))
+            typeof<uint16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint16>(unbox img, UInt16.MaxValue))
+            typeof<int32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int32>(unbox img, Int32.MaxValue))
+            typeof<uint32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint32>(unbox img, UInt32.MaxValue))
+            typeof<int64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int64>(unbox img, Int64.MaxValue))
+            typeof<uint64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint64>(unbox img, UInt64.MaxValue))
+            typeof<float16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float16>(unbox img, float16(Float32 = 1.0f)))
+            typeof<float32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float32>(unbox img, 1.0f))
+            typeof<float>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float>(unbox img, 1.0))
+        ]
+    abstract member Visit<'a when 'a : unmanaged> : PixImage<'a> * 'a -> 'r
+
+        
+
+
+    interface IPixImageVisitor<'r> with
+        member x.Visit<'a>(img : PixImage<'a>) =
+            table (typeof<'a>) (x, img)
+
+[<AbstractClass>]
+type private PixVolumeVisitor<'r>() =
+    static let table =
+        LookupTable.lookupTable [
+            typeof<int8>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int8>(unbox img, 127y))
+            typeof<uint8>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint8>(unbox img, 255uy))
+            typeof<int16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int16>(unbox img, Int16.MaxValue))
+            typeof<uint16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint16>(unbox img, UInt16.MaxValue))
+            typeof<int32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int32>(unbox img, Int32.MaxValue))
+            typeof<uint32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint32>(unbox img, UInt32.MaxValue))
+            typeof<int64>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int64>(unbox img, Int64.MaxValue))
+            typeof<uint64>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint64>(unbox img, UInt64.MaxValue))
+            typeof<float16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float16>(unbox img, float16(Float32 = 1.0f)))
+            typeof<float32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float32>(unbox img, 1.0f))
+            typeof<float>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float>(unbox img, 1.0))
+        ]
+    abstract member Visit<'a when 'a : unmanaged> : PixVolume<'a> * 'a -> 'r
+
+    interface IPixVolumeVisitor<'r> with
+        member x.Visit<'a>(img : PixVolume<'a>) =
+            table (typeof<'a>) (x, img)
 
 
 // ===========================================================================================
@@ -1026,6 +1074,196 @@ module ``Image Format Extensions`` =
                 VkFormat.Astc1212SrgbBlock, -1               
             ]
 
+
+        let expectedType =
+            LookupTable.lookupTable [
+                VkFormat.Undefined, null
+                VkFormat.R4g4UnormPack8, typeof<uint8>
+                VkFormat.R4g4b4a4UnormPack16, typeof<uint16>
+                VkFormat.B4g4r4a4UnormPack16, typeof<uint16>
+                VkFormat.R5g6b5UnormPack16, typeof<uint16>
+                VkFormat.B5g6r5UnormPack16, typeof<uint16>
+                VkFormat.R5g5b5a1UnormPack16, typeof<uint16>
+                VkFormat.B5g5r5a1UnormPack16, typeof<uint16>
+                VkFormat.A1r5g5b5UnormPack16, typeof<uint16>
+                VkFormat.R8Unorm, typeof<uint8>
+                VkFormat.R8Snorm, typeof<int8>
+                VkFormat.R8Uscaled, typeof<uint8>
+                VkFormat.R8Sscaled, typeof<int8>
+                VkFormat.R8Uint, typeof<uint8>
+                VkFormat.R8Sint, typeof<int8>
+                VkFormat.R8Srgb, typeof<uint8>
+                VkFormat.R8g8Unorm, typeof<uint8>
+                VkFormat.R8g8Snorm, typeof<int8>
+                VkFormat.R8g8Uscaled, typeof<uint8>
+                VkFormat.R8g8Sscaled, typeof<int8>
+                VkFormat.R8g8Uint, typeof<uint8>
+                VkFormat.R8g8Sint, typeof<int8>
+                VkFormat.R8g8Srgb, typeof<uint8>
+                VkFormat.R8g8b8Unorm, typeof<uint8>
+                VkFormat.R8g8b8Snorm, typeof<int8>
+                VkFormat.R8g8b8Uscaled, typeof<uint8>
+                VkFormat.R8g8b8Sscaled, typeof<int8>
+                VkFormat.R8g8b8Uint, typeof<uint8>
+                VkFormat.R8g8b8Sint, typeof<int8>
+                VkFormat.R8g8b8Srgb, typeof<uint8>
+                VkFormat.B8g8r8Unorm, typeof<uint8>
+                VkFormat.B8g8r8Snorm, typeof<int8>
+                VkFormat.B8g8r8Uscaled, typeof<uint8>
+                VkFormat.B8g8r8Sscaled, typeof<int8>
+                VkFormat.B8g8r8Uint, typeof<uint8>
+                VkFormat.B8g8r8Sint, typeof<int8>
+                VkFormat.B8g8r8Srgb, typeof<uint8>
+                VkFormat.R8g8b8a8Unorm, typeof<uint8>
+                VkFormat.R8g8b8a8Snorm, typeof<int8>
+                VkFormat.R8g8b8a8Uscaled, typeof<uint8>
+                VkFormat.R8g8b8a8Sscaled, typeof<int8>
+                VkFormat.R8g8b8a8Uint, typeof<uint8>
+                VkFormat.R8g8b8a8Sint, typeof<int8>
+                VkFormat.R8g8b8a8Srgb, typeof<uint8>
+                VkFormat.B8g8r8a8Unorm, typeof<uint8>
+                VkFormat.B8g8r8a8Snorm, typeof<int8>
+                VkFormat.B8g8r8a8Uscaled, typeof<uint8>
+                VkFormat.B8g8r8a8Sscaled, typeof<int8>
+                VkFormat.B8g8r8a8Uint, typeof<uint8>
+                VkFormat.B8g8r8a8Sint, typeof<int8>
+                VkFormat.B8g8r8a8Srgb, typeof<uint8>
+                VkFormat.A8b8g8r8UnormPack32, typeof<uint32>
+                VkFormat.A8b8g8r8SnormPack32, typeof<uint32>
+                VkFormat.A8b8g8r8UscaledPack32, typeof<uint32>
+                VkFormat.A8b8g8r8SscaledPack32, typeof<uint32>
+                VkFormat.A8b8g8r8UintPack32, typeof<uint32>
+                VkFormat.A8b8g8r8SintPack32, typeof<uint32>
+                VkFormat.A8b8g8r8SrgbPack32, typeof<uint32>
+                VkFormat.A2r10g10b10UnormPack32, typeof<uint32>
+                VkFormat.A2r10g10b10SnormPack32, typeof<uint32>
+                VkFormat.A2r10g10b10UscaledPack32, typeof<uint32>
+                VkFormat.A2r10g10b10SscaledPack32, typeof<uint32>
+                VkFormat.A2r10g10b10UintPack32, typeof<uint32>
+                VkFormat.A2r10g10b10SintPack32, typeof<uint32>
+                VkFormat.A2b10g10r10UnormPack32, typeof<uint32>
+                VkFormat.A2b10g10r10SnormPack32, typeof<uint32>
+                VkFormat.A2b10g10r10UscaledPack32, typeof<uint32>
+                VkFormat.A2b10g10r10SscaledPack32, typeof<uint32>
+                VkFormat.A2b10g10r10UintPack32, typeof<uint32>
+                VkFormat.A2b10g10r10SintPack32, typeof<uint32>
+                VkFormat.R16Unorm, typeof<uint16>
+                VkFormat.R16Snorm, typeof<int16>
+                VkFormat.R16Uscaled, typeof<uint16>
+                VkFormat.R16Sscaled, typeof<int16>
+                VkFormat.R16Uint, typeof<uint16>
+                VkFormat.R16Sint, typeof<int16>
+                VkFormat.R16Sfloat, typeof<float16>
+                VkFormat.R16g16Unorm, typeof<uint16>
+                VkFormat.R16g16Snorm, typeof<int16>
+                VkFormat.R16g16Uscaled, typeof<uint16>
+                VkFormat.R16g16Sscaled, typeof<int16>
+                VkFormat.R16g16Uint, typeof<uint16>
+                VkFormat.R16g16Sint, typeof<int16>
+                VkFormat.R16g16Sfloat, typeof<float16>
+                VkFormat.R16g16b16Unorm, typeof<uint16>
+                VkFormat.R16g16b16Snorm, typeof<int16>
+                VkFormat.R16g16b16Uscaled, typeof<uint16>
+                VkFormat.R16g16b16Sscaled, typeof<int16>
+                VkFormat.R16g16b16Uint, typeof<uint16>
+                VkFormat.R16g16b16Sint, typeof<int16>
+                VkFormat.R16g16b16Sfloat, typeof<float16>
+                VkFormat.R16g16b16a16Unorm, typeof<uint16>
+                VkFormat.R16g16b16a16Snorm, typeof<int16>
+                VkFormat.R16g16b16a16Uscaled, typeof<uint16>
+                VkFormat.R16g16b16a16Sscaled, typeof<int16>
+                VkFormat.R16g16b16a16Uint, typeof<uint16>
+                VkFormat.R16g16b16a16Sint, typeof<int16>
+                VkFormat.R16g16b16a16Sfloat, typeof<float16>
+                VkFormat.R32Uint, typeof<uint32>
+                VkFormat.R32Sint, typeof<int32>
+                VkFormat.R32Sfloat, typeof<float32>
+                VkFormat.R32g32Uint, typeof<uint32>
+                VkFormat.R32g32Sint, typeof<int32>
+                VkFormat.R32g32Sfloat, typeof<float32>
+                VkFormat.R32g32b32Uint, typeof<uint32>
+                VkFormat.R32g32b32Sint, typeof<int32>
+                VkFormat.R32g32b32Sfloat, typeof<float32>
+                VkFormat.R32g32b32a32Uint, typeof<uint32>
+                VkFormat.R32g32b32a32Sint, typeof<int32>
+                VkFormat.R32g32b32a32Sfloat, typeof<float32>
+                VkFormat.R64Uint, typeof<uint64>
+                VkFormat.R64Sint, typeof<int64>
+                VkFormat.R64Sfloat, typeof<float>
+                VkFormat.R64g64Uint, typeof<uint64>
+                VkFormat.R64g64Sint, typeof<int64>
+                VkFormat.R64g64Sfloat, typeof<float>
+                VkFormat.R64g64b64Uint, typeof<uint64>
+                VkFormat.R64g64b64Sint, typeof<int64>
+                VkFormat.R64g64b64Sfloat, typeof<float>
+                VkFormat.R64g64b64a64Uint, typeof<uint64>
+                VkFormat.R64g64b64a64Sint, typeof<int64>
+                VkFormat.R64g64b64a64Sfloat, typeof<float>
+                VkFormat.B10g11r11UfloatPack32, typeof<uint32>
+                VkFormat.E5b9g9r9UfloatPack32, typeof<uint32>
+                VkFormat.D16Unorm, typeof<uint16>
+                VkFormat.X8D24UnormPack32, typeof<uint32>
+                VkFormat.D32Sfloat, null
+                VkFormat.S8Uint, typeof<uint8>
+                VkFormat.D16UnormS8Uint, null
+                VkFormat.D24UnormS8Uint, typeof<uint32>
+                VkFormat.D32SfloatS8Uint, null
+                VkFormat.Bc1RgbUnormBlock, null
+                VkFormat.Bc1RgbSrgbBlock, null
+                VkFormat.Bc1RgbaUnormBlock, null
+                VkFormat.Bc1RgbaSrgbBlock, null
+                VkFormat.Bc2UnormBlock, null
+                VkFormat.Bc2SrgbBlock, null
+                VkFormat.Bc3UnormBlock, null
+                VkFormat.Bc3SrgbBlock, null
+                VkFormat.Bc4UnormBlock, null
+                VkFormat.Bc4SnormBlock, null
+                VkFormat.Bc5UnormBlock, null
+                VkFormat.Bc5SnormBlock, null
+                VkFormat.Bc6hUfloatBlock, null
+                VkFormat.Bc6hSfloatBlock, null
+                VkFormat.Bc7UnormBlock, null
+                VkFormat.Bc7SrgbBlock, null
+                VkFormat.Etc2R8g8b8UnormBlock, null
+                VkFormat.Etc2R8g8b8SrgbBlock, null
+                VkFormat.Etc2R8g8b8a1UnormBlock, null
+                VkFormat.Etc2R8g8b8a1SrgbBlock, null
+                VkFormat.Etc2R8g8b8a8UnormBlock, null
+                VkFormat.Etc2R8g8b8a8SrgbBlock, null
+                VkFormat.EacR11UnormBlock, null
+                VkFormat.EacR11SnormBlock, null
+                VkFormat.EacR11g11UnormBlock, null
+                VkFormat.EacR11g11SnormBlock, null
+                VkFormat.Astc44UnormBlock, null
+                VkFormat.Astc44SrgbBlock, null
+                VkFormat.Astc54UnormBlock, null
+                VkFormat.Astc54SrgbBlock, null
+                VkFormat.Astc55UnormBlock, null
+                VkFormat.Astc55SrgbBlock, null
+                VkFormat.Astc65UnormBlock, null
+                VkFormat.Astc65SrgbBlock, null
+                VkFormat.Astc66UnormBlock, null
+                VkFormat.Astc66SrgbBlock, null
+                VkFormat.Astc85UnormBlock, null
+                VkFormat.Astc85SrgbBlock, null
+                VkFormat.Astc86UnormBlock, null
+                VkFormat.Astc86SrgbBlock, null
+                VkFormat.Astc88UnormBlock, null
+                VkFormat.Astc88SrgbBlock, null
+                VkFormat.Astc105UnormBlock, null
+                VkFormat.Astc105SrgbBlock, null
+                VkFormat.Astc106UnormBlock, null
+                VkFormat.Astc106SrgbBlock, null
+                VkFormat.Astc108UnormBlock, null
+                VkFormat.Astc108SrgbBlock, null
+                VkFormat.Astc1010UnormBlock, null
+                VkFormat.Astc1010SrgbBlock, null
+                VkFormat.Astc1210UnormBlock, null
+                VkFormat.Astc1210SrgbBlock, null
+                VkFormat.Astc1212UnormBlock, null
+                VkFormat.Astc1212SrgbBlock, null               
+            ]
+
         let ofPixFormat (fmt : PixFormat) =
             TextureFormat.ofPixFormat fmt TextureParams.empty |> ofTextureFormat
 
@@ -1233,6 +1471,26 @@ module ``Image Format Extensions`` =
                 TextureFormat.Rgb10A2ui, create r g b a
             ]
 
+    let private colFormatChannels =
+        Dictionary.ofList [
+            Col.Format.Alpha, 1
+            Col.Format.BGR, 3
+            Col.Format.BGRA, 4
+            Col.Format.BGRP, 4
+            Col.Format.BW, 1
+            Col.Format.Gray, 1
+            Col.Format.GrayAlpha, 2
+            Col.Format.NormalUV, 2
+            Col.Format.RGB, 3
+            Col.Format.RGBA, 4
+            Col.Format.RGBP, 4
+        ]
+
+    type Col.Format with
+        member x.Channels = 
+            match colFormatChannels.TryGetValue x with
+                | (true, c) -> c
+                | _ -> failf "could not get channelcount for format %A" x
 
 // ===========================================================================================
 // Image Resource Type
@@ -1395,255 +1653,789 @@ and ImageSubresource(image : Image, aspect : ImageAspect, level : int, slice : i
 // DevicePixImageMipMap
 // ===========================================================================================
 
+[<Struct>]
+type DeviceVector<'a when 'a : unmanaged>(memory : DeviceMemory, info : VectorInfo) =
+    member x.Device = memory.Device
+    member x.Info = info
+
+    member x.Size = info.Size
+
+    member x.Mapped (action : NativeVector<'a> -> 'r) =
+        let info = info
+        memory.Mapped(fun ptr ->
+            action (NativeVector<'a>(NativePtr.ofNativeInt ptr, info))
+        )
+
+    member x.SubVector(origin : int64, size : int64, delta : int64) =
+        DeviceVector<'a>(memory, info.SubVector(origin, size, delta))
+
+    member x.SubVector(origin : int64, size : int64) = x.SubVector(origin, size, info.Delta)
+    member x.SubVector(size : int64) = x.SubVector(info.Origin, size, info.Delta)
+
+    // int64 slices
+    member x.GetSlice(min : Option<int64>, max : Option<int64>) =
+        let min = match min with | Some v -> v | None -> 0L
+        let max = match max with | Some v -> v | None -> info.Size - 1L
+        x.SubVector(min, 1L + max - min)
+
+    // int slices
+    member x.GetSlice(min : Option<int>, max : Option<int>) =
+        let min = match min with | Some v -> int64 v | None -> 0L
+        let max = match max with | Some v -> int64 v | None -> info.Size - 1L
+        x.SubVector(min, 1L + max - min)
+
+    member x.CopyTo(dst : NativeVector<'a>) =
+        if info.Size <> dst.Size then failf "mismatching Vector size"
+        x.Mapped (fun src ->
+            NativeVector.copy src dst
+        )
+
+    member x.CopyTo(dst : Vector<'a>) =
+        if info.Size <> dst.Size then failf "mismatching Vector size"
+        x.Mapped (fun src ->
+            NativeVector.using dst (fun dst ->
+                NativeVector.copy src dst
+            )
+        )
+
+    member x.CopyFrom(src : NativeVector<'a>) =
+        if info.Size <> src.Size then failf "mismatching Vector size"
+        x.Mapped (fun dst ->
+            NativeVector.copy src dst
+        )
+
+    member x.CopyFrom(src : Vector<'a>) =
+        if info.Size <> src.Size then failf "mismatching Vector size"
+        x.Mapped (fun dst ->
+            NativeVector.using src (fun src ->
+                NativeVector.copy src dst
+            )
+        )
+
+    member x.Set(v : 'a) =
+        x.Mapped (fun dst ->
+            NativeVector.set v dst
+        )
+        
+[<Struct>]
+type DeviceMatrix<'a when 'a : unmanaged>(memory : DeviceMemory, info : MatrixInfo) =
+    member x.Device = memory.Device
+    member x.Info = info
+
+    member x.Size = info.Size
+
+    member x.Mapped (action : NativeMatrix<'a> -> 'r) =
+        let info = info
+        memory.Mapped(fun ptr ->
+            action (NativeMatrix<'a>(NativePtr.ofNativeInt ptr, info))
+        )
+
+    member x.SubMatrix(origin : V2l, size : V2l, delta : V2l) =
+        DeviceMatrix<'a>(memory, info.SubMatrix(origin, size, delta))
+        
+    member x.SubMatrix(origin : V2l, size : V2l) = x.SubMatrix(origin, size, info.Delta)
+    member x.SubMatrix(size : V2l) = x.SubMatrix(V2l.Zero, size, info.Delta)
+
+    member this.SubXVector(y : int64) = DeviceVector<'a>(memory, info.SubXVector(y))
+    member this.SubYVector(x : int64) = DeviceVector<'a>(memory, info.SubYVector(x))
+    
+    // int64 slices
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, minY : Option<int64>, maxY : Option<int64>) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        this.SubMatrix(V2l(minX, minY), V2l(1L + maxX - minX, 1L + maxY - minY), info.Delta)
+
+    member this.GetSlice(x : int64, minY : Option<int64>, maxY : Option<int64>) =
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        this.SubYVector(x).SubVector(minY, 1L + maxY - minY)
+
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, y : int64) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        this.SubXVector(y).SubVector(minX, 1L + maxX - minX)
+        
+    // int slices
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        this.SubMatrix(V2l(minX, minY), V2l(1L + maxX - minX, 1L + maxY - minY), info.Delta)
+
+    member this.GetSlice(x : int, minY : Option<int>, maxY : Option<int>) =
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        this.SubYVector(int64 x).SubVector(minY, 1L + maxY - minY)
+
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, y : int) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        this.SubXVector(int64 y).SubVector(minX, 1L + maxX - minX)
+
+
+    member x.CopyTo(dst : NativeMatrix<'a>) =
+        if info.Size <> dst.Size then failf "mismatching Matrix size"
+        x.Mapped (fun src ->
+            NativeMatrix.copy src dst
+        )
+
+    member x.CopyTo(dst : Matrix<'a>) =
+        if info.Size <> dst.Size then failf "mismatching Matrix size"
+        x.Mapped (fun src ->
+            NativeMatrix.using dst (fun dst ->
+                NativeMatrix.copy src dst
+            )
+        )
+
+    member x.CopyFrom(src : NativeMatrix<'a>) =
+        if info.Size <> src.Size then failf "mismatching Matrix size"
+        x.Mapped (fun dst ->
+            NativeMatrix.copy src dst
+        )
+
+    member x.CopyFrom(src : Matrix<'a>) =
+        if info.Size <> src.Size then failf "mismatching Matrix size"
+        x.Mapped (fun dst ->
+            NativeMatrix.using src (fun src ->
+                NativeMatrix.copy src dst
+            )
+        )
+
+    member x.Set(v : 'a) =
+        x.Mapped (fun dst ->
+            NativeMatrix.set v dst
+        )
+       
+[<Struct>]
+type DeviceVolume<'a when 'a : unmanaged>(memory : DeviceMemory, info : VolumeInfo) =
+    member x.Device = memory.Device
+    member x.Info = info
+
+    member x.Size = info.Size
+
+    member x.Mapped (action : NativeVolume<'a> -> 'r) =
+        let info = info
+        memory.Mapped(fun ptr ->
+            action (NativeVolume<'a>(NativePtr.ofNativeInt ptr, info))
+        )
+
+    member x.SubVolume(origin : V3l, size : V3l, delta : V3l) =
+        DeviceVolume<'a>(memory, info.SubVolume(origin, size, delta))
+      
+    member x.SubVolume(origin : V3l, size : V3l) = x.SubVolume(origin, size, info.Delta)
+    member x.SubVolume(size : V3l) = x.SubVolume(V3l.Zero, size, info.Delta)
+        
+    member this.SubYZMatrix(x : int64) = DeviceMatrix<'a>(memory, info.SubYZMatrix(x))  
+    member this.SubXZMatrix(y : int64) = DeviceMatrix<'a>(memory, info.SubXZMatrix(y))   
+    member this.SubXYMatrix(z : int64) = DeviceMatrix<'a>(memory, info.SubXYMatrix(z))   
+    
+    member this.SubXVector(y : int64, z : int64) = DeviceVector<'a>(memory, VectorInfo(info.Index(0L, y, z), info.SX, info.DX))
+    member this.SubYVector(x : int64, z : int64) = DeviceVector<'a>(memory, VectorInfo(info.Index(x, 0L, z), info.SY, info.DY))
+    member this.SubZVector(x : int64, y : int64) = DeviceVector<'a>(memory, VectorInfo(info.Index(x, y, 0L), info.SZ, info.DZ))
+
+    // int64 slices
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, minY : Option<int64>, maxY : Option<int64>, minZ : Option<int64>, maxZ : Option<int64>) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> v | None -> 0L
+        let maxZ = match maxZ with | Some v -> v | None -> (info.Size.Z - 1L)
+        this.SubVolume(V3l(minX, minY, minZ), V3l(1L + maxX - minX, 1L + maxY - minY, 1L + maxZ - minZ), info.Delta)
+
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, minY : Option<int64>, maxY : Option<int64>, z : int64) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        this.SubXYMatrix(z).SubMatrix(V2l(minX, minY), V2l(1L + maxX - minX, 1L + maxY - minY))
+        
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, y : int64, minZ : Option<int64>, maxZ : Option<int64>) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        let minZ = match minZ with | Some v -> v | None -> 0L
+        let maxZ = match maxZ with | Some v -> v | None -> (info.Size.Z - 1L)
+        this.SubXZMatrix(y).SubMatrix(V2l(minX, maxZ), V2l(1L + maxX - minX, 1L + maxZ - minZ))
+
+    member this.GetSlice(x : int64, minY : Option<int64>, maxY : Option<int64>, minZ : Option<int64>, maxZ : Option<int64>) =
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> v | None -> 0L
+        let maxZ = match maxZ with | Some v -> v | None -> (info.Size.Z - 1L)
+        this.SubYZMatrix(x).SubMatrix(V2l(minY, maxZ), V2l(1L + maxY - minY, 1L + maxZ - minZ))
+
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, y : int64, z : int64) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        this.SubXVector(y,z).SubVector(minX, 1L + maxX - minX)
+        
+    member this.GetSlice(x : int64, minY : Option<int64>, maxY : Option<int64>, z : int64) =
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        this.SubYVector(x,z).SubVector(minY, 1L + maxY - minY)
+
+    member this.GetSlice(x : int64, y : int64, minZ : Option<int64>, maxZ : Option<int64>) =
+        let minZ = match minZ with | Some v -> v | None -> 0L
+        let maxZ = match maxZ with | Some v -> v | None -> (info.Size.Z - 1L)
+        this.SubXVector(x,y).SubVector(minZ, 1L + maxZ - minZ)
+
+    // int slices
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, minZ : Option<int>, maxZ : Option<int>) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> int64 v | None -> 0L
+        let maxZ = match maxZ with | Some v -> int64 v | None -> (info.Size.Z - 1L)
+        this.SubVolume(V3l(minX, minY, minZ), V3l(1L + maxX - minX, 1L + maxY - minY, 1L + maxZ - minZ), info.Delta)
+
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, z : int) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        this.SubXYMatrix(int64 z).SubMatrix(V2l(minX, minY), V2l(1L + maxX - minX, 1L + maxY - minY))
+        
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, y : int, minZ : Option<int>, maxZ : Option<int>) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        let minZ = match minZ with | Some v -> int64 v | None -> 0L
+        let maxZ = match maxZ with | Some v -> int64 v | None -> (info.Size.Z - 1L)
+        this.SubXZMatrix(int64 y).SubMatrix(V2l(minX, maxZ), V2l(1L + maxX - minX, 1L + maxZ - minZ))
+
+    member this.GetSlice(x : int, minY : Option<int>, maxY : Option<int>, minZ : Option<int>, maxZ : Option<int>) =
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> int64 v | None -> 0L
+        let maxZ = match maxZ with | Some v -> int64 v | None -> (info.Size.Z - 1L)
+        this.SubYZMatrix(int64 x).SubMatrix(V2l(minY, maxZ), V2l(1L + maxY - minY, 1L + maxZ - minZ))
+
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, y : int, z : int) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        this.SubXVector(int64 y, int64 z).SubVector(minX, 1L + maxX - minX)
+        
+    member this.GetSlice(x : int, minY : Option<int>, maxY : Option<int>, z : int) =
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        this.SubYVector(int64 x, int64 z).SubVector(minY, 1L + maxY - minY)
+
+    member this.GetSlice(x : int, y : int, minZ : Option<int>, maxZ : Option<int>) =
+        let minZ = match minZ with | Some v -> int64 v | None -> 0L
+        let maxZ = match maxZ with | Some v -> int64 v | None -> (info.Size.Z - 1L)
+        this.SubXVector(int64 x, int64 y).SubVector(minZ, 1L + maxZ - minZ)
+
+
+    member x.CopyTo(dst : NativeVolume<'a>) =
+        if info.Size <> dst.Size then failf "mismatching Volume size"
+        x.Mapped (fun src ->
+            NativeVolume.copy src dst
+        )
+
+    member x.CopyTo(dst : Volume<'a>) =
+        if info.Size <> dst.Size then failf "mismatching Volume size"
+        x.Mapped (fun src ->
+            NativeVolume.using dst (fun dst ->
+                NativeVolume.copy src dst
+            )
+        )
+
+    member x.CopyFrom(src : NativeVolume<'a>) =
+        if info.Size <> src.Size then failf "mismatching Volume size"
+        x.Mapped (fun dst ->
+            NativeVolume.copy src dst
+        )
+
+    member x.CopyFrom(src : Volume<'a>) =
+        if info.Size <> src.Size then failf "mismatching Volume size"
+        x.Mapped (fun dst ->
+            NativeVolume.using src (fun src ->
+                NativeVolume.copy src dst
+            )
+        )
+
+    member x.Set(v : 'a) =
+        x.Mapped (fun dst ->
+            NativeVolume.set v dst
+        )
+       
+[<Struct>]
+type DeviceTensor4<'a when 'a : unmanaged>(memory : DeviceMemory, info : Tensor4Info) =
+    member x.Device = memory.Device
+    member x.Info = info
+
+    member x.Size = info.Size
+
+    member x.Mapped (action : NativeTensor4<'a> -> 'r) =
+        let info = info
+        memory.Mapped(fun ptr ->
+            action (NativeTensor4<'a>(NativePtr.ofNativeInt ptr, info))
+        )
+
+    member x.SubTensor4(origin : V4l, size : V4l, delta : V4l) =
+        DeviceTensor4<'a>(memory, info.SubTensor4(origin, size, delta))
+       
+    member x.SubTensor4(origin : V4l, size : V4l) = x.SubTensor4(origin, size, info.Delta)
+    member x.SubTensor4(size : V4l) = x.SubTensor4(V4l.Zero, size, info.Delta)
+            
+    member this.SubXYZVolume(w : int64) = DeviceVolume<'a>(memory, info.SubXYZVolume(w))
+    member this.SubXYWVolume(z : int64) = DeviceVolume<'a>(memory, info.SubXYWVolume(z))
+    member this.SubXZWVolume(y : int64) = DeviceVolume<'a>(memory, info.SubXZWVolume(y))
+    member this.SubYZWVolume(x : int64) = DeviceVolume<'a>(memory, info.SubYZWVolume(x))
+
+    member this.SubXYMatrix(z : int64, w : int64) = DeviceMatrix<'a>(memory, MatrixInfo(info.Index(0L, 0L, z, w), info.Size.XY, info.Delta.XY))
+    member this.SubXZMatrix(y : int64, w : int64) = DeviceMatrix<'a>(memory, MatrixInfo(info.Index(0L, y, 0L, w), info.Size.XZ, info.Delta.XZ))
+    member this.SubXWMatrix(y : int64, z : int64) = DeviceMatrix<'a>(memory, MatrixInfo(info.Index(0L, y, z, 0L), info.Size.XW, info.Delta.XW))
+    member this.SubYZMatrix(x : int64, w : int64) = DeviceMatrix<'a>(memory, MatrixInfo(info.Index(x, 0L, 0L, w), info.Size.YZ, info.Delta.YZ))
+    member this.SubYWMatrix(x : int64, z : int64) = DeviceMatrix<'a>(memory, MatrixInfo(info.Index(x, 0L, z, 0L), info.Size.YW, info.Delta.YW))
+    member this.SubZWMatrix(x : int64, y : int64) = DeviceMatrix<'a>(memory, MatrixInfo(info.Index(x, y, 0L, 0L), info.Size.ZW, info.Delta.ZW))
+
+    member this.SubXVector(y : int64, z : int64, w : int64) = DeviceVector<'a>(memory, VectorInfo(info.Index(0L, y, z, w), info.SX, info.DX))
+    member this.SubYVector(x : int64, z : int64, w : int64) = DeviceVector<'a>(memory, VectorInfo(info.Index(x, 0L, z, w), info.SY, info.DY))
+    member this.SubZVector(x : int64, y : int64, w : int64) = DeviceVector<'a>(memory, VectorInfo(info.Index(x, y, 0L, w), info.SZ, info.SZ))
+    member this.SubWVector(x : int64, y : int64, z : int64) = DeviceVector<'a>(memory, VectorInfo(info.Index(x, y, z, 0L), info.SW, info.SW))
+
+    // int64 slices
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, minY : Option<int64>, maxY : Option<int64>, minZ : Option<int64>, maxZ : Option<int64>, minW : Option<int64>, maxW : Option<int64>) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> v | None -> 0L
+        let maxZ = match maxZ with | Some v -> v | None -> (info.Size.Z - 1L)
+        let minW = match minW with | Some v -> v | None -> 0L
+        let maxW = match maxW with | Some v -> v | None -> (info.Size.W - 1L)
+        this.SubTensor4(
+            V4l(minX, minY, minZ, minW), 
+            V4l(1L + maxX - minX, 1L + maxY - minY, 1L + maxZ - minZ, 1L + maxW - minW), 
+            info.Delta
+        )
+
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, minY : Option<int64>, maxY : Option<int64>, minZ : Option<int64>, maxZ : Option<int64>, w : int64) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> v | None -> 0L
+        let maxZ = match maxZ with | Some v -> v | None -> (info.Size.Z - 1L)
+
+        this.SubXYZVolume(w).SubVolume(V3l(minX, minY, minZ), V3l(1L + maxX - minX, 1L + maxY - minY, 1L + maxZ - minZ))
+
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, minY : Option<int64>, maxY : Option<int64>, z : int64, minW : Option<int64>, maxW : Option<int64>) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        let minW = match minW with | Some v -> v | None -> 0L
+        let maxW = match maxW with | Some v -> v | None -> (info.Size.W - 1L)
+
+        this.SubXYWVolume(z).SubVolume(V3l(minX, minY, minW), V3l(1L + maxX - minX, 1L + maxY - minY, 1L + maxW - minW))
+
+    member this.GetSlice(minX : Option<int64>, maxX : Option<int64>, y : int64, minZ : Option<int64>, maxZ : Option<int64>, minW : Option<int64>, maxW : Option<int64>) =
+        let minX = match minX with | Some v -> v | None -> 0L
+        let maxX = match maxX with | Some v -> v | None -> (info.Size.X - 1L)
+        let minZ = match minZ with | Some v -> v | None -> 0L
+        let maxZ = match maxZ with | Some v -> v | None -> (info.Size.Z - 1L)
+        let minW = match minW with | Some v -> v | None -> 0L
+        let maxW = match maxW with | Some v -> v | None -> (info.Size.W - 1L)
+
+        this.SubXZWVolume(y).SubVolume(V3l(minX, minZ, minW), V3l(1L + maxX - minX, 1L + maxZ - minZ, 1L + maxW - minW))
+
+    member this.GetSlice(x : int64, minY : Option<int64>, maxY : Option<int64>, minZ : Option<int64>, maxZ : Option<int64>, minW : Option<int64>, maxW : Option<int64>) =
+        let minY = match minY with | Some v -> v | None -> 0L
+        let maxY = match maxY with | Some v -> v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> v | None -> 0L
+        let maxZ = match maxZ with | Some v -> v | None -> (info.Size.Z - 1L)
+        let minW = match minW with | Some v -> v | None -> 0L
+        let maxW = match maxW with | Some v -> v | None -> (info.Size.W - 1L)
+
+        this.SubYZWVolume(x).SubVolume(V3l(minY, minZ, minW), V3l(1L + maxY - minY, 1L + maxZ - minZ, 1L + maxW - minW))
+
+    // TODO: matrix/vector slices
+
+
+    // int slices
+    // int64 slices
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, minZ : Option<int>, maxZ : Option<int>, minW : Option<int>, maxW : Option<int>) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> int64 v | None -> 0L
+        let maxZ = match maxZ with | Some v -> int64 v | None -> (info.Size.Z - 1L)
+        let minW = match minW with | Some v -> int64 v | None -> 0L
+        let maxW = match maxW with | Some v -> int64 v | None -> (info.Size.W - 1L)
+        this.SubTensor4(
+            V4l(minX, minY, minZ, minW), 
+            V4l(1L + maxX - minX, 1L + maxY - minY, 1L + maxZ - minZ, 1L + maxW - minW), 
+            info.Delta
+        )
+
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, minZ : Option<int>, maxZ : Option<int>, w : int) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> int64 v | None -> 0L
+        let maxZ = match maxZ with | Some v -> int64 v | None -> (info.Size.Z - 1L)
+
+        this.SubXYZVolume(int64 w).SubVolume(V3l(minX, minY, minZ), V3l(1L + maxX - minX, 1L + maxY - minY, 1L + maxZ - minZ))
+
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, z : int, minW : Option<int>, maxW : Option<int>) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        let minW = match minW with | Some v -> int64 v | None -> 0L
+        let maxW = match maxW with | Some v -> int64 v | None -> (info.Size.W - 1L)
+
+        this.SubXYWVolume(int64 z).SubVolume(V3l(minX, minY, minW), V3l(1L + maxX - minX, 1L + maxY - minY, 1L + maxW - minW))
+
+    member this.GetSlice(minX : Option<int>, maxX : Option<int>, y : int, minZ : Option<int>, maxZ : Option<int>, minW : Option<int>, maxW : Option<int>) =
+        let minX = match minX with | Some v -> int64 v | None -> 0L
+        let maxX = match maxX with | Some v -> int64 v | None -> (info.Size.X - 1L)
+        let minZ = match minZ with | Some v -> int64 v | None -> 0L
+        let maxZ = match maxZ with | Some v -> int64 v | None -> (info.Size.Z - 1L)
+        let minW = match minW with | Some v -> int64 v | None -> 0L
+        let maxW = match maxW with | Some v -> int64 v | None -> (info.Size.W - 1L)
+
+        this.SubXZWVolume(int64 y).SubVolume(V3l(minX, minZ, minW), V3l(1L + maxX - minX, 1L + maxZ - minZ, 1L + maxW - minW))
+
+    member this.GetSlice(x : int, minY : Option<int>, maxY : Option<int>, minZ : Option<int>, maxZ : Option<int>, minW : Option<int>, maxW : Option<int>) =
+        let minY = match minY with | Some v -> int64 v | None -> 0L
+        let maxY = match maxY with | Some v -> int64 v | None -> (info.Size.Y - 1L)
+        let minZ = match minZ with | Some v -> int64 v | None -> 0L
+        let maxZ = match maxZ with | Some v -> int64 v | None -> (info.Size.Z - 1L)
+        let minW = match minW with | Some v -> int64 v | None -> 0L
+        let maxW = match maxW with | Some v -> int64 v | None -> (info.Size.W - 1L)
+
+        this.SubYZWVolume(int64 x).SubVolume(V3l(minY, minZ, minW), V3l(1L + maxY - minY, 1L + maxZ - minZ, 1L + maxW - minW))
+
+    // TODO: matrix/vector slices
+
+
+    member x.CopyTo(dst : NativeTensor4<'a>) =
+        if info.Size <> dst.Size then failf "mismatching Tensor4 size"
+        x.Mapped (fun src ->
+            NativeTensor4.copy src dst
+        )
+
+    member x.CopyTo(dst : Tensor4<'a>) =
+        if info.Size <> dst.Size then failf "mismatching Tensor4 size"
+        x.Mapped (fun src ->
+            NativeTensor4.using dst (fun dst ->
+                NativeTensor4.copy src dst
+            )
+        )
+
+    member x.CopyFrom(src : NativeTensor4<'a>) =
+        if info.Size <> src.Size then failf "mismatching Tensor4 size"
+        x.Mapped (fun dst ->
+            NativeTensor4.copy src dst
+        )
+
+    member x.CopyFrom(src : Tensor4<'a>) =
+        if info.Size <> src.Size then failf "mismatching Tensor4 size"
+        x.Mapped (fun dst ->
+            NativeTensor4.using src (fun src ->
+                NativeTensor4.copy src dst
+            )
+        )
+
+    member x.Set(v : 'a) =
+        x.Mapped (fun dst ->
+            NativeTensor4.set v dst
+        )
+
 [<AbstractClass>]
-type DeviceMemoryImage(device : Device, image : Image, aspect : ImageAspect) =
-    inherit ImageSubresourceLevels(image, aspect, 0, image.MipMapLevels, 0)
-    member x.Device = device
-    member x.Image = image
+type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageFormat : VkFormat) =
+    member x.Buffer = buffer
+    member x.Channels = int info.Size.W
+    member x.Size = V3i info.Size.XYZ
+    member x.PixFormat = format
+    member x.Format = format.Format
+    member x.ImageFormat = imageFormat
 
-    member x.LevelCount = image.MipMapLevels
-    member x.Size = image.Size.XY
+    abstract member Write<'x when 'x : unmanaged> : NativeMatrix<'x> -> unit
+    abstract member Write<'x when 'x : unmanaged> : NativeVolume<'x> -> unit
+    abstract member Write<'x when 'x : unmanaged> : NativeTensor4<'x> -> unit
+    
+    abstract member Read<'x when 'x : unmanaged> : NativeMatrix<'x> -> unit
+    abstract member Read<'x when 'x : unmanaged> : NativeVolume<'x> -> unit
+    abstract member Read<'x when 'x : unmanaged> : NativeTensor4<'x> -> unit
 
-    abstract member GetLevelSize : int -> V3i
-    abstract member PixFormat : PixFormat
+    abstract member Write : data : nativeint * rowSize : nativeint * format : Col.Format * trafo : ImageTrafo -> unit
+    abstract member Read : data : nativeint * rowSize : nativeint * format : Col.Format * trafo : ImageTrafo -> unit
 
-    abstract member Upload : level : int * src : PixImage -> unit
-    abstract member Download : level : int * dst : PixImage -> unit
+    member x.Write(img : PixImage) =
+        img.Visit { 
+            new PixImageVisitor<int>() with 
+                override __.Visit(img : PixImage<'a>, value : 'a) =
+                    NativeVolume.using img.Volume (fun src ->
+                        x.Write src
+                    )
+                    1
+        } |> ignore
 
-    abstract member Upload : level : int * format : PixFormat * srcTrafo : ImageTrafo * src : nativeint * srcRowSize : int64 -> unit
-    abstract member Download : level : int * format : PixFormat * dstTrafo : ImageTrafo * dst : nativeint * dstRowSize : int64 -> unit
+    member x.Read(img : PixImage) =
+        img.Visit { 
+            new PixImageVisitor<int>() with 
+                override __.Visit(img : PixImage<'a>, value : 'a) =
+                    NativeVolume.using img.Volume (fun dst ->
+                        x.Read dst
+                    )
+                    1
+        } |> ignore
 
+    member x.Write(img : PixVolume) =
+        img.Visit { 
+            new PixVolumeVisitor<int>() with 
+                override __.Visit(img : PixVolume<'a>, value : 'a) =
+                    NativeTensor4.using img.Tensor4 (fun src ->
+                        x.Write src
+                    )
+                    1
+        } |> ignore
 
+    member x.Read(img : PixVolume) =
+        img.Visit { 
+            new PixVolumeVisitor<int>() with 
+                override __.Visit(img : PixVolume<'a>, value : 'a) =
+                    NativeTensor4.using img.Tensor4 (fun dst ->
+                        x.Read dst
+                    )
+                    1
+        } |> ignore
+        
+type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4Info, format : Col.Format, imageFormat : VkFormat) =
+    inherit TensorImage(buffer, info, PixFormat(typeof<'a>, format), imageFormat)
 
+    static let sa = sizeof<'a> |> int64
 
-type DeviceMemoryImage<'a when 'a : unmanaged> internal(device : Device, image : Image, aspect : ImageAspect) =
-    inherit DeviceMemoryImage(device, image, aspect)
+    let tensor = DeviceTensor4<'a>(unbox buffer.Memory, info)
 
     static let defaultValue =
         match typeof<'a> with
             | TypeInfo.Patterns.Byte    -> 255uy |> unbox<'a>
-            | TypeInfo.Patterns.SByte   -> 127y |> unbox<'a>
+            | TypeInfo.Patterns.SByte   -> 0y |> unbox<'a>
             | TypeInfo.Patterns.UInt16  -> UInt16.MaxValue |> unbox<'a>
-            | TypeInfo.Patterns.Int16   -> Int16.MaxValue |> unbox<'a>
+            | TypeInfo.Patterns.Int16   -> 0 |> unbox<'a>
             | TypeInfo.Patterns.UInt32  -> UInt32.MaxValue |> unbox<'a>
-            | TypeInfo.Patterns.Int32   -> Int32.MaxValue |> unbox<'a>
+            | TypeInfo.Patterns.Int32   -> 0 |> unbox<'a>
             | TypeInfo.Patterns.UInt64  -> UInt64.MaxValue |> unbox<'a>
-            | TypeInfo.Patterns.Int64   -> Int64.MaxValue |> unbox<'a>
+            | TypeInfo.Patterns.Int64   -> 0 |> unbox<'a>
             | TypeInfo.Patterns.Float32 -> 1.0f |> unbox<'a>
             | TypeInfo.Patterns.Float64 -> 1.0 |> unbox<'a>
             | _ -> failf "unsupported channel-type: %A" typeof<'a>
 
-    let aspect = VkFormat.toAspect image.Format
-    let channels = VkFormat.channels image.Format
-    let channelSize = int64 sizeof<'a>
+    override x.Write(data : nativeint, rowSize : nativeint, format : Col.Format, trafo : ImageTrafo) =
+        let rowSize = int64 rowSize
+        let channels = format.Channels
 
-    let tensor4Infos = 
-        Array.init image.MipMapLevels (fun level ->
-            let mutable subresource = VkImageSubresource(aspect, uint32 level, 0u)
-            let mutable layout = VkSubresourceLayout()
-            VkRaw.vkGetImageSubresourceLayout(device.Handle, image.Handle, &&subresource, &&layout)
+        if rowSize % sa <> 0L then failf "non-aligned row-size"
+        let dy = rowSize / sa
 
-            let divisor = 1 <<< level
-            let size = V3i(image.Size.X / divisor |> max 1, image.Size.Y / divisor |> max 1, image.Size.Z / divisor |> max 1)
-
-            Tensor4Info(
-                int64 layout.offset / channelSize,
-                V4l(int64 size.X, int64 size.Y, int64 channels, int64 size.Z),
-                V4l(
-                    int64 channels,
-                    int64 layout.rowPitch / channelSize,
-                    1L,
-                    int64 layout.depthPitch / channelSize
-                )
-            )
-        )
-
-    let pixFormat = PixFormat(typeof<'a>, VkFormat.toColFormat image.Format)
-
-    let copyVolume (fill : bool) (src : NativeVolume<'a>) (dst : NativeVolume<'a>) =
-        if src.SZ = dst.SZ then
-            NativeVolume.copy src dst
-        elif src.SZ < dst.SZ then
-            NativeVolume.copy src dst.[*, *, 0L .. src.SZ - 1L]
-            if fill then NativeVolume.set defaultValue dst.[*, *, src.SZ .. dst.SZ - 1L]
-        else
-            NativeVolume.copy src.[*, *, 0L .. dst.SZ - 1L] dst
-
-    let copyTensor (fill : bool) (src : NativeTensor4<'a>) (dst : NativeTensor4<'a>) =
-        if src.SZ = dst.SZ then
-            NativeTensor4.copy src dst
-        elif src.SZ < dst.SZ then
-            NativeTensor4.copy src dst.[*, *, 0L .. src.SZ - 1L, *]
-            if fill then NativeTensor4.set defaultValue dst.[*, *, src.SZ .. dst.SZ - 1L, *]
-        else
-            NativeTensor4.copy src.[*, *, 0L .. dst.SZ - 1L, *] dst
-
-    override x.PixFormat = pixFormat
-
-    override x.Upload(level : int, src : PixImage) =
-        let src = unbox<PixImage<'a>>(src).Volume.Transformed(ImageTrafo.MirrorY)
-        NativeVolume.using src (fun src ->
-            x.MapVolume(level, fun dst -> 
-                copyVolume true src dst
-            )
-        )
-
-    override x.Download(level : int, dst : PixImage) =
-        let dst = unbox<PixImage<'a>>(dst).Volume.Transformed(ImageTrafo.MirrorY)
-        NativeVolume.using dst (fun dst ->
-            x.MapVolume(level, fun src ->
-                copyVolume false src dst
-            )
-        )
-
-    override x.Upload(level : int, format : PixFormat, srcTrafo : ImageTrafo, src : nativeint, srcRowSize : int64) =
-        if format.Type <> typeof<'a> then
-            failf "cannot upload input-data of type: %A" format.Type
-
-        let dstInfo = tensor4Infos.[level].SubXYZVolume(0L)
-        let srcSize = srcTrafo |> ImageTrafo.inverseTransformSize image.Size.XY
-        let srcChannels = format.ChannelCount
-        
-        let untransformedSrcInfo =
+        let srcInfo =
             VolumeInfo(
                 0L,
-                V3l(int64 srcSize.X, int64 srcSize.Y, int64 srcChannels),
-                V3l(int64 srcChannels, srcRowSize / channelSize, 1L)
+                V3l(info.SX, info.SY, int64 channels),
+                V3l(int64 channels, dy, 1L)
             )
 
-        let srcInfo = untransformedSrcInfo.Transformed(srcTrafo)
-        let src = NativeVolume<'a>(NativePtr.ofNativeInt src, srcInfo)
+        let srcInfo =
+            srcInfo.Transformed(trafo)
 
-        x.MapVolume(level, fun dst -> copyVolume true src dst)
+        let src = NativeVolume<'a>(NativePtr.ofNativeInt data, srcInfo)
+        x.Write(src)
 
-    override x.Download(level : int, format : PixFormat, dstTrafo : ImageTrafo, dst : nativeint, dstRowSize : int64) =
-        if format.Type <> typeof<'a> then
-            failf "cannot upload input-data of type: %A" format.Type
+    override x.Read(data : nativeint, rowSize : nativeint, format : Col.Format, trafo : ImageTrafo) =
+        let rowSize = int64 rowSize
+        let channels = format.Channels
+
+        if rowSize % sa <> 0L then failf "non-aligned row-size"
+        let dy = rowSize / sa
+
+        let dstInfo =
+            VolumeInfo(
+                0L,
+                V3l(info.SY, info.SY, int64 channels),
+                V3l(int64 channels, dy, 1L)
+            )
+
+        let dstInfo =
+            dstInfo.Transformed(trafo)
+
+        let dst = NativeVolume<'a>(NativePtr.ofNativeInt data, dstInfo)
+        x.Read(dst)
+
+    override x.Write(matrix : NativeMatrix<'x>) : unit =
+        if typeof<'a> = typeof<'x> then
+            let src = unbox<NativeMatrix<'a>> matrix
+            let dst = tensor.[*,*,*,0].[*,*,0]
+            dst.CopyFrom src
             
-        let dstInfo = tensor4Infos.[level].SubXYZVolume(0L)
-        let dstSize = dstTrafo |> ImageTrafo.transformSize image.Size.XY
-        let dstChannels = format.ChannelCount
+            let rest = tensor.[*,*,1..,*]
+            rest.Set defaultValue
 
-        let untransformedDstInfo =
-            VolumeInfo(
+            let rest = tensor.[*,*,0,1..]
+            rest.Set defaultValue
+        else
+            failf "mismatching types is upload"
+
+    override x.Write(volume : NativeVolume<'x>) =
+        if typeof<'a> = typeof<'x> then
+            let src = unbox<NativeVolume<'a>> volume
+
+            // copy all available channels
+            let dst = tensor.[*,*,0L,0L..src.SZ-1L]
+            dst.CopyFrom src
+            
+            // set the missing channels to default
+            if src.Size.Z < tensor.Size.W then
+                let missingChannels = tensor.[*,*,0L,src.Size.Z..]
+                missingChannels.Set defaultValue
+
+            // set the remaining tensor to default
+            let rest = tensor.[*,*,1..,*]
+            rest.Set defaultValue
+
+        else
+            failf "mismatching types is upload"
+
+    override x.Write(t : NativeTensor4<'x>) =
+        if typeof<'a> = typeof<'x> then
+            let src = unbox<NativeTensor4<'a>> t
+
+            // copy all available channels
+            let dst = tensor.[*,*,*,0L..src.SZ-1L]
+            dst.CopyFrom src
+            
+            // set the missing channels to default
+            if src.Size.W < tensor.Size.W then
+                let missingChannels = tensor.[*,*,*,src.Size.W..]
+                missingChannels.Set defaultValue
+
+        else
+            failf "mismatching types is upload"
+
+    override x.Read(dst : NativeMatrix<'x>) : unit =
+        if typeof<'a> = typeof<'x> then
+            let dst = unbox<NativeMatrix<'a>> dst
+            let src = tensor.[*,*,*,0].[*,*,0]
+            src.CopyTo dst
+        else
+            failf "mismatching types is download"
+
+    override x.Read(dst : NativeVolume<'x>) : unit =
+        if typeof<'a> = typeof<'x> then
+            let dst = unbox<NativeVolume<'a>> dst
+            let src = tensor.[*,*,0,*]
+            src.CopyTo dst
+        else
+            failf "mismatching types is download"
+
+    override x.Read(dst : NativeTensor4<'x>) : unit =
+        if typeof<'a> = typeof<'x> then
+            let dst = unbox<NativeTensor4<'a>> dst
+            let src = tensor
+            src.CopyTo dst
+        else
+            failf "mismatching types is download"
+
+    member x.Buffer = buffer
+    member x.Size = V3i info.Size.XYZ
+    member x.Format = format
+    member x.Channels = int info.SW
+        
+    member x.Tensor4 =
+        tensor
+
+    member x.Volume =
+        if info.SZ <> 1L then failf "3d image cannot be interpreted as 2d image"
+        else tensor.[*,*,0,*]
+
+    member x.Matrix =
+        if info.SZ <> 1L then failf "3d image cannot be interpreted as 2d matrix"
+        elif info.SW <> 1L then failf "2d image with more than one channel cannot be interpreted as 2d matrix"
+        else tensor.[*,*,*,0].[*,*,0]
+            
+    member x.Vector =
+        if info.SZ <> 1L then failf "3d image cannot be interpreted as vector"
+        elif info.SY <> 1L then failf "2d image cannot be interpreted as vector"
+        elif info.SW <> 1L then failf "1d image with more than one channel cannot be interpreted as vector"
+        else tensor.[*,*,*,0].[*,0,0]
+
+    internal new(buffer : Buffer, size : V3i, format : Col.Format, imageFormat : VkFormat) =
+        let channels = format.Channels
+        let s = V4l(size.X, size.Y, size.Z, channels)
+        let info =
+            Tensor4Info(
                 0L,
-                V3l(int64 dstSize.X, int64 dstSize.Y, int64 dstChannels),
-                V3l(int64 dstChannels, dstRowSize / channelSize, 1L)
+                s,
+                V4l(s.W, s.W * s.X, s.W * s.X * s.Y, 1L)
             )
+        TensorImage<'a>(buffer, info, format, imageFormat)
+ 
+type TensorImageMipMap(images : TensorImage[]) =
+    member x.LevelCount = images.Length
+    member x.ImageArray = images
+    member x.Format = images.[0].PixFormat
 
-        let dstInfo = untransformedDstInfo.Transformed(ImageTrafo.inverse dstTrafo)
-        let dst = NativeVolume<'a>(NativePtr.ofNativeInt dst, dstInfo)
-        x.MapVolume(level, fun src -> copyVolume true src dst)
-
-    override x.GetLevelSize (level : int) =
-        tensor4Infos.[level].Size.XYW |> V3i
-
-    member x.MapVolume<'x>(level : int, f : NativeVolume<'a> -> 'x) : 'x =
-        let info = tensor4Infos.[level].SubXYZVolume(0L)
-        image.Memory.Mapped(fun ptr ->
-            let volume = NativeVolume<'a>(NativePtr.ofNativeInt ptr, info)
-            f volume
-        )
-    member x.MapTensor<'x>(level : int, f : NativeTensor4<'a> -> 'x) : 'x =
-        let info = tensor4Infos.[level]
-        image.Memory.Mapped(fun ptr ->
-            let volume = NativeTensor4<'a>(NativePtr.ofNativeInt ptr, info)
-            f volume
-        )
-
-    member x.Image = image
-    member x.Channels = channels
-    member x.Format = image.Format
-    member x.Aspect = aspect
+type TensorImageCube(faces : TensorImageMipMap[]) =
+    do assert(faces.Length = 6)
+    member x.MipMapArray = faces
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module DeviceMemoryImage =
+module TensorImage =
+    let create<'a when 'a : unmanaged> (size : V3i) (format : Col.Format) (device : Device) : TensorImage<'a> =
+        let imageFormat = device.GetSupportedFormat(VkImageTiling.Optimal, PixFormat(typeof<'a>, format))
+        let format = PixFormat(VkFormat.expectedType imageFormat, VkFormat.toColFormat imageFormat)
 
-    let create<'a when 'a : unmanaged> (size : V3i) (dim : TextureDimension) (levels : int) (fmt : Col.Format) (device : Device) =
-        let pixFormat = PixFormat(typeof<'a>, fmt)
-        let format = device.GetSupportedFormat(VkImageTiling.Optimal, pixFormat)
-        let extent = VkExtent3D(size.X, size.Y, size.Z)
+        if format.Type <> typeof<'a> then
+            failf "device does not support images of type %s" typeof<'a>.PrettyName
 
-        let imageType = VkImageType.ofTextureDimension dim
+        let channels = format.Format.Channels
+        let sizeInBytes = int64 size.X * int64 size.X * int64 size.Z * int64 channels
+        let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit) sizeInBytes
+        TensorImage<'a>(buffer, size, format.Format, imageFormat)
 
-        let mutable info =
-            VkImageCreateInfo(
-                VkStructureType.ImageCreateInfo, 0n,
-                VkImageCreateFlags.None,
-                imageType,
-                format,
-                extent, 
+    let inline private erase (creator : V3i -> Col.Format -> Device-> TensorImage<'a>) (size : V3i) (format : Col.Format) (device : Device) = creator size format device :> TensorImage
 
-                uint32 levels, 1u, VkSampleCountFlags.D1Bit,
-                VkImageTiling.Linear,
-                VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit,
-                VkSharingMode.Exclusive,
-                0u, NativePtr.zero,
-                VkImageLayout.Preinitialized
-            )
-
-        let mutable handle = VkImage.Null
-        VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> check "could not create image for DeviceVolume"
-
-        let mutable requirements = VkMemoryRequirements()
-        VkRaw.vkGetImageMemoryRequirements(device.Handle, handle, &&requirements)
-        let hostComp = device.HostMemory.Mask &&& requirements.memoryTypeBits <> 0u
-        if not hostComp then 
-            VkRaw.vkDestroyImage(device.Handle, handle, NativePtr.zero)
-            failf "could not allocate DeviceVolume since HostMemory is incompatible"
-
-        let memalign = int64 requirements.alignment |> Alignment.next device.BufferImageGranularity
-        let memsize = int64 requirements.size |> Alignment.next device.BufferImageGranularity
-
-        let memory = device.HostMemory.AllocTemp(memalign, memsize)
-        VkRaw.vkBindImageMemory(device.Handle, handle, memory.Memory.Handle, uint64 memory.Offset)
-            |> check "could not bind image memory for DeviceVolume"
-
-        let image = Image(device, handle, size, levels, 1, 1, dim, format, memory, VkImageLayout.Preinitialized)
-        DeviceMemoryImage<'a>(device, image, ImageAspect.Color)
-
-    let delete (mipMap : DeviceMemoryImage) (device : Device) =
-        let image = mipMap.Image
-        if image.Handle.IsValid then
-            image.Memory.Dispose()
-            VkRaw.vkDestroyImage(device.Handle, image.Handle, NativePtr.zero)
-            image.Handle <- VkImage.Null
-
-    let inline private createUpcast<'a when 'a : unmanaged> (size : V3i) (dim : TextureDimension) (levels : int) (fmt : Col.Format) (device : Device) =
-        create<'a> size dim levels fmt device :> DeviceMemoryImage
-
-    let private ctors =
-        LookupTable.lookupTable [
-            typeof<uint8>, createUpcast<uint8>
-            typeof<int8>, createUpcast<int8>
-            typeof<uint16>, createUpcast<uint16>
-            typeof<int16>, createUpcast<int16>
-            typeof<uint32>, createUpcast<uint32>
-            typeof<int32>, createUpcast<int32>
-            typeof<uint64>, createUpcast<uint64>
-            typeof<int64>, createUpcast<int64>
-            typeof<float16>, createUpcast<float16>
-            typeof<float32>, createUpcast<float32>
-            typeof<float>, createUpcast<float>
+    let private creators =
+        Dictionary.ofList [
+            typeof<uint8>, erase create<uint8>
+            typeof<int8>, erase create<int8>
+            typeof<uint16>, erase create<uint16>
+            typeof<int16>, erase create<int16>
+            typeof<uint32>, erase create<uint32>
+            typeof<int32>, erase create<int32>
+            typeof<uint64>, erase create<uint64>
+            typeof<int64>, erase create<int64>
+            typeof<float16>, erase create<float16>
+            typeof<float32>, erase create<float32>
+            typeof<float>, erase create<float>
+            // TODO: any others?
         ]
 
-    let createUntyped (size : V3i) (dim : TextureDimension) (levels : int) (pixFormat : PixFormat) (device : Device) =
-        ctors pixFormat.Type size dim levels pixFormat.Format device
+    let createUntyped (size : V3i) (format : PixFormat) (device : Device) =
+        creators.[format.Type] size format.Format device
 
-    let ofPixImageMipMap (data : PixImageMipMap) (levels : int) (device : Device) =
-        let size = data.[0].Size
-        let pixFormat = data.PixFormat
-        let res = device |> createUntyped (V3i(size, 1)) TextureDimension.Texture2D levels pixFormat
+    let ofPixImage (img : PixImage) (device : Device) =
+        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat device
+        dst.Write(img)
+        dst
 
-        for l in 0 .. levels - 1 do
-            res.Upload(l, data.[l].Transformed(ImageTrafo.MirrorY))
-
-        res
-
+    let ofPixVolume (img : PixVolume) (device : Device) =
+        let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat device
+        dst.Write(img)
+        dst
 
 [<AutoOpen>]
 module ``Devil Loader`` =
+
     open DevILSharp
     
     let private devilLock = typeof<PixImage>.GetField("s_devilLock", System.Reflection.BindingFlags.NonPublic ||| System.Reflection.BindingFlags.Static).GetValue(null)
@@ -1682,8 +2474,7 @@ module ``Devil Loader`` =
         let ofDevil (fmt : ChannelFormat) (t : ChannelType) =
             PixFormat(types t, colFormat fmt)
 
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module DeviceMemoryImage =   
+    module TensorImage =
         let ofFile (file : string) (device : Device) =
             lock devilLock (fun () ->
                 PixImage.InitDevil()
@@ -1702,44 +2493,240 @@ module ``Devil Loader`` =
                     let pixFormat   = PixFormat.ofDevil format channelType
 
                     let bytesPerPixel = IL.GetInteger(IntName.ImageBytesPerPixel)
-                    let rowSize = int64 bytesPerPixel * int64 width
-
-                    let target = device |> DeviceMemoryImage.createUntyped (V3i(width, height, 1)) TextureDimension.Texture2D 1 pixFormat
-                    target.Upload(0, pixFormat, ImageTrafo.MirrorY, data, rowSize)
+                    let rowSize = nativeint bytesPerPixel * nativeint width
                     
+                    let target = device |> TensorImage.createUntyped (V3i(width, height, 1)) pixFormat
+                    target.Write(data, rowSize, pixFormat.Format, ImageTrafo.Rot0)
+
                     target
                 finally
                     IL.BindImage(0)
                     IL.DeleteImage(img)
-
             )
 
+
 [<AbstractClass; Sealed; Extension>]
-type DeviceMemoryImageExtensions private() =
+type DeviceTensorExtensions private() =
 
     [<Extension>]
-    static member inline CreateDeviceMemoryImage(this : Device, data : PixImageMipMap, levels : int) =
-        this |> DeviceMemoryImage.ofPixImageMipMap data levels
+    static member inline CreateTensorImage<'a when 'a : unmanaged>(device : Device, size : V3i, format : Col.Format) : TensorImage<'a> =
+        TensorImage.create size format device
+        
+    [<Extension>]
+    static member inline CreateTensorImage(device : Device, size : V3i, format : PixFormat) : TensorImage =
+        TensorImage.createUntyped size format device
+        
+    [<Extension>]
+    static member inline Create(device : Device, data : PixImage) : TensorImage =
+        device |> TensorImage.ofPixImage data
+        
+    [<Extension>]
+    static member inline Create(device : Device, data : PixImageMipMap, levels : int) : TensorImageMipMap =
+        TensorImageMipMap(
+            data.ImageArray |> Array.take levels |> Array.map (fun l -> TensorImage.ofPixImage l device)
+        )
 
     [<Extension>]
-    static member inline CreateDeviceMemoryImage(this : Device, data : PixImageMipMap) =
-        this |> DeviceMemoryImage.ofPixImageMipMap data data.LevelCount
+    static member inline Create(device : Device, data : PixImageCube, levels : int) : TensorImageCube =
+        TensorImageCube(
+            data.MipMapArray |> Array.map (fun face ->
+                DeviceTensorExtensions.Create(device, face, levels)
+            )
+        )
 
     [<Extension>]
-    static member inline CreateDeviceMemoryImage(this : Device, file : string) =
-        this |> DeviceMemoryImage.ofFile file
+    static member inline Create(device : Device, data : PixImageMipMap) =
+        DeviceTensorExtensions.Create(device, data, data.LevelCount)
 
     [<Extension>]
-    static member inline CreateDeviceMemoryImage(this : Device, size : V3i, dim : TextureDimension, levels : int, fmt : PixFormat) =
-        this |> DeviceMemoryImage.createUntyped size dim levels fmt
+    static member inline Create(device : Device, data : PixImageCube) =
+        DeviceTensorExtensions.Create(device, data, data.MipMapArray.[0].LevelCount)
 
     [<Extension>]
-    static member inline CreateDeviceMemoryImage<'a when 'a : unmanaged>(this : Device, size : V3i, dim : TextureDimension, levels : int, fmt : Col.Format) =
-        this |> DeviceMemoryImage.create<'a> size dim levels fmt
+    static member inline Create(device : Device, data : PixVolume) : TensorImage =
+        device |> TensorImage.ofPixVolume data
 
     [<Extension>]
-    static member inline Delete(this : Device, mipMap : DeviceMemoryImage) =
-        this |> DeviceMemoryImage.delete mipMap
+    static member Delete(device : Device, m : TensorImage) =
+        device.Delete m.Buffer
+
+    [<Extension>]
+    static member Delete(device : Device, m : TensorImageMipMap) =
+        for i in m.ImageArray do DeviceTensorExtensions.Delete (device, i)
+        
+    [<Extension>]
+    static member Delete(device : Device, m : TensorImageCube) =
+        for i in m.MipMapArray do DeviceTensorExtensions.Delete (device, i)
+
+[<AutoOpen>]
+module DeviceTensorCommandExtensions =
+    type Command with
+        // upload
+        static member Copy(src : TensorImage, dst : ImageSubresource, dstOffset : V3i, size : V3i) =
+            if dst.Aspect <> ImageAspect.Color then
+                failf "[TensorImage] cannot copy to aspect %A" dst.Aspect
+
+            if dstOffset.AnySmaller 0 || dst.Size.AnySmaller(dstOffset + size) then
+                failf "[TensorImage] target region out of bounds"
+
+            if src.Size.AnySmaller size then 
+                failf "[TensorImage] insufficient size %A" src.Size
+
+            let dstElementType = VkFormat.expectedType dst.Image.Format 
+            let dstSizeInBytes = VkFormat.sizeInBytes dst.Image.Format 
+
+            if isNull dstElementType || dstSizeInBytes < 0 then 
+                failf "[TensorImage] format %A has no CPU representation" dst.Image.Format
+
+            let dstChannels = dstSizeInBytes / Marshal.SizeOf dstElementType
+            if dstChannels <> src.Channels then
+                failf "[TensorImage] got '%d * %s' but expected '%d * %s'" src.Channels src.PixFormat.Type.PrettyName dstChannels dstElementType.PrettyName
+
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let mutable copy =
+                        VkBufferImageCopy(
+                            0UL,
+                            0u,
+                            0u,
+                            dst.VkImageSubresourceLayers,
+                            VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
+                            VkExtent3D(size.X, size.Y, size.Z)
+                        )
+                        
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Buffer.Handle, dst.Image.Handle, dst.Image.Layout, 1u, &&copy)
+                    Disposable.Empty
+            }
+
+        static member Copy(src : TensorImage, dst : ImageSubresource) =
+            if src.Size <> dst.Size then failf "[TensorImage] mismatching sizes in copy %A vs %A" src.Size dst.Size
+            Command.Copy(src, dst, V3i.Zero, src.Size)
+
+        // download
+        static member Copy(src : ImageSubresource, srcOffset : V3i, dst : TensorImage, size : V3i) =
+            if src.Aspect <> ImageAspect.Color then
+                failf "[TensorImage] cannot copy from aspect %A" src.Aspect
+
+            if srcOffset.AnySmaller 0 || src.Size.AnySmaller(srcOffset + size) then
+                failf "[TensorImage] source region out of bounds"
+
+            if dst.Size.AnySmaller size then 
+                failf "[TensorImage] insufficient size %A" src.Size
+
+            let srcElementType = VkFormat.expectedType src.Image.Format 
+            let srcSizeInBytes = VkFormat.sizeInBytes src.Image.Format 
+
+            if isNull srcElementType || srcSizeInBytes < 0 then 
+                failf "[TensorImage] format %A has no CPU representation" src.Image.Format
+
+            let srcChannels = srcSizeInBytes / Marshal.SizeOf srcElementType
+            if srcChannels <> dst.Channels then
+                failf "[TensorImage] got '%d * %s' but expected '%d * %s'" srcChannels srcElementType.PrettyName dst.Channels dst.PixFormat.Type.PrettyName
+
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let mutable copy =
+                        VkBufferImageCopy(
+                            0UL,
+                            0u,
+                            0u,
+                            src.VkImageSubresourceLayers,
+                            VkOffset3D(srcOffset.X, srcOffset.Y, srcOffset.Z),
+                            VkExtent3D(size.X, size.Y, size.Z)
+                        )
+                        
+                    cmd.AppendCommand()
+                    VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Buffer.Handle, 1u, &&copy)
+                    Disposable.Empty
+            }
+
+        static member Copy(src : ImageSubresource, dst : TensorImage) =
+            if src.Size <> dst.Size then failf "[TensorImage] mismatching sizes in copy %A vs %A" src.Size dst.Size
+            Command.Copy(src, V3i.Zero, dst, src.Size)
+
+    module private MustCompile =
+
+        let createImage (device : Device) =
+            let img = device.CreateTensorImage<byte>(V3i.III, Col.Format.RGBA)
+
+            let v = img.Vector
+            let m = img.Matrix
+            let v = img.Volume
+            let t = img.Tensor4
+            
+            device.Delete img
+            ()
+
+        let testVec (v : DeviceVector<int>) =
+            let a = v.[1L..]
+            let b = v.[..10L]
+
+            let x = v.[1..]
+            let y = v.[..10]
+        
+            ()
+
+        let testMat (m : DeviceMatrix<int>) =
+            let a = m.[1L,*]
+            let b = m.[*,2L]
+            let c = m.[1L.., 1L..]
+        
+            let x = m.[1,*]
+            let y = m.[*,2]
+            let z = m.[1.., 1..]
+        
+            ()
+
+        let testVol (v : DeviceVolume<int>) =
+            let a = v.[1L,*,*]
+            let b = v.[*,2L,*]
+            let c = v.[*,*,3L]
+
+            let a = v.[1L,1L,*]
+            let b = v.[1L,*,1L]
+            let c = v.[*,1L,1L]
+
+            let a = v.[1L..,1L..,1L..]
+
+
+        
+            let a = v.[1,*,*]
+            let b = v.[*,2,*]
+            let c = v.[*,*,3]
+
+            let a = v.[1,1,*]
+            let b = v.[1,*,1]
+            let c = v.[*,1,1]
+
+            let a = v.[1..,1..,1..]
+        
+            ()
+
+        
+        let testTensor4 (t : DeviceTensor4<int>) =
+            let a = t.[1L,*,*,*]
+            let b = t.[*,2L,*,*]
+            let c = t.[*,*,3L,*]
+            let d = t.[*,*,*,4L]
+
+            
+            // t.[1L,*,*,4L]
+            // t.[1L,2L,*,4L]
+
+            let a = t.[1L..,1L..,1L..,1L..]
+
+            let a = t.[1,*,*,*]
+            let b = t.[*,2,*,*]
+            let c = t.[*,*,3,*]
+            let d = t.[*,*,*,4]
+        
+            let a = t.[1..,1..,1..,1..]
+
+        
+            ()
 
 
 
@@ -2124,31 +3111,6 @@ module ``Image Command Extensions`` =
 // ===========================================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Image =
-    [<AbstractClass>]
-    type private PixImageVisitor<'r>() =
-        static let table =
-            LookupTable.lookupTable [
-                typeof<int8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int8>(unbox img, 127y))
-                typeof<uint8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint8>(unbox img, 255uy))
-                typeof<int16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int16>(unbox img, Int16.MaxValue))
-                typeof<uint16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint16>(unbox img, UInt16.MaxValue))
-                typeof<int32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int32>(unbox img, Int32.MaxValue))
-                typeof<uint32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint32>(unbox img, UInt32.MaxValue))
-                typeof<int64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int64>(unbox img, Int64.MaxValue))
-                typeof<uint64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint64>(unbox img, UInt64.MaxValue))
-                typeof<float16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float16>(unbox img, float16(Float32 = 1.0f)))
-                typeof<float32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float32>(unbox img, 1.0f))
-                typeof<float>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float>(unbox img, 1.0))
-            ]
-        abstract member Visit<'a when 'a : unmanaged> : PixImage<'a> * 'a -> 'r
-
-        
-
-
-        interface IPixImageVisitor<'r> with
-            member x.Visit<'a>(img : PixImage<'a>) =
-                table (typeof<'a>) (x, img)
-
 
     let alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
@@ -2201,129 +3163,169 @@ module Image =
         let vkfmt = VkFormat.ofTextureFormat fmt
         alloc size mipMapLevels count samples dim vkfmt usage device
 
-    let private ofDeviceMemoryImage (dispose : bool) (tempImage : DeviceMemoryImage) (info : TextureParams) (device : Device) =
-        if tempImage.LevelCount <= 0 then failf "empty PixImageMipMap"
-
-        let size = tempImage.Size
-
-        // figure out whether to create/upload mipmaps or not
-        let generateMipMaps = 
-            info.wantMipMaps && tempImage.LevelCount = 1
-
-        let mipMapLevels =
-            if info.wantMipMaps then
-                if tempImage.LevelCount = 1 then
-                    1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
-                else 
-                    tempImage.LevelCount
-            else
-                1
-
-        // allocate the final image
-        let format          = tempImage.Image.Format
-        let size            = V3i(size, 1)
-        let usage           = VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
-        let img             = device |> alloc size mipMapLevels 1 1 TextureDimension.Texture2D format usage
-        let copyLevels      = min tempImage.LevelCount mipMapLevels
-
-        // enqueue the copy command and finally delete the temporary image
-        // if mipmaps need to be generated do that on the GPU-Memory-Image
-        device.eventually {
-            try 
-                do! Command.TransformLayout(tempImage.Image, VkImageLayout.TransferSrcOptimal)
-                do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
-
-                let color = img.[tempImage.Aspect, *, 0]
-                do! Command.Copy(tempImage.[0 .. copyLevels - 1], color.[0 .. copyLevels - 1])
-
-                // generate mipmaps if needed
-                if generateMipMaps then
-                    do! Command.TransformLayout(img, VkImageLayout.General)
-                    do! Command.GenerateMipMaps color
-                    
-
-                // convert to shader read layout
-                do! Command.TransformLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
-
-            finally 
-                if dispose then device.Delete tempImage
-        }
-
-        // finally return the created image
-        img
-
     let ofPixImageMipMap (pi : PixImageMipMap) (info : TextureParams) (device : Device) =
         if pi.LevelCount <= 0 then failf "empty PixImageMipMap"
+        
+        let format = pi.ImageArray.[0].PixFormat
+        let size = pi.ImageArray.[0].Size
 
-        let temp = device.CreateDeviceMemoryImage(pi)
-        device |> ofDeviceMemoryImage true temp info
+        let format = device.GetSupportedFormat(VkImageTiling.Optimal, format)
+        let textureFormat = VkFormat.toTextureFormat format
+        let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
-    let ofPixImageCube (pi : PixImageCube) (info : TextureParams) (device : Device) =
-
-        let levels = pi.MipMapArray |> Seq.map (fun pi -> pi.LevelCount) |> Seq.min
-        if levels < 1 then failf "empty PixImageCube"
-
-        let sizes = pi.MipMapArray |> Seq.map (fun pi -> pi.[0].Size) |> HashSet.ofSeq
-        if sizes.Count <> 1 then failf "PixImageCube faces have differing sizes: %A" (Seq.toList sizes)
-
-        let faceSize = sizes |> Seq.head
-
-        let generateMipMaps = info.wantMipMaps && levels = 1
+        let uploadLevels =
+            if info.wantMipMaps then pi.LevelCount
+            else 1
 
         let mipMapLevels =
             if info.wantMipMaps then
-                if levels = 1 then
-                    1 + max faceSize.X faceSize.Y |> Fun.Log2 |> floor |> int 
-                else 
-                    levels
+                if pi.LevelCount > 1 then pi.LevelCount
+                else 1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
             else
                 1
 
-        let copyLevels = min mipMapLevels levels
+        let generateMipMaps =
+            uploadLevels < mipMapLevels
 
-        let faces = pi.MipMapArray |> Array.map (fun img -> device.CreateDeviceMemoryImage(img, copyLevels))
+        //create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
+        let image = 
+            create 
+                (V3i(size.X, size.Y, 1)) 
+                mipMapLevels 1 1 
+                TextureDimension.Texture2D 
+                textureFormat 
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                device
 
-        // allocate the final image
-        let format          = faces.[0].Image.Format
-        let aspect          = faces.[0].Aspect
-        let size            = V3i(faceSize, 1)
-        let usage           = VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
-        let img             = device |> alloc size mipMapLevels 6 1 TextureDimension.TextureCube format usage
-
-
-        // enqueue the copy command and finally delete the temporary image
-        // if mipmaps need to be generated do that on the GPU-Memory-Image
+        
         device.eventually {
-            try 
-                do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
-                for fi in 0 .. 5 do
-                    let src = faces.[fi]
-                    do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
+            let tempImages = List()
+            try
+                do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
 
-                    let dst = img.[aspect, *, fi]
-                    do! Command.Copy(src.[0 .. copyLevels-1], dst.[0 .. copyLevels - 1])
+                // upload the levels
+                for level in 0 .. uploadLevels - 1 do
+                    let data = pi.ImageArray.[level]
+                    let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat)
+                    temp.Write data
+                    tempImages.Add temp
+                    do! Command.Copy(temp, image.[ImageAspect.Color, level, 0])
 
-                 
-                // generate mipmaps if needed
+                // generate the mipMaps
                 if generateMipMaps then
-                    do! Command.TransformLayout(img, VkImageLayout.General)
-                    do! Command.GenerateMipMaps img.[aspect, *, *]
-                    
-                // convert to shader read layout
-                do! Command.TransformLayout(img, VkImageLayout.ShaderReadOnlyOptimal)
+                    do! Command.GenerateMipMaps image.[ImageAspect.Color]
 
-            finally 
-                faces |> Array.iter device.Delete
+                do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+
+            finally
+                for t in tempImages do device.Delete t
         }
 
-        // finally return the created image
-        img
+        image
+
+    let ofPixImageCube (pi : PixImageCube) (info : TextureParams) (device : Device) =
+        let face0 = pi.MipMapArray.[0]
+        if face0.LevelCount <= 0 then failf "empty PixImageMipMap"
+        
+        let format = face0.ImageArray.[0].PixFormat
+        let size = face0.ImageArray.[0].Size
+
+        let format = device.GetSupportedFormat(VkImageTiling.Optimal, format)
+        let textureFormat = VkFormat.toTextureFormat format
+
+        let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
+
+        let uploadLevels =
+            if info.wantMipMaps then face0.LevelCount
+            else 1
+
+        let mipMapLevels =
+            if info.wantMipMaps then
+                if face0.LevelCount > 1 then face0.LevelCount
+                else 1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
+            else
+                1
+
+        let generateMipMaps =
+            uploadLevels < mipMapLevels
+
+        //create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
+        let image = 
+            create 
+                (V3i(size.X, size.Y, 1)) 
+                mipMapLevels 6 1 
+                TextureDimension.TextureCube 
+                textureFormat 
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                device
+
+        
+        device.eventually {
+            let tempImages = List()
+            try
+                do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+
+                // upload the levels
+                for level in 0 .. uploadLevels - 1 do
+                    for face in 0 .. 5 do
+                        let data = pi.MipMapArray.[face].ImageArray.[level]
+                        let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat)
+                        temp.Write data
+                        tempImages.Add temp
+                        do! Command.Copy(temp, image.[ImageAspect.Color, level, face])
+
+                // generate the mipMaps
+                if generateMipMaps then
+                    do! Command.GenerateMipMaps image.[ImageAspect.Color]
+
+                do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+
+            finally
+                for t in tempImages do device.Delete t
+        }
+
+        image
 
     let ofFile (file : string) (info : TextureParams) (device : Device) =
         if not (System.IO.File.Exists file) then failf "file does not exists: %A" file
 
-        let temp = device.CreateDeviceMemoryImage(file)
-        device |> ofDeviceMemoryImage true temp info
+        let temp = device |> TensorImage.ofFile file
+        let size = temp.Size
+        let textureFormat = VkFormat.toTextureFormat temp.ImageFormat
+
+
+        let mipMapLevels =
+            if info.wantMipMaps then
+                1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
+            else
+                1
+
+        let image = 
+            create 
+                size
+                mipMapLevels 1 1 
+                TextureDimension.Texture2D 
+                textureFormat 
+                (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                device
+        
+        device.eventually {
+            try
+                do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+
+                // upload the levels
+                do! Command.Copy(temp, image.[ImageAspect.Color, 0, 0])
+
+                // generate the mipMaps
+                if info.wantMipMaps then
+                    do! Command.GenerateMipMaps image.[ImageAspect.Color]
+
+                do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+
+            finally
+                device.Delete temp
+        }
+        image
 
     let ofTexture (t : ITexture) (device : Device) =
         match t with
@@ -2355,30 +3357,33 @@ module Image =
                 failf "unsupported texture-type: %A" t
 
     let downloadLevel (src : ImageSubresource) (dst : PixImage) (device : Device) =
-        let temp = device.CreateDeviceMemoryImage(V3i(dst.Size, 1), TextureDimension.Texture2D, 1, dst.PixFormat)
+        let format = src.Image.Format
+        let sourcePixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
+
+        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), sourcePixFormat)
         try
             device.GraphicsFamily.run {
                 let layout = src.Image.Layout
                 do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
-                do! Command.Copy(src, temp.[0])
+                do! Command.Copy(src, temp)
                 do! Command.TransformLayout(src.Image, layout)
             }
-            temp.Download(0, dst)
-        finally 
+            temp.Read(dst)
+        finally
             device.Delete temp
 
     let uploadLevel (src : PixImage) (dst : ImageSubresource) (device : Device) =
-        let temp = device.CreateDeviceMemoryImage(PixImageMipMap [|src|])
+        let format = dst.Image.Format
+        let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
+        
+        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), dstPixFormat)
+        temp.Write(src)
+        let layout = dst.Image.Layout
         device.eventually {
-            try 
-                let layout = dst.Image.Layout
-                do! Command.TransformLayout(temp.Image, VkImageLayout.TransferSrcOptimal)
+            try
                 do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
-
-                do! Command.Copy(temp.[0], dst)
-                
+                do! Command.Copy(temp, dst)
                 do! Command.TransformLayout(dst.Image, layout)
-
             finally 
                 device.Delete temp
         }
