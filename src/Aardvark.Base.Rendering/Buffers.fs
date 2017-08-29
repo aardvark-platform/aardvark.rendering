@@ -15,6 +15,43 @@ type IIndirectBuffer =
     abstract member Buffer : IBuffer
     abstract member Count : int
 
+type INativeBuffer =
+    inherit IBuffer
+    abstract member SizeInBytes : int
+    abstract member Use : (nativeint -> 'a) -> 'a
+    abstract member Pin : unit -> nativeint
+    abstract member Unpin : unit -> unit
+
+type ArrayBuffer(data : Array) =
+    let elementType = data.GetType().GetElementType()
+    let mutable gchandle = Unchecked.defaultof<_>
+
+    interface IBuffer
+    member x.Data = data
+    member x.ElementType = elementType
+
+    interface INativeBuffer with
+        member x.SizeInBytes = data.Length * Marshal.SizeOf elementType
+        member x.Use (f : nativeint -> 'a) =
+            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+            try f (gc.AddrOfPinnedObject())
+            finally gc.Free()
+
+        member x.Pin() =
+            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+            gchandle <- gc
+            gc.AddrOfPinnedObject()
+
+        member x.Unpin() =
+            gchandle.Free()
+            gchandle <- Unchecked.defaultof<_>
+
+    override x.GetHashCode() = data.GetHashCode()
+    override x.Equals o =
+        match o with
+            | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
+            | _ -> false
+
 
 type SingleValueBuffer(value : IMod<V4f>) =
     inherit Mod.AbstractMod<IBuffer>()
@@ -23,7 +60,7 @@ type SingleValueBuffer(value : IMod<V4f>) =
 
     override x.Compute(token) = 
         let v = value.GetValue token
-        failwithf "NullBuffer cannot be evaluated"
+        ArrayBuffer [|v|] :> IBuffer
 
     override x.GetHashCode() = value.GetHashCode()
     override x.Equals o =
@@ -62,43 +99,6 @@ type BufferView(b : IMod<IBuffer>, elementType : Type, offset : int, stride : in
                 o.Buffer = b && o.ElementType = elementType && o.Offset = offset && o.Stride = stride
             | _ -> false
 
-
-type INativeBuffer =
-    inherit IBuffer
-    abstract member SizeInBytes : int
-    abstract member Use : (nativeint -> 'a) -> 'a
-    abstract member Pin : unit -> nativeint
-    abstract member Unpin : unit -> unit
-
-type ArrayBuffer(data : Array) =
-    let elementType = data.GetType().GetElementType()
-    let mutable gchandle = Unchecked.defaultof<_>
-
-    interface IBuffer
-    member x.Data = data
-    member x.ElementType = elementType
-
-    interface INativeBuffer with
-        member x.SizeInBytes = data.Length * Marshal.SizeOf elementType
-        member x.Use (f : nativeint -> 'a) =
-            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            try f (gc.AddrOfPinnedObject())
-            finally gc.Free()
-
-        member x.Pin() =
-            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-            gchandle <- gc
-            gc.AddrOfPinnedObject()
-
-        member x.Unpin() =
-            gchandle.Free()
-            gchandle <- Unchecked.defaultof<_>
-
-    override x.GetHashCode() = data.GetHashCode()
-    override x.Equals o =
-        match o with
-            | :? ArrayBuffer as o -> System.Object.ReferenceEquals(o.Data,data)
-            | _ -> false
 
 type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
     interface INativeBuffer with

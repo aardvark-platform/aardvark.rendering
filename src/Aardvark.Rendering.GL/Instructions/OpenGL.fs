@@ -602,6 +602,11 @@ module OpenGl =
         let ClearDepth  = getProcAddress "glClearDepth"
 
         /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClearStencil.xml
+        /// </summary>
+        let ClearStencil  = getProcAddress "glClearStencil"
+
+        /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glGetError.xml
         /// </summary>
         let GetError  = getProcAddress "glGetError"
@@ -658,6 +663,12 @@ module OpenGl =
         /// </summary>
         let DrawBuffers = getProcAddress "glDrawBuffers"
 
+        
+        /// <summary>
+        /// https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDrawBuffer.xhtml
+        /// </summary>
+        let DrawBuffer = getProcAddress "glDrawBuffer"
+
 
         let Uniform1iv = getProcAddress "glUniform1iv"
         let Uniform1fv = getProcAddress "glUniform1fv"
@@ -688,6 +699,8 @@ module OpenGl =
         let HSetBlendMode = getGLVMProcAddress "hglSetBlendMode"
         let HSetStencilMode = getGLVMProcAddress "hglSetStencilMode"
         let HBindVertexAttributes = getGLVMProcAddress "hglBindVertexAttributes"
+        let HSetConservativeRaster = getGLVMProcAddress "hglSetConservativeRaster"
+        let HSetMultisample = getGLVMProcAddress "hglSetMultisample"
 
 
 
@@ -765,6 +778,8 @@ module OpenGl =
               HSetBlendMode, "hglSetBlendMode"
               HSetStencilMode, "hglSetStencilMode"
               HBindVertexAttributes, "hglBindVertexAttributes"
+              HSetConservativeRaster, "hglSetConservativeRaster"
+              HSetMultisample, "hglSetMultisample"
 
             ] |> Map.ofList
 
@@ -854,3 +869,5 @@ module OpenGl =
         let HSetBlendMode : nativeint -> unit = wrap Pointers.HSetBlendMode
         let HSetStencilMode : nativeint -> unit = wrap Pointers.HSetStencilMode
         let HBindVertexAttributes : nativeint -> nativeint -> unit = wrap Pointers.HBindVertexAttributes
+        let HSetConservativeRaster : nativeint -> unit = wrap Pointers.HSetConservativeRaster
+        let HSetMultisample : nativeint -> unit = wrap Pointers.HSetMultisample

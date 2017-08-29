@@ -372,10 +372,10 @@ void runInstruction(Instruction* i)
 		hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
 		break;
 	case HDrawArraysIndirect:
-		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (int*)i->Arg3, (GLuint)i->Arg4);
+		hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (HandleAndCount*)i->Arg3);
 		break;
 	case HDrawElementsIndirect:
-		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (int*)i->Arg4, (GLuint)i->Arg5);
+		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (HandleAndCount*)i->Arg4);
 		break;
 	case HSetDepthTest:
 		hglSetDepthTest((DepthTestMode*)i->Arg0);
@@ -394,6 +394,12 @@ void runInstruction(Instruction* i)
 		break;
 	case HBindVertexAttributes:
 		hglBindVertexAttributes((void**)i->Arg0, (VertexInputBinding*)i->Arg1);
+		break;
+	case HSetConservativeRaster:
+		hglSetConservativeRaster((int*)i->Arg0);
+		break;
+	case HSetMultisample:
+		hglSetMultisample((int*)i->Arg0);
 		break;
 	default:
 		printf("unknown instruction code: %d\n", i->Code);
@@ -672,10 +678,10 @@ Statistics runRedundancyChecks(Fragment* frag)
 					hglDrawElements((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (DrawCallInfoList*)i->Arg4);
 					break;
 				case HDrawArraysIndirect:
-					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (int*)i->Arg3, (GLuint)i->Arg4);
+					hglDrawArraysIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (HandleAndCount*)i->Arg3);
 					break;
 				case HDrawElementsIndirect:
-					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (int*)i->Arg4, (GLuint)i->Arg5);
+					hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (HandleAndCount*)i->Arg4);
 					break;
 
 				case HSetDepthTest:
@@ -713,6 +719,20 @@ Statistics runRedundancyChecks(Fragment* frag)
 					if (state.HShouldBindVertexAttributes((VertexInputBinding*)i->Arg1))
 					{
 						hglBindVertexAttributes((void**)i->Arg0, (VertexInputBinding*)i->Arg1);
+					}
+					break;
+
+				case HSetConservativeRaster:
+					if (state.HShouldSetConservativeRaster((int*)i->Arg0))
+					{
+						hglSetConservativeRaster((int*)i->Arg0);
+					}
+					break;
+
+				case HSetMultisample:
+					if (state.HShouldSetMultisample((int*)i->Arg0))
+					{
+						hglSetMultisample((int*)i->Arg0);
 					}
 					break;
 
@@ -839,13 +859,14 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 	endtrace("a")
 }
 
-DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLint* count, GLuint buffer)
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, HandleAndCount* handleAndCount)
 {
 	trace("hglDrawArraysIndirect\n");
 
 	auto active = *isActive;
-	auto drawcount = *count;
+	auto drawcount = handleAndCount->Count;
 	if (!active || !drawcount) return;
+	auto buffer = handleAndCount->Handle;
 
 	stats->DrawCalls++;
 	stats->EffectiveDrawCalls += drawcount;
@@ -889,12 +910,13 @@ DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginM
 	endtrace("a")
 }
 
-DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLuint buffer)
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, HandleAndCount* handleAndCount)
 {
 	trace("hglDrawElementsIndirect\n");
-	auto drawcount = *count;
+	auto drawcount = handleAndCount->Count;
 	auto active = *isActive;
 	if (!active || !drawcount)return;
+	auto buffer = handleAndCount->Handle;
 
 	stats->DrawCalls++;
 	stats->EffectiveDrawCalls += drawcount;
@@ -1115,5 +1137,32 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 		}
 	}
 
+}
+
+#define GL_CONSERVATIVE_RASTERIZATION_NV 0x9346
+
+DllExport(void) hglSetConservativeRaster(int * enable)
+{
+	auto e = *enable;
+	if (e)
+	{
+		glEnable(GL_CONSERVATIVE_RASTERIZATION_NV);
+	}
+	else
+	{
+		glDisable(GL_CONSERVATIVE_RASTERIZATION_NV);
+	}
+}
+DllExport(void) hglSetMultisample(int * enable)
+{
+	auto e = *enable;
+	if (e)
+	{
+		glEnable(GL_MULTISAMPLE);
+	}
+	else
+	{
+		glDisable(GL_MULTISAMPLE);
+	}
 }
 

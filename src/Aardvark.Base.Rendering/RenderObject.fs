@@ -148,6 +148,16 @@ type UniformProvider private() =
 
     static member Empty = empty
     
+    static member union (l : IUniformProvider) (r : IUniformProvider) =
+        { new IUniformProvider with
+            member x.Dispose() = l.Dispose(); r.Dispose()
+            member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
+                match l.TryGetUniform(scope, name) with
+                    | Some m -> Some m
+                    | None -> r.TryGetUniform(scope, name)
+            
+        }
+
     static member ofDict (values : SymbolDict<IMod>) =
         { new IUniformProvider with
             member x.Dispose() = ()
@@ -240,6 +250,9 @@ type RenderObject =
                 
         mutable Uniforms            : IUniformProvider
 
+        mutable ConservativeRaster  : IMod<bool>
+        mutable Multisample         : IMod<bool>
+
         mutable Activate            : unit -> IDisposable
         mutable WriteBuffers        : Option<Set<Symbol>>
 
@@ -273,6 +286,8 @@ type RenderObject =
           InstanceAttributes = null
           VertexAttributes = null
           Uniforms = null
+          ConservativeRaster = null
+          Multisample = null
           Activate = nopActivate
           WriteBuffers = None
         }
@@ -323,6 +338,8 @@ module RenderObjectExtensions =
           FillMode = null
           StencilMode = null
           Indices = None
+          ConservativeRaster = null
+          Multisample = null
           InstanceAttributes = emptyAttributes
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms
@@ -963,6 +980,5 @@ module GeometrySetUtilities =
 
         
     
-
 
 

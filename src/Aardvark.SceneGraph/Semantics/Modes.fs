@@ -21,6 +21,8 @@ module ModeSemantics =
         member x.WriteBuffers   : Option<Set<Symbol>>       = x?WriteBuffers
         member x.ColorWriteMask : IMod<bool*bool*bool*bool> = x?ColorWriteMask
         member x.DepthWriteMask : IMod<bool>                = x?ColorWriteMask
+        member x.ConservativeRaster : IMod<bool>            = x?ConservativeRaster
+        member x.Multisample : IMod<bool>                   = x?Multisample
 
     module Semantic =
         let depthTestMode  (s : ISg) = s.DepthTestMode
@@ -31,6 +33,8 @@ module ModeSemantics =
         let writeBuffers   (s : ISg) = s.WriteBuffers
         let colorWriteMask (s : ISg) = s.ColorWriteMask
         let depthWriteMask (s : ISg) = s.DepthWriteMask
+        let conservativeRaster (s : ISg) = s.ConservativeRaster
+        let multisample (s : ISg) = s.Multisample
         
     [<Semantic>]
     type ModeSem() =
@@ -42,6 +46,8 @@ module ModeSemantics =
         let defaultWriteBuffers   = Option<Set<Symbol>>.None
         let defaultColorWriteMask = Mod.constant (true,true,true,true)
         let defaultDepthWriteMask = Mod.constant true
+        let defaultConservativeRaster = Mod.constant false
+        let defaultMultisample = Mod.constant true
 
         member x.DepthTestMode(e : Root<ISg>) =
             e.Child?DepthTestMode <- defaultDepth
@@ -57,6 +63,18 @@ module ModeSemantics =
 
         member x.BlendMode(e : Root<ISg>) =
             e.Child?BlendMode <- defaultBlend
+
+        member x.ConservativeRaster(e : Root<ISg>) =
+            e.Child?ConservativeRaster <- defaultConservativeRaster
+            
+        member x.ConservativeRaster(b : Sg.ConservativeRasterApplicator) =
+            b.Child?ConservativeRaster <- b.ConservativeRaster
+
+        member x.Multisample(e : Root<ISg>) =
+            e.Child?Multisample <- defaultMultisample
+            
+        member x.Multisample(b : Sg.MultisampleApplicator) =
+            b.Child?Multisample <- b.Multisample
 
         member x.WriteBuffers(e : Root<ISg>) = e.Child?WriteBuffers <- defaultWriteBuffers
         member x.WriteBuffers(b : Sg.WriteBuffersApplicator) =

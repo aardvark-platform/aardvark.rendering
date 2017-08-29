@@ -80,6 +80,8 @@ type InstructionCode =
     | HSetBlendMode                 = 107
     | HSetStencilMode               = 108
     | HBindVertexAttributes         = 109
+    | HSetConservativeRaster        = 110
+    | HSetMultisample               = 111
 
 
 /// <summary>
@@ -182,11 +184,11 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
     static member VertexAttrib4f (index : int) (v0 : float32) (v1 : float32) (v2 : float32) (v3 : float32) =
         Instruction(InstructionCode.VertexAttrib4f, [|index :> obj; v0 :> obj; v1 :> obj; v2 :> obj; v3 :> obj|])
 
-    static member MultiDrawArraysIndirectPtr (mode : int) (indirect : nativeint) (drawCountPtr : nativeint) (stride : int) =
-        Instruction(InstructionCode.MultiDrawArraysIndirect, [|mode :> obj; indirect :> obj; Aardvark.Base.Ptr32 drawCountPtr :> obj; stride :> obj|])
+    static member MultiDrawArraysIndirect (mode : int) (indirect : nativeint) (drawCount : int) (stride : int) =
+        Instruction(InstructionCode.MultiDrawArraysIndirect, [|mode :> obj; indirect :> obj; drawCount :> obj; stride :> obj|])
 
-    static member MultiDrawElementsIndirectPtr (mode : int) (t : int) (indirect : nativeint) (drawCountPtr : nativeint) (stride : int) =
-        Instruction(InstructionCode.MultiDrawElementsIndirect, [|mode :> obj; t :> obj; indirect :> obj; Aardvark.Base.Ptr32 drawCountPtr :> obj; stride :> obj|])
+    static member MultiDrawElementsIndirect (mode : int) (t : int) (indirect : nativeint) (drawCount : int) (stride : int) =
+        Instruction(InstructionCode.MultiDrawElementsIndirect, [|mode :> obj; t :> obj; indirect :> obj; drawCount :> obj; stride :> obj|])
 
     static member DepthMask (enabled : int) =
         Instruction(InstructionCode.DepthMask, [|enabled :> obj|])
@@ -202,35 +204,41 @@ type Instruction internal(code : InstructionCode, args : obj[]) =
         Instruction(InstructionCode.DrawBuffers, [|n :> obj; ptr :> obj |])
 
 
-    static member HDrawArrays (runtimeStats : nativeint) (isActive : IsActiveHandle) (mode : BeginModeHandle) (infos : DrawCallInfoListHandle) =
-        Instruction(InstructionCode.HDrawArrays, [| runtimeStats :> obj; isActive.Pointer :> obj; mode.Pointer :> obj; infos.Pointer :> obj |])
+    static member HDrawArrays (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (infos : nativeptr<DrawCallInfoList>) =
+        Instruction(InstructionCode.HDrawArrays, [| runtimeStats :> obj; isActive :> obj; mode :> obj; infos :> obj |])
 
-    static member HDrawElements (runtimeStats : nativeint) (isActive : IsActiveHandle) (mode : BeginModeHandle) (indexType : int) (infos : DrawCallInfoListHandle) =
-        Instruction(InstructionCode.HDrawElements, [| runtimeStats :> obj; isActive.Pointer :> obj; mode.Pointer :> obj; indexType :> obj; infos.Pointer :> obj |])
+    static member HDrawElements (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (indexType : int) (infos : nativeptr<DrawCallInfoList>) =
+        Instruction(InstructionCode.HDrawElements, [| runtimeStats :> obj; isActive :> obj; mode :> obj; indexType :> obj; infos :> obj |])
 
-    static member HDrawArraysIndirect (runtimeStats : nativeint) (isActive : IsActiveHandle) (mode : BeginModeHandle) (count : nativeptr<int>)(buffer : int) =
-        Instruction(InstructionCode.HDrawArraysIndirect, [| runtimeStats :> obj; isActive.Pointer :> obj; mode.Pointer :> obj; count :> obj; buffer :> obj |])
+    static member HDrawArraysIndirect (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (handleAndCount : nativeptr<Aardvark.Base.V2i>) =
+        Instruction(InstructionCode.HDrawArraysIndirect, [| runtimeStats :> obj; isActive :> obj; mode :> obj; handleAndCount :> obj |])
 
-    static member HDrawElementsIndirect (runtimeStats : nativeint) (isActive : IsActiveHandle) (mode : BeginModeHandle) (indexType : int) (count : nativeptr<int>) (buffer : int) =
-        Instruction(InstructionCode.HDrawElementsIndirect, [| runtimeStats :> obj; isActive.Pointer :> obj; mode.Pointer :> obj; indexType :> obj; count :> obj; buffer :> obj |])
+    static member HDrawElementsIndirect (runtimeStats : nativeint) (isActive : nativeptr<int>) (mode : nativeptr<GLBeginMode>) (indexType : int) (handleAndCount : nativeptr<Aardvark.Base.V2i>) =
+        Instruction(InstructionCode.HDrawElementsIndirect, [| runtimeStats :> obj; isActive :> obj; mode :> obj; indexType :> obj; handleAndCount :> obj |])
 
-    static member HSetDepthTest (test : DepthTestModeHandle) =
-        Instruction(InstructionCode.HSetDepthTest, [| test.Pointer :> obj |])
+    static member HSetDepthTest (test : nativeptr<DepthTestInfo>) =
+        Instruction(InstructionCode.HSetDepthTest, [| test :> obj |])
 
-    static member HSetCullFace (face : CullModeHandle) =
-        Instruction(InstructionCode.HSetCullFace, [| face.Pointer :> obj |])
+    static member HSetCullFace (face : nativeptr<int>) =
+        Instruction(InstructionCode.HSetCullFace, [| face :> obj |])
 
-    static member HSetPolygonMode (mode : PolygonModeHandle) =
-        Instruction(InstructionCode.HSetPolygonMode, [| mode.Pointer :> obj |])
+    static member HSetPolygonMode (mode : nativeptr<int>) =
+        Instruction(InstructionCode.HSetPolygonMode, [| mode :> obj |])
 
-    static member HSetBlendMode (mode : BlendModeHandle) =
-        Instruction(InstructionCode.HSetBlendMode, [| mode.Pointer :> obj |])
+    static member HSetBlendMode (mode : nativeptr<GLBlendMode>) =
+        Instruction(InstructionCode.HSetBlendMode, [| mode :> obj |])
 
-    static member HSetStencilMode (mode : StencilModeHandle) =
-        Instruction(InstructionCode.HSetStencilMode, [| mode.Pointer :> obj |])
+    static member HSetStencilMode (mode : nativeptr<GLStencilMode>) =
+        Instruction(InstructionCode.HSetStencilMode, [| mode :> obj |])
 
     static member HBindVertexArray (arr : nativeint) =
         Instruction(InstructionCode.BindVertexArray, [| Aardvark.Base.Ptr32 arr :> obj |])
 
-    static member HBindVertexAttributes (contextHandle : nativeptr<nativeint>, binding : VertexInputBindingHandle) =
-        Instruction(InstructionCode.HBindVertexAttributes, [| contextHandle :> obj; binding.Pointer :> obj |])
+    static member HBindVertexAttributes (contextHandle : nativeptr<nativeint>, binding : nativeptr<VertexInputBinding>) =
+        Instruction(InstructionCode.HBindVertexAttributes, [| contextHandle :> obj; binding :> obj |])
+
+    static member HSetConservativeRaster (enabled : nativeptr<int>) =
+        Instruction(InstructionCode.HSetConservativeRaster, [| enabled |])
+
+    static member HSetMultisample (enabled : nativeptr<int>) =
+        Instruction(InstructionCode.HSetMultisample, [| enabled |])

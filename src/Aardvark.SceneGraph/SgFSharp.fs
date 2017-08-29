@@ -145,7 +145,11 @@ module SgFSharp =
                 }
             sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
 
-
+        let conservativeRaster (m : IMod<bool>) (sg : ISg) =
+            Sg.ConservativeRasterApplicator(m, Mod.constant sg) :> ISg
+            
+        let multisample (m : IMod<bool>) (sg : ISg) =
+            Sg.MultisampleApplicator(m, Mod.constant sg) :> ISg
 
         let fillMode (m : IMod<FillMode>) (sg : ISg) =
             Sg.FillModeApplicator(m, sg) :> ISg

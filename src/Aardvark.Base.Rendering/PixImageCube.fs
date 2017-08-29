@@ -187,12 +187,12 @@ module FSharpPixImageCubeExtensions =
 
             let RotZ90 =
                 Map.ofList [
-                    CubeSide.PositiveX, (CubeSide.NegativeY, ImageTrafo.Rot90)   
-                    CubeSide.NegativeX, (CubeSide.PositiveY, ImageTrafo.Rot90)   
+                    CubeSide.PositiveX, (CubeSide.PositiveY, ImageTrafo.Rot90)   
+                    CubeSide.NegativeX, (CubeSide.NegativeY, ImageTrafo.Rot90)   
                     CubeSide.PositiveZ, (CubeSide.PositiveZ, ImageTrafo.Rot90)   
                     CubeSide.NegativeZ, (CubeSide.NegativeZ, ImageTrafo.Rot270)   
-                    CubeSide.PositiveY, (CubeSide.PositiveX, ImageTrafo.Rot90)   
-                    CubeSide.NegativeY, (CubeSide.NegativeX, ImageTrafo.Rot90)   
+                    CubeSide.PositiveY, (CubeSide.NegativeX, ImageTrafo.Rot90)   
+                    CubeSide.NegativeY, (CubeSide.PositiveX, ImageTrafo.Rot90)   
                 ]
 
             let RotZ180 = compose RotZ90 RotZ90
@@ -230,8 +230,25 @@ module FSharpPixImageCubeExtensions =
                     CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.MirrorY)   
                 ]
 
+            let OfOpenGlConventionTrafo = 
+                Map.ofList [
+                    CubeSide.PositiveX, (CubeSide.PositiveX, ImageTrafo.MirrorX)   
+                    CubeSide.NegativeX, (CubeSide.NegativeX, ImageTrafo.MirrorX)   
+                    CubeSide.PositiveZ, (CubeSide.NegativeZ, ImageTrafo.MirrorX)   
+                    CubeSide.NegativeZ, (CubeSide.PositiveZ, ImageTrafo.MirrorX)   
+                    CubeSide.NegativeY, (CubeSide.NegativeY, ImageTrafo.MirrorY)   
+                    CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.MirrorY)   
+                ]
 
-            let OpenGlConventionTrafo = compose InvertY RotX270
+            let ToOpenGlConventionTrafo = 
+                Map.ofList [
+                    CubeSide.PositiveX, (CubeSide.PositiveX, ImageTrafo.MirrorY)   
+                    CubeSide.NegativeX, (CubeSide.NegativeX, ImageTrafo.MirrorY)   
+                    CubeSide.PositiveZ, (CubeSide.NegativeZ, ImageTrafo.Rot180)   
+                    CubeSide.NegativeZ, (CubeSide.PositiveZ, ImageTrafo.Rot180)   
+                    CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.Rot0)   
+                    CubeSide.NegativeY, (CubeSide.NegativeY, ImageTrafo.Rot0)   
+                ]
 
         let load (faceFiles : list<CubeSide * string>) =
             let faces = 
@@ -281,10 +298,10 @@ module FSharpPixImageCubeExtensions =
 
 
         let ofOpenGlConvention (c : PixImageCube) =
-            c.Transformed Trafo.OpenGlConventionTrafo
+            c.Transformed Trafo.OfOpenGlConventionTrafo
             
         let toOpenGlConvention (c : PixImageCube) =
-            c.Transformed Trafo.OpenGlConventionTrafo
+            c.Transformed Trafo.ToOpenGlConventionTrafo
             
         let toTexture (mipMaps : bool) (c : PixImageCube) =
             PixTextureCube(c, mipMaps) :> ITexture

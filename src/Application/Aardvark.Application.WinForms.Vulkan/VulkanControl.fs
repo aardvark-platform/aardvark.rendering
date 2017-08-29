@@ -8,12 +8,12 @@ open Aardvark.Base
 open Aardvark.Base.Incremental
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
+open Aardvark.Application.WinForms.Vulkan
 
-type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as this =
+
+[<AbstractClass>]
+type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     inherit UserControl()
-
-    let queuePool = context.DefaultQueue
-
 
     do base.SetStyle(ControlStyles.UserPaint, true)
        base.SetStyle(ControlStyles.DoubleBuffer, false)
@@ -21,96 +21,73 @@ type VulkanControl(context : Context, depthFormat : VkFormat, samples : int) as 
        base.SetStyle(ControlStyles.Opaque, true)
        base.SetStyle(ControlStyles.ResizeRedraw, true)
 
-    let mutable samples = samples
-    let mutable swapChainDescription : VulkanSwapChainDescription = Unchecked.defaultof<_>
-    let mutable swapChain : IVulkanSwapChain = Unchecked.defaultof<_>
-    let mutable renderPass : RenderPass = Unchecked.defaultof<_>
+    let mutable surface : Surface = Unchecked.defaultof<_>
+    let mutable swapchainDescription : SwapchainDescription = Unchecked.defaultof<_>
+    let mutable swapchain : Swapchain = Unchecked.defaultof<_>
     let mutable loaded = false
-    let mutable recreateSwapChain = true
-
-    member x.UpdateSamples(newSamples : int) =
-
-        if loaded && samples <> newSamples then
-            swapChainDescription.Dispose()
-            swapChain.Dispose()
-            swapChainDescription <- this.CreateVulkanSwapChainDescription(context, depthFormat, newSamples)
-            renderPass <- swapChainDescription.RenderPass
-            recreateSwapChain <- true
-
-        samples <- newSamples
 
 
     member x.SwapChainDescription = 
         if not x.IsHandleCreated then x.CreateHandle()
-        swapChainDescription
+        swapchainDescription
 
     member x.RenderPass = 
         if not x.IsHandleCreated then x.CreateHandle()
-        swapChainDescription.RenderPass
+        swapchainDescription.renderPass
 
-
+    abstract member OnLoad : SwapchainDescription -> unit
+    abstract member OnUnload : unit -> unit
     abstract member OnRenderFrame : RenderPass * Framebuffer -> unit
-    default x.OnRenderFrame(_,_) = ()
 
-
-    override x.OnResize(e) =
-        base.OnResize e
-        if loaded then
-//            if not recreateSwapChain then
-//                swapChain.Dispose()
-            recreateSwapChain <- true
-        
     override x.OnHandleCreated(e) =
         base.OnHandleCreated e
-        swapChainDescription <- this.CreateVulkanSwapChainDescription(context, depthFormat, samples)
-        renderPass <- swapChainDescription.RenderPass
-        
-        recreateSwapChain <- true
+        surface <- device.CreateSurface(x)
+        swapchainDescription <- device.CreateSwapchainDescription(surface, graphicsMode)
+        swapchain <- device.CreateSwapchain(swapchainDescription)
+        x.OnLoad swapchainDescription
         loaded <- true
 
     override x.OnPaint(e) =
         base.OnPaint(e)
 
         if loaded then
-            if recreateSwapChain then
-                recreateSwapChain <- false
-                if Unchecked.notNull swapChain then swapChain.Dispose()
-                swapChain <- x.CreateVulkanSwapChain(swapChainDescription)
-
-            let queue = queuePool.Acquire()
-            try
-                swapChain.BeginFrame queue
-
-                let fbo = swapChain.Framebuffer
+            swapchain.RenderFrame(fun framebuffer ->
                 Aardvark.Base.Incremental.EvaluationUtilities.evaluateTopLevel (fun () ->
-                    x.OnRenderFrame(renderPass, fbo)
+                    x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
                 )
-
-                swapChain.EndFrame queue
-            finally
-                queuePool.Release(queue)
+            )
 
     override x.Dispose(d) =
-        base.Dispose(d)
-
         if loaded then
             loaded <- false
-            swapChain.Dispose()
-            swapChainDescription.Dispose()
+            x.OnUnload()
+            device.Delete swapchain
+            device.Delete swapchainDescription
+            device.Delete surface
 
-type VulkanRenderControl(runtime : Runtime, samples : int) as this =
-    inherit VulkanControl(runtime.Context, VkFormat.D16Unorm, samples)
+        base.Dispose(d)
+
+type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode) as this =
+    inherit VulkanControl(runtime.Device, graphicsMode)
     
     static let messageLoop = MessageLoop()
     static do messageLoop.Start()
 
-    let context = runtime.Context
-    let mutable renderTask : IRenderTask = Unchecked.defaultof<_>
+    let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable taskSubscription : IDisposable = null
     let mutable sizes = Mod.init (V2i(this.ClientSize.Width, this.ClientSize.Height))
     let mutable needsRedraw = false
+    let mutable renderContiuously = false
 
     let time = Mod.custom(fun _ -> DateTime.Now)
+
+    override x.OnLoad(desc : SwapchainDescription) =
+        x.KeyDown.Add(fun e ->
+            if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
+                renderContiuously <- not renderContiuously
+                x.Invalidate()
+                e.Handled <- true
+        )
 
     override x.OnRenderFrame(pass, fbo) =
         needsRedraw <- false
@@ -118,51 +95,24 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
         if s <> sizes.Value then
             transact (fun () -> Mod.change sizes s)
 
-        renderTask.Run(fbo) |> ignore
+        renderTask.Run(RenderToken.Empty, fbo)
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
+        if renderContiuously then
+            x.Invalidate()
 
+    override x.OnUnload() =
+        if not (isNull taskSubscription) then
+            taskSubscription.Dispose()
+            taskSubscription <- null
+
+        renderTask.Dispose()
+        renderTask <- RenderTask.empty
+        ()
 
     member x.Time = time
     member x.Sizes = sizes :> IMod<_>
-
-    member x.Screenshot(size : V2i) =
-        let desc = x.SwapChainDescription
-
-        let color =
-            context.CreateImage(
-                VkImageType.D2d, desc.ColorFormat, TextureDimension.Texture2D, V3i(size.X, size.Y, 1), 1, 1, 1, 
-                VkImageUsageFlags.ColorAttachmentBit, VkImageLayout.TransferSrcOptimal, VkImageTiling.Optimal
-            )
-
-        let depth =
-            context.CreateImage(
-                VkImageType.D2d, desc.DepthFormat, TextureDimension.Texture2D, V3i(size.X, size.Y, 1), 1, 1, 1, 
-                VkImageUsageFlags.DepthStencilAttachmentBit, VkImageLayout.DepthStencilAttachmentOptimal, VkImageTiling.Optimal
-            )
-
-        let colorView = context.CreateImageOutputView(color, 0, 0)
-        let depthView = context.CreateImageOutputView(depth, 0, 0)
-
-        let fbo = 
-            context.CreateFramebuffer(
-                x.RenderPass, 
-                [ colorView; depthView ]
-            )
-
-        renderTask.Run(fbo) |> ignore
-
-        let image = PixImage<byte>(Col.Format.BGRA, size)
-        color.Download(image) |> context.DefaultQueue.RunSynchronously
-        
-        context.Delete fbo
-        context.Delete depthView
-        context.Delete colorView
-        context.Delete color
-        context.Delete depth
-
-        image
 
     member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature
 
@@ -182,17 +132,20 @@ type VulkanRenderControl(runtime : Runtime, samples : int) as this =
     interface IControl with
         member x.IsInvalid = needsRedraw
         member x.Invalidate() =
-            if not needsRedraw then
-                needsRedraw <- true
-                x.Invalidate()
+            if not x.IsDisposed && not renderContiuously then
+                if not needsRedraw then
+                    needsRedraw <- true
+                    x.Invalidate()
 
         member x.Paint() =
-            use g = x.CreateGraphics()
-            use e = new System.Windows.Forms.PaintEventArgs(g, x.ClientRectangle)
-            x.InvokePaint(x, e)
+            if not x.IsDisposed && not renderContiuously then
+                use g = x.CreateGraphics()
+                use e = new System.Windows.Forms.PaintEventArgs(g, x.ClientRectangle)
+                x.InvokePaint(x, e)
 
         member x.Invoke f =
-            base.Invoke (new System.Action(f)) |> ignore
+            if not x.IsDisposed then
+                base.Invoke (new System.Action(f)) |> ignore
 
     interface IRenderTarget with
         member x.FramebufferSignature = x.RenderPass :> IFramebufferSignature

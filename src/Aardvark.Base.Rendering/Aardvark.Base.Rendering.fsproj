@@ -17,7 +17,7 @@
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
     <TargetFrameworkProfile />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debfug|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -65,6 +65,8 @@
   <ItemGroup>
     <Compile Include="ColoredLock.fs" />
     <Compile Include="PrimitiveValueConverter.fs" />
+    <None Include="NativeTensorGenerator.fsx" />
+    <Compile Include="NativeTensorGenerated.fs" />
     <Compile Include="RenderPass.fs" />
     <Compile Include="GPUVendor.fs" />
     <Compile Include="DefaultSemantic.fs" />
@@ -108,11 +110,10 @@
     <Compile Include="DefaultSurfaces\InstanceTrafo.fs" />
     <Compile Include="DefaultSurfaces.fs" />
     <Compile Include="GridCell.fs" />
-    <None Include="NativeTensorGenerator.fsx" />
-    <Compile Include="NativeTensorGenerated.fs" />
     <Compile Include="ImageTrafo.fs" />
     <Compile Include="PixImageCube.fs" />
     <Compile Include="ShaderInterface.fs" />
+    <Compile Include="Ordered.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />

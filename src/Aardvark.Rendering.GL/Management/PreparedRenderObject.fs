@@ -22,31 +22,32 @@ type PreparedRenderObject =
         Original : RenderObject
         FramebufferSignature : IFramebufferSignature
         LastTextureSlot : int
-        Program : IResource<Program>
-        UniformBuffers : Map<int, IResource<UniformBufferView>>
-        Uniforms : Map<int, IResource<UniformLocation>>
-        Textures : Map<int, IResource<Texture> * IResource<Sampler>>
-        Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer>>
-        IndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer>>
+        Program : IResource<Program, int>
+        UniformBuffers : Map<int, IResource<UniformBufferView, int>>
+        Uniforms : Map<int, IResource<UniformLocation, nativeint>>
+        Textures : Map<int, IResource<Texture, int> * IResource<Sampler, int>>
+        Buffers : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>
+        IndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>
         
-        IsActive : IResource<IsActiveHandle>
-        BeginMode : IResource<BeginModeHandle>
-        DrawCallInfos : IResource<DrawCallInfoListHandle>
-        IndirectBuffer : Option<IResource<IndirectBuffer>>
-        DepthTestMode : IResource<DepthTestModeHandle>
-        CullMode : IResource<CullModeHandle>
-        PolygonMode : IResource<PolygonModeHandle>
-        BlendMode : IResource<BlendModeHandle>
-        StencilMode : IResource<StencilModeHandle>
+        IsActive : IResource<bool, int>
+        BeginMode : IResource<GLBeginMode, GLBeginMode>
+        DrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
+        IndirectBuffer : Option<IResource<IndirectBuffer, V2i>>
+        DepthTestMode : IResource<DepthTestInfo, DepthTestInfo>
+        CullMode : IResource<int, int>
+        PolygonMode : IResource<int, int>
+        BlendMode : IResource<GLBlendMode, GLBlendMode>
+        StencilMode : IResource<GLStencilMode, GLStencilMode>
+        ConservativeRaster : IResource<bool, int>
+        Multisample : IResource<bool, int>
 
-        VertexInputBinding : IResource<VertexInputBindingHandle>
+        VertexInputBinding : IResource<VertexInputBindingHandle, int>
         
         ColorAttachmentCount : int
         DrawBuffers : Option<DrawBufferConfig>
         ColorBufferMasks : Option<list<V4i>>
         DepthBufferMask : bool
         StencilBufferMask : bool
-
 
         mutable ResourceCount : int
         mutable ResourceCounts : Map<ResourceKind, int>
@@ -96,7 +97,8 @@ type PreparedRenderObject =
             yield x.VertexInputBinding :> _ 
             yield x.IsActive :> _
             yield x.BeginMode :> _
-            
+            yield x.ConservativeRaster :> _
+            yield x.Multisample :> _
             yield x.DepthTestMode :> _
             yield x.CullMode :> _
             yield x.PolygonMode :> _
@@ -140,7 +142,8 @@ type PreparedRenderObject =
         x.PolygonMode.Update(caller, token)
         x.BlendMode.Update(caller, token)
         x.StencilMode.Update(caller, token)
-
+        x.ConservativeRaster.Update(caller, token)
+        x.Multisample.Update(caller, token)
 
     member x.Dispose() =
         lock x (fun () -> 
@@ -181,6 +184,8 @@ type PreparedRenderObject =
                         x.PolygonMode.Dispose()
                         x.BlendMode.Dispose()
                         x.StencilMode.Dispose()
+                        x.ConservativeRaster.Dispose()
+                        x.Multisample.Dispose()
         )
         
              
@@ -238,6 +243,8 @@ module PreparedRenderObject =
             PolygonMode = Unchecked.defaultof<_>
             BlendMode = Unchecked.defaultof<_>
             StencilMode = Unchecked.defaultof<_>
+            ConservativeRaster = Unchecked.defaultof<_>
+            Multisample = Unchecked.defaultof<_>
         }  
 
     let clone (o : PreparedRenderObject) =
@@ -282,6 +289,8 @@ module PreparedRenderObject =
                 PolygonMode  = o.PolygonMode 
                 BlendMode  = o.BlendMode 
                 StencilMode  = o.StencilMode 
+                ConservativeRaster = o.ConservativeRaster
+                Multisample = o.Multisample
             }  
 
         for r in res.Resources do
@@ -350,7 +359,7 @@ type ResourceManagerExtensions private() =
 //            else rj.Surface
 
         let program = x.CreateSurface(fboSignature, rj.Surface)
-        let prog = program.Handle.GetValue(AdaptiveToken.Top)
+        let prog = program.Handle.GetValue()
 
         GL.Check "[Prepare] Create Surface"
 
@@ -575,7 +584,8 @@ type ResourceManagerExtensions private() =
         let polygonMode = x.CreatePolygonMode rj.FillMode
         let blendMode = x.CreateBlendMode rj.BlendMode
         let stencilMode = x.CreateStencilMode rj.StencilMode
-
+        let conservativeRaster = x.CreateFlag rj.ConservativeRaster
+        let multisample = x.CreateFlag rj.Multisample
 
 
         // finally return the PreparedRenderObject
@@ -613,7 +623,8 @@ type ResourceManagerExtensions private() =
                 PolygonMode = polygonMode
                 BlendMode = blendMode
                 StencilMode = stencilMode
-
+                ConservativeRaster = conservativeRaster
+                Multisample = multisample
             }
 
         res.ResourceCount <- res.Resources |> Seq.length

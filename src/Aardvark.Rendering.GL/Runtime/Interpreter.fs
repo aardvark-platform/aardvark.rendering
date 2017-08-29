@@ -147,8 +147,8 @@ module OpenGLInterpreter =
         member x.ShouldSetVertexArray (vao : int) =
             x.set(&currentVAO, vao)
 
-        member x.ShouldBindVertexAttributes (vibh : VertexInputBindingHandle) =
-            x.set(&currentVIBH, vibh.Pointer)
+        member x.ShouldBindVertexAttributes (vibh : nativeptr<VertexInputBinding>) =
+            x.set(&currentVIBH, vibh)
 
         member x.ShouldSetProgram (program : int) =
             x.set(&currentProgram, program)
@@ -303,9 +303,9 @@ module OpenGLInterpreter =
             if x.ShouldSetVertexArray vao then
                 GL.BindVertexArray vao
                 
-        member inline x.bindVertexAttributes (contextHandle : nativeptr<nativeint>) (vibh : VertexInputBindingHandle) =
+        member inline x.bindVertexAttributes (contextHandle : nativeptr<nativeint>) (vibh : nativeptr<VertexInputBinding>) =
             if x.ShouldBindVertexAttributes vibh then
-                GL.HBindVertexAttributes (NativePtr.toNativeInt contextHandle) (NativePtr.toNativeInt vibh.Pointer)
+                GL.HBindVertexAttributes (NativePtr.toNativeInt contextHandle) (NativePtr.toNativeInt vibh)
 
         member inline x.bindProgram (prog : int) =
             if x.ShouldSetProgram prog then
@@ -630,7 +630,7 @@ module OpenGLObjectInterpreter =
                     let u = u.Handle.GetValue()
                     gl.bindUniformLocation id u
 
-                gl.bindVertexAttributes gl.ContextHandle vibh
+                gl.bindVertexAttributes gl.ContextHandle vibh.Pointer
 
                 if hasTess then
                     gl.patchVertices patchSize
@@ -638,7 +638,7 @@ module OpenGLObjectInterpreter =
                 match o.IndirectBuffer with
                     | Some ib ->
                         let ib = ib.Handle.GetValue()
-                        let cnt = ib.Count |> Microsoft.FSharp.NativeInterop.NativePtr.read
+                        let cnt = ib.Count
 
                         if cnt > 0 then
                             let cnt =

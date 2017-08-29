@@ -162,6 +162,8 @@ private:
 	GLenum* hPolygonMode;
 	BlendMode* hBlendMode;
 	StencilMode* hStencilMode;
+	int* hConservativeRaster;
+	int* hMultisample;
 	VertexInputBinding* currentVertexInput;
 
 public:
@@ -199,7 +201,8 @@ public:
 	bool HShouldSetBlendMode(BlendMode* mode);
 	bool HShouldSetStencilMode(StencilMode* mode);
 	bool HShouldBindVertexAttributes(VertexInputBinding* binding);
-
+	bool HShouldSetConservativeRaster(int* enabled);
+	bool HShouldSetMultisample(int* enabled);
 
 	int GetRemovedInstructions();
 };

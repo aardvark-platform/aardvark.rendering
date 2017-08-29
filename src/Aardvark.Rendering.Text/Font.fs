@@ -162,7 +162,7 @@ type private FontImpl(f : System.Drawing.Font) =
 
     let kerningTable = FontInfo.getKerningPairs graphics largeScaleFont
 
-    let lineHeight = 1.0
+    //let lineHeight = 1.2
 
     let getPath (c : char) =
         use path = new GraphicsPath()
@@ -171,7 +171,7 @@ type private FontImpl(f : System.Drawing.Font) =
         fmt.Trimming <- StringTrimming.None
         fmt.FormatFlags <- StringFormatFlags.FitBlackBox ||| StringFormatFlags.NoClip ||| StringFormatFlags.NoWrap 
         path.AddString(String(c, 1), f.FontFamily, int f.Style, size, PointF(0.0f, 0.0f), fmt)
-
+        
 
         if path.PointCount = 0 then
             { bounds = Box2d.Invalid; outline = [||] }
@@ -238,6 +238,19 @@ type private FontImpl(f : System.Drawing.Font) =
             CSharpList.toArray components |> Array.concat |> Path.ofArray
 
     let glyphCache = Dict<char, Glyph>()
+    
+    let lineHeight =
+        let s1 = graphics.MeasureString("%\r\n%", largeScaleFont)
+        let s2= graphics.MeasureString("%", largeScaleFont)
+        let s = (s1.Height - s2.Height) / largeScaleFont.Size
+        float s
+
+    let spacing =
+        
+        let s1 = graphics.MeasureString("% %", largeScaleFont)
+        let s2 = graphics.MeasureString("%%", largeScaleFont)
+        let s = (s1.Width - s2.Width) / largeScaleFont.Size
+        float s
 
     let get (c : char) =
         lock glyphCache (fun () ->
@@ -250,7 +263,7 @@ type private FontImpl(f : System.Drawing.Font) =
     member x.Family = f.FontFamily.Name
     member x.LineHeight = lineHeight
     member x.Style = unbox<FontStyle> (int f.Style)
-    member x.Spacing = 1.0
+    member x.Spacing = spacing
 
     member x.GetGlyph(c : char) =
         get c
@@ -281,7 +294,6 @@ type Font(family : string, style : FontStyle) =
 type ShapeCache(r : IRuntime) =
     static let cache = ConcurrentDictionary<IRuntime, ShapeCache>()
 
-
     let types =
         Map.ofList [
             DefaultSemantic.Positions, typeof<V3f>
@@ -291,24 +303,52 @@ type ShapeCache(r : IRuntime) =
     let pool = r.CreateGeometryPool(types)
     let ranges = ConcurrentDictionary<Shape, Range1i>()
 
+    let signature =
+        r.CreateFramebufferSignature(
+            1, 
+            [
+                DefaultSemantic.Colors, RenderbufferFormat.Rgba8
+                //Path.Src1Color, RenderbufferFormat.Rgba8
+                DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            ]
+        )
+
     let surface = 
-        r.PrepareEffect [
-            Path.Shader.pathVertex      |> toEffect
-            DefaultSurfaces.trafo       |> toEffect
-            Path.Shader.pathFragment    |> toEffect
-        ]
+        r.PrepareEffect(
+            signature, [
+                Path.Shader.pathVertex      |> toEffect
+                Path.Shader.pathTrafo       |> toEffect
+                Path.Shader.pathFragment    |> toEffect
+            ]
+        )
 
     let boundarySurface =
-        r.PrepareEffect [
-            DefaultSurfaces.trafo       |> toEffect
-            Path.Shader.boundary        |> toEffect
-        ]
+        r.PrepareEffect(
+            signature, [
+                DefaultSurfaces.trafo       |> toEffect
+                Path.Shader.boundary        |> toEffect
+            ]
+        )
 
+    do 
+        r.OnDispose.Add(fun () ->
+            r.DeleteSurface boundarySurface
+            r.DeleteSurface surface
+            r.DeleteFramebufferSignature signature
+            pool.Dispose()
+            ranges.Clear()
+            cache.Clear()
+        )
 
     let vertexBuffers =
         { new IAttributeProvider with
             member x.TryGetAttribute(sem) =
-                pool.TryGetBufferView sem
+                match pool.TryGetBufferView sem with
+                    | Some bufferView ->
+                        //bufferView.Buffer.Level <- max bufferView.Buffer.Level 3000
+                        Some bufferView
+                    | None ->
+                        None
 
             member x.All = Seq.empty
             member x.Dispose() = ()
@@ -333,7 +373,6 @@ type ShapeCache(r : IRuntime) =
 
     member x.Dispose() =
         pool.Dispose()
-        surface.Dispose()
         ranges.Clear()
 
 

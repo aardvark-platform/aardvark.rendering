@@ -12,35 +12,43 @@ type ColoredLockStatus<'a> =
     | Colored of 'a
     | NotEntered
 
+type private ColoredLockLocalState<'a> =
+    class
+        val mutable public Count : int
+        val mutable public Stash : list<int * 'a>
+
+        new() = { Count = 0; Stash = [] }
+    end
+
 type ColoredLock<'a when 'a : equality and 'a : comparison>() =
     let mutable color = Unchecked.defaultof<'a>
     let mutable count = 0
     let lockObj = obj()
-    let myCount = new ThreadLocal<ref<int> * ref<'a>>(fun _ -> ref 0, ref Unchecked.defaultof<'a>)
-    //let stashColor = new ThreadLocal<'a>(fun _ -> Unchecked.defaultof<'a>)
+    let local = new ThreadLocal<ColoredLockLocalState<'a>>(fun _ -> ColoredLockLocalState())
 
     member __.Status =
         if Monitor.IsEntered lockObj then Exclusive
         else
-            let (local,_) = myCount.Value
-            if !local > 0 then Colored color
+            let local = local.Value
+            if local.Count > 0 then Colored color
             else NotEntered
 
     member __.HasExclusiveLock =
         Monitor.IsEntered lockObj
 
     member __.Enter(onLock : Option<'a> -> unit) =
-        let local, stash = myCount.Value
+        let local = local.Value
 
         if Monitor.IsEntered lockObj then
             count <- count - 1
         else
             Monitor.Enter lockObj
 
-            if !local > 0 then
+            if local.Count > 0 then
                 // give away all readers acquired by the current thread
-                count <- count - !local
-                stash := color
+                count <- count - local.Count
+                local.Stash <- (local.Count, color) :: local.Stash
+                local.Count <- 0
 
             // wait until the count gets zero
             while not (count = 0) do
@@ -51,46 +59,71 @@ type ColoredLock<'a when 'a : equality and 'a : comparison>() =
             onLock None
 
     member __.Enter(c : 'a, onLock : Option<'a> -> unit) =
-        let local, stash = myCount.Value
+        let local = local.Value
         if Monitor.IsEntered lockObj then
             count <- count - 1
         else
             Monitor.Enter lockObj
+
+            if color <> c then
+                count <- count - local.Count
+                local.Stash <- (local.Count, color) :: local.Stash
+                local.Count <- 0
+
             while not (count = 0 || (count > 0 && color = c)) do
                 Monitor.Wait lockObj |> ignore
 
             if count = 0 then
                 color <- c
                 count <- 1
-                local := 1
+                local.Count <- 1
+                Monitor.Exit lockObj
                 onLock (Some c)
 
             elif color = c then
                 count <- count + 1
-                local := !local + 1
+                local.Count <- local.Count + 1
+                Monitor.Exit lockObj
         
-            Monitor.Exit lockObj
+            
 
     member __.Exit(onUnlock : Option<'a> -> unit) =
-        let local,stash = myCount.Value
+        let local = local.Value
 
         if Monitor.IsEntered lockObj then
             count <- count + 1
             if count = 0 then
-                count <- !local
-                color <- !stash
+                match local.Stash with
+                    | (cnt, col) :: rest ->
+                        local.Stash <- rest
+                        count <- cnt
+                        color <- col
+                        local.Count <- cnt
+                    | _ ->
+                        color <- Unchecked.defaultof<'a>
+                        local.Count <- 0
+
                 Monitor.PulseAll lockObj
                 onUnlock None
                 Monitor.Exit lockObj
         else
             Monitor.Enter lockObj
             count <- count - 1
-            local := !local - 1
+            local.Count <- local.Count - 1
 
             if count = 0 then
+                match local.Stash with
+                    | (cnt, col) :: rest ->
+                        local.Stash <- rest
+                        count <- cnt
+                        color <- col
+                        local.Count <- cnt
+                    | _ ->
+                        onUnlock (Some color)
+                        color <- Unchecked.defaultof<'a>
+                        local.Count <- 0
+
                 Monitor.PulseAll lockObj
-                onUnlock (Some color)
-                color <- Unchecked.defaultof<_>
 
             Monitor.Exit lockObj
             ()

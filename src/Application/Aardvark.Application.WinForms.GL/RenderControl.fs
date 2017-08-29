@@ -145,6 +145,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
         GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
         GL.Enable(EnableCap.TextureCubeMapSeamless)
+        GL.Disable(EnableCap.PolygonSmooth)
+
         if c <> null then
             c.MakeCurrent(null)
 
@@ -156,11 +158,13 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         base.MakeCurrent()
          
     member x.Render() = 
+        let mutable initial = false
         if loaded then
             needsRedraw <- false
             if isNull contextHandle || contextHandle.Handle.IsDisposed then
                 contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
                 contextHandle.AttachDebugOutputIfNeeded(enableDebug)
+                initial <- true
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
           
@@ -168,6 +172,14 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             match task with
                 | Some t ->
                     using (ctx.RenderingLock contextHandle) (fun _ ->
+                        if initial then
+                            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                            let ms = GL.IsEnabled(EnableCap.Multisample)
+                            if ms then Log.warn "multisample enabled"
+                            else Log.warn "multisample disabled"
+                            let samples = Array.zeroCreate 1
+                            GL.GetFramebufferParameter(FramebufferTarget.Framebuffer, unbox (int All.Samples), samples)
+                            Log.warn "effective samples: %A" samples.[0]
 
                         let stopDispatcherProcessing = threadStealing.StopStealing()
                         let sw = System.Diagnostics.Stopwatch()
@@ -229,7 +241,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
             if renderContinuously then
                 x.Invalidate()
-
+        
     override x.OnPaint(e) =
         if x.OnPaintRender then
             x.Render()

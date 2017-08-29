@@ -8,6 +8,26 @@ open System.Runtime.InteropServices
 type ITexture = 
     abstract member WantMipMaps : bool
 
+
+type ISparseTexture<'a when 'a : unmanaged> =
+    inherit IDisposable
+
+    
+    [<CLIEvent>]
+    abstract member OnSwap : IEvent<EventHandler, EventArgs>
+
+    abstract member Size : V3i
+    abstract member MipMapLevels : int
+    abstract member Count : int
+    abstract member Format : Col.Format
+    abstract member Texture : IMod<ITexture>
+    abstract member GetBrickCount : level : int -> V3i
+
+    abstract member SparseLevels : int
+    abstract member BrickSize : V3i
+    abstract member UploadBrick : level : int * slice : int * index : V3i * data : NativeTensor4<'a> -> IDisposable
+
+
 type TextureParams =
     {
         wantMipMaps : bool

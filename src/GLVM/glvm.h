@@ -148,7 +148,9 @@ typedef enum {
 	HSetPolygonMode = 106,
 	HSetBlendMode = 107,
 	HSetStencilMode = 108,
-	HBindVertexAttributes = 109
+	HBindVertexAttributes = 109,
+	HSetConservativeRaster = 110,
+	HSetMultisample = 111
 
 } InstructionCode;
 
@@ -182,6 +184,12 @@ typedef struct {
 	int RemovedInstructions;
 } Statistics;
 
+typedef struct HandleAndCountStruct {
+	int Handle;
+	int Count;
+} HandleAndCount;
+
+
 DllExport(void) vmInit();
 DllExport(Fragment*) vmCreate();
 DllExport(void) vmDelete(Fragment* frag);
@@ -206,8 +214,8 @@ DllExport(void) hglCleanup(void* ctx);
 
 DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos);
 DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos);
-DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLint* count, GLuint buffer);
-DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, GLint* count, GLuint buffer);
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, HandleAndCountStruct* handleAndCount);
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, HandleAndCountStruct* handleAndCount);
 DllExport(void) hglSetDepthTest(DepthTestMode* mode);
 DllExport(void) hglSetCullFace(GLenum* face);
 DllExport(void) hglSetPolygonMode(GLenum* mode);
@@ -215,3 +223,5 @@ DllExport(void) hglSetBlendMode(BlendMode* mode);
 DllExport(void) hglSetStencilMode(StencilMode* mode);
 DllExport(void) hglBindVertexArray(int* vao);
 DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding* binding);
+DllExport(void) hglSetConservativeRaster(int* enable);
+DllExport(void) hglSetMultisample(int* enable);

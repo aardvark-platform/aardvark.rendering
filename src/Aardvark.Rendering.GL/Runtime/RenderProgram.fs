@@ -173,6 +173,7 @@ module RenderProgram =
         let compileFull scope r =
             compileDeltaInternal false scope None r
 
+
     module Native =
         let private instructionToCall (i : Instruction) : NativeCall =
             let compiled = ExecutionContext.compile i

@@ -68,7 +68,12 @@ module DeltaCompiler =
 
             if prev.StencilMode <> me.StencilMode then
                 yield Instructions.setStencilMode me.StencilMode
-
+//
+//            if prev.ConservativeRaster <> me.ConservativeRaster then
+//                yield Instruction.HSetConservativeRaster(me.ConservativeRaster.Pointer)
+//            
+            if prev.Multisample <> me.Multisample then
+                yield Instruction.HSetMultisample(me.Multisample.Pointer)
             
 
             // bind the program (if needed)
@@ -126,15 +131,15 @@ module DeltaCompiler =
 
             // bind the VAO (if needed)
             if prev.VertexInputBinding <> me.VertexInputBinding then
-                let ptr = me.VertexInputBinding.Handle |> Mod.force 
-                yield Instruction.HBindVertexAttributes(s.info.contextHandle, ptr)
+                let ptr = me.VertexInputBinding.Handle.GetValue() // unchangeable
+                yield Instruction.HBindVertexAttributes(s.info.contextHandle, ptr.Pointer)
 
             // draw the thing
             // TODO: surface assumed to be constant here
             let prog = me.Program.Handle.GetValue()
 
-            let isActive = me.IsActive.Handle |> Mod.force
-            let beginMode = me.BeginMode.Handle |> Mod.force
+            let isActive = me.IsActive.Pointer
+            let beginMode = me.BeginMode.Pointer
             let! s = compilerState
             let stats = NativePtr.toNativeInt s.runtimeStats
 
@@ -142,18 +147,12 @@ module DeltaCompiler =
                 | Some indirect ->
                     match me.IndexBuffer with
                         | Some (it,_) ->
-                            yield
-                                indirect.Handle |> Mod.map (fun i -> 
-                                    [ Instruction.HDrawElementsIndirect stats isActive beginMode (int it) i.Count i.Buffer.Handle]
-                                )
+                            yield Instruction.HDrawElementsIndirect stats isActive beginMode (int it) indirect.Pointer
                         | None ->
-                            yield
-                                indirect.Handle |> Mod.map (fun i -> 
-                                    [ Instruction.HDrawArraysIndirect stats isActive beginMode i.Count i.Buffer.Handle]
-                                )
+                            yield Instruction.HDrawArraysIndirect stats isActive beginMode indirect.Pointer
 
                 | None ->
-                    let calls = me.DrawCallInfos.Handle |> Mod.force
+                    let calls = me.DrawCallInfos.Pointer
                     match me.IndexBuffer with
                         | Some (it,_) ->
                             yield Instruction.HDrawElements stats isActive beginMode (int it) calls
@@ -168,6 +167,7 @@ module DeltaCompiler =
     /// </summary>
     let compileFull (me : PreparedRenderObject) =
         compileDelta PreparedRenderObject.empty me
+
 
     let compileEpilog (prev : Option<PreparedMultiRenderObject>) =
         compiled {

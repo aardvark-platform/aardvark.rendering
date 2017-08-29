@@ -325,7 +325,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
             Config.Buffers, 
             false
         ),
-        "Aardvark",
+        "Aardvark rocks \\o/",
         GameWindowFlags.Default,
         DisplayDevice.Default,
         Config.MajorVersion, 
@@ -400,6 +400,7 @@ type GameWindow(runtime : Runtime, enableDebug : bool, samples : int) as this =
     override x.OnLoad(e) =
         GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
         GL.Enable(EnableCap.TextureCubeMapSeamless)
+        GL.Disable(EnableCap.PolygonSmooth)
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
         if c <> null then
             c.MakeCurrent(null)

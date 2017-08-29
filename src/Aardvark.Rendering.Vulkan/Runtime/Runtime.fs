@@ -1,341 +1,453 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open System
+open System.Threading
+open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+open Aardvark.Base
+open Aardvark.Base.Rendering
+open Aardvark.Rendering.Vulkan
+open Microsoft.FSharp.NativeInterop
+open Aardvark.Base.Incremental
+open System.Diagnostics
+open System.Collections.Generic
+open Aardvark.Base.Runtime
+open FShade
 #nowarn "9"
 #nowarn "51"
 
-open System
-open System.Runtime.InteropServices
-open Aardvark.Base
-open Aardvark.Base.Incremental
-open Aardvark.Base.Rendering
-open Aardvark.Rendering
-open System.Collections.Generic
-open System.Threading
-open Aardvark.Rendering.Vulkan
-open System.Runtime.CompilerServices
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Runtime
+type private MappedBuffer(d : Device, store : ResizeBuffer) =
+    inherit ConstantMod<IBuffer>(store)
 
-
-type private FramebufferSignature(runtime : IRuntime, res : Resource<RenderPass>) =
-
-    let signature = lazy ( res.Handle.GetValue() :> IFramebufferSignature )
-    
-    member x.RenderPass = signature.Value |> unbox<RenderPass>
-
-    member x.Dispose() = res.Dispose()
+    let onDispose = Event<_>()
 
     interface IDisposable with
-        member x.Dispose() = res.Dispose()
+        member x.Dispose() = 
+            onDispose.Trigger()
+            d |> ResizeBuffer.delete store
 
-    interface IFramebufferSignature with
-        member x.IsAssignableFrom other = signature.Value.IsAssignableFrom other
-        member x.ColorAttachments = signature.Value.ColorAttachments
-        member x.DepthAttachment = signature.Value.DepthAttachment
-        member x.StencilAttachment = signature.Value.StencilAttachment
-        member x.Runtime = runtime
-        member x.Images = Map.empty
+    interface ILockedResource with
+        member x.Lock = store.Lock
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
 
-//type private BackendTexture(res : Resource<Image>) =
-//    let img = lazy ( res.Handle.GetValue() :> IBackendTexture )
-//
-//    member x.Dispose() =
-//        res.Dispose()
-//
-//    interface IDisposable with
-//        member x.Dispose() = x.Dispose()
-//
-//    interface IBackendTexture with
-//        member x.Count = img.Value.Count
-//        member x.Dimension = img.Value.Dimension
-//        member x.Format = img.Value.Format
-//        member x.Handle = img.Value.Handle
-//        member x.Size = img.Value.Size
-//        member x.MipMapLevels = img.Value.MipMapLevels
-//        member x.WantMipMaps = img.Value.WantMipMaps
-//        member x.Samples = img.Value.Samples
-//
+    interface IMappedBuffer with
+        member x.Write(sourcePtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun dst -> Marshal.Copy(sourcePtr, dst, size))
+        member x.Read(targetPtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun src -> Marshal.Copy(src, targetPtr, size))
+        member x.Capacity = nativeint store.Capacity
+        member x.Resize(newCapacity) = store.Resize(int64 newCapacity) 
+        member x.OnDispose = onDispose.Publish :> IObservable<_>
+        member x.UseRead(offset, size, f) = store.UseRead(int64 offset, int64 size, f)
+        member x.UseWrite(offset, size, f) = store.UseWrite(int64 offset, int64 size, f)
+
+type private MappedIndirectBuffer private(device : Device, indexed : bool, store : ResizeBuffer, indirect : IndirectBuffer) =
+    inherit ConstantMod<IIndirectBuffer>(indirect)
+    static let drawCallSize = int64 sizeof<DrawCallInfo>
+
+    let transform (c : DrawCallInfo) =
+        if indexed then 
+            let mutable c = c
+            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+            c
+        else
+            c
+
+    new(device : Device, indexed : bool, store : ResizeBuffer) = new MappedIndirectBuffer(device, indexed, store, IndirectBuffer(device, store.Handle, Unchecked.defaultof<_>, 0))
+
+    interface IDisposable with
+        member x.Dispose() = 
+            device |> ResizeBuffer.delete store
+
+    interface ILockedResource with
+        member x.Lock = store.Lock
+        member x.OnLock u = ()
+        member x.OnUnlock u = ()
+
+    interface IMappedIndirectBuffer with
+        member x.Indexed = indexed
+        member x.Resize cnt = store.Resize (int64 cnt * drawCallSize)
+        member x.Capacity = store.Capacity / drawCallSize |> int
+        member x.Count 
+            with get() = indirect.Count
+            and set c = indirect.Count <- c
+
+        member x.Item
+            with get (i : int) =
+                let res = store.UseRead(int64 i * drawCallSize, drawCallSize, NativeInt.read<DrawCallInfo>)
+                transform res
+
+            and set (i : int) (v : DrawCallInfo) =
+                let v = transform v
+                store.UseWrite(int64 i * drawCallSize, drawCallSize, fun ptr -> NativeInt.write ptr v)
 
 
-type Runtime(device : Device) as this =
-    inherit Resource(device)
+type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
+    let instance = device.Instance
+    do device.Runtime <- this
+    let manager = new ResourcesNew.ResourceManager(device)
 
-    let context = new Context(device)
-    let manager = new ResourceManager(this, context)
+    static let shaderStages =
+        LookupTable.lookupTable [
+            FShade.ShaderStage.Vertex, Aardvark.Base.ShaderStage.Vertex
+            FShade.ShaderStage.TessControl, Aardvark.Base.ShaderStage.TessControl
+            FShade.ShaderStage.TessEval, Aardvark.Base.ShaderStage.TessEval
+            FShade.ShaderStage.Geometry, Aardvark.Base.ShaderStage.Geometry
+            FShade.ShaderStage.Fragment, Aardvark.Base.ShaderStage.Fragment
+        ]
+
+    #if false
+    let seen = System.Collections.Concurrent.ConcurrentHashSet()
+
+    let debugBreak (str : string) =
+        if Debugger.IsAttached then
+            let stack = StackTrace().GetFrames() |> Array.toList |> List.map (fun f -> f.GetMethod().MetadataToken)
+            if seen.Add ((stack, str)) then
+                Debugger.Break()
+    #else
+    let debugBreak (str : string) = ()
+    #endif
+
+
+    let ignored =
+        HashSet.ofList [
+            Guid.Parse("{2f3e2b49-7f12-eb9c-578f-c46f5981d022}")
+        ]
+
+    let debugBreak (msg : DebugMessage) =
+        if Debugger.IsAttached then
+            Debugger.Break()
+
+
+    let debugMessage (msg : DebugMessage) =
+        if not (ignored.Contains msg.id) then
+            let str = msg.layerPrefix + ": " + msg.message
+            match msg.severity with
+                | MessageSeverity.Error ->
+                    Report.Error("[Vulkan] {0}", str)
+                    debugBreak msg
+
+                | MessageSeverity.Warning ->
+                    Report.Warn("[Vulkan] {0}", str)
+
+                | MessageSeverity.PerformanceWarning ->
+                    Report.Line("[Vulkan] performance: {0}", str)
+
+                | _ ->
+                    Report.Line(4, "[Vulkan] {0}", str)
+
+    // install debug output to file (and errors/warnings to console)
+    let debugSubscription = 
+        if debug then instance.DebugMessages.Subscribe debugMessage
+        else { new IDisposable with member x.Dispose() = () }
+
+    let onDispose = Event<unit>()
 
     member x.Device = device
-    member x.Instance = device.Instance
-    member x.Context = context
-    member x.Manager = manager
+    member x.ResourceManager = manager
+    member x.ContextLock = device.Token :> IDisposable
 
-    override x.Release() =
-        manager.Dispose()
-        context.Dispose()
+    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
+    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
 
+    member x.CreateMappedBuffer() =
+        let store = device |> ResizeBuffer.create VkBufferUsageFlags.VertexBufferBit
+        new MappedBuffer(device, store) :> IMappedBuffer
 
-    member x.CompileRender(fbo : IFramebufferSignature, config : BackendConfiguration, renderObjects : aset<IRenderObject>) =
-        let pass =
-            match fbo with
-                | :? RenderPass as pass -> pass
-                | :? FramebufferSignature as fb -> fb.RenderPass
-                | _ -> failf "unexpected FramebufferSignature: %A" fbo
+    member x.CreateMappedIndirectBuffer(indexed : bool) =
+        let store = device |> ResizeBuffer.create VkBufferUsageFlags.IndirectBufferBit
+        new MappedIndirectBuffer(device, indexed, store) :> IMappedIndirectBuffer
 
-        new RenderTask(manager, pass, renderObjects, config) :> IRenderTask
+    member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
+    member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
 
-    member x.CompileClear(fbo : IFramebufferSignature, clearColors : IMod<Map<Symbol, C4f>>, clearDepth : IMod<Option<double>>) =
-        let colors = 
-            fbo.ColorAttachments
-                |> Map.toSeq
-                |> Seq.map (fun (b, (sem,att)) ->
-                    adaptive {
-                        let! clearColors = clearColors
-                        match Map.tryFind sem clearColors with
-                            | Some cc -> return cc
-                            | _ -> return C4f.Black
-                    }
-                   )
-                |> Seq.toList
-
-        new ClearTask( manager, unbox fbo, colors, clearDepth, None ) :> IRenderTask
-
-    member x.PrepareRenderObject(fboSig, ro) = 
-        manager.PrepareRenderObject(unbox fboSig, ro) :> IPreparedRenderObject
+    member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
+        new SparseTextureImplemetation.DoubleBufferedSparseImage<'a>(
+            device, 
+            size, levels, slices, 
+            dim, format,
+            VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit,
+            brickSize,
+            maxMemory
+        ) :> ISparseTexture<_>
 
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
-        let pass = manager.CreateRenderPass(SymDict.toMap attachments)
-        new FramebufferSignature(x, pass) :> IFramebufferSignature
+    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
+        let image = unbox<Image> t 
+        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
+
+    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
+        let image = unbox<Image> t 
+        device.UploadLevel(image.[ImageAspect.Color, level, slice], source)
+
+    member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
+        let t = AdaptiveToken.Top
+        try manager.PrepareRenderObject(t, unbox fboSignature, rj) :> IPreparedRenderObject
+        finally for l in t.Locked do t.ExitRead l
+
+
+    member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
+        new RenderTasks.RenderTask(manager, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
+
+    member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
+        let pass = unbox<RenderPass> signature
+        let colors = pass.ColorAttachments |> Map.toSeq |> Seq.map (fun (_,(sem,att)) -> sem, color |> Mod.map (Map.find sem)) |> Map.ofSeq
+        new RenderTasks.ClearTask(manager, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
+
+
+
+    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
+        let attachments = attachments |> SymDict.toMap
+        device.CreateRenderPass(attachments) :> IFramebufferSignature
 
     member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
-        match signature with
-            | :? FramebufferSignature as s -> s.Dispose()
-            | _ -> failf "unexpected FramebufferSignature: %A" signature
+        device.Delete(unbox<RenderPass> signature)
+
+    member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
+        let views =
+            bindings |> Map.map (fun s o ->
+                match o with
+                    | :? IBackendTextureOutputView as view ->
+                        device.CreateImageView(unbox view.texture, view.level, 1, view.slice, 1, VkComponentMapping.Identity)
+
+                    | :? Image as img ->
+                        device.CreateImageView(img, 0, 1, 0, 1, VkComponentMapping.Identity)
+
+                    | _ -> failf "invalid framebuffer attachment %A: %A" s o
+            )
+
+        device.CreateFramebuffer(unbox signature, views) :> IFramebuffer
+
+    member x.DeleteFramebuffer(fbo : IFramebuffer) =
+        let fbo = unbox<Framebuffer> fbo
+        fbo.Attachments |> Map.iter (fun _ v -> device.Delete(v))
+        device.Delete(fbo)
 
 
-    member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) =
-        context.CreateImage(
-            VkImageType.D2d,
-            VkFormat.ofTextureFormat format,
-            TextureDimension.Texture2D,
-            V3i(size.X, size.Y, 1), 
-            levels,
-            count,
-            samples,
-            VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.SampledBit,
-            VkImageLayout.ColorAttachmentOptimal,
-            VkImageTiling.Optimal
-        )
+
+    member x.PrepareSurface (fboSignature : IFramebufferSignature, surface : ISurface) =
+        device.CreateShaderProgram(unbox fboSignature, surface) :> IBackendSurface
+
+    member x.DeleteSurface (bs : IBackendSurface) =
+        device.Delete(unbox<ShaderProgram> bs)
+
+    member x.PrepareTexture (t : ITexture) =
+        device.CreateImage(t) :> IBackendTexture
+
+    member x.DeleteTexture(t : IBackendTexture) =
+        device.Delete(unbox<Image> t)
+
+    member x.DeletRenderbuffer(t : IRenderbuffer) =
+        device.Delete(unbox<Image> t)
+
+    member x.PrepareBuffer (t : IBuffer) =
+        device.CreateBuffer(VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit, t) :> IBackendBuffer
+
+    member x.DeleteBuffer(t : IBackendBuffer) =
+        device.Delete(unbox<Buffer> t)
+
+    member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
+        let isDepth =
+            match format with
+                | TextureFormat.Depth24Stencil8 -> true
+                | TextureFormat.Depth32fStencil8 -> true
+                | TextureFormat.DepthComponent -> true
+                | TextureFormat.DepthComponent16 -> true
+                | TextureFormat.DepthComponent24 -> true
+                | TextureFormat.DepthComponent32 -> true
+                | TextureFormat.DepthComponent32f -> true
+                | TextureFormat.DepthStencil -> true
+                | _ -> false
+
+        let layout =
+            if isDepth then VkImageLayout.ShaderReadOnlyOptimal
+            else VkImageLayout.ShaderReadOnlyOptimal
+
+        let usage =
+            if isDepth then 
+                VkImageUsageFlags.DepthStencilAttachmentBit ||| 
+                VkImageUsageFlags.TransferSrcBit ||| 
+                VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.SampledBit
+            else 
+                VkImageUsageFlags.ColorAttachmentBit ||| 
+                VkImageUsageFlags.TransferSrcBit ||| 
+                VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.SampledBit
+
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, count, samples, TextureDimension.Texture2D, format, usage) 
+        device.GraphicsFamily.run {
+            do! Command.TransformLayout(img, layout)
+        }
+        img :> IBackendTexture
+
+    member x.CreateTextureCube(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
+        let isDepth =
+            match format with
+                | TextureFormat.Depth24Stencil8 -> true
+                | TextureFormat.Depth32fStencil8 -> true
+                | TextureFormat.DepthComponent -> true
+                | TextureFormat.DepthComponent16 -> true
+                | TextureFormat.DepthComponent24 -> true
+                | TextureFormat.DepthComponent32 -> true
+                | TextureFormat.DepthComponent32f -> true
+                | TextureFormat.DepthStencil -> true
+                | _ -> false
+
+        let layout =
+            if isDepth then VkImageLayout.DepthStencilAttachmentOptimal
+            else VkImageLayout.ColorAttachmentOptimal
+
+        let usage =
+            if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
+            else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
+
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), levels, 6, samples, TextureDimension.TextureCube, format, usage) 
+        device.GraphicsFamily.run {
+            do! Command.TransformLayout(img, layout)
+        }
+        img :> IBackendTexture
+
+
+
+    member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
+        let isDepth =
+            match format with
+                | RenderbufferFormat.Depth24Stencil8 -> true
+                | RenderbufferFormat.Depth32fStencil8 -> true
+                | RenderbufferFormat.DepthComponent -> true
+                | RenderbufferFormat.DepthComponent16 -> true
+                | RenderbufferFormat.DepthComponent24 -> true
+                | RenderbufferFormat.DepthComponent32 -> true
+                | RenderbufferFormat.DepthComponent32f -> true
+                | RenderbufferFormat.DepthStencil -> true
+                | _ -> false
+
+        let layout =
+            if isDepth then VkImageLayout.DepthStencilAttachmentOptimal
+            else VkImageLayout.ColorAttachmentOptimal
+
+        let usage =
+            if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit 
+            else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit
+
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, samples, TextureDimension.Texture2D, RenderbufferFormat.toTextureFormat format, usage) 
+        device.GraphicsFamily.run {
+            do! Command.TransformLayout(img, layout)
+        }
+        img :> IRenderbuffer
+
+    member x.GenerateMipMaps(t : IBackendTexture) =
+        device.GraphicsFamily.run {
+            do! Command.GenerateMipMaps (unbox t)
+        }
+
+    member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =
+        use token = device.Token
+
+        let src =
+            match source with
+                | :? IBackendTextureOutputView as view ->
+                    let image = unbox<Image> view.texture
+                    let flags = VkFormat.toAspect image.Format
+                    image.[unbox (int flags), view.level, view.slice]
+                | :? Image as img ->
+                    let flags = VkFormat.toAspect img.Format
+                    img.[unbox (int flags), 0, 0]
+                | _ ->
+                    failf "invalid input for blit: %A" source
+
+        let dst = 
+            let img = unbox<Image> target
+            img.[src.Aspect, 0, 0]
+
+        token.Enqueue (Command.ResolveMultisamples(src, dst))
+
+    member x.Dispose() = 
+        onDispose.Trigger()
+        debugSubscription.Dispose()
+        Log.warn "dispose resource manager"
+        //manager.Dispose()
+        device.Dispose()
         
-    member x.DeleteTexture(tex : Image) =
-        context.Delete tex
-
-
-    member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) =
-        context.CreateImage(
-            VkImageType.D2d,
-            VkFormat.ofRenderbufferFormat format,
-            TextureDimension.Texture2D,
-            V3i(size.X, size.Y, 1), 
-            1,
-            1,
-            samples,
-            VkImageUsageFlags.ColorAttachmentBit,
-            VkImageLayout.ColorAttachmentOptimal,
-            VkImageTiling.Optimal
-        )
-
-    member x.DeleteRenderbuffer(tex : Image) =
-        context.Delete tex
-
+    interface IDisposable with
+        member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
-        member x.ResourceManager = failwith ""
-        member x.ContextLock = { new IDisposable with member x.Dispose() = () }
-
-        // compilation
-
-        member x.PrepareRenderObject(fboSig, ro) = x.PrepareRenderObject(fboSig, ro)
-        member x.CompileClear(fboSig, col, depth) = x.CompileClear(fboSig, col, depth)
-        member x.CompileRender(fboSig, config, ros) = x.CompileRender(fboSig, config, ros)
-
-
-        // framebuffer signatures
-
-        member x.CreateFramebufferSignature(signature, images) = 
-            x.CreateFramebufferSignature(signature)
-
-        member x.DeleteFramebufferSignature(signature) = 
-            x.DeleteFramebufferSignature(signature)
-
-
-        // textures
-
-        member x.CreateTexture(size,format,levels,samples,count) = 
-            x.CreateTexture(size, format, levels, samples, count) :> IBackendTexture
-
-        member x.CreateTextureCube(size,format,levels,samples) = 
-            context.CreateImage(
-                VkImageType.D2d,
-                VkFormat.ofTextureFormat format,
-                TextureDimension.TextureCube,
-                V3i(size.X, size.Y, 1),
-                levels,
-                6, samples,
-                VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.SampledBit,
-                VkImageLayout.ColorAttachmentOptimal,
-                VkImageTiling.Optimal
-            ) :> IBackendTexture
-
-        member x.PrepareTexture (t : ITexture) = 
-            context.CreateImage(t) :> IBackendTexture
-
-        member x.DeleteTexture (t : IBackendTexture) =
-            match t with
-                | :? Image as img -> context.Delete img
-                | _ -> failf "unexpected Texture: %A" t
-
-
-        // streaming textures
-
-        member x.CreateStreamingTexture _ = failf "not implemented"
-        member x.DeleteStreamingTexture _ = failf "not implemented"
-
-
-        // renderbuffers
-
-        member x.CreateRenderbuffer(size,format,samples) = 
-            x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
-
-        member x.DeleteRenderbuffer (rb) =
-            match rb with
-                | :? Image as img -> context.Delete img
-                | _ -> failf "unexpected Renderbuffer: %A" rb
-
-
-        // buffers
-
-        member x.CreateMappedBuffer() =
-            new MappedBuffer(context) :> IMappedBuffer
-
-        member x.CreateMappedIndirectBuffer(indexed) =
-            failwith "not implemented"
-
-        member x.PrepareBuffer (b) =
-            context.CreateBuffer(None, b, VkBufferUsageFlags.VertexBufferBit) :> IBackendBuffer
-
-        member x.DeleteBuffer (b) =
-            match b with
-                | :? Buffer as b -> context.Delete b
-                | _ -> failf "unexpected Buffer: %A" b
-
-
-        // surfaces 
-
-        member x.PrepareSurface (fboSignature : IFramebufferSignature, s : ISurface) =
-            match fboSignature with 
-                | :? RenderPass as pass ->
-                    context.Device.CreateShaderProgram(x, s, pass) :> IBackendSurface
-                | _ ->
-                    failf "unexpected FramebufferSignature: %A" fboSignature
-
-        member x.DeleteSurface (s : IBackendSurface) =
-            match s with
-                | :? ShaderProgram as p ->
-                    context.Device.Delete(p)
-                | _ ->
-                    failf "unexpected BackendSurface: %A" s
-
-
-        // framebuffers
-
-        member x.CreateFramebuffer (signature, attachments) = 
-            let pass = 
-                match signature with
-                    | :? FramebufferSignature as fb -> fb.RenderPass
-                    | :? RenderPass as pass -> pass
-                    | _ -> failf "unexpected FramebufferSignature: %A" signature
-                    
-            let createView (o : IFramebufferOutput) =
-                match o with
-                    | :? Image as img -> context.CreateImageOutputView(img)
-                    | :? BackendTextureOutputView as view ->
-                        match view.texture with
-                            | :? Image as img -> context.CreateImageOutputView(img, view.level, view.slice)
-                            | t -> failf "unexpected BackendTexture: %A" t
-                    | v -> failf "unexpected FramebufferOutput: %A" v
-
-            let views =
-                pass.ColorAttachments 
-                    |> Seq.map (fun (sem, att) -> createView attachments.[sem])
-                    |> Seq.toList
-
-            let depthView =
-                pass.DepthAttachment
-                    |> Option.map (fun att -> createView attachments.[DefaultSemantic.Depth])
-
-            context.CreateFramebuffer(pass, views @ Option.toList depthView) :> IFramebuffer
-
-
-        member x.DeleteFramebuffer(fbo) = 
-            match fbo with
-                | :? Framebuffer as f -> 
-                    f.Attachments |> List.iter (fun v -> context.Delete v)
-                    context.Delete f
-
-                | _ -> 
-                    failf "unexpected Framebuffer: %A" fbo
-
-
-
-        // utilities
-
-        member x.Download(tex : IBackendTexture, slice : int, level : int, target : PixImage) =
-            match tex with
-                | :? Image as img ->
-                    let sub = ImageSubResource(img, level, Range1i(slice, slice), V3i.Zero)
-                    sub.Download(target) |> context.DefaultQueue.RunSynchronously
-                | _ ->
-                    failf "unexpected BackendTexture: %A" tex
-
-        member x.DownloadStencil(tex : IBackendTexture, slice : int, level : int, target : Matrix<int>) =
-            failf "not implemented"
-        member x.DownloadDepth(tex : IBackendTexture, slice : int, level : int, target : Matrix<float32>) =
-            failf "not implemented"
-
-        member x.Upload(tex : IBackendTexture, slice : int, level : int, source : PixImage) =
-            match tex with
-                | :? Image as img ->
-                    let sub = ImageSubResource(img, level, Range1i(slice, slice), V3i.Zero)
-                    sub.Upload(source) |> context.DefaultQueue.RunSynchronously
-                | _ ->
-                    failf "unexpected BackendTexture: %A" tex
-
-        member x.GenerateMipMaps(t : IBackendTexture) =
-            match t with
-                | :? Image as img ->
-                    img.GenerateMipMaps() |> context.DefaultQueue.RunSynchronously
-                | _ ->
-                    failf "unexpexted BackendTexture: %A" t
-
-        member x.ResolveMultisamples(source, target, trafo) = 
-            let sourceView = 
-                match source with
-                    | :? BackendTextureOutputView as view ->
-                        match view.texture with
-                            | :? Image as img -> ImageSubResource(img, view.level, Range1i(view.slice, view.slice), V3i.Zero)
-                            | t -> failf "unexpected BackendTexture: %A" t
-
-                    | :? Image as img -> ImageSubResource(img)
-
-                    | v -> failf "unexpected FramebufferOutput: %A" v
- 
-            let targetView = 
-                match target with
-                    | :? Image as img -> ImageSubResource(img)
-                    | t -> failf "unexpected BackendTexture: %A" t
+        member x.OnDispose = onDispose.Publish
+        member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature) =
+            let module_ = signature.Link(effect, Range1d(0.0, 1.0), false)
+            let glsl = 
+                module_ |> ModuleCompiler.compileGLSLVulkan
             
-            if trafo <> ImageTrafo.Rot0 then
-                failf "ImageTrafos not implemented atm"
+            let entries =
+                module_.entries
+                    |> Seq.choose (fun e -> 
+                        let stage = e.decorations |> List.tryPick (function Imperative.EntryDecoration.Stages { self = self } -> Some self | _ -> None)
+                        match stage with
+                            | Some stage ->
+                                Some (shaderStages stage, "main")
+                            | None ->
+                                None
+                    ) 
+                    |> Dictionary.ofSeq
 
-            sourceView.BlitTo(targetView, VkFilter.Nearest) |> context.DefaultQueue.RunSynchronously
 
+            let samplers = Dictionary.empty
+
+            for KeyValue(k,v) in effect.Uniforms do
+                match v.uniformValue with
+                    | UniformValue.Sampler(texName,sam) ->
+                        samplers.[(k, 0)] <- { textureName = Symbol.Create texName; samplerState = sam.SamplerStateDescription }
+                    | UniformValue.SamplerArray semSams ->
+                        for i in 0 .. semSams.Length - 1 do
+                            let (sem, sam) = semSams.[i]
+                            samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = sam.SamplerStateDescription }
+                    | _ ->
+                        ()
+
+            // TODO: gl_PointSize (builtIn)
+            BackendSurface(glsl.code, entries, Map.empty, SymDict.empty, samplers, true)
+
+        member x.ResourceManager = failf "not implemented"
+
+        member x.CreateFramebufferSignature(a,b) = x.CreateFramebufferSignature(a,b)
+        member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
+
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
+        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
+
+        member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
+        member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
+        member x.ContextLock = x.ContextLock
+        member x.CompileRender (signature, engine, set) = x.CompileRender(signature, engine, set)
+        member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
+
+        member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)
+        member x.DeleteSurface(s) = x.DeleteSurface(s)
+        member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
+        member x.PrepareTexture(t) = x.PrepareTexture(t)
+        member x.DeleteTexture(t) = x.DeleteTexture(t)
+        member x.PrepareBuffer(b) = x.PrepareBuffer(b)
+        member x.DeleteBuffer(b) = x.DeleteBuffer(b)
+
+        member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)
+        member x.DeleteFramebuffer(f) = x.DeleteFramebuffer(f)
+
+        member x.CreateStreamingTexture(mipMap) = x.CreateStreamingTexture(mipMap)
+        member x.DeleteStreamingTexture(t) = x.DeleteStreamingTexture(t)
+
+
+        member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
+            x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)
+
+
+        member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
+        member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples, 1)
+        member x.CreateTextureArray(size, format, levels, samples, count) = x.CreateTexture(size, format, levels, samples, count)
+        member x.CreateTextureCube(size, format, levels, samples) = x.CreateTextureCube(size, format, levels, samples)
+        member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
+        member x.CreateMappedBuffer() = x.CreateMappedBuffer()
+        member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
+        member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool

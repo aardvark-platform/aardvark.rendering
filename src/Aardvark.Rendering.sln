@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26403.7
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Base.Rendering", "Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj", "{F8233648-55CE-4795-9151-E512390D86E7}"
 EndProject
@@ -39,8 +39,6 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.GL.Tests
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Examples", "Demo\Examples\Examples.fsproj", "{6C943F93-9A9A-4A57-9A75-A235A3443C22}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSharpDemo", "Demo\CSharpDemo\CSharpDemo.csproj", "{E12A854A-8B0F-44F6-96DC-BEEEC7E65320}"
-EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Interactive", "Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj", "{79D48400-F885-461A-B747-E3675A7EF2EF}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Text", "Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj", "{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}"
@@ -54,9 +52,9 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.SceneGraph.IO", "A
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Scratch", "Demo\Scratch\Scratch.fsproj", "{346185F9-AB7F-4973-8B80-24CEB113E4B5}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan2", "Aardvark.Rendering.Vulkan2\Aardvark.Rendering.Vulkan2.fsproj", "{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan", "Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj", "{8BBC1EF6-9C85-4BAF-A732-FC46DCA64EC3}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.Vulkan2", "Application\Aardvark.Application.WinForms.Vulkan2\Aardvark.Application.WinForms.Vulkan2.fsproj", "{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Application.WinForms.Vulkan", "Application\Aardvark.Application.WinForms.Vulkan\Aardvark.Application.WinForms.Vulkan.fsproj", "{99DD80B4-B1B8-4042-BEEA-B3A7FD617242}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -64,8 +62,8 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{F8233648-55CE-4795-9151-E512390D86E7}.Debug|Any CPU.ActiveCfg = Debfug|Any CPU
-		{F8233648-55CE-4795-9151-E512390D86E7}.Debug|Any CPU.Build.0 = Debfug|Any CPU
+		{F8233648-55CE-4795-9151-E512390D86E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F8233648-55CE-4795-9151-E512390D86E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F8233648-55CE-4795-9151-E512390D86E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F8233648-55CE-4795-9151-E512390D86E7}.Release|Any CPU.Build.0 = Release|Any CPU
 		{88B586F5-A5E2-4321-BD5D-27D296DA0FDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -124,10 +122,6 @@ Global
 		{6C943F93-9A9A-4A57-9A75-A235A3443C22}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C943F93-9A9A-4A57-9A75-A235A3443C22}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6C943F93-9A9A-4A57-9A75-A235A3443C22}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E12A854A-8B0F-44F6-96DC-BEEEC7E65320}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E12A854A-8B0F-44F6-96DC-BEEEC7E65320}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E12A854A-8B0F-44F6-96DC-BEEEC7E65320}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E12A854A-8B0F-44F6-96DC-BEEEC7E65320}.Release|Any CPU.Build.0 = Release|Any CPU
 		{79D48400-F885-461A-B747-E3675A7EF2EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{79D48400-F885-461A-B747-E3675A7EF2EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{79D48400-F885-461A-B747-E3675A7EF2EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -168,7 +162,6 @@ Global
 		{275853BC-F5A5-485D-8F15-CBAB95735399} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
 		{6C943F93-9A9A-4A57-9A75-A235A3443C22} = {C664AC25-597F-470A-854B-045CD7E59CE2}
-		{E12A854A-8B0F-44F6-96DC-BEEEC7E65320} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{79D48400-F885-461A-B747-E3675A7EF2EF} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{346185F9-AB7F-4973-8B80-24CEB113E4B5} = {C664AC25-597F-470A-854B-045CD7E59CE2}
 		{99DD80B4-B1B8-4042-BEEA-B3A7FD617242} = {2993E291-DFD2-4AB6-9E3B-B7F66015C914}

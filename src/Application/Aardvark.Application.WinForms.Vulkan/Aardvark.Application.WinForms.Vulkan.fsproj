@@ -5,7 +5,7 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>be9c26c3-b846-4356-923d-12e7d88ab309</ProjectGuid>
+    <ProjectGuid>99dd80b4-b1b8-4042-beea-b3a7fd617242</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>Aardvark.Application.WinForms.Vulkan</RootNamespace>
     <AssemblyName>Aardvark.Application.WinForms.Vulkan</AssemblyName>
@@ -47,6 +47,12 @@
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Utilities.fs" />
+    <Compile Include="Surface.fs" />
+    <Compile Include="VulkanControl.fs" />
+    <Compile Include="Application.fs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj">
       <Name>Aardvark.Base.Rendering</Name>
       <Project>{f8233648-55ce-4795-9151-e512390d86e7}</Project>
@@ -54,7 +60,7 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj">
       <Name>Aardvark.Rendering.Vulkan</Name>
-      <Project>{67c2dd0d-8892-4953-b916-ced3aed034b1}</Project>
+      <Project>{8bbc1ef6-9c85-4baf-a732-fc46dca64ec3}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj">
@@ -67,15 +73,6 @@
       <Project>{e3508b1c-592c-4e8e-98f3-71dbec6083da}</Project>
       <Private>True</Private>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="MessageLoop.fs" />
-    <Compile Include="SwapChain.fs" />
-    <Compile Include="VulkanControl.fs" />
-    <Compile Include="GameWindow\IGameWindow.fs" />
-    <Compile Include="GameWindow\GameWindowWin32.fs" />
-    <Compile Include="GameWindow\GameWindowXcb.fs" />
-    <Compile Include="Application.fs" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>

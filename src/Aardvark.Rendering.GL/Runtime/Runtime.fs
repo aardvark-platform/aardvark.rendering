@@ -77,7 +77,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     let mutable manager = if ctx <> null then ResourceManager(ctx, None, shareTextures, shareBuffers) else null
 
     let shaderCache = System.Collections.Concurrent.ConcurrentDictionary<string*list<int*Symbol>,BackendSurface>()
-
+    let onDispose = Event<unit>()    
     do if not (isNull ctx) then using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
     new(ctx) = new Runtime(ctx, false, false)
@@ -98,14 +98,15 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.Dispose() = 
         if ctx <> null then
+            onDispose.Trigger()
             ctx.Dispose()
             ctx <- null
-        
 
     interface IDisposable with
         member x.Dispose() = x.Dispose() 
 
     interface IRuntime with
+        member x.OnDispose = onDispose.Publish
         member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature) =
             let key = effect.Id, signature.ExtractSemantics()
             shaderCache.GetOrAdd(key,fun _ -> 
@@ -162,6 +163,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
         member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
       
+            
+
+
         member x.PrepareSurface (signature, s : ISurface) = x.PrepareSurface(signature, s) :> IBackendSurface
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
@@ -195,6 +199,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
+
+        member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
+            failwith "not implemented"
+
 
         member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
             x.CreateFramebuffer(signature, bindings) :> _
@@ -271,6 +279,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     member x.CreateStreamingTexture(mipMaps : bool) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture
 
+    member x.ResourceManager = manager
+
     member x.DeleteStreamingTexture(t : IStreamingTexture) =
         match t with
             | :? StreamingTexture as t ->
@@ -317,6 +327,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, Mod.constant engine, set)
+        
+    member x.Compile (signature : IFramebufferSignature, commands : alist<RenderCommand>) =
+        new CommandRenderTask(manager, signature, commands, Mod.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
 
     member x.CompileClear(fboSignature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let clearValues =

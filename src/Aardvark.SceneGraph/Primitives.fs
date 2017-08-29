@@ -472,7 +472,17 @@ module SgPrimitives =
                 |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.constant normals)
                 |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant texcoords)
 
+        let coordinateCross (size : IMod<float>) =  
+            let drawCall = DrawCallInfo(FaceVertexCount = 6, InstanceCount = 1)
 
+            drawCall
+                |> Sg.render IndexedGeometryMode.LineList
+                |> Sg.vertexAttribute' DefaultSemantic.Positions [| V3f.OOO; V3f.IOO; V3f.OOO; V3f.OIO; V3f.OOO; V3f.OOI |]
+                |> Sg.vertexAttribute' DefaultSemantic.Colors [| C4b.Red; C4b.Red; C4b.Green; C4b.Green; C4b.Blue; C4b.Blue |]
+                |> Sg.trafo (size |> Mod.map Trafo3d.Scale)
+
+        let coordinateCross' (size : float) = 
+            coordinateCross (Mod.constant size)
 
         let box (color : IMod<C4b>) (bounds : IMod<Box3d>) =
             let trafo = bounds |> Mod.map (fun box -> Trafo3d.Scale(box.Size) * Trafo3d.Translation(box.Min))

@@ -23,24 +23,24 @@ module Instructions =
             Instruction.ColorMask i mask.X mask.Y mask.Z mask.W
         )
 
-    let setDepthTest (m : IResource<DepthTestModeHandle>) =
-        m.Handle |> Mod.force |> Instruction.HSetDepthTest
+    let setDepthTest (m : IResource<DepthTestInfo, DepthTestInfo>) =
+        m.Pointer |> Instruction.HSetDepthTest
 
 
-    let setPolygonMode (m : IResource<PolygonModeHandle>) =
-        m.Handle |> Mod.force |> Instruction.HSetPolygonMode
+    let setPolygonMode (m : IResource<int, int>) =
+        m.Pointer |> Instruction.HSetPolygonMode
 
-    let setCullMode (m : IResource<CullModeHandle>) =        
-        m.Handle |> Mod.force |> Instruction.HSetCullFace
+    let setCullMode (m : IResource<int, int>) =        
+        m.Pointer |> Instruction.HSetCullFace
 
-    let setBlendMode (m : IResource<BlendModeHandle>) =
-        m.Handle |> Mod.force |> Instruction.HSetBlendMode
+    let setBlendMode (m : IResource<GLBlendMode, GLBlendMode>) =
+        m.Pointer |> Instruction.HSetBlendMode
 
-    let setStencilMode (m : IResource<StencilModeHandle>) =
-        m.Handle |> Mod.force |> Instruction.HSetStencilMode 
+    let setStencilMode (m : IResource<GLStencilMode, GLStencilMode>) =
+        m.Pointer |> Instruction.HSetStencilMode 
 
-    let bindVertexAttributes (contextHandle : nativeptr<nativeint>) (m : IResource<VertexInputBindingHandle>) =
-        Instruction.HBindVertexAttributes (contextHandle, Mod.force m.Handle)
+    let bindVertexAttributes (contextHandle : nativeptr<nativeint>) (m : IResource<VertexInputBinding, VertexInputBinding>) =
+        Instruction.HBindVertexAttributes (contextHandle, m.Pointer)
 
     let bindProgram (p : IResource<Program>) =
         p.Handle |> Mod.map (fun r -> Instruction.BindProgram(r.Handle))
@@ -55,7 +55,7 @@ module Instructions =
         u.Handle |> Mod.map (fun r ->
             let b = r.Buffer
             //ExecutionContext.bindUniformBuffer index r
-            Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index b.Handle r.Offset (nativeint r.Size)
+            Instruction.BindBufferRange (int OpenGl.Enums.BufferTarget.UniformBuffer) index b.Handle r.Offset r.Size
     )
 
     let bindIndirectBuffer (u : IResource<IndirectBuffer>) =   
@@ -117,7 +117,6 @@ module Instructions =
             adaptive {
                 let! buffer = buffer.Handle
                 let! igMode = mode
-                let count = NativePtr.toNativeInt buffer.Count
                 let mode =
                     if hasTess then int OpenGl.Enums.DrawMode.Patches
                     else 
@@ -144,9 +143,9 @@ module Instructions =
                         elif indexType = typeof<int32> then int OpenGl.Enums.IndexType.UnsignedInt
                         else failwithf "unsupported index type: %A"  indexType
 
-                    return igMode, Instruction.MultiDrawElementsIndirectPtr mode indexType 0n count buffer.Stride
+                    return igMode, Instruction.MultiDrawElementsIndirect mode indexType 0n buffer.Count buffer.Stride
                 else
-                    return igMode, Instruction.MultiDrawArraysIndirectPtr mode 0n count buffer.Stride
+                    return igMode, Instruction.MultiDrawArraysIndirect mode 0n buffer.Count buffer.Stride
             }
 
 
