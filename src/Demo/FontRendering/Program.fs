@@ -193,68 +193,84 @@ module VulkanTests =
 
 
 
+        let cancel = new CancellationTokenSource()
 
         let mutable modifications = 0
         let mutable totalErros = 0L
         let uploader() =
-            while true do
-                let brickIndex = rand.UniformInt(bricks.Length)
-                let brick = bricks.[brickIndex]
+            try
+                let ct = cancel.Token
+                let mutable cnt = 0
+                while true do 
+                    ct.ThrowIfCancellationRequested()
 
-                lock brick (fun () ->
-                    match brick.Witness with
-                        | Some w ->
-                            // swap() -> frontBricks.Contains brick
-                            lock residentBricks (fun () -> residentBricks.Remove brick |> ignore)
-                            w.Dispose()
-                            Interlocked.Decrement(&resident) |> ignore
-                            brick.Witness <- None
-                        | None ->
-                            //Log.line "commit(%d, %A)" brick.Level brick.Index
-                            let witness = 
-                                NativeTensor4.using brick.Data (fun data ->
-                                    img.UploadBrick(brick.Level, 0, brick.Index, data)
-                                )
-                            brick.Witness <- Some witness
-                            lock residentBricks (fun () -> residentBricks.Add brick |> ignore)
-                            Interlocked.Increment(&resident) |> ignore
-                    Interlocked.Increment(&modifications) |> ignore
-                )
+                    cnt <- cnt + 1
+                    let brickIndex = rand.UniformInt(bricks.Length)
+                    let brick = bricks.[brickIndex]
 
+                    lock brick (fun () ->
+                        match brick.Witness with
+                            | Some w ->
+                                // swap() -> frontBricks.Contains brick
+                                lock residentBricks (fun () -> residentBricks.Remove brick |> ignore)
+                                w.Dispose()
+                                Interlocked.Decrement(&resident) |> ignore
+                                brick.Witness <- None
+                            | None ->
+                                //Log.line "commit(%d, %A)" brick.Level brick.Index
+                                let witness = 
+                                    NativeTensor4.using brick.Data (fun data ->
+                                        img.UploadBrick(brick.Level, 0, brick.Index, data)
+                                    )
+                                brick.Witness <- Some witness
+                                lock residentBricks (fun () -> residentBricks.Add brick |> ignore)
+                                Interlocked.Increment(&resident) |> ignore
+                        Interlocked.Increment(&modifications) |> ignore
+                    )
 
+            with _ -> ()
 
         let sw = System.Diagnostics.Stopwatch()
 
         let renderer() =
-            while true do
-                sw.Start()
-                Mod.force img.Texture |> ignore
-                sw.Stop()
-                Interlocked.Increment(&count) |> ignore
-
-                if count % 10 = 0 then
-                    Log.start "frame %d" count
-                    Log.line "modifications: %A" modifications
-                    Log.line "resident:      %A" resident
-                    Log.line "force:         %A" (sw.MicroTime / 10.0)
-                    Log.stop()
-                    sw.Reset()
-                Thread.Sleep(16)
-
-//                let errors = Mod.force renderResult
+            try
+                let ct = cancel.Token
+                while true do
+                    ct.ThrowIfCancellationRequested()
+//                    sw.Start()
+//                    Mod.force img.Texture |> ignore
+//                    sw.Stop()
+//                    Interlocked.Increment(&count) |> ignore
 //
-//                match errors with
-//                    | [] -> 
+//                    if count % 10 = 0 then
 //                        Log.start "frame %d" count
-//                        Log.line "modification: %A" modifications
-//                        Log.line "resident: %A" resident
-//                        if totalErros > 0L then Log.warn "totalErros %A" totalErros
+//                        Log.line "modifications: %A" modifications
+//                        Log.line "resident:      %A" resident
+//                        Log.line "force:         %A" (sw.MicroTime / 10.0)
 //                        Log.stop()
-//                    | _ ->
-//                        let errs = List.length errors |> int64
-//                        totalErros <- totalErros + errs
-//                        Log.warn "errors: %A" errs
-//                        ()
+//                        sw.Reset()
+//
+//                    Thread.Sleep(16)
+    
+    
+                    let errors = Mod.force renderResult
+
+                    match errors with
+                        | [] -> 
+                            Log.start "frame %d" count
+                            Log.line "modifications: %A" modifications
+                            Log.line "resident: %A" resident
+                            if totalErros > 0L then Log.warn "totalErros %A" totalErros
+                            Log.stop()
+                        | _ ->
+                            let errs = List.length errors |> int64
+                            totalErros <- totalErros + errs
+                            Log.warn "errors: %A" errs
+                            ()
+    
+    
+            with _ -> ()
+
 
 
 
@@ -270,8 +286,14 @@ module VulkanTests =
         let renderers = 
             Array.init 1 (fun _ -> startThread renderer)
             
-        Console.ReadLine() |> ignore
 
+        Console.ReadLine() |> ignore
+        cancel.Cancel()
+
+        for t in uploaders do t.Join()
+        for t in renderers do t.Join()
+
+        img.Dispose()
 
 let tensorPerformance() =
     
@@ -365,8 +387,8 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
-    tensorPerformance()
-    //VulkanTests.run()
+    //tensorPerformance()
+    VulkanTests.run()
     Environment.Exit 0
 
 

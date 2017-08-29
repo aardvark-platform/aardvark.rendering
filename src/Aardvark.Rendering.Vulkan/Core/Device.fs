@@ -1144,22 +1144,22 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
     let manager = DeviceMemoryManager(this, heap.Capacity.Bytes, 128L <<< 20)
     let mask = 1u <<< memory.index
 
-    let nullptr = 
-        lazy (
-            let mutable mem = VkDeviceMemory.Null
+    let createNullPtr() =
+        let mutable mem = VkDeviceMemory.Null
 
-            let mutable info =
-                VkMemoryAllocateInfo(
-                    VkStructureType.MemoryAllocateInfo, 0n, 
-                    16UL,
-                    uint32 memory.index
-                )
+        let mutable info =
+            VkMemoryAllocateInfo(
+                VkStructureType.MemoryAllocateInfo, 0n, 
+                16UL,
+                uint32 memory.index
+            )
 
-            VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
-                |> check "could not 'allocate' null pointer for device heap"
+        VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&mem)
+            |> check "could not 'allocate' null pointer for device heap"
 
-            new DeviceMemory(this, mem, 0L)
-        )
+        new DeviceMemory(this, mem, 0L)
+
+    let mutable nullptr = None
 
     member x.Device = device
     member x.Info = memory
@@ -1172,8 +1172,15 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
     member x.Allocated = heap.Allocated
     member x.Capacity = heap.Capacity
 
-
-    member x.Null = nullptr.Value
+    member x.Null = 
+        lock x (fun () ->
+            match nullptr with
+                | Some ptr -> ptr
+                | None ->
+                    let ptr = createNullPtr()
+                    nullptr <- Some ptr
+                    ptr
+        )
 
     member x.Alloc(align : int64, size : int64) = manager.Alloc(align, size)
     member x.Free(ptr : DevicePtr) = ptr.Dispose()
@@ -1224,9 +1231,24 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
             )
 
     member x.Dispose() =
-        if nullptr.IsValueCreated then
-            VkRaw.vkFreeMemory(device.Handle, nullptr.Value.Handle, NativePtr.zero)
+        match nullptr with
+            | Some ptr -> 
+                VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
+                nullptr <- None
+            | None -> ()
         
+    member x.Clear() =
+
+        match nullptr with
+            | Some ptr -> 
+                VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
+                nullptr <- None
+            | None -> ()
+
+        manager.Clear()
+
+    member x.Copy() = new DeviceHeap(device, memory, heap)
+
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
@@ -1315,9 +1337,11 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
         else v + (align - v % align)    
   
     let free = DeviceFreeList()
+    let blocks = System.Collections.Generic.HashSet<DeviceMemory>()
 
     let addBlock(this : DeviceMemoryManager) =
         let store = heap.AllocRaw blockSize
+        blocks.Add store |> ignore
 
         let block = new DeviceBlock(this, store, 0L, blockSize, true, null, null)
         free.Insert(block)
@@ -1402,11 +1426,20 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
 
                 if isFirst && isLast then
                     assert (b.Offset = 0L && b.Size = b.Memory.Size)
+                    blocks.Remove b.Memory |> ignore
                     b.Memory.Dispose()
                 else
                     free.Insert(b)
 
             )
+
+    member x.Clear() =
+        lock free (fun () ->
+            for f in blocks do f.Dispose()
+            blocks.Clear()
+            free.Clear()
+        )
+            
 
 and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)

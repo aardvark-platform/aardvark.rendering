@@ -198,6 +198,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                             |> check "could not bind sparse memory"
                     )
                     f.Wait()
+                    f.Dispose()
                 )  
 
 
@@ -314,6 +315,7 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
                         VkRaw.vkQueueBindSparse(q.Handle, 1u, &&info, f.Handle)
                             |> check "could not bind sparse memory"
                         f.Wait()
+                        f.Dispose()
                     )
 
                 )
@@ -415,7 +417,12 @@ module SparseTextureImplemetation =
         let mutable back = device.CreateSparseImage(size, levels, slices, dim, fmt, usage, allocMipTail)
         let mutable front = device.CreateSparseImage(size, levels, slices, dim, fmt, usage, allocMipTail)
 
-        let memory = back.Memory
+        do  device.perform {
+                do! Command.TransformLayout(back, VkImageLayout.TransferDstOptimal)
+                do! Command.TransformLayout(front, VkImageLayout.ShaderReadOnlyOptimal)
+            }
+
+        let memory = device.DeviceMemory.Copy()
         let align = back.PageAlign
 
         let pageSize =
@@ -590,6 +597,7 @@ module SparseTextureImplemetation =
                 transact (fun () -> texture.MarkOutdated())
                 device.Delete back
                 device.Delete front
+                memory.Clear()
 
         member x.Size = size
         member x.MipMapLevels = levels
