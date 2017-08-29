@@ -2,3 +2,4 @@ Aardvark.Base.Incremental
 Aardvark.Base.Runtime
 FSharp.Quotations.Evaluator 
 FShade
+FSharp.Core

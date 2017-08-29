@@ -3,3 +3,4 @@ Aardvark.Base.Runtime
 FSharp.Quotations.Evaluator 
 FShade
 GLSLangSharp
+FSharp.Core

@@ -2,16 +2,15 @@ framework: net45
 source https://api.nuget.org/v3/index.json
 source https://vrvis.myget.org/F/aardvark_public/api/v3/index.json
 
-nuget Aardvark.Base.FSharp               ~> 3.0.26
-nuget Aardvark.Base.Incremental          ~> 3.0.26
-nuget Aardvark.Base.Runtime              ~> 3.0.26
-                                         
-nuget FShade.Core                        ~> 3.2.2
-nuget FShade                             ~> 3.2.2
-nuget FSharp.Core                        ~> 4.0.0.1
-nuget GLSLangSharp                       ~> 0.3.2
+nuget FSharp.Core ~> 4.0.0
 
-nuget Another.Unofficial.Xilium.CefGlue.UnpackNativeDependencies ~> 0.0.9
+nuget Aardvark.Base.FSharp               ~> 3.0.35
+nuget Aardvark.Base.Incremental          ~> 3.0.35
+nuget Aardvark.Base.Runtime              ~> 3.0.35
+                                         
+nuget FShade.Core                        ~> 3.2.5
+nuget FShade                             ~> 3.2.5
+nuget GLSLangSharp                       ~> 0.3.3
      
 nuget FSharp.Quotations.Evaluator        ~> 1.0.6
 nuget FSharp.Charting                    ~> 0.90.14
@@ -34,6 +33,9 @@ nuget NUnit                              ~> 3.6.0
 nuget FsUnit                             ~> 2.4.0-alpha-2
 
 nuget SharpDX.Direct3D9
+
+nuget Another.Unofficial.Xilium.CefGlue.UnpackNativeDependencies ~> 0.0.9
+
 
 group Build
 framework: net45
