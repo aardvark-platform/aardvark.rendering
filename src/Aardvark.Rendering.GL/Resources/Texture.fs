@@ -3008,20 +3008,34 @@ module Texture =
         tex.Context.Download(tex, level, 0, pi)
         [|pi|]
 
+
+module private ImplicitConversionHate =
+    let inline download (ctx : Context, t : Texture, level : int, slice : int, offset : V2i, target : PixImage) = 
+        ctx.Download(t, level, slice, offset, target)
+
+    let inline upload (ctx : Context, t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
+        ctx.Upload(t, level, slice, offset, source)
+
+    let inline copy(ctx : Context, src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
+        ctx.Copy(src, srcLevel, srcSlice, srcOffset, dst, dstLevel, dstSlice, dstOffset, size)
+
+    let inline blit(ctx : Context, src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
+        ctx.Blit(src, srcLevel, srcSlice, srcRegion, dst, dstLevel, dstSlice, dstRegion, linear)
+
 [<Extension; AbstractClass; Sealed>]
 type TextureExtensionsCSharp =
     [<Extension>]
     static member Download(ctx : Context, t : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
-        ctx.Download(t, level, slice, offset, target)
+        ImplicitConversionHate.download(ctx, t, level, slice, offset, target)
 
     [<Extension>]
     static member Upload(ctx : Context, t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
-        ctx.Upload(t, level, slice, offset, source)
+        ImplicitConversionHate.upload(ctx, t, level, slice, offset, source)
 
     [<Extension>]
     static member Copy(ctx : Context, src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
-        ctx.Copy(src, srcLevel, srcSlice, srcOffset, dst, dstLevel, dstSlice, dstOffset, size)
+        ImplicitConversionHate.copy(ctx, src, srcLevel, srcSlice, srcOffset, dst, dstLevel, dstSlice, dstOffset, size)
 
     [<Extension>]
     static member Blit(ctx : Context, src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
-        ctx.Blit(src, srcLevel, srcSlice, srcRegion, dst, dstLevel, dstSlice, dstRegion, linear)
+        ImplicitConversionHate.blit(ctx, src, srcLevel, srcSlice, srcRegion, dst, dstLevel, dstSlice, dstRegion, linear)
