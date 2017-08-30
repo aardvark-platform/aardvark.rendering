@@ -2402,7 +2402,7 @@ module TensorImage =
             failf "device does not support images of type %s" typeof<'a>.PrettyName
 
         let channels = format.Format.Channels
-        let sizeInBytes = int64 size.X * int64 size.X * int64 size.Z * int64 channels
+        let sizeInBytes = int64 size.X * int64 size.Y * int64 size.Z * int64 channels * int64 sizeof<'a>
         let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit) sizeInBytes
         TensorImage<'a>(buffer, size, format.Format, imageFormat)
 

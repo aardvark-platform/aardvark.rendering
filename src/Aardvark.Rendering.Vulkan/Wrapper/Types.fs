@@ -162,7 +162,7 @@ module CStr =
         ptrs
 
     let malloc (str : string) =
-        let ptr = NativePtr.malloc (str.Length - 1)
+        let ptr = NativePtr.malloc (str.Length + 1)
         str |> writeTo ptr |> ignore
         ptr
 
