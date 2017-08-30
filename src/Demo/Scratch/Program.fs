@@ -172,7 +172,11 @@ module ShaderStuff =
 
     let fragment (v : Effects.Vertex) =
         fragment {
-            return sample(v.tc)
+            let a : V3d = uniform?A
+            let b : V3d = uniform?B
+            let c : float = uniform?C
+            let f = (a + b) * c
+            return sample(v.tc * f.XY) 
         }
 
 
@@ -183,7 +187,10 @@ module ShaderStuff =
                 DefaultSurfaces.trafo |> toEffect
                 fragment |> toEffect
                ]
-            |> Sg.diffuseFileTexture' @"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg" true
+            |> Sg.uniform "A" (Mod.constant V3d.IOI)
+            |> Sg.uniform "B" (Mod.constant V3d.OII)
+            |> Sg.uniform "C" (Mod.constant 1.0)
+            |> Sg.diffuseFileTexture' @"C:\volumes\hate.png" true
 
 
 
@@ -794,6 +801,8 @@ module Ranges =
         
 open Ranges 
 
+open Aardvark.Rendering.Vulkan
+open System.Runtime.InteropServices
 
 [<EntryPoint>]
 let main argv = 
@@ -812,6 +821,11 @@ let main argv =
 //    printfn ""
 //
 //    System.Environment.Exit 0
+
+    let t =  typeof<VkSparseImageMemoryRequirements>
+    for f in t.GetFields() do
+        Marshal.OffsetOf(t, f.Name) |> printfn "%s: %d" f.Name 
+
 
     Ag.initialize()
     Aardvark.Init()

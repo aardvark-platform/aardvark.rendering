@@ -417,7 +417,7 @@ module UniformBufferLayoutStd140 =
                 // of the underlying scalar type.
                 match toUniformType bt with
                     | Primitive(t,s,a) -> 
-                        UniformType.Primitive(PrimitiveType.Vector(t, 3), s * 4, s * 4)
+                        UniformType.Primitive(PrimitiveType.Vector(t, 3), s * 3, s * 4)
                     | o ->
                         UniformType.Struct(structLayout [bt, "X", []; bt, "Y", []; bt, "Z", []])
 
@@ -499,9 +499,19 @@ module UniformBufferLayoutStd140 =
                 let align = t.align
                 let size = t.size
 
+
+
                 // align the field offset
                 if currentOffset % align <> 0 then
                     currentOffset <- currentOffset + align - (currentOffset % align)
+
+                let declaredOffset =
+                    dec |> List.tryPick (function (Decoration.Offset,[| off |]) -> Some (int off) | _ -> None)
+
+                let offset =
+                    match declaredOffset with
+                        | Some o -> o
+                        | None -> currentOffset
 
                 // keep track of the biggest member
                 if size > biggestFieldSize then
@@ -512,11 +522,11 @@ module UniformBufferLayoutStd140 =
                     {
                         name        = n
                         fieldType   = t
-                        offset      = currentOffset
+                        offset      = offset
                     }
 
                 // store the member's offset
-                currentOffset <- currentOffset + size
+                currentOffset <- offset + size
                 result
             )
 

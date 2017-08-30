@@ -118,10 +118,11 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
         let totalSize = 
             sparseRequirements |> Array.sumBy (fun r ->
                 let singleMipTail = r.formatProperties.flags.HasFlag(VkSparseImageFormatFlags.SingleMiptailBit)
+                let mipTailSize = min r.imageMipTailSize (64UL <<< 20) |> int64
                 if singleMipTail then
-                    int64 r.imageMipTailSize
+                    mipTailSize
                 else
-                    int64 slices * int64 r.imageMipTailSize
+                    int64 slices * mipTailSize
             )
 
         if totalSize <= 0L then
@@ -402,6 +403,7 @@ module SparseTextureImplemetation =
 
 
         let updateLock = new ReaderWriterLockSlim()
+        let memory = device.DeviceMemory.Copy()
 
         let mutable isDisposed = false
 
@@ -410,7 +412,7 @@ module SparseTextureImplemetation =
             match mipTailMem with
                 | Some mem -> mem
                 | None ->
-                    let mem = heap.Alloc(align, size)
+                    let mem = memory.Alloc(align, size)
                     mipTailMem <- Some mem
                     mem
 
@@ -422,7 +424,6 @@ module SparseTextureImplemetation =
                 do! Command.TransformLayout(front, VkImageLayout.ShaderReadOnlyOptimal)
             }
 
-        let memory = device.DeviceMemory.Copy()
         let align = back.PageAlign
 
         let pageSize =
@@ -606,6 +607,8 @@ module SparseTextureImplemetation =
         member x.Format = format
         member x.Texture = texture
         member x.BrickSize = brickSize
+        member x.AllocatedMemory = memory.AllocatedMemory
+        member x.UsedMemory = memory.UsedMemory
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
@@ -626,6 +629,8 @@ module SparseTextureImplemetation =
 
             member x.GetBrickCount level = x.GetBrickCount level
             member x.UploadBrick(level, slice, index, data) = x.UploadBrick(level, slice, index, data)
+            member x.AllocatedMemory = memory.AllocatedMemory
+            member x.UsedMemory = memory.UsedMemory
 
     type Brick<'a>(level : int, index : V3i, data : Tensor4<'a>) =
         let mutable witness : Option<IDisposable> = None

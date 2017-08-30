@@ -16,6 +16,9 @@ type ISparseTexture<'a when 'a : unmanaged> =
     [<CLIEvent>]
     abstract member OnSwap : IEvent<EventHandler, EventArgs>
 
+    abstract member UsedMemory : Mem
+    abstract member AllocatedMemory : Mem
+
     abstract member Size : V3i
     abstract member MipMapLevels : int
     abstract member Count : int

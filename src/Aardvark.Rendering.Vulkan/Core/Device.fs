@@ -1161,6 +1161,8 @@ and DeviceHeap internal(device : Device, memory : MemoryInfo, heap : MemoryHeapI
 
     let mutable nullptr = None
 
+    member x.AllocatedMemory = manager.AllocatedMemory
+    member x.UsedMemory = manager.UsedMemory
     member x.Device = device
     member x.Info = memory
     member x.Index = memory.index
@@ -1338,20 +1340,34 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
   
     let free = DeviceFreeList()
     let blocks = System.Collections.Generic.HashSet<DeviceMemory>()
+    let mutable allocatedMemory = 0L
+    let mutable usedMemory = 0L
 
     let addBlock(this : DeviceMemoryManager) =
         let store = heap.AllocRaw blockSize
+        Interlocked.Add(&allocatedMemory, blockSize) |> ignore
         blocks.Add store |> ignore
 
         let block = new DeviceBlock(this, store, 0L, blockSize, true, null, null)
         free.Insert(block)
 
+    member x.AllocatedMemory = Mem allocatedMemory
+    member x.UsedMemory = Mem usedMemory
 
     member x.Alloc(align : int64, size : int64) =
         if size <= 0L then
             DevicePtr.Null
         elif size >= blockSize then
-            heap.AllocRaw(size) :> DevicePtr
+            let mem = heap.AllocRaw(size)
+            Interlocked.Add(&usedMemory, size) |> ignore
+            Interlocked.Add(&allocatedMemory, size) |> ignore
+            { new DevicePtr(mem, 0L, size) with
+                override x.Dispose() =
+                    mem.Dispose()
+                    Interlocked.Add(&usedMemory, -size) |> ignore
+                    Interlocked.Add(&allocatedMemory, -size) |> ignore
+            }
+
         else
             lock free (fun () ->
                 match free.TryGetAligned(align, size) with
@@ -1376,6 +1392,7 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
                             free.Insert(r)
                             b.Size <- size
 
+                        Interlocked.Add(&usedMemory, size) |> ignore
                         b.IsFree <- false
                         b :> DevicePtr
 
@@ -1398,7 +1415,7 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
                 old.Offset <- -1234L
                 old.Size <- -2000L
                 old.IsFree <- true
-
+                Interlocked.Add(&usedMemory, -b.Size) |> ignore
 
                 let prev = b.Prev
                 let next = b.Next
@@ -1424,9 +1441,12 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
 
                 b.IsFree <- true
 
+
+
                 if isFirst && isLast then
                     assert (b.Offset = 0L && b.Size = b.Memory.Size)
                     blocks.Remove b.Memory |> ignore
+                    Interlocked.Add(&allocatedMemory, -b.Memory.Size) |> ignore
                     b.Memory.Dispose()
                 else
                     free.Insert(b)
@@ -1438,6 +1458,8 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
             for f in blocks do f.Dispose()
             blocks.Clear()
             free.Clear()
+            allocatedMemory <- 0L
+            usedMemory <- 0L
         )
             
 

@@ -144,7 +144,7 @@ module ShaderProgram =
                             | _ -> failwithf "unsupported shader stage: %A" stage
 
                     let code = code.Replace(sprintf "%s(" entry, "main(")
-                    stage, versionRx.Replace(code, "#version 420 core\r\n" + (sprintf "#define %s\r\n" define))
+                    stage, versionRx.Replace(code, "#version 450 core\r\n" + (sprintf "#define %s\r\n" define))
                 )
 
         printfn "%s" (snd codes.[0])
