@@ -2976,12 +2976,91 @@ module ``Image Command Extensions`` =
             else
                 command {
                     let oldLayout = img.Image.Layout
+                    do! Command.TransformLayout(img.[0,*], oldLayout, VkImageLayout.TransferSrcOptimal)
 
                     for l in 1 .. img.LevelCount - 1 do
-                        do! Command.Sync(img.[l - 1, *])
+                        do! Command.TransformLayout(img.[l,*], oldLayout, VkImageLayout.TransferDstOptimal)
                         do! Command.Blit(img.[l - 1, *], img.[l, *], VkFilter.Linear)
+                        do! Command.TransformLayout(img.[l,*], VkImageLayout.TransferDstOptimal, VkImageLayout.TransferSrcOptimal)
 
-                    do! Command.TransformLayout(img.Image, oldLayout)
+                    do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal, oldLayout)
+                }
+
+        static member TransformLayout(img : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
+            if img.Image.IsNull || target = VkImageLayout.Undefined || target = VkImageLayout.Preinitialized then
+                Command.Nop
+            else
+                { new Command() with
+                    member x.Compatible = QueueFlags.All
+                    member x.Enqueue (cmd : CommandBuffer) =
+                        let src =
+                            if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                            elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                            elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                            elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                            elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
+                            elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                            elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
+                            else VkAccessFlags.None
+
+                        let dst =
+                            if target = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
+                            elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
+                            elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
+                            elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
+                            elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
+                            elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
+                            elif target = VkImageLayout.General then VkAccessFlags.None
+                            else VkAccessFlags.None
+
+                        let srcMask =
+                            if source = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                            elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.LateFragmentTestsBit
+                            elif source = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
+                            elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
+                            elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
+                            elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
+                            elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.FragmentShaderBit
+                            elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
+                            elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
+                            else VkPipelineStageFlags.None
+
+                        let dstMask =
+                            if target = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
+                            elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
+                            elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
+                            elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.EarlyFragmentTestsBit
+                            elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.VertexShaderBit
+                            elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
+                            elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
+
+
+                            else VkPipelineStageFlags.None
+
+                        let mutable barrier =
+                            VkImageMemoryBarrier(
+                                VkStructureType.ImageMemoryBarrier, 0n, 
+                                src,
+                                dst,
+                                source,
+                                target,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                VK_QUEUE_FAMILY_IGNORED,
+                                img.Image.Handle,
+                                img.VkImageSubresourceRange
+                            )
+
+                        cmd.AppendCommand()
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle,
+                            srcMask,
+                            dstMask,
+                            VkDependencyFlags.None,
+                            0u, NativePtr.zero,
+                            0u, NativePtr.zero,
+                            1u, &&barrier
+                        )
+                        Disposable.Empty
                 }
 
         static member TransformLayout(img : Image, target : VkImageLayout) =
@@ -2996,118 +3075,45 @@ module ``Image Command Extensions`` =
                         else
                             let source = img.Layout
                             img.Layout <- target
-
-                            let src =
-                                if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
-                                elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                                elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
-                                elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
-                                elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
-                                elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                                elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
-                                else VkAccessFlags.None
-
-                            let dst =
-                                if target = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                                elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
-                                elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
-                                elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                                elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
-                                elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
-                                elif target = VkImageLayout.General then VkAccessFlags.None
-                                else VkAccessFlags.None
-
-                            let srcMask =
-                                if source = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
-                                elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
-                                elif source = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
-                                elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
-                                elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
-                                elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
-                                elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.FragmentShaderBit
-                                elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
-                                elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
-                                else VkPipelineStageFlags.None
-
-                            let dstMask =
-                                if target = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
-                                elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
-                                elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
-                                elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
-                                elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.VertexShaderBit
-                                elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
-                                elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
-
-
-                                else VkPipelineStageFlags.None
-
                             let aspect = VkFormat.toAspect img.Format
-
-                            let mutable barrier =
-                                VkImageMemoryBarrier(
-                                    VkStructureType.ImageMemoryBarrier, 0n, 
-                                    src,
-                                    dst,
-                                    source,
-                                    target,
-                                    VK_QUEUE_FAMILY_IGNORED,
-                                    VK_QUEUE_FAMILY_IGNORED,
-                                    img.Handle,
-                                    VkImageSubresourceRange(
-                                        aspect, 
-                                        0u, uint32 img.MipMapLevels, 
-                                        0u, uint32 img.Count
-                                    )
-                                )
-
-                            cmd.AppendCommand()
-                            VkRaw.vkCmdPipelineBarrier(
-                                cmd.Handle,
-                                srcMask,
-                                dstMask,
-                                VkDependencyFlags.None,
-                                0u, NativePtr.zero,
-                                0u, NativePtr.zero,
-                                1u, &&barrier
-                            )
-                            Disposable.Empty
+                            Command.TransformLayout(img.[unbox (int aspect)], source, target).Enqueue(cmd)
                 }
-
-        static member Sync(img : ImageSubresourceRange) =
-            if img.Image.IsNull then
-                Command.Nop
-            else
-                { new Command() with
-                    member x.Compatible = QueueFlags.All
-                    member x.Enqueue (cmd : CommandBuffer) =
-                        let layout = img.Image.Layout
-                        let mutable barrier =
-                            VkImageMemoryBarrier(
-                                VkStructureType.ImageMemoryBarrier, 0n, 
-                                VkAccessFlags.Write,
-                                VkAccessFlags.Read,
-                                layout,
-                                layout,
-                                VK_QUEUE_FAMILY_IGNORED,
-                                VK_QUEUE_FAMILY_IGNORED,
-                                img.Image.Handle,
-                                img.VkImageSubresourceRange
-                            )
-                            
-                        cmd.AppendCommand()
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle,
-                            VkPipelineStageFlags.TopOfPipeBit,
-                            VkPipelineStageFlags.TopOfPipeBit,
-                            VkDependencyFlags.None,
-                            0u, NativePtr.zero,
-                            0u, NativePtr.zero,
-                            1u, &&barrier
-                        )
-                        Disposable.Empty
-                }
-
-
+//
+//        static member Sync(img : ImageSubresourceRange) =
+//            if img.Image.IsNull then
+//                Command.Nop
+//            else
+//                { new Command() with
+//                    member x.Compatible = QueueFlags.All
+//                    member x.Enqueue (cmd : CommandBuffer) =
+//                        let layout = img.Image.Layout
+//                        let mutable barrier =
+//                            VkImageMemoryBarrier(
+//                                VkStructureType.ImageMemoryBarrier, 0n, 
+//                                VkAccessFlags.Write,
+//                                VkAccessFlags.Read,
+//                                layout,
+//                                layout,
+//                                VK_QUEUE_FAMILY_IGNORED,
+//                                VK_QUEUE_FAMILY_IGNORED,
+//                                img.Image.Handle,
+//                                img.VkImageSubresourceRange
+//                            )
+//                            
+//                        cmd.AppendCommand()
+//                        VkRaw.vkCmdPipelineBarrier(
+//                            cmd.Handle,
+//                            VkPipelineStageFlags.TopOfPipeBit,
+//                            VkPipelineStageFlags.TopOfPipeBit,
+//                            VkDependencyFlags.None,
+//                            0u, NativePtr.zero,
+//                            0u, NativePtr.zero,
+//                            1u, &&barrier
+//                        )
+//                        Disposable.Empty
+//                }
+//
+//
 
 
 // ===========================================================================================
