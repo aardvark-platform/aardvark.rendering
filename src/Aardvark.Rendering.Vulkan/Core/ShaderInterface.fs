@@ -895,6 +895,7 @@ module private ShaderInfo =
 
     type private FunctionProperties =
         {
+            mutable id              : uint32
             mutable entryModel      : ExecutionModel
             mutable entryName       : string
             mutable geometryFlags   : GeometryFlags
@@ -906,7 +907,8 @@ module private ShaderInfo =
             usedVariables           : HashSet<uint32>
         }
         static member Empty = 
-            { 
+            {
+                id = 0u
                 entryModel = ExecutionModel.Vertex
                 entryName = ""
                 geometryFlags = GeometryFlags.None
@@ -934,11 +936,40 @@ module private ShaderInfo =
         let structs                 = HashSet.empty
         let callers                 = Dict.empty
         let constants               = Dict.empty
+        let entries                 = List<uint32>()
         let mutable currentFunction = None
 
-        let getProps e = functions.GetOrCreate(e, fun _ -> FunctionProperties.Empty)
+        let getProps e = functions.GetOrCreate(e, fun e -> { FunctionProperties.Empty with id = e })
 
-        
+        let rec addUsed (v : uint32) (f : FunctionProperties) =
+            if f.usedVariables.Add v then
+                match callers.TryGetValue f.id with
+                    | (true, callers) ->
+                        for c in callers do
+                            let c = getProps c
+                            addUsed v c
+                    | _ ->
+                        ()
+
+        let rec addCaller (caller : FunctionProperties) (callee : uint32) =
+            let set = callers.GetOrCreate(callee, fun _ -> HashSet())
+            if set.Add(caller.id) then
+                match functions.TryGetValue callee with
+                    | (true, calleeProps) ->
+                        let calleeUsed = calleeProps.usedVariables
+                        if calleeUsed.Count = 0 then
+                            let rec union (current : FunctionProperties) =
+                                current.usedVariables.UnionWith calleeUsed
+                                match callers.TryGetValue current.id with
+                                    | (true, callers) ->
+                                        for c in callers do
+                                            let props = getProps c
+                                            union props
+                                    | _ ->
+                                        ()
+                            union caller
+                    | _ ->
+                        ()
 
         // process the instructions maintaining all needed information
         for i in instructions do
@@ -978,17 +1009,12 @@ module private ShaderInfo =
                 | OpStore(id,_,_) ->
                     match currentFunction with
                         | Some f when variables.Contains id ->
-                            let mode = getProps f
-                            mode.usedVariables.Add id |> ignore
-                            match callers.TryGetValue f with
-                                | (true, callers) ->
-                                    for c in callers do
-                                        let m = getProps c
-                                        m.usedVariables.Add id |> ignore
-                                | _ ->
-                                    ()
+                            let props = getProps f
+                            addUsed id props
                         | _ ->
                             ()
+
+                
 
                 | OpVariable(typeId, id, kind, _) ->
                     match kind with
@@ -1023,6 +1049,7 @@ module private ShaderInfo =
                     let mode = getProps id
                     mode.entryModel <- model
                     mode.entryName <- name
+                    entries.Add id
 
                 | OpKill ->
                     match currentFunction with
@@ -1039,18 +1066,15 @@ module private ShaderInfo =
 
                         | None -> ()
 
-                | OpFunctionCall(_,_,f,_) ->
+                | OpFunctionCall(_,_,f,args) ->
                     match currentFunction with
                         | Some current -> 
-                            let callers = callers.GetOrCreate(f, fun _ -> HashSet.empty)
-                            callers.Add current |> ignore
-
                             let cm = getProps current
-                            match functions.TryGetValue f with
-                                | (true, fm) -> 
-                                    cm.usedVariables.UnionWith fm.usedVariables
-                                    cm.discards <- cm.discards || fm.discards
-                                | _ -> ()
+                            addCaller cm f
+
+                            for a in args do
+                                if variables.Contains a then
+                                    addUsed a cm
 
                         | _ ->
                             ()
@@ -1138,8 +1162,8 @@ module private ShaderInfo =
             let vPar    = { paramName = vName; paramType = vType; paramDecorations = vDec }
             parameters.[id] <- vPar
         
-
-        functions.Values
+        entries
+            |> Seq.map (fun eid -> functions.[eid])
             |> Seq.map (fun m ->
                 let mutable stage, kind =
                     match m.entryModel with

@@ -139,6 +139,51 @@ let quadTexture() =
         |> Sg.andAlso env
         |> Sg.andAlso coord
 
+[<ReflectedDefinition>]
+module ShaderStuff =
+    open FShade
+
+    let sampler1 =
+        sampler2d {
+            texture uniform?DiffuseColorTexture
+            filter Filter.MinMagMipLinear
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+        }
+
+    let sampler2 =
+        sampler2d {
+            texture uniform?DiffuseColorTexture
+            filter Filter.MinMagPoint
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+        }
+
+    let sepp (s : Sampler2d) (tc : V2d) =
+        s.Sample(tc)
+
+    let sample(tc : V2d) =
+        if tc.X > 0.5 then
+            let s = sampler1.Size
+            sepp sampler1 (tc * V2d s / 100.0)
+        else
+            sepp sampler2 tc
+        
+
+    let fragment (v : Effects.Vertex) =
+        fragment {
+            return sample(v.tc)
+        }
+
+
+    [<Demo("Duplicate Texture Name Demo")>]
+    let duplTexture() =
+        Sg.fullScreenQuad
+            |> Sg.effect [
+                DefaultSurfaces.trafo |> toEffect
+                fragment |> toEffect
+               ]
+            |> Sg.diffuseFileTexture' @"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg" true
 
 
 
@@ -772,6 +817,6 @@ let main argv =
     Aardvark.Init()
 
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
-    App.run(quadTexture())
+    App.run(ShaderStuff.duplTexture())
 
     0 // return an integer exit code
