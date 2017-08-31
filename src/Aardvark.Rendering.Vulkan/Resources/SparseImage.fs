@@ -118,7 +118,8 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
         let totalSize = 
             sparseRequirements |> Array.sumBy (fun r ->
                 let singleMipTail = r.formatProperties.flags.HasFlag(VkSparseImageFormatFlags.SingleMiptailBit)
-                let mipTailSize = min r.imageMipTailSize (64UL <<< 20) |> int64
+                let mipTailSize = r.imageMipTailSize |> int64
+                printfn "mip tail size: %A" mipTailSize
                 if singleMipTail then
                     mipTailSize
                 else
@@ -401,6 +402,8 @@ module SparseTextureImplemetation =
         let fmt = VkFormat.ofPixFormat (PixFormat(typeof<'a>, format))
         let usage = VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| usage
 
+        let mutable flushAfterUpload = true
+
 
         let updateLock = new ReaderWriterLockSlim()
         let memory = device.DeviceMemory.Copy()
@@ -507,6 +510,9 @@ module SparseTextureImplemetation =
         [<CLIEvent>]
         member x.OnSwap = onSwap.Publish
 
+        member x.FlushAfterUpload 
+            with get () = flushAfterUpload
+            and set v = flushAfterUpload <- v
 
         member private x.Revoke(bind : SparseImageBind) =
             ReaderWriterLock.read updateLock (fun () ->
@@ -583,7 +589,8 @@ module SparseTextureImplemetation =
                     }
                 )
 
-                invalidate()
+                if flushAfterUpload then
+                    invalidate()
 
                 device.Delete tempBuffer
 
@@ -609,6 +616,8 @@ module SparseTextureImplemetation =
         member x.BrickSize = brickSize
         member x.AllocatedMemory = memory.AllocatedMemory
         member x.UsedMemory = memory.UsedMemory
+        member x.Invalidate () = invalidate ()
+        
 
         interface IDisposable with
             member x.Dispose() = x.Dispose()
