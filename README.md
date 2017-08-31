@@ -1,5 +1,5 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/oqg1tw2ax1jl8qjx/branch/master?svg=true)](https://ci.appveyor.com/project/haraldsteinlechner/aardvark-rendering/branch/master)
-[![Build Status](https://travis-ci.org/vrvis/aardvark.rendering.svg?branch=master)](https://travis-ci.org/vrvis/aardvark.rendering)
+[![Build Status](https://api.travis-ci.org/aardvark-platform/aardvark.rendering.svg?branch=master)](https://travis-ci.org/aardvark-platform/aardvark.rendering)
 
 # Aardvark.Rendering
 
