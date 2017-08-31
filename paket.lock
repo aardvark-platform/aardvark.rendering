@@ -59,7 +59,7 @@ NUGET
       FShade.Core (>= 3.2.5)
       FShade.Imperative (>= 3.2.5)
       FSharp.Core (>= 4.0 < 4.1)
-    GLSLangSharp (0.3.3)
+    GLSLangSharp (0.3.4)
       Aardvark.Base (>= 3.0.35)
       Aardvark.Base.FSharp (>= 3.0.35)
       FSharp.Core (>= 4.0.0.1)
