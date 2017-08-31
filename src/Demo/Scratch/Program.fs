@@ -190,7 +190,7 @@ module ShaderStuff =
             |> Sg.uniform "A" (Mod.constant V3d.IOI)
             |> Sg.uniform "B" (Mod.constant V3d.OII)
             |> Sg.uniform "C" (Mod.constant 1.0)
-            |> Sg.diffuseFileTexture' @"C:\volumes\hate.png" true
+            |> Sg.diffuseFileTexture' @"/home/schorsch/bla.png" true
 
 
 
@@ -473,78 +473,6 @@ let manymany() =
 
 
 
-
-module DependentHandleNative =
-    open System
-    open System.Reflection
-    open System.Runtime.InteropServices
-
-    [<AutoOpen>]
-    module private Impl = 
-        let tHandle = Type.GetType("System.Runtime.CompilerServices.DependentHandle")
-        let nInitializeMeth = tHandle.GetMethod("nInitialize", BindingFlags.NonPublic ||| BindingFlags.Static)
-        let nGetPrimaryMeth = tHandle.GetMethod("nGetPrimary", BindingFlags.NonPublic ||| BindingFlags.Static)
-        let nGetPrimaryAndSecondaryMeth = tHandle.GetMethod("nGetPrimaryAndSecondary", BindingFlags.NonPublic ||| BindingFlags.Static)
-        let nFreeMeth = tHandle.GetMethod("nFree", BindingFlags.NonPublic ||| BindingFlags.Static)
-
-        type NInitializeDelegate = delegate of obj * obj * byref<nativeint> -> unit
-        type NGetPrimaryDelegate = delegate of nativeint * byref<obj> -> unit
-        type NGetPrimaryAndSecondaryDelegate = delegate of nativeint * byref<obj> * byref<obj> -> unit
-        type NFreeDelegate = delegate of nativeint -> unit
-
-        let nInitializeDel = 
-            Delegate.CreateDelegate(typeof<NInitializeDelegate>, nInitializeMeth) |> unbox<NInitializeDelegate>
-
-        let nGetPrimaryDel = 
-            Delegate.CreateDelegate(typeof<NGetPrimaryDelegate>, nGetPrimaryMeth) |> unbox<NGetPrimaryDelegate>
-
-        let nGetPrimaryAndSecondaryDel = 
-            Delegate.CreateDelegate(typeof<NGetPrimaryAndSecondaryDelegate>, nGetPrimaryAndSecondaryMeth) |> unbox<NGetPrimaryAndSecondaryDelegate>
-            
-        let nFreeDel = 
-            Delegate.CreateDelegate(typeof<NFreeDelegate>, nFreeMeth) |> unbox<NFreeDelegate>
-
-    let nInitialize(primary : obj, secondary : obj, [<Out>] dependentHandle : byref<nativeint>) =
-        nInitializeDel.Invoke(primary, secondary, &dependentHandle)
-
-    let nGetPrimary(dependentHandle : nativeint, [<Out>] primary : byref<obj>) =
-        nGetPrimaryDel.Invoke(dependentHandle, &primary)
-
-    let nGetPrimaryAndSecondary(dependentHandle : nativeint, [<Out>] primary : byref<obj>, [<Out>] secondary : byref<obj>) =
-        nGetPrimaryAndSecondaryDel.Invoke(dependentHandle, &primary, &secondary)
-
-    let nFree(dependentHandle : nativeint) =
-        nFreeDel.Invoke(dependentHandle)
-
-type DependentHandle =
-    struct
-        val mutable public Handle : nativeint
-
-        member x.IsAllocated = x.Handle <> 0n
-
-        member x.GetPrimary() =
-            let mutable res = null
-            DependentHandleNative.nGetPrimary(x.Handle, &res)
-            res
-
-        member x.GetPrimaryAndSecondary() =
-            let mutable primary = null
-            let mutable secondary = null
-            DependentHandleNative.nGetPrimaryAndSecondary(x.Handle, &primary, &secondary)
-            primary, secondary
-
-        member x.Free() =
-            let h = System.Threading.Interlocked.Exchange(&x.Handle, 0n)
-            if h <> 0n then
-                DependentHandleNative.nFree(h)
-
-        new(primary : obj, secondary : obj) =
-            let mutable handle = 0n
-            DependentHandleNative.nInitialize(primary, secondary, &handle)
-            { Handle = handle }
-
-    end
-
 module Ranges =
     open System.Collections.Generic
 
@@ -822,9 +750,6 @@ let main argv =
 //
 //    System.Environment.Exit 0
 
-    let t =  typeof<VkSparseImageMemoryRequirements>
-    for f in t.GetFields() do
-        Marshal.OffsetOf(t, f.Name) |> printfn "%s: %d" f.Name 
 
 
     Ag.initialize()

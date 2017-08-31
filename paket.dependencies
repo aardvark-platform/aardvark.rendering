@@ -10,7 +10,7 @@ nuget Aardvark.Base.Runtime              ~> 3.0.35
                                          
 nuget FShade.Core                        ~> 3.2.5
 nuget FShade                             ~> 3.2.5
-nuget GLSLangSharp                       ~> 0.3.4
+nuget GLSLangSharp                       ~> 0.3.5
      
 nuget FSharp.Quotations.Evaluator        ~> 1.0.6
 nuget FSharp.Charting                    ~> 0.90.14
