@@ -560,9 +560,58 @@ module SparseTextureImplemetation =
             
                 let copies = List<VkBufferImageCopy>()
 
+                Log.startTimed "copy the data to tempBuffer"
                 tempBuffer.Memory.Mapped(fun ptr ->
                     let mutable ptr = ptr
                     let mutable offset = 0L
+
+
+//                    let b2 = 
+//                        [|
+//                            for i in 0 .. binds.Length - 1 do
+//                                let b = binds.[i]
+//                                let src = ranges.[i].data
+//
+//                                let dst =
+//                                    NativeTensor4<'a>(
+//                                        NativePtr.ofNativeInt ptr, 
+//                                        Tensor4Info(
+//                                            0L,
+//                                            V4l(b.size.X, b.size.Y, b.size.Z, channels),
+//                                            V4l(channels, b.size.X * channels, b.size.X * b.size.Y * channels, 1)
+//                                        )
+//                                    )
+//
+//                                if src.Size.AnyGreater dst.Size then
+//                                    failwith "bad brick size"
+//
+//                                let minSize = V4l.Min(src.Size, dst.Size)
+//                                let srcTensor = src.SubTensor4(V4l.Zero, minSize)
+//                                let dstTensor = dst.SubTensor4(V4l.Zero, minSize)
+//
+//                                if b.level >= back.SparseLevels then
+//                                    failwith "cannot bind non-sparse level"
+//
+//                                let copy =
+//                                    VkBufferImageCopy(
+//                                        uint64 offset,
+//                                        0u, 0u,
+//                                        back.[ImageAspect.Color, b.level, b.slice].VkImageSubresourceLayers,
+//                                        VkOffset3D(b.offset.X, b.offset.Y, b.offset.Z),
+//                                        VkExtent3D(uint32 minSize.X, uint32 minSize.Y, uint32 minSize.Z)
+//                                    )
+//                                copies.Add copy
+//
+//
+//                                let byteSize = int64 b.size.X * int64 b.size.Y * int64 b.size.Z * int64 channels * int64 sizeof<'a>
+//                                ptr <- ptr + nativeint byteSize
+//                                offset <- offset + byteSize
+//                                yield srcTensor,dstTensor
+//                        |]
+//
+//                    let r = System.Threading.Tasks.Parallel.ForEach(b2,fun (src,dst) -> NativeTensor4.copy src dst) 
+//                    ()
+
                     for i in 0 .. binds.Length - 1 do
                         let b = binds.[i]
                         let src = ranges.[i].data
@@ -601,6 +650,7 @@ module SparseTextureImplemetation =
                         ptr <- ptr + nativeint byteSize
                         offset <- offset + byteSize
                 )
+                Log.stop()
 
                 let copies = CSharpList.toArray copies
 
@@ -624,15 +674,21 @@ module SparseTextureImplemetation =
                     }
 
 
+                lock pendingBinds (fun () -> 
+                    for bind in binds do
+                        pendingBinds.[(bind.level, bind.slice, bind.offset)] <- bind
+                )
+
                 ReaderWriterLock.read updateLock (fun () ->
-                    lock pendingBinds (fun () -> 
-                        for bind in binds do
-                            pendingBinds.[(bind.level, bind.slice, bind.offset)] <- bind
-                    )
-
+                    let sw = System.Diagnostics.Stopwatch.StartNew()
                     back.Update binds
+                    sw.Stop()
+                    Log.warn "bind: %A" sw.MicroTime
 
+                    let sw = System.Diagnostics.Stopwatch.StartNew()
                     device.perform { do! copy }
+                    sw.Stop()
+                    Log.warn "copy: %A" sw.MicroTime
                 )
 
                 device.Delete tempBuffer
