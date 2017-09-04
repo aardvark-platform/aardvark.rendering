@@ -111,9 +111,10 @@ module UniformBuffer =
             }
 
     let delete (b : UniformBuffer) (device : Device) =
-        device.Delete(b :> Buffer)
-        UnmanagedStruct.free b.Storage
-        b.Storage <- UnmanagedStruct.Null
+        if b <> Unchecked.defaultof<_> then
+            device.Delete(b :> Buffer)
+            UnmanagedStruct.free b.Storage
+            b.Storage <- UnmanagedStruct.Null
 
 
 [<AbstractClass; Sealed; Extension>]

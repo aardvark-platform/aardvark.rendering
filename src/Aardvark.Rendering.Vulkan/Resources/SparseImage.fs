@@ -360,6 +360,7 @@ type SparseImageDeviceExtensions private() =
                 VkImageLayout.Preinitialized
             )
 
+
         let mutable handle = VkImage.Null
         VkRaw.vkCreateImage(device.Handle, &&info, NativePtr.zero, &&handle)
             |> check "could not create sparse image"
@@ -397,6 +398,8 @@ type BufferTensorExtensions private() =
    
 module SparseTextureImplemetation = 
     open Aardvark.Base.Incremental
+
+    type Bind<'a when 'a : unmanaged> = { level : int; slice : int; index : V3i; data : NativeTensor4<'a> }
 
     type DoubleBufferedSparseImage<'a when 'a : unmanaged>(device : Device, size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, usage : VkImageUsageFlags, brickSize : V3i, maxMemory : int64) =
         let fmt = VkFormat.ofPixFormat (PixFormat(typeof<'a>, format))
@@ -506,6 +509,21 @@ module SparseTextureImplemetation =
         let channels =
             VkFormat.channels back.Format
 
+
+        let toSparseImageUnbind (b : Bind<'a>) : SparseImageBind =
+            let levelSize = V3i.Max(size / (1 <<< b.level),V3i.III)
+            let offset = b.index * brickSize
+            let size = V3i.Min(levelSize, offset + brickSize) - offset
+            let alignedSize = Align.next3 size pageSize
+            { level = b.level; slice = b.slice; offset = offset; size = alignedSize; pointer = None }
+        
+        let toSparseImageBind (b : Bind<'a>) : SparseImageBind =
+            let levelSize = V3i.Max(size / (1 <<< b.level),V3i.III)
+            let offset = b.index * brickSize
+            let size = V3i.Min(levelSize, offset + brickSize) - offset
+            let alignedSize = Align.next3 size pageSize
+            let mem = memory.Alloc(align, int64 alignedSize.X * int64 alignedSize.Y * int64 alignedSize.Z * int64 sizeof<'a>)
+            { level = b.level; slice = b.slice; offset = offset; size = alignedSize; pointer = Some mem }
         
         [<CLIEvent>]
         member x.OnSwap = onSwap.Publish
@@ -529,6 +547,111 @@ module SparseTextureImplemetation =
             if level < 0 || level >= levels then failwith "[SparseTexture] miplevel out of bounds"
             let levelSize = size / (1 <<< level)
             div3 levelSize brickSize
+
+
+        member x.UploadBricks(ranges : array<Bind<'a>>) =
+            
+            if ranges.Length > 0 then
+                let cnt = ranges.Length
+                let totalSize = int64 cnt * brickSizeInBytes
+
+                let binds = ranges |> Array.map toSparseImageBind
+                let tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit totalSize
+            
+                let copies = List<VkBufferImageCopy>()
+
+                tempBuffer.Memory.Mapped(fun ptr ->
+                    let mutable ptr = ptr
+                    let mutable offset = 0L
+                    for i in 0 .. binds.Length - 1 do
+                        let b = binds.[i]
+                        let src = ranges.[i].data
+
+                        let dst =
+                            NativeTensor4<'a>(
+                                NativePtr.ofNativeInt ptr, 
+                                Tensor4Info(
+                                    0L,
+                                    V4l(b.size.X, b.size.Y, b.size.Z, channels),
+                                    V4l(channels, b.size.X * channels, b.size.X * b.size.Y * channels, 1)
+                                )
+                            )
+
+                        if src.Size.AnyGreater dst.Size then
+                            failwith "bad brick size"
+
+                        let minSize = V4l.Min(src.Size, dst.Size)
+                        NativeTensor4.copy (src.SubTensor4(V4l.Zero, minSize)) (dst.SubTensor4(V4l.Zero, minSize))
+
+                        if b.level >= back.SparseLevels then
+                            failwith "cannot bind non-sparse level"
+
+                        let copy =
+                            VkBufferImageCopy(
+                                uint64 offset,
+                                0u, 0u,
+                                back.[ImageAspect.Color, b.level, b.slice].VkImageSubresourceLayers,
+                                VkOffset3D(b.offset.X, b.offset.Y, b.offset.Z),
+                                VkExtent3D(uint32 minSize.X, uint32 minSize.Y, uint32 minSize.Z)
+                            )
+                        copies.Add copy
+
+
+                        let byteSize = int64 b.size.X * int64 b.size.Y * int64 b.size.Z * int64 channels * int64 sizeof<'a>
+                        ptr <- ptr + nativeint byteSize
+                        offset <- offset + byteSize
+                )
+
+                let copies = CSharpList.toArray copies
+
+                let copy =
+                    { new Command() with
+                        member x.Compatible = QueueFlags.All
+                        member x.Enqueue cmd =
+                            copies |> NativePtr.withA (fun pCopies ->
+                                cmd.AppendCommand()
+                                VkRaw.vkCmdCopyBufferToImage(
+                                    cmd.Handle,
+                                    tempBuffer.Handle,
+                                    back.Handle,
+                                    VkImageLayout.TransferDstOptimal,
+                                    uint32 copies.Length,
+                                    pCopies
+                                )
+                            )
+
+                            Disposable.Empty
+                    }
+
+
+                ReaderWriterLock.read updateLock (fun () ->
+                    lock pendingBinds (fun () -> 
+                        for bind in binds do
+                            pendingBinds.[(bind.level, bind.slice, bind.offset)] <- bind
+                    )
+
+                    back.Update binds
+
+                    device.perform { do! copy }
+                )
+
+                device.Delete tempBuffer
+
+                binds
+            else
+                [||]
+
+        member x.Unbind(binds : array<SparseImageBind>) =
+            ReaderWriterLock.read updateLock (fun () ->
+                let unbinds = binds |> Array.map (fun bind -> { bind with pointer = None })
+                back.Update unbinds
+                lock pendingBinds (fun () -> 
+                    for i in 0 .. binds.Length - 1 do
+                        let unbind = unbinds.[i]
+                        pendingBinds.[(unbind.level, unbind.slice, unbind.offset)] <- unbind
+                        unusedPointers.Add binds.[i].pointer.Value
+                )
+            )
 
         member x.UploadBrick(level : int, slice : int, index : V3i, data : NativeTensor4<'a>) : IDisposable =
             if isDisposed then failwith "[SparseTexture] disposed"
