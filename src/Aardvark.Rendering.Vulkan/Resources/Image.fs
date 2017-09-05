@@ -1517,6 +1517,9 @@ type Image =
         val mutable public Format : VkFormat
         val mutable public Memory : DevicePtr
         val mutable public Layout : VkImageLayout
+        val mutable public RefCount : int
+
+        member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
 
         interface ITexture with 
             member x.WantMipMaps = x.MipMapLevels > 1
@@ -1567,6 +1570,7 @@ type Image =
                 Format = fmt
                 Memory = mem
                 Layout = layout
+                RefCount = 1
             }
     end
 
@@ -3164,10 +3168,11 @@ module Image =
         result
 
     let delete (img : Image) (device : Device) =
-        if device.Handle <> 0n && img.Handle.IsValid then
-            VkRaw.vkDestroyImage(img.Device.Handle, img.Handle, NativePtr.zero)
-            img.Memory.Dispose()
-            img.Handle <- VkImage.Null
+        if Interlocked.Decrement(&img.RefCount) = 0 then
+            if device.Handle <> 0n && img.Handle.IsValid then
+                VkRaw.vkDestroyImage(img.Device.Handle, img.Handle, NativePtr.zero)
+                img.Memory.Dispose()
+                img.Handle <- VkImage.Null
 
     let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
         let vkfmt = VkFormat.ofTextureFormat fmt
@@ -3361,6 +3366,7 @@ module Image =
                 failf "BitmapTexture considered obsolete"
 
             | :? Image as t ->
+                t.AddReference()
                 t
 
             | _ ->

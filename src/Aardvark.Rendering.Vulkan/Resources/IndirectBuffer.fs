@@ -55,6 +55,7 @@ module IndirectBuffer =
     let create (indexed : bool) (b : IIndirectBuffer) (device : Device) =
         match b with
             | :? IndirectBuffer as b ->
+                b.AddReference()
                 b
 
             | :? Aardvark.Base.IndirectBuffer as b ->

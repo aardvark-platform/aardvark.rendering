@@ -97,8 +97,6 @@
     <Compile Include="Swapchain\SwapchainDescription.fs" />
     <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
-    <Compile Include="Management\ResourcesNew.fs" />
-    <Compile Include="Management\ResourcesNewer.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Runtime\DebugReport.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />

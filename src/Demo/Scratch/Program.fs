@@ -190,7 +190,7 @@ module ShaderStuff =
             |> Sg.uniform "A" (Mod.constant V3d.IOI)
             |> Sg.uniform "B" (Mod.constant V3d.OII)
             |> Sg.uniform "C" (Mod.constant 1.0)
-            |> Sg.diffuseFileTexture' @"/home/schorsch/bla.png" true
+            |> Sg.diffuseFileTexture' @"C:\Users\Schorsch\Development\WorkDirectory\pattern.jpg" true
 
 
 
@@ -756,6 +756,6 @@ let main argv =
     Aardvark.Init()
 
     App.Config <- { BackendConfiguration.Default with useDebugOutput = true }
-    App.run(ShaderStuff.duplTexture())
+    App.run()
 
     0 // return an integer exit code

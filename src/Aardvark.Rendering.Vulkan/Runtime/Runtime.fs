@@ -84,7 +84,15 @@ type private MappedIndirectBuffer private(device : Device, indexed : bool, store
 type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
     let instance = device.Instance
     do device.Runtime <- this
-    let manager = new ResourcesNew.ResourceManager(device)
+
+    let noUser =
+        {
+            new IResourceUser with
+                member x.AddLocked _ = ()
+                member x.RemoveLocked _ = ()
+        }
+
+    let manager = new ResourceManager(noUser, device)
 
     static let shaderStages =
         LookupTable.lookupTable [

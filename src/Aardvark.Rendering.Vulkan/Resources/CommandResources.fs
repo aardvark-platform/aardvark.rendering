@@ -198,6 +198,16 @@ type DescriptorSetBinding =
                 Layout = layout.Handle
                 Sets = pSets
             }
+
+        new(layout : PipelineLayout, first : int, count : int) =
+            let pSets = NativePtr.alloc count
+
+            {
+                FirstIndex = first
+                Count = count
+                Layout = layout.Handle
+                Sets = pSets
+            }
     end
 
 [<AbstractClass; Sealed; Extension>]

@@ -19,7 +19,7 @@ open Aardvark.Base.Runtime
 module RenderTasks =
     
     [<AbstractClass>]
-    type AbstractVulkanRenderTask(manager : ResourcesNew.ResourceManager, renderPass : RenderPass, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
+    type AbstractVulkanRenderTask(manager : ResourceManager, renderPass : RenderPass, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
 
         let fboSignature = renderPass :> IFramebufferSignature
@@ -85,7 +85,7 @@ module RenderTasks =
         let mutable commandVersion = -1
         let mutable resourceHandlesChanged = false
 
-        let resources = ResourcesNew.ResourceSet()
+        let resources = ResourceSet()
 
         static let inPlaceResources =
             HashSet.ofList [
@@ -137,7 +137,7 @@ module RenderTasks =
             x.EvaluateAlways caller (fun caller ->
                 x.init(caller)
                 if x.OutOfDate then
-                    resourceHandlesChanged <- resources.Update(caller, token)
+                    resourceHandlesChanged <- resources.Update(caller) || resourceHandlesChanged
                     x.UpdateProgram(caller, token)
             )
 
@@ -147,7 +147,7 @@ module RenderTasks =
             let viewportChanged     = lastViewports <> viewports
 
             if resourceHandlesChanged || versionChanged || viewportChanged then
-                //Log.line "{ handles: %A; version: %A; viewport: %A }" resourceHandlesChanged versionChanged viewportChanged
+                Log.line "{ handles: %A; version: %A; viewport: %A }" resourceHandlesChanged versionChanged viewportChanged
                 resourceHandlesChanged <- false
                 cmd.Begin(renderPass, CommandBufferUsage.RenderPassContinue)
                 cmd.enqueue {
@@ -307,8 +307,9 @@ module RenderTasks =
 
             objectsWithKeys <- Unchecked.defaultof<_>
 
-    type RenderTask(man : ResourcesNew.ResourceManager, renderPass : RenderPass, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
+    type RenderTask(man : ResourceManager, renderPass : RenderPass, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractVulkanRenderTask(man, renderPass, config, shareTextures, shareBuffers)
+
 
         let mutable currentToken = Unchecked.defaultof<AdaptiveToken>
 
@@ -445,7 +446,7 @@ module RenderTasks =
             commandBuffers <- Map.empty
 
 
-    type ClearTask(manager : ResourcesNew.ResourceManager, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
+    type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
         inherit AdaptiveObject()
         static let depthStencilFormats =
             HashSet.ofList [

@@ -19,6 +19,7 @@ type Buffer =
     class
         inherit Resource<VkBuffer>
         val mutable public Memory : DevicePtr
+        val mutable public RefCount : int
 
         member x.Size = x.Memory.Size
 
@@ -26,7 +27,9 @@ type Buffer =
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Memory.Size
 
-        new(device, handle, memory) = { inherit Resource<_>(device, handle); Memory = memory }
+        member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
+
+        new(device, handle, memory) = { inherit Resource<_>(device, handle); Memory = memory; RefCount = 1 }
     end
 
 type BufferView =
@@ -350,10 +353,11 @@ module Buffer =
         }
 
     let delete (buffer : Buffer) (device : Device) =
-        if buffer.Handle.IsValid && buffer.Size > 0L then
-            VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
-            buffer.Handle <- VkBuffer.Null
-            buffer.Memory.Dispose()
+        if Interlocked.Decrement(&buffer.RefCount) = 0 then
+            if buffer.Handle.IsValid && buffer.Size > 0L then
+                VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
+                buffer.Handle <- VkBuffer.Null
+                buffer.Memory.Dispose()
 
     let tryUpdate (data : IBuffer) (buffer : Buffer) =
         match data with 
@@ -399,6 +403,7 @@ module Buffer =
                     
 
             | :? Buffer as b ->
+                b.AddReference()
                 b
 
             | _ ->
