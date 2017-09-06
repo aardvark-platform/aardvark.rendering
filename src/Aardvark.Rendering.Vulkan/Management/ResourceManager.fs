@@ -81,7 +81,8 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
             if refCount = 0 then
                 owner.Remove key
                 x.Destroy()
-                assert (x.Outputs.IsEmpty)
+                let mutable foo = 0
+                x.Outputs.Consume(&foo) |> ignore
                 x.OutOfDate <- true
         )
   
