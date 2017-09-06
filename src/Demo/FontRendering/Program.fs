@@ -294,6 +294,84 @@ module VulkanTests =
         for t in renderers do t.Join()
 
         img.Dispose()
+    
+    type VkExternalMemoryHandleTypeFlagBitsKHR =
+        | OpaqueFd = 0x00000001
+        | OpaqueWin32 = 0x00000002
+        | OpaqueWin32KMT = 0x00000004
+        | D3D11Texture = 0x00000008
+        | D3D11TextureKMT = 0x00000010
+        | D3D12Heap = 0x00000020
+        | D3D12Resource = 0x00000040
+
+    type VkStructureType with
+        static member inline MemoryWin32Import = unbox<VkStructureType> 1000073000
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkImportMemoryWin32HandleInfoKHR =
+        struct
+            val mutable public sType : VkStructureType
+            val mutable public pNext : nativeint
+            val mutable public handleType : VkExternalMemoryHandleTypeFlagBitsKHR
+            val mutable public handle : nativeint
+            val mutable public name : cstr
+
+            new(stype, pnext, handleType, handle, name) =
+                {
+                    sType = stype
+                    pNext = pnext
+                    handleType = handleType
+                    handle = handle
+                    name = name
+                }
+
+        end
+
+    open System.IO
+    open System.IO.MemoryMappedFiles
+    let mappedFile() =
+        use app = new HeadlessVulkanApplication(true)
+        let device = app.Device
+
+        let file = MemoryMappedFile.CreateFromFile(@"C:\Users\Schorsch\Desktop\bla.txt")
+        let view = file.CreateViewAccessor()
+
+        let handle = view.SafeMemoryMappedViewHandle.DangerousGetHandle()
+
+        let mutable import =
+            VkImportMemoryWin32HandleInfoKHR(
+                VkStructureType.MemoryWin32Import, 0n,
+                VkExternalMemoryHandleTypeFlagBitsKHR.OpaqueWin32KMT,
+                handle,
+                NativePtr.zero
+            )
+
+        let mutable info =
+            VkMemoryAllocateInfo(
+                VkStructureType.MemoryAllocateInfo, &&import |> NativePtr.toNativeInt,
+                uint64 35,
+                uint32 device.HostMemory.Index
+            )
+
+        let mutable handle = VkDeviceMemory.Null
+        VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&handle)
+            |> printfn "alloc: %A"
+
+        let mutable ptr = 0n
+        VkRaw.vkMapMemory(device.Handle, handle, 0UL, 35UL, VkMemoryMapFlags.MinValue, &&ptr)
+            |> printfn "map: %A"
+
+        let data : byte[] = Array.zeroCreate 35
+        Marshal.Copy(ptr, data, 0, data.Length)
+        let str = System.Text.Encoding.UTF8.GetString(data)
+        printfn "data: %A" str
+
+        VkRaw.vkUnmapMemory(device.Handle, handle)
+
+
+        ()
+
+
 
 let tensorPerformance() =
     
@@ -388,7 +466,7 @@ let main argv =
     Aardvark.Init()
 
     //tensorPerformance()
-    VulkanTests.run()
+    VulkanTests.mappedFile()
     Environment.Exit 0
 
 
