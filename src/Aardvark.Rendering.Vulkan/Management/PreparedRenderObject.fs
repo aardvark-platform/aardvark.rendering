@@ -38,10 +38,8 @@ type PreparedRenderObject =
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
         for r in x.resources do r.Update(caller) |> ignore
 
-
-//
-//    member x.IncrementReferenceCount() =
-//        for r in x.resources do r.Acquire()
+    member x.IncrementReferenceCount() =
+        for r in x.resources do r.Acquire()
 
 
     interface IPreparedRenderObject with
@@ -126,9 +124,6 @@ type DevicePreparedRenderObjectExtensions private() =
                                                     let tex = this.CreateImage(tex)
                                                     let view = this.CreateImageView(tex)
                                                     let sam = this.CreateSampler(Mod.constant samplerState)
-                                                    resources.Add tex
-                                                    resources.Add view
-                                                    resources.Add sam
 
                                                     Some(view, sam)
 
@@ -142,7 +137,6 @@ type DevicePreparedRenderObjectExtensions private() =
                     )
 
                 let res = this.CreateDescriptorSet(ds, Array.toList descriptors)
-                resources.Add res
 
                 res
             )
@@ -171,7 +165,6 @@ type DevicePreparedRenderObjectExtensions private() =
             bufferViews 
                 |> List.map (fun (name,loc, _, view) ->
                     let buffer = this.CreateBuffer(view.Buffer)
-                    resources.Add buffer
                     buffer, int64 view.Offset
                 )
 
@@ -210,7 +203,6 @@ type DevicePreparedRenderObjectExtensions private() =
                 | Some view -> 
                     let buffer = this.CreateIndexBuffer(view.Buffer)
                     let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
-                    resources.Add buffer
                     resources.Add res
                     Some res
                 | None -> 
@@ -224,7 +216,6 @@ type DevicePreparedRenderObjectExtensions private() =
                     this.CreateDrawCall(indexed, ro.DrawCallInfos)
                 | b -> 
                     let indirect = this.CreateIndirectBuffer(indexed, b)
-                    resources.Add indirect
                     this.CreateDrawCall(indexed, indirect)
         resources.Add calls
         let bindings =
@@ -240,6 +231,7 @@ type DevicePreparedRenderObjectExtensions private() =
         let isActive = this.CreateIsActive ro.IsActive
         resources.Add isActive
 
+        for r in resources do r.Acquire()
 
         let res = 
             {

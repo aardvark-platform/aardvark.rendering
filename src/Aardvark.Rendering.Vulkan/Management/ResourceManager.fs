@@ -1207,7 +1207,6 @@ type ResourceSet() =
     member x.Add(r : IResourceLocation) =
         if all.Add r then
             lock r (fun () ->
-                r.Acquire()
                 if r.OutOfDate then
                     lock dirty (fun () -> dirty.Add r |> ignore)
                 else
@@ -1217,7 +1216,6 @@ type ResourceSet() =
     member x.Remove(r : IResourceLocation) =
         if all.Remove r then
             lock r (fun () ->
-                r.Release()
                 r.RemoveOutput x
                 lock dirty (fun () -> dirty.Remove r |> ignore)
             )

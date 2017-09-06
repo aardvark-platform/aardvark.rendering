@@ -86,13 +86,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     do device.Runtime <- this
 
     let noUser =
-        {
-            new IResourceUser with
-                member x.AddLocked _ = ()
-                member x.RemoveLocked _ = ()
+        { new IResourceUser with
+            member x.AddLocked _ = ()
+            member x.RemoveLocked _ = ()
         }
 
-    let manager = new ResourceManager(noUser, device)
+    let manager = ResourceManager(noUser, device)
 
     static let shaderStages =
         LookupTable.lookupTable [
@@ -194,12 +193,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
-        new RenderTasks.RenderTask(manager, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
+        new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
         let pass = unbox<RenderPass> signature
         let colors = pass.ColorAttachments |> Map.toSeq |> Seq.map (fun (_,(sem,att)) -> sem, color |> Mod.map (Map.find sem)) |> Map.ofSeq
-        new RenderTasks.ClearTask(manager, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
+        new RenderTasks.ClearTask(device, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
 
 
 

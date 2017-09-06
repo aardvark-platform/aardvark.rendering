@@ -19,12 +19,21 @@ open Aardvark.Base.Runtime
 module RenderTasks =
     
     [<AbstractClass>]
-    type AbstractVulkanRenderTask(manager : ResourceManager, renderPass : RenderPass, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
+    type AbstractVulkanRenderTask(device : Device, renderPass : RenderPass, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
 
+        let locks = ReferenceCountingSet<ILockedResource>()
+
+        let user =
+            { new IResourceUser with
+                member x.AddLocked l = lock locks (fun () -> locks.Add l |> ignore)
+                member x.RemoveLocked l = lock locks (fun () -> locks.Remove l |> ignore)
+            }
+
+        let manager = new ResourceManager(user, device)
+
         let fboSignature = renderPass :> IFramebufferSignature
-        let device = manager.Device
-        let renderTaskLock = RenderTaskLock()
+        let device = device
         let manager = manager
         let runtimeStats = NativePtr.alloc 1
         let mutable isDisposed = false
@@ -40,9 +49,16 @@ module RenderTasks =
         abstract member Perform : AdaptiveToken * RenderToken * Framebuffer -> unit
         abstract member Release : unit -> unit
 
+        member x.UseRender (action : unit -> 'r) =
+            let locks = lock locks (fun () -> Seq.toList locks)
+            for l in locks do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
+            try
+                action()
+            finally 
+                for l in locks do l.Lock.Exit(l.OnUnlock)
+
         member x.Config = config
         member x.Device = device
-        member x.RenderTaskLock = renderTaskLock
         member x.ResourceManager = manager
 
         override x.Dispose() =
@@ -307,8 +323,8 @@ module RenderTasks =
 
             objectsWithKeys <- Unchecked.defaultof<_>
 
-    type RenderTask(man : ResourceManager, renderPass : RenderPass, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
-        inherit AbstractVulkanRenderTask(man, renderPass, config, shareTextures, shareBuffers)
+    type RenderTask(device : Device, renderPass : RenderPass, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
+        inherit AbstractVulkanRenderTask(device, renderPass, config, shareTextures, shareBuffers)
 
 
         let mutable currentToken = Unchecked.defaultof<AdaptiveToken>
@@ -316,9 +332,9 @@ module RenderTasks =
         let prepare (o : IRenderObject) =
             this.ResourceManager.PrepareRenderObject(currentToken, renderPass, o, this.HookRenderObject)
 
-        let device = man.Device
         let preparedCache = Cache<IRenderObject, PreparedMultiRenderObject>(prepare)
         let objectReader = objects.GetReader()
+        //let device = this.ResourceManager
 
         let preparedObjectReader =
             { new AbstractReader<hdeltaset<PreparedMultiRenderObject>>(Ag.emptyScope, HDeltaSet.monoid) with
@@ -381,7 +397,7 @@ module RenderTasks =
 
         override x.Use (f : unit -> 'a) =
             lock x (fun () ->
-                x.RenderTaskLock.Run (fun () ->
+                x.UseRender (fun () ->
                     f()
                 )
             )
@@ -400,7 +416,6 @@ module RenderTasks =
             let vp = Array.create renderPass.AttachmentCount bounds
 
             update caller
-
             let commandBuffers =
                 commandBuffers 
                     |> Map.toList 
@@ -411,7 +426,7 @@ module RenderTasks =
                     )
 
 
-            x.RenderTaskLock.Run (fun () ->
+            x.UseRender (fun () ->
                 devToken.enqueue {
                     
                     let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
@@ -446,7 +461,7 @@ module RenderTasks =
             commandBuffers <- Map.empty
 
 
-    type ClearTask(manager : ResourceManager, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
+    type ClearTask(device : Device, renderPass : RenderPass, clearColors : Map<Symbol, IMod<C4f>>, clearDepth : IMod<Option<float>>, clearStencil : Option<IMod<uint32>>) =
         inherit AdaptiveObject()
         static let depthStencilFormats =
             HashSet.ofList [
@@ -455,7 +470,6 @@ module RenderTasks =
                 RenderbufferFormat.DepthStencil
             ]
         
-        let device = manager.Device
         let pool = device.GraphicsFamily.CreateCommandPool()
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
 
