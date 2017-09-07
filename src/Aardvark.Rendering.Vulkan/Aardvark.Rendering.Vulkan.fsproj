@@ -188,7 +188,7 @@
     <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.5'">
       <ItemGroup>
         <Reference Include="DevILSharp">
-          <HintPath>..\..\packages\DevilSharp\lib\net45\DevILSharp.dll</HintPath>
+          <HintPath>..\..\packages\DevILSharp\lib\net45\DevILSharp.dll</HintPath>
           <Private>True</Private>
           <Paket>True</Paket>
         </Reference>
