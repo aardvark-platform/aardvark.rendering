@@ -1,8 +1,11 @@
 type project
 id Aardvark.SceneGraph
-authors VRVis Research Center
+authors Aardvark Platform Team
+owners Aardvark Platform Team
+projectUrl http://github.com/aardvark-platform
+licenseUrl http://www.apache.org/licenses/LICENSE-2.0.txt
 description
-    Aardvark.SceneGraph
+    Aardvark is an open-source platform for visual computing, real-time graphics and visualization.
 files
     ..\..\bin\Release\Aardvark.SceneGraph.dll ==> lib\net45
     ..\..\bin\Release\Aardvark.SceneGraph.pdb ==> lib\net45
