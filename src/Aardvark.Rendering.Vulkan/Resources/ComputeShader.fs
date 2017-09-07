@@ -24,7 +24,8 @@ type ComputeShader =
         val mutable public Handle : VkPipeline
         val mutable public TextureNames : Map<string * int, string>
         val mutable public Samplers : Map<string * int, Sampler>
-        new(d,s,l,p,tn,sd) = { Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd }
+        val mutable public GroupSize : V3i
+        new(d,s,l,p,tn,sd,gs) = { Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs }
     end
 
 type ComputeShaderInputBinding(pool : DescriptorPool, shader : ComputeShader, sets : DescriptorSet[], storageBuffers : Dictionary<string, Buffer>, images : Dictionary<string, Image>, release : unit -> unit) =
@@ -379,7 +380,7 @@ module ComputeShader =
                     shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerStateDescription)
                 
 
-                ComputeShader(device, sm, layout, handle, shader.csTextureNames, samplers)
+                ComputeShader(device, sm, layout, handle, shader.csTextureNames, samplers, shader.csLocalSize)
             | _ ->
                 failf "could not create compute shader"
 

@@ -378,7 +378,184 @@ module VulkanTests =
             do! Command.Dispatch(dst.Size)
         }
 
+    [<Literal>]
+    let scanSize = 2048
+
+    [<Literal>]
+    let halfScanSize = 1024
+
+    [<LocalSize(X = halfScanSize)>]
+    let scan2048 (inputOffset : int) (inputDelta : int) (inputSize : int) (input : float[]) (outputOffset : int) (outputDelta : int) (output : float[]) =
+        compute {
+            let mem : float[] = allocateShared scanSize
+            let gid = getGlobalId().X
+
+            let gid0 = gid
+            let lid0 =  getLocalId().X
+
+            let lgid = 2 * gid0
+            let rgid = lgid + 1
+            
+            let llid = 2 * lid0
+            let rlid = llid + 1
+
+            if lgid < inputSize then mem.[llid] <- input.[inputOffset + lgid * inputDelta]
+            else mem.[llid] <- 0.0
+
+            if rlid < inputSize then mem.[rlid] <- input.[inputOffset + rgid * inputDelta]
+            else mem.[rlid] <- 0.0
+
+            barrier()
+            
+            let mutable s = 1
+            let mutable d = 2
+            while d <= scanSize do
+                if llid % d = 0 && llid >= s then
+                    mem.[llid] <- mem.[llid] + mem.[llid - s]
+
+                barrier()
+                s <- s <<< 1
+                d <- d <<< 1
+
+            d <- d >>> 1
+            s <- s >>> 1
+            while s >= 1 do
+                if llid % d = 0 && llid + s < scanSize then
+                    mem.[llid + s] <- mem.[llid + s] + mem.[llid]
+                    
+                barrier()
+                s <- s >>> 1
+                d <- d >>> 1
+
+            if lgid < inputSize then
+                output.[outputOffset + lgid * outputDelta] <- mem.[llid]
+            if rgid < inputSize then
+                output.[outputOffset + rgid * outputDelta] <- mem.[rlid]
+
+        }
         
+    [<LocalSize(X = halfScanSize)>]
+    let addParentSum (dataLength : int) (offset : int) (scan : float[]) (data : float[]) =
+        compute {
+            let id = offset + getGlobalId().X
+            let pid = id / offset - 1
+            let s = scan.[pid]
+
+
+            if id < dataLength then
+                data.[id] <- data.[id] + s
+
+        }
+
+    [<LocalSize(X = 8, Y = 8)>]
+    let reduce8 (dst : Image2d<Formats.rgba8>) =
+        compute {
+            let mem : V3d[] = allocateShared 64
+
+            let lid = getLocalId().XY
+            let gid = getGlobalId().XY
+
+            let li = lid.Y * 8 + lid.X
+            mem.[li] <- sourceSampler.[gid, 0].XYZ
+            barrier()
+
+            let mutable off = 1
+            let mutable d = 2
+            while d <= 64 do
+                if li % d = 0 && li + off < 64 then
+                    mem.[li] <- mem.[li] + mem.[li + off]
+
+                barrier()
+                off <- off <<< 1
+                d <- d <<< 1
+
+            if li = 0 then
+                let di = gid / 8
+                dst.[di] <- V4d(mem.[0] / 64.0, 1.0)
+
+        }
+
+
+    let testreduce8() =
+        use app = new HeadlessVulkanApplication(false)
+        let device = app.Device
+        let shader = device |> ComputeShader.ofFunction scan2048
+        let pool = device.CreateDescriptorPool(1 <<< 20, 1 <<< 20)
+       
+        let cnt = 1 <<< 20
+        let input = ArrayBuffer (Array.init cnt (fun _ -> 1.0f))
+        let output = device.CreateBuffer(VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.TransferSrcBit, int64 cnt * 4L)
+        let mappable = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 cnt * 4L)
+
+        //(inputOffset : int) (inputDelta : int) (inputSize : int) (input : float[]) (outputOffset : int) (outputDelta : int) (res : float[])
+        let args0 = ComputeShader.newInputBinding shader pool
+        args0.["inputOffset"] <- 0
+        args0.["inputDelta"] <- 1
+        args0.["inputSize"] <- cnt
+        args0.["input"] <- input
+        args0.["outputOffset"] <- 0
+        args0.["outputDelta"] <- 1
+        args0.["output"] <- output
+        args0.Flush()
+        
+        let temp = device.CreateBuffer(VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.TransferSrcBit, int64 (cnt / 2048) * 4L)
+        let args1 = ComputeShader.newInputBinding shader pool
+        args1.["inputOffset"] <- scanSize
+        args1.["inputDelta"] <- scanSize
+        args1.["inputSize"] <- (cnt - scanSize) / scanSize
+        args1.["input"] <- output
+        args1.["outputOffset"] <- 0
+        args1.["outputDelta"] <- 1
+        args1.["output"] <- temp
+        args1.Flush()
+
+        
+        let shader2 = device |> ComputeShader.ofFunction addParentSum
+        
+        let argsAdd = ComputeShader.newInputBinding shader2 pool
+        argsAdd.["scan"] <- temp
+        argsAdd.["data"] <- output
+        argsAdd.["dataLength"] <- cnt / scanSize
+        argsAdd.["offset"] <- scanSize
+        argsAdd.Flush()
+
+        device.perform {
+            do! Command.Bind shader
+
+            do! Command.SetInputs args0
+            do! Command.Dispatch(cnt / scanSize)
+
+            do! Command.SetInputs args1
+            do! Command.Dispatch(cnt / scanSize / scanSize)
+
+            do! Command.Bind shader2
+            do! Command.SetInputs argsAdd
+            do! Command.Dispatch((cnt - scanSize) / halfScanSize)
+
+            do! Command.Copy(output, mappable)
+        }
+
+        let result : float32[] = Array.zeroCreate cnt
+        let gc = GCHandle.Alloc(result, GCHandleType.Pinned)
+        mappable.Memory.Mapped (fun src -> Marshal.Copy(src, gc.AddrOfPinnedObject(), int64 cnt * 4L))
+        gc.Free()
+
+        let check = Array.init cnt (fun i -> 1 + (i % 2048) |> float32)
+        if check = result then
+            printfn "OK"
+        else
+            printfn "ERROR:"
+            for i in 0 .. cnt - 1 do
+                if result.[i] <> check.[i] then
+                    printfn "  %d: %A vs %A" i result.[i] check.[i]
+
+        args0.Dispose()
+        args1.Dispose()
+        argsAdd.Dispose()
+        device.Delete output
+        device.Delete mappable
+        ComputeShader.delete shader
+        device.Delete pool
 
 
     let shader() =
@@ -413,6 +590,8 @@ module VulkanTests =
             do! Command.TransformLayout(img, VkImageLayout.General)
         }
 
+        let groups = size / shader.GroupSize.XY
+
         let iter = 1000
         let innerIter = 1
         let cmd =
@@ -420,7 +599,7 @@ module VulkanTests =
                 do! Command.Bind shader
                 do! Command.SetInputs args
                 for i in 1 .. innerIter do
-                    do! Command.Dispatch(size)
+                    do! Command.Dispatch(groups)
             }
 
         let cmdBuffer = family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
@@ -469,7 +648,7 @@ module VulkanTests =
                 do! Command.Bind shader2
                 do! Command.SetInputs args
                 for i in 1 .. innerIter do
-                    do! Command.Dispatch(linearSize)
+                    do! Command.Dispatch(linearSize / shader2.GroupSize.X)
             }
 
         let cmdBuffer = family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
@@ -588,7 +767,7 @@ let main argv =
     Aardvark.Init()
 
     //tensorPerformance()
-    VulkanTests.shader()
+    VulkanTests.testreduce8()
     Environment.Exit 0
 
 
