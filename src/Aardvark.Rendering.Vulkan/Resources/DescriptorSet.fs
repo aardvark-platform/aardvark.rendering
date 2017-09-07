@@ -15,7 +15,9 @@ open Microsoft.FSharp.NativeInterop
 
 type Descriptor =
     | UniformBuffer of int * UniformBuffer
+    | StorageBuffer of int * Buffer
     | CombinedImageSampler of int * array<Option<ImageView * Sampler>>
+    | StorageImage of int * ImageView
 
 type DescriptorSet =
     class
@@ -66,6 +68,30 @@ module DescriptorSet =
             descriptors
                 |> Array.collect (fun desc ->
                     match desc with
+                        | StorageBuffer (binding, b) ->
+                            let info = 
+                                VkDescriptorBufferInfo(
+                                    b.Handle, 
+                                    0UL, 
+                                    uint64 b.Size
+                                )
+
+                            NativePtr.write bufferInfos info
+                            let ptr = bufferInfos
+                            bufferInfos <- NativePtr.step 1 bufferInfos
+
+                            [|
+                                VkWriteDescriptorSet(
+                                    VkStructureType.WriteDescriptorSet, 0n,
+                                    set.Handle,
+                                    uint32 binding,
+                                    0u, 1u, VkDescriptorType.StorageBuffer,
+                                    NativePtr.zero,
+                                    ptr,
+                                    NativePtr.zero
+                                )
+                            |]
+
                         | UniformBuffer (binding, ub) ->
                             let info = 
                                 VkDescriptorBufferInfo(
@@ -89,6 +115,7 @@ module DescriptorSet =
                                     NativePtr.zero
                                 )
                             |]
+
                         | CombinedImageSampler(binding, arr) ->
                             arr |> Array.choosei (fun i vs ->
                                 match vs with
@@ -119,6 +146,30 @@ module DescriptorSet =
                                         None
                             )
 
+                        | StorageImage(binding, view) ->
+                            let info =
+                                VkDescriptorImageInfo(
+                                    VkSampler.Null,
+                                    view.Handle,
+                                    VkImageLayout.General
+                                )
+
+                            NativePtr.write imageInfos info
+                            let ptr = imageInfos
+                            imageInfos <- NativePtr.step 1 imageInfos
+                            
+                            let write = 
+                                VkWriteDescriptorSet(
+                                    VkStructureType.WriteDescriptorSet, 0n,
+                                    set.Handle,
+                                    uint32 binding,
+                                    0u, 1u, VkDescriptorType.StorageImage,
+                                    ptr,
+                                    NativePtr.zero,
+                                    NativePtr.zero
+                                )
+
+                            [| write |]
                    )
 
         let pWrites = NativePtr.pushStackArray writes

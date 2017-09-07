@@ -91,7 +91,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             member x.RemoveLocked _ = ()
         }
 
-    let manager = ResourceManager(noUser, device)
+    let manager = new ResourceManager(noUser, device)
 
     static let shaderStages =
         LookupTable.lookupTable [
@@ -372,8 +372,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.Dispose() = 
         onDispose.Trigger()
         debugSubscription.Dispose()
-        Log.warn "dispose resource manager"
-        //manager.Dispose()
+        manager.Dispose()
         device.Dispose()
         
     interface IDisposable with

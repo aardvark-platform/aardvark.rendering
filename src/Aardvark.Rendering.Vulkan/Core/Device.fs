@@ -72,10 +72,37 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                         available.[fam.index] <- { fam with count = 0 }
                         Some (allFamilies.[fam.index], fam.count)
 
+    member x.TryTakeExplicit(caps : QueueFlags, count : int) =
+        let families = 
+            available 
+                |> Array.toList
+                |> List.indexed
+                |> List.filter (fun (i, f) -> f.count > 0 && f.flags = caps)
+                |> List.sortByDescending (snd >> familyScore)
+        
+        let mutable chosen = None
+
+        for (i, f) in families  do
+            if Option.isNone chosen then
+                if f.count >= count then
+                    available.[i] <- { f with count = f.count - count }
+                    chosen <- Some (f.index, count)
+
+        match chosen with
+            | Some (familyIndex, count) -> 
+                Some (allFamilies.[familyIndex], count)
+
+            | None ->
+                match families with
+                    | [] -> None
+                    | (_, fam) :: _ -> 
+                        available.[fam.index] <- { fam with count = 0 }
+                        Some (allFamilies.[fam.index], fam.count)
+
 type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, wantedExtensions : Set<string>) as this =
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 4)
-    let computeQueues   = pool.TryTakeSingleFamily(QueueFlags.Compute, 2)
+    let computeQueues   = pool.TryTakeExplicit(QueueFlags.Compute, 2)
     let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer ||| QueueFlags.SparseBinding, 2)
     let onDispose = Event<unit>()
 
@@ -230,6 +257,18 @@ type Device internal(physical : PhysicalDevice, wantedLayers : Set<string>, want
     let mutable runtime = Unchecked.defaultof<IRuntime>
     let memoryLimits = physical.Limits.Memory
 
+    
+    member x.ComputeToken =
+        let ref = currentResourceToken.Value
+        match !ref with
+            | Some t ->
+                t.AddRef()
+                t
+            | None ->
+                let queue = computeFamily.Value.GetQueue()
+                let t = new DeviceToken(queue, ref)
+                ref := Some t
+                t 
 
     member x.Token =
         let ref = currentResourceToken.Value

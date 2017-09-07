@@ -36,6 +36,7 @@ type IResourceLocation =
     abstract member Update : AdaptiveToken -> ResourceInfo<obj>
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit
+    abstract member RelaseAll : unit -> unit
     abstract member Key : list<obj>
     abstract member Owner : IResourceCache
     
@@ -86,6 +87,16 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
                 x.OutOfDate <- true
         )
   
+    member x.RelaseAll() =
+        lock x (fun () ->
+            refCount <- 0
+            owner.Remove key
+            x.Destroy()
+            let mutable foo = 0
+            x.Outputs.Consume(&foo) |> ignore
+            x.OutOfDate <- true
+        )
+
     member x.Update(token : AdaptiveToken) =
         x.EvaluateAlways token (fun token ->
             if refCount <= 0 then failwithf "[Resource] no ref count"
@@ -99,6 +110,7 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
 
         member x.Acquire() = x.Acquire()
         member x.Release() = x.Release()
+        member x.RelaseAll() = x.RelaseAll()
         member x.Owner = owner
         member x.Key = key
 
@@ -317,6 +329,10 @@ type ResourceLocationCache<'h>(user : IResourceUser) =
                 res
             )
         res
+
+    member x.Clear() =
+        let res = store.Values |> Seq.toArray
+        for r in res do r.RelaseAll()
 
     interface IResourceCache with
         member x.AddLocked l = user.AddLocked l
@@ -1035,6 +1051,35 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let indexBindingCache       = ResourceLocationCache<nativeptr<IndexBufferBinding>>(user)
     let isActiveCache           = ResourceLocationCache<nativeptr<int>>(user)
 
+
+    member x.Dispose() =
+        device.Delete descriptorPool
+        bufferCache.Clear()
+
+        indirectBufferCache.Clear()
+        indexBufferCache.Clear()
+        descriptorSetCache.Clear()
+        uniformBufferCache.Clear()
+        imageCache.Clear()
+        imageViewCache.Clear()
+        samplerCache.Clear()
+        programCache.Clear()
+
+        vertexInputCache.Clear()
+        inputAssemblyCache.Clear()
+        depthStencilCache.Clear()
+        rasterizerStateCache.Clear()
+        colorBlendStateCache.Clear()
+        pipelineCache.Clear()
+
+        drawCallCache.Clear()
+        bufferBindingCache.Clear()
+        descriptorBindingCache.Clear()
+        indexBindingCache.Clear()
+        isActiveCache.Clear()
+
+
+
     member x.Device = device
     
     member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
@@ -1182,6 +1227,9 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
     member x.CreateIsActive(value : IMod<bool>) =
         isActiveCache.GetOrCreate([value :> obj], fun cache key -> IsActiveResource(cache, key, value))
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 type ResourceSet() =
     inherit AdaptiveObject()

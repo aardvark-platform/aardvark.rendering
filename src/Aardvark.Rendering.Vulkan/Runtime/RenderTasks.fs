@@ -65,7 +65,7 @@ module RenderTasks =
             if not isDisposed then
                 isDisposed <- true
                 //Log.warn "manager dispose not implemented"
-                //manager.Dispose()
+                manager.Dispose()
                 x.Release()
                 NativePtr.free runtimeStats
 

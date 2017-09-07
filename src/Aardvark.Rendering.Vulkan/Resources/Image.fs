@@ -3024,7 +3024,9 @@ module ``Image Command Extensions`` =
                             elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
                             elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
                             elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
-                            elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.FragmentShaderBit
+                            elif source = VkImageLayout.ShaderReadOnlyOptimal then 
+                                if cmd.QueueFamily.Flags &&& QueueFlags.Graphics <> QueueFlags.None then VkPipelineStageFlags.FragmentShaderBit
+                                else VkPipelineStageFlags.ComputeShaderBit
                             elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
                             elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
                             else VkPipelineStageFlags.None
@@ -3034,7 +3036,10 @@ module ``Image Command Extensions`` =
                             elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
                             elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
                             elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.EarlyFragmentTestsBit
-                            elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.VertexShaderBit
+                            elif target = VkImageLayout.ShaderReadOnlyOptimal then 
+                                if cmd.QueueFamily.Flags &&& QueueFlags.Graphics <> QueueFlags.None then VkPipelineStageFlags.VertexShaderBit
+                                else VkPipelineStageFlags.ComputeShaderBit
+
                             elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
                             elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
 

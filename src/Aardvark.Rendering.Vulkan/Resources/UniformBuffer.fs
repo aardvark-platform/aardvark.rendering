@@ -90,14 +90,18 @@ type UniformBuffer =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module UniformBuffer =
     let create (layout : UniformBufferLayout) (device : Device) =
-        let storage = UnmanagedStruct.alloc layout.size
+        match layout.size with
+            | Fixed size ->
+                let storage = UnmanagedStruct.alloc size
 
-        let align = device.MinUniformBufferOffsetAlignment
-        let alignedSize = Alignment.next align (int64 layout.size)
+                let align = device.MinUniformBufferOffsetAlignment
+                let alignedSize = Alignment.next align (int64 size)
 
-        let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, alignedSize)
+                let buffer = device.CreateBuffer(VkBufferUsageFlags.UniformBufferBit ||| VkBufferUsageFlags.TransferDstBit, alignedSize)
 
-        UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
+                UniformBuffer(device, buffer.Handle, buffer.Memory, storage, layout)
+            | Dynamic ->
+                failf "cannot create UniformBuffer with dynamic size"
 
     let upload (b : UniformBuffer) (device : Device) =
         use t = device.Token
@@ -136,41 +140,96 @@ module UniformWriters =
     open Microsoft.FSharp.NativeInterop
     open Aardvark.Base.Incremental
     open System.Reflection
+    open System.Reflection.Emit
 
     type IWriter = 
         abstract member Write : AdaptiveToken * IAdaptiveObject * nativeint -> unit
+        abstract member WriteUnsafeValue : obj * nativeint -> unit
 
     type IWriter<'a> =
         inherit IWriter
-        abstract member Write : AdaptiveToken * 'a * nativeint -> unit
+        abstract member WriteValue : 'a * nativeint -> unit
 
+
+    type private ReflectionCompiler<'a, 'b> private() =
+        static let propertyCache = System.Collections.Concurrent.ConcurrentDictionary<PropertyInfo, 'a -> 'b>()
+        static let fieldCache = System.Collections.Concurrent.ConcurrentDictionary<FieldInfo, 'a -> 'b>()
+
+        static let compileProperty (prop : PropertyInfo) =
+            let meth = 
+                new DynamicMethod(
+                    Guid.NewGuid() |> string,
+                    MethodAttributes.Static ||| MethodAttributes.Public,
+                    CallingConventions.Standard,
+                    typeof<'b>,
+                    [| typeof<'a> |],
+                    typeof<'a>,
+                    true
+                )
+            let il = meth.GetILGenerator()
+
+            il.Emit(OpCodes.Ldarg_0)
+            il.EmitCall(OpCodes.Callvirt, prop.GetMethod, null)
+            il.Emit(OpCodes.Ret)
+            let t = System.Linq.Expressions.Expression.GetDelegateType [| typeof<'a>; typeof<'b> |]
+            let func = meth.CreateDelegate(t) |> unbox<Func<'a, 'b>>
+            func.Invoke
+
+        static let compileField (field : FieldInfo) =
+            let meth = 
+                new DynamicMethod(
+                    Guid.NewGuid() |> string,
+                    MethodAttributes.Static ||| MethodAttributes.Public,
+                    CallingConventions.Standard,
+                    typeof<'b>,
+                    [| typeof<'a> |],
+                    typeof<'a>,
+                    true
+                )
+            let il = meth.GetILGenerator()
+
+            il.Emit(OpCodes.Ldarg_0)
+            il.Emit(OpCodes.Ldfld, field)
+            il.Emit(OpCodes.Ret)
+            let t = System.Linq.Expressions.Expression.GetDelegateType [| typeof<'a>; typeof<'b> |]
+            let func = meth.CreateDelegate(t) |> unbox<Func<'a, 'b>>
+            func.Invoke
+
+        static member Property(p : PropertyInfo) = propertyCache.GetOrAdd(p, Func<_,_>(compileProperty))
+        static member Field(f : FieldInfo) = fieldCache.GetOrAdd(f, Func<_,_>(compileField))
 
 
     [<AbstractClass>]
     type AbstractWriter<'a>() =
-        abstract member Write : AdaptiveToken * 'a * nativeint -> unit
+        abstract member Write : 'a * nativeint -> unit
 
 
         interface IWriter with
             member x.Write(caller, value, ptr) =
                 let value = unbox<IMod<'a>> value
-                x.Write(caller, value.GetValue caller, ptr)
+                x.Write(value.GetValue caller, ptr)
+
+            member x.WriteUnsafeValue(value, ptr) =
+                match value with
+                    | :? 'a as value -> x.Write(value, ptr)
+                    | _ -> failf "unexpected value %A (expecting %A)" value typeof<'a>
+                
 
         interface IWriter<'a> with
-            member x.Write(caller, value, ptr) = x.Write(caller, value, ptr)
+            member x.WriteValue(value, ptr) = x.Write(value, ptr)
 
 
     type SingleValueWriter<'a when 'a : unmanaged>(offset : int) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
+        override x.Write(value : 'a, ptr : nativeint) =
             let ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
             NativePtr.write ptr value
 
     type ConversionWriter<'a, 'b when 'b : unmanaged>(offset : int, convert : 'a -> 'b) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
+        override x.Write(value : 'a, ptr : nativeint) =
             let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
             let res = convert value
             NativePtr.write ptr res
@@ -178,49 +237,53 @@ module UniformWriters =
     type NoConversionWriter<'a when 'a : unmanaged>(offset : int) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
+        override x.Write(value : 'a, ptr : nativeint) =
             let mutable ptr = NativePtr.ofNativeInt (ptr + nativeint offset)
             NativePtr.write ptr value
 
     type MultiWriter<'a>(writers : list<IWriter<'a>>) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : AdaptiveToken, value : 'a, ptr : nativeint) =
-            for w in writers do w.Write(caller, value, ptr)
+        override x.Write(value : 'a, ptr : nativeint) =
+            for w in writers do w.WriteValue(value, ptr)
 
         new (writers : list<IWriter>) = MultiWriter<'a>(writers |> List.map unbox<IWriter<'a>>)
 
     type PropertyWriter<'a, 'b>(prop : PropertyInfo, inner : IWriter<'b>) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : AdaptiveToken, value : 'a, target : nativeint) =
-            let v = prop.GetValue(value) |> unbox<'b>
-            inner.Write(caller, v, target)
+        let getProp = ReflectionCompiler<'a, 'b>.Property prop
+
+        override x.Write(value : 'a, target : nativeint) =
+            let v = getProp value
+            inner.WriteValue(v, target)
 
     type FieldWriter<'a, 'b>(prop : FieldInfo, inner : IWriter<'b>) =
         inherit AbstractWriter<'a>()
 
-        override x.Write(caller : AdaptiveToken, value : 'a, target : nativeint) =
-            let v = prop.GetValue(value) |> unbox<'b>
-            inner.Write(caller, v, target)
+        let getField = ReflectionCompiler<'a, 'b>.Field prop
+
+        override x.Write(value : 'a, target : nativeint) =
+            let v = getField value
+            inner.WriteValue(v, target)
 
     type SequenceWriter<'s, 'a when 's :> seq<'a>>(inner : IWriter<'a>[]) =
         inherit AbstractWriter<'s>()
 
-        let rec run (caller : AdaptiveToken) (target : nativeint) (index : int) (e : System.Collections.Generic.IEnumerator<'a>) =
+        let rec run (target : nativeint) (index : int) (e : System.Collections.Generic.IEnumerator<'a>) =
             if index >= inner.Length then 
                 ()
             else
                 if e.MoveNext() then
                     let v = e.Current
-                    inner.[index].Write(caller, v, target)
-                    run caller target (index + 1) e
+                    inner.[index].WriteValue(v, target)
+                    run target (index + 1) e
                 else
                     ()
 
-        override x.Write(caller : AdaptiveToken, value : 's, target : nativeint) =
+        override x.Write(value : 's, target : nativeint) =
             use e = (value :> seq<'a>).GetEnumerator()
-            run caller target 0 e
+            run target 0 e
 
         new(writers : list<IWriter>) =
             SequenceWriter<'s, 'a>(writers |> List.map unbox |> List.toArray)
@@ -237,6 +300,9 @@ module UniformWriters =
 
     let rec private tryCreateWriterInternal (offset : int) (target : UniformType) (tSource : Type) =
         match target with
+            | UniformType.RuntimeArray _ ->
+                failf "cannot create writer for RuntimeArray"
+
             | UniformType.Primitive(t, s, a) ->
                 let tTarget = PrimitiveType.toType t
                 if tSource <> tTarget then

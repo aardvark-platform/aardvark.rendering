@@ -5,8 +5,6 @@ open System
 type HeadlessVulkanApplication(debug : bool) =
     let requestedExtensions =
         [
-            yield "VK_KHR_external_memory"
-            yield "VK_KHR_external_memory_win32"
             if debug then
                 yield Instance.Extensions.DebugReport
         ]

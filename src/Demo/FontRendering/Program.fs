@@ -327,50 +327,172 @@ module VulkanTests =
 
         end
 
-    open System.IO
-    open System.IO.MemoryMappedFiles
-    let mappedFile() =
-        use app = new HeadlessVulkanApplication(true)
+    open FShade
+    open Aardvark.Rendering.Vulkan
+    
+    let sourceSampler =
+        sampler2d {
+            texture uniform?SourceImage
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+            filter Filter.MinMagMipLinear
+        }
+
+    [<LocalSize(X = 4, Y = 4)>]
+    let invertShader (factor : float) (dst : Image2d<Formats.rgba8>) =
+        compute {
+            let id = getGlobalId().XY
+
+            let v = sourceSampler.[id,0].XYZ
+
+
+            dst.[id] <- V4d(V3d.III - v, 1.0)
+
+        }
+
+    [<LocalSize(X = 1)>]
+    let copyToBufferShader (factor : float) (dst : uint32[]) =
+        compute {
+            let id = getGlobalId().X
+            let size = sourceSampler.Size
+
+            let c = V2i(id % size.X, id / size.X)
+
+            let v = sourceSampler.[c, 0]
+            dst.[id] <- packUnorm4x8 v
+
+        }
+
+    let invertImage (shader : ComputeShader) (pool : DescriptorPool) (src : ITexture) (dst : Image) =
+        let device = shader.Device
+
+        use args = ComputeShader.newInputBinding shader pool
+        //args.["SourceImage"] <- src
+        args.["dst"] <- dst
+        //args.["factor"] <- 0.5
+        args.Flush()
+
+        device.perform {
+            do! Command.Bind shader
+            do! Command.SetInputs args
+            do! Command.Dispatch(dst.Size)
+        }
+
+        
+
+
+    let shader() =
+        use app = new HeadlessVulkanApplication(false)
         let device = app.Device
+        let shader = device |> Aardvark.Rendering.Vulkan.ComputeShader.ofFunction invertShader
+        let pool = device.CreateDescriptorPool(1 <<< 20, 1 <<< 20)
 
-        let file = MemoryMappedFile.CreateFromFile(@"C:\Users\Schorsch\Desktop\bla.txt")
-        let view = file.CreateViewAccessor()
+        let inputImage = PixImage.Create @"E:\Development\WorkDirectory\DataSVN\fullhd.png"
+        let inputTexture = PixTexture2d(PixImageMipMap [| inputImage |], TextureParams.empty)
+        let size = inputImage.Size
 
-        let handle = view.SafeMemoryMappedViewHandle.DangerousGetHandle()
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, 1, TextureDimension.Texture2D, TextureFormat.Rgba8, VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.StorageBit)
+        let result = device |> TensorImage.create<byte> img.Size Col.Format.RGBA
+        let resultCPU = new PixImage<byte>(Col.Format.RGBA, img.Size.XY)
 
-        let mutable import =
-            VkImportMemoryWin32HandleInfoKHR(
-                VkStructureType.MemoryWin32Import, 0n,
-                VkExternalMemoryHandleTypeFlagBitsKHR.OpaqueWin32KMT,
-                handle,
-                NativePtr.zero
-            )
+        let args = ComputeShader.newInputBinding shader pool
+        args.["SourceImage"] <- inputTexture
+        args.["dst"] <- img
+        //args.["factor"] <- 0.2
+        args.Flush()
+        
 
-        let mutable info =
-            VkMemoryAllocateInfo(
-                VkStructureType.MemoryAllocateInfo, &&import |> NativePtr.toNativeInt,
-                uint64 35,
-                uint32 device.HostMemory.Index
-            )
+       
 
-        let mutable handle = VkDeviceMemory.Null
-        VkRaw.vkAllocateMemory(device.Handle, &&info, NativePtr.zero, &&handle)
-            |> printfn "alloc: %A"
+        let family = device.GraphicsFamily
+        printfn "family: %A" family.Index
 
-        let mutable ptr = 0n
-        VkRaw.vkMapMemory(device.Handle, handle, 0UL, 35UL, VkMemoryMapFlags.MinValue, &&ptr)
-            |> printfn "map: %A"
+        let queue = family.GetQueue()
 
-        let data : byte[] = Array.zeroCreate 35
-        Marshal.Copy(ptr, data, 0, data.Length)
-        let str = System.Text.Encoding.UTF8.GetString(data)
-        printfn "data: %A" str
+        family.run {
+            do! Command.TransformLayout(img, VkImageLayout.General)
+        }
 
-        VkRaw.vkUnmapMemory(device.Handle, handle)
+        let iter = 1000
+        let innerIter = 1
+        let cmd =
+            command {
+                do! Command.Bind shader
+                do! Command.SetInputs args
+                for i in 1 .. innerIter do
+                    do! Command.Dispatch(size)
+            }
+
+        let cmdBuffer = family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmdBuffer.Begin(CommandBufferUsage.None)
+        cmd.Enqueue(cmdBuffer) |> ignore
+        cmdBuffer.End()
+
+        // warmup
+        queue.RunSynchronously(cmdBuffer)
+
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            queue.RunSynchronously(cmdBuffer)
+        sw.Stop()
+        Log.line "took %A" (sw.MicroTime / (iter * innerIter))
+            
+
+        device.perform {
+            do! Command.TransformLayout(img, VkImageLayout.General)
+            do! Command.Bind shader
+            do! Command.SetInputs args
+            do! Command.Dispatch(size)
+            do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
+            do! Command.Copy(img.[ImageAspect.Color, 0, 0], result)
+        }
+
+        result.Read(resultCPU)
+        resultCPU.SaveAsImage @"C:\Users\Schorsch\Desktop\test.jpg"
 
 
+        args.Dispose()
+
+        let linearSize = img.Size.X * img.Size.Y
+        let buffer = device.CreateBuffer(VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.StorageBufferBit, int64 linearSize * 4L)
+        let shader2 = device |> ComputeShader.ofFunction copyToBufferShader
+        let args = ComputeShader.newInputBinding shader2 pool
+        args.["SourceImage"] <- inputTexture
+        args.["dst"] <- buffer
+        args.Flush()
+
+        
+        let iter = 10
+        let innerIter = 10
+        let cmd =
+            command {
+                do! Command.Bind shader2
+                do! Command.SetInputs args
+                for i in 1 .. innerIter do
+                    do! Command.Dispatch(linearSize)
+            }
+
+        let cmdBuffer = family.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmdBuffer.Begin(CommandBufferUsage.None)
+        cmd.Enqueue(cmdBuffer) |> ignore
+        cmdBuffer.End()
+
+        // warmup
+        queue.RunSynchronously(cmdBuffer)
+
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            queue.RunSynchronously(cmdBuffer)
+        sw.Stop()
+        Log.line "took %A" (sw.MicroTime / (iter * innerIter))
+
+        
+        device.Delete img
+        device.Delete result
+        ComputeShader.delete shader
+        ComputeShader.delete shader2
+        device.Delete pool
         ()
-
 
 
 let tensorPerformance() =
@@ -466,7 +588,7 @@ let main argv =
     Aardvark.Init()
 
     //tensorPerformance()
-    VulkanTests.mappedFile()
+    VulkanTests.shader()
     Environment.Exit 0
 
 

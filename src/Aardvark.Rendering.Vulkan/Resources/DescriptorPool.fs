@@ -63,7 +63,9 @@ type ContextDescriptorPoolExtensions private() =
         let counts =
             Map.ofList [
                 VkDescriptorType.UniformBuffer, perTypeCount
+                VkDescriptorType.StorageBuffer, perTypeCount
                 VkDescriptorType.CombinedImageSampler, perTypeCount
+                VkDescriptorType.StorageImage, perTypeCount
             ]
 
         this |> DescriptorPool.create setCount counts

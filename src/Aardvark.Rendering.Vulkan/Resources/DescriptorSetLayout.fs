@@ -22,6 +22,7 @@ type DescriptorSetLayoutBinding =
         member x.DescriptorCount = int x.Handle.descriptorCount
         member x.Name = x.Parameter.Name
         member x.Binding = int x.Handle.binding 
+        member x.DescriptorType = x.Handle.descriptorType
 
         new (device, handle, parameter) = { Device = device; Handle = handle; Parameter = parameter }
     end

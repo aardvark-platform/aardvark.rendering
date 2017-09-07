@@ -21,6 +21,7 @@ module VkShaderStageFlags =
             ShaderStage.TessEval, VkShaderStageFlags.TessellationEvaluationBit
             ShaderStage.Geometry, VkShaderStageFlags.GeometryBit
             ShaderStage.Fragment, VkShaderStageFlags.FragmentBit
+            ShaderStage.Compute, VkShaderStageFlags.ComputeBit
         ]
 
 
@@ -44,6 +45,7 @@ module PipelineLayout =
         // figure out which stages reference which uniforms/textures
         let uniformBlocks = Dict.empty
         let textures = Dict.empty
+        let storageBlocks = Dict.empty
         let mutable setCount = 0
 
         for shader in shaders do
@@ -57,7 +59,16 @@ module PipelineLayout =
                         | (true, (_, referencedBy)) -> referencedBy
                         | _ -> VkShaderStageFlags.None  
                 uniformBlocks.[key] <- (block, referenced ||| flags)
-                                    
+                         
+            for block in iface.storageBlocks do
+                setCount <- max setCount (block.set + 1)
+                let key = (block.set, block.binding)
+                let referenced = 
+                    match uniformBlocks.TryGetValue key with
+                        | (true, (_, referencedBy)) -> referencedBy
+                        | _ -> VkShaderStageFlags.None  
+                storageBlocks.[key] <- (block, referenced ||| flags)
+                                   
             for tex in iface.textures do
                 setCount <- max setCount (tex.set + 1)
                 let key = (tex.set, tex.binding)
@@ -69,6 +80,7 @@ module PipelineLayout =
                 textures.[key] <- (tex, referenced ||| flags)
                             
         let uniformBlocks = uniformBlocks.Values |> Seq.toList
+        let storageBlocks = storageBlocks.Values |> Seq.toList
         let textures = textures.Values |> Seq.toList
 
         // create DescriptorSetLayouts for all used slots (empty if no bindings)
@@ -84,10 +96,25 @@ module PipelineLayout =
 
             sets.[block.set].Add binding
 
-        for (tex, stageFlags) in textures do
+        for (block, stageFlags) in storageBlocks do
             let binding = 
                 DescriptorSetLayoutBinding.create
-                    VkDescriptorType.CombinedImageSampler
+                    VkDescriptorType.StorageBuffer
+                    stageFlags
+                    (UniformBlockParameter block)
+                    device
+
+            sets.[block.set].Add binding
+            
+
+        for (tex, stageFlags) in textures do
+            let descriptorType = 
+                if tex.isSampled then VkDescriptorType.CombinedImageSampler
+                else VkDescriptorType.StorageImage
+
+            let binding = 
+                DescriptorSetLayoutBinding.create
+                    descriptorType
                     stageFlags
                     (ImageParameter tex)
                     device
