@@ -338,7 +338,7 @@ module VulkanTests =
             filter Filter.MinMagMipLinear
         }
 
-    [<LocalSize(X = 4, Y = 4)>]
+    [<LocalSize(X = 8, Y = 4)>]
     let invertShader (factor : float) (dst : Image2d<Formats.rgba8>) =
         compute {
             let id = getGlobalId().XY
@@ -350,7 +350,7 @@ module VulkanTests =
 
         }
 
-    [<LocalSize(X = 1)>]
+    [<LocalSize(X = 32)>]
     let copyToBufferShader (factor : float) (dst : uint32[]) =
         compute {
             let id = getGlobalId().X
@@ -387,7 +387,7 @@ module VulkanTests =
         let shader = device |> Aardvark.Rendering.Vulkan.ComputeShader.ofFunction invertShader
         let pool = device.CreateDescriptorPool(1 <<< 20, 1 <<< 20)
 
-        let inputImage = PixImage.Create @"E:\Development\WorkDirectory\DataSVN\fullhd.png"
+        let inputImage = PixImage.Create @"E:\Development\WorkDirectory\DataSVN\puget_color_large.png"
         let inputTexture = PixTexture2d(PixImageMipMap [| inputImage |], TextureParams.empty)
         let size = inputImage.Size
 
