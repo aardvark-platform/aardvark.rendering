@@ -379,15 +379,15 @@ module VulkanTests =
         }
 
     [<Literal>]
-    let scanSize = 2048
+    let scanSize = 192
 
     [<Literal>]
-    let halfScanSize = 1024
+    let halfScanSize = 96
 
     [<LocalSize(X = halfScanSize)>]
-    let scan2048 (inputOffset : int) (inputDelta : int) (inputSize : int) (input : float[]) (outputOffset : int) (outputDelta : int) (output : float[]) =
+    let scan2048 (inputOffset : int) (inputDelta : int) (inputSize : int) (inputData : int[]) (outputOffset : int) (outputDelta : int) (outputData : int[]) =
         compute {
-            let mem : float[] = allocateShared scanSize
+            let mem : int[] = allocateShared scanSize
             let gid = getGlobalId().X
 
             let gid0 = gid
@@ -399,11 +399,11 @@ module VulkanTests =
             let llid = 2 * lid0
             let rlid = llid + 1
 
-            if lgid < inputSize then mem.[llid] <- input.[inputOffset + lgid * inputDelta]
-            else mem.[llid] <- 0.0
+            if lgid < inputSize then mem.[llid] <- inputData.[inputOffset + lgid * inputDelta]
+            else mem.[llid] <- 0
 
-            if rlid < inputSize then mem.[rlid] <- input.[inputOffset + rgid * inputDelta]
-            else mem.[rlid] <- 0.0
+            if rlid < inputSize then mem.[rlid] <- inputData.[inputOffset + rgid * inputDelta]
+            else mem.[rlid] <- 0
 
             barrier()
             
@@ -428,22 +428,25 @@ module VulkanTests =
                 d <- d >>> 1
 
             if lgid < inputSize then
-                output.[outputOffset + lgid * outputDelta] <- mem.[llid]
+                outputData.[outputOffset + lgid * outputDelta] <- mem.[llid]
             if rgid < inputSize then
-                output.[outputOffset + rgid * outputDelta] <- mem.[rlid]
+                outputData.[outputOffset + rgid * outputDelta] <- mem.[rlid]
 
         }
         
     [<LocalSize(X = halfScanSize)>]
-    let addParentSum (dataLength : int) (offset : int) (scan : float[]) (data : float[]) =
+    let addParentSum (inputData : int[]) (inputOffset : int) (inputDelta : int) (outputData : int[]) (outputOffset : int) (outputDelta : int) (groupSize : int) (count : int) =
         compute {
-            let id = offset + getGlobalId().X
-            let pid = id / offset - 1
-            let s = scan.[pid]
+            let id = getGlobalId().X + groupSize
 
+            if id < count then
+                let block = id / groupSize - 1
+              
+                let iid = inputOffset + block * inputDelta
+                let oid = outputOffset + id * outputDelta
 
-            if id < dataLength then
-                data.[id] <- data.[id] + s
+                if id % groupSize <> groupSize - 1 then
+                    outputData.[oid] <- outputData.[oid] + inputData.[iid]
 
         }
 
@@ -475,85 +478,223 @@ module VulkanTests =
 
         }
 
+    
+    open System.Runtime.CompilerServices
+
+    type Buffer<'a when 'a : unmanaged>(device : Device, handle : VkBuffer, mem : DevicePtr, count : int64) =
+        inherit Buffer(device, handle, mem)
+
+        static let sl = sizeof<'a> |> int64
+
+        member x.Count = count
+
+        member x.Upload(src : 'a[], srcIndex: int64, dstIndex : int64, count : int64) =
+            let size = count * sl
+            let srcOffset = nativeint (srcIndex * sl)
+            let dstOffset = dstIndex * sl
+
+            let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit size
+            let gc = GCHandle.Alloc(src, GCHandleType.Pinned)
+            try 
+                temp.Memory.Mapped(fun ptr ->
+                    Marshal.Copy(gc.AddrOfPinnedObject() + srcOffset, ptr, nativeint size)
+                )
+            finally 
+                gc.Free()
+
+            device.perform {
+                try do! Command.Copy(temp, 0L, x, dstOffset, size)
+                finally device.Delete temp
+            }
+
+        member x.Upload(src : 'a[], count : int64) =
+            x.Upload(src, 0L, 0L, count)
+
+        member x.Upload(src : 'a[]) =
+            x.Upload(src, 0L, 0L, min src.LongLength count)
+
+        member x.Download(srcIndex : int64, dst : 'a[], dstIndex : int64, count : int64) =
+            let size = count * sl
+            let dstOffset = nativeint (dstIndex * sl)
+            let srcOffset = srcIndex * sl
+
+            let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit size
+
+            device.perform {
+                do! Command.Copy(x, srcOffset, temp, 0L, size)
+            }
+
+            let gc = GCHandle.Alloc(dst, GCHandleType.Pinned)
+            try 
+                temp.Memory.Mapped(fun ptr ->
+                    Marshal.Copy(ptr, gc.AddrOfPinnedObject() + dstOffset, nativeint size)
+                )
+            finally 
+                gc.Free()
+                device.Delete temp
+
+        member x.Download(dst : 'a[], count : int64) =
+            x.Download(0L, dst, 0L, count)
+
+        member x.Download(dst : 'a[]) =
+            x.Download(0L, dst, 0L, min count dst.LongLength)
+
+    [<AbstractClass; Sealed; Extension>]
+    type DeviceTypedBufferExtensions private() =
+        static let usage =
+            VkBufferUsageFlags.TransferSrcBit ||| 
+            VkBufferUsageFlags.TransferDstBit |||
+            VkBufferUsageFlags.StorageBufferBit
+
+        [<Extension>]
+        static member CreateBuffer<'a when 'a : unmanaged>(device : Device, count : int64) =
+            let b = device.CreateBuffer(usage, int64 sizeof<'a> * count)
+            Buffer<'a>(b.Device, b.Handle, b.Memory, count)
+            
+        [<Extension>]
+        static member CreateBuffer<'a when 'a : unmanaged>(device : Device, data : 'a[]) =
+            let b = DeviceTypedBufferExtensions.CreateBuffer<'a>(device, data.LongLength)
+            b.Upload(data)
+            b
+            
+        [<Extension>]
+        static member Coerce<'a when 'a : unmanaged>(buffer : Buffer) =
+            Buffer<'a>(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size / int64 sizeof<'a>)
+
+    type BufferVector<'a when 'a : unmanaged>(b : Buffer<'a>, offset : int64, delta : int64, size : int64) =
+        member x.Buffer = b
+        member x.Offset = offset
+        member x.Delta = delta
+        member x.Size = size
+
+        member x.Skip(n : int64) =
+            BufferVector<'a>(b, offset + n * delta, delta, size - n)
+
+        member x.Strided(n : int64) =
+            BufferVector<'a>(b, offset, n * delta, 1L + (size - 1L) / n)
+
+        new(b : Buffer<'a>) = BufferVector<'a>(b, 0L, 1L, b.Count)
 
     let testreduce8() =
         use app = new HeadlessVulkanApplication(false)
         let device = app.Device
         let shader = device |> ComputeShader.ofFunction scan2048
-        let pool = device.CreateDescriptorPool(1 <<< 20, 1 <<< 20)
-       
-        let cnt = 1 <<< 20
-        let input = ArrayBuffer (Array.init cnt (fun _ -> 1.0f))
-        let output = device.CreateBuffer(VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.TransferSrcBit, int64 cnt * 4L)
-        let mappable = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 cnt * 4L)
-
-        //(inputOffset : int) (inputDelta : int) (inputSize : int) (input : float[]) (outputOffset : int) (outputDelta : int) (res : float[])
-        let args0 = ComputeShader.newInputBinding shader pool
-        args0.["inputOffset"] <- 0
-        args0.["inputDelta"] <- 1
-        args0.["inputSize"] <- cnt
-        args0.["input"] <- input
-        args0.["outputOffset"] <- 0
-        args0.["outputDelta"] <- 1
-        args0.["output"] <- output
-        args0.Flush()
-        
-        let temp = device.CreateBuffer(VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.TransferSrcBit, int64 (cnt / 2048) * 4L)
-        let args1 = ComputeShader.newInputBinding shader pool
-        args1.["inputOffset"] <- scanSize
-        args1.["inputDelta"] <- scanSize
-        args1.["inputSize"] <- (cnt - scanSize) / scanSize
-        args1.["input"] <- output
-        args1.["outputOffset"] <- 0
-        args1.["outputDelta"] <- 1
-        args1.["output"] <- temp
-        args1.Flush()
-
-        
         let shader2 = device |> ComputeShader.ofFunction addParentSum
         
-        let argsAdd = ComputeShader.newInputBinding shader2 pool
-        argsAdd.["scan"] <- temp
-        argsAdd.["data"] <- output
-        argsAdd.["dataLength"] <- cnt / scanSize
-        argsAdd.["offset"] <- scanSize
-        argsAdd.Flush()
+        let pool = device.CreateDescriptorPool(1 <<< 20, 1 <<< 20)
+       
+        let rand = RandomSystem()
+        let cnt = 1 <<< 28
+        let inputData = Array.init cnt (fun _ -> rand.UniformInt(64))
+        let input = device.CreateBuffer<int>(inputData)
+        let output = device.CreateBuffer<int>(int64 cnt)
+
+        let ceilDiv (a : int) (b : int) =
+            if a % b = 0 then a / b
+            else 1 + a / b
+
+
+        let rec build (input : BufferVector<int>) (output : BufferVector<int>) =
+            command {
+                if input.Size > 0L then
+                    let cnt = int input.Size
+                    let args0 = ComputeShader.newInputBinding shader pool
+                    try
+                        args0.["inputOffset"] <- input.Offset |> int
+                        args0.["inputDelta"] <- input.Delta |> int
+                        args0.["inputSize"] <- input.Size |> int
+                        args0.["inputData"] <- input.Buffer
+                        args0.["outputOffset"] <- output.Offset |> int
+                        args0.["outputDelta"] <- output.Delta |> int
+                        args0.["outputData"] <- output.Buffer
+                        args0.Flush()
+
+                        do! Command.Bind shader
+                        do! Command.SetInputs args0
+                        do! Command.Dispatch(ceilDiv (int input.Size) scanSize)
+                        do! Command.SyncWrite(output.Buffer)
+
+                        let blocks = cnt / scanSize
+                        if blocks > 0 then
+                            let o = output.Skip(int64 scanSize - 1L).Strided(int64 scanSize)
+                            do! build o o
+
+                            let args1 = ComputeShader.newInputBinding shader2 pool
+                            try
+                                //    let addParentSum (inputData : int[]) (inputOffset : int) (inputDelta : int) (outputData : int[]) (outputOffset : int) (outputDelta : int) (count : int) =
+
+                                args1.["inputData"] <- o.Buffer
+                                args1.["inputOffset"] <- o.Offset |> int
+                                args1.["inputDelta"] <- o.Delta |> int
+                                args1.["outputData"] <- output.Buffer
+                                args1.["outputOffset"] <- output.Offset |> int
+                                args1.["outputDelta"] <- output.Delta |> int
+                                args1.["count"] <- output.Size |> int
+                                args1.["groupSize"] <- scanSize
+                                args1.Flush()
+
+                                do! Command.Bind shader2
+                                do! Command.SetInputs args1
+                                do! Command.Dispatch(ceilDiv (int output.Size - scanSize) halfScanSize)
+                                do! Command.SyncWrite(output.Buffer)
+                            finally
+                                args1.Dispose()
+
+
+                    finally
+                        args0.Dispose()
+            }
+
 
         device.perform {
-            do! Command.Bind shader
-
-            do! Command.SetInputs args0
-            do! Command.Dispatch(cnt / scanSize)
-
-            do! Command.SetInputs args1
-            do! Command.Dispatch(cnt / scanSize / scanSize)
-
-            do! Command.Bind shader2
-            do! Command.SetInputs argsAdd
-            do! Command.Dispatch((cnt - scanSize) / halfScanSize)
-
-            do! Command.Copy(output, mappable)
+            do! build (BufferVector input) (BufferVector output)
         }
 
-        let result : float32[] = Array.zeroCreate cnt
-        let gc = GCHandle.Alloc(result, GCHandleType.Pinned)
-        mappable.Memory.Mapped (fun src -> Marshal.Copy(src, gc.AddrOfPinnedObject(), int64 cnt * 4L))
-        gc.Free()
+        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+        cmd.Begin(CommandBufferUsage.None)
+        cmd.Enqueue(build (BufferVector input) (BufferVector output))
+        cmd.End()
 
-        let check = Array.init cnt (fun i -> 1 + (i % 2048) |> float32)
+        let queue = device.GraphicsFamily.GetQueue()
+
+        let iter = 100
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            queue.RunSynchronously cmd
+        sw.Stop()
+        Log.warn "took %A" (sw.MicroTime / iter)
+            
+
+
+
+        let result : int[] = Array.zeroCreate cnt
+        output.Download(result)
+
+        let check = Array.zeroCreate cnt
+
+
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+
+        for i in 1 .. 10 do
+            check.[0] <- inputData.[0]
+            for i in 1 .. check.Length - 1 do
+                check.[i] <- check.[i-1] + inputData.[i]
+        sw.Stop()
+
+        Log.warn "took %A" (sw.MicroTime / 10)
+
         if check = result then
             printfn "OK"
         else
-            printfn "ERROR:"
-            for i in 0 .. cnt - 1 do
-                if result.[i] <> check.[i] then
-                    printfn "  %d: %A vs %A" i result.[i] check.[i]
+            printfn "ERROR"
+//            for i in 0 .. cnt - 1 do
+//                if result.[i] <> check.[i] then
+//                    printfn "  %d: %A vs %A" i result.[i] check.[i]
 
-        args0.Dispose()
-        args1.Dispose()
-        argsAdd.Dispose()
+        //args0.Dispose()
+        //args1.Dispose()
+        //argsAdd.Dispose()
         device.Delete output
-        device.Delete mappable
         ComputeShader.delete shader
         device.Delete pool
 
