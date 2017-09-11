@@ -378,107 +378,7 @@ module VulkanTests =
             do! Command.Dispatch(dst.Size)
         }
 
-    [<Literal>]
-    let scanSize = 192
-
-    [<Literal>]
-    let halfScanSize = 96
-
-    [<LocalSize(X = halfScanSize)>]
-    let scan2048 (inputOffset : int) (inputDelta : int) (inputSize : int) (inputData : int[]) (outputOffset : int) (outputDelta : int) (outputData : int[]) =
-        compute {
-            let mem : int[] = allocateShared scanSize
-            let gid = getGlobalId().X
-
-            let gid0 = gid
-            let lid0 =  getLocalId().X
-
-            let lgid = 2 * gid0
-            let rgid = lgid + 1
-            
-            let llid = 2 * lid0
-            let rlid = llid + 1
-
-            if lgid < inputSize then mem.[llid] <- inputData.[inputOffset + lgid * inputDelta]
-            else mem.[llid] <- 0
-
-            if rlid < inputSize then mem.[rlid] <- inputData.[inputOffset + rgid * inputDelta]
-            else mem.[rlid] <- 0
-
-            barrier()
-            
-            let mutable s = 1
-            let mutable d = 2
-            while d <= scanSize do
-                if llid % d = 0 && llid >= s then
-                    mem.[llid] <- mem.[llid] + mem.[llid - s]
-
-                barrier()
-                s <- s <<< 1
-                d <- d <<< 1
-
-            d <- d >>> 1
-            s <- s >>> 1
-            while s >= 1 do
-                if llid % d = 0 && llid + s < scanSize then
-                    mem.[llid + s] <- mem.[llid + s] + mem.[llid]
-                    
-                barrier()
-                s <- s >>> 1
-                d <- d >>> 1
-
-            if lgid < inputSize then
-                outputData.[outputOffset + lgid * outputDelta] <- mem.[llid]
-            if rgid < inputSize then
-                outputData.[outputOffset + rgid * outputDelta] <- mem.[rlid]
-
-        }
-        
-    [<LocalSize(X = halfScanSize)>]
-    let addParentSum (inputData : int[]) (inputOffset : int) (inputDelta : int) (outputData : int[]) (outputOffset : int) (outputDelta : int) (groupSize : int) (count : int) =
-        compute {
-            let id = getGlobalId().X + groupSize
-
-            if id < count then
-                let block = id / groupSize - 1
-              
-                let iid = inputOffset + block * inputDelta
-                let oid = outputOffset + id * outputDelta
-
-                if id % groupSize <> groupSize - 1 then
-                    outputData.[oid] <- outputData.[oid] + inputData.[iid]
-
-        }
-
-    [<LocalSize(X = 8, Y = 8)>]
-    let reduce8 (dst : Image2d<Formats.rgba8>) =
-        compute {
-            let mem : V3d[] = allocateShared 64
-
-            let lid = getLocalId().XY
-            let gid = getGlobalId().XY
-
-            let li = lid.Y * 8 + lid.X
-            mem.[li] <- sourceSampler.[gid, 0].XYZ
-            barrier()
-
-            let mutable off = 1
-            let mutable d = 2
-            while d <= 64 do
-                if li % d = 0 && li + off < 64 then
-                    mem.[li] <- mem.[li] + mem.[li + off]
-
-                barrier()
-                off <- off <<< 1
-                d <- d <<< 1
-
-            if li = 0 then
-                let di = gid / 8
-                dst.[di] <- V4d(mem.[0] / 64.0, 1.0)
-
-        }
-
-    
+    open Microsoft.FSharp.Quotations
     open System.Runtime.CompilerServices
 
     type Buffer<'a when 'a : unmanaged>(device : Device, handle : VkBuffer, mem : DevicePtr, count : int64) =
@@ -518,7 +418,7 @@ module VulkanTests =
             let dstOffset = nativeint (dstIndex * sl)
             let srcOffset = srcIndex * sl
 
-            let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit size
+            let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit size
 
             device.perform {
                 do! Command.Copy(x, srcOffset, temp, 0L, size)
@@ -556,7 +456,7 @@ module VulkanTests =
             let b = DeviceTypedBufferExtensions.CreateBuffer<'a>(device, data.LongLength)
             b.Upload(data)
             b
-            
+
         [<Extension>]
         static member Coerce<'a when 'a : unmanaged>(buffer : Buffer) =
             Buffer<'a>(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size / int64 sizeof<'a>)
@@ -575,88 +475,193 @@ module VulkanTests =
 
         new(b : Buffer<'a>) = BufferVector<'a>(b, 0L, 1L, b.Count)
 
-    let testreduce8() =
-        use app = new HeadlessVulkanApplication(false)
-        let device = app.Device
-        let shader = device |> ComputeShader.ofFunction scan2048
-        let shader2 = device |> ComputeShader.ofFunction addParentSum
-        
-        let pool = device.CreateDescriptorPool(1 <<< 20, 1 <<< 20)
-       
-        let rand = RandomSystem()
-        let cnt = 1 <<< 28
-        let inputData = Array.init cnt (fun _ -> rand.UniformInt(64))
-        let input = device.CreateBuffer<int>(inputData)
-        let output = device.CreateBuffer<int>(int64 cnt)
+    module ScanImpl = 
+    
+        [<Literal>]
+        let scanSize = 128
 
-        let ceilDiv (a : int) (b : int) =
-            if a % b = 0 then a / b
-            else 1 + a / b
+        [<Literal>]
+        let halfScanSize = 64
 
+        [<LocalSize(X = halfScanSize)>]
+        let scanKernel (add : Expr<'a -> 'a -> 'a>) (inputOffset : int) (inputDelta : int) (inputSize : int) (inputData : 'a[]) (outputOffset : int) (outputDelta : int) (outputData : 'a[]) =
+            compute {
+                let mem : 'a[] = allocateShared scanSize
+                let gid = getGlobalId().X
 
-        let rec build (input : BufferVector<int>) (output : BufferVector<int>) =
-            command {
-                if input.Size > 0L then
-                    let cnt = int input.Size
-                    let args0 = ComputeShader.newInputBinding shader pool
-                    try
-                        args0.["inputOffset"] <- input.Offset |> int
-                        args0.["inputDelta"] <- input.Delta |> int
-                        args0.["inputSize"] <- input.Size |> int
-                        args0.["inputData"] <- input.Buffer
-                        args0.["outputOffset"] <- output.Offset |> int
-                        args0.["outputDelta"] <- output.Delta |> int
-                        args0.["outputData"] <- output.Buffer
-                        args0.Flush()
+                let gid0 = gid
+                let lid0 =  getLocalId().X
 
-                        do! Command.Bind shader
-                        do! Command.SetInputs args0
-                        do! Command.Dispatch(ceilDiv (int input.Size) scanSize)
-                        do! Command.SyncWrite(output.Buffer)
+                let lgid = 2 * gid0
+                let rgid = lgid + 1
+            
+                let llid = 2 * lid0
+                let rlid = llid + 1
 
-                        let blocks = cnt / scanSize
-                        if blocks > 0 then
-                            let o = output.Skip(int64 scanSize - 1L).Strided(int64 scanSize)
-                            do! build o o
-
-                            let args1 = ComputeShader.newInputBinding shader2 pool
-                            try
-                                //    let addParentSum (inputData : int[]) (inputOffset : int) (inputDelta : int) (outputData : int[]) (outputOffset : int) (outputDelta : int) (count : int) =
-
-                                args1.["inputData"] <- o.Buffer
-                                args1.["inputOffset"] <- o.Offset |> int
-                                args1.["inputDelta"] <- o.Delta |> int
-                                args1.["outputData"] <- output.Buffer
-                                args1.["outputOffset"] <- output.Offset |> int
-                                args1.["outputDelta"] <- output.Delta |> int
-                                args1.["count"] <- output.Size |> int
-                                args1.["groupSize"] <- scanSize
-                                args1.Flush()
-
-                                do! Command.Bind shader2
-                                do! Command.SetInputs args1
-                                do! Command.Dispatch(ceilDiv (int output.Size - scanSize) halfScanSize)
-                                do! Command.SyncWrite(output.Buffer)
-                            finally
-                                args1.Dispose()
+                if lgid < inputSize then mem.[llid] <- inputData.[inputOffset + lgid * inputDelta]
+                if rlid < inputSize then mem.[rlid] <- inputData.[inputOffset + rgid * inputDelta]
 
 
-                    finally
-                        args0.Dispose()
+                barrier()
+            
+                let mutable s = 1
+                let mutable d = 2
+                while d <= scanSize do
+                    if llid % d = 0 && llid >= s then
+                        mem.[llid] <- (%add) mem.[llid - s] mem.[llid]
+
+                    barrier()
+                    s <- s <<< 1
+                    d <- d <<< 1
+
+                d <- d >>> 1
+                s <- s >>> 1
+                while s >= 1 do
+                    if llid % d = 0 && llid + s < scanSize then
+                        mem.[llid + s] <- (%add) mem.[llid] mem.[llid + s]
+                    
+                    barrier()
+                    s <- s >>> 1
+                    d <- d >>> 1
+
+                if lgid < inputSize then
+                    outputData.[outputOffset + lgid * outputDelta] <- mem.[llid]
+                if rgid < inputSize then
+                    outputData.[outputOffset + rgid * outputDelta] <- mem.[rlid]
+
             }
+        
+        [<LocalSize(X = halfScanSize)>]
+        let fixupKernel (add : Expr<'a -> 'a -> 'a>) (inputData : 'a[]) (inputOffset : int) (inputDelta : int) (outputData : 'a[]) (outputOffset : int) (outputDelta : int) (groupSize : int) (count : int) =
+            compute {
+                let id = getGlobalId().X + groupSize
+
+                if id < count then
+                    let block = id / groupSize - 1
+              
+                    let iid = inputOffset + block * inputDelta
+                    let oid = outputOffset + id * outputDelta
+
+                    if id % groupSize <> groupSize - 1 then
+                        outputData.[oid] <- (%add) inputData.[iid] outputData.[oid]
+
+            }
+      
+        type Scan<'a when 'a : unmanaged>(runtime : Runtime, add : Expr<'a -> 'a -> 'a>) =
+            static let ceilDiv (v : int) (d : int) =
+                if v % d = 0 then v / d
+                else 1 + v / d
+
+            let device  = runtime.Device
+            let pool = runtime.DescriptorPool
+
+            let scan    = device |> ComputeShader.ofFunction (scanKernel add)
+            let fixup   = device |> ComputeShader.ofFunction (fixupKernel add)
+
+            let release() =
+                ComputeShader.delete scan
+                ComputeShader.delete fixup
+
+            do device.OnDispose.Add (fun _ -> release())
+
+            member x.Invoke(input : Buffer<'a>, output : Buffer<'a>) =
+                let rec build (input : BufferVector<'a>) (output : BufferVector<'a>) =
+                    command {
+                        if input.Size > 0L then
+                            let cnt = int input.Size
+                            let args0 = ComputeShader.newInputBinding scan pool
+                            let blocks = cnt / scanSize
+
+                            try
+                                args0.["inputOffset"] <- input.Offset |> int
+                                args0.["inputDelta"] <- input.Delta |> int
+                                args0.["inputSize"] <- input.Size |> int
+                                args0.["inputData"] <- input.Buffer
+                                args0.["outputOffset"] <- output.Offset |> int
+                                args0.["outputDelta"] <- output.Delta |> int
+                                args0.["outputData"] <- output.Buffer
+                                args0.Flush()
+
+                                do! Command.Bind scan
+                                do! Command.SetInputs args0
+                                do! Command.Dispatch(ceilDiv (int input.Size) scanSize)
+                                do! Command.SyncWrite(output.Buffer)
+
+                                if blocks > 0 then
+                                    let o = output.Skip(int64 scanSize - 1L).Strided(int64 scanSize)
+                            
+                                    do! build o o
+
+                                    let args1 = ComputeShader.newInputBinding fixup pool
+                                    try
+                                        args1.["inputData"] <- o.Buffer
+                                        args1.["inputOffset"] <- o.Offset |> int
+                                        args1.["inputDelta"] <- o.Delta |> int
+                                        args1.["outputData"] <- output.Buffer
+                                        args1.["outputOffset"] <- output.Offset |> int
+                                        args1.["outputDelta"] <- output.Delta |> int
+                                        args1.["count"] <- output.Size |> int
+                                        args1.["groupSize"] <- scanSize
+                                        args1.Flush()
+
+                                        do! Command.Bind fixup
+                                        do! Command.SetInputs args1
+                                        do! Command.Dispatch(ceilDiv (int output.Size - scanSize) halfScanSize)
+                                        do! Command.SyncWrite(output.Buffer)
+                                    finally
+                                        args1.Dispose()
 
 
+                            finally
+                                args0.Dispose()
+                    }
+
+                build (BufferVector input) (BufferVector output)
+
+            member x.Compile(input : Buffer<'a>, output : Buffer<'a>) =
+                let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
+                cmd.Begin(CommandBufferUsage.None)
+                cmd.Enqueue(x.Invoke(input, output))
+                cmd.End()
+                cmd
+
+            member x.Dispose() = release()
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+
+    [<AbstractClass; Sealed; Extension>]
+    type DeviceScanExtensions private() =
+        [<Extension>]
+        static member CompileScan<'a when 'a : unmanaged> (this : Runtime, add : Expr<'a -> 'a -> 'a>) =
+            new ScanImpl.Scan<'a>(this, add)
+
+    let testscan() =
+        use app = new HeadlessVulkanApplication(true)
+        let device = app.Device
+
+        // generate random data
+        let cnt = 1 <<< 24
+        let rand = RandomSystem()
+        let inputData = Array.init cnt (fun _ -> M44f.Rotation(rand.UniformV3dDirection() |> V3f, rand.UniformFloat() * float32 Constant.PiTimesTwo))
+
+        // compile a scan using (+) as accumulation function
+        let scanner = app.Runtime.CompileScan <@ (*) @>
+
+        // create buffers holding the in-/output
+        let input   = device.CreateBuffer<M44f>(inputData)
+        let output  = device.CreateBuffer<M44f>(int64 cnt)
+
+        // perform the scan once
         device.perform {
-            do! build (BufferVector input) (BufferVector output)
+            do! scanner.Invoke(input, output)
         }
 
-        let cmd = device.GraphicsFamily.DefaultCommandPool.CreateCommandBuffer(CommandBufferLevel.Primary)
-        cmd.Begin(CommandBufferUsage.None)
-        cmd.Enqueue(build (BufferVector input) (BufferVector output))
-        cmd.End()
+        // compile a scan-command-buffer ahead of time
+        let cmd = scanner.Compile(input, output)
 
+        // run the pre-compiled scan 100 times and measure its execution-time
         let queue = device.GraphicsFamily.GetQueue()
-
         let iter = 100
         let sw = System.Diagnostics.Stopwatch.StartNew()
         for i in 1 .. iter do
@@ -665,38 +670,36 @@ module VulkanTests =
         Log.warn "took %A" (sw.MicroTime / iter)
             
 
-
-
-        let result : int[] = Array.zeroCreate cnt
-        output.Download(result)
-
+        // validate the scan result using a single threaded CPU implementation (and measure its time)
         let check = Array.zeroCreate cnt
-
-
         let sw = System.Diagnostics.Stopwatch.StartNew()
-
         for i in 1 .. 10 do
             check.[0] <- inputData.[0]
             for i in 1 .. check.Length - 1 do
-                check.[i] <- check.[i-1] + inputData.[i]
+                check.[i] <- check.[i-1] * inputData.[i]
         sw.Stop()
-
         Log.warn "took %A" (sw.MicroTime / 10)
 
-        if check = result then
-            printfn "OK"
-        else
-            printfn "ERROR"
-//            for i in 0 .. cnt - 1 do
-//                if result.[i] <> check.[i] then
-//                    printfn "  %d: %A vs %A" i result.[i] check.[i]
 
-        //args0.Dispose()
-        //args1.Dispose()
-        //argsAdd.Dispose()
+        // download the result and check it against the CPU version
+        let result = Array.zeroCreate cnt
+        output.Download(result)
+        let mutable ok = true
+        for i in 0 .. cnt - 1 do
+            let t = result.[i] * check.[i].Inverse
+            if not (t.IsIdentity(1.0E-3f)) then
+                if ok then
+                    printfn "ERROR"
+                    ok <- false
+                printfn "  %d: %A" i t.NormMax
+
+        if ok then printfn "OK"
+
+        // relase all the resources
+        cmd.Dispose()
+        scanner.Dispose()
+        device.Delete input
         device.Delete output
-        ComputeShader.delete shader
-        device.Delete pool
 
 
     let shader() =
@@ -908,7 +911,7 @@ let main argv =
     Aardvark.Init()
 
     //tensorPerformance()
-    VulkanTests.testreduce8()
+    VulkanTests.testscan()
     Environment.Exit 0
 
 

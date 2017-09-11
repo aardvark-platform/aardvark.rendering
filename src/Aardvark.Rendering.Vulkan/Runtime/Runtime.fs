@@ -149,6 +149,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let onDispose = Event<unit>()
 
+    member x.DescriptorPool = manager.DescriptorPool
     member x.Device = device
     member x.ResourceManager = manager
     member x.ContextLock = device.Token :> IDisposable

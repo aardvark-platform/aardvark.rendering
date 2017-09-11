@@ -1081,7 +1081,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
 
     member x.Device = device
-    
+    member x.DescriptorPool = descriptorPool
+
     member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
         device.CreateRenderPass(signature)
 

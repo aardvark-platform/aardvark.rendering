@@ -700,6 +700,7 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
 //            | _ -> 
         { new CommandBuffer(device, pool, queueFamily, level) with
             override x.Dispose() =
+                x.Cleanup()
                 let mutable handle = x.Handle
                 VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, &&handle)
 
