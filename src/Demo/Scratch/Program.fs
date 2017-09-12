@@ -734,6 +734,8 @@ open System.Runtime.InteropServices
 
 [<EntryPoint>]
 let main argv = 
+    Rendering.Examples.NullBufferTest.run() |> ignore
+
 //    
 //
 //    let a = RangeSet.Empty.Add(Range1l(0L, 10L)).Add(Range1l(100L, 1000L)).Add(Range1l(12L, 98L))

@@ -194,6 +194,62 @@ module BufferCommands =
         static member inline Copy(src : Buffer, dst : Buffer) = 
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
 
+        static member Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let mutable barrier =
+                        VkBufferMemoryBarrier(
+                            VkStructureType.BufferMemoryBarrier, 0n,
+                            src,
+                            dst,
+                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            b.Handle,
+                            0UL,
+                            uint64 b.Size
+                        )
+
+                    let srcStage =
+                        match src with
+                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
+                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.ComputeShaderBit
+                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | _ -> VkPipelineStageFlags.None
+                            
+                    let dstStage =
+                        match dst with
+                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
+                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
+                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
+                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.VertexShaderBit
+                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
+                            | _ -> VkPipelineStageFlags.None
+
+                    VkRaw.vkCmdPipelineBarrier(
+                        cmd.Handle, 
+                        srcStage, 
+                        dstStage,
+                        VkDependencyFlags.None,
+                        0u, NativePtr.zero,
+                        1u, &&barrier,
+                        0u, NativePtr.zero
+                    )
+
+                    Disposable.Empty
+            }
+
         static member SyncWrite(b : Buffer) =
             { new Command() with
                 member x.Compatible = QueueFlags.All

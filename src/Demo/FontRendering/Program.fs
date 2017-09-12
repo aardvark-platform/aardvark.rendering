@@ -673,7 +673,7 @@ module VulkanTests =
                             do! Command.Bind scan
                             do! Command.SetInputs args0
                             do! Command.Dispatch(ceilDiv (int input.Size) scanSize)
-                            do! Command.SyncWrite(output.Buffer)
+                            do! Command.Sync(output.Buffer, VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit)
 
                             let oSums = output.[int64 scanSize - 1L .. ].Strided(scanSize)
                             if oSums.Size > 1L then
@@ -695,7 +695,7 @@ module VulkanTests =
                                     do! Command.Bind fixup
                                     do! Command.SetInputs args1
                                     do! Command.Dispatch(ceilDiv (int output.Size - scanSize) halfScanSize)
-                                    do! Command.SyncWrite(output.Buffer)
+                                    do! Command.Sync(output.Buffer, VkAccessFlags.ShaderWriteBit, VkAccessFlags.ShaderReadBit)
                                 finally
                                     args1.Dispose()
 
@@ -728,21 +728,531 @@ module VulkanTests =
         static member CompileScan<'a when 'a : unmanaged> (this : Runtime, add : Expr<'a -> 'a -> 'a>) =
             new ScanImpl.Scan<'a>(this, add)
 
+    module Jpeg =
+        open Aardvark.Base
+
+        let inverseZigZagOrder =
+            [|
+                0;  1;  8;  16;  9;  2;  3; 10
+                17; 24; 32; 25; 18; 11;  4;  5
+                12; 19; 26; 33; 40; 48; 41; 34 
+                27; 20; 13;  6;  7; 14; 21; 28
+                35; 42; 49; 56; 57; 50; 43; 36
+                29; 22; 15; 23; 30; 37; 44; 51
+                58; 59; 52; 45; 38; 31; 39; 46
+                53; 60; 61; 54; 47; 55; 62; 63
+            |]
+
+        let zigZagOrder =
+            [|
+                0; 1; 5; 6; 14; 15; 27; 28
+                2; 4; 7; 13; 16; 26; 29; 42
+                3; 8; 12; 17; 25; 30; 41; 43
+                9; 11; 18; 24; 31; 40; 44; 53
+                10; 19; 23; 32; 39; 45; 52; 54
+                20; 22; 33; 38; 46; 51; 55; 60
+                21; 34; 37; 47; 50; 56; 59; 61
+                35; 36; 48; 49; 57; 58; 62; 63
+            |]
+
+ 
+        let izigZag (block : 'a[]) =
+            inverseZigZagOrder |> Array.map (fun i -> block.[i])
+
+        let zigZag (block : 'a[]) =
+            zigZagOrder |> Array.map (fun i -> block.[i])
+
+        let ycbcr =
+            let mat = 
+                M34d(
+                     0.299,       0.587,      0.114,     0.0,
+                    -0.168736,   -0.331264,   0.5,       0.5,
+                     0.5,        -0.418688,  -0.081312,  0.5
+                )
+
+            fun (c : V3d[]) ->
+                c |> Array.map mat.TransformPos
+
+        let dct (block : V3d[]) =
+            Array.init 64 (fun i ->
+                let x = i % 8
+                let y = i / 8
+                let cxy = if x = y then 0.5 else 1.0
+
+                let mutable sum = V3d.Zero
+                for m in 0 .. 7 do
+                    for n in 0 .. 7 do
+                        sum <- sum + block.[m + 8*n] * cos ((2.0 * float m + 1.0) * float x * Constant.Pi / 16.0) *  cos ((2.0 * float n + 1.0) * float y * Constant.Pi / 16.0)
+                
+                0.25 * cxy * sum
+            )
+
+        let printMat8 (arr : 'a[]) =
+            arr |> Array.map (sprintf "%A") |> Array.chunkBySize 8 |> Array.map (String.concat " ") |> String.concat "\r\n"
+
+
+
+        let testBlock =
+            [|
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+            |]
+//            [|
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//            |]
+
+        type Codeword =
+            struct
+                val mutable Length : byte
+                val mutable Code : uint16
+
+                override x.ToString() =
+                    if x.Length = 0uy then 
+                        "0"
+                    else
+                        let mutable str = ""
+                        let mutable mask = 1us <<< (int x.Length - 1)
+                        for i in 1 .. int x.Length do
+                            if x.Code &&& mask <> 0us then str <- str + "1"
+                            else str <- str + "0"
+                            mask <- mask >>> 1
+
+                        str
+
+                member x.AppendBit(b : bool) =
+                    Codeword(x.Length + 1uy, (x.Code <<< 1) ||| (if b then 1us else 0us))
+
+                member x.AppendBits(count : byte, value : uint16) =
+                    Codeword(x.Length + count, (x.Code <<< int count) ||| value)
+
+                new(l,c) = { Length = l; Code = c }
+            end
+
+        let QLum =
+            zigZag [|
+                0x02; 0x02; 0x02; 0x02; 0x02; 0x02; 0x02; 0x02 
+                0x02; 0x02; 0x03; 0x02; 0x02; 0x02; 0x03; 0x04 
+                0x03; 0x02; 0x02; 0x03; 0x04; 0x05; 0x04; 0x04 
+                0x04; 0x04; 0x04; 0x05; 0x06; 0x05; 0x05; 0x05 
+                0x05; 0x05; 0x05; 0x06; 0x06; 0x07; 0x07; 0x08 
+                0x07; 0x07; 0x06; 0x09; 0x09; 0x0A; 0x0A; 0x09 
+                0x09; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C 
+                0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C
+            |]
+
+        let QChrom =
+            zigZag [|
+                0x03; 0x03;0x03; 0x05; 0x04; 0x05; 0x09; 0x06 
+                0x06; 0x09;0x0D; 0x0B; 0x09; 0x0B; 0x0D; 0x0F 
+                0x0E; 0x0E;0x0E; 0x0E; 0x0F; 0x0F; 0x0C; 0x0C 
+                0x0C; 0x0C;0x0C; 0x0F; 0x0F; 0x0C; 0x0C; 0x0C 
+                0x0C; 0x0C;0x0C; 0x0F; 0x0C; 0x0C; 0x0C; 0x0C 
+                0x0C; 0x0C;0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C 
+                0x0C; 0x0C;0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C 
+                0x0C; 0x0C;0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C
+            |]
+            
+
+        let quantify (block : V3d[]) =
+            let round (v : V3d) = V3i(int (round v.X), int (round v.Y), int (round v.Z))
+            Array.map3 (fun ql qc v -> round(255.0 * v / V3d(float ql,float qc,float qc))) QLum QChrom block
+
+
+        module Huffman = 
+            type TableSpec =
+                {
+                    counts : int[]
+                    values : byte[]
+                }
+
+            let dcLum = 
+                {
+                    counts = [| 0; 0; 1; 5; 1; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0; 0; 0 |]
+                    values = [| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy; 9uy; 10uy; 11uy |]
+                }
+
+            let dcChrom = 
+                {
+                    counts = [| 0; 0; 3; 1; 1; 1; 1; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0 |]
+                    values = [| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy; 9uy; 10uy; 11uy |]
+                }
+
+            let acLum = 
+                { 
+                    counts = [|  0; 0; 2; 1; 3; 3; 2; 4; 3; 5; 5; 4; 4; 0; 0; 1; 0x7d |]
+                    values = 
+                    [|
+                        0x01uy; 0x02uy; 0x03uy; 0x00uy; 0x04uy; 0x11uy; 0x05uy; 0x12uy;
+                        0x21uy; 0x31uy; 0x41uy; 0x06uy; 0x13uy; 0x51uy; 0x61uy; 0x07uy;
+                        0x22uy; 0x71uy; 0x14uy; 0x32uy; 0x81uy; 0x91uy; 0xa1uy; 0x08uy;
+                        0x23uy; 0x42uy; 0xb1uy; 0xc1uy; 0x15uy; 0x52uy; 0xd1uy; 0xf0uy;
+                        0x24uy; 0x33uy; 0x62uy; 0x72uy; 0x82uy; 0x09uy; 0x0auy; 0x16uy;
+                        0x17uy; 0x18uy; 0x19uy; 0x1auy; 0x25uy; 0x26uy; 0x27uy; 0x28uy;
+                        0x29uy; 0x2auy; 0x34uy; 0x35uy; 0x36uy; 0x37uy; 0x38uy; 0x39uy;
+                        0x3auy; 0x43uy; 0x44uy; 0x45uy; 0x46uy; 0x47uy; 0x48uy; 0x49uy;
+                        0x4auy; 0x53uy; 0x54uy; 0x55uy; 0x56uy; 0x57uy; 0x58uy; 0x59uy;
+                        0x5auy; 0x63uy; 0x64uy; 0x65uy; 0x66uy; 0x67uy; 0x68uy; 0x69uy;
+                        0x6auy; 0x73uy; 0x74uy; 0x75uy; 0x76uy; 0x77uy; 0x78uy; 0x79uy;
+                        0x7auy; 0x83uy; 0x84uy; 0x85uy; 0x86uy; 0x87uy; 0x88uy; 0x89uy;
+                        0x8auy; 0x92uy; 0x93uy; 0x94uy; 0x95uy; 0x96uy; 0x97uy; 0x98uy;
+                        0x99uy; 0x9auy; 0xa2uy; 0xa3uy; 0xa4uy; 0xa5uy; 0xa6uy; 0xa7uy;
+                        0xa8uy; 0xa9uy; 0xaauy; 0xb2uy; 0xb3uy; 0xb4uy; 0xb5uy; 0xb6uy;
+                        0xb7uy; 0xb8uy; 0xb9uy; 0xbauy; 0xc2uy; 0xc3uy; 0xc4uy; 0xc5uy;
+                        0xc6uy; 0xc7uy; 0xc8uy; 0xc9uy; 0xcauy; 0xd2uy; 0xd3uy; 0xd4uy;
+                        0xd5uy; 0xd6uy; 0xd7uy; 0xd8uy; 0xd9uy; 0xdauy; 0xe1uy; 0xe2uy;
+                        0xe3uy; 0xe4uy; 0xe5uy; 0xe6uy; 0xe7uy; 0xe8uy; 0xe9uy; 0xeauy;
+                        0xf1uy; 0xf2uy; 0xf3uy; 0xf4uy; 0xf5uy; 0xf6uy; 0xf7uy; 0xf8uy;
+                        0xf9uy; 0xfauy
+                    |]
+                }
+
+            let acChrom = 
+                {
+                     counts = [| 0; 0; 2; 1; 2; 4; 4; 3; 4; 7; 5; 4; 4; 0; 1; 2; 0x77 |]
+                     values = 
+                     [|
+                        0x00uy; 0x01uy; 0x02uy; 0x03uy; 0x11uy; 0x04uy; 0x05uy; 0x21uy;
+                        0x31uy; 0x06uy; 0x12uy; 0x41uy; 0x51uy; 0x07uy; 0x61uy; 0x71uy;
+                        0x13uy; 0x22uy; 0x32uy; 0x81uy; 0x08uy; 0x14uy; 0x42uy; 0x91uy;
+                        0xa1uy; 0xb1uy; 0xc1uy; 0x09uy; 0x23uy; 0x33uy; 0x52uy; 0xf0uy;
+                        0x15uy; 0x62uy; 0x72uy; 0xd1uy; 0x0auy; 0x16uy; 0x24uy; 0x34uy;
+                        0xe1uy; 0x25uy; 0xf1uy; 0x17uy; 0x18uy; 0x19uy; 0x1auy; 0x26uy;
+                        0x27uy; 0x28uy; 0x29uy; 0x2auy; 0x35uy; 0x36uy; 0x37uy; 0x38uy;
+                        0x39uy; 0x3auy; 0x43uy; 0x44uy; 0x45uy; 0x46uy; 0x47uy; 0x48uy;
+                        0x49uy; 0x4auy; 0x53uy; 0x54uy; 0x55uy; 0x56uy; 0x57uy; 0x58uy;
+                        0x59uy; 0x5auy; 0x63uy; 0x64uy; 0x65uy; 0x66uy; 0x67uy; 0x68uy;
+                        0x69uy; 0x6auy; 0x73uy; 0x74uy; 0x75uy; 0x76uy; 0x77uy; 0x78uy;
+                        0x79uy; 0x7auy; 0x82uy; 0x83uy; 0x84uy; 0x85uy; 0x86uy; 0x87uy;
+                        0x88uy; 0x89uy; 0x8auy; 0x92uy; 0x93uy; 0x94uy; 0x95uy; 0x96uy;
+                        0x97uy; 0x98uy; 0x99uy; 0x9auy; 0xa2uy; 0xa3uy; 0xa4uy; 0xa5uy;
+                        0xa6uy; 0xa7uy; 0xa8uy; 0xa9uy; 0xaauy; 0xb2uy; 0xb3uy; 0xb4uy;
+                        0xb5uy; 0xb6uy; 0xb7uy; 0xb8uy; 0xb9uy; 0xbauy; 0xc2uy; 0xc3uy;
+                        0xc4uy; 0xc5uy; 0xc6uy; 0xc7uy; 0xc8uy; 0xc9uy; 0xcauy; 0xd2uy;
+                        0xd3uy; 0xd4uy; 0xd5uy; 0xd6uy; 0xd7uy; 0xd8uy; 0xd9uy; 0xdauy;
+                        0xe2uy; 0xe3uy; 0xe4uy; 0xe5uy; 0xe6uy; 0xe7uy; 0xe8uy; 0xe9uy;
+                        0xeauy; 0xf2uy; 0xf3uy; 0xf4uy; 0xf5uy; 0xf6uy; 0xf7uy; 0xf8uy;
+                        0xf9uy; 0xfauy
+                     |]
+                }
+
+            type HuffTree =
+                | Empty
+                | Leaf of byte
+                | Node of HuffTree * HuffTree
+
+            let rec zipper (l : list<HuffTree>) =
+                match l with
+                    | [] -> []
+                    | a :: b :: rest ->
+                        Node(a,b) :: zipper rest
+                    | [a] ->
+                        [Node(a,Empty)]
+
+            let build (spec : TableSpec) : HuffTree =
+                let mutable currentValue = 0
+                let rec build (level : int) (n : int) : list<HuffTree> =
+                    if n <= 0 then
+                        []
+                    else
+                        let cnt = spec.counts.[level]
+
+                        let leafs = 
+                            List.init cnt (fun _ -> 
+                                let i = currentValue
+                                currentValue <- i + 1
+                                Leaf spec.values.[i]
+                            )
+
+                        let nodes =
+                            if level >= spec.counts.Length - 1 then
+                                []
+                            else
+                                let nodeCount = n - cnt
+                                build (level + 1) (2 * nodeCount) |> zipper
+
+                        let res = leafs @ nodes
+            
+                        res
+
+                match build 0 1 with
+                    | [n] -> n
+                    | _ -> failwith "magic"
+
+            let inverse (spec : TableSpec) =
+                let tree = build spec
+                let max = 1 + (spec.values |> Array.max |> int)
+
+                let arr = Array.zeroCreate max
+
+                let rec traverse (path : Codeword) (t : HuffTree) =
+                    match t with
+                        | Empty -> ()
+                        | Leaf v -> arr.[int v] <- path
+                        | Node(l,r) ->
+                            traverse (path.AppendBit false) l
+                            traverse (path.AppendBit true) r
+
+                traverse (Codeword(0uy, 0us)) tree
+                arr  
+
+            let dcLumInv = inverse dcLum
+            let acLumInv = inverse acLum
+            let dcChromInv = inverse dcChrom
+            let acChromInv = inverse acChrom
+
+
+        type BitStream(s : System.IO.Stream) =
+            let mutable current = Codeword(0uy, 0us)
+
+            static let bla (f : byte[]) =
+                f |> Array.collect (fun b ->
+                    if b = 0xFFuy then [| b; 0x00uy |]
+                    else [| b |]
+                )
+
+            
+            let write arr =
+                let arr = bla arr
+                s.Write(arr, 0, arr.Length)
+
+            let s = ()
+
+            member x.Write(w : Codeword) =
+                let appendBits = min w.Length (16uy - current.Length)
+                current <- current.AppendBits(appendBits, w.Code)
+
+                if current.Length = 16uy then
+                    let h = current.Code >>> 8 |> byte
+                    let l = current.Code |> byte
+                    write [| h; l |]
+                    current <- Codeword(0uy, 0us)
+
+                if appendBits < w.Length then
+                    let rem = w.Length - appendBits
+                    current <- current.AppendBits(rem, w.Code >>> int appendBits)
+
+            member x.Write(b : byte) =
+                x.Write(Codeword(8uy, uint16 b))
+
+            member x.Flush() =
+                if current.Length > 8uy then
+                    let v = current.Code <<< (16 - int current.Length)
+                    let h = v >>> 8 |> byte
+                    let l = v |> byte
+                    write [| h; l |]
+                    current <- Codeword(0uy, 0us)
+                elif current.Length > 0uy then
+                    let v = current.Code <<< (8 - int current.Length)
+                    let l = current.Code |> byte
+                    write [| l |]
+                    current <- Codeword(0uy, 0us)
+
+            member x.WriteDCLum(v : int) =
+                let dc = Fun.HighestBit(abs v) + 1
+                let off = if v < 0 then (1 <<< dc) - 1 else 0
+                let v = uint16 (off + v)
+                let huff = Huffman.dcLumInv.[dc]
+                x.Write(huff)
+                x.Write(Codeword(byte dc, v))
+
+            member x.WriteACLum(leadingZeros : int, v : int) =
+                assert(leadingZeros < 16) 
+
+                let dc = Fun.HighestBit(abs v) + 1
+                let off = if v < 0 then (1 <<< dc) - 1 else 0
+                let v = uint16 (off + v)
+
+                let index = (byte leadingZeros <<< 4) ||| byte dc
+                let huff = Huffman.acLumInv.[int index]
+                x.Write huff
+                x.Write(Codeword(byte dc, v))
+
+                
+            member x.WriteDCChrom(v : int) =
+                let dc = Fun.HighestBit(abs v) + 1
+                let off = if v < 0 then (1 <<< dc) - 1 else 0
+                let v = uint16 (off + v)
+                let huff = Huffman.dcChromInv.[dc]
+                x.Write(huff)
+                x.Write(Codeword(byte dc, v))
+
+            member x.WriteACChrom(leadingZeros : int, v : int) =
+                assert(leadingZeros < 16) 
+
+                let dc = Fun.HighestBit(abs v) + 1
+                let off = if v < 0 then (1 <<< dc) - 1 else 0
+                let v = uint16 (off + v)
+
+                let index = (byte leadingZeros <<< 4) ||| byte dc
+                let huff = Huffman.acChromInv.[int index]
+                x.Write huff
+                x.Write(Codeword(byte dc, v))
+
+        let writeBlock (bs : BitStream) (block : V3i[]) =
+
+
+            bs.WriteDCLum(block.[0].X)
+            let mutable leading = 0
+            let mutable i = 1 
+            while i < 64 do
+                while i < 64 && block.[i].X = 0 do 
+                    leading <- leading + 1
+                    i <- i + 1
+
+                if i < 64 then
+                    let v = block.[i]
+
+                    while leading >= 16 do
+                        bs.Write(0xF0uy)
+                        leading <- leading - 16
+
+                    bs.WriteACLum(leading, v.X)
+                    leading <- 0
+                    i <- i + 1
+                else
+                    bs.WriteACLum(0, 0)
+
+            for d in 1 .. 2 do
+                bs.WriteDCChrom(block.[0].[d])
+                let mutable leading = 0
+                let mutable i = 1 
+                while i < 64 do
+                    while i < 64 && block.[i].[d] = 0 do 
+                        leading <- leading + 1
+                        i <- i + 1
+
+                    if i < 64 then
+                        let v = block.[i]
+
+                        while leading >= 16 do
+                            bs.Write(0xF0uy)
+                            leading <- leading - 16
+
+
+                        bs.WriteACChrom(leading, v.[d])
+                        leading <- 0
+                        i <- i + 1
+                    else
+                        bs.WriteACChrom(0, 0)
+
+        let writeImage (size : V2i) (blocks : list<V3i[]>) =
+            let ms = new System.IO.MemoryStream()
+            
+
+            let header = [| 0xFFuy; 0xD8uy;  |]
+            ms.Write(header, 0, header.Length)
+
+            let encode (v : uint16) =
+                [| byte (v >>> 8); byte v |]
+
+
+            let quant = 
+                Array.concat [
+                    [| 0xFFuy; 0xDBuy; 0x00uy; 0x84uy |]
+                    [| 0x00uy |]
+                    QLum |> izigZag |> Array.map byte
+                    [| 0x01uy |]
+                    QChrom |> izigZag |> Array.map byte
+                ]
+            ms.Write(quant, 0, quant.Length)
+
+            let sof =
+                Array.concat [
+                    [| 0xFFuy; 0xC0uy; 0x00uy; 0x11uy |]
+                    [| 0x08uy |]
+                    encode (uint16 size.Y)
+                    encode (uint16 size.X)
+                    [| 0x03uy; |]
+                    [| 0x01uy; 0x11uy; 0x00uy |]
+                    [| 0x02uy; 0x11uy; 0x01uy |]
+                    [| 0x03uy; 0x11uy; 0x01uy |]
+                ]
+            ms.Write(sof, 0, sof.Length)
+
+            let huff =
+                let huffSize (spec : Huffman.TableSpec)  =
+                     uint16 (1 + 16 + spec.values.Length)
+
+                let encodeHuff (kind : byte) (spec : Huffman.TableSpec) =
+                    Array.concat [
+                        [| kind |]
+                        Array.skip 1 spec.counts |> Array.map byte
+                        spec.values
+                    ]
+
+                Array.concat [
+                    [| 0xFFuy; 0xC4uy |]
+                    encode (2us + huffSize Huffman.dcLum + huffSize Huffman.dcChrom + huffSize Huffman.acLum + huffSize Huffman.acChrom)
+
+                    encodeHuff 0x00uy Huffman.dcLum
+                    encodeHuff 0x01uy Huffman.dcChrom
+                    encodeHuff 0x10uy Huffman.acLum
+                    encodeHuff 0x11uy Huffman.acChrom
+                ]
+            ms.Write(huff, 0, huff.Length)
+
+            let sos = [| 0xFFuy; 0xDAuy; 0x00uy; 0x0Cuy; 0x03uy; 0x01uy; 0x00uy; 0x02uy; 0x11uy; 0x03uy; 0x11uy; 0x00uy; 0x3Fuy; 0x00uy |]
+            ms.Write(sos, 0, sos.Length)
+            let bs = new BitStream(ms)
+            for b in blocks do writeBlock bs b
+            bs.Flush()
+
+            ms.Write([| 0xFFuy; 0xD9uy |], 0, 2)
+
+            ms.ToArray()
+
+
+
+        let test() = 
+            testBlock
+                |> ycbcr
+                |> dct
+                |> quantify
+                |> zigZag
+                |> List.singleton
+                |> writeImage (V2i(8,8))
+
+
+
     let testscan() =
-        use app = new HeadlessVulkanApplication(true)
+        let data = Jpeg.test()
+        data |> Array.map (sprintf "0x%02X") |> String.concat ";" |> printfn "%s"
+        printfn "%A" data.Length
+
+        File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf.jpg" data
+
+
+        System.Environment.Exit 0
+
+        use app = new HeadlessVulkanApplication(false)
         let device = app.Device
 
         // generate random data
-        let cnt = 1 <<< 24
+        let cnt = 1 <<< 26
         let rand = RandomSystem()
-        let inputData = Array.init cnt (fun _ -> M44f.Rotation(V3f(rand.UniformV3dDirection()), float32 <| rand.UniformDouble() * Constant.PiTimesTwo))
+        let inputData = Array.init cnt (fun _ -> V4d(rand.UniformV3d(), rand.UniformDouble()) |> V4f)
 
         // compile a scan using (+) as accumulation function
-        let scanner = app.Runtime.CompileScan <@ (*) @>
+        let scanner = app.Runtime.CompileScan <@ (+) @>
 
         // create buffers holding the in-/output
         let input   = device.CreateBuffer(inputData)
         let output  = device.CreateBuffer(int64 cnt)
+
+        //device.Scan(<@ (*) @>, input, output)
 
         // perform the scan once
         device.perform {
@@ -768,7 +1278,7 @@ module VulkanTests =
         for i in 1 .. 10 do
             check.[0] <- inputData.[0]
             for i in 1 .. check.Length - 1 do
-                check.[i] <- check.[i-1] * inputData.[i]
+                check.[i] <- check.[i-1] + inputData.[i]
         sw.Stop()
         Log.warn "took %A" (sw.MicroTime / 10)
 
@@ -776,28 +1286,33 @@ module VulkanTests =
 
         let mutable hist : MapExt<int, int * float> = MapExt.empty
 
+        let mutable ok = true
         // download the result and check it against the CPU version
         let result = Array.zeroCreate cnt
         output.Download(result)
         for i in 0 .. cnt - 1 do
-            let d = M44d.Distance2(M44d.op_Explicit result.[i], M44d.op_Explicit check.[i]) |> float
-            let e = if d <= 0.0 then -1000 else Fun.Log10 d |> int
-            hist <-
-                hist |> MapExt.alter e (fun o ->
-                    match o with
-                        | Some (cnt, v) -> Some (cnt + 1, v + d)
-                        | None -> Some (1, d)
-                )
+            if check.[i] <> result.[i] then
+                ok <- false
+//            let d = M44d.Distance2(M44d.op_Explicit result.[i], M44d.op_Explicit check.[i]) |> float
+//            let e = if d <= 0.0 then -1000 else Fun.Log10 d |> int
+//            hist <-
+//                hist |> MapExt.alter e (fun o ->
+//                    match o with
+//                        | Some (cnt, v) -> Some (cnt + 1, v + d)
+//                        | None -> Some (1, d)
+//                )
+//
+//        printfn "results"
+//        for (e,(cnt,v)) in MapExt.toSeq hist do
+//            if e <= -1000 then
+//                printfn "   0:          (%d)" cnt
+//            else
+//                let v = (v / float cnt)
+//                let v = v / (10.0 ** float e)
+//                printfn "   1E%d: %.3f (%d)" e v cnt
 
-        printfn "results"
-        for (e,(cnt,v)) in MapExt.toSeq hist do
-            if e <= -1000 then
-                printfn "   0:          (%d)" cnt
-            else
-                let v = (v / float cnt)
-                let v = v / (10.0 ** float e)
-                printfn "   1E%d: %.3f (%d)" e v cnt
-
+        if ok then printfn "OK"
+        else printfn "ERROR"
 
         // relase all the resources
         cmd.Dispose()
