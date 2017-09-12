@@ -731,7 +731,7 @@ module VulkanTests =
     module Jpeg =
         open Aardvark.Base
 
-        let inverseZigZagOrder =
+        let zigZagOrder =
             [|
                 0;  1;  8;  16;  9;  2;  3; 10
                 17; 24; 32; 25; 18; 11;  4;  5
@@ -743,7 +743,7 @@ module VulkanTests =
                 53; 60; 61; 54; 47; 55; 62; 63
             |]
 
-        let zigZagOrder =
+        let inverseZigZagOrder =
             [|
                 0; 1; 5; 6; 14; 15; 27; 28
                 2; 4; 7; 13; 16; 26; 29; 42
@@ -760,31 +760,36 @@ module VulkanTests =
             inverseZigZagOrder |> Array.map (fun i -> block.[i])
 
         let zigZag (block : 'a[]) =
-            zigZagOrder |> Array.map (fun i -> block.[i])
+            zigZagOrder |> Array.map (fun i -> 
+                let x = i % 8
+                let y = i / 8
+                block.[x + 8* y]
+            )
 
         let ycbcr =
             let mat = 
                 M34d(
                      0.299,       0.587,      0.114,     0.0,
-                    -0.168736,   -0.331264,   0.5,       0.5,
-                     0.5,        -0.418688,  -0.081312,  0.5
+                    -0.168736,   -0.331264,   0.5,       0.0,
+                     0.5,        -0.418688,  -0.081312,  0.0
                 )
 
             fun (c : V3d[]) ->
-                c |> Array.map mat.TransformPos
+                c |> Array.map (fun c -> mat.TransformPos(c * V3d(255.0, 255.0, 255.0)) + V3d(-128.0, 0.0, 0.0))
 
         let dct (block : V3d[]) =
             Array.init 64 (fun i ->
                 let x = i % 8
                 let y = i / 8
-                let cxy = if x = y then 0.5 else 1.0
+                let cx = if x = 0 then sqrt 0.5 else 1.0
+                let cy = if y = 0 then sqrt 0.5 else 1.0
 
                 let mutable sum = V3d.Zero
                 for m in 0 .. 7 do
                     for n in 0 .. 7 do
                         sum <- sum + block.[m + 8*n] * cos ((2.0 * float m + 1.0) * float x * Constant.Pi / 16.0) *  cos ((2.0 * float n + 1.0) * float y * Constant.Pi / 16.0)
                 
-                0.25 * cxy * sum
+                0.25 * cx * cy * sum
             )
 
         let printMat8 (arr : 'a[]) =
@@ -793,26 +798,26 @@ module VulkanTests =
 
 
         let testBlock =
-            [|
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-            |]
 //            [|
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
 //            |]
+            [|
+                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+            |]
 
         type Codeword =
             struct
@@ -842,7 +847,7 @@ module VulkanTests =
             end
 
         let QLum =
-            zigZag [|
+            izigZag [|
                 0x02; 0x02; 0x02; 0x02; 0x02; 0x02; 0x02; 0x02 
                 0x02; 0x02; 0x03; 0x02; 0x02; 0x02; 0x03; 0x04 
                 0x03; 0x02; 0x02; 0x03; 0x04; 0x05; 0x04; 0x04 
@@ -854,7 +859,7 @@ module VulkanTests =
             |]
 
         let QChrom =
-            zigZag [|
+            izigZag [|
                 0x03; 0x03;0x03; 0x05; 0x04; 0x05; 0x09; 0x06 
                 0x06; 0x09;0x0D; 0x0B; 0x09; 0x0B; 0x0D; 0x0F 
                 0x0E; 0x0E;0x0E; 0x0E; 0x0F; 0x0F; 0x0C; 0x0C 
@@ -868,7 +873,7 @@ module VulkanTests =
 
         let quantify (block : V3d[]) =
             let round (v : V3d) = V3i(int (round v.X), int (round v.Y), int (round v.Z))
-            Array.map3 (fun ql qc v -> round(255.0 * v / V3d(float ql,float qc,float qc))) QLum QChrom block
+            Array.map3 (fun ql qc v -> round(v / V3d(float ql,float qc,float qc))) QLum QChrom block
 
 
         module Huffman = 
