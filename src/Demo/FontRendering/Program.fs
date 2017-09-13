@@ -1809,40 +1809,243 @@ module VulkanTests =
         type Ballot () =
             
             [<GLSLIntrinsic("gl_SubGroupSizeARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
-            static member GetSubGroupSize() : uint32 =
+            static member SubGroupSize() : uint32 =
                 failwith ""
 
             [<GLSLIntrinsic("ballotARB({0})", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
             static member Ballot(a : bool) : uint64 =
                 failwith ""
 
-        [<LocalSize(X = 64)>]
-        let compact (mask : int[]) =
+            [<GLSLIntrinsic("bitCount({0})")>]
+            static member BitCount(u : uint32) : int =
+                failwith ""
+
+            [<GLSLIntrinsic("findMSB({0})")>]
+            static member MSB(u : uint32) : int =
+                failwith ""
+
+            [<GLSLIntrinsic("gl_SubGroupLtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+            static member LessMask() : uint64 =
+                failwith ""
+
+            [<GLSLIntrinsic("gl_SubGroupLeMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+            static member LessEqualMask() : uint64 =
+                failwith ""
+
+            [<GLSLIntrinsic("gl_SubGroupGtMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+            static member GreaterMask() : uint64 =
+                failwith ""
+
+            [<GLSLIntrinsic("gl_SubGroupGeMaskARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+            static member GreaterEqualMask() : uint64 =
+                failwith ""
+                
+            [<GLSLIntrinsic("addInvocationsAMD", "GL_AMD_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+            static member AddInvocations(v : int) : int =
+                failwith ""
+        
+            [<GLSLIntrinsic("atomicOr({0}, {1})")>]
+            static member AtomicOr(r : 'a, v : 'a) : unit =
+                failwith ""
+
+        let encode (index : int) (leading : int) (value : float) : int * uint32 =
+            if index = 0 then
+                16, 0xDEAD0000u
+            else
+                //let value = (uint32 leading <<< 16) ||| (uint32 (32768.0 + value))
+                8, 0xAB000000u
+
+        let takeHigh (cnt : int) (word : uint32) =
+            word >>> (32 - cnt)
+            
+        let takeLow (cnt : int) (word : uint32) =
+            word &&& ((1u <<< cnt) - 1u)
+
+        let skip (cnt : int) (word : uint32) =
+            word <<< cnt
+
+        [<LocalSize(X = 32)>]
+        let compact (channel : int) (data : float[]) (counts : int[]) (mask : uint32[]) =
             compute {
-                let id = getGlobalId().X
-                //let lid = getLocalId().X
-                let r = Ballot.GetSubGroupSize()
-                mask.[id] <- int r
+                let mem = allocateShared 64
+                let temp = allocateShared 64
 
-//
-//                let value = data.[id *  4 + channel]
-//                let isZero = false
-//                let lz = 0
-//
-//                if isZero then
-//                    if lz < 16 then
-//                        mask.[id] <- 0
-//                    else
-//                        emit.[id] <- 0xFA
-//                        mask.[id] <- 1
-//                else
-//                    let lz = 
+                let offset = getWorkGroupId().X * 64
+
+                let lid = getLocalId().X
+                let llid = 2 * lid 
+                let rlid = llid + 1
+
+                let gid = getGlobalId().X
+                let li = 2 * gid
+                let ri = li + 1
 
 
-                // Option<LeadingZeros * Value>
+                let lv = data.[li * 4 + channel]
+                let rv = data.[ri * 4 + channel]
+
+                let lnz = llid = 0 || lv <> 0.0
+                let rnz = rv <> 0.0
 
 
-                ()
+                // count leading zeros
+                let lessMask = Ballot.LessMask()
+                let lb = lessMask &&& Ballot.Ballot(lnz) |> uint32
+                let rb = lessMask &&& Ballot.Ballot(rnz) |> uint32
+
+                let loi = Ballot.BitCount lb + Ballot.BitCount rb
+                let roi = (if lnz then 1 else 0) + loi
+                
+                let lpm = Ballot.MSB(lb)
+                let rpm = Ballot.MSB(rb)
+                let lp =
+                    if lpm > rpm then 2 * lpm
+                    else 2 * rpm + 1
+
+                let rp =
+                    if lnz then li
+                    else lp
+
+                let llz = li - lp - 1
+                let rlz = ri - rp - 1
+
+
+                let scanSize = 64
+
+                // encode values and write their bit-counts to mem
+                // TODO: what about >=16 zeros??? => should be done
+                // TODO: what about EOB marker
+                let mutable lCode = 0u
+                let mutable rCode = 0u
+                let mutable lLength = 0
+                let mutable rLength = 0
+
+                if llid = 0 then
+                    let v = if lid >= 64 then lv - data.[lid - 4*64] else lv
+                    let lSize, lc = encode llid (llz % 16) v
+                    lCode <- lc
+                    lLength <- lSize
+
+                elif lnz then
+                    let lSize, lc = encode llid (llz % 16) lv
+                    lCode <- lc
+                    lLength <- lSize
+
+                elif llz > 0 && llz % 16 = 0 then
+                    lCode <- 0xFAu
+                    lLength <- 8
+
+
+                if rnz then
+                    let rSize, rc = encode rlid (rlz % 16) rv
+                    rCode <- rc
+                    rLength <- rSize
+                elif rlz > 0 && rlz % 16 = 0 then
+                    rCode <- 0xFAu
+                    rLength <- 8
+
+
+
+
+                mem.[llid] <- lLength
+                mem.[rlid] <- rLength        
+
+                // scan mem
+                barrier()
+
+                let mutable s = 1
+                let mutable d = 2
+                while d <= scanSize do
+                    if llid % d = 0 && llid >= s then
+                        mem.[llid] <- mem.[llid - s] + mem.[llid]
+
+                    barrier()
+                    s <- s <<< 1
+                    d <- d <<< 1
+
+                d <- d >>> 1
+                s <- s >>> 1
+                while s >= 1 do
+                    if llid % d = 0 && llid + s < scanSize then
+                        mem.[llid + s] <- mem.[llid] + mem.[llid + s]
+                    
+                    barrier()
+                    s <- s >>> 1
+                    d <- d >>> 1
+                    
+
+
+                temp.[llid] <- 0u
+                temp.[rlid] <- 0u
+                barrier()
+
+                if lLength > 0 then
+                    let bitOffset = if llid > 0 then mem.[llid - 1] else 0
+                    let bitLength = lLength
+                    let store = lCode
+
+                    let oi = bitOffset / 32
+                    let oo = bitOffset % 32
+
+                    let word = takeHigh bitLength store
+                    let space = 32 - oo
+
+                    if bitLength <= space then
+                        // oo = 0 => word <<< (32 - bitLength)
+                        // oo = 16 => word <<< (16 - bitLength)
+                        // oo = 24 => word <<< (8 - bitLength)
+                        let a = word <<< (space - bitLength)
+                        Ballot.AtomicOr(temp.[oi], a)
+
+                    else
+                        let a = takeHigh space word
+                        Ballot.AtomicOr(temp.[oi], a)
+
+                        let cnt = bitLength - space
+                        let b = takeLow cnt word <<< (32 - cnt)
+                        Ballot.AtomicOr(temp.[oi+1], b)
+
+                if rLength > 0 then
+                    let bitOffset = mem.[rlid - 1]
+                    let bitLength = rLength
+                    let store = rCode
+
+                    let oi = bitOffset / 32
+                    let oo = bitOffset % 32
+
+                    let word = takeHigh bitLength store
+                    let space = 32 - oo
+
+                    if bitLength <= space then
+                        // oo = 0 => word <<< (32 - bitLength)
+                        // oo = 16 => word <<< (16 - bitLength)
+                        // oo = 24 => word <<< (8 - bitLength)
+                        let a = word <<< (space - bitLength)
+                        Ballot.AtomicOr(temp.[oi], a)
+
+                    else
+                        let a = takeHigh space word
+                        Ballot.AtomicOr(temp.[oi], a)
+
+                        let cnt = bitLength - space
+                        let b = takeLow cnt word <<< (32 - cnt)
+                        Ballot.AtomicOr(temp.[oi+1], b)
+
+
+
+                barrier()
+
+                let cnt = mem.[63]
+                if llid * 4 < cnt then
+                    mask.[li] <- temp.[llid]
+                    
+                if rlid * 4 < cnt then
+                    mask.[ri] <- temp.[rlid]
+
+                    
+                if lid = 31 then
+                    counts.[getWorkGroupId().X] <- cnt
+
 
             
             }
@@ -1860,7 +2063,13 @@ module VulkanTests =
         let shader = device |> ComputeShader.ofFunction JpegGPU.compact
         let input = ComputeShader.newInputBinding shader app.Runtime.DescriptorPool
 
-        let b = device.CreateBuffer<int>(64L)
+
+        let data = device.CreateBuffer<V4f>(Array.init 64 (fun i -> if i % 3 = 0 then V4f(i,i,i,i) else V4f.Zero))
+        let counts = device.CreateBuffer<int>(1L)
+        let b = device.CreateBuffer<uint32>(64L)
+        input.["channel"] <- 0
+        input.["data"] <- data
+        input.["counts"] <- counts
         input.["mask"] <- b
         input.Flush()
         
@@ -1872,7 +2081,18 @@ module VulkanTests =
 
         let arr = Array.zeroCreate 64
         b.Download(arr)
-        printfn "%A" arr.[0]
+
+        let arr2 = 
+            arr |> Array.map (fun v ->
+                let lz = (v >>> 16) &&& 0xFFFFu |> int
+                let v = int (v &&& 0xFFFFu) - 32768
+                (lz,v)
+            )
+
+        let cnts = Array.zeroCreate 1
+        counts.Download(cnts)
+   
+        printfn "%A (%A)" arr2.[0] cnts.[0]
 
 
         let shader = device |> ComputeShader.ofFunction JpegGPU.dct
