@@ -18,8 +18,8 @@ type ShaderType =
     | Vector of compType : ShaderType * dim : int
     | Matrix of colType : ShaderType * dim : int
     | Array of elementType : ShaderType * length : int
-    | Struct of name : string * fields : list<ShaderType * string * list<Decoration * uint32[]>>
-    | Image of sampledType : ShaderType * dim : Dim * depth : int * arrayed : bool * ms : int * sampled : bool * format : int
+    | Struct of name : string * fields : list<ShaderType * string * list<Decoration * int[]>>
+    | Image of sampledType : ShaderType * dim : Dim * depth : int * arrayed : bool * ms : int * sampled : bool * format : ImageFormat
     | SampledImage of ShaderType
     | Ptr of StorageClass * ShaderType
     | RuntimeArray of ShaderType
@@ -27,7 +27,7 @@ type ShaderType =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderType =
 
-    let glslDecoration (decorations : list<Decoration * uint32[]>) =
+    let glslDecoration (decorations : list<Decoration * int[]>) =
         if List.isEmpty decorations then
             ""
         else
@@ -211,7 +211,7 @@ type ShaderParameter =
     { 
         paramName : string
         paramType : ShaderType
-        paramDecorations : list<Decoration * uint32[]> 
+        paramDecorations : list<Decoration * int[]> 
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -517,7 +517,7 @@ module UniformBufferLayoutStd140 =
             | ShaderType.SampledImage _ ->
                 failf "cannot use SampledImage in UniformBuffer"
 
-    and structLayout (fields : list<ShaderType * string * list<Decoration * uint32[]>>) : UniformBufferLayout =
+    and structLayout (fields : list<ShaderType * string * list<Decoration * int[]>>) : UniformBufferLayout =
         let mutable currentOffset = 0
         let mutable offsets : Map<string, int> = Map.empty
         let mutable types : Map<string, ShaderType> = Map.empty
@@ -735,7 +735,8 @@ module ShaderUniformParameter =
                 TextureFormat.R8ui
             |]
 
-        let toTextureFormat (fmt : int) =
+        let toTextureFormat (fmt : ImageFormat) =
+            let fmt = int fmt
             if fmt < 1 || fmt >= textureFormats.Length then None
             else Some textureFormats.[fmt]
 
@@ -1036,7 +1037,7 @@ module private ShaderInfo =
 
                 | OpTypeVoid r              -> types.[r] <- ShaderType.Void
                 | OpTypeBool r              -> types.[r] <- ShaderType.Bool
-                | OpTypeInt (r, w, s)       -> types.[r] <- ShaderType.Int(int w, s = 1u)
+                | OpTypeInt (r, w, s)       -> types.[r] <- ShaderType.Int(int w, s = 1)
                 | OpTypeFloat (r, w)        -> types.[r] <- ShaderType.Float(int w)
                 | OpTypeVector (r, c, d)    -> types.[r] <- ShaderType.Vector(types.[c], int d)
                 | OpTypeMatrix (r, c, d)    -> types.[r] <- ShaderType.Matrix(types.[c], int d)
@@ -1046,7 +1047,7 @@ module private ShaderInfo =
                 | OpTypePointer (r, c, t)   -> types.[r] <- ShaderType.Ptr(c, types.[t])
                 | OpTypeRuntimeArray(r,t)   -> types.[r] <- ShaderType.RuntimeArray(types.[t])
                 | OpTypeImage(r,sampledType,dim,depth, arrayed, ms, sampled,format,access) ->
-                    types.[r] <- ShaderType.Image(types.[sampledType], unbox<Dim> dim, int depth, (arrayed = 1u), int ms, (sampled = 1u), format)
+                    types.[r] <- ShaderType.Image(types.[sampledType], unbox<Dim> dim, int depth, (arrayed = 1), int ms, (sampled = 1), format)
 
                 | OpTypeStruct (r, fts) -> 
                     let fieldTypes = fts |> Array.toList |> List.map (fun ft -> types.[ft])
@@ -1158,8 +1159,8 @@ module private ShaderInfo =
                         | ExecutionMode.OutputLineStrip         -> m.geometryFlags <- m.geometryFlags ||| GeometryFlags.OutputLineStrip
                         | ExecutionMode.OutputTriangleStrip     -> m.geometryFlags <- m.geometryFlags ||| GeometryFlags.OutputTriangleStrip
 
-                        | ExecutionMode.Invocations             -> m.invocations <- int (Option.get arg)
-                        | ExecutionMode.OutputVertices          -> m.outputVertices <- int (Option.get arg)
+                        | ExecutionMode.Invocations             -> m.invocations <- arg.[0]
+                        | ExecutionMode.OutputVertices          -> m.outputVertices <- arg.[0]
 
 
                         | ExecutionMode.PixelCenterInteger      -> m.fragFlags <- m.fragFlags ||| FragmentFlags.PixelCenterInteger
@@ -1190,12 +1191,12 @@ module private ShaderInfo =
                     let fields =
                         fields |> List.mapi (fun fi (t,_,_) ->
                             let name = 
-                                match memberNames.TryGetValue ((id, uint32 fi)) with
+                                match memberNames.TryGetValue ((id, fi)) with
                                     | (true, name) -> name
                                     | _ -> sprintf "field%d" fi
 
                             let decorations =
-                                match memberDecorations.TryGetValue((id, uint32 fi)) with
+                                match memberDecorations.TryGetValue((id, fi)) with
                                     | (true, dec) -> dec |> CSharpList.toList
                                     | _ -> []
 
@@ -1296,16 +1297,20 @@ module private ShaderInfo =
         ofInstructions m.instructions
 
     let ofBinary (code : byte[]) =
-        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(code))
-        reader 
-            |> Serializer.read
+        Module.ofByteArray code
             |> ofModule
+//        use reader = new System.IO.BinaryReader(new System.IO.MemoryStream(code))
+//        reader 
+//            |> Serializer.read
+//            |> ofModule
 
     let ofStream (stream : System.IO.Stream) =
-        use reader = new System.IO.BinaryReader(stream)
-        reader 
-            |> Serializer.read
+        Module.readFrom stream
             |> ofModule
+//        use reader = new System.IO.BinaryReader(stream)
+//        reader 
+//            |> Serializer.read
+//            |> ofModule
 
 
     let resolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) (info : ShaderInfo) =

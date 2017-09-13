@@ -1109,13 +1109,13 @@ module VulkanTests =
         let ycbcr =
             let mat = 
                 M34d(
-                     0.299,       0.587,      0.114,     0.0,
-                    -0.168736,   -0.331264,   0.5,       0.0,
-                     0.5,        -0.418688,  -0.081312,  0.0
+                     0.299,       0.587,      0.114,     -128.0,
+                    -0.168736,   -0.331264,   0.5,        0.0,
+                     0.5,        -0.418688,  -0.081312,   0.0
                 )
 
             fun (c : V3d[]) ->
-                c |> Array.map (fun c -> mat.TransformPos(c * V3d(255.0, 255.0, 255.0)) + V3d(-128.0, 0.0, 0.0))
+                c |> Array.map (fun c -> mat.TransformPos(c * V3d(255.0, 255.0, 255.0)))
 
         let dct (block : V3d[]) =
             Array.init 64 (fun i ->
@@ -1202,29 +1202,29 @@ module VulkanTests =
             )
                
         let quality = 70.0
-        let QLum = Q quality
-//            [|
-//                2;  2;  2;  2;  3;  4;  5;  6;
-//                2;  2;  2;  2;  3;  4;  5;  6;
-//                2;  2;  2;  2;  4;  5;  7;  9;
-//                2;  2;  2;  4;  5;  7;  9; 12;
-//                3;  3;  4;  5;  8; 10; 12; 12;
-//                4;  4;  5;  7; 10; 12; 12; 12;
-//                5;  5;  7;  9; 12; 12; 12; 12;
-//                6;  6;  9; 12; 12; 12; 12; 12;
-//            |]
+        let QLum = //Q quality
+            [|
+                2;  2;  2;  2;  3;  4;  5;  6;
+                2;  2;  2;  2;  3;  4;  5;  6;
+                2;  2;  2;  2;  4;  5;  7;  9;
+                2;  2;  2;  4;  5;  7;  9; 12;
+                3;  3;  4;  5;  8; 10; 12; 12;
+                4;  4;  5;  7; 10; 12; 12; 12;
+                5;  5;  7;  9; 12; 12; 12; 12;
+                6;  6;  9; 12; 12; 12; 12; 12;
+            |]
 
-        let QChrom = Q quality
-//            [|
-//                 3;  3;  5;  9; 13; 15; 15; 15;
-//                 3;  4;  6; 11; 14; 12; 12; 12;
-//                 5;  6;  9; 14; 12; 12; 12; 12;
-//                 9; 11; 14; 12; 12; 12; 12; 12;
-//                13; 14; 12; 12; 12; 12; 12; 12;
-//                15; 12; 12; 12; 12; 12; 12; 12;
-//                15; 12; 12; 12; 12; 12; 12; 12;
-//                15; 12; 12; 12; 12; 12; 12; 12;
-//            |]
+        let QChrom = //Q quality
+            [|
+                 3;  3;  5;  9; 13; 15; 15; 15;
+                 3;  4;  6; 11; 14; 12; 12; 12;
+                 5;  6;  9; 14; 12; 12; 12; 12;
+                 9; 11; 14; 12; 12; 12; 12; 12;
+                13; 14; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
+            |]
             
 
         let quantify (block : V3d[]) =
@@ -1701,14 +1701,249 @@ module VulkanTests =
                 |> List.map (ycbcr >> dct >> quantify >> zigZag)
                 |> writeImage imageSize
 
+    
+
+    [<ReflectedDefinition>]
+    module JpegGPU =
+
+        let inputImage =
+            sampler2d {
+                texture uniform?InputImage
+                filter Filter.MinMagPoint
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+            }
+
+        let QLum =
+            [|
+                2;  2;  2;  2;  3;  4;  5;  6;
+                2;  2;  2;  2;  3;  4;  5;  6;
+                2;  2;  2;  2;  4;  5;  7;  9;
+                2;  2;  2;  4;  5;  7;  9; 12;
+                3;  3;  4;  5;  8; 10; 12; 12;
+                4;  4;  5;  7; 10; 12; 12; 12;
+                5;  5;  7;  9; 12; 12; 12; 12;
+                6;  6;  9; 12; 12; 12; 12; 12;
+            |]
+
+        let QChrom =
+            [|
+                 3;  3;  5;  9; 13; 15; 15; 15;
+                 3;  4;  6; 11; 14; 12; 12; 12;
+                 5;  6;  9; 14; 12; 12; 12; 12;
+                 9; 11; 14; 12; 12; 12; 12; 12;
+                13; 14; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
+            |]
+
+        let Q = Array.map2 (fun l c -> V3d(float l, float c, float c)) QLum QChrom
+
+        let y =  V4d(  0.299,       0.587,      0.114,     -128.0 )
+        let cb = V4d( -0.168736,   -0.331264,   0.5,        0.0   )
+        let cr = V4d(  0.5,        -0.418688,  -0.081312,   0.0   )
 
 
+        let inverseZigZagOrder =
+            [|
+                0; 1; 5; 6; 14; 15; 27; 28
+                2; 4; 7; 13; 16; 26; 29; 42
+                3; 8; 12; 17; 25; 30; 41; 43
+                9; 11; 18; 24; 31; 40; 44; 53
+                10; 19; 23; 32; 39; 45; 52; 54
+                20; 22; 33; 38; 46; 51; 55; 60
+                21; 34; 37; 47; 50; 56; 59; 61
+                35; 36; 48; 49; 57; 58; 62; 63
+            |]
+
+        let ycbcr (v : V3d) =
+            let v = 255.0 * v
+            V3d(
+                Vec.dot y (V4d(v, 1.0)),
+                Vec.dot cb (V4d(v, 1.0)),
+                Vec.dot cr (V4d(v, 1.0))
+            )
+
+        let quantify (i : int) (v : V3d) =
+            let t = v / Q.[i]
+            V3d(round t.X, round t.Y, round t.Z)
+
+        [<LocalSize(X = 8, Y = 8)>]
+        let dct (size : V2i) (target : V4d[]) =
+            compute {
+                let size = size
+                let ll : V3d[] = allocateShared 64
+
+                let c = getGlobalId().XY
+                let lc = getLocalId().XY
+                let lid = lc.Y * 8 + lc.X
+
+                ll.[lid] <- ycbcr inputImage.[c, 0].XYZ
+                barrier()
+                let x = c.X
+                let y = c.Y
+
+                let f = (if x = 0 then Constant.Sqrt2Half else 1.0) * (if y = 0 then Constant.Sqrt2Half else 1.0)
+
+                let mutable sum = V3d.Zero
+                let mutable i = 0
+                for n in 0 .. 7 do
+                    for m in 0 .. 7 do
+                        let a = cos ( (2.0 * float m + 1.0) * Constant.Pi * float x / 16.0)
+                        let b = cos ( (2.0 * float n + 1.0) * Constant.Pi * float y / 16.0)
+                        sum <- sum + ll.[i] * a * b
+                        i <- i + 1
+
+                let dct = 0.25 * f * sum |> quantify lid
+                barrier()
+
+                ll.[inverseZigZagOrder.[lid]] <- dct
+                barrier()
+
+                let tid = c.X + size.X * c.Y
+                target.[tid] <- V4d(ll.[lid], 1.0)
+            }
+        
+        
+        type Ballot () =
+            
+            [<GLSLIntrinsic("gl_SubGroupSizeARB", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+            static member GetSubGroupSize() : uint32 =
+                failwith ""
+
+            [<GLSLIntrinsic("ballotARB({0})", "GL_ARB_shader_ballot", "GL_ARB_gpu_shader_int64")>]
+            static member Ballot(a : bool) : uint64 =
+                failwith ""
+
+        [<LocalSize(X = 64)>]
+        let compact (mask : int[]) =
+            compute {
+                let id = getGlobalId().X
+                //let lid = getLocalId().X
+                let r = Ballot.GetSubGroupSize()
+                mask.[id] <- int r
+
+//
+//                let value = data.[id *  4 + channel]
+//                let isZero = false
+//                let lz = 0
+//
+//                if isZero then
+//                    if lz < 16 then
+//                        mask.[id] <- 0
+//                    else
+//                        emit.[id] <- 0xFA
+//                        mask.[id] <- 1
+//                else
+//                    let lz = 
+
+
+                // Option<LeadingZeros * Value>
+
+
+                ()
+
+            
+            }
+
+
+    let next (v : int) (a : int) =
+        if v % a = 0 then v
+        else (1 + v / a) * a
+
+    let testDCT() =
+        use app = new HeadlessVulkanApplication(false)
+        let device = app.Device
+        
+        
+        let shader = device |> ComputeShader.ofFunction JpegGPU.compact
+        let input = ComputeShader.newInputBinding shader app.Runtime.DescriptorPool
+
+        let b = device.CreateBuffer<int>(64L)
+        input.["mask"] <- b
+        input.Flush()
+        
+        device.perform {
+            do! Command.Bind shader
+            do! Command.SetInputs input
+            do! Command.Dispatch 1
+        }
+
+        let arr = Array.zeroCreate 64
+        b.Download(arr)
+        printfn "%A" arr.[0]
+
+
+        let shader = device |> ComputeShader.ofFunction JpegGPU.dct
+        let input = ComputeShader.newInputBinding shader app.Runtime.DescriptorPool
+        
+        let rand = RandomSystem()
+
+        let image = PixImage<byte>(Col.Format.RGBA, V2i(8,8))
+        image.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
+            rand.UniformC3f().ToC4b()
+        ) |> ignore
+
+        let alignedSize = V2i(next image.Size.X 8, next image.Size.Y 8)
+
+        let sourceData = device.CreateImage(PixTexture2d(PixImageMipMap [| image :> PixImage|], TextureParams.empty))
+        let targetBuffer = device.CreateBuffer<V4f>(int64 alignedSize.X * int64 alignedSize.Y)
+
+        input.["size"] <- alignedSize
+        input.["target"] <- targetBuffer
+        input.["InputImage"] <- sourceData
+        input.Flush()
+
+        device.perform {
+            do! Command.Bind shader
+            do! Command.SetInputs input
+            do! Command.Dispatch (alignedSize / V2i(8,8))
+            do! Command.Sync(targetBuffer, VkAccessFlags.ShaderWriteBit, VkAccessFlags.TransferReadBit)
+        }
+
+        let arr = Array.zeroCreate (alignedSize.X * alignedSize.Y)
+        targetBuffer.Download(arr)
+
+        printfn "%A" arr
+
+        let reference() =
+            let mat = image.GetMatrix<C4b>().SubMatrix(V2l.Zero, V2l(8L,8L))
+
+            let arr = Array.zeroCreate 64
+            mat.ForeachXYIndex (fun (x : int64) (y : int64) (i : int64) ->
+                let v = mat.[i]
+                let ti = int x + 8 * int y
+                arr.[ti] <- v.ToC3f().ToV3d()
+            )
+
+            arr
+                |> Jpeg.ycbcr
+                |> Jpeg.dct
+                |> Jpeg.quantify
+                |> Jpeg.zigZag
+                |> Array.map (V3d)
+
+        let ref = reference()
+
+        let diff = Array.map2 (fun (gpu : V4f) (cpu : V3d) -> (V3d gpu.XYZ - cpu).LengthSquared) arr ref
+
+        let sum = diff |> Array.fold (+) V3d.Zero
+        printfn "dev: %A" sum
+
+
+        ()
     let testscan() =
-        let data = Jpeg.test()
-        //data |> Array.map (sprintf "0x%02X") |> String.concat ";" |> printfn "%s"
-        Log.warn "total size: %d (%.3f bpp)" data.Length (float (8 * data.Length) / float (Jpeg.imageSize.X * Jpeg.imageSize.Y))
+        testDCT()
+//
+//        let data = Jpeg.test()
+//        //data |> Array.map (sprintf "0x%02X") |> String.concat ";" |> printfn "%s"
+//        Log.warn "total size: %d (%.3f bpp)" data.Length (float (8 * data.Length) / float (Jpeg.imageSize.X * Jpeg.imageSize.Y))
+//
+//        File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf.jpg" data
+//
+//
 
-        File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf.jpg" data
 
 
         System.Environment.Exit 0
