@@ -800,52 +800,107 @@ module VulkanTests =
 
 
         let testBlock =
-//            [|
-//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-//                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-//            |]
             [|
-                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
             |]
+//            [|
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//            |]
 
+        [<StructuredFormatDisplay("{AsString}")>]
         type Codeword =
             struct
-                val mutable Length : byte
-                val mutable Code : uint16
+                val mutable public Store : uint16
+                val mutable public LengthStore : uint8
 
+
+                member inline x.Length = int x.LengthStore
+
+
+                member private x.AsString = x.ToString()
                 override x.ToString() =
-                    if x.Length = 0uy then 
-                        "0"
+                    if x.LengthStore = 0uy then
+                        "(0)"
                     else
-                        let mutable str = ""
-                        let mutable mask = 1us <<< (int x.Length - 1)
+                        let mutable res = sprintf "(%d:" x.LengthStore
+                        let mutable mask = 1us <<< 15
                         for i in 1 .. int x.Length do
-                            if x.Code &&& mask <> 0us then str <- str + "1"
-                            else str <- str + "0"
+                            if x.Store &&& mask <> 0us then res <- res + "1"
+                            else res <- res + "0"
                             mask <- mask >>> 1
+                        res + ")"
 
-                        str
+                member x.FullString =
+                    let mutable res = sprintf "(%d:" x.LengthStore
+                    let mutable mask = 1us <<< 15
+                    for i in 1 .. 16 do
+                        if x.Store &&& mask <> 0us then res <- res + "1"
+                        else res <- res + "0"
+                        mask <- mask >>> 1
+                    res + ")"
+                    
+                member x.ToByteArray() =
+                    if x.Length = 0 then [||]
+                    elif x.Length <= 8 then [| byte (x.Store >>> 8) |]
+                    else [| byte (x.Store >>> 8); byte x.Store |]
 
-                member x.AppendBit(b : bool) =
-                    Codeword(x.Length + 1uy, (x.Code <<< 1) ||| (if b then 1us else 0us))
+                member x.Take(count : int) =
+                    if count > x.Length || count < 0 then failwith "[Codeword] cannot skip"
 
-                member x.AppendBits(count : byte, value : uint16) =
-                    Codeword(x.Length + count, (x.Code <<< int count) ||| (value &&& ((1us <<< int count) - 1us)))
+                    let mask = ((1us <<< count) - 1us) <<< (16 - count)
 
-                new(l,c) = { Length = l; Code = c }
+                    Codeword(count, x.Store &&& mask)
+
+                member x.Skip(count : int) =
+                    if count > x.Length || count < 0 then failwith "[Codeword] cannot take"
+
+                    let rem = x.Length - count
+                    //let mask = (1us <<< rem) - 1us
+                    Codeword(rem, x.Store <<< count)
+
+                member x.Append(other : Codeword) =
+                    let len = x.Length + other.Length
+                    if len > 16 then failwith "[Codeword] cannot append"
+
+                    let other = other.Store >>> x.Length
+                    Codeword(len, x.Store ||| other)
+
+
+                member x.AppendBit (b : bool) =
+                    if x.Length >= 16 then failwith "[Codeword] cannot append to full codeword"
+
+                    if b then 
+                        let n = 1us <<< (15 - x.Length)
+                        Codeword(x.Length + 1, x.Store ||| n)
+                    else 
+                        Codeword(x.Length + 1, x.Store)
+
+                static member Create (length : int, code : uint16) =
+                    // mask the higher bits
+                    let code = code &&& ((1us <<< length) - 1us)
+
+                    // shift the code to the beginning
+                    let code = code <<< (16 - length)
+
+                    Codeword(length, code)
+                static member Empty = Codeword(0, 0us)
+
+                private new(length : int, code : uint16) = { Store = code; LengthStore = byte length}
+
             end
 
         let QLum =
@@ -883,6 +938,7 @@ module VulkanTests =
                 counts : int[]
                 values : byte[]
             }
+
         type HuffmanSpec =
             {
                 specDCLum : TableSpec
@@ -964,7 +1020,7 @@ module VulkanTests =
                                 traverse (path.AppendBit false) l
                                 traverse (path.AppendBit true) r
 
-                    traverse (Codeword(0uy, 0us)) tree
+                    traverse Codeword.Empty tree
                     arr  
 
 
@@ -1142,7 +1198,7 @@ module VulkanTests =
 
 
         type BitStream(coder : HuffmanCoder, s : System.IO.Stream) =
-            let mutable current = Codeword(0uy, 0us)
+            let mutable current = Codeword.Empty
             let result = System.Collections.Generic.List<byte>()
 
             static let bla (f : byte[]) =
@@ -1158,37 +1214,26 @@ module VulkanTests =
 
 
             member x.Write(w : Codeword) =
-                let appendBits = min w.Length (16uy - current.Length)
-                current <- current.AppendBits(appendBits, w.Code)
+                let appendBits = min w.Length (16 - current.Length)
 
-                if current.Length = 16uy then
-                    let h = current.Code >>> 8 |> byte
-                    let l = current.Code |> byte
+                if appendBits >= w.Length then
+                    current <- current.Append w
+                else
+                    current <- current.Append (w.Take appendBits)
+                    let h = current.Store >>> 8 |> byte
+                    let l = current.Store |> byte
                     write [| h; l |]
-                    current <- Codeword(0uy, 0us)
-
-                if appendBits < w.Length then
-                    let rem = w.Length - appendBits
-                    current <- current.AppendBits(rem, w.Code >>> int appendBits)
+                    current <- w.Skip appendBits
 
             member x.Write(b : byte) =
-                x.Write(Codeword(8uy, uint16 b))
+                x.Write(Codeword.Create(8, uint16 b))
 
             member x.Flush() =
-                if current.Length > 8uy then
-                    let v = current.Code <<< (16 - int current.Length)
-                    let h = v >>> 8 |> byte
-                    let l = v |> byte
-                    write [| h; l |]
-                    current <- Codeword(0uy, 0us)
-                elif current.Length > 0uy then
-                    let v = current.Code <<< (8 - int current.Length)
-                    let l = current.Code |> byte
-                    write [| l |]
-                    current <- Codeword(0uy, 0us)
+                let arr = current.ToByteArray()
+                write arr
+                current <- Codeword.Empty
 
                 let data = result.ToArray()
-                data |> Array.map (sprintf "%02X") |> String.concat " " |> printfn "%A"
                 result.Clear()
                 s.Write(data, 0, data.Length)
 
@@ -1198,7 +1243,7 @@ module VulkanTests =
                 let v = uint16 (off + v)
                 let huff = coder.dcLumInv.[dc]
                 x.Write(huff)
-                x.Write(Codeword(byte dc, v))
+                x.Write(Codeword.Create(dc, v))
 
             member x.WriteACLum(leadingZeros : int, v : int) =
                 assert(leadingZeros < 16) 
@@ -1210,7 +1255,7 @@ module VulkanTests =
                 let index = (byte leadingZeros <<< 4) ||| byte dc
                 let huff = coder.acLumInv.[int index]
                 x.Write huff
-                x.Write(Codeword(byte dc, v))
+                x.Write(Codeword.Create(dc, v))
 
                 
             member x.WriteDCChrom(v : int) =
@@ -1219,7 +1264,7 @@ module VulkanTests =
                 let v = uint16 (off + v)
                 let huff = coder.dcChromaInv.[dc]
                 x.Write(huff)
-                x.Write(Codeword(byte dc, v))
+                x.Write(Codeword.Create(dc, v))
 
             member x.WriteACChrom(leadingZeros : int, v : int) =
                 assert(leadingZeros < 16) 
@@ -1231,7 +1276,7 @@ module VulkanTests =
                 let index = (byte leadingZeros <<< 4) ||| byte dc
                 let huff = coder.acChromaInv.[int index]
                 x.Write huff
-                x.Write(Codeword(byte dc, v))
+                x.Write(Codeword.Create(dc, v))
 
         let writeBlock (bs : BitStream) (block : V3i[]) =
 
