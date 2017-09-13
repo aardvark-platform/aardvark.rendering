@@ -476,14 +476,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         ctx.CreateRenderbuffer(size, format, samples)
 
     member x.CreateMappedBuffer() : IMappedBuffer =
-        failwith ""
-        //ctx.CreateMappedBuffer()
+        ctx.CreateMappedBuffer()
         
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool
 
     member x.CreateMappedIndirectBuffer(indexed : bool) : IMappedIndirectBuffer =
-        failwith ""
-        //ctx.CreateMappedIndirectBuffer(indexed)
+        ctx.CreateMappedIndirectBuffer(indexed)
 
     new() = new Runtime(null)

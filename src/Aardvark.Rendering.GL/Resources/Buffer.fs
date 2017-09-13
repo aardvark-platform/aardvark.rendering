@@ -577,7 +577,7 @@ module IndirectBufferExtensions =
                 member x.Buffer = x.Buffer :> IBuffer
                 member x.Count = x.Count
 
-            new(b, ptr, stride, indexed) = { Buffer = b; Count = ptr; Stride = stride; Indexed = indexed }
+            new(b, count, stride, indexed) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed }
         end 
 
     type Context with
