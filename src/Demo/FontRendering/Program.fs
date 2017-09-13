@@ -787,7 +787,9 @@ module VulkanTests =
                 let mutable sum = V3d.Zero
                 for m in 0 .. 7 do
                     for n in 0 .. 7 do
-                        sum <- sum + block.[m + 8*n] * cos ((2.0 * float m + 1.0) * float x * Constant.Pi / 16.0) *  cos ((2.0 * float n + 1.0) * float y * Constant.Pi / 16.0)
+                        let a = cos ((2.0 * float m + 1.0) * float x * Constant.Pi / 16.0)
+                        let b = cos ((2.0 * float n + 1.0) * float y * Constant.Pi / 16.0)
+                        sum <- sum + block.[m + 8*n] * a * b
                 
                 0.25 * cx * cy * sum
             )
@@ -841,33 +843,33 @@ module VulkanTests =
                     Codeword(x.Length + 1uy, (x.Code <<< 1) ||| (if b then 1us else 0us))
 
                 member x.AppendBits(count : byte, value : uint16) =
-                    Codeword(x.Length + count, (x.Code <<< int count) ||| value)
+                    Codeword(x.Length + count, (x.Code <<< int count) ||| (value &&& ((1us <<< int count) - 1us)))
 
                 new(l,c) = { Length = l; Code = c }
             end
 
         let QLum =
-            izigZag [|
-                0x02; 0x02; 0x02; 0x02; 0x02; 0x02; 0x02; 0x02 
-                0x02; 0x02; 0x03; 0x02; 0x02; 0x02; 0x03; 0x04 
-                0x03; 0x02; 0x02; 0x03; 0x04; 0x05; 0x04; 0x04 
-                0x04; 0x04; 0x04; 0x05; 0x06; 0x05; 0x05; 0x05 
-                0x05; 0x05; 0x05; 0x06; 0x06; 0x07; 0x07; 0x08 
-                0x07; 0x07; 0x06; 0x09; 0x09; 0x0A; 0x0A; 0x09 
-                0x09; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C 
-                0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C
+            [|
+                2;  2;  2;  2;  3;  4;  5;  6;
+                2;  2;  2;  2;  3;  4;  5;  6;
+                2;  2;  2;  2;  4;  5;  7;  9;
+                2;  2;  2;  4;  5;  7;  9; 12;
+                3;  3;  4;  5;  8; 10; 12; 12;
+                4;  4;  5;  7; 10; 12; 12; 12;
+                5;  5;  7;  9; 12; 12; 12; 12;
+                6;  6;  9; 12; 12; 12; 12; 12;
             |]
 
         let QChrom =
-            izigZag [|
-                0x03; 0x03;0x03; 0x05; 0x04; 0x05; 0x09; 0x06 
-                0x06; 0x09;0x0D; 0x0B; 0x09; 0x0B; 0x0D; 0x0F 
-                0x0E; 0x0E;0x0E; 0x0E; 0x0F; 0x0F; 0x0C; 0x0C 
-                0x0C; 0x0C;0x0C; 0x0F; 0x0F; 0x0C; 0x0C; 0x0C 
-                0x0C; 0x0C;0x0C; 0x0F; 0x0C; 0x0C; 0x0C; 0x0C 
-                0x0C; 0x0C;0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C 
-                0x0C; 0x0C;0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C 
-                0x0C; 0x0C;0x0C; 0x0C; 0x0C; 0x0C; 0x0C; 0x0C
+            [|
+                 3;  3;  5;  9; 13; 15; 15; 15;
+                 3;  4;  6; 11; 14; 12; 12; 12;
+                 5;  6;  9; 14; 12; 12; 12; 12;
+                 9; 11; 14; 12; 12; 12; 12; 12;
+                13; 14; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
+                15; 12; 12; 12; 12; 12; 12; 12;
             |]
             
 
@@ -876,151 +878,272 @@ module VulkanTests =
             Array.map3 (fun ql qc v -> round(v / V3d(float ql,float qc,float qc))) QLum QChrom block
 
 
-        module Huffman = 
-            type TableSpec =
-                {
-                    counts : int[]
-                    values : byte[]
-                }
-
-            let dcLum = 
-                {
-                    counts = [| 0; 0; 1; 5; 1; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0; 0; 0 |]
-                    values = [| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy; 9uy; 10uy; 11uy |]
-                }
-
-            let dcChrom = 
-                {
-                    counts = [| 0; 0; 3; 1; 1; 1; 1; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0 |]
-                    values = [| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy; 9uy; 10uy; 11uy |]
-                }
-
-            let acLum = 
-                { 
-                    counts = [|  0; 0; 2; 1; 3; 3; 2; 4; 3; 5; 5; 4; 4; 0; 0; 1; 0x7d |]
-                    values = 
-                    [|
-                        0x01uy; 0x02uy; 0x03uy; 0x00uy; 0x04uy; 0x11uy; 0x05uy; 0x12uy;
-                        0x21uy; 0x31uy; 0x41uy; 0x06uy; 0x13uy; 0x51uy; 0x61uy; 0x07uy;
-                        0x22uy; 0x71uy; 0x14uy; 0x32uy; 0x81uy; 0x91uy; 0xa1uy; 0x08uy;
-                        0x23uy; 0x42uy; 0xb1uy; 0xc1uy; 0x15uy; 0x52uy; 0xd1uy; 0xf0uy;
-                        0x24uy; 0x33uy; 0x62uy; 0x72uy; 0x82uy; 0x09uy; 0x0auy; 0x16uy;
-                        0x17uy; 0x18uy; 0x19uy; 0x1auy; 0x25uy; 0x26uy; 0x27uy; 0x28uy;
-                        0x29uy; 0x2auy; 0x34uy; 0x35uy; 0x36uy; 0x37uy; 0x38uy; 0x39uy;
-                        0x3auy; 0x43uy; 0x44uy; 0x45uy; 0x46uy; 0x47uy; 0x48uy; 0x49uy;
-                        0x4auy; 0x53uy; 0x54uy; 0x55uy; 0x56uy; 0x57uy; 0x58uy; 0x59uy;
-                        0x5auy; 0x63uy; 0x64uy; 0x65uy; 0x66uy; 0x67uy; 0x68uy; 0x69uy;
-                        0x6auy; 0x73uy; 0x74uy; 0x75uy; 0x76uy; 0x77uy; 0x78uy; 0x79uy;
-                        0x7auy; 0x83uy; 0x84uy; 0x85uy; 0x86uy; 0x87uy; 0x88uy; 0x89uy;
-                        0x8auy; 0x92uy; 0x93uy; 0x94uy; 0x95uy; 0x96uy; 0x97uy; 0x98uy;
-                        0x99uy; 0x9auy; 0xa2uy; 0xa3uy; 0xa4uy; 0xa5uy; 0xa6uy; 0xa7uy;
-                        0xa8uy; 0xa9uy; 0xaauy; 0xb2uy; 0xb3uy; 0xb4uy; 0xb5uy; 0xb6uy;
-                        0xb7uy; 0xb8uy; 0xb9uy; 0xbauy; 0xc2uy; 0xc3uy; 0xc4uy; 0xc5uy;
-                        0xc6uy; 0xc7uy; 0xc8uy; 0xc9uy; 0xcauy; 0xd2uy; 0xd3uy; 0xd4uy;
-                        0xd5uy; 0xd6uy; 0xd7uy; 0xd8uy; 0xd9uy; 0xdauy; 0xe1uy; 0xe2uy;
-                        0xe3uy; 0xe4uy; 0xe5uy; 0xe6uy; 0xe7uy; 0xe8uy; 0xe9uy; 0xeauy;
-                        0xf1uy; 0xf2uy; 0xf3uy; 0xf4uy; 0xf5uy; 0xf6uy; 0xf7uy; 0xf8uy;
-                        0xf9uy; 0xfauy
-                    |]
-                }
-
-            let acChrom = 
-                {
-                     counts = [| 0; 0; 2; 1; 2; 4; 4; 3; 4; 7; 5; 4; 4; 0; 1; 2; 0x77 |]
-                     values = 
-                     [|
-                        0x00uy; 0x01uy; 0x02uy; 0x03uy; 0x11uy; 0x04uy; 0x05uy; 0x21uy;
-                        0x31uy; 0x06uy; 0x12uy; 0x41uy; 0x51uy; 0x07uy; 0x61uy; 0x71uy;
-                        0x13uy; 0x22uy; 0x32uy; 0x81uy; 0x08uy; 0x14uy; 0x42uy; 0x91uy;
-                        0xa1uy; 0xb1uy; 0xc1uy; 0x09uy; 0x23uy; 0x33uy; 0x52uy; 0xf0uy;
-                        0x15uy; 0x62uy; 0x72uy; 0xd1uy; 0x0auy; 0x16uy; 0x24uy; 0x34uy;
-                        0xe1uy; 0x25uy; 0xf1uy; 0x17uy; 0x18uy; 0x19uy; 0x1auy; 0x26uy;
-                        0x27uy; 0x28uy; 0x29uy; 0x2auy; 0x35uy; 0x36uy; 0x37uy; 0x38uy;
-                        0x39uy; 0x3auy; 0x43uy; 0x44uy; 0x45uy; 0x46uy; 0x47uy; 0x48uy;
-                        0x49uy; 0x4auy; 0x53uy; 0x54uy; 0x55uy; 0x56uy; 0x57uy; 0x58uy;
-                        0x59uy; 0x5auy; 0x63uy; 0x64uy; 0x65uy; 0x66uy; 0x67uy; 0x68uy;
-                        0x69uy; 0x6auy; 0x73uy; 0x74uy; 0x75uy; 0x76uy; 0x77uy; 0x78uy;
-                        0x79uy; 0x7auy; 0x82uy; 0x83uy; 0x84uy; 0x85uy; 0x86uy; 0x87uy;
-                        0x88uy; 0x89uy; 0x8auy; 0x92uy; 0x93uy; 0x94uy; 0x95uy; 0x96uy;
-                        0x97uy; 0x98uy; 0x99uy; 0x9auy; 0xa2uy; 0xa3uy; 0xa4uy; 0xa5uy;
-                        0xa6uy; 0xa7uy; 0xa8uy; 0xa9uy; 0xaauy; 0xb2uy; 0xb3uy; 0xb4uy;
-                        0xb5uy; 0xb6uy; 0xb7uy; 0xb8uy; 0xb9uy; 0xbauy; 0xc2uy; 0xc3uy;
-                        0xc4uy; 0xc5uy; 0xc6uy; 0xc7uy; 0xc8uy; 0xc9uy; 0xcauy; 0xd2uy;
-                        0xd3uy; 0xd4uy; 0xd5uy; 0xd6uy; 0xd7uy; 0xd8uy; 0xd9uy; 0xdauy;
-                        0xe2uy; 0xe3uy; 0xe4uy; 0xe5uy; 0xe6uy; 0xe7uy; 0xe8uy; 0xe9uy;
-                        0xeauy; 0xf2uy; 0xf3uy; 0xf4uy; 0xf5uy; 0xf6uy; 0xf7uy; 0xf8uy;
-                        0xf9uy; 0xfauy
-                     |]
-                }
-
-            type HuffTree =
-                | Empty
-                | Leaf of byte
-                | Node of HuffTree * HuffTree
-
-            let rec zipper (l : list<HuffTree>) =
-                match l with
-                    | [] -> []
-                    | a :: b :: rest ->
-                        Node(a,b) :: zipper rest
-                    | [a] ->
-                        [Node(a,Empty)]
-
-            let build (spec : TableSpec) : HuffTree =
-                let mutable currentValue = 0
-                let rec build (level : int) (n : int) : list<HuffTree> =
-                    if n <= 0 then
-                        []
-                    else
-                        let cnt = spec.counts.[level]
-
-                        let leafs = 
-                            List.init cnt (fun _ -> 
-                                let i = currentValue
-                                currentValue <- i + 1
-                                Leaf spec.values.[i]
-                            )
-
-                        let nodes =
-                            if level >= spec.counts.Length - 1 then
-                                []
-                            else
-                                let nodeCount = n - cnt
-                                build (level + 1) (2 * nodeCount) |> zipper
-
-                        let res = leafs @ nodes
+        type TableSpec =
+            {
+                counts : int[]
+                values : byte[]
+            }
+        type HuffmanSpec =
+            {
+                specDCLum : TableSpec
+                specACLum : TableSpec
+                specDCChroma : TableSpec
+                specACChroma : TableSpec
+            }
             
-                        res
+        type HuffTree =
+            | Empty
+            | Leaf of byte
+            | Node of HuffTree * HuffTree
 
-                match build 0 1 with
-                    | [n] -> n
-                    | _ -> failwith "magic"
+        type HuffmanCoder =
+            {
+                spec : HuffmanSpec
+                dcLum : HuffTree
+                acLum : HuffTree
+                dcChroma : HuffTree
+                acChroma : HuffTree
 
-            let inverse (spec : TableSpec) =
-                let tree = build spec
-                let max = 1 + (spec.values |> Array.max |> int)
+                dcLumInv : Codeword[]
+                acLumInv : Codeword[]
+                dcChromaInv : Codeword[]
+                acChromaInv : Codeword[]
+            }
 
-                let arr = Array.zeroCreate max
+        module Huffman =
+            [<AutoOpen>]
+            module private Helpers = 
+                let rec zipper (l : list<HuffTree>) =
+                    match l with
+                        | [] -> []
+                        | a :: b :: rest ->
+                            Node(a,b) :: zipper rest
+                        | [a] ->
+                            [Node(a,Empty)]
 
-                let rec traverse (path : Codeword) (t : HuffTree) =
-                    match t with
-                        | Empty -> ()
-                        | Leaf v -> arr.[int v] <- path
-                        | Node(l,r) ->
-                            traverse (path.AppendBit false) l
-                            traverse (path.AppendBit true) r
+                let build (spec : TableSpec) : HuffTree =
+                    let mutable currentValue = 0
+                    let rec build (level : int) (n : int) : list<HuffTree> =
+                        if n <= 0 then
+                            []
+                        else
+                            let cnt = spec.counts.[level]
 
-                traverse (Codeword(0uy, 0us)) tree
-                arr  
+                            let leafs = 
+                                List.init cnt (fun _ -> 
+                                    let i = currentValue
+                                    currentValue <- i + 1
+                                    Leaf spec.values.[i]
+                                )
 
-            let dcLumInv = inverse dcLum
-            let acLumInv = inverse acLum
-            let dcChromInv = inverse dcChrom
-            let acChromInv = inverse acChrom
+                            let nodes =
+                                if level >= spec.counts.Length - 1 then
+                                    []
+                                else
+                                    let nodeCount = n - cnt
+                                    build (level + 1) (2 * nodeCount) |> zipper
+
+                            let res = leafs @ nodes
+            
+                            res
+
+                    match build 0 1 with
+                        | [n] -> n
+                        | _ -> failwith "magic"
+
+                let inverse (spec : TableSpec) (tree : HuffTree) =
+                    let max = 1 + (spec.values |> Array.max |> int)
+
+                    let arr = Array.zeroCreate max
+
+                    let rec traverse (path : Codeword) (t : HuffTree) =
+                        match t with
+                            | Empty -> ()
+                            | Leaf v -> arr.[int v] <- path
+                            | Node(l,r) ->
+                                traverse (path.AppendBit false) l
+                                traverse (path.AppendBit true) r
+
+                    traverse (Codeword(0uy, 0us)) tree
+                    arr  
 
 
-        type BitStream(s : System.IO.Stream) =
+            let build (spec : HuffmanSpec) =
+                let dcLum = build spec.specDCLum
+                let dcLumInv = inverse spec.specDCLum dcLum
+
+                let dcChroma = build spec.specDCChroma
+                let dcChromaInv = inverse spec.specDCChroma dcChroma
+
+                let acLum = build spec.specACLum
+                let acLumInv = inverse spec.specACLum acLum
+
+                let acChroma = build spec.specACChroma
+                let acChromaInv = inverse spec.specACChroma acChroma
+                
+                {
+                    spec = spec
+                    dcLum = dcLum
+                    acLum = acLum
+                    dcChroma = dcChroma
+                    acChroma = acChroma
+
+                    dcLumInv = dcLumInv
+                    acLumInv = acLumInv
+                    dcChromaInv = dcChromaInv
+                    acChromaInv = acChromaInv
+                }
+
+            let photoshop =
+                build {
+                    specDCLum = 
+                        {
+                            counts = [| 0; 0; 0; 7; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0; 0; 0; 0 |]
+                            values = [| 0x04uy; 0x05uy; 0x03uy; 0x02uy; 0x06uy; 0x01uy; 0x00uy; 0x07uy; 0x08uy; 0x09uy; 0x0Auy; 0x0Buy |]
+                        }
+
+                    specDCChroma = 
+                        {
+                            counts = [| 0; 0; 2; 2; 3; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0; 0; 0 |]
+                            values = [| 0x01uy; 0x00uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy; 0x07uy; 0x08uy; 0x09uy; 0x0Auy; 0x0Buy |]
+                        }
+
+                    specACLum = 
+                        { 
+                            counts = [|  0; 0; 2; 1; 3; 3; 2; 4; 2; 6; 7; 3; 4; 2; 6; 2; 115 |]
+                            values = 
+                            [|
+                                0x01uy; 0x02uy; 0x03uy; 0x11uy; 0x04uy; 0x00uy; 0x05uy; 0x21uy
+                                0x12uy; 0x31uy; 0x41uy; 0x51uy; 0x06uy; 0x13uy; 0x61uy; 0x22uy
+                                0x71uy; 0x81uy; 0x14uy; 0x32uy; 0x91uy; 0xA1uy; 0x07uy; 0x15uy
+                                0xB1uy; 0x42uy; 0x23uy; 0xC1uy; 0x52uy; 0xD1uy; 0xE1uy; 0x33uy
+                                0x16uy; 0x62uy; 0xF0uy; 0x24uy; 0x72uy; 0x82uy; 0xF1uy; 0x25uy
+                                0x43uy; 0x34uy; 0x53uy; 0x92uy; 0xA2uy; 0xB2uy; 0x63uy; 0x73uy
+                                0xC2uy; 0x35uy; 0x44uy; 0x27uy; 0x93uy; 0xA3uy; 0xB3uy; 0x36uy
+                                0x17uy; 0x54uy; 0x64uy; 0x74uy; 0xC3uy; 0xD2uy; 0xE2uy; 0x08uy
+                                0x26uy; 0x83uy; 0x09uy; 0x0Auy; 0x18uy; 0x19uy; 0x84uy; 0x94uy
+                                0x45uy; 0x46uy; 0xA4uy; 0xB4uy; 0x56uy; 0xD3uy; 0x55uy; 0x28uy
+                                0x1Auy; 0xF2uy; 0xE3uy; 0xF3uy; 0xC4uy; 0xD4uy; 0xE4uy; 0xF4uy
+                                0x65uy; 0x75uy; 0x85uy; 0x95uy; 0xA5uy; 0xB5uy; 0xC5uy; 0xD5uy
+                                0xE5uy; 0xF5uy; 0x66uy; 0x76uy; 0x86uy; 0x96uy; 0xA6uy; 0xB6uy
+                                0xC6uy; 0xD6uy; 0xE6uy; 0xF6uy; 0x37uy; 0x47uy; 0x57uy; 0x67uy
+                                0x77uy; 0x87uy; 0x97uy; 0xA7uy; 0xB7uy; 0xC7uy; 0xD7uy; 0xE7uy
+                                0xF7uy; 0x38uy; 0x48uy; 0x58uy; 0x68uy; 0x78uy; 0x88uy; 0x98uy
+                                0xA8uy; 0xB8uy; 0xC8uy; 0xD8uy; 0xE8uy; 0xF8uy; 0x29uy; 0x39uy
+                                0x49uy; 0x59uy; 0x69uy; 0x79uy; 0x89uy; 0x99uy; 0xA9uy; 0xB9uy
+                                0xC9uy; 0xD9uy; 0xE9uy; 0xF9uy; 0x2Auy; 0x3Auy; 0x4Auy; 0x5Auy
+                                0x6Auy; 0x7Auy; 0x8Auy; 0x9Auy; 0xAAuy; 0xBAuy; 0xCAuy; 0xDAuy
+                                0xEAuy; 0xFAuy
+                            |]
+                        }
+
+                    specACChroma =
+                        {
+                             counts = [| 0; 0; 2; 2; 1; 2; 3; 5; 5; 4; 5; 6; 4; 8; 3; 3; 109 |]
+                             values = 
+                             [|
+                                0x01uy; 0x00uy; 0x02uy; 0x11uy; 0x03uy; 0x04uy; 0x21uy; 0x12uy
+                                0x31uy; 0x41uy; 0x05uy; 0x51uy; 0x13uy; 0x61uy; 0x22uy; 0x06uy
+                                0x71uy; 0x81uy; 0x91uy; 0x32uy; 0xA1uy; 0xB1uy; 0xF0uy; 0x14uy
+                                0xC1uy; 0xD1uy; 0xE1uy; 0x23uy; 0x42uy; 0x15uy; 0x52uy; 0x62uy
+                                0x72uy; 0xF1uy; 0x33uy; 0x24uy; 0x34uy; 0x43uy; 0x82uy; 0x16uy
+                                0x92uy; 0x53uy; 0x25uy; 0xA2uy; 0x63uy; 0xB2uy; 0xC2uy; 0x07uy
+                                0x73uy; 0xD2uy; 0x35uy; 0xE2uy; 0x44uy; 0x83uy; 0x17uy; 0x54uy
+                                0x93uy; 0x08uy; 0x09uy; 0x0Auy; 0x18uy; 0x19uy; 0x26uy; 0x36uy
+                                0x45uy; 0x1Auy; 0x27uy; 0x64uy; 0x74uy; 0x55uy; 0x37uy; 0xF2uy
+                                0xA3uy; 0xB3uy; 0xC3uy; 0x28uy; 0x29uy; 0xD3uy; 0xE3uy; 0xF3uy
+                                0x84uy; 0x94uy; 0xA4uy; 0xB4uy; 0xC4uy; 0xD4uy; 0xE4uy; 0xF4uy
+                                0x65uy; 0x75uy; 0x85uy; 0x95uy; 0xA5uy; 0xB5uy; 0xC5uy; 0xD5uy
+                                0xE5uy; 0xF5uy; 0x46uy; 0x56uy; 0x66uy; 0x76uy; 0x86uy; 0x96uy
+                                0xA6uy; 0xB6uy; 0xC6uy; 0xD6uy; 0xE6uy; 0xF6uy; 0x47uy; 0x57uy
+                                0x67uy; 0x77uy; 0x87uy; 0x97uy; 0xA7uy; 0xB7uy; 0xC7uy; 0xD7uy
+                                0xE7uy; 0xF7uy; 0x38uy; 0x48uy; 0x58uy; 0x68uy; 0x78uy; 0x88uy
+                                0x98uy; 0xA8uy; 0xB8uy; 0xC8uy; 0xD8uy; 0xE8uy; 0xF8uy; 0x39uy
+                                0x49uy; 0x59uy; 0x69uy; 0x79uy; 0x89uy; 0x99uy; 0xA9uy; 0xB9uy
+                                0xC9uy; 0xD9uy; 0xE9uy; 0xF9uy; 0x2Auy; 0x3Auy; 0x4Auy; 0x5Auy
+                                0x6Auy; 0x7Auy; 0x8Auy; 0x9Auy; 0xAAuy; 0xBAuy; 0xCAuy; 0xDAuy
+                                0xEAuy; 0xFAuy
+                             |]
+                        }               
+                }
+
+            let turboJpeg = 
+                build {
+                    specDCLum = 
+                        {
+                            counts = [| 0; 0; 1; 5; 1; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0; 0; 0 |]
+                            values = [| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy; 9uy; 10uy; 11uy |]
+                        }
+
+                    specDCChroma = 
+                        {
+                            counts = [| 0; 0; 3; 1; 1; 1; 1; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0 |]
+                            values = [| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy; 9uy; 10uy; 11uy |]
+                        }
+
+                    specACLum = 
+                        { 
+                            counts = [|  0; 0; 2; 1; 3; 3; 2; 4; 3; 5; 5; 4; 4; 0; 0; 1; 0x7d |]
+                            values = 
+                            [|
+                                0x01uy; 0x02uy; 0x03uy; 0x00uy; 0x04uy; 0x11uy; 0x05uy; 0x12uy;
+                                0x21uy; 0x31uy; 0x41uy; 0x06uy; 0x13uy; 0x51uy; 0x61uy; 0x07uy;
+                                0x22uy; 0x71uy; 0x14uy; 0x32uy; 0x81uy; 0x91uy; 0xa1uy; 0x08uy;
+                                0x23uy; 0x42uy; 0xb1uy; 0xc1uy; 0x15uy; 0x52uy; 0xd1uy; 0xf0uy;
+                                0x24uy; 0x33uy; 0x62uy; 0x72uy; 0x82uy; 0x09uy; 0x0auy; 0x16uy;
+                                0x17uy; 0x18uy; 0x19uy; 0x1auy; 0x25uy; 0x26uy; 0x27uy; 0x28uy;
+                                0x29uy; 0x2auy; 0x34uy; 0x35uy; 0x36uy; 0x37uy; 0x38uy; 0x39uy;
+                                0x3auy; 0x43uy; 0x44uy; 0x45uy; 0x46uy; 0x47uy; 0x48uy; 0x49uy;
+                                0x4auy; 0x53uy; 0x54uy; 0x55uy; 0x56uy; 0x57uy; 0x58uy; 0x59uy;
+                                0x5auy; 0x63uy; 0x64uy; 0x65uy; 0x66uy; 0x67uy; 0x68uy; 0x69uy;
+                                0x6auy; 0x73uy; 0x74uy; 0x75uy; 0x76uy; 0x77uy; 0x78uy; 0x79uy;
+                                0x7auy; 0x83uy; 0x84uy; 0x85uy; 0x86uy; 0x87uy; 0x88uy; 0x89uy;
+                                0x8auy; 0x92uy; 0x93uy; 0x94uy; 0x95uy; 0x96uy; 0x97uy; 0x98uy;
+                                0x99uy; 0x9auy; 0xa2uy; 0xa3uy; 0xa4uy; 0xa5uy; 0xa6uy; 0xa7uy;
+                                0xa8uy; 0xa9uy; 0xaauy; 0xb2uy; 0xb3uy; 0xb4uy; 0xb5uy; 0xb6uy;
+                                0xb7uy; 0xb8uy; 0xb9uy; 0xbauy; 0xc2uy; 0xc3uy; 0xc4uy; 0xc5uy;
+                                0xc6uy; 0xc7uy; 0xc8uy; 0xc9uy; 0xcauy; 0xd2uy; 0xd3uy; 0xd4uy;
+                                0xd5uy; 0xd6uy; 0xd7uy; 0xd8uy; 0xd9uy; 0xdauy; 0xe1uy; 0xe2uy;
+                                0xe3uy; 0xe4uy; 0xe5uy; 0xe6uy; 0xe7uy; 0xe8uy; 0xe9uy; 0xeauy;
+                                0xf1uy; 0xf2uy; 0xf3uy; 0xf4uy; 0xf5uy; 0xf6uy; 0xf7uy; 0xf8uy;
+                                0xf9uy; 0xfauy
+                            |]
+                        }
+
+                    specACChroma = 
+                        {
+                             counts = [| 0; 0; 2; 1; 2; 4; 4; 3; 4; 7; 5; 4; 4; 0; 1; 2; 0x77 |]
+                             values = 
+                             [|
+                                0x00uy; 0x01uy; 0x02uy; 0x03uy; 0x11uy; 0x04uy; 0x05uy; 0x21uy;
+                                0x31uy; 0x06uy; 0x12uy; 0x41uy; 0x51uy; 0x07uy; 0x61uy; 0x71uy;
+                                0x13uy; 0x22uy; 0x32uy; 0x81uy; 0x08uy; 0x14uy; 0x42uy; 0x91uy;
+                                0xa1uy; 0xb1uy; 0xc1uy; 0x09uy; 0x23uy; 0x33uy; 0x52uy; 0xf0uy;
+                                0x15uy; 0x62uy; 0x72uy; 0xd1uy; 0x0auy; 0x16uy; 0x24uy; 0x34uy;
+                                0xe1uy; 0x25uy; 0xf1uy; 0x17uy; 0x18uy; 0x19uy; 0x1auy; 0x26uy;
+                                0x27uy; 0x28uy; 0x29uy; 0x2auy; 0x35uy; 0x36uy; 0x37uy; 0x38uy;
+                                0x39uy; 0x3auy; 0x43uy; 0x44uy; 0x45uy; 0x46uy; 0x47uy; 0x48uy;
+                                0x49uy; 0x4auy; 0x53uy; 0x54uy; 0x55uy; 0x56uy; 0x57uy; 0x58uy;
+                                0x59uy; 0x5auy; 0x63uy; 0x64uy; 0x65uy; 0x66uy; 0x67uy; 0x68uy;
+                                0x69uy; 0x6auy; 0x73uy; 0x74uy; 0x75uy; 0x76uy; 0x77uy; 0x78uy;
+                                0x79uy; 0x7auy; 0x82uy; 0x83uy; 0x84uy; 0x85uy; 0x86uy; 0x87uy;
+                                0x88uy; 0x89uy; 0x8auy; 0x92uy; 0x93uy; 0x94uy; 0x95uy; 0x96uy;
+                                0x97uy; 0x98uy; 0x99uy; 0x9auy; 0xa2uy; 0xa3uy; 0xa4uy; 0xa5uy;
+                                0xa6uy; 0xa7uy; 0xa8uy; 0xa9uy; 0xaauy; 0xb2uy; 0xb3uy; 0xb4uy;
+                                0xb5uy; 0xb6uy; 0xb7uy; 0xb8uy; 0xb9uy; 0xbauy; 0xc2uy; 0xc3uy;
+                                0xc4uy; 0xc5uy; 0xc6uy; 0xc7uy; 0xc8uy; 0xc9uy; 0xcauy; 0xd2uy;
+                                0xd3uy; 0xd4uy; 0xd5uy; 0xd6uy; 0xd7uy; 0xd8uy; 0xd9uy; 0xdauy;
+                                0xe2uy; 0xe3uy; 0xe4uy; 0xe5uy; 0xe6uy; 0xe7uy; 0xe8uy; 0xe9uy;
+                                0xeauy; 0xf2uy; 0xf3uy; 0xf4uy; 0xf5uy; 0xf6uy; 0xf7uy; 0xf8uy;
+                                0xf9uy; 0xfauy
+                             |]
+                        }
+                }
+
+
+        type BitStream(coder : HuffmanCoder, s : System.IO.Stream) =
             let mutable current = Codeword(0uy, 0us)
+            let result = System.Collections.Generic.List<byte>()
 
             static let bla (f : byte[]) =
                 f |> Array.collect (fun b ->
@@ -1031,9 +1154,8 @@ module VulkanTests =
             
             let write arr =
                 let arr = bla arr
-                s.Write(arr, 0, arr.Length)
+                result.AddRange arr
 
-            let s = ()
 
             member x.Write(w : Codeword) =
                 let appendBits = min w.Length (16uy - current.Length)
@@ -1065,11 +1187,16 @@ module VulkanTests =
                     write [| l |]
                     current <- Codeword(0uy, 0us)
 
+                let data = result.ToArray()
+                data |> Array.map (sprintf "%02X") |> String.concat " " |> printfn "%A"
+                result.Clear()
+                s.Write(data, 0, data.Length)
+
             member x.WriteDCLum(v : int) =
                 let dc = Fun.HighestBit(abs v) + 1
                 let off = if v < 0 then (1 <<< dc) - 1 else 0
                 let v = uint16 (off + v)
-                let huff = Huffman.dcLumInv.[dc]
+                let huff = coder.dcLumInv.[dc]
                 x.Write(huff)
                 x.Write(Codeword(byte dc, v))
 
@@ -1081,7 +1208,7 @@ module VulkanTests =
                 let v = uint16 (off + v)
 
                 let index = (byte leadingZeros <<< 4) ||| byte dc
-                let huff = Huffman.acLumInv.[int index]
+                let huff = coder.acLumInv.[int index]
                 x.Write huff
                 x.Write(Codeword(byte dc, v))
 
@@ -1090,7 +1217,7 @@ module VulkanTests =
                 let dc = Fun.HighestBit(abs v) + 1
                 let off = if v < 0 then (1 <<< dc) - 1 else 0
                 let v = uint16 (off + v)
-                let huff = Huffman.dcChromInv.[dc]
+                let huff = coder.dcChromaInv.[dc]
                 x.Write(huff)
                 x.Write(Codeword(byte dc, v))
 
@@ -1102,12 +1229,11 @@ module VulkanTests =
                 let v = uint16 (off + v)
 
                 let index = (byte leadingZeros <<< 4) ||| byte dc
-                let huff = Huffman.acChromInv.[int index]
+                let huff = coder.acChromaInv.[int index]
                 x.Write huff
                 x.Write(Codeword(byte dc, v))
 
         let writeBlock (bs : BitStream) (block : V3i[]) =
-
 
             bs.WriteDCLum(block.[0].X)
             let mutable leading = 0
@@ -1155,7 +1281,7 @@ module VulkanTests =
 
         let writeImage (size : V2i) (blocks : list<V3i[]>) =
             let ms = new System.IO.MemoryStream()
-            
+            let coder = Huffman.photoshop
 
             let header = [| 0xFFuy; 0xD8uy;  |]
             ms.Write(header, 0, header.Length)
@@ -1168,9 +1294,9 @@ module VulkanTests =
                 Array.concat [
                     [| 0xFFuy; 0xDBuy; 0x00uy; 0x84uy |]
                     [| 0x00uy |]
-                    QLum |> izigZag |> Array.map byte
+                    QLum |> zigZag |> Array.map byte
                     [| 0x01uy |]
-                    QChrom |> izigZag |> Array.map byte
+                    QChrom |> zigZag |> Array.map byte
                 ]
             ms.Write(quant, 0, quant.Length)
 
@@ -1188,10 +1314,10 @@ module VulkanTests =
             ms.Write(sof, 0, sof.Length)
 
             let huff =
-                let huffSize (spec : Huffman.TableSpec)  =
+                let huffSize (spec : TableSpec)  =
                      uint16 (1 + 16 + spec.values.Length)
 
-                let encodeHuff (kind : byte) (spec : Huffman.TableSpec) =
+                let encodeHuff (kind : byte) (spec : TableSpec) =
                     Array.concat [
                         [| kind |]
                         Array.skip 1 spec.counts |> Array.map byte
@@ -1200,18 +1326,18 @@ module VulkanTests =
 
                 Array.concat [
                     [| 0xFFuy; 0xC4uy |]
-                    encode (2us + huffSize Huffman.dcLum + huffSize Huffman.dcChrom + huffSize Huffman.acLum + huffSize Huffman.acChrom)
+                    encode (2us + huffSize coder.spec.specDCLum + huffSize coder.spec.specDCChroma + huffSize coder.spec.specACLum + huffSize coder.spec.specACChroma)
 
-                    encodeHuff 0x00uy Huffman.dcLum
-                    encodeHuff 0x01uy Huffman.dcChrom
-                    encodeHuff 0x10uy Huffman.acLum
-                    encodeHuff 0x11uy Huffman.acChrom
+                    encodeHuff 0x00uy coder.spec.specDCLum
+                    encodeHuff 0x01uy coder.spec.specDCChroma
+                    encodeHuff 0x10uy coder.spec.specACLum
+                    encodeHuff 0x11uy coder.spec.specACChroma
                 ]
             ms.Write(huff, 0, huff.Length)
 
             let sos = [| 0xFFuy; 0xDAuy; 0x00uy; 0x0Cuy; 0x03uy; 0x01uy; 0x00uy; 0x02uy; 0x11uy; 0x03uy; 0x11uy; 0x00uy; 0x3Fuy; 0x00uy |]
             ms.Write(sos, 0, sos.Length)
-            let bs = new BitStream(ms)
+            let bs = new BitStream(coder, ms)
             for b in blocks do writeBlock bs b
             bs.Flush()
 
