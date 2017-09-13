@@ -728,6 +728,346 @@ module VulkanTests =
         static member CompileScan<'a when 'a : unmanaged> (this : Runtime, add : Expr<'a -> 'a -> 'a>) =
             new ScanImpl.Scan<'a>(this, add)
 
+
+    [<StructuredFormatDisplay("{AsString}")>]
+    type Codeword =
+        struct
+            val mutable public Store : uint16
+            val mutable public LengthStore : uint8
+
+
+            member inline x.Length = int x.LengthStore
+
+
+            member private x.AsString = x.ToString()
+            override x.ToString() =
+                if x.LengthStore = 0uy then
+                    "(0)"
+                else
+                    let mutable res = sprintf "(%d:" x.LengthStore
+                    let mutable mask = 1us <<< 15
+                    for i in 1 .. int x.Length do
+                        if x.Store &&& mask <> 0us then res <- res + "1"
+                        else res <- res + "0"
+                        mask <- mask >>> 1
+                    res + ")"
+
+            member x.FullString =
+                let mutable res = sprintf "(%d:" x.LengthStore
+                let mutable mask = 1us <<< 15
+                for i in 1 .. 16 do
+                    if x.Store &&& mask <> 0us then res <- res + "1"
+                    else res <- res + "0"
+                    mask <- mask >>> 1
+                res + ")"
+                    
+            member x.ToByteArray() =
+                if x.Length = 0 then [||]
+                elif x.Length <= 8 then [| byte (x.Store >>> 8) |]
+                else [| byte (x.Store >>> 8); byte x.Store |]
+
+            member x.Take(count : int) =
+                if count > x.Length || count < 0 then failwith "[Codeword] cannot skip"
+
+                let mask = ((1us <<< count) - 1us) <<< (16 - count)
+
+                Codeword(count, x.Store &&& mask)
+
+            member x.Skip(count : int) =
+                if count > x.Length || count < 0 then failwith "[Codeword] cannot take"
+
+                let rem = x.Length - count
+                //let mask = (1us <<< rem) - 1us
+                Codeword(rem, x.Store <<< count)
+
+            member x.Append(other : Codeword) =
+                let len = x.Length + other.Length
+                if len > 16 then failwith "[Codeword] cannot append"
+
+                let other = other.Store >>> x.Length
+                Codeword(len, x.Store ||| other)
+
+
+            member x.AppendBit (b : bool) =
+                if x.Length >= 16 then failwith "[Codeword] cannot append to full codeword"
+
+                if b then 
+                    let n = 1us <<< (15 - x.Length)
+                    Codeword(x.Length + 1, x.Store ||| n)
+                else 
+                    Codeword(x.Length + 1, x.Store)
+
+            static member Create (length : int, code : uint16) =
+                // mask the higher bits
+                let code = code &&& ((1us <<< length) - 1us)
+
+                // shift the code to the beginning
+                let code = code <<< (16 - length)
+
+                Codeword(length, code)
+            static member Empty = Codeword(0, 0us)
+
+            private new(length : int, code : uint16) = { Store = code; LengthStore = byte length}
+
+        end
+
+    module JpegClean =
+        
+        
+        type HuffmanTree =
+            | HuffmanNode of left : HuffmanTree * right : HuffmanTree
+            | HuffmanLeaf of value : byte
+            | HuffmanEmpty
+
+        type HuffmanTable = 
+            { 
+                counts      : int[]
+                values      : byte[]
+                forward     : HuffmanTree
+                backward    : Codeword[]
+            }
+            
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module HuffmanTable =
+            [<AutoOpen>]
+            module private Helpers =
+                let rec zipper (l : list<HuffmanTree>) =
+                    match l with
+                        | [] -> []
+                        | a :: b :: rest ->
+                            HuffmanNode(a,b) :: zipper rest
+                        | [a] ->
+                            [HuffmanNode(a,HuffmanEmpty)]
+
+                let build (counts : int[]) (values : byte[]) : HuffmanTree =
+                    let mutable currentValue = 0
+                    let rec build (level : int) (n : int) : list<HuffmanTree> =
+                        if n <= 0 then
+                            []
+                        else
+                            let cnt = counts.[level]
+
+                            let leafs = 
+                                List.init cnt (fun _ -> 
+                                    let i = currentValue
+                                    currentValue <- i + 1
+                                    HuffmanLeaf values.[i]
+                                )
+
+                            let nodes =
+                                if level >= counts.Length - 1 then
+                                    []
+                                else
+                                    let nodeCount = n - cnt
+                                    build (level + 1) (2 * nodeCount) |> zipper
+
+                            let res = leafs @ nodes
+            
+                            res
+
+                    match build 0 1 with
+                        | [n] -> n
+                        | _ -> failwith "magic"
+
+                let inverse (tree : HuffmanTree) =
+                    let max = 256
+
+                    let arr = Array.zeroCreate max
+
+                    let rec traverse (path : Codeword) (t : HuffmanTree) =
+                        match t with
+                            | HuffmanEmpty -> ()
+                            | HuffmanLeaf v -> arr.[int v] <- path
+                            | HuffmanNode(l,r) ->
+                                traverse (path.AppendBit false) l
+                                traverse (path.AppendBit true) r
+
+                    traverse Codeword.Empty tree
+                    arr  
+
+            let create (counts : int[]) (values : byte[]) =
+                let tree = build counts values
+                { 
+                    counts      = counts
+                    values      = values
+                    forward     = tree
+                    backward    = inverse tree
+                }
+
+            module Photoshop =
+                
+                let luminanceDC =
+                    create
+                        [| 0; 0; 0; 7; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0; 0; 0; 0 |]
+                        [| 0x04uy; 0x05uy; 0x03uy; 0x02uy; 0x06uy; 0x01uy; 0x00uy; 0x07uy; 0x08uy; 0x09uy; 0x0Auy; 0x0Buy |]
+                        
+                let chromaDC =
+                    create
+                        [| 0; 0; 2; 2; 3; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0; 0; 0 |]
+                        [| 0x01uy; 0x00uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy; 0x07uy; 0x08uy; 0x09uy; 0x0Auy; 0x0Buy |]
+
+                let luminanceAC =
+                    create 
+                        [|  0; 0; 2; 1; 3; 3; 2; 4; 2; 6; 7; 3; 4; 2; 6; 2; 115 |]
+                        [|
+                            0x01uy; 0x02uy; 0x03uy; 0x11uy; 0x04uy; 0x00uy; 0x05uy; 0x21uy
+                            0x12uy; 0x31uy; 0x41uy; 0x51uy; 0x06uy; 0x13uy; 0x61uy; 0x22uy
+                            0x71uy; 0x81uy; 0x14uy; 0x32uy; 0x91uy; 0xA1uy; 0x07uy; 0x15uy
+                            0xB1uy; 0x42uy; 0x23uy; 0xC1uy; 0x52uy; 0xD1uy; 0xE1uy; 0x33uy
+                            0x16uy; 0x62uy; 0xF0uy; 0x24uy; 0x72uy; 0x82uy; 0xF1uy; 0x25uy
+                            0x43uy; 0x34uy; 0x53uy; 0x92uy; 0xA2uy; 0xB2uy; 0x63uy; 0x73uy
+                            0xC2uy; 0x35uy; 0x44uy; 0x27uy; 0x93uy; 0xA3uy; 0xB3uy; 0x36uy
+                            0x17uy; 0x54uy; 0x64uy; 0x74uy; 0xC3uy; 0xD2uy; 0xE2uy; 0x08uy
+                            0x26uy; 0x83uy; 0x09uy; 0x0Auy; 0x18uy; 0x19uy; 0x84uy; 0x94uy
+                            0x45uy; 0x46uy; 0xA4uy; 0xB4uy; 0x56uy; 0xD3uy; 0x55uy; 0x28uy
+                            0x1Auy; 0xF2uy; 0xE3uy; 0xF3uy; 0xC4uy; 0xD4uy; 0xE4uy; 0xF4uy
+                            0x65uy; 0x75uy; 0x85uy; 0x95uy; 0xA5uy; 0xB5uy; 0xC5uy; 0xD5uy
+                            0xE5uy; 0xF5uy; 0x66uy; 0x76uy; 0x86uy; 0x96uy; 0xA6uy; 0xB6uy
+                            0xC6uy; 0xD6uy; 0xE6uy; 0xF6uy; 0x37uy; 0x47uy; 0x57uy; 0x67uy
+                            0x77uy; 0x87uy; 0x97uy; 0xA7uy; 0xB7uy; 0xC7uy; 0xD7uy; 0xE7uy
+                            0xF7uy; 0x38uy; 0x48uy; 0x58uy; 0x68uy; 0x78uy; 0x88uy; 0x98uy
+                            0xA8uy; 0xB8uy; 0xC8uy; 0xD8uy; 0xE8uy; 0xF8uy; 0x29uy; 0x39uy
+                            0x49uy; 0x59uy; 0x69uy; 0x79uy; 0x89uy; 0x99uy; 0xA9uy; 0xB9uy
+                            0xC9uy; 0xD9uy; 0xE9uy; 0xF9uy; 0x2Auy; 0x3Auy; 0x4Auy; 0x5Auy
+                            0x6Auy; 0x7Auy; 0x8Auy; 0x9Auy; 0xAAuy; 0xBAuy; 0xCAuy; 0xDAuy
+                            0xEAuy; 0xFAuy
+                        |]
+
+                let chromaAC =
+                    create
+                        [| 0; 0; 2; 2; 1; 2; 3; 5; 5; 4; 5; 6; 4; 8; 3; 3; 109 |]
+                        [|
+                            0x01uy; 0x00uy; 0x02uy; 0x11uy; 0x03uy; 0x04uy; 0x21uy; 0x12uy
+                            0x31uy; 0x41uy; 0x05uy; 0x51uy; 0x13uy; 0x61uy; 0x22uy; 0x06uy
+                            0x71uy; 0x81uy; 0x91uy; 0x32uy; 0xA1uy; 0xB1uy; 0xF0uy; 0x14uy
+                            0xC1uy; 0xD1uy; 0xE1uy; 0x23uy; 0x42uy; 0x15uy; 0x52uy; 0x62uy
+                            0x72uy; 0xF1uy; 0x33uy; 0x24uy; 0x34uy; 0x43uy; 0x82uy; 0x16uy
+                            0x92uy; 0x53uy; 0x25uy; 0xA2uy; 0x63uy; 0xB2uy; 0xC2uy; 0x07uy
+                            0x73uy; 0xD2uy; 0x35uy; 0xE2uy; 0x44uy; 0x83uy; 0x17uy; 0x54uy
+                            0x93uy; 0x08uy; 0x09uy; 0x0Auy; 0x18uy; 0x19uy; 0x26uy; 0x36uy
+                            0x45uy; 0x1Auy; 0x27uy; 0x64uy; 0x74uy; 0x55uy; 0x37uy; 0xF2uy
+                            0xA3uy; 0xB3uy; 0xC3uy; 0x28uy; 0x29uy; 0xD3uy; 0xE3uy; 0xF3uy
+                            0x84uy; 0x94uy; 0xA4uy; 0xB4uy; 0xC4uy; 0xD4uy; 0xE4uy; 0xF4uy
+                            0x65uy; 0x75uy; 0x85uy; 0x95uy; 0xA5uy; 0xB5uy; 0xC5uy; 0xD5uy
+                            0xE5uy; 0xF5uy; 0x46uy; 0x56uy; 0x66uy; 0x76uy; 0x86uy; 0x96uy
+                            0xA6uy; 0xB6uy; 0xC6uy; 0xD6uy; 0xE6uy; 0xF6uy; 0x47uy; 0x57uy
+                            0x67uy; 0x77uy; 0x87uy; 0x97uy; 0xA7uy; 0xB7uy; 0xC7uy; 0xD7uy
+                            0xE7uy; 0xF7uy; 0x38uy; 0x48uy; 0x58uy; 0x68uy; 0x78uy; 0x88uy
+                            0x98uy; 0xA8uy; 0xB8uy; 0xC8uy; 0xD8uy; 0xE8uy; 0xF8uy; 0x39uy
+                            0x49uy; 0x59uy; 0x69uy; 0x79uy; 0x89uy; 0x99uy; 0xA9uy; 0xB9uy
+                            0xC9uy; 0xD9uy; 0xE9uy; 0xF9uy; 0x2Auy; 0x3Auy; 0x4Auy; 0x5Auy
+                            0x6Auy; 0x7Auy; 0x8Auy; 0x9Auy; 0xAAuy; 0xBAuy; 0xCAuy; 0xDAuy
+                            0xEAuy; 0xFAuy
+                            |]
+
+            module TurboJpeg = 
+                let luminanceDC =
+                    create 
+                        [| 0; 0; 1; 5; 1; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0; 0; 0 |]
+                        [| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy; 9uy; 10uy; 11uy |]
+
+                let chromaDC =
+                    create
+                        [| 0; 0; 3; 1; 1; 1; 1; 1; 1; 1; 1; 1; 0; 0; 0; 0; 0 |]
+                        [| 0uy; 1uy; 2uy; 3uy; 4uy; 5uy; 6uy; 7uy; 8uy; 9uy; 10uy; 11uy |]
+
+                let luminanceAC = 
+                    create
+                        [|  0; 0; 2; 1; 3; 3; 2; 4; 3; 5; 5; 4; 4; 0; 0; 1; 0x7d |]
+                        [|
+                            0x01uy; 0x02uy; 0x03uy; 0x00uy; 0x04uy; 0x11uy; 0x05uy; 0x12uy;
+                            0x21uy; 0x31uy; 0x41uy; 0x06uy; 0x13uy; 0x51uy; 0x61uy; 0x07uy;
+                            0x22uy; 0x71uy; 0x14uy; 0x32uy; 0x81uy; 0x91uy; 0xa1uy; 0x08uy;
+                            0x23uy; 0x42uy; 0xb1uy; 0xc1uy; 0x15uy; 0x52uy; 0xd1uy; 0xf0uy;
+                            0x24uy; 0x33uy; 0x62uy; 0x72uy; 0x82uy; 0x09uy; 0x0auy; 0x16uy;
+                            0x17uy; 0x18uy; 0x19uy; 0x1auy; 0x25uy; 0x26uy; 0x27uy; 0x28uy;
+                            0x29uy; 0x2auy; 0x34uy; 0x35uy; 0x36uy; 0x37uy; 0x38uy; 0x39uy;
+                            0x3auy; 0x43uy; 0x44uy; 0x45uy; 0x46uy; 0x47uy; 0x48uy; 0x49uy;
+                            0x4auy; 0x53uy; 0x54uy; 0x55uy; 0x56uy; 0x57uy; 0x58uy; 0x59uy;
+                            0x5auy; 0x63uy; 0x64uy; 0x65uy; 0x66uy; 0x67uy; 0x68uy; 0x69uy;
+                            0x6auy; 0x73uy; 0x74uy; 0x75uy; 0x76uy; 0x77uy; 0x78uy; 0x79uy;
+                            0x7auy; 0x83uy; 0x84uy; 0x85uy; 0x86uy; 0x87uy; 0x88uy; 0x89uy;
+                            0x8auy; 0x92uy; 0x93uy; 0x94uy; 0x95uy; 0x96uy; 0x97uy; 0x98uy;
+                            0x99uy; 0x9auy; 0xa2uy; 0xa3uy; 0xa4uy; 0xa5uy; 0xa6uy; 0xa7uy;
+                            0xa8uy; 0xa9uy; 0xaauy; 0xb2uy; 0xb3uy; 0xb4uy; 0xb5uy; 0xb6uy;
+                            0xb7uy; 0xb8uy; 0xb9uy; 0xbauy; 0xc2uy; 0xc3uy; 0xc4uy; 0xc5uy;
+                            0xc6uy; 0xc7uy; 0xc8uy; 0xc9uy; 0xcauy; 0xd2uy; 0xd3uy; 0xd4uy;
+                            0xd5uy; 0xd6uy; 0xd7uy; 0xd8uy; 0xd9uy; 0xdauy; 0xe1uy; 0xe2uy;
+                            0xe3uy; 0xe4uy; 0xe5uy; 0xe6uy; 0xe7uy; 0xe8uy; 0xe9uy; 0xeauy;
+                            0xf1uy; 0xf2uy; 0xf3uy; 0xf4uy; 0xf5uy; 0xf6uy; 0xf7uy; 0xf8uy;
+                            0xf9uy; 0xfauy
+                        |]
+
+                let chromaAC =
+                    create
+                        [| 0; 0; 2; 1; 2; 4; 4; 3; 4; 7; 5; 4; 4; 0; 1; 2; 0x77 |]
+                        [|
+                            0x00uy; 0x01uy; 0x02uy; 0x03uy; 0x11uy; 0x04uy; 0x05uy; 0x21uy;
+                            0x31uy; 0x06uy; 0x12uy; 0x41uy; 0x51uy; 0x07uy; 0x61uy; 0x71uy;
+                            0x13uy; 0x22uy; 0x32uy; 0x81uy; 0x08uy; 0x14uy; 0x42uy; 0x91uy;
+                            0xa1uy; 0xb1uy; 0xc1uy; 0x09uy; 0x23uy; 0x33uy; 0x52uy; 0xf0uy;
+                            0x15uy; 0x62uy; 0x72uy; 0xd1uy; 0x0auy; 0x16uy; 0x24uy; 0x34uy;
+                            0xe1uy; 0x25uy; 0xf1uy; 0x17uy; 0x18uy; 0x19uy; 0x1auy; 0x26uy;
+                            0x27uy; 0x28uy; 0x29uy; 0x2auy; 0x35uy; 0x36uy; 0x37uy; 0x38uy;
+                            0x39uy; 0x3auy; 0x43uy; 0x44uy; 0x45uy; 0x46uy; 0x47uy; 0x48uy;
+                            0x49uy; 0x4auy; 0x53uy; 0x54uy; 0x55uy; 0x56uy; 0x57uy; 0x58uy;
+                            0x59uy; 0x5auy; 0x63uy; 0x64uy; 0x65uy; 0x66uy; 0x67uy; 0x68uy;
+                            0x69uy; 0x6auy; 0x73uy; 0x74uy; 0x75uy; 0x76uy; 0x77uy; 0x78uy;
+                            0x79uy; 0x7auy; 0x82uy; 0x83uy; 0x84uy; 0x85uy; 0x86uy; 0x87uy;
+                            0x88uy; 0x89uy; 0x8auy; 0x92uy; 0x93uy; 0x94uy; 0x95uy; 0x96uy;
+                            0x97uy; 0x98uy; 0x99uy; 0x9auy; 0xa2uy; 0xa3uy; 0xa4uy; 0xa5uy;
+                            0xa6uy; 0xa7uy; 0xa8uy; 0xa9uy; 0xaauy; 0xb2uy; 0xb3uy; 0xb4uy;
+                            0xb5uy; 0xb6uy; 0xb7uy; 0xb8uy; 0xb9uy; 0xbauy; 0xc2uy; 0xc3uy;
+                            0xc4uy; 0xc5uy; 0xc6uy; 0xc7uy; 0xc8uy; 0xc9uy; 0xcauy; 0xd2uy;
+                            0xd3uy; 0xd4uy; 0xd5uy; 0xd6uy; 0xd7uy; 0xd8uy; 0xd9uy; 0xdauy;
+                            0xe2uy; 0xe3uy; 0xe4uy; 0xe5uy; 0xe6uy; 0xe7uy; 0xe8uy; 0xe9uy;
+                            0xeauy; 0xf2uy; 0xf3uy; 0xf4uy; 0xf5uy; 0xf6uy; 0xf7uy; 0xf8uy;
+                            0xf9uy; 0xfauy
+                            |]
+         
+
+        type Quality =
+            {
+                qLumninance : byte[]
+                qChroma     : byte[]
+            }
+
+        type Coder =
+            {
+                luminanceDC : HuffmanTable
+                luminanceAC : HuffmanTable
+                chromaDC    : HuffmanTable
+                chromaAC    : HuffmanTable
+            }
+
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module Coder =
+
+            let photoshop =
+                {
+                    luminanceDC = HuffmanTable.Photoshop.luminanceDC 
+                    luminanceAC = HuffmanTable.Photoshop.luminanceAC 
+                    chromaDC    = HuffmanTable.Photoshop.chromaDC    
+                    chromaAC    = HuffmanTable.Photoshop.chromaAC    
+                }
+
+            let turboJpeg =
+                {
+                    luminanceDC = HuffmanTable.Photoshop.luminanceDC 
+                    luminanceAC = HuffmanTable.Photoshop.luminanceAC 
+                    chromaDC    = HuffmanTable.Photoshop.chromaDC    
+                    chromaAC    = HuffmanTable.Photoshop.chromaAC    
+                }
+
+        module Jpeg =
+            let encode (coder : Coder) (quality : Quality) (data : PixImage<'a>) =
+                let mat = data.GetMatrix<C4f>()
+                ()
+
+
+
+
+
     module Jpeg =
         open Aardvark.Base
 
@@ -793,145 +1133,103 @@ module VulkanTests =
                 
                 0.25 * cx * cy * sum
             )
+        let hsv2rgb (h : float) (s : float) (v : float) =
+            let s = clamp 0.0 1.0 s
+            let v = clamp 0.0 1.0 v
+
+            let h = h % 1.0
+            let h = if h < 0.0 then h + 1.0 else h
+            let hi = floor ( h * 6.0 ) |> int
+            let f = h * 6.0 - float hi
+            let p = v * (1.0 - s)
+            let q = v * (1.0 - s * f)
+            let t = v * (1.0 - s * ( 1.0 - f ))
+            match hi with
+                | 1 -> V3d(q,v,p)
+                | 2 -> V3d(p,v,t)
+                | 3 -> V3d(p,q,v)
+                | 4 -> V3d(t,p,v)
+                | 5 -> V3d(v,p,q)
+                | _ -> V3d(v,t,p)
+
+        let imageSize = V2i(1920,1080)
+        let testBlocks =
+            let blockCount = imageSize / 8
+            List.init (blockCount.X * blockCount.Y) (fun bi ->
+                let bx = bi % blockCount.X
+                let by = bi / blockCount.X
+
+                Array.init 64 (fun i ->
+                    let x = 8*bx + i%8
+                    let y = 8*by + i/8
+
+                    let x = x / 18
+                    let y = y / 18
+
+                    let r = (x + y) % 2
+
+
+                    if r > 0 then
+                        let h = hsv2rgb ((float x + float y) / 27.0) 1.0 1.0
+                        h
+                    else
+                        V3d(0.4, 0.4, 0.4)
+                )
+
+            )
+
 
         let printMat8 (arr : 'a[]) =
             arr |> Array.map (sprintf "%A") |> Array.chunkBySize 8 |> Array.map (String.concat " ") |> String.concat "\r\n"
-
-
-
-        let testBlock =
+        
+        let QBase =
             [|
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
-                V3d.IOO; V3d.IOO; V3d.IOO; V3d.IOO; V3d.OIO; V3d.OIO; V3d.OIO; V3d.OIO
+                16;   11;   10;   16;   24;   40;   51;   61;
+                12;   12;   14;   19;   26;   58;   60;   55;
+                14;   13;   16;   24;   40;   57;   69;   56;
+                14;   17;   22;   29;   51;   87;   80;   62;
+                18;   22;   37;   56;   68;  109;  103;   77;
+                24;   35;   55;   64;   81;  104;  113;   92;
+                49;   64;   78;   87;  103;  121;  120;  101;
+                72;   92;   95;   98;  112;  100;  103;   99;
             |]
+
+        let Q (q : float) =
+            let q = q |> max 1.0 |> min 100.0
+            let s = if q < 50.0 then 5000.0 / q else 200.0 - 2.0 * q
+            QBase |> Array.map (fun v ->
+                floor ((s * float v + 50.0) / 100.0) |> int  |> max 1
+            )
+               
+        let quality = 70.0
+        let QLum = Q quality
 //            [|
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
-//                V3d.III; V3d.III; V3d.III; V3d.III; V3d.OOO; V3d.OOO; V3d.OOO; V3d.OOO
+//                2;  2;  2;  2;  3;  4;  5;  6;
+//                2;  2;  2;  2;  3;  4;  5;  6;
+//                2;  2;  2;  2;  4;  5;  7;  9;
+//                2;  2;  2;  4;  5;  7;  9; 12;
+//                3;  3;  4;  5;  8; 10; 12; 12;
+//                4;  4;  5;  7; 10; 12; 12; 12;
+//                5;  5;  7;  9; 12; 12; 12; 12;
+//                6;  6;  9; 12; 12; 12; 12; 12;
 //            |]
 
-        [<StructuredFormatDisplay("{AsString}")>]
-        type Codeword =
-            struct
-                val mutable public Store : uint16
-                val mutable public LengthStore : uint8
-
-
-                member inline x.Length = int x.LengthStore
-
-
-                member private x.AsString = x.ToString()
-                override x.ToString() =
-                    if x.LengthStore = 0uy then
-                        "(0)"
-                    else
-                        let mutable res = sprintf "(%d:" x.LengthStore
-                        let mutable mask = 1us <<< 15
-                        for i in 1 .. int x.Length do
-                            if x.Store &&& mask <> 0us then res <- res + "1"
-                            else res <- res + "0"
-                            mask <- mask >>> 1
-                        res + ")"
-
-                member x.FullString =
-                    let mutable res = sprintf "(%d:" x.LengthStore
-                    let mutable mask = 1us <<< 15
-                    for i in 1 .. 16 do
-                        if x.Store &&& mask <> 0us then res <- res + "1"
-                        else res <- res + "0"
-                        mask <- mask >>> 1
-                    res + ")"
-                    
-                member x.ToByteArray() =
-                    if x.Length = 0 then [||]
-                    elif x.Length <= 8 then [| byte (x.Store >>> 8) |]
-                    else [| byte (x.Store >>> 8); byte x.Store |]
-
-                member x.Take(count : int) =
-                    if count > x.Length || count < 0 then failwith "[Codeword] cannot skip"
-
-                    let mask = ((1us <<< count) - 1us) <<< (16 - count)
-
-                    Codeword(count, x.Store &&& mask)
-
-                member x.Skip(count : int) =
-                    if count > x.Length || count < 0 then failwith "[Codeword] cannot take"
-
-                    let rem = x.Length - count
-                    //let mask = (1us <<< rem) - 1us
-                    Codeword(rem, x.Store <<< count)
-
-                member x.Append(other : Codeword) =
-                    let len = x.Length + other.Length
-                    if len > 16 then failwith "[Codeword] cannot append"
-
-                    let other = other.Store >>> x.Length
-                    Codeword(len, x.Store ||| other)
-
-
-                member x.AppendBit (b : bool) =
-                    if x.Length >= 16 then failwith "[Codeword] cannot append to full codeword"
-
-                    if b then 
-                        let n = 1us <<< (15 - x.Length)
-                        Codeword(x.Length + 1, x.Store ||| n)
-                    else 
-                        Codeword(x.Length + 1, x.Store)
-
-                static member Create (length : int, code : uint16) =
-                    // mask the higher bits
-                    let code = code &&& ((1us <<< length) - 1us)
-
-                    // shift the code to the beginning
-                    let code = code <<< (16 - length)
-
-                    Codeword(length, code)
-                static member Empty = Codeword(0, 0us)
-
-                private new(length : int, code : uint16) = { Store = code; LengthStore = byte length}
-
-            end
-
-        let QLum =
-            [|
-                2;  2;  2;  2;  3;  4;  5;  6;
-                2;  2;  2;  2;  3;  4;  5;  6;
-                2;  2;  2;  2;  4;  5;  7;  9;
-                2;  2;  2;  4;  5;  7;  9; 12;
-                3;  3;  4;  5;  8; 10; 12; 12;
-                4;  4;  5;  7; 10; 12; 12; 12;
-                5;  5;  7;  9; 12; 12; 12; 12;
-                6;  6;  9; 12; 12; 12; 12; 12;
-            |]
-
-        let QChrom =
-            [|
-                 3;  3;  5;  9; 13; 15; 15; 15;
-                 3;  4;  6; 11; 14; 12; 12; 12;
-                 5;  6;  9; 14; 12; 12; 12; 12;
-                 9; 11; 14; 12; 12; 12; 12; 12;
-                13; 14; 12; 12; 12; 12; 12; 12;
-                15; 12; 12; 12; 12; 12; 12; 12;
-                15; 12; 12; 12; 12; 12; 12; 12;
-                15; 12; 12; 12; 12; 12; 12; 12;
-            |]
+        let QChrom = Q quality
+//            [|
+//                 3;  3;  5;  9; 13; 15; 15; 15;
+//                 3;  4;  6; 11; 14; 12; 12; 12;
+//                 5;  6;  9; 14; 12; 12; 12; 12;
+//                 9; 11; 14; 12; 12; 12; 12; 12;
+//                13; 14; 12; 12; 12; 12; 12; 12;
+//                15; 12; 12; 12; 12; 12; 12; 12;
+//                15; 12; 12; 12; 12; 12; 12; 12;
+//                15; 12; 12; 12; 12; 12; 12; 12;
+//            |]
             
 
         let quantify (block : V3d[]) =
             let round (v : V3d) = V3i(int (round v.X), int (round v.Y), int (round v.Z))
             Array.map3 (fun ql qc v -> round(v / V3d(float ql,float qc,float qc))) QLum QChrom block
-
 
         type TableSpec =
             {
@@ -1278,9 +1576,9 @@ module VulkanTests =
                 x.Write huff
                 x.Write(Codeword.Create(dc, v))
 
-        let writeBlock (bs : BitStream) (block : V3i[]) =
+        let writeBlock (bs : BitStream) (lastDC : V3i) (block : V3i[]) =
 
-            bs.WriteDCLum(block.[0].X)
+            bs.WriteDCLum(block.[0].X - lastDC.X)
             let mutable leading = 0
             let mutable i = 1 
             while i < 64 do
@@ -1302,7 +1600,7 @@ module VulkanTests =
                     bs.WriteACLum(0, 0)
 
             for d in 1 .. 2 do
-                bs.WriteDCChrom(block.[0].[d])
+                bs.WriteDCChrom(block.[0].[d] - lastDC.[d])
                 let mutable leading = 0
                 let mutable i = 1 
                 while i < 64 do
@@ -1382,10 +1680,16 @@ module VulkanTests =
 
             let sos = [| 0xFFuy; 0xDAuy; 0x00uy; 0x0Cuy; 0x03uy; 0x01uy; 0x00uy; 0x02uy; 0x11uy; 0x03uy; 0x11uy; 0x00uy; 0x3Fuy; 0x00uy |]
             ms.Write(sos, 0, sos.Length)
-            let bs = new BitStream(coder, ms)
-            for b in blocks do writeBlock bs b
-            bs.Flush()
 
+            let start = ms.Position
+            let bs = new BitStream(coder, ms)
+            let mutable lastDC = V3i.Zero
+            for b in blocks do 
+                writeBlock bs lastDC b
+                lastDC <- b.[0]
+            bs.Flush()
+            let len = ms.Position - start
+            Log.warn "total scan size: %d (%.3f bpp)" len (float (8L * len) / (float (size.X * size.Y)))
             ms.Write([| 0xFFuy; 0xD9uy |], 0, 2)
 
             ms.ToArray()
@@ -1393,20 +1697,16 @@ module VulkanTests =
 
 
         let test() = 
-            testBlock
-                |> ycbcr
-                |> dct
-                |> quantify
-                |> zigZag
-                |> List.singleton
-                |> writeImage (V2i(8,8))
+            testBlocks
+                |> List.map (ycbcr >> dct >> quantify >> zigZag)
+                |> writeImage imageSize
 
 
 
     let testscan() =
         let data = Jpeg.test()
-        data |> Array.map (sprintf "0x%02X") |> String.concat ";" |> printfn "%s"
-        printfn "%A" data.Length
+        //data |> Array.map (sprintf "0x%02X") |> String.concat ";" |> printfn "%s"
+        Log.warn "total size: %d (%.3f bpp)" data.Length (float (8 * data.Length) / float (Jpeg.imageSize.X * Jpeg.imageSize.Y))
 
         File.writeAllBytes @"C:\Users\Schorsch\Desktop\wtf.jpg" data
 
