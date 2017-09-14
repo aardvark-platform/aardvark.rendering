@@ -1847,13 +1847,60 @@ module VulkanTests =
             [<GLSLIntrinsic("atomicOr({0}, {1})")>]
             static member AtomicOr(r : 'a, v : 'a) : unit =
                 failwith ""
+            [<GLSLIntrinsic("atomicAdd({0}, {1})")>]
+            static member AtomicAdd(r : 'a, v : 'a) : 'a =
+                failwith ""
 
-        let encode (index : int) (leading : int) (value : float) : int * uint32 =
-            if index = 0 then
-                16, 0xDEAD0000u
+
+        let dcLumInv = Jpeg.Huffman.photoshop.dcLumInv |> Array.map (fun c -> (uint32 c.Length) ||| (uint32 c.Store <<< 16))
+        let dcChromaInv = Jpeg.Huffman.photoshop.dcChromaInv |> Array.map (fun c -> (uint32 c.Length) ||| (uint32 c.Store <<< 16))
+        let acLumInv = Jpeg.Huffman.photoshop.acLumInv |> Array.map (fun c -> (uint32 c.Length) ||| (uint32 c.Store <<< 16))
+        let acChromaInv = Jpeg.Huffman.photoshop.acChromaInv |> Array.map (fun c -> (uint32 c.Length) ||| (uint32 c.Store <<< 16))
+
+        let lenMask = 0x000000FFu
+        let huffMask = 0xFFFF0000u
+
+        let encode (index : int) (chroma : bool) (leading : int) (value : float) : int * uint32 =
+            let value = int value
+            if chroma then
+                if index = 0 then
+                    let dc = Ballot.MSB(uint32 (abs value)) + 1
+                    let off = if value < 0 then (1 <<< dc) else 0
+                    let v = uint32 (off + value)
+                    let huff = dcChromaInv.[dc]
+                    let len = huff &&& lenMask |> int
+                    let huff = huff &&& huffMask
+
+                    len + dc, huff ||| (v <<< (32 - len + dc))
+                else
+                    let dc = Ballot.MSB(uint32 (abs value)) + 1
+                    let off = if value < 0 then (1 <<< dc) else 0
+                    let v = uint32 (off + value)
+                    let huff = acChromaInv.[dc]
+                    let len = huff &&& lenMask |> int
+                    let huff = huff &&& huffMask
+
+                    len + dc, huff ||| (v <<< (32 - len + dc))
+
             else
-                //let value = (uint32 leading <<< 16) ||| (uint32 (32768.0 + value))
-                8, 0xAB000000u
+                if index = 0 then
+                    let dc = Ballot.MSB(uint32 (abs value)) + 1
+                    let off = if value < 0 then (1 <<< dc) else 0
+                    let v = uint32 (off + value)
+                    let huff = dcLumInv.[dc]
+                    let len = huff &&& lenMask |> int
+                    let huff = huff &&& huffMask
+
+                    len + dc, huff ||| (v <<< (32 - len + dc))
+                else
+                    let dc = Ballot.MSB(uint32 (abs value)) + 1
+                    let off = if value < 0 then (1 <<< dc) else 0
+                    let v = uint32 (off + value)
+                    let huff = acLumInv.[dc]
+                    let len = huff &&& lenMask |> int
+                    let huff = huff &&& huffMask
+
+                    len + dc, huff ||| (v <<< (32 - len + dc))
 
         let takeHigh (cnt : int) (word : uint32) =
             word >>> (32 - cnt)
@@ -1865,10 +1912,11 @@ module VulkanTests =
             word <<< cnt
 
         [<LocalSize(X = 32)>]
-        let compact (channel : int) (data : float[]) (counts : int[]) (mask : uint32[]) =
+        let compact (channel : int) (counter : int[]) (data : float[]) (ranges : V2i[]) (mask : uint32[]) =
             compute {
                 let mem = allocateShared 64
                 let temp = allocateShared 64
+                let offsetStore = allocateShared 1
 
                 let offset = getWorkGroupId().X * 64
 
@@ -1922,12 +1970,12 @@ module VulkanTests =
 
                 if llid = 0 then
                     let v = if lid >= 64 then lv - data.[lid - 4*64] else lv
-                    let lSize, lc = encode llid (llz % 16) v
+                    let lSize, lc = encode llid (channel <> 0) (llz % 16) v
                     lCode <- lc
                     lLength <- lSize
 
                 elif lnz then
-                    let lSize, lc = encode llid (llz % 16) lv
+                    let lSize, lc = encode llid (channel <> 0)(llz % 16) lv
                     lCode <- lc
                     lLength <- lSize
 
@@ -1937,7 +1985,7 @@ module VulkanTests =
 
 
                 if rnz then
-                    let rSize, rc = encode rlid (rlz % 16) rv
+                    let rSize, rc = encode rlid (channel <> 0) (rlz % 16) rv
                     rCode <- rc
                     rLength <- rSize
                 elif rlz > 0 && rlz % 16 = 0 then
@@ -2035,17 +2083,21 @@ module VulkanTests =
 
                 barrier()
 
-                let cnt = mem.[63]
-                if llid * 4 < cnt then
-                    mask.[li] <- temp.[llid]
-                    
-                if rlid * 4 < cnt then
-                    mask.[ri] <- temp.[rlid]
+                let bitCnt = mem.[63]
+                let intCnt = (if bitCnt % 32 = 0 then bitCnt / 32 else 1 + bitCnt / 32)
+                if lid = 0 then
+                    let off = Ballot.AtomicAdd(counter.[0], intCnt)
+                    ranges.[getWorkGroupId().X] <- V2i(off, bitCnt)
+                    offsetStore.[0] <- off
 
-                    
-                if lid = 31 then
-                    counts.[getWorkGroupId().X] <- cnt
+                barrier()
+                let offset = offsetStore.[0]
 
+                if llid < intCnt then
+                    mask.[offset + llid] <- temp.[llid]
+                    
+                if rlid < intCnt then
+                    mask.[offset + rlid] <- temp.[rlid]
 
             
             }
@@ -2059,48 +2111,12 @@ module VulkanTests =
         use app = new HeadlessVulkanApplication(false)
         let device = app.Device
         
-        
-        let shader = device |> ComputeShader.ofFunction JpegGPU.compact
-        let input = ComputeShader.newInputBinding shader app.Runtime.DescriptorPool
-
-
-        let data = device.CreateBuffer<V4f>(Array.init 64 (fun i -> if i % 3 = 0 then V4f(i,i,i,i) else V4f.Zero))
-        let counts = device.CreateBuffer<int>(1L)
-        let b = device.CreateBuffer<uint32>(64L)
-        input.["channel"] <- 0
-        input.["data"] <- data
-        input.["counts"] <- counts
-        input.["mask"] <- b
-        input.Flush()
-        
-        device.perform {
-            do! Command.Bind shader
-            do! Command.SetInputs input
-            do! Command.Dispatch 1
-        }
-
-        let arr = Array.zeroCreate 64
-        b.Download(arr)
-
-        let arr2 = 
-            arr |> Array.map (fun v ->
-                let lz = (v >>> 16) &&& 0xFFFFu |> int
-                let v = int (v &&& 0xFFFFu) - 32768
-                (lz,v)
-            )
-
-        let cnts = Array.zeroCreate 1
-        counts.Download(cnts)
-   
-        printfn "%A (%A)" arr2.[0] cnts.[0]
-
-
-        let shader = device |> ComputeShader.ofFunction JpegGPU.dct
-        let input = ComputeShader.newInputBinding shader app.Runtime.DescriptorPool
+        let dct = device |> ComputeShader.ofFunction JpegGPU.dct
+        let input = ComputeShader.newInputBinding dct app.Runtime.DescriptorPool
         
         let rand = RandomSystem()
 
-        let image = PixImage<byte>(Col.Format.RGBA, V2i(8,8))
+        let image = PixImage<byte>(Col.Format.RGBA, V2i(32,32))
         image.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
             rand.UniformC3f().ToC4b()
         ) |> ignore
@@ -2116,11 +2132,50 @@ module VulkanTests =
         input.Flush()
 
         device.perform {
-            do! Command.Bind shader
+            do! Command.Bind dct
             do! Command.SetInputs input
             do! Command.Dispatch (alignedSize / V2i(8,8))
             do! Command.Sync(targetBuffer, VkAccessFlags.ShaderWriteBit, VkAccessFlags.TransferReadBit)
         }
+
+
+        let encode = device |> ComputeShader.ofFunction JpegGPU.compact
+        let input = ComputeShader.newInputBinding encode app.Runtime.DescriptorPool
+
+
+        //let data = device.CreateBuffer<V4f>(Array.init 64 (fun i -> if i % 3 = 0 then V4f(i,i,i,i) else V4f.Zero))
+        let blocks = (alignedSize.X * alignedSize.Y) / 64
+        let ranges = device.CreateBuffer<V2i>(int64 blocks)
+        let b = device.CreateBuffer<uint32>(64L * int64 blocks)
+        let counter = device.CreateBuffer<int>(Array.zeroCreate 1)
+
+        input.["channel"] <- 0
+        input.["data"] <- targetBuffer
+        input.["ranges"] <- ranges
+        input.["counter"] <- counter
+        input.["mask"] <- b
+        input.Flush()
+        
+        device.perform {
+            do! Command.Bind encode
+            do! Command.SetInputs input
+            do! Command.Dispatch blocks
+        }
+
+        let cnt = Array.zeroCreate 1
+        counter.Download(cnt)
+
+        let arr = Array.zeroCreate cnt.[0]
+        b.Download(0L, arr, 0L, arr.LongLength)
+
+        let r = Array.zeroCreate blocks
+        ranges.Download(r)
+   
+
+        printfn "%A (%A) %A" arr.[0] r.[0] cnt.[0]
+
+
+        
 
         let arr = Array.zeroCreate (alignedSize.X * alignedSize.Y)
         targetBuffer.Download(arr)
