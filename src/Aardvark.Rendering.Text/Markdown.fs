@@ -469,4 +469,4 @@ module ``Markdown Sg Extensions`` =
         let markdown (config : MarkdownConfig) (code : IMod<string>) =
             code
                 |> Mod.map (Markdown.layout config)
-                |> Sg.shapeWithBackground (C4b(255uy, 255uy, 255uy, 200uy))
+                |> Sg.shapeWithBackground (C4b(255uy, 255uy, 255uy, 200uy)) Border2d.None

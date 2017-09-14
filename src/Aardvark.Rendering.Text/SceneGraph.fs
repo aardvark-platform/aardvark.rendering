@@ -11,19 +11,22 @@ open Aardvark.SceneGraph
 module RenderPass =
     let shapes = RenderPass.main |> RenderPass.after "shapes" RenderPassOrder.BackToFront
 
+type Border2d = { left : float; right: float; top: float; bottom : float } with
+    static member None = { left = 0.0; right = 0.0; top = 0.0; bottom = 0.0 }
+
 module Sg =
     open Aardvark.SceneGraph.Semantics
     open Aardvark.Base.Ag
 
-    type Shape private(renderBoundary : bool, boundaryColor : C4b, boundaryExtent : float, content : IMod<ShapeList>) =
+    type Shape (renderBoundary : bool, boundaryColor : C4b, boundaryExtent : Border2d, content : IMod<ShapeList>) =
         interface ISg
 
         member x.RenderBoundary = renderBoundary
         member x.BoundaryColor = boundaryColor
         member x.BoundaryExtent = boundaryExtent
         member x.Content = content
-        new(content) = Shape(false, C4b.Black, 0.0, content)
-        new(color, content) = Shape(true, color, 0.02, content)
+        new(content) = Shape(false, C4b.Black, Border2d.None, content)
+        new(color, content) = Shape(true, color, Border2d.None, content)
 
     type BillboardApplicator(child : IMod<ISg>) =
         inherit Sg.AbstractApplicator(child)
@@ -157,11 +160,13 @@ module Sg =
                             | "BoundaryColor" -> t.BoundaryColor |> Mod.constant :> IMod |> Some
                             | "ModelTrafo" -> 
                                 let scaleTrafo = 
+                                    let e = t.BoundaryExtent
+
                                     content |> Mod.map (fun s -> 
-                                        let bounds = s.bounds.EnlargedByRelativeEps t.BoundaryExtent
+                                        let b = s.bounds
+                                        let bounds = Box2d(b.Min.X - e.left, b.Min.Y - e.bottom, b.Max.X + e.right, b.Max.Y + e.top)
                                         Trafo3d.Scale(bounds.SizeX, bounds.SizeY, 1.0) *
                                         Trafo3d.Translation(bounds.Min.X, bounds.Min.Y, 0.0)
-                                            
                                     )
 
                                 match old.TryGetUniform(scope, sem) with
@@ -225,13 +230,18 @@ module Sg =
     let shape (content : IMod<ShapeList>) =
         Shape(content) :> ISg
 
-    let shapeWithBackground (color : C4b) (content : IMod<ShapeList>) =
-        Shape(color, content) :> ISg
+    let shapeWithBackground (color : C4b) (border : Border2d) (content : IMod<ShapeList>) =
+        Shape(true, color, border, content) :> ISg
 
     let text (f : Font) (color : C4b) (content : IMod<string>) =
         content 
             |> Mod.map (fun c -> Text.Layout(f, color, c)) 
             |> shape
+            
+    let textWithBackground (f : Font) (color : C4b) (backgroundColor : C4b) (border : Border2d) (content : IMod<string>) =
+        content 
+            |> Mod.map (fun c -> Text.Layout(f, color, c)) 
+            |> shapeWithBackground backgroundColor border
 
 
 
