@@ -799,15 +799,19 @@ module VulkanTests =
 
             static member Create (length : int, code : uint16) =
                 // mask the higher bits
-                let code = code &&& ((1us <<< length) - 1us)
+                let code1 = 
+                    if length < 16 then code &&& ((1us <<< length) - 1us)
+                    else code
 
                 // shift the code to the beginning
-                let code = code <<< (16 - length)
+                let code2 = code1 <<< (16 - length)
 
-                Codeword(length, code)
+                Codeword(length, code2)
             static member Empty = Codeword(0, 0us)
 
-            private new(length : int, code : uint16) = { Store = code; LengthStore = byte length}
+            private new(length : int, code : uint16) =  
+                assert(length <= 16)
+                { Store = code; LengthStore = byte length}
 
         end
 
@@ -1510,12 +1514,20 @@ module VulkanTests =
                 let arr = bla arr
                 result.AddRange arr
 
+            let s = ()
+
+            member x.Write(value : uint32) =
+                let a = Codeword.Create(16, uint16 (value >>> 16))
+                x.Write a
+                let b = Codeword.Create(16, uint16 value)
+                x.Write b
 
             member x.Write(w : Codeword) =
                 let appendBits = min w.Length (16 - current.Length)
 
                 if appendBits >= w.Length then
                     current <- current.Append w
+                    ()
                 else
                     current <- current.Append (w.Take appendBits)
                     let h = current.Store >>> 8 |> byte
@@ -1533,7 +1545,8 @@ module VulkanTests =
 
                 let data = result.ToArray()
                 result.Clear()
-                s.Write(data, 0, data.Length)
+                write data
+                //s.Write(data, 0, data.Length)
 
             member x.WriteDCLum(v : int) =
                 let dc = Fun.HighestBit(abs v) + 1
@@ -1860,6 +1873,41 @@ module VulkanTests =
         let lenMask = 0x000000FFu
         let huffMask = 0xFFFF0000u
 
+
+        [<ReflectedDefinition>]
+        let inline scan1 (v : 'a) =
+            let scanSize = LocalSize.X
+            let lid = getLocalId().X
+            let temp = allocateShared<'a> LocalSize.X
+            temp.[lid] <- v
+            barrier()
+
+            let mutable s = 1
+            let mutable d = 2
+            while d <= scanSize do
+                if lid % d = 0 && lid >= s then
+                    temp.[lid] <- temp.[lid - s] + temp.[lid]
+
+                barrier()
+                s <- s <<< 1
+                d <- d <<< 1
+
+            d <- d >>> 1
+            s <- s >>> 1
+            while s >= 1 do
+                if lid % d = 0 && lid + s < scanSize then
+                    temp.[lid + s] <- temp.[lid] + temp.[lid + s]
+                    
+                barrier()
+                s <- s >>> 1
+                d <- d >>> 1
+              
+            let left =
+                if lid > 0 then temp.[lid - 1]
+                else LanguagePrimitives.GenericZero
+        
+            temp.[lid]
+
         let encode (index : int) (chroma : bool) (leading : int) (value : float) : int * uint32 =
             let value = int value
             if chroma then
@@ -1937,15 +1985,18 @@ module VulkanTests =
 
 
                 // count leading zeros
-                let lessMask = Ballot.LessMask()
-                let lb = lessMask &&& Ballot.Ballot(lnz) |> uint32
-                let rb = lessMask &&& Ballot.Ballot(rnz) |> uint32
+                let lessMask = Ballot.LessMask() |> uint32
+                let greaterMask = Ballot.GreaterMask() |> uint32
+                let lb = Ballot.Ballot(lnz) |> uint32
+                let rb = Ballot.Ballot(rnz) |> uint32
 
-                let loi = Ballot.BitCount lb + Ballot.BitCount rb
-                let roi = (if lnz then 1 else 0) + loi
+
+                let lpm = Ballot.MSB(lb &&& lessMask)
+                let rpm = Ballot.MSB(rb &&& lessMask)
                 
-                let lpm = Ballot.MSB(lb)
-                let rpm = Ballot.MSB(rb)
+                let nonZeroAfterR = (lb &&& greaterMask) <> 0u || (rb &&& greaterMask) <> 0u
+                let nonZeroAfterL = rnz || nonZeroAfterR
+
                 let lp =
                     if lpm > rpm then 2 * lpm
                     else 2 * rpm + 1
@@ -1970,16 +2021,16 @@ module VulkanTests =
 
                 if llid = 0 then
                     let v = if lid >= 64 then lv - data.[lid - 4*64] else lv
-                    let lSize, lc = encode llid (channel <> 0) (llz % 16) v
+                    let lSize, lc = encode 0 (channel <> 0) 0 v
                     lCode <- lc
                     lLength <- lSize
 
                 elif lnz then
-                    let lSize, lc = encode llid (channel <> 0)(llz % 16) lv
+                    let lSize, lc = encode llid (channel <> 0) (llz % 16) lv
                     lCode <- lc
                     lLength <- lSize
 
-                elif llz > 0 && llz % 16 = 0 then
+                elif llz > 0 && llz % 16 = 0 && nonZeroAfterL then
                     lCode <- 0xFAu
                     lLength <- 8
 
@@ -1988,7 +2039,8 @@ module VulkanTests =
                     let rSize, rc = encode rlid (channel <> 0) (rlz % 16) rv
                     rCode <- rc
                     rLength <- rSize
-                elif rlz > 0 && rlz % 16 = 0 then
+
+                elif rlz > 0 && rlz % 16 = 0 && nonZeroAfterR then
                     rCode <- 0xFAu
                     rLength <- 8
 
@@ -2102,10 +2154,119 @@ module VulkanTests =
             
             }
 
+//
+//    [<LocalSize(X = 64)>]
+//    let computer (values : float[]) (res : float[]) =
+//        compute {
+//            let id = getGlobalId().X
+//            let v = values.[id] //if values.[id] > 0.0 then 1 else 0
+//
+//            let lg = scan1 v
+//            res.[id] <- lg
+//        }
 
     let next (v : int) (a : int) =
         if v % a = 0 then v
         else (1 + v / a) * a
+
+    let writeImage (size : V2i) (offsets : V3i[]) (counts : V3i[]) (data : uint32[]) =
+        let ms = new System.IO.MemoryStream()
+        let coder = Jpeg.Huffman.photoshop
+
+        let header = [| 0xFFuy; 0xD8uy;  |]
+        ms.Write(header, 0, header.Length)
+
+        let encode (v : uint16) =
+            [| byte (v >>> 8); byte v |]
+
+
+        let quant = 
+            Array.concat [
+                [| 0xFFuy; 0xDBuy; 0x00uy; 0x84uy |]
+                [| 0x00uy |]
+                Jpeg.QLum |> Jpeg.zigZag |> Array.map byte
+                [| 0x01uy |]
+                Jpeg.QChrom |> Jpeg.zigZag |> Array.map byte
+            ]
+        ms.Write(quant, 0, quant.Length)
+
+        let sof =
+            Array.concat [
+                [| 0xFFuy; 0xC0uy; 0x00uy; 0x11uy |]
+                [| 0x08uy |]
+                encode (uint16 size.Y)
+                encode (uint16 size.X)
+                [| 0x03uy; |]
+                [| 0x01uy; 0x11uy; 0x00uy |]
+                [| 0x02uy; 0x11uy; 0x01uy |]
+                [| 0x03uy; 0x11uy; 0x01uy |]
+            ]
+        ms.Write(sof, 0, sof.Length)
+
+        let huff =
+            let huffSize (spec : Jpeg.TableSpec)  =
+                uint16 (1 + 16 + spec.values.Length)
+
+            let encodeHuff (kind : byte) (spec : Jpeg.TableSpec) =
+                Array.concat [
+                    [| kind |]
+                    Array.skip 1 spec.counts |> Array.map byte
+                    spec.values
+                ]
+
+            Array.concat [
+                [| 0xFFuy; 0xC4uy |]
+                encode (2us + huffSize coder.spec.specDCLum + huffSize coder.spec.specDCChroma + huffSize coder.spec.specACLum + huffSize coder.spec.specACChroma)
+
+                encodeHuff 0x00uy coder.spec.specDCLum
+                encodeHuff 0x01uy coder.spec.specDCChroma
+                encodeHuff 0x10uy coder.spec.specACLum
+                encodeHuff 0x11uy coder.spec.specACChroma
+            ]
+        ms.Write(huff, 0, huff.Length)
+
+        let sos = [| 0xFFuy; 0xDAuy; 0x00uy; 0x0Cuy; 0x03uy; 0x01uy; 0x00uy; 0x02uy; 0x11uy; 0x03uy; 0x11uy; 0x00uy; 0x3Fuy; 0x00uy |]
+        ms.Write(sos, 0, sos.Length)
+
+        let start = ms.Position
+        let bs = new Jpeg.BitStream(coder, ms)
+
+
+        for bi in 0 .. offsets.Length - 1 do
+            for ci in 0 .. 2 do
+                let offset = offsets.[bi].[ci]
+                let size = counts.[bi].[ci]
+
+                let mutable i = 0
+                while i <= size - 32 do
+                    bs.Write data.[offset + i / 32]
+                    i <- i + 32
+
+                if size > i then
+                    let mutable rem = size - i
+                    if rem > 16 then
+                        let w = Codeword.Create(16, uint16 (data.[offset + i/32] >>> 16))
+                        bs.Write(w)
+                        rem <- rem - 16
+
+                    let w = Codeword.Create(rem, uint16 (data.[offset + i/32] >>> (16 - rem)))
+                    bs.Write(w)
+
+                        
+                if ci = 0 then
+                    bs.WriteACLum(0, 0)
+                else
+                    bs.WriteACChrom(0,0)
+
+        bs.Flush()
+        let len = ms.Position - start
+        Log.warn "total scan size: %d (%.3f bpp)" len (float (8L * len) / (float (size.X * size.Y)))
+        ms.Write([| 0xFFuy; 0xD9uy |], 0, 2)
+
+        ms.ToArray()
+
+
+
 
     let testDCT() =
         use app = new HeadlessVulkanApplication(false)
@@ -2116,10 +2277,10 @@ module VulkanTests =
         
         let rand = RandomSystem()
 
-        let image = PixImage<byte>(Col.Format.RGBA, V2i(32,32))
+        let image = PixImage<byte>(Col.Format.RGBA, V2i(8,8))
         image.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-            if c.X > 16L then C4b.Red
-            else C4b.Green
+            if c.X > 4L then C4b.White
+            else C4b.Black
         ) |> ignore
 
         let alignedSize = V2i(next image.Size.X 8, next image.Size.Y 8)
@@ -2183,10 +2344,10 @@ module VulkanTests =
         let arr = Array.zeroCreate cnt.[0]
         b.Download(0L, arr, 0L, arr.LongLength)
 
-   
-
+        let data = writeImage image.Size offsets counts arr
+        File.writeAllBytes @"C:\Users\Schorsch\Desktop\hugo.jpg" data
         printfn "%A (%A) %A" arr.[0] offsets.[0] cnt.[0]
-
+        Environment.Exit 0
 
         
 
