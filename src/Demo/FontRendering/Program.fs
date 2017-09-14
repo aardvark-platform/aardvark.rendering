@@ -2118,7 +2118,8 @@ module VulkanTests =
 
         let image = PixImage<byte>(Col.Format.RGBA, V2i(32,32))
         image.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-            rand.UniformC3f().ToC4b()
+            if c.X > 16L then C4b.Red
+            else C4b.Green
         ) |> ignore
 
         let alignedSize = V2i(next image.Size.X 8, next image.Size.Y 8)
@@ -2149,18 +2150,32 @@ module VulkanTests =
         let b = device.CreateBuffer<uint32>(64L * int64 blocks)
         let counter = device.CreateBuffer<int>(Array.zeroCreate 1)
 
-        input.["channel"] <- 0
         input.["data"] <- targetBuffer
         input.["ranges"] <- ranges
         input.["counter"] <- counter
         input.["mask"] <- b
         input.Flush()
         
-        device.perform {
-            do! Command.Bind encode
-            do! Command.SetInputs input
-            do! Command.Dispatch blocks
-        }
+        let offsets : V3i[] = Array.zeroCreate blocks
+        let counts : V3i[] = Array.zeroCreate blocks
+
+        for c in 0 .. 2 do
+            input.["channel"] <- c
+            input.Flush()
+
+            device.perform {
+                do! Command.Bind encode
+                do! Command.SetInputs input
+                do! Command.Dispatch blocks
+            }
+
+            let r = Array.zeroCreate blocks
+            ranges.Download(r)
+            for i in 0 .. blocks - 1 do
+                offsets.[i].[c] <- r.[i].X
+                counts.[i].[c] <- r.[i].Y
+
+
 
         let cnt = Array.zeroCreate 1
         counter.Download(cnt)
@@ -2168,11 +2183,9 @@ module VulkanTests =
         let arr = Array.zeroCreate cnt.[0]
         b.Download(0L, arr, 0L, arr.LongLength)
 
-        let r = Array.zeroCreate blocks
-        ranges.Download(r)
    
 
-        printfn "%A (%A) %A" arr.[0] r.[0] cnt.[0]
+        printfn "%A (%A) %A" arr.[0] offsets.[0] cnt.[0]
 
 
         
