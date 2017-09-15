@@ -1590,7 +1590,6 @@ module VulkanTests =
                 x.Write(Codeword.Create(dc, v))
 
         let writeBlock (bs : BitStream) (lastDC : V3i) (block : V3i[]) =
-
             bs.WriteDCLum(block.[0].X - lastDC.X)
             let mutable leading = 0
             let mutable i = 1 
@@ -2689,9 +2688,11 @@ let main argv =
     Ag.initialize()
     Aardvark.Init()
 
+    Jpeg.Test.run()
+    Environment.Exit 0
+
     //tensorPerformance()
     VulkanTests.testscan()
-    Environment.Exit 0
 
 
     use app = new VulkanApplication(true)

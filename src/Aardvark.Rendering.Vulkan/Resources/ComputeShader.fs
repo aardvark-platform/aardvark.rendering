@@ -257,7 +257,7 @@ type InputBinding(pool : DescriptorPool, shader : ComputeShader, sets : Descript
     member x.Set(name : string, value : obj) = 
         match Map.tryFind name references with
             | Some refs -> for r in refs do write r value
-            | None -> failf "invalid reference %A" name
+            | None -> () //failf "invalid reference %A" name
 
     member x.Item
         with set (name : string) (value : obj) = x.Set(name, value)

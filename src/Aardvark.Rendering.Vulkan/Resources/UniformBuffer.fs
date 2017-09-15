@@ -384,10 +384,14 @@ module UniformWriters =
                                 | _ -> None
                         )
 
-                    let tWriter = typedefof<SequenceWriter<list<int>, int>>.MakeGenericType [|tSequence; tItem|]
-                    let ctor = tWriter.GetConstructor [| typeof<list<IWriter>> |]
-                    let writer = ctor.Invoke [|writers|] |> unbox<IWriter>
-                    Some writer
+                    match writers with
+                        | Some writers ->
+                            let tWriter = typedefof<SequenceWriter<list<int>, int>>.MakeGenericType [|tSequence; tItem|]
+                            let ctor = tWriter.GetConstructor [| typeof<list<IWriter>> |]
+                            let writer = ctor.Invoke [|writers|] |> unbox<IWriter>
+                            Some writer
+                        | _ ->
+                            None
     
     let cache = System.Collections.Concurrent.ConcurrentDictionary<int * UniformType * Type, Option<IWriter>>()
 
