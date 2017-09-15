@@ -563,6 +563,11 @@ module Kernels =
             failwith ""
 
 
+    let dcLum = encoder.dcLuminance.table
+    let acLum = encoder.acLuminance.table
+    let dcChrom = encoder.dcChroma.table
+    let acChrom = encoder.acChroma.table
+
     let encode (index : int) (chroma : bool) (leading : int) (value : float) : int * uint32 =
         let value = int value
         if chroma then
@@ -570,7 +575,7 @@ module Kernels =
                 let dc = Ballot.MSB(uint32 (abs value)) + 1
                 let off = if value < 0 then (1 <<< dc) else 0
                 let v = uint32 (off + value)
-                let huff = encoder.dcChroma.table.[dc]
+                let huff = dcChrom.[dc]
                 let len = Codeword.length huff
                 let huff = Codeword.code huff
                 len + dc, (huff <<< dc) ||| v
@@ -578,7 +583,7 @@ module Kernels =
                 let dc = Ballot.MSB(uint32 (abs value)) + 1
                 let off = if value < 0 then (1 <<< dc) else 0
                 let v = uint32 (off + value)
-                let huff = encoder.acChroma.table.[dc]
+                let huff = acChrom.[dc]
                 let len = Codeword.length huff
                 let huff = Codeword.code huff
                 len + dc, (huff <<< dc) ||| v
@@ -588,7 +593,7 @@ module Kernels =
                 let dc = Ballot.MSB(uint32 (abs value)) + 1
                 let off = if value < 0 then (1 <<< dc) else 0
                 let v = uint32 (off + value)
-                let huff = encoder.dcLuminance.table.[dc]
+                let huff = dcLum.[dc]
                 let len = Codeword.length huff
                 let huff = Codeword.code huff
                 len + dc, (huff <<< dc) ||| v
@@ -596,11 +601,10 @@ module Kernels =
                 let dc = Ballot.MSB(uint32 (abs value)) + 1
                 let off = if value < 0 then (1 <<< dc) else 0
                 let v = uint32 (off + value)
-                let huff = encoder.acLuminance.table.[dc]
+                let huff = acLum.[dc]
                 let len = Codeword.length huff
                 let huff = Codeword.code huff
                 len + dc, (huff <<< dc) ||| v
-
 
     [<LocalSize(X = 32)>]
     let encodeKernel (channel : int) (counter : int[]) (data : float[]) (ranges : V2i[]) (mask : uint32[]) =
